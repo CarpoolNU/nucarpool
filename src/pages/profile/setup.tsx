@@ -218,12 +218,14 @@ const Setup: NextPage = () => {
       </div>
     );
   }
-  const continueBaseClass =
-    "absolute left-1/2 -translate-x-1/2 top-[calc(50%+250px+20px)] z-0 flex w-[200px] items-center justify-center rounded-full drop-shadow-[0_15px_4px_rgba(0,0,0,0.35)]";
+  const buttonContainerClass =
+    "absolute left-1/2 bottom-10 transform -translate-x-1/2 flex flex-col items-center gap-6";
   const backButtonClass =
-    "absolute left-1/2 top-[calc(50%+250px+75px)] z-0 -translate-x-1/2 px-4 py-2 items-center justify-center font-montserrat text-lg text-black underline";
-  const continueButtonDefaultClass = "bg-white text-black ";
-  const continueButtonFinalStepClass = "bg-northeastern-red text-white";
+    "px-6 py-3 font-montserrat text-lg text-black underline";
+  const continueBaseClass =
+    "flex w-[200px] items-center justify-center rounded-full drop-shadow-[0_15px_4px_rgba(0,0,0,0.35)";
+  const continueButtonDefaultClass = "bg-white text-black px-6 py-3";
+  const continueButtonFinalStepClass = "bg-northeastern-red text-white px-6 py-3";
 
   return (
     <div className="relative h-full w-full overflow-hidden ">
@@ -240,8 +242,8 @@ const Setup: NextPage = () => {
       <SetupContainer
         className={`${
           step < 2
-            ? "rounded-2xl bg-white px-16 py-20  drop-shadow-[0_15px_8px_rgba(0,0,0,0.35)]"
-            : "rounded-2xl bg-white  drop-shadow-[0_15px_8px_rgba(0,0,0,0.35)]"
+            ? "rounded-2xl bg-white px-16 py-20 drop-shadow-[0_15px_8px_rgba(0,0,0,0.35)]"
+            : "rounded-2xl bg-white drop-shadow-[0_15px_8px_rgba(0,0,0,0.35)]"
         } absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 transform`}
       >
         {(step === 0 || step == 1) && (
@@ -285,7 +287,7 @@ const Setup: NextPage = () => {
       </SetupContainer>
 
       {step > 0 && (
-        <>
+        <div className={buttonContainerClass}>
           {step > 1 && (
             <button
               type="button"
@@ -297,14 +299,14 @@ const Setup: NextPage = () => {
           )}
           <button
             type="button"
-            className={`${continueBaseClass}  ${
+            className={`${continueBaseClass} ${
               step === 4 || watch("role") === Role.VIEWER
                 ? continueButtonFinalStepClass
                 : continueButtonDefaultClass
             }`}
             onClick={handleNextStep}
           >
-            <div className="z-0 flex items-center px-4 py-2 font-montserrat text-2xl font-bold">
+            <div className="flex items-center font-montserrat text-2xl font-bold">
               {watch("role") === Role.VIEWER
                 ? "View Map"
                 : step === 4
@@ -315,7 +317,7 @@ const Setup: NextPage = () => {
               )}
             </div>
           </button>
-        </>
+        </div>
       )}
     </div>
   );
