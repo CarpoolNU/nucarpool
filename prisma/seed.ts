@@ -9,9 +9,10 @@ const prisma = new PrismaClient();
  * Deletes all entries in the user table.
  */
 const deleteUsers = async () => {
-  await prisma.user.deleteMany({});
   await prisma.request.deleteMany({});
   await prisma.carpoolGroup.deleteMany({});
+  await prisma.message.deleteMany({}); 
++ await prisma.user.deleteMany({});
 };
 
 /**
@@ -250,11 +251,14 @@ const genRandomUsers = ({
   return new Array(count).fill(undefined).map((_, index) => {
     const startMin = 15 * Math.floor(rand(3.9));
     const endMin = 15 * Math.floor(rand(3.9));
+    const startHour = 8 + Math.floor(rand(3));
+    const endHour = 16 + Math.floor(rand(3));
+    const startTime = new Date(2023, 0, 1, startHour, startMin).toISOString();
+    const endTime = new Date(2023, 0, 1, endHour, endMin).toISOString();
     const output: GenerateUserInput = {
       role: "RIDER",
       // Generates a start time between 8:00 - 11:45
-      startTime:
-        8 + Math.floor(rand(3)) + ":" + (startMin == 0 ? "00" : startMin),
+      startTime,
       startCoordLat: startCoordLat - coordOffset + rand(doubleOffset),
       startPOICoordLat: startCoordLat,
       startCoordLng: startCoordLng - coordOffset + rand(doubleOffset),
@@ -262,7 +266,7 @@ const genRandomUsers = ({
       coopEndDate: null,
       coopStartDate: null,
       // Generates an end time between 16:00 - 19:45
-      endTime: 16 + Math.floor(rand(3)) + ":" + (endMin == 0 ? "00" : endMin),
+      endTime,
       companyCoordLat: companyCoordLat - coordOffset + rand(doubleOffset),
       companyPOICoordLat: companyCoordLat,
       companyCoordLng: companyCoordLng - coordOffset + rand(doubleOffset),
