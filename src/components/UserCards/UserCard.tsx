@@ -196,12 +196,12 @@ export const UserCard = (props: UserCardProps): JSX.Element => {
         <div className="flex text-sm ">
           <p className="pr-1">Start:</p>
           <p className="font-semibold">
-            {dayjs.tz(props.otherUser.startTime, "UTC").format("h:mm")} am
+            {dayjs.tz(props.otherUser.startTime, dayjs.tz.guess()).format("h:mm")} am
           </p>
           <p className="px-2 font-semibold">|</p>
           <p className="pr-1">End:</p>
           <p className="font-semibold">
-            {dayjs.tz(props.otherUser.endTime, "UTC").format("h:mm")} pm
+            {dayjs.tz(props.otherUser.endTime, dayjs.tz.guess()).format("h:mm")} pm
           </p>
         </div>
       </div>
