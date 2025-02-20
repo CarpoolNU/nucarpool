@@ -9,8 +9,6 @@ import StartIcon from "../../../public/start.png";
 import EndIcon from "../../../public/end.png";
 import StaticDayBox from "../Sidebar/StaticDayBox";
 import dayjs from "dayjs";
-import utc from "dayjs/plugin/utc";
-import timezone from "dayjs/plugin/timezone";
 import useProfileImage from "../../utils/useProfileImage";
 import { AiOutlineUser } from "react-icons/ai";
 
@@ -29,6 +27,7 @@ const ConnectModal = (props: ConnectModalProps): JSX.Element => {
   const { profileImageUrl, imageLoadError } = useProfileImage(
     props.otherUser.id
   );
+<<<<<<< HEAD
 
 
   dayjs.extend(utc);
@@ -45,6 +44,8 @@ const ConnectModal = (props: ConnectModalProps): JSX.Element => {
   const formattedStartTime = dayjs.tz(props.otherUser.startTime, displayZone).format("h:mm");
   const formattedEndTime = dayjs.tz(props.otherUser.endTime, displayZone).format("h:mm");
 
+=======
+>>>>>>> parent of a205291 (temporary fix for timezone issue)
   const onClose = async (action: string) => {
     if (action === "closeAfterSend") {
       await utils.user.recommendations.me.invalidate();
@@ -222,13 +223,17 @@ const ConnectModal = (props: ConnectModalProps): JSX.Element => {
                       <div className="flex  ">
                         <p className="pr-1">Start:</p>
                         <p className="font-semibold">
-                          {formattedStartTime}{" "}
+                          {dayjs
+                            .tz(props.otherUser.startTime, "UTC")
+                            .format("h:mm")}{" "}
                           am
                         </p>
                         <p className="px-2 font-semibold">|</p>
                         <p className="pr-1">End:</p>
                         <p className="font-semibold">
-                          {formattedEndTime}{" "}
+                          {dayjs
+                            .tz(props.otherUser.endTime, "UTC")
+                            .format("h:mm")}{" "}
                           pm
                         </p>
                       </div>

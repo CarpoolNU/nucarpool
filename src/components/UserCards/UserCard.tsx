@@ -61,6 +61,7 @@ export const UserCard = (props: UserCardProps): JSX.Element => {
   dayjs.extend(utc);
   dayjs.extend(timezone);
 
+<<<<<<< HEAD
   const estZone = "America/New_York";
   const utcZone = "UTC";
 
@@ -72,6 +73,8 @@ export const UserCard = (props: UserCardProps): JSX.Element => {
   const formattedStartTime = dayjs.tz(props.otherUser.startTime, displayZone).format("h:mm");
   const formattedEndTime = dayjs.tz(props.otherUser.endTime, displayZone).format("h:mm");
 
+=======
+>>>>>>> parent of a205291 (temporary fix for timezone issue)
   /** Creates a div with 7 boxes, each representing a day of the week.
    *  Background color is red if the user is working on that day.
    */
@@ -207,12 +210,12 @@ export const UserCard = (props: UserCardProps): JSX.Element => {
         <div className="flex text-sm ">
           <p className="pr-1">Start:</p>
           <p className="font-semibold">
-            {formattedStartTime} am
+            {dayjs.tz(props.otherUser.startTime, dayjs.tz.guess()).format("h:mm")} am
           </p>
           <p className="px-2 font-semibold">|</p>
           <p className="pr-1">End:</p>
           <p className="font-semibold">
-            {formattedEndTime} pm
+            {dayjs.tz(props.otherUser.endTime, dayjs.tz.guess()).format("h:mm")} pm
           </p>
         </div>
       </div>
