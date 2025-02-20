@@ -42,8 +42,8 @@ const ConnectModal = (props: ConnectModalProps): JSX.Element => {
   const useUtc = startTimeEst.hour() >= 0 && startTimeEst.hour() < 4;
 
   const displayZone = useUtc ? utcZone : estZone;
-  const formattedStartTime = dayjs.tz(props.otherUser.startTime, displayZone).format("h:mm A");
-  const formattedEndTime = dayjs.tz(props.otherUser.endTime, displayZone).format("h:mm A");
+  const formattedStartTime = dayjs.tz(props.otherUser.startTime, displayZone).format("h:mm");
+  const formattedEndTime = dayjs.tz(props.otherUser.endTime, displayZone).format("h:mm");
 
   const onClose = async (action: string) => {
     if (action === "closeAfterSend") {
