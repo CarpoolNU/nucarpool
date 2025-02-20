@@ -9,6 +9,8 @@ import StartIcon from "../../../public/start.png";
 import EndIcon from "../../../public/end.png";
 import StaticDayBox from "../Sidebar/StaticDayBox";
 import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
 import useProfileImage from "../../utils/useProfileImage";
 import { AiOutlineUser } from "react-icons/ai";
 
@@ -27,6 +29,22 @@ const ConnectModal = (props: ConnectModalProps): JSX.Element => {
   const { profileImageUrl, imageLoadError } = useProfileImage(
     props.otherUser.id
   );
+
+
+  dayjs.extend(utc);
+  dayjs.extend(timezone);
+
+  const estZone = "America/New_York";
+  const utcZone = "UTC";
+
+  const startTimeEst = dayjs.tz(props.otherUser.startTime, estZone);
+
+  const useUtc = startTimeEst.hour() >= 0 && startTimeEst.hour() < 4;
+
+  const displayZone = useUtc ? utcZone : estZone;
+  const formattedStartTime = dayjs.tz(props.otherUser.startTime, displayZone).format("h:mm A");
+  const formattedEndTime = dayjs.tz(props.otherUser.endTime, displayZone).format("h:mm A");
+
   const onClose = async (action: string) => {
     if (action === "closeAfterSend") {
       await utils.user.recommendations.me.invalidate();
@@ -204,17 +222,13 @@ const ConnectModal = (props: ConnectModalProps): JSX.Element => {
                       <div className="flex  ">
                         <p className="pr-1">Start:</p>
                         <p className="font-semibold">
-                          {dayjs
-                            .tz(props.otherUser.startTime, "UTC")
-                            .format("h:mm")}{" "}
+                          {formattedStartTime}{" "}
                           am
                         </p>
                         <p className="px-2 font-semibold">|</p>
                         <p className="pr-1">End:</p>
                         <p className="font-semibold">
-                          {dayjs
-                            .tz(props.otherUser.endTime, "UTC")
-                            .format("h:mm")}{" "}
+                          {formattedEndTime}{" "}
                           pm
                         </p>
                       </div>
