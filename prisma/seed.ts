@@ -257,7 +257,7 @@ const genRandomUsers = ({
     const startMin = 15 * Math.floor(rand(3.9));
     const endMin = 15 * Math.floor(rand(3.9));
     const startHour = timezone === "UTC" ? 2 + Math.floor(rand(3)) : 8 + Math.floor(rand(3)) ;
-    const endHour = timezone === "UTC" ? 2 + Math.floor(rand(3)) : 16 + Math.floor(rand(3));
+    const endHour = timezone === "UTC" ? 10 + Math.floor(rand(3)) : 16 + Math.floor(rand(3));
     const startTime = new Date(2023, 0, 1, startHour, startMin).toISOString();
     const endTime = new Date(2023, 0, 1, endHour, endMin).toISOString();
     const output: GenerateUserInput = {

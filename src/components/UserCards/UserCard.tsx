@@ -63,11 +63,11 @@ export const UserCard = (props: UserCardProps): JSX.Element => {
 
   const est = "America/New_York";
 
-  const formatTime = (time : Date | null) => {
+  const formatTime = (time : Date | null, starttime? : Date | null) => {
     let timeInEST = dayjs.tz(time, est);
-    const hour = timeInEST.hour();
+    const hour = starttime ? dayjs.tz(starttime, est).hour() : timeInEST.hour();
   
-    if (hour >= 1 && hour < 5) {
+    if (hour >= 1 && hour < 5) { 
       timeInEST = dayjs.tz(time, "UTC");
     }
   
@@ -215,7 +215,7 @@ export const UserCard = (props: UserCardProps): JSX.Element => {
           <p className="px-2 font-semibold">|</p>
           <p className="pr-1">End:</p>
           <p className="font-semibold">
-            {formatTime(props.otherUser.endTime)} 
+            {formatTime(props.otherUser.endTime, props.otherUser.startTime)} 
           </p>
         </div>
       </div>
