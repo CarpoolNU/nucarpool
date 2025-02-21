@@ -1,4 +1,4 @@
-import React, { Dispatch, SetStateAction, useContext, useEffect, useState } from "react";
+import React, { Dispatch, SetStateAction, useContext, useState } from "react";
 import styled from "styled-components";
 import DropDownMenu from "./DropDownMenu";
 import { createPortal } from "react-dom";
@@ -7,8 +7,6 @@ import { trpc } from "../utils/trpc";
 import { UserContext } from "../utils/userContext";
 import { useRouter } from "next/router";
 import Spinner from "./Spinner";
-import Pusher from "pusher-js";
-import { Message } from "../utils/types";
 
 const HeaderDiv = styled.div`
   display: flex;
@@ -52,37 +50,8 @@ export type HeaderOptions = "explore" | "requests";
 
 const Header = (props: HeaderProps) => {
   const [isLoading, setIsLoading] = useState(false);
-
-  const { data } = trpc.user.messages.getUnreadMessageCount.useQuery()
-  const [unreadMessagesCount, setUnreadMessagesCount] = useState<number>(data ? data : 0);
-
-  // useEffect(() => {
-  //   if (data !== undefined) {
-  //     setUnreadMessagesCount(data);
-  //   }
-  // }, [])
-
-  useEffect(() => {
-    const pusher = new Pusher("988fdff5dc5909417348", {
-      cluster: "us2"
-    })
-
-    const messageChannel = pusher.subscribe("conversation");
-
-    messageChannel.bind("updateUnreadMessage", (data: { userId: string}) => {
-      console.log
-      if (user?.id === data.userId) {
-        setUnreadMessagesCount(unreadMessagesCount + 1);
-      }
-    })
-
-    return () => {
-      messageChannel.unbind("updateUnreadMessage");
-      pusher.unsubscribe("conversation"); 
-    };
-  },[])
-
-
+  const { data: unreadMessagesCount } =
+    trpc.user.messages.getUnreadMessageCount.useQuery();
   const user = useContext(UserContext);
   const router = useRouter();
 

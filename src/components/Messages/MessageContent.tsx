@@ -28,11 +28,9 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
     [selectedUser.incomingRequest, selectedUser.outgoingRequest]
   );
 
-  const [conversationMessages, setConversationMessages] = useState(
-    request?.conversation?.messages || []
-  );
+  const [conversationMessages, setConversationMessages] = useState(request?.conversation?.messages || []);
 
-  // Persist default date
+  // Persist default date r
   const defaultDateCreatedRef = useRef(new Date());
 
   const initialMessage = useMemo(() => {
@@ -40,71 +38,40 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
     return {
       id: "initial",
       content: request?.message || "",
-      conversationId: request?.conversation?.id || "initial",
+      conversationId: "initial",
       userId: request?.fromUserId || "",
       dateCreated,
       isRead: true,
     };
-  }, [
-    request?.message,
-    request?.dateCreated,
-    request?.fromUserId,
-    request?.conversation?.id,
-  ]);
+  }, [request?.message, request?.dateCreated, request?.fromUserId]);
 
-  // Update messages from the request prop if it changes
   useEffect(() => {
     setConversationMessages(request?.conversation?.messages || []);
-  }, [request?.conversation?.messages]);
-
-  // New useEffect: When the component mounts or when the conversation changes,
-  // fetch the latest conversation messages from the server in case new messages arrived.
-  const { data: freshMessages } = trpc.user.messages.getMessages.useQuery(
-    request?.conversation?.id ?? "",
-    { enabled: !!request?.conversation?.id }
-  );
-
-  useEffect(() => {
-    if (freshMessages) {
-      setConversationMessages(freshMessages);
-    }
-  }, [freshMessages]);
+  }, [request?.conversation?.messages])
 
   useEffect(() => {
     const pusher = new Pusher("988fdff5dc5909417348", {
-      cluster: "us2",
+      cluster: "us2"
     });
 
     const messageChannel = pusher.subscribe("conversation");
 
-    messageChannel.bind(
-      "sendMessage",
-      (data: { requestId: string } & { newMessage: Message }) => {
-        console.log("request ", request);
-        console.log("data ", data);
-        console.log("requestId ", data.requestId);
-        console.log("message", data.newMessage);
+    messageChannel.bind("sendMessage", (data : {requestId: string} & {newMessage : Message}) => {
+      console.log("request ", request);
+      console.log("data ", data);
+      console.log("requestId ", data.requestId);
+      console.log("message", data.newMessage);
 
-        // Check if the new message belongs to the current conversation.
-        // This now uses the conversation id if available, otherwise falls back to the request id.
-        if (
-          (request?.conversation?.id &&
-            data.newMessage.conversationId === request.conversation.id) ||
-          request?.id === data.requestId
-        ) {
-          setConversationMessages((prevMessages) => [
-            ...prevMessages,
-            data.newMessage,
-          ]);
-        }
+      if (request?.id === data.requestId ) {
+        setConversationMessages((prevMessages) => [...prevMessages, data.newMessage ]);
       }
-    );
-
+    })
+  
     return () => {
       messageChannel.unbind("sendMessage");
-      pusher.unsubscribe("conversation");
+      pusher.unsubscribe("conversation"); 
     };
-  }, [request?.id, request?.conversation?.id]);
+  }, [request?.id]);
 
   const allMessages = useMemo(() => {
     if (request?.message) {
@@ -179,7 +146,7 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
 
   const scrollToBottom = useCallback(() => {
     if (messagesEndRef.current) {
-      const container = messagesEndRef.current.closest(".overflow-y-auto");
+      const container = messagesEndRef.current.closest('.overflow-y-auto');
       if (container) {
         container.scrollTop = container.scrollHeight;
       }
@@ -202,10 +169,10 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
             const messageTime = message.dateCreated
               ? format(new Date(message.dateCreated), "h:mm aa")
               : "";
-
+            
             // Add ref to the last message of the last date group
-            const isLastMessage =
-              dateIndex === messagesByDate.length - 1 &&
+            const isLastMessage = 
+              dateIndex === messagesByDate.length - 1 && 
               messageIndex === messages.length - 1;
 
             return (

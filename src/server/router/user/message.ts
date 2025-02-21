@@ -128,22 +128,6 @@ export const messageRouter = router({
           requestId: input.requestId,
           newMessage: newMessage,
         });
-
-        const requestData = await ctx.prisma.request.findUnique({
-          where: { id: input.requestId },
-          select: { fromUserId: true, toUserId: true },
-        });
-        if (!requestData) {
-          throw new TRPCError({
-            code: "INTERNAL_SERVER_ERROR",
-            message: "Request not found",
-          });
-        }
-        const recipientUserId =
-          userId === requestData.fromUserId ? requestData.toUserId : requestData.fromUserId;
-        pusher.trigger("conversation", "updateUnreadMessage", {
-          userId: recipientUserId,
-        });
       }
 
       if (!conversation) {

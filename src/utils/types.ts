@@ -197,14 +197,14 @@ export type Conversation = {
   messages: Message[];
 };
 
-export interface Message {
+export type Message = {
   id: string;
-  content: string;
   conversationId: string;
+  content: string;
+  isRead: boolean;
   userId: string;
   dateCreated: Date;
-  isRead: boolean;
-}
+};
 
 type Notification = {
   details: {
