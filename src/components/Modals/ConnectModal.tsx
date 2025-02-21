@@ -9,6 +9,8 @@ import StartIcon from "../../../public/start.png";
 import EndIcon from "../../../public/end.png";
 import StaticDayBox from "../Sidebar/StaticDayBox";
 import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
 import useProfileImage from "../../utils/useProfileImage";
 import { AiOutlineUser } from "react-icons/ai";
 
@@ -87,6 +89,22 @@ const ConnectModal = (props: ConnectModalProps): JSX.Element => {
   const daysArray = props.otherUser.daysWorking
     .split(",")
     .map((day) => day === "1");
+
+  dayjs.extend(utc);
+  dayjs.extend(timezone);
+
+  const est = "America/New_York";
+
+  const formatTime = (time : Date | null) => {
+    let timeInEST = dayjs.tz(time, est);
+    const hour = timeInEST.hour();
+  
+    if (hour >= 1 && hour < 5) {
+      timeInEST = dayjs.tz(time, "UTC");
+    }
+  
+    return timeInEST.format("h:mm A");
+  };
   return (
     <Dialog
       open={isOpen}

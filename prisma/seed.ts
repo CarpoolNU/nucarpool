@@ -2,6 +2,7 @@ import { CarpoolGroup, PrismaClient, Role, User } from "@prisma/client";
 import { range } from "lodash";
 import Random from "random-seed";
 import { generateUser, GenerateUserInput } from "../src/utils/recommendation";
+import { timeEnd } from "console";
 
 const prisma = new PrismaClient();
 
@@ -190,6 +191,7 @@ const createUserData = async () => {
       companyCoordLng: -71.1,
       count: 15,
       seed: "asjfwieoiroqweiaof",
+      timezone: "UTC",
     }),
     ...genRandomUsers({
       // BROOKLINE => FENWAY
@@ -199,6 +201,7 @@ const createUserData = async () => {
       companyCoordLng: -71.1,
       count: 15,
       seed: "dfsiuyisryrklewuoiadusruasi",
+      timezone: "UTC",
     }),
   ];
 
@@ -234,6 +237,7 @@ const genRandomUsers = ({
   coordOffset = 0.03,
   count,
   seed,
+  timezone,
 }: {
   startCoordLat: number;
   startCoordLng: number;
@@ -242,6 +246,7 @@ const genRandomUsers = ({
   coordOffset?: number;
   count: number;
   seed?: string;
+  timezone?: string;
 }): GenerateUserInput[] => {
   const random = Random.create(seed);
   const doubleOffset = coordOffset * 2;
@@ -251,8 +256,8 @@ const genRandomUsers = ({
   return new Array(count).fill(undefined).map((_, index) => {
     const startMin = 15 * Math.floor(rand(3.9));
     const endMin = 15 * Math.floor(rand(3.9));
-    const startHour = 8 + Math.floor(rand(3));
-    const endHour = 16 + Math.floor(rand(3));
+    const startHour = timezone === "UTC" ? 2 + Math.floor(rand(3)) : 8 + Math.floor(rand(3)) ;
+    const endHour = timezone === "UTC" ? 2 + Math.floor(rand(3)) : 16 + Math.floor(rand(3));
     const startTime = new Date(2023, 0, 1, startHour, startMin).toISOString();
     const endTime = new Date(2023, 0, 1, endHour, endMin).toISOString();
     const output: GenerateUserInput = {
