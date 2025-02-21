@@ -95,16 +95,17 @@ const ConnectModal = (props: ConnectModalProps): JSX.Element => {
 
   const est = "America/New_York";
 
-  const formatTime = (time : Date | null) => {
+  const formatTime = (time : Date | null, starttime? : Date | null) => {
     let timeInEST = dayjs.tz(time, est);
-    const hour = timeInEST.hour();
+    const hour = starttime ? dayjs.tz(starttime, est).hour() : timeInEST.hour();
   
-    if (hour >= 1 && hour < 5) {
+    if (hour >= 1 && hour < 5) { 
       timeInEST = dayjs.tz(time, "UTC");
     }
   
     return timeInEST.format("h:mm A");
   };
+
   return (
     <Dialog
       open={isOpen}
@@ -222,14 +223,12 @@ const ConnectModal = (props: ConnectModalProps): JSX.Element => {
                       <div className="flex  ">
                         <p className="pr-1">Start:</p>
                         <p className="font-semibold">
-                          {dayjs.tz(props.otherUser.startTime, dayjs.tz.guess()).format("h:mm A")}{" "}
-                          am
+                          {formatTime(props.otherUser.startTime)}
                         </p>
                         <p className="px-2 font-semibold">|</p>
                         <p className="pr-1">End:</p>
                         <p className="font-semibold">
-                          {dayjs.tz(props.otherUser.endTime, dayjs.tz.guess()).format("h:mm A")}{" "}
-                          pm
+                          {formatTime(props.otherUser.endTime, props.otherUser.startTime)}
                         </p>
                       </div>
                     </div>
