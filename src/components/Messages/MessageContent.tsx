@@ -11,6 +11,7 @@ import { format, isSameDay } from "date-fns";
 import { trpc } from "../../utils/trpc";
 import { UserContext } from "../../utils/userContext";
 import Pusher from "pusher-js";
+import { browserEnv } from "../../utils/env/browser";
 
 interface MessageContentProps {
   selectedUser: EnhancedPublicUser;
@@ -50,8 +51,8 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
   }, [request?.conversation?.messages])
 
   useEffect(() => {
-    const pusher = new Pusher("988fdff5dc5909417348", {
-      cluster: "us2"
+    const pusher = new Pusher(browserEnv.NEXT_PUBLIC_PUSHER_KEY, {
+      cluster: browserEnv.NEXT_PUBLIC_PUSHER_CLUSTER
     });
 
     const messageChannel = pusher.subscribe("conversation");

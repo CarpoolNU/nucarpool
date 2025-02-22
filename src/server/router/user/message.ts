@@ -2,13 +2,14 @@ import { TRPCError } from "@trpc/server";
 import { protectedRouter, router } from "../createRouter";
 import { z } from "zod";
 import Pusher from "pusher";
+import { serverEnv } from "../../../utils/env/server";
 import { message } from "antd";
 
 const pusher = new Pusher({
-  appId: "1933132",
-  key: "988fdff5dc5909417348",
-  secret: "484df2e314b7f06a5392",
-  cluster: "us2",
+  appId: serverEnv.PUSHER_APP_ID,
+  key: serverEnv.NEXT_PUBLIC_PUSHER_KEY,
+  secret: serverEnv.PUSHER_SECRET,
+  cluster: serverEnv.NEXT_PUBLIC_PUSHER_CLUSTER,
   useTLS: true
 });
 
