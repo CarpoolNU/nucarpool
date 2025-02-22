@@ -141,14 +141,6 @@ export const messageRouter = router({
           data: { conversationId: conversation.id },
         });
       }
-
-      // return ctx.prisma.message.create({
-      //   data: {
-      //     conversationId: conversation.id,
-      //     content: input.content,
-      //     userId: userId,
-      //   },
-      // });
     }),
 
   markMessagesAsRead: protectedRouter
