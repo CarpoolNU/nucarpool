@@ -41,5 +41,11 @@ export const serverEnv = {
     GOOGLE_CLIENT_SECRET: str({
       input: process.env.GOOGLE_CLIENT_SECRET,
     }),
+    PUSHER_APP_ID: str({
+      input: process.env.PUSHER_APP_ID,
+    }),
+    PUSHER_SECRET: str({
+      input: process.env.PUSHER_SECRET,
+    })
   }),
 };
