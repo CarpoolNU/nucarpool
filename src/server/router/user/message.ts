@@ -112,9 +112,6 @@ export const messageRouter = router({
       // notify the frontend in real time 
       if (conversation) {
 
-        console.log("Conversation:", conversation);
-        console.log("Conversation ID:", conversation?.id);
-
         const newMessage = await ctx.prisma.message.create({
           data: {
             conversationId: conversation.id,
@@ -122,11 +119,8 @@ export const messageRouter = router({
             userId: userId,
           },
         });
-
-        console.log("backend message", newMessage)
         
-        pusher.trigger("conversation", "sendMessage", {
-          requestId: input.requestId,
+        pusher.trigger(`conversation-${input.requestId}`, "sendMessage", {
           newMessage: newMessage,
         });
       }

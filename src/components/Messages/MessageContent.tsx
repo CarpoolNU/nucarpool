@@ -55,17 +55,10 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
       cluster: browserEnv.NEXT_PUBLIC_PUSHER_CLUSTER
     });
 
-    const messageChannel = pusher.subscribe("conversation");
+    const messageChannel = pusher.subscribe(`conversation-${request?.id}`);
 
-    messageChannel.bind("sendMessage", (data : {requestId: string} & {newMessage : Message}) => {
-      console.log("request ", request);
-      console.log("data ", data);
-      console.log("requestId ", data.requestId);
-      console.log("message", data.newMessage);
-
-      if (request?.id === data.requestId ) {
-        setConversationMessages((prevMessages) => [...prevMessages, data.newMessage ]);
-      }
+    messageChannel.bind("sendMessage", (data : {newMessage : Message}) => {
+      setConversationMessages((prevMessages) => [...prevMessages, data.newMessage ]);
     })
   
     return () => {
