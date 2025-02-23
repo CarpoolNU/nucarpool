@@ -7,6 +7,10 @@ import { trpc } from "../utils/trpc";
 import { UserContext } from "../utils/userContext";
 import { useRouter } from "next/router";
 import Spinner from "./Spinner";
+import { useEffect } from "react";
+import Pusher from "pusher-js";
+import { browserEnv } from "../utils/env/browser";
+import { Message } from "../utils/types";
 
 const HeaderDiv = styled.div`
   display: flex;
@@ -55,7 +59,33 @@ const Header = (props: HeaderProps) => {
   const user = useContext(UserContext);
   const router = useRouter();
 
+  const [currentunreadMessagesCount, setCurrentunreadMessagesCount] = useState(0);
   const [displayGroup, setDisplayGroup] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const pusher = new Pusher(browserEnv.NEXT_PUBLIC_PUSHER_KEY, {
+      cluster: browserEnv.NEXT_PUBLIC_PUSHER_CLUSTER
+    });
+
+    const messageChannel = pusher.subscribe(`notification-${user?.id}`);
+
+    messageChannel.bind("sendNotification", (data : {newMessage : Message}) => {
+      props.data?.setSidebar(prev => {
+        if (prev !== "requests") {
+          setCurrentunreadMessagesCount(prev => prev + 1);
+        }
+        return prev
+      });
+    })
+
+    return () => {
+      messageChannel.unbind("sendNotification");
+      pusher.unsubscribe(`notification-${user?.id}`); 
+    };
+  }, [props.data?.setSidebar]);
+
   const renderClassName = (sidebarValue: string, sidebarText: string) => {
     if (sidebarValue == "explore" && sidebarText == "explore") {
       return "underline underline-offset-8 rounded-xl p-4 font-medium text-xl text-white";
@@ -120,15 +150,16 @@ const Header = (props: HeaderProps) => {
         <button
           onClick={() => {
             setSidebar("requests");
+            setCurrentunreadMessagesCount(0);
           }}
           disabled={disabled}
           className={`${renderClassName(sidebarValue, "requests")} relative`}
         >
           Requests
-          {unreadMessagesCount !== 0 && (
+          {(unreadMessagesCount !== 0 || currentunreadMessagesCount !== 0) && (
             <span className="absolute right-0 top-0 flex h-6 w-6 items-center justify-center rounded-full bg-white">
               <span className="text-xs font-bold text-northeastern-red">
-                {unreadMessagesCount}
+                {currentunreadMessagesCount !== 0  ? currentunreadMessagesCount : unreadMessagesCount}
               </span>
             </span>
           )}
