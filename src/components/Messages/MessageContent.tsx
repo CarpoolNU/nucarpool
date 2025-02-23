@@ -51,6 +51,8 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
   }, [request?.conversation?.messages])
 
   useEffect(() => {
+    if (!request?.id) return;
+    
     const pusher = new Pusher(browserEnv.NEXT_PUBLIC_PUSHER_KEY, {
       cluster: browserEnv.NEXT_PUBLIC_PUSHER_CLUSTER
     });
@@ -63,7 +65,7 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
   
     return () => {
       messageChannel.unbind("sendMessage");
-      pusher.unsubscribe("conversation"); 
+      pusher.unsubscribe(`conversation-${request?.id}`); 
     };
   }, [request?.id]);
 

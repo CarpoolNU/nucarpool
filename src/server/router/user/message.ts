@@ -119,8 +119,16 @@ export const messageRouter = router({
             userId: userId,
           },
         });
+
+        const request = await ctx.prisma.request.findUnique({
+          where : {id : conversation.requestId}
+        })
         
         pusher.trigger(`conversation-${input.requestId}`, "sendMessage", {
+          newMessage: newMessage,
+        });
+
+        pusher.trigger(`notification-${request?.toUserId}`, "sendNotification", {
           newMessage: newMessage,
         });
       }
