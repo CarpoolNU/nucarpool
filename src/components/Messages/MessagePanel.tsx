@@ -27,6 +27,12 @@ const MessagePanel = ({
   const utils = trpc.useContext();
   const user = useContext(UserContext);
 
+  const requestId =
+      selectedUser.incomingRequest?.id || selectedUser.outgoingRequest?.id;
+  const { data: conversationMessages, refetch } = trpc.user.messages.getMessages.useQuery(requestId || "", {
+    enabled: !!requestId,
+  });
+
   // Create request handlers
   const { handleAcceptRequest, handleRejectRequest } =
     createRequestHandlers(utils);
@@ -47,12 +53,30 @@ const MessagePanel = ({
       },
     });
 
-  const handleSendMessage = (content: string) => {
-    const requestId =
-      selectedUser.incomingRequest?.id || selectedUser.outgoingRequest?.id;
+  const handleSendMessage = async (content: string) => {
     if (!requestId) return;
 
-    sendMessage.mutate({ requestId, content });
+    await sendMessage.mutateAsync({ requestId, content });
+
+    const { data: updatedMessages } = await refetch();
+
+    // If the last message from the recipient is less than 5 mins old, don't send email notification
+    if (updatedMessages && updatedMessages.length > 0) {
+      const recipientMessages = updatedMessages.filter(
+        (msg) => msg.userId === selectedUser.id
+      );
+
+      const lastMessageFromRecipient = recipientMessages[recipientMessages.length - 1];
+
+      if (lastMessageFromRecipient) {
+        const lastMsgTime = new Date(lastMessageFromRecipient.dateCreated).getTime();
+        const minsDiff = (Date.now() - lastMsgTime) / (1000 * 60);
+
+        if (minsDiff < 5) {
+          return;
+        }
+      }
+    }
 
     // Send email notification
     if (user && user.email && selectedUser.email) {
