@@ -14,6 +14,9 @@ import { OnboardingFormInputs } from "../../utils/types";
 import { formatDateToMonth, handleMonthChange } from "../../utils/dateUtils";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import { Switch } from "@mui/material";
+import { DatePicker } from "antd";
+import dayjs, {Dayjs} from "dayjs";
+
 interface AccountSectionProps {
   errors: FieldErrors<OnboardingFormInputs>;
   setValue: UseFormSetValue<OnboardingFormInputs>;
@@ -101,16 +104,16 @@ const AccountSection = ({
               label="Start Date"
               className={"!text-lg"}
             />
-            <TextField
-              type="month"
-              inputClassName="h-14 text-lg"
-              isDisabled={isViewer}
+             <DatePicker<Dayjs>
               id="coopStartDate"
-              error={errors.coopStartDate}
-              onChange={handleMonthChange("coopStartDate", setValue)}
-              defaultValue={
-                formatDateToMonth(watch("coopStartDate")) || undefined
-              }
+              picker="month"
+              disabled={isViewer}
+              {...(watch("coopStartDate") && {
+                defaultValue: dayjs(formatDateToMonth(watch("coopStartDate")), "YYYY/MM"),
+              })}
+              onChange={(date : Dayjs, dateString) => setValue("coopStartDate", date ? date.toDate() : null)}
+              format="YYYY-MM" 
+              className="h-14 text-lg w-full border rounded-md p-2"
             />
           </div>
           <div className="flex flex-1 flex-col">
@@ -120,16 +123,16 @@ const AccountSection = ({
               label="End Date"
               className={"!text-lg"}
             />
-            <TextField
-              type="month"
-              inputClassName="h-14 text-lg"
-              isDisabled={isViewer}
-              id="coopEndDate"
-              error={errors.coopEndDate}
-              onChange={handleMonthChange("coopEndDate", setValue)}
-              defaultValue={
-                formatDateToMonth(watch("coopEndDate")) || undefined
-              }
+            <DatePicker<Dayjs>
+              id="coopStartDate"
+              picker="month"
+              disabled={isViewer}
+              {...(watch("coopEndDate") && {
+                defaultValue: dayjs(formatDateToMonth(watch("coopEndDate")), "YYYY/MM"),
+              })}
+              onChange={(date : Dayjs, dateString) => setValue("coopEndDate", date ? date.toDate() : null)}
+              format="YYYY-MM" 
+              className="h-14 text-lg w-full border rounded-md p-2"
             />
           </div>
         </div>

@@ -15,6 +15,9 @@ import ControlledTimePicker from "../Profile/ControlledTimePicker";
 import { TextField } from "../TextField";
 import { formatDateToMonth, handleMonthChange } from "../../utils/dateUtils";
 import StaticDayBox from "../Sidebar/StaticDayBox";
+import { DatePicker } from "antd";
+import dayjs, {Dayjs} from "dayjs";
+
 
 interface StepThreeProps {
   errors: FieldErrors<OnboardingFormInputs>;
@@ -147,43 +150,36 @@ const StepThree = ({
             } gap-8`}
           >
             {/* Start Date */}
-            <div className="flex flex-1  flex-col  ">
+            <div className="flex flex-col w-1/2">
               <EntryLabel
                 required={true}
                 error={errors.coopStartDate}
                 label="Start Date"
+                className="w-full"
               />
-              <TextField
-                type="month"
-                isDisabled={false}
-                inputClassName={" !px-0 !pr-0 !pl-2"}
+              <DatePicker<Dayjs>
                 id="coopStartDate"
-                error={errors.coopStartDate}
-                onChange={handleMonthChange("coopStartDate", setValue)}
-                defaultValue={
-                  formatDateToMonth(watch("coopStartDate")) || undefined
-                }
+                picker="month"
+                onChange={(date : Dayjs, dateString) => setValue("coopStartDate", date ? date.toDate() : null)}
+                format="YYYY-MM" 
+                className="h-14 text-lg w-full border rounded-md p-2"
               />
             </div>
 
             {/* End Date */}
-            <div className="flex flex-1 flex-grow-0 flex-col ">
+            <div className="flex flex-grow-0 flex-col w-1/2">
               <EntryLabel
                 required={true}
                 error={errors.coopEndDate}
                 label="End Date"
               />
-              <TextField
-                type="month"
-                isDisabled={false}
-                inputClassName={"!pr-0 !pl-2"}
-                id="coopEndDate"
-                error={errors.coopEndDate}
-                onChange={handleMonthChange("coopEndDate", setValue)}
-                defaultValue={
-                  formatDateToMonth(watch("coopEndDate")) || undefined
-                }
-              />
+            <DatePicker<Dayjs>
+              id="coopStartDate"
+              picker="month"
+              onChange={(date : Dayjs, dateString) => setValue("coopEndDate", date ? date.toDate() : null)}
+              format="YYYY-MM" 
+              className="h-14 text-lg w-full border rounded-md p-2"
+            />
             </div>
           </div>
           {/* Note for Date Section */}
