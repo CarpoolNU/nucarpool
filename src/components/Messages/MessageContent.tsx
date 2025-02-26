@@ -60,7 +60,12 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
     const messageChannel = pusher.subscribe(`conversation-${request?.id}`);
 
     messageChannel.bind("sendMessage", (data : {newMessage : Message}) => {
-      setConversationMessages((prevMessages) => [...prevMessages, data.newMessage ]);
+      setConversationMessages((prevMessages) => {
+        if (prevMessages.some((m) => m.id === data.newMessage.id)) {
+          return prevMessages; 
+        }
+        return [...prevMessages, data.newMessage];
+      });
     })
   
     return () => {
