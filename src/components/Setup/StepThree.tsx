@@ -156,6 +156,7 @@ const StepThree = ({
               picker="month"
               onChange={(date : Dayjs, dateString) => setValue("coopStartDate", date ? date.toDate() : null)}
               format="YYYY-MM" 
+              inputReadOnly={true}
               className={`${isMobile ? 'h-10 text-base' : 'h-12 text-lg'} w-full border rounded-md p-2`}
             />
           </div>
@@ -172,6 +173,7 @@ const StepThree = ({
               picker="month"
               onChange={(date : Dayjs, dateString) => setValue("coopEndDate", date ? date.toDate() : null)}
               format="YYYY-MM" 
+              inputReadOnly={true}
               className={`${isMobile ? 'h-10 text-base' : 'h-12 text-lg'} w-full border rounded-md p-2`}
             />
           </div>
