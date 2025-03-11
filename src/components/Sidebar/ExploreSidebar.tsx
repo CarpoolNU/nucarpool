@@ -71,7 +71,7 @@ const ExploreSidebar = (props: ExploreSidebarProps) => {
   return (
     
     <div className="z-10 flex h-full flex-shrink-0 flex-col bg-white text-left">
-      <div className="flex-row px-5 py-3">
+      <div className={`flex-row px-5 ${isMobile ? 'py-0' : 'py-3'}`}>
         {!isMobile && <div className="flex justify-center gap-3">
           <button
             className={
