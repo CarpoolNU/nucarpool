@@ -10,8 +10,6 @@ interface ConnectPortalProps {
   onViewRouteClick: (user: User, otherUser: PublicUser) => void;
   onViewRequest: (userId: string) => void;
   onClose: () => void;
-  mobileSelectedUser: string | null;
-  handleMobileExpand: (userId?: string) => void;
 }
 
 export const MapConnectPortal = (props: ConnectPortalProps) => {
@@ -49,9 +47,6 @@ export const MapConnectPortal = (props: ConnectPortalProps) => {
                         onClose={(action) => {
                           if (action === "connect") props.onClose();
                         }}
-                        handleMobileExpand={props.handleMobileExpand}
-                        mobileSelectedUser={props.mobileSelectedUser}
-                        
                       />
                     </div>
                   ))}

@@ -19,8 +19,8 @@ interface ConnectCardProps {
   onViewRouteClick: (user: User, otherUser: PublicUser) => void;
   onClose?: (action: string) => void;
   onViewRequest: (userId: string) => void;
-  handleMobileExpand?: (userId?: string) => void,
   mobileSelectedUser?: string | null,
+  handleMobileExpand?: (userId?: string) => void,
 }
 
 export const ConnectCard = (props: ConnectCardProps): JSX.Element => {

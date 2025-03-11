@@ -70,8 +70,8 @@ const renderUserCard = (
   onViewRequest: (userId: string) => void,
   isUnread: boolean,
   latestMessage: Message | undefined,
-  handleMobileExpand: (userId?: string) => void,
-  mobileSelectedUser: string | null,
+  handleMobileExpand?: (userId?: string) => void,
+  mobileSelectedUser?: string | null,
 ): JSX.Element => {
   const handleClick = () => onCardClick(otherUser.id);
   switch (subType) {
