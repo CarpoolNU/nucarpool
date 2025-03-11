@@ -38,6 +38,7 @@ import updateCompanyLocation from "../utils/map/updateCompanyLocation";
 import MessagePanel from "../components/Messages/MessagePanel";
 import InactiveBlocker from "../components/Map/InactiveBlocker";
 import updateGeoJsonUsers from "../utils/map/updateGeoJsonUsers";
+import useIsMobile from "../utils/useIsMobile";
 
 mapboxgl.accessToken = browserEnv.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
 
@@ -91,6 +92,10 @@ const Home: NextPage<any> = () => {
   const [otherUser, setOtherUser] = useState<PublicUser | null>(null);
   const isMapInitialized = useRef(false);
   const [mapStateLoaded, setMapStateLoaded] = useState(false);
+  const isMobile : boolean = useIsMobile();
+  // const [mobileSidebarExpanded, setMobileSidebarExpanded] = useState<boolean>(false);
+  const [mobileSelectedUserID, setmobileSelectedUserID] = useState<string | null>(null)
+
   useEffect(() => {
     const handler = debounce(() => {
       setDebouncedFilters(filters);
@@ -202,6 +207,50 @@ const Home: NextPage<any> = () => {
     }
     return null;
   }, [selectedUserId, requests, extendPublicUser]);
+
+  const sidebarRef = useRef<HTMLDivElement>(null);
+  const lastScrollTop = useRef<number>(0);
+
+  const handleMobileSidebarExpand = (userId?: string) => {
+    if (userId) {
+      setmobileSelectedUserID(userId);
+      const allUsers = [...enhancedRecs, ...enhancedFavs, ...enhancedSentUsers, ...enhancedReceivedUsers];
+      const selectedPublicUser = allUsers.find(u => u.id === userId);
+      
+      if (selectedPublicUser && user && mapState && mapStateLoaded) {
+        onViewRouteClick(user, selectedPublicUser);
+      }
+    } 
+    else {
+      setmobileSelectedUserID(null);
+    }
+  };
+
+  useEffect(() => {
+    const handleScroll = (e: Event) => {
+      if (!isMobile || !sidebarRef.current || mobileSelectedUserID === null) return;
+      
+      const element = e.target as HTMLDivElement;
+      const scrollTop = element.scrollTop;
+      
+      if (scrollTop < lastScrollTop.current && scrollTop < 10) {
+        handleMobileSidebarExpand(); 
+      }
+      
+      lastScrollTop.current = scrollTop;
+    };
+    
+    const sidebarElement = sidebarRef.current;
+    if (sidebarElement && isMobile) {
+      sidebarElement.addEventListener('scroll', handleScroll);
+    }
+    
+    return () => {
+      if (sidebarElement) {
+        sidebarElement.removeEventListener('scroll', handleScroll);
+      }
+    };
+  }, [isMobile, mobileSelectedUserID, sidebarRef]);
 
   const onViewRouteClick = useCallback(
     (user: User, clickedUser: PublicUser) => {
@@ -569,15 +618,30 @@ const Home: NextPage<any> = () => {
             <title>CarpoolNU</title>
           </Head>
           <div className="m-0 h-full max-h-screen w-full">
-            <Header
+            {!isMobile && <Header
               data={{
                 sidebarValue: sidebarType,
                 setSidebar: setSidebarType,
                 disabled: user.status === "INACTIVE" && user.role !== "VIEWER",
               }}
-            />
+            />}
             <div className="flex h-[91.5%] overflow-hidden">
-              <div className="w-[25rem]  ">
+
+              {isMobile && (
+                <div className="absolute left-1/2 top-12 z-30 -translate-x-1/2 transform">
+                  <div className="h-1.5 w-16 rounded-full bg-gray-500 shadow-sm"></div>
+                </div>
+              )}
+            <div 
+              ref={sidebarRef}
+              className={`${isMobile 
+                ? `absolute left-0 z-20 w-full overflow-y-auto bg-white shadow-lg transition-all duration-300 rounded-t-3xl border-2 border-black ${
+                    mobileSelectedUserID !== null 
+                      ? 'bottom-0 h-[320px]' // Short height for single card view
+                      : 'top-14  h-[calc(100%-3.5rem)]' // Full height otherwise
+                  }`
+                : 'relative w-[25rem]'}`}>
+               
                 {mapState && (
                   <SidebarPage
                     setSort={setSort}
@@ -595,16 +659,19 @@ const Home: NextPage<any> = () => {
                     onViewRouteClick={onViewRouteClick}
                     onUserSelect={handleUserSelect}
                     selectedUser={selectedUser}
+                    mobileSelectedUser={mobileSelectedUserID}
+                    handleMobileExpand={handleMobileSidebarExpand}
                   />
                 )}
               </div>
+              
 
-              <button
+              {!isMobile && <button
                 className="absolute bottom-[150px] right-[8px] z-10 flex h-8 w-8 items-center justify-center rounded-md border-2 border-solid border-gray-300 bg-white shadow-sm hover:bg-gray-200"
                 id="fly"
               >
                 <RiFocus3Line />
-              </button>
+              </button>}
               <div className="relative flex-auto">
                 {/* Message Panel */}
                 {selectedUser && (
@@ -625,8 +692,8 @@ const Home: NextPage<any> = () => {
                   className="pointer-events-auto relative  z-0 h-full w-full flex-auto"
                 >
                   {user.role === "VIEWER" && viewerBox}
-                  <MapLegend role={user.role} />
-                  <MapConnectPortal
+                  {!isMobile && <MapLegend role={user.role} />}
+                  {!isMobile && <MapConnectPortal
                     otherUsers={popupUsers}
                     extendUser={extendPublicUser}
                     onViewRouteClick={onViewRouteClick}
@@ -634,7 +701,7 @@ const Home: NextPage<any> = () => {
                     onClose={() => {
                       setPopupUsers(null);
                     }}
-                  />
+                  />}
                   {user.status === "INACTIVE" && user.role !== "VIEWER" && (
                     <InactiveBlocker />
                   )}
