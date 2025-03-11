@@ -26,7 +26,7 @@ interface UserCardProps {
   isUnread?: boolean;
   classname?: string;
   onClick?: () => void;
-  isMobileCondensedLayout: boolean;
+  isMobileCondensedLayout?: boolean;
 }
 
 const getButtonClassName = (button: ButtonInfo): string => {

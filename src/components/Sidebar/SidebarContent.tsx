@@ -24,8 +24,8 @@ interface SidebarContentProps {
   onCardClick: (userId: string) => void;
   selectedUser: EnhancedPublicUser | null;
   onViewRequest: (userId: string) => void;
-  mobileSelectedUser: string | null;
-  handleMobileExpand: (userId?: string) => void;
+  mobileSelectedUser?: string | null;
+  handleMobileExpand?: (userId?: string) => void;
 }
 
 const emptyMessages = {
