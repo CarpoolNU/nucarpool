@@ -151,7 +151,7 @@ const ConnectModal = (props: ConnectModalProps): JSX.Element => {
                       {props.otherUser.coopStartDate &&
                         props.otherUser.coopEndDate && (
                           <div className=" flex  justify-start align-middle">
-                            <div className="flex text-base ">
+                            <div className={`${isMobile ? 'flex-col' : 'flex'} text-base`}>
                               <p className="pr-1">From:</p>
                               <p className="font-bold">
                                 {dayjs(props.otherUser.coopStartDate).format(
