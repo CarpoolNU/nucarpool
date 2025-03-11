@@ -252,6 +252,8 @@ const Home: NextPage<any> = () => {
     };
   }, [isMobile, mobileSelectedUserID, sidebarRef]);
 
+  
+
   const onViewRouteClick = useCallback(
     (user: User, clickedUser: PublicUser) => {
       if (!mapStateLoaded || !mapState || !geoJsonUsers) return;
@@ -626,12 +628,15 @@ const Home: NextPage<any> = () => {
               }}
             />}
             <div className="flex h-[91.5%] overflow-hidden">
-
-              {isMobile && (
-                <div className="absolute left-1/2 top-12 z-30 -translate-x-1/2 transform">
-                  <div className="h-1.5 w-16 rounded-full bg-gray-500 shadow-sm"></div>
-                </div>
-              )}
+            {isMobile && (
+              <div className={`absolute left-1/2 z-30 -translate-x-1/2 transform ${
+                mobileSelectedUserID !== null 
+                  ? 'bottom-[325px]' 
+                  : 'top-12'
+              }`}>
+                <div className="h-1.5 w-16 rounded-full bg-gray-500 shadow-sm"></div>
+              </div>
+            )}
             <div 
               ref={sidebarRef}
               className={`${isMobile 
@@ -641,6 +646,20 @@ const Home: NextPage<any> = () => {
                       : 'top-14  h-[calc(100%-3.5rem)]' // Full height otherwise
                   }`
                 : 'relative w-[25rem]'}`}>
+
+                {isMobile && mobileSelectedUserID !== null && (
+                    <div className="flex-shrink-0 border-b border-gray-200 bg-gray-50 px-3 py-2">
+                      <button
+                        onClick={() => handleMobileSidebarExpand()}
+                        className="flex items-center text-northeastern-red"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mr-1">
+                          <polyline points="15 18 9 12 15 6"></polyline>
+                        </svg>
+                        <span className="font-medium">Back</span>
+                      </button>
+                    </div>
+                  )}
                
                 {mapState && (
                   <SidebarPage
