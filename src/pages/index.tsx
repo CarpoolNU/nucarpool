@@ -127,12 +127,23 @@ const Home: NextPage<any> = () => {
   });
   const { data: requests = { sent: [], received: [] } } = requestsQuery;
   const utils = trpc.useContext();
+
   const handleUserSelect = (userId: string) => {
     setSelectedUserId(userId);
     if (userId !== "") {
       setOtherUser(null);
+      if (sidebarRef.current) {
+        sidebarRef.current.classList.remove('hidden');
+      }
+    }
+    
+    if (sidebarType === "requests" && isMobile) {
+      if (sidebarRef.current) {
+        sidebarRef.current.classList.add('hidden');
+      }
     }
   };
+
   const [mapState, setMapState] = useState<mapboxgl.Map>();
   const [sidebarType, setSidebarType] = useState<HeaderOptions>("explore");
   const [popupUsers, setPopupUsers] = useState<PublicUser[] | null>(null);
@@ -642,7 +653,7 @@ const Home: NextPage<any> = () => {
               className={`${isMobile 
                 ? `absolute left-0 z-20 w-full overflow-y-auto bg-white shadow-lg transition-all duration-300 rounded-t-3xl border-2 border-black ${
                     mobileSelectedUserID !== null 
-                      ? 'bottom-0 h-[320px]' // Short height for single card view
+                      ? 'bottom-12 h-[320px]' // Short height for single card view
                       : 'top-14  h-[calc(100%-3.5rem)]' // Full height otherwise
                   }`
                 : 'relative w-[25rem]'}`}>
@@ -725,8 +736,20 @@ const Home: NextPage<any> = () => {
                     <InactiveBlocker />
                   )}
                 </div>
+                {isMobile && (
+            <Header
+              data={{
+                sidebarValue: sidebarType,
+                setSidebar: setSidebarType,
+                disabled: user.status === "INACTIVE" && user.role !== "VIEWER",
+              }}
+              isMobile={true}
+            />
+          )}
               </div>
+              
             </div>
+            
           </div>
         </ToastProvider>
       </UserContext.Provider>
