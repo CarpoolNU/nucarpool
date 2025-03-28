@@ -137,11 +137,6 @@ const Home: NextPage<any> = () => {
       }
     }
     
-    if (sidebarType === "requests" && isMobile) {
-      if (sidebarRef.current) {
-        sidebarRef.current.classList.add('hidden');
-      }
-    }
   };
 
   const [mapState, setMapState] = useState<mapboxgl.Map>();
@@ -218,6 +213,16 @@ const Home: NextPage<any> = () => {
     }
     return null;
   }, [selectedUserId, requests, extendPublicUser]);
+
+  useEffect(() => {
+    if (isMobile && sidebarRef.current) {
+      if (selectedUser) {
+        sidebarRef.current.classList.add('hidden');
+      } else {
+        sidebarRef.current.classList.remove('hidden');
+      }
+    }
+  }, [selectedUser, isMobile]);
 
   const sidebarRef = useRef<HTMLDivElement>(null);
   const lastScrollTop = useRef<number>(0);
@@ -639,10 +644,10 @@ const Home: NextPage<any> = () => {
               }}
             />}
             <div className="flex h-[91.5%] overflow-hidden">
-            {isMobile && (
+            {isMobile && sidebarType === "explore" && (
               <div className={`absolute left-1/2 z-30 -translate-x-1/2 transform ${
                 mobileSelectedUserID !== null 
-                  ? 'bottom-[325px]' 
+                  ? 'hidden' 
                   : 'top-12'
               }`}>
                 <div className="h-1.5 w-16 rounded-full bg-gray-500 shadow-sm"></div>
