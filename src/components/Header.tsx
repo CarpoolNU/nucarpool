@@ -185,16 +185,36 @@ const Header = (props: HeaderProps) => {
     setActiveNav(option);
     
     if (option === "explore" || option === "requests") {
-      props.data?.setSidebar(option as HeaderOptions);
+      setIsLoading(true);
+      router.push({
+        pathname: "/",
+        query: { tab: option }
+      }).finally(() => {
+        setIsLoading(false);
+        if (props.data?.setSidebar) {
+          props.data.setSidebar(option as HeaderOptions);
+        }
+      });
       if (option === "requests") {
         setCurrentunreadMessagesCount(0);
       }
     } else if (option === "group") {
       setDisplayGroup(true);
     } else if (option === "profile") {
-      // Handle profile click - this would open the dropdown menu functionality
+      setIsLoading(true);
+      router.push("/profile").finally(() => {
+        setIsLoading(false);
+      });
     }
   };
+
+  useEffect(() => {
+    const { tab } = router.query;
+    if (tab && (tab === "explore" || tab === "requests") && props.data?.setSidebar) {
+      props.data.setSidebar(tab as HeaderOptions);
+      setActiveNav(tab as string);
+    }
+  }, [router.query, props.data?.setSidebar]);
 
   const renderSidebarOptions = ({
     sidebarValue,
@@ -261,24 +281,28 @@ const Header = (props: HeaderProps) => {
   };
 
   const renderMobileNav = () => {
-    // Make sure we're getting the current active tab from props if available
-    const currentActiveTab = props.data?.sidebarValue || activeNav;
     
+    const isProfilePage = router.pathname.includes('/profile');
+  
+    const currentActiveTab = isProfilePage 
+      ? "profile" 
+      : (props.data?.sidebarValue || activeNav);
+      
     const navItems = [
       { 
         id: "explore", 
-        icon: "⚭", // Compass icon - in a real app, use an SVG or icon library
+        icon: "⚭", 
         label: "Explore" 
       },
       { 
         id: "requests", 
-        icon: "👥", // People icon
+        icon: "👥", 
         label: "Requests",
         badge: unreadMessagesCount !== 0 || currentunreadMessagesCount !== 0
       },
       { 
         id: "profile", 
-        icon: "👤", // User profile icon
+        icon: "👤", 
         label: "Profile" 
       }
     ];
@@ -288,7 +312,7 @@ const Header = (props: HeaderProps) => {
         {navItems.map((item) => (
           <MobileNavItem 
             key={item.id} 
-            active={currentActiveTab === item.id || (item.id === "explore" && currentActiveTab === "explore")}
+            active={currentActiveTab === item.id}
             onClick={() => {
                 handleMobileNavClick(item.id);
             }}
@@ -321,7 +345,6 @@ const Header = (props: HeaderProps) => {
     );
   };
 
-  // On mobile, we only render the mobile navigation
   if (isMobile) {
     return (
       <>
@@ -335,7 +358,6 @@ const Header = (props: HeaderProps) => {
     );
   }
 
-  // On desktop, render the regular header
   return (
     <>
       <HeaderDiv>
