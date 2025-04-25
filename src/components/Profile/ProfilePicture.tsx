@@ -170,17 +170,16 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
 
       <div className="mt-2 flex items-center">
         {croppedImageUrl ? (
-          <div className="h-40 w-40 overflow-hidden rounded-full">
+          <div className="relative h-40 w-40 overflow-hidden rounded-full flex-shrink-0">
             <Image
               src={croppedImageUrl}
               alt="Cropped Image"
-              width={160}
-              height={160}
+              layout="fill"
               objectFit="cover"
             />
           </div>
         ) : profileImageUrl && !imageLoadError ? (
-          <div className="relative h-40 w-40 items-center justify-center overflow-hidden rounded-full">
+          <div className="relative h-40 w-40 items-center justify-center overflow-hidden rounded-full flex-shrink-0">
             <Image
               src={profileImageUrl}
               alt="Profile Picture"
@@ -189,8 +188,8 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
             />
           </div>
         ) : (
-          <div className="flex items-center justify-center h-40 w-40 rounded-full bg-gray-400 overflow-hidden">
-            <AiOutlineUser className="h-32 w-32" /> {/* Sized down slightly to fit within the circle */}
+          <div className="flex items-center justify-center h-40 w-40 rounded-full bg-gray-400 overflow-hidden flex-shrink-0">
+            <AiOutlineUser className="h-28 w-28 text-white" />
           </div>
         )}
 

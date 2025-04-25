@@ -122,7 +122,7 @@ const UserSection = ({
       <EntryLabel label="Personal Info" className="mb-4 mt-6 !text-2xl" />
       
       {/* Profile picture section */}
-      <div className={`mb-12 ${isMobile ? "ml-2" : "ml-10"} w-full`}>
+      <div className={`mb-12 ${isMobile ? "flex flex-col items-start" : "ml-10"} w-full`}>
         <ProfilePicture onFileSelected={onFileSelect} />
       </div>
 
