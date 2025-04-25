@@ -203,7 +203,7 @@ export const SidebarContent = (props: SidebarContentProps) => {
 
   return (
     <div className="relative h-full px-3.5">
-      <div className={`relative h-full ${isMobile && props.mobileSelectedUser === null ? 'overflow-y-scroll' : isMobile && props.mobileSelectedUser !== null ? 'overflow-hidden' : 'overflow-y-scroll'} pb-32 scrollbar scrollbar-track-stone-100 scrollbar-thumb-busy-red scrollbar-track-rounded-full scrollbar-thumb-rounded-full`}>
+      <div className={`relative h-full ${props.mobileSelectedUser === null ? 'overflow-y-scroll' : 'overflow-hidden'} pb-32 scrollbar scrollbar-track-stone-100 scrollbar-thumb-busy-red scrollbar-track-rounded-full scrollbar-thumb-rounded-full`}>
         {props.userCardList.length === 0 ||
         (props.disabled && props.subType !== "favorites") ? (
           <div className="m-4 text-center text-lg font-light">

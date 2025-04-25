@@ -90,12 +90,8 @@ export const ConnectCard = (props: ConnectCardProps): JSX.Element => {
         otherUser={props.otherUser}
         rightButton={connectButtonInfo}
         onViewRouteClick={props.onViewRouteClick}
-        onClick={() => {
-          if (isMobile) {
-            props.handleMobileExpand?.(props.otherUser.id);
-          }
-        }}
-        isMobileCondensedLayout={isMobile && props.mobileSelectedUser !== null}
+        onClick={() => props.handleMobileExpand?.(props.otherUser.id)}
+        isMobileCondensedLayout={props.mobileSelectedUser !== null}
       />
       {props.mobileSelectedUser !== null && isMobile && (
         <div className="mx-3.5 mb-4 mt-2">

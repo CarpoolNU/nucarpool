@@ -198,7 +198,7 @@ export const UserCard = (props: UserCardProps): JSX.Element => {
       </div>
 
       {/* Fourth row - messaging bubble */}
-      {props.message && !(isMobile && props.isMobileCondensedLayout) && (
+      {props.message && !props.isMobileCondensedLayout && (
         <div
           className={`mt-2 inline-block max-w-full break-words rounded-lg bg-white p-2 text-sm ${
             props.isUnread ? "font-bold" : ""
@@ -208,14 +208,15 @@ export const UserCard = (props: UserCardProps): JSX.Element => {
         </div>
       )}
 
-      {!(isMobile && props.isMobileCondensedLayout) && (
+      {!props.isMobileCondensedLayout && (
       <div className="flex w-full items-center gap-4">
         {DaysWorkingDisplay(props.otherUser.daysWorking)}
       </div>
       )}
 
       {/* Fifth row - Start and end times */}
-      {!(isMobile && props.isMobileCondensedLayout) && (<div className="m-0 flex w-full justify-between align-middle">
+
+      {!props.isMobileCondensedLayout && (<div className="m-0 flex w-full justify-between align-middle">
         <div className="flex text-sm ">
           <p className="pr-1">Start:</p>
           <p className="font-semibold">
@@ -230,7 +231,7 @@ export const UserCard = (props: UserCardProps): JSX.Element => {
       </div>
       )}
       {/* Sixth row - coop Start and end dates */}
-      {props.otherUser.coopStartDate && props.otherUser.coopEndDate && !(isMobile && props.isMobileCondensedLayout) && (
+      {props.otherUser.coopStartDate && props.otherUser.coopEndDate && !props.isMobileCondensedLayout && (
         <div className="m-0 flex w-full justify-between align-middle">
           <div className="flex text-sm ">
             <p className="pr-1">From:</p>
@@ -247,7 +248,8 @@ export const UserCard = (props: UserCardProps): JSX.Element => {
       )}
 
       {/* Seventh row - Seats avaliable*/}
-      {props.otherUser.role === "DRIVER" && !(isMobile && props.isMobileCondensedLayout) && (
+
+      {props.otherUser.role === "DRIVER" && !props.isMobileCondensedLayout && (
         <div className="flex flex-row text-sm">
           <div className="mr-1">Seats Available:</div>
           <div className="font-semibold">{props.otherUser.seatAvail}</div>
