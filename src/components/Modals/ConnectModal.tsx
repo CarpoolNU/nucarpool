@@ -9,8 +9,11 @@ import StartIcon from "../../../public/start.png";
 import EndIcon from "../../../public/end.png";
 import StaticDayBox from "../Sidebar/StaticDayBox";
 import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
 import useProfileImage from "../../utils/useProfileImage";
 import { AiOutlineUser } from "react-icons/ai";
+import useIsMobile from "../../utils/useIsMobile";
 
 interface ConnectModalProps {
   user: User;
@@ -27,6 +30,8 @@ const ConnectModal = (props: ConnectModalProps): JSX.Element => {
   const { profileImageUrl, imageLoadError } = useProfileImage(
     props.otherUser.id
   );
+  const isMobile = useIsMobile();
+
   const onClose = async (action: string) => {
     if (action === "closeAfterSend") {
       await utils.user.recommendations.me.invalidate();
@@ -87,6 +92,23 @@ const ConnectModal = (props: ConnectModalProps): JSX.Element => {
   const daysArray = props.otherUser.daysWorking
     .split(",")
     .map((day) => day === "1");
+
+  dayjs.extend(utc);
+  dayjs.extend(timezone);
+
+  const est = "America/New_York";
+
+  const formatTime = (time : Date | null, starttime? : Date | null) => {
+    let timeInEST = dayjs.tz(time, est);
+    const hour = starttime ? dayjs.tz(starttime, est).hour() : timeInEST.hour();
+  
+    if (hour >= 1 && hour < 5) { 
+      timeInEST = dayjs.tz(time, "UTC");
+    }
+  
+    return timeInEST.format("h:mm A");
+  };
+
   return (
     <Dialog
       open={isOpen}
@@ -120,7 +142,7 @@ const ConnectModal = (props: ConnectModalProps): JSX.Element => {
                           <p>{props.otherUser.preferredName}</p>
                         </div>
                         <p className="font-montserrat  text-sm italic text-stone-400">
-                          {props.otherUser.pronouns !== ""
+                          {props.otherUser.pronouns !== "" && !isMobile
                             ? "(" + `${props.otherUser.pronouns}` + ")"
                             : null}
                         </p>
@@ -129,7 +151,7 @@ const ConnectModal = (props: ConnectModalProps): JSX.Element => {
                       {props.otherUser.coopStartDate &&
                         props.otherUser.coopEndDate && (
                           <div className=" flex  justify-start align-middle">
-                            <div className="flex text-base ">
+                            <div className={`${isMobile ? 'flex-col' : 'flex'} text-base`}>
                               <p className="pr-1">From:</p>
                               <p className="font-bold">
                                 {dayjs(props.otherUser.coopStartDate).format(
@@ -158,7 +180,7 @@ const ConnectModal = (props: ConnectModalProps): JSX.Element => {
                       </div>
                     </div>
                   )}
-                  <div className="flex flex-col gap-3 py-7 pl-12 md:w-1/2">
+                  {!isMobile && (<div className="flex flex-col gap-3 py-7 pl-12 md:w-1/2">
                     {/*start location*/}
                     <div className="flex  items-center">
                       <div className="flex w-8 items-center justify-center">
@@ -204,18 +226,12 @@ const ConnectModal = (props: ConnectModalProps): JSX.Element => {
                       <div className="flex  ">
                         <p className="pr-1">Start:</p>
                         <p className="font-semibold">
-                          {dayjs
-                            .tz(props.otherUser.startTime, "UTC")
-                            .format("h:mm")}{" "}
-                          am
+                          {formatTime(props.otherUser.startTime)}
                         </p>
                         <p className="px-2 font-semibold">|</p>
                         <p className="pr-1">End:</p>
                         <p className="font-semibold">
-                          {dayjs
-                            .tz(props.otherUser.endTime, "UTC")
-                            .format("h:mm")}{" "}
-                          pm
+                          {formatTime(props.otherUser.endTime, props.otherUser.startTime)}
                         </p>
                       </div>
                     </div>
@@ -227,7 +243,7 @@ const ConnectModal = (props: ConnectModalProps): JSX.Element => {
                         </div>
                       </div>
                     )}
-                  </div>
+                  </div>)}
                 </div>
                 <div className="flex w-full flex-col px-14">
                   <Dialog.Title className="mb-4 pt-2 text-center text-xl font-bold">
@@ -272,9 +288,12 @@ const ConnectModal = (props: ConnectModalProps): JSX.Element => {
                 <Dialog.Title className="mb-8 text-center text-2xl font-bold">
                   Your request has been sent!
                 </Dialog.Title>
-                <div className="mb-4 text-center">
+                {!isMobile && (<div className="mb-4 text-center">
                   Click below to view or continue exploring.
-                </div>
+                </div>)}
+                {isMobile && (<div className="mb-4 text-center">
+                  View your requests on desktop!
+                </div>)}
                 <div className="flex w-full  justify-center space-x-7">
                   <div className="flex w-full  gap-6 md:w-3/4">
                     <button
@@ -283,12 +302,12 @@ const ConnectModal = (props: ConnectModalProps): JSX.Element => {
                     >
                       Close
                     </button>
-                    <button
+                    {!isMobile && (<button
                       className="w-full rounded-md  bg-northeastern-red p-1 text-slate-50 hover:bg-red-700"
                       onClick={handleViewRequest}
                     >
                       View Request
-                    </button>
+                    </button>)}
                   </div>
                 </div>
               </div>

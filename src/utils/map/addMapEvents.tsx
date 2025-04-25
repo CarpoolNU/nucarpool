@@ -60,7 +60,7 @@ const addMapEvents = (
     map.getCanvas().style.cursor = "";
   });
 
-  document.getElementById("fly")!.addEventListener("click", () => {
+  document.getElementById("fly")?.addEventListener("click", () => {
     map.flyTo({
       center: [user.companyCoordLng, user.companyCoordLat],
       essential: true,

@@ -10,6 +10,7 @@ import Filters from "../Filters";
 import { FaFilter } from "react-icons/fa6";
 import CustomSelect from "./CustomSelect";
 import { UserContext } from "../../utils/userContext";
+import useIsMobile from "../../utils/useIsMobile";
 
 interface ExploreSidebarProps {
   recs: EnhancedPublicUser[];
@@ -22,10 +23,13 @@ interface ExploreSidebarProps {
   disabled: boolean;
   viewRoute: (user: User, otherUser: PublicUser) => void;
   onViewRequest: (userId: string) => void;
+  mobileSelectedUser: string | null;
+  handleMobileExpand: (userId?: string) => void;
 }
 
 const ExploreSidebar = (props: ExploreSidebarProps) => {
   const user = useContext(UserContext);
+  const isMobile = useIsMobile();
   const [curOption, setCurOption] = useState<"recommendations" | "favorites">(
     "recommendations"
   );
@@ -65,9 +69,10 @@ const ExploreSidebar = (props: ExploreSidebarProps) => {
     { value: "time", label: "Time" },
   ];
   return (
+    
     <div className="z-10 flex h-full flex-shrink-0 flex-col bg-white text-left">
-      <div className="flex-row px-5 py-3">
-        <div className="flex justify-center gap-3">
+      <div className={`flex-row px-5 ${isMobile ? 'py-0' : 'py-3'}`}>
+        {!isMobile && <div className="flex justify-center gap-3">
           <button
             className={
               curOption === "recommendations"
@@ -93,9 +98,9 @@ const ExploreSidebar = (props: ExploreSidebarProps) => {
           >
             Favorites
           </button>
-        </div>
+        </div>}
 
-        {!filtersOpen && !props.disabled && curOption === "recommendations" && (
+        {!filtersOpen && !props.disabled && curOption === "recommendations" && !isMobile && (
           <div className="relative mx-4 mt-6 flex items-center justify-between">
             <CustomSelect
               value={props.sort}
@@ -138,6 +143,8 @@ const ExploreSidebar = (props: ExploreSidebarProps) => {
             onCardClick={() => {}}
             selectedUser={null}
             onViewRequest={props.onViewRequest}
+            mobileSelectedUser={props.mobileSelectedUser}
+            handleMobileExpand={props.handleMobileExpand}
           />
         )}
       </div>

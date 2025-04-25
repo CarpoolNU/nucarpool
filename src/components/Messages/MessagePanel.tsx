@@ -48,11 +48,29 @@ const MessagePanel = ({
     });
 
   const handleSendMessage = (content: string) => {
-    const requestId =
-      selectedUser.incomingRequest?.id || selectedUser.outgoingRequest?.id;
+    const request =
+      selectedUser.incomingRequest || selectedUser.outgoingRequest;
+    const requestId = request?.id;
     if (!requestId) return;
 
     sendMessage.mutate({ requestId, content });
+
+    const converstationMessages = request.conversation?.messages;
+
+     // If the last message from the recipient is less than 5 mins old, don't send email notification
+     if (converstationMessages && converstationMessages.length > 0) {
+      const recipientMessages = converstationMessages.filter(
+        (msg) => msg.userId === selectedUser.id
+      );
+      const lastMessageFromRecipient = recipientMessages[recipientMessages.length - 1];
+      if (lastMessageFromRecipient) {
+        const lastMsgTime = new Date(lastMessageFromRecipient.dateCreated).getTime();
+        const minsDiff = (Date.now() - lastMsgTime) / (1000 * 60);
+        if (minsDiff < 5) {
+          return;
+        }
+      }
+    }
 
     // Send email notification
     if (user && user.email && selectedUser.email) {

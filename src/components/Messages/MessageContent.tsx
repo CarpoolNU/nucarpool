@@ -4,11 +4,14 @@ import React, {
   useEffect,
   useMemo,
   useRef,
+  useState,
 } from "react";
-import { EnhancedPublicUser } from "../../utils/types";
+import { EnhancedPublicUser, Message } from "../../utils/types";
 import { format, isSameDay } from "date-fns";
 import { trpc } from "../../utils/trpc";
 import { UserContext } from "../../utils/userContext";
+import Pusher from "pusher-js";
+import { browserEnv } from "../../utils/env/browser";
 
 interface MessageContentProps {
   selectedUser: EnhancedPublicUser;
@@ -26,6 +29,8 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
     [selectedUser.incomingRequest, selectedUser.outgoingRequest]
   );
 
+  const [conversationMessages, setConversationMessages] = useState(request?.conversation?.messages || []);
+
   // Persist default date r
   const defaultDateCreatedRef = useRef(new Date());
 
@@ -41,9 +46,33 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
     };
   }, [request?.message, request?.dateCreated, request?.fromUserId]);
 
-  const conversationMessages = useMemo(() => {
-    return request?.conversation?.messages || [];
-  }, [request?.conversation?.messages]);
+  useEffect(() => {
+    setConversationMessages(request?.conversation?.messages || []);
+  }, [request?.conversation?.messages])
+
+  useEffect(() => {
+    if (!request?.id) return;
+    
+    const pusher = new Pusher(browserEnv.NEXT_PUBLIC_PUSHER_KEY, {
+      cluster: browserEnv.NEXT_PUBLIC_PUSHER_CLUSTER
+    });
+
+    const messageChannel = pusher.subscribe(`conversation-${request?.id}`);
+
+    messageChannel.bind("sendMessage", (data : {newMessage : Message}) => {
+      setConversationMessages((prevMessages) => {
+        if (prevMessages.some((m) => m.id === data.newMessage.id)) {
+          return prevMessages; 
+        }
+        return [...prevMessages, data.newMessage];
+      });
+    })
+  
+    return () => {
+      messageChannel.unbind("sendMessage");
+      pusher.unsubscribe(`conversation-${request?.id}`); 
+    };
+  }, [request?.id]);
 
   const allMessages = useMemo(() => {
     if (request?.message) {
