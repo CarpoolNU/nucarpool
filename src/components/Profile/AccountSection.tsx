@@ -92,7 +92,7 @@ const AccountSection = ({
                   Marking your profile inactive will make you invisible on the
                   map and disables sending messages from this profile. Profiles
                   are automatically marked inactive at the end of the of the
-                  user's co-op period.
+                  user&apos;s co-op period.
                 </Note>
               </div>
             )}
