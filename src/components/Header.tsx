@@ -218,11 +218,10 @@ const Header = (props: HeaderProps) => {
       setIsLoading(true);
       
       if (comingFromProfile) {
-        // For mobile, directly use location.href and reload for a complete refresh
+        // For real mobile devices, we need to ensure navigation completes
+        // before attempting reload
         window.location.href = `/?tab=${option}`;
-        setTimeout(() => {
-          window.location.reload();
-        }, 100);
+        // Don't use timeout - let the browser handle the navigation naturally
       } else {
         router.push({
           pathname: "/",
@@ -280,14 +279,8 @@ const Header = (props: HeaderProps) => {
       const comingFromProfile = props.profile === true || router.pathname.includes('/profile');
       
       if (comingFromProfile) {
-        // First set query parameter
-        router.push({
-          pathname: "/",
-          query: { tab: option }
-        }).then(() => {
-          // Then force a complete page reload
-          window.location.reload();
-        });
+        // Simplify navigation from profile page - don't force reload
+        window.location.href = `/?tab=${option}`;
       } else {
         setSidebar(option);
         if (option === "requests") {

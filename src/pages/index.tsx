@@ -381,6 +381,7 @@ const Home: NextPage<any> = () => {
         otherUser: clickedUser,
         map: mapState,
         userCoord,
+        isMobile
       };
 
       if (user.role === "RIDER") {
@@ -593,6 +594,7 @@ const Home: NextPage<any> = () => {
         otherUser: undefined,
         map: mapState,
         userCoord,
+        isMobile
       };
 
       // Set initial points for directions or route viewing
@@ -625,6 +627,25 @@ const Home: NextPage<any> = () => {
   });
   useGetDirections({ points: points, map: mapState! });
 
+  // Create a mobile banner component that will be added to the DOM
+  const MobileBanner = () => {
+    if (!isMobile) return null;
+    
+    return (
+      <div 
+        className="absolute top-0 left-0 right-0 z-[9999] bg-yellow-100 text-black py-1 px-4 text-xs text-center"
+        style={{ 
+          width: '100%',
+          position: 'fixed',
+          top: 0,
+          zIndex: 9999
+        }}
+      >
+        For the full experience, try using CarpoolNU on desktop
+      </div>
+    );
+  };
+  
   if (!user) {
     return <Spinner />;
   }
@@ -693,7 +714,12 @@ const Home: NextPage<any> = () => {
         >
           <Head>
             <title>CarpoolNU</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
           </Head>
+          
+          {/* Always render the banner outside of other containers */}
+          <MobileBanner />
+          
           <div className="m-0 h-full max-h-screen w-full">
             {!isMobile && <Header
               data={{
@@ -702,7 +728,7 @@ const Home: NextPage<any> = () => {
                 disabled: user.status === "INACTIVE" && user.role !== "VIEWER",
               }}
             />}
-            <div className="flex h-[91.5%] overflow-hidden">
+            <div className={`flex h-[91.5%] overflow-hidden ${isMobile ? 'mt-5' : ''}`}>
             {isMobile && sidebarType === "explore" && (
               <div className={`absolute left-1/2 z-30 -translate-x-1/2 transform ${
                 mobileSelectedUserID !== null 
