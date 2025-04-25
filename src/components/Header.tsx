@@ -72,6 +72,27 @@ export const Logo = styled.h1`
   }
 `;
 
+export const SigninLogo = styled.h1`
+  font-family: "Lato", sans-serif;
+  height: 111px;
+  font-style: normal;
+  font-weight: 700;
+  font-size: 48px;
+  line-height: 77px;
+  display: flex;
+  align-items: center;
+  text-align: center;
+  color: #f4f4f4;
+  justify-content: center;
+  width: 100%;
+  
+  @media (max-width: 768px) {
+    font-size: 32px;
+    height: 70px;
+    line-height: normal;
+  }
+`;
+
 interface HeaderProps {
   data?: {
     sidebarValue: string;
@@ -345,7 +366,7 @@ const Header = (props: HeaderProps) => {
     );
   };
 
-  if (isMobile) {
+  if (isMobile && !props.signIn) {
     return (
       <>
         {renderMobileNav()}
@@ -361,7 +382,7 @@ const Header = (props: HeaderProps) => {
   return (
     <>
       <HeaderDiv>
-        <Logo>CarpoolNU</Logo>
+        {props.signIn ? <SigninLogo>CarpoolNU</SigninLogo> :  <Logo>CarpoolNU</Logo>}
         {props.admin ? (
           <div className="flex items-center">
             <button

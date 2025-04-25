@@ -24,7 +24,7 @@ import {
   Request,
 } from "../utils/types";
 import { Role, User } from "@prisma/client";
-import { useGetDirections, viewRoute } from "../utils/map/viewRoute";
+import { useGetDirections, viewRoute, clearDirections } from "../utils/map/viewRoute";
 import { MapConnectPortal } from "../components/MapConnectPortal";
 import useSearch from "../utils/search";
 import AddressCombobox from "../components/Map/AddressCombobox";
@@ -489,7 +489,25 @@ const Home: NextPage<any> = () => {
   ]);
   useEffect(() => {
     setSelectedUserId(null);
-  }, [sidebarType]);
+    // Clear other user and related route data when sidebar type changes
+    setOtherUser(null);
+    if (tempOtherUserMarkerActive && tempOtherUser && mapState) {
+      updateCompanyLocation(
+        mapState,
+        tempOtherUser.companyCoordLng,
+        tempOtherUser.companyCoordLat,
+        tempOtherUser.role,
+        tempOtherUser.id,
+        false,
+        true
+      );
+      setTempOtherUserMarkerActive(false);
+      setTempOtherUser(null);
+    }
+    if (mapState) {
+      clearDirections(mapState);
+    }
+  }, [sidebarType, tempOtherUser, tempOtherUserMarkerActive, mapState]);
 
   // initial route rendering
   useEffect(() => {

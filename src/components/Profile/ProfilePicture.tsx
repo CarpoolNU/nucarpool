@@ -189,7 +189,9 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
             />
           </div>
         ) : (
-          <AiOutlineUser className="h-40 w-40 rounded-full bg-gray-400" />
+          <div className="flex items-center justify-center h-40 w-40 rounded-full bg-gray-400 overflow-hidden">
+            <AiOutlineUser className="h-32 w-32" /> {/* Sized down slightly to fit within the circle */}
+          </div>
         )}
 
         <div className="ml-4">

@@ -69,7 +69,18 @@ export const viewRoute = (props: ViewRouteProps) => {
   const redStart = createMarkerEl(redCircle);
   let minLng, minLat, maxLng, maxLat;
 
+  // Validate otherUser coordinates
   if (props.otherUser !== undefined) {
+    const otherStartLng = props.otherUser.startCoordLng;
+    const otherStartLat = props.otherUser.startCoordLat;
+    const otherCompanyLng = props.otherUser.companyCoordLng;
+    const otherCompanyLat = props.otherUser.companyCoordLat;
+    
+    // Check if any otherUser coordinates are NaN
+    if (isNaN(otherStartLng) || isNaN(otherStartLat) || isNaN(otherCompanyLng) || isNaN(otherCompanyLat)) {
+      return;
+    }
+    
     const otherRole =
       props.otherUser.role.charAt(0).toUpperCase() +
       props.otherUser.role.slice(1).toLowerCase();
@@ -78,84 +89,96 @@ export const viewRoute = (props: ViewRouteProps) => {
     const otherUserStartMarker = new mapboxgl.Marker({
       element: otherRole === "Rider" ? orangeStart : redStart,
     })
-      .setLngLat([
-        props.otherUser.startCoordLng,
-        props.otherUser.startCoordLat,
-      ])
+      .setLngLat([otherStartLng, otherStartLat])
       .setPopup(otherUserStartPopup)
       .addTo(props.map);
 
     const otherUserEndPopup = createPopup(`${otherRole} Dest.`);
     otherUserEndPopup
-      .setLngLat([
-        props.otherUser.companyCoordLng,
-        props.otherUser.companyCoordLat,
-      ])
+      .setLngLat([otherCompanyLng, otherCompanyLat])
       .addTo(props.map);
 
     otherUserStartMarker.togglePopup();
     previousMarkers.push(otherUserStartMarker);
     previousMarkers.push(otherUserEndPopup);
-    minLng = Math.min(
-      props.otherUser.startCoordLng,
-      props.otherUser.companyCoordLng
-    );
-    minLat = Math.min(
-      props.otherUser.startCoordLat,
-      props.otherUser.companyCoordLat
-    );
-    maxLng = Math.max(
-      props.otherUser.startCoordLng,
-      props.otherUser.companyCoordLng
-    );
-    maxLat = Math.max(
-      props.otherUser.startCoordLat,
-      props.otherUser.companyCoordLat
-    );
+    minLng = Math.min(otherStartLng, otherCompanyLng);
+    minLat = Math.min(otherStartLat, otherCompanyLat);
+    maxLng = Math.max(otherStartLng, otherCompanyLng);
+    maxLat = Math.max(otherStartLat, otherCompanyLat);
   }
+  
+  // Validate userCoord coordinates
   if (props.userCoord !== undefined) {
-    selfStartPopup
-      .setLngLat([props.userCoord.startLng, props.userCoord.startLat])
-      .addTo(props.map);
+    const userStartLng = props.userCoord.startLng;
+    const userStartLat = props.userCoord.startLat; 
+    const userEndLng = props.userCoord.endLng;
+    const userEndLat = props.userCoord.endLat;
+    
+    // Check if any userCoord coordinates are NaN
+    if (isNaN(userStartLng) || isNaN(userStartLat) || isNaN(userEndLng) || isNaN(userEndLat)) {
+      // If we have no valid coordinates at all, just return
+      if (minLng === undefined) {
+        return;
+      }
+    } else {
+      selfStartPopup
+        .setLngLat([userStartLng, userStartLat])
+        .addTo(props.map);
 
-    selfEndPopup
-      .setLngLat([props.userCoord.endLng, props.userCoord.endLat])
-      .addTo(props.map);
-    previousMarkers.push(selfStartPopup);
-    previousMarkers.push(selfEndPopup);
-    minLng =
-      minLng !== undefined
-        ? Math.min(minLng, props.userCoord.startLng, props.userCoord.endLng)
-        : Math.min(props.userCoord.startLng, props.userCoord.endLng);
-    minLat =
-      minLat !== undefined
-        ? Math.min(minLat, props.userCoord.startLat, props.userCoord.endLat)
-        : Math.min(props.userCoord.startLat, props.userCoord.endLat);
-    maxLng =
-      maxLng !== undefined
-        ? Math.max(maxLng, props.userCoord.startLng, props.userCoord.endLng)
-        : Math.max(props.userCoord.startLng, props.userCoord.endLng);
-    maxLat =
-      maxLat !== undefined
-        ? Math.max(maxLat, props.userCoord.startLat, props.userCoord.endLat)
-        : Math.max(props.userCoord.startLat, props.userCoord.endLat);
+      selfEndPopup
+        .setLngLat([userEndLng, userEndLat])
+        .addTo(props.map);
+      previousMarkers.push(selfStartPopup);
+      previousMarkers.push(selfEndPopup);
+      
+      minLng =
+        minLng !== undefined
+          ? Math.min(minLng, userStartLng, userEndLng)
+          : Math.min(userStartLng, userEndLng);
+      minLat =
+        minLat !== undefined
+          ? Math.min(minLat, userStartLat, userEndLat)
+          : Math.min(userStartLat, userEndLat);
+      maxLng =
+        maxLng !== undefined
+          ? Math.max(maxLng, userStartLng, userEndLng)
+          : Math.max(userStartLng, userEndLng);
+      maxLat =
+        maxLat !== undefined
+          ? Math.max(maxLat, userStartLat, userEndLat)
+          : Math.max(userStartLat, userEndLat);
+    }
   }
+  
+  // Final validation before fitting bounds
   if (
     minLng === undefined ||
     minLat === undefined ||
     maxLng === undefined ||
-    maxLat === undefined
+    maxLat === undefined ||
+    isNaN(minLng) ||
+    isNaN(minLat) ||
+    isNaN(maxLng) ||
+    isNaN(maxLat) ||
+    !isFinite(minLng) ||
+    !isFinite(minLat) ||
+    !isFinite(maxLng) ||
+    !isFinite(maxLat)
   ) {
     return;
   }
 
-  props.map.fitBounds(
-    [
-      [minLng - 0.0075, minLat - 0.0075],
-      [maxLng + 0.0075, maxLat + 0.0075],
-    ],
-    { padding: 20 }
-  );
+  try {
+    props.map.fitBounds(
+      [
+        [minLng - 0.0075, minLat - 0.0075],
+        [maxLng + 0.0075, maxLat + 0.0075],
+      ],
+      { padding: 20 }
+    );
+  } catch (error) {
+    console.error("Error fitting bounds:", error);
+  }
 };
 
 export function useGetDirections({

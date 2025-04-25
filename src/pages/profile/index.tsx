@@ -29,6 +29,7 @@ import Header from "../../components/Header";
 import CarpoolSection from "../../components/Profile/CarpoolSection";
 import AccountSection from "../../components/Profile/AccountSection";
 import UnsavedModal from "../../components/Profile/UnsavedModal";
+import useIsMobile from "../../utils/useIsMobile";
 
 export async function getServerSideProps(context: GetServerSidePropsContext) {
   const session = await getSession(context);
@@ -76,6 +77,8 @@ const Index: NextPage = () => {
 
   const { setSelectedAddress: setStartAddressSelected } = startAddressHook;
   const { setSelectedAddress: setCompanyAddressSelected } = companyAddressHook;
+
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     if (user?.startAddress && user.startAddress !== "") {
@@ -263,51 +266,94 @@ const Index: NextPage = () => {
 
       <Header profile={true} checkChanges={checkForChanges} />
 
-      <div className="relative grid  h-[91.5%] w-full grid-cols-[250px_repeat(2,1fr)] overflow-hidden lg:grid-cols-[350px_repeat(2,1fr)]">
-        {/* Sidebar */}
-        <div className="sticky  top-0 col-start-1 col-end-2 h-full w-[250px]  border-r-4 border-busy-red bg-stone-100 lg:w-[350px]">
+      {isMobile && (
+        <div className="w-full border-b-2 border-busy-red bg-stone-100 z-10">
           <ProfileSidebar option={option} setOption={setOption} />
         </div>
-
-        {/* Main Section */}
-        <div className="col-start-2 col-end-4 flex h-full shrink items-start justify-center overflow-y-auto overflow-x-hidden ">
-          <div className="mt-10 lg:-translate-x-[175px]  ">
-            {option === "user" ? (
-              <UserSection
-                watch={watch}
-                onFileSelect={setSelectedFile}
-                errors={errors}
-                register={register}
-                onSubmit={handleSubmit(onSubmit, onError)}
-                setValue={setValue}
-              />
-            ) : option === "carpool" ? (
-              <CarpoolSection
-                watch={watch}
-                onFileSelect={setSelectedFile}
-                errors={errors}
-                register={register}
-                setValue={setValue}
-                onSubmit={handleSubmit(onSubmit, onError)}
-                startAddressHook={startAddressHook}
-                companyAddressHook={companyAddressHook}
-                control={control}
-              />
-            ) : option === "account" ? (
-              <AccountSection
-                control={control}
-                watch={watch}
-                onSubmit={handleSubmit(onSubmit, onError)}
-                errors={errors}
-                setValue={setValue}
-              />
-            ) : (
-              <></>
-            )}
+      )}
+        
+        {isMobile ? (
+          <div className="absolute top-[6rem] bottom-16 left-0 right-0 overflow-y-auto">
+            <div className="px-8 pt-6 pb-24">
+              {option === "user" ? (
+                <UserSection
+                  watch={watch}
+                  onFileSelect={setSelectedFile}
+                  errors={errors}
+                  register={register}
+                  onSubmit={handleSubmit(onSubmit, onError)}
+                  setValue={setValue}
+                />
+              ) : option === "carpool" ? (
+                <CarpoolSection
+                  watch={watch}
+                  onFileSelect={setSelectedFile}
+                  errors={errors}
+                  register={register}
+                  setValue={setValue}
+                  onSubmit={handleSubmit(onSubmit, onError)}
+                  startAddressHook={startAddressHook}
+                  companyAddressHook={companyAddressHook}
+                  control={control}
+                />
+              ) : option === "account" ? (
+                <AccountSection
+                  control={control}
+                  watch={watch}
+                  onSubmit={handleSubmit(onSubmit, onError)}
+                  errors={errors}
+                  setValue={setValue}
+                />
+              ) : (
+                <></>
+              )}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="relative h-[91.5%] w-full grid grid-cols-[250px_repeat(2,1fr)] overflow-hidden">
+            {/* <div className="sticky top-0 col-start-1 col-end-2 h-full w-[250px] border-r-4 border-busy-red bg-stone-100 lg:w-[350px]">
+              <ProfileSidebar option={option} setOption={setOption} />
+            </div> */}
+            
+            <div className="col-start-2 col-end-4 flex h-full shrink items-start justify-center overflow-y-auto overflow-x-hidden">
+              <div className="mt-10 lg:-translate-x-[175px]">
+                {option === "user" ? (
+                  <UserSection
+                    watch={watch}
+                    onFileSelect={setSelectedFile}
+                    errors={errors}
+                    register={register}
+                    onSubmit={handleSubmit(onSubmit, onError)}
+                    setValue={setValue}
+                  />
+                ) : option === "carpool" ? (
+                  <CarpoolSection
+                    watch={watch}
+                    onFileSelect={setSelectedFile}
+                    errors={errors}
+                    register={register}
+                    setValue={setValue}
+                    onSubmit={handleSubmit(onSubmit, onError)}
+                    startAddressHook={startAddressHook}
+                    companyAddressHook={companyAddressHook}
+                    control={control}
+                  />
+                ) : option === "account" ? (
+                  <AccountSection
+                    control={control}
+                    watch={watch}
+                    onSubmit={handleSubmit(onSubmit, onError)}
+                    errors={errors}
+                    setValue={setValue}
+                  />
+                ) : (
+                  <></>
+                )}
+              </div>
+            </div>
+            </div>
+            )} 
       </div>
-    </div>
   );
 };
 export default Index;
