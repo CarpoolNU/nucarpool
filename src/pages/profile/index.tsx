@@ -311,9 +311,9 @@ const Index: NextPage = () => {
           </div>
         ) : (
           <div className="relative h-[91.5%] w-full grid grid-cols-[250px_repeat(2,1fr)] overflow-hidden">
-            {/* <div className="sticky top-0 col-start-1 col-end-2 h-full w-[250px] border-r-4 border-busy-red bg-stone-100 lg:w-[350px]">
+            <div className="sticky top-0 col-start-1 col-end-2 h-full w-[250px] border-r-4 border-busy-red bg-stone-100 lg:w-[350px]">
               <ProfileSidebar option={option} setOption={setOption} />
-            </div> */}
+            </div>
             
             <div className="col-start-2 col-end-4 flex h-full shrink items-start justify-center overflow-y-auto overflow-x-hidden">
               <div className="mt-10 lg:-translate-x-[175px]">
