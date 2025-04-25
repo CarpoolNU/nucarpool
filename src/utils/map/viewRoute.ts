@@ -56,6 +56,7 @@ interface ViewRouteProps {
         endLng: number;
       }
     | undefined;
+  isMobile?: boolean;
 }
 
 // Creates MapBox markers showing user's start address and the start area of the other user.
@@ -247,7 +248,19 @@ export const viewRoute = (props: ViewRouteProps) => {
       return;
     }
     
-    props.map.fitBounds(bounds, { padding: 20 });
+    // If on mobile, use a large bottom padding to push the route up to the upper part of the map
+    if (props.isMobile) {
+      props.map.fitBounds(bounds, { 
+        padding: {
+          top: 60,
+          bottom: 300, // Large bottom padding to push content up
+          left: 40,
+          right: 40
+        } 
+      });
+    } else {
+      props.map.fitBounds(bounds, { padding: 20 });
+    }
   } catch (error) {
     console.error("Error fitting bounds:", error);
   }

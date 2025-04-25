@@ -381,6 +381,7 @@ const Home: NextPage<any> = () => {
         otherUser: clickedUser,
         map: mapState,
         userCoord,
+        isMobile
       };
 
       if (user.role === "RIDER") {
@@ -593,6 +594,7 @@ const Home: NextPage<any> = () => {
         otherUser: undefined,
         map: mapState,
         userCoord,
+        isMobile
       };
 
       // Set initial points for directions or route viewing
