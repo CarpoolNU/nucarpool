@@ -1,4 +1,4 @@
-import React, { Dispatch, SetStateAction, useContext, useState, useEffect } from "react";
+import React, { Dispatch, SetStateAction, useContext, useState, useEffect, useRef } from "react";
 import styled from "styled-components";
 import DropDownMenu from "./DropDownMenu";
 import { createPortal } from "react-dom";
@@ -122,6 +122,9 @@ const Header = (props: HeaderProps) => {
   // Check if we're explicitly passed isMobile or detect it ourselves
   const [internalIsMobile, setInternalIsMobile] = useState(false);
   const isMobile = props.isMobile !== undefined ? props.isMobile : internalIsMobile;
+  
+  // Track if user is coming from profile page
+  const isComingFromProfile = useRef(false);
 
   // Only run our own detection if isMobile isn't passed as a prop
   useEffect(() => {
@@ -197,6 +200,9 @@ const Header = (props: HeaderProps) => {
   };
 
   const handleMapClick = async () => {
+    // Note if we're on profile
+    isComingFromProfile.current = props.profile === true;
+    
     if (props.checkChanges) {
       props.checkChanges();
     }
@@ -205,23 +211,38 @@ const Header = (props: HeaderProps) => {
   const handleMobileNavClick = (option: string) => {
     setActiveNav(option);
     
+    // Check if coming from profile
+    const comingFromProfile = router.pathname.includes('/profile');
+    
     if (option === "explore" || option === "requests") {
       setIsLoading(true);
-      router.push({
-        pathname: "/",
-        query: { tab: option }
-      }).finally(() => {
-        setIsLoading(false);
-        if (props.data?.setSidebar) {
-          props.data.setSidebar(option as HeaderOptions);
+      
+      if (comingFromProfile) {
+        // For mobile, directly use location.href and reload for a complete refresh
+        window.location.href = `/?tab=${option}`;
+        setTimeout(() => {
+          window.location.reload();
+        }, 100);
+      } else {
+        router.push({
+          pathname: "/",
+          query: { tab: option }
+        }).finally(() => {
+          setIsLoading(false);
+          if (props.data?.setSidebar) {
+            props.data.setSidebar(option as HeaderOptions);
+          }
+        });
+        if (option === "requests") {
+          setCurrentunreadMessagesCount(0);
         }
-      });
-      if (option === "requests") {
-        setCurrentunreadMessagesCount(0);
       }
     } else if (option === "group") {
       setDisplayGroup(true);
     } else if (option === "profile") {
+      // Note we're going to profile
+      isComingFromProfile.current = false;
+      
       setIsLoading(true);
       router.push("/profile").finally(() => {
         setIsLoading(false);
@@ -253,11 +274,33 @@ const Header = (props: HeaderProps) => {
         </div>
       );
     }
+    
+    const handleSidebarChange = (option: HeaderOptions) => {
+      // Check if we're coming from profile page
+      const comingFromProfile = props.profile === true || router.pathname.includes('/profile');
+      
+      if (comingFromProfile) {
+        // First set query parameter
+        router.push({
+          pathname: "/",
+          query: { tab: option }
+        }).then(() => {
+          // Then force a complete page reload
+          window.location.reload();
+        });
+      } else {
+        setSidebar(option);
+        if (option === "requests") {
+          setCurrentunreadMessagesCount(0);
+        }
+      }
+    };
+    
     return (
       <div className="pr-8 ">
         <button
           onClick={() => {
-            setSidebar("explore");
+            handleSidebarChange("explore");
           }}
           disabled={disabled}
           className={renderClassName(sidebarValue, "explore")}
@@ -266,8 +309,7 @@ const Header = (props: HeaderProps) => {
         </button>
         <button
           onClick={() => {
-            setSidebar("requests");
-            setCurrentunreadMessagesCount(0);
+            handleSidebarChange("requests");
           }}
           disabled={disabled}
           className={`${renderClassName(sidebarValue, "requests")} relative`}

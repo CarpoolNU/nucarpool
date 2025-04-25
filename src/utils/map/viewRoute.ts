@@ -60,6 +60,12 @@ interface ViewRouteProps {
 
 // Creates MapBox markers showing user's start address and the start area of the other user.
 export const viewRoute = (props: ViewRouteProps) => {
+  // First validate that all required inputs are valid
+  if (!props.map || !props.user) {
+    console.error("viewRoute called with invalid map or user");
+    return;
+  }
+  
   clearMarkers();
   clearDirections(props.map);
   const redCircle = createMarkerEl(DriverStart);
@@ -71,13 +77,32 @@ export const viewRoute = (props: ViewRouteProps) => {
 
   // Validate otherUser coordinates
   if (props.otherUser !== undefined) {
+    // Check if otherUser has all the required properties
+    if (!Object.prototype.hasOwnProperty.call(props.otherUser, 'startCoordLng') ||
+        !Object.prototype.hasOwnProperty.call(props.otherUser, 'startCoordLat') ||
+        !Object.prototype.hasOwnProperty.call(props.otherUser, 'companyCoordLng') ||
+        !Object.prototype.hasOwnProperty.call(props.otherUser, 'companyCoordLat')) {
+      console.error("otherUser missing required coordinate properties");
+      return;
+    }
+    
     const otherStartLng = props.otherUser.startCoordLng;
     const otherStartLat = props.otherUser.startCoordLat;
     const otherCompanyLng = props.otherUser.companyCoordLng;
     const otherCompanyLat = props.otherUser.companyCoordLat;
     
-    // Check if any otherUser coordinates are NaN
-    if (isNaN(otherStartLng) || isNaN(otherStartLat) || isNaN(otherCompanyLng) || isNaN(otherCompanyLat)) {
+    // Check if any otherUser coordinates are NaN, null, undefined, or not finite
+    if (otherStartLng === null || otherStartLat === null || 
+        otherCompanyLng === null || otherCompanyLat === null ||
+        otherStartLng === undefined || otherStartLat === undefined || 
+        otherCompanyLng === undefined || otherCompanyLat === undefined ||
+        isNaN(otherStartLng) || isNaN(otherStartLat) || 
+        isNaN(otherCompanyLng) || isNaN(otherCompanyLat) ||
+        !isFinite(otherStartLng) || !isFinite(otherStartLat) || 
+        !isFinite(otherCompanyLng) || !isFinite(otherCompanyLat)) {
+      console.error("Invalid coordinates in otherUser", {
+        otherStartLng, otherStartLat, otherCompanyLng, otherCompanyLat
+      });
       return;
     }
     
@@ -85,22 +110,28 @@ export const viewRoute = (props: ViewRouteProps) => {
       props.otherUser.role.charAt(0).toUpperCase() +
       props.otherUser.role.slice(1).toLowerCase();
 
-    const otherUserStartPopup = createPopup(`${otherRole} Start`);
-    const otherUserStartMarker = new mapboxgl.Marker({
-      element: otherRole === "Rider" ? orangeStart : redStart,
-    })
-      .setLngLat([otherStartLng, otherStartLat])
-      .setPopup(otherUserStartPopup)
-      .addTo(props.map);
+    try {
+      const otherUserStartPopup = createPopup(`${otherRole} Start`);
+      const otherUserStartMarker = new mapboxgl.Marker({
+        element: otherRole === "Rider" ? orangeStart : redStart,
+      })
+        .setLngLat([otherStartLng, otherStartLat])
+        .setPopup(otherUserStartPopup)
+        .addTo(props.map);
 
-    const otherUserEndPopup = createPopup(`${otherRole} Dest.`);
-    otherUserEndPopup
-      .setLngLat([otherCompanyLng, otherCompanyLat])
-      .addTo(props.map);
+      const otherUserEndPopup = createPopup(`${otherRole} Dest.`);
+      otherUserEndPopup
+        .setLngLat([otherCompanyLng, otherCompanyLat])
+        .addTo(props.map);
 
-    otherUserStartMarker.togglePopup();
-    previousMarkers.push(otherUserStartMarker);
-    previousMarkers.push(otherUserEndPopup);
+      otherUserStartMarker.togglePopup();
+      previousMarkers.push(otherUserStartMarker);
+      previousMarkers.push(otherUserEndPopup);
+    } catch (error) {
+      console.error("Error creating markers for otherUser", error);
+      return;
+    }
+    
     minLng = Math.min(otherStartLng, otherCompanyLng);
     minLat = Math.min(otherStartLat, otherCompanyLat);
     maxLng = Math.max(otherStartLng, otherCompanyLng);
@@ -109,27 +140,53 @@ export const viewRoute = (props: ViewRouteProps) => {
   
   // Validate userCoord coordinates
   if (props.userCoord !== undefined) {
+    // Check if userCoord has all the required properties
+    if (!Object.prototype.hasOwnProperty.call(props.userCoord, 'startLng') ||
+        !Object.prototype.hasOwnProperty.call(props.userCoord, 'startLat') ||
+        !Object.prototype.hasOwnProperty.call(props.userCoord, 'endLng') ||
+        !Object.prototype.hasOwnProperty.call(props.userCoord, 'endLat')) {
+      console.error("userCoord missing required coordinate properties");
+      return;
+    }
+    
     const userStartLng = props.userCoord.startLng;
     const userStartLat = props.userCoord.startLat; 
     const userEndLng = props.userCoord.endLng;
     const userEndLat = props.userCoord.endLat;
     
-    // Check if any userCoord coordinates are NaN
-    if (isNaN(userStartLng) || isNaN(userStartLat) || isNaN(userEndLng) || isNaN(userEndLat)) {
+    // Check if any userCoord coordinates are NaN, null, undefined, or not finite
+    if (userStartLng === null || userStartLat === null || 
+        userEndLng === null || userEndLat === null ||
+        userStartLng === undefined || userStartLat === undefined || 
+        userEndLng === undefined || userEndLat === undefined ||
+        isNaN(userStartLng) || isNaN(userStartLat) || 
+        isNaN(userEndLng) || isNaN(userEndLat) ||
+        !isFinite(userStartLng) || !isFinite(userStartLat) || 
+        !isFinite(userEndLng) || !isFinite(userEndLat)) {
+      console.error("Invalid coordinates in userCoord", {
+        userStartLng, userStartLat, userEndLng, userEndLat
+      });
       // If we have no valid coordinates at all, just return
       if (minLng === undefined) {
         return;
       }
     } else {
-      selfStartPopup
-        .setLngLat([userStartLng, userStartLat])
-        .addTo(props.map);
+      try {
+        selfStartPopup
+          .setLngLat([userStartLng, userStartLat])
+          .addTo(props.map);
 
-      selfEndPopup
-        .setLngLat([userEndLng, userEndLat])
-        .addTo(props.map);
-      previousMarkers.push(selfStartPopup);
-      previousMarkers.push(selfEndPopup);
+        selfEndPopup
+          .setLngLat([userEndLng, userEndLat])
+          .addTo(props.map);
+        previousMarkers.push(selfStartPopup);
+        previousMarkers.push(selfEndPopup);
+      } catch (error) {
+        console.error("Error creating markers for userCoord", error);
+        if (minLng === undefined) {
+          return;
+        }
+      }
       
       minLng =
         minLng !== undefined
@@ -165,17 +222,32 @@ export const viewRoute = (props: ViewRouteProps) => {
     !isFinite(maxLng) ||
     !isFinite(maxLat)
   ) {
+    console.error("Invalid bounds for fitBounds", { minLng, minLat, maxLng, maxLat });
     return;
   }
 
   try {
-    props.map.fitBounds(
-      [
-        [minLng - 0.0075, minLat - 0.0075],
-        [maxLng + 0.0075, maxLat + 0.0075],
-      ],
-      { padding: 20 }
-    );
+    // Add padding to ensure coordinates are valid
+    const padding = 0.0075;
+    const bounds: mapboxgl.LngLatBoundsLike = [
+      [minLng - padding, minLat - padding],
+      [maxLng + padding, maxLat + padding]
+    ];
+    
+    // Validate each coordinate in the bounds array
+    if (bounds.some(coord => 
+      Array.isArray(coord) && coord.some(value => 
+        value === null || 
+        value === undefined || 
+        isNaN(value) || 
+        !isFinite(value)
+      )
+    )) {
+      console.error("Invalid values in bounds array", bounds);
+      return;
+    }
+    
+    props.map.fitBounds(bounds, { padding: 20 });
   } catch (error) {
     console.error("Error fitting bounds:", error);
   }

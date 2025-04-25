@@ -270,9 +270,33 @@ const Home: NextPage<any> = () => {
 
   
 
+  // Helper function to validate coordinates
+  const isValidCoordinates = (lng?: number, lat?: number): boolean => {
+    return lng !== undefined && 
+           lat !== undefined && 
+           !isNaN(lng) && 
+           !isNaN(lat) && 
+           isFinite(lng) && 
+           isFinite(lat);
+  };
+
   const onViewRouteClick = useCallback(
     (user: User, clickedUser: PublicUser) => {
-      if (!mapStateLoaded || !mapState || !geoJsonUsers) return;
+      if (!mapStateLoaded || !mapState || !geoJsonUsers) {
+        console.error("Map not fully initialized for route viewing");
+        return;
+      }
+      
+      // Validate user and clickedUser have required coordinate properties
+      if (!user || !clickedUser || 
+          !isValidCoordinates(user.startCoordLng, user.startCoordLat) || 
+          !isValidCoordinates(user.companyCoordLng, user.companyCoordLat) || 
+          !isValidCoordinates(clickedUser.startCoordLng, clickedUser.startCoordLat) || 
+          !isValidCoordinates(clickedUser.companyCoordLng, clickedUser.companyCoordLat)) {
+        console.error("Invalid user coordinates for route viewing");
+        return;
+      }
+      
       const isOtherUserInGeoList = geoJsonUsers.features.some(
         (f) => f.properties?.id === clickedUser.id
       );
@@ -392,6 +416,7 @@ const Home: NextPage<any> = () => {
       tempOtherUserMarkerActive,
     ]
   );
+
   const enhancedSentUsers = requests.sent.map((request: { toUser: any }) =>
     extendPublicUser(request.toUser!)
   );
@@ -520,12 +545,27 @@ const Home: NextPage<any> = () => {
         (startAddressSelected.center[0] !== 0 &&
           companyAddressSelected.center[0] !== 0))
     ) {
+      // Validate coordinates before proceeding
+      const isViewerWithValidCoords = user.role === "VIEWER" && 
+        isValidCoordinates(startAddressSelected.center[0], startAddressSelected.center[1]) &&
+        isValidCoordinates(companyAddressSelected.center[0], companyAddressSelected.center[1]);
+        
+      const isNonViewerWithValidCoords = user.role !== "VIEWER" &&
+        isValidCoordinates(user.startCoordLng, user.startCoordLat) &&
+        isValidCoordinates(user.companyCoordLng, user.companyCoordLat);
+        
+      if (!isViewerWithValidCoords && !isNonViewerWithValidCoords) {
+        console.error("Invalid coordinates for initial route rendering");
+        return;
+      }
+      
       let userCoord = {
         startLat: user.startCoordLat,
         startLng: user.startCoordLng,
         endLat: user.companyCoordLat,
         endLng: user.companyCoordLng,
       };
+      
       if (user.role == "VIEWER") {
         userCoord = {
           startLng: startAddressSelected.center[0],
@@ -534,6 +574,7 @@ const Home: NextPage<any> = () => {
           endLat: companyAddressSelected.center[1],
         };
       }
+      
       if (tempOtherUserMarkerActive && tempOtherUser) {
         updateCompanyLocation(
           mapState,
