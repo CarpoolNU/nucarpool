@@ -24,7 +24,7 @@ import {
   Request,
 } from "../utils/types";
 import { Role, User } from "@prisma/client";
-import { useGetDirections, viewRoute } from "../utils/map/viewRoute";
+import { useGetDirections, viewRoute, clearDirections } from "../utils/map/viewRoute";
 import { MapConnectPortal } from "../components/MapConnectPortal";
 import useSearch from "../utils/search";
 import AddressCombobox from "../components/Map/AddressCombobox";
@@ -127,12 +127,18 @@ const Home: NextPage<any> = () => {
   });
   const { data: requests = { sent: [], received: [] } } = requestsQuery;
   const utils = trpc.useContext();
+
   const handleUserSelect = (userId: string) => {
     setSelectedUserId(userId);
     if (userId !== "") {
       setOtherUser(null);
+      if (sidebarRef.current) {
+        sidebarRef.current.classList.remove('hidden');
+      }
     }
+    
   };
+
   const [mapState, setMapState] = useState<mapboxgl.Map>();
   const [sidebarType, setSidebarType] = useState<HeaderOptions>("explore");
   const [popupUsers, setPopupUsers] = useState<PublicUser[] | null>(null);
@@ -208,6 +214,16 @@ const Home: NextPage<any> = () => {
     return null;
   }, [selectedUserId, requests, extendPublicUser]);
 
+  useEffect(() => {
+    if (isMobile && sidebarRef.current) {
+      if (selectedUser) {
+        sidebarRef.current.classList.add('hidden');
+      } else {
+        sidebarRef.current.classList.remove('hidden');
+      }
+    }
+  }, [selectedUser, isMobile]);
+
   const sidebarRef = useRef<HTMLDivElement>(null);
   const lastScrollTop = useRef<number>(0);
 
@@ -254,9 +270,33 @@ const Home: NextPage<any> = () => {
 
   
 
+  // Helper function to validate coordinates
+  const isValidCoordinates = (lng?: number, lat?: number): boolean => {
+    return lng !== undefined && 
+           lat !== undefined && 
+           !isNaN(lng) && 
+           !isNaN(lat) && 
+           isFinite(lng) && 
+           isFinite(lat);
+  };
+
   const onViewRouteClick = useCallback(
     (user: User, clickedUser: PublicUser) => {
-      if (!mapStateLoaded || !mapState || !geoJsonUsers) return;
+      if (!mapStateLoaded || !mapState || !geoJsonUsers) {
+        console.error("Map not fully initialized for route viewing");
+        return;
+      }
+      
+      // Validate user and clickedUser have required coordinate properties
+      if (!user || !clickedUser || 
+          !isValidCoordinates(user.startCoordLng, user.startCoordLat) || 
+          !isValidCoordinates(user.companyCoordLng, user.companyCoordLat) || 
+          !isValidCoordinates(clickedUser.startCoordLng, clickedUser.startCoordLat) || 
+          !isValidCoordinates(clickedUser.companyCoordLng, clickedUser.companyCoordLat)) {
+        console.error("Invalid user coordinates for route viewing");
+        return;
+      }
+      
       const isOtherUserInGeoList = geoJsonUsers.features.some(
         (f) => f.properties?.id === clickedUser.id
       );
@@ -341,6 +381,7 @@ const Home: NextPage<any> = () => {
         otherUser: clickedUser,
         map: mapState,
         userCoord,
+        isMobile
       };
 
       if (user.role === "RIDER") {
@@ -376,6 +417,7 @@ const Home: NextPage<any> = () => {
       tempOtherUserMarkerActive,
     ]
   );
+
   const enhancedSentUsers = requests.sent.map((request: { toUser: any }) =>
     extendPublicUser(request.toUser!)
   );
@@ -473,7 +515,25 @@ const Home: NextPage<any> = () => {
   ]);
   useEffect(() => {
     setSelectedUserId(null);
-  }, [sidebarType]);
+    // Clear other user and related route data when sidebar type changes
+    setOtherUser(null);
+    if (tempOtherUserMarkerActive && tempOtherUser && mapState) {
+      updateCompanyLocation(
+        mapState,
+        tempOtherUser.companyCoordLng,
+        tempOtherUser.companyCoordLat,
+        tempOtherUser.role,
+        tempOtherUser.id,
+        false,
+        true
+      );
+      setTempOtherUserMarkerActive(false);
+      setTempOtherUser(null);
+    }
+    if (mapState) {
+      clearDirections(mapState);
+    }
+  }, [sidebarType, tempOtherUser, tempOtherUserMarkerActive, mapState]);
 
   // initial route rendering
   useEffect(() => {
@@ -486,12 +546,27 @@ const Home: NextPage<any> = () => {
         (startAddressSelected.center[0] !== 0 &&
           companyAddressSelected.center[0] !== 0))
     ) {
+      // Validate coordinates before proceeding
+      const isViewerWithValidCoords = user.role === "VIEWER" && 
+        isValidCoordinates(startAddressSelected.center[0], startAddressSelected.center[1]) &&
+        isValidCoordinates(companyAddressSelected.center[0], companyAddressSelected.center[1]);
+        
+      const isNonViewerWithValidCoords = user.role !== "VIEWER" &&
+        isValidCoordinates(user.startCoordLng, user.startCoordLat) &&
+        isValidCoordinates(user.companyCoordLng, user.companyCoordLat);
+        
+      if (!isViewerWithValidCoords && !isNonViewerWithValidCoords) {
+        console.error("Invalid coordinates for initial route rendering");
+        return;
+      }
+      
       let userCoord = {
         startLat: user.startCoordLat,
         startLng: user.startCoordLng,
         endLat: user.companyCoordLat,
         endLng: user.companyCoordLng,
       };
+      
       if (user.role == "VIEWER") {
         userCoord = {
           startLng: startAddressSelected.center[0],
@@ -500,6 +575,7 @@ const Home: NextPage<any> = () => {
           endLat: companyAddressSelected.center[1],
         };
       }
+      
       if (tempOtherUserMarkerActive && tempOtherUser) {
         updateCompanyLocation(
           mapState,
@@ -518,6 +594,7 @@ const Home: NextPage<any> = () => {
         otherUser: undefined,
         map: mapState,
         userCoord,
+        isMobile
       };
 
       // Set initial points for directions or route viewing
@@ -550,6 +627,25 @@ const Home: NextPage<any> = () => {
   });
   useGetDirections({ points: points, map: mapState! });
 
+  // Create a mobile banner component that will be added to the DOM
+  const MobileBanner = () => {
+    if (!isMobile) return null;
+    
+    return (
+      <div 
+        className="absolute top-0 left-0 right-0 z-[9999] bg-yellow-100 text-black py-1 px-4 text-xs text-center"
+        style={{ 
+          width: '100%',
+          position: 'fixed',
+          top: 0,
+          zIndex: 9999
+        }}
+      >
+        For the full experience, try using CarpoolNU on desktop
+      </div>
+    );
+  };
+  
   if (!user) {
     return <Spinner />;
   }
@@ -618,7 +714,12 @@ const Home: NextPage<any> = () => {
         >
           <Head>
             <title>CarpoolNU</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
           </Head>
+          
+          {/* Always render the banner outside of other containers */}
+          <MobileBanner />
+          
           <div className="m-0 h-full max-h-screen w-full">
             {!isMobile && <Header
               data={{
@@ -627,11 +728,11 @@ const Home: NextPage<any> = () => {
                 disabled: user.status === "INACTIVE" && user.role !== "VIEWER",
               }}
             />}
-            <div className="flex h-[91.5%] overflow-hidden">
-            {isMobile && (
+            <div className={`flex h-[91.5%] overflow-hidden ${isMobile ? 'mt-5' : ''}`}>
+            {isMobile && sidebarType === "explore" && (
               <div className={`absolute left-1/2 z-30 -translate-x-1/2 transform ${
                 mobileSelectedUserID !== null 
-                  ? 'bottom-[325px]' 
+                  ? 'hidden' 
                   : 'top-12'
               }`}>
                 <div className="h-1.5 w-16 rounded-full bg-gray-500 shadow-sm"></div>
@@ -642,7 +743,7 @@ const Home: NextPage<any> = () => {
               className={`${isMobile 
                 ? `absolute left-0 z-20 w-full overflow-y-auto bg-white shadow-lg transition-all duration-300 rounded-t-3xl border-2 border-black ${
                     mobileSelectedUserID !== null 
-                      ? 'bottom-0 h-[320px]' // Short height for single card view
+                      ? 'bottom-12 h-[320px]' // Short height for single card view
                       : 'top-14  h-[calc(100%-3.5rem)]' // Full height otherwise
                   }`
                 : 'relative w-[25rem]'}`}>
@@ -725,8 +826,20 @@ const Home: NextPage<any> = () => {
                     <InactiveBlocker />
                   )}
                 </div>
+                {isMobile && (
+            <Header
+              data={{
+                sidebarValue: sidebarType,
+                setSidebar: setSidebarType,
+                disabled: user.status === "INACTIVE" && user.role !== "VIEWER",
+              }}
+              isMobile={true}
+            />
+          )}
               </div>
+              
             </div>
+            
           </div>
         </ToastProvider>
       </UserContext.Provider>
