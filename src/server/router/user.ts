@@ -4,6 +4,7 @@ import { protectedRouter, router } from "./createRouter";
 import { Role } from "@prisma/client";
 import { Status } from "@prisma/client";
 import { generatePoiData } from "../../utils/publicUser";
+import { reverseGeocode } from "../../utils/map/geocode";
 import _ from "lodash";
 import { favoritesRouter } from "./user/favorites";
 import { groupsRouter } from "./user/groups";
@@ -69,10 +70,17 @@ export const userRouter = router({
       const endTimeDate = input.endTime
         ? new Date(Date.parse(input.endTime))
         : undefined;
-
+      
+      /*
       const [startPOIData, endPOIData] = await Promise.all([
         generatePoiData(input.startCoordLng, input.startCoordLat),
         generatePoiData(input.companyCoordLng, input.companyCoordLat),
+      ]);
+      */
+
+      const [startGeo, companyGeo] = await Promise.all([
+        reverseGeocode(input.startCoordLng, input.startCoordLat),
+        reverseGeocode(input.companyCoordLng, input.companyCoordLat),
       ]);
 
       const id = ctx.session.user?.id;
@@ -89,12 +97,19 @@ export const userRouter = router({
           startAddress: input.startAddress,
           startCoordLng: input.startCoordLng,
           startCoordLat: input.startCoordLat,
-          startPOILocation: startPOIData.location,
-          startPOICoordLng: startPOIData.coordLng,
-          startPOICoordLat: startPOIData.coordLat,
-          companyPOIAddress: endPOIData.location,
-          companyPOICoordLng: endPOIData.coordLng,
-          companyPOICoordLat: endPOIData.coordLat,
+          // Using reverseGeocode results
+          companyStreet: companyGeo.street,
+          companyCity: companyGeo.city,
+          companyState: companyGeo.state,
+          startStreet: startGeo.street,
+          startCity: startGeo.city,
+          startState: startGeo.state,
+          //startPOILocation: startPOIData.location,
+          //startPOICoordLng: startPOIData.coordLng,
+          //startPOICoordLat: startPOIData.coordLat,
+          //companyPOIAddress: endPOIData.location,
+          //companyPOICoordLng: endPOIData.coordLng,
+          //companyPOICoordLat: endPOIData.coordLat,
           preferredName: input.preferredName,
           pronouns: input.pronouns,
           isOnboarded: input.isOnboarded,

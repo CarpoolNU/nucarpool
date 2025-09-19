@@ -255,19 +255,27 @@ export type GenerateUserInput = {
   role: Role;
   seatAvail?: number;
   companyCoordLng: number;
-  companyPOICoordLng: number;
+  //companyPOICoordLng: number;
   companyCoordLat: number;
-  companyPOICoordLat: number;
+  //companyPOICoordLat: number;
   startCoordLng: number;
-  startPOICoordLng: number;
+  //startPOICoordLng: number;
   startCoordLat: number;
-  startPOICoordLat: number;
+  //startPOICoordLat: number;
   daysWorking: string; // Format: S,M,T,W,R,F,S
   startTime: string;
   endTime: string;
   carpoolId?: string;
   coopStartDate: Date | null;
   coopEndDate: Date | null;
+  companyAddress?: string;
+  startAddress?: string;
+  companyStreet?: string;
+  companyCity?: string;
+  companyState?: string;
+  startStreet?: string;
+  startCity?: string;
+  startState?: string;
 };
 
 /**
@@ -289,6 +297,14 @@ export const generateUser = ({
   endTime,
   coopStartDate,
   coopEndDate,
+  companyAddress,
+  startAddress,
+  companyStreet,
+  companyCity,
+  companyState,
+  startStreet,
+  startCity,
+  startState,
 }: GenerateUserInput & { id: string }) => {
   if (daysWorking.length != 13) {
     throw new Error("Given an invalid string for daysWorking");
@@ -313,18 +329,18 @@ export const generateUser = ({
     status: "ACTIVE" as Status,
     seatAvail: seatAvail || 0,
     companyName: "Sandbox Inc.",
-    companyAddress: "360 Huntington Ave",
+    companyAddress: companyAddress || '',
     companyCoordLng: companyCoordLng,
     companyCoordLat: companyCoordLat,
-    startAddress: "Roxbury",
+    startAddress: startAddress || '',
     startCoordLng: startCoordLng,
     startCoordLat: startCoordLat,
-    companyPOIAddress: "Northeastern University",
-    companyPOICoordLng: companyCoordLng,
-    companyPOICoordLat: companyCoordLat,
-    startPOILocation: "Greenfield Commons",
-    startPOICoordLng: startCoordLng,
-    startPOICoordLat: startCoordLat,
+    //companyPOIAddress: "Northeastern University",
+    //companyPOICoordLng: companyCoordLng,
+    //companyPOICoordLat: companyCoordLat,
+    //startPOILocation: "Greenfield Commons",
+    //startPOICoordLng: startCoordLng,
+    //startPOICoordLat: startCoordLat,
     isOnboarded: true,
     daysWorking: daysWorking,
     startTime: startTime,
@@ -335,6 +351,12 @@ export const generateUser = ({
     licenseSigned: true,
     dateCreated: new Date(),
     dateModified: new Date(),
+    companyStreet: companyStreet || '',
+    companyCity: companyCity || '',
+    companyState: companyState || '',
+    startStreet: startStreet || '',
+    startCity: startCity || '',
+    startState: startState || '',
   };
   return {
     where: { id: id },
