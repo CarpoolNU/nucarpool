@@ -3,8 +3,6 @@ import { z } from "zod";
 import { protectedRouter, router } from "./createRouter";
 import { Role } from "@prisma/client";
 import { Status } from "@prisma/client";
-import { generatePoiData } from "../../utils/publicUser";
-import { reverseGeocode } from "../../utils/map/geocode";
 import _ from "lodash";
 import { favoritesRouter } from "./user/favorites";
 import { groupsRouter } from "./user/groups";
@@ -61,6 +59,12 @@ export const userRouter = router({
         coopEndDate: z.date().nullable(),
         bio: z.string(),
         licenseSigned: z.boolean(),
+        startStreet: z.string(),
+        startCity: z.string(),
+        startState: z.string(),
+        companyStreet: z.string(),
+        companyCity: z.string(),
+        companyState: z.string(),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -70,18 +74,6 @@ export const userRouter = router({
       const endTimeDate = input.endTime
         ? new Date(Date.parse(input.endTime))
         : undefined;
-      
-      /*
-      const [startPOIData, endPOIData] = await Promise.all([
-        generatePoiData(input.startCoordLng, input.startCoordLat),
-        generatePoiData(input.companyCoordLng, input.companyCoordLat),
-      ]);
-      */
-
-      const [startGeo, companyGeo] = await Promise.all([
-        reverseGeocode(input.startCoordLng, input.startCoordLat),
-        reverseGeocode(input.companyCoordLng, input.companyCoordLat),
-      ]);
 
       const id = ctx.session.user?.id;
       const user = await ctx.prisma.user.update({
@@ -97,19 +89,12 @@ export const userRouter = router({
           startAddress: input.startAddress,
           startCoordLng: input.startCoordLng,
           startCoordLat: input.startCoordLat,
-          // Using reverseGeocode results
-          companyStreet: companyGeo.street,
-          companyCity: companyGeo.city,
-          companyState: companyGeo.state,
-          startStreet: startGeo.street,
-          startCity: startGeo.city,
-          startState: startGeo.state,
-          //startPOILocation: startPOIData.location,
-          //startPOICoordLng: startPOIData.coordLng,
-          //startPOICoordLat: startPOIData.coordLat,
-          //companyPOIAddress: endPOIData.location,
-          //companyPOICoordLng: endPOIData.coordLng,
-          //companyPOICoordLat: endPOIData.coordLat,
+          companyStreet: input.companyStreet,
+          companyCity: input.companyCity,
+          companyState: input.companyState,
+          startStreet: input.startStreet,
+          startCity: input.startCity,
+          startState: input.startState,
           preferredName: input.preferredName,
           pronouns: input.pronouns,
           isOnboarded: input.isOnboarded,

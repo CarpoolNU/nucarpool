@@ -187,6 +187,12 @@ const Index: NextPage = () => {
       startCoordLng: startAddressHook.selectedAddress.center[0],
       startCoordLat: startAddressHook.selectedAddress.center[1],
       seatAvail: values.role === "RIDER" ? 0 : values.seatAvail,
+      startStreet: startAddressHook.selectedAddress.street || '',
+      startCity: startAddressHook.selectedAddress.city || '',
+      startState: startAddressHook.selectedAddress.state || '',
+      companyStreet: companyAddressHook.selectedAddress.street || '',
+      companyCity: companyAddressHook.selectedAddress.city || '',
+      companyState: companyAddressHook.selectedAddress.state || '',
     };
     if (selectedFile) {
       try {
@@ -271,10 +277,52 @@ const Index: NextPage = () => {
           <ProfileSidebar option={option} setOption={setOption} />
         </div>
       )}
-        
-        {isMobile ? (
-          <div className="absolute top-[6rem] bottom-16 left-0 right-0 overflow-y-auto">
-            <div className="px-8 pt-6 pb-24">
+
+      {isMobile ? (
+        <div className="absolute top-[6rem] bottom-16 left-0 right-0 overflow-y-auto">
+          <div className="px-8 pt-6 pb-24">
+            {option === "user" ? (
+              <UserSection
+                watch={watch}
+                onFileSelect={setSelectedFile}
+                errors={errors}
+                register={register}
+                onSubmit={handleSubmit(onSubmit, onError)}
+                setValue={setValue}
+              />
+            ) : option === "carpool" ? (
+              <CarpoolSection
+                watch={watch}
+                onFileSelect={setSelectedFile}
+                errors={errors}
+                register={register}
+                setValue={setValue}
+                onSubmit={handleSubmit(onSubmit, onError)}
+                startAddressHook={startAddressHook}
+                companyAddressHook={companyAddressHook}
+                control={control}
+              />
+            ) : option === "account" ? (
+              <AccountSection
+                control={control}
+                watch={watch}
+                onSubmit={handleSubmit(onSubmit, onError)}
+                errors={errors}
+                setValue={setValue}
+              />
+            ) : (
+              <></>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="relative h-[91.5%] w-full grid grid-cols-[250px_repeat(2,1fr)] overflow-hidden">
+          <div className="sticky top-0 col-start-1 col-end-2 h-full w-[250px] border-r-4 border-busy-red bg-stone-100 lg:w-[350px]">
+            <ProfileSidebar option={option} setOption={setOption} />
+          </div>
+
+          <div className="col-start-2 col-end-4 flex h-full shrink items-start justify-center overflow-y-auto overflow-x-hidden">
+            <div className="mt-10 w-full max-w-2xl px-8">
               {option === "user" ? (
                 <UserSection
                   watch={watch}
@@ -309,51 +357,9 @@ const Index: NextPage = () => {
               )}
             </div>
           </div>
-        ) : (
-          <div className="relative h-[91.5%] w-full grid grid-cols-[250px_repeat(2,1fr)] overflow-hidden">
-            <div className="sticky top-0 col-start-1 col-end-2 h-full w-[250px] border-r-4 border-busy-red bg-stone-100 lg:w-[350px]">
-              <ProfileSidebar option={option} setOption={setOption} />
-            </div>
-            
-            <div className="col-start-2 col-end-4 flex h-full shrink items-start justify-center overflow-y-auto overflow-x-hidden">
-              <div className="mt-10 lg:-translate-x-[175px]">
-                {option === "user" ? (
-                  <UserSection
-                    watch={watch}
-                    onFileSelect={setSelectedFile}
-                    errors={errors}
-                    register={register}
-                    onSubmit={handleSubmit(onSubmit, onError)}
-                    setValue={setValue}
-                  />
-                ) : option === "carpool" ? (
-                  <CarpoolSection
-                    watch={watch}
-                    onFileSelect={setSelectedFile}
-                    errors={errors}
-                    register={register}
-                    setValue={setValue}
-                    onSubmit={handleSubmit(onSubmit, onError)}
-                    startAddressHook={startAddressHook}
-                    companyAddressHook={companyAddressHook}
-                    control={control}
-                  />
-                ) : option === "account" ? (
-                  <AccountSection
-                    control={control}
-                    watch={watch}
-                    onSubmit={handleSubmit(onSubmit, onError)}
-                    errors={errors}
-                    setValue={setValue}
-                  />
-                ) : (
-                  <></>
-                )}
-              </div>
-            </div>
-            </div>
-            )} 
-      </div>
+        </div>
+      )}
+    </div>
   );
 };
 export default Index;

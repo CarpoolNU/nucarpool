@@ -255,13 +255,9 @@ export type GenerateUserInput = {
   role: Role;
   seatAvail?: number;
   companyCoordLng: number;
-  //companyPOICoordLng: number;
   companyCoordLat: number;
-  //companyPOICoordLat: number;
   startCoordLng: number;
-  //startPOICoordLng: number;
   startCoordLat: number;
-  //startPOICoordLat: number;
   daysWorking: string; // Format: S,M,T,W,R,F,S
   startTime: string;
   endTime: string;
@@ -335,12 +331,6 @@ export const generateUser = ({
     startAddress: startAddress || '',
     startCoordLng: startCoordLng,
     startCoordLat: startCoordLat,
-    //companyPOIAddress: "Northeastern University",
-    //companyPOICoordLng: companyCoordLng,
-    //companyPOICoordLat: companyCoordLat,
-    //startPOILocation: "Greenfield Commons",
-    //startPOICoordLng: startCoordLng,
-    //startPOICoordLat: startCoordLat,
     isOnboarded: true,
     daysWorking: daysWorking,
     startTime: startTime,

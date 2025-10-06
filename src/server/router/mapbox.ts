@@ -8,6 +8,7 @@ import { DirectionsResponse } from "../../utils/types";
 import { convertToPublic, roundCoord } from "../../utils/publicUser";
 import _ from "lodash";
 import { calculateScore } from "../../utils/recommendation";
+import { parseMapboxFeature } from "../../utils/map/parseAddress";
 
 // router for interacting with the Mapbox API
 export const mapboxRouter = router({
@@ -36,7 +37,16 @@ export const mapboxRouter = router({
             cause: err,
           });
         });
-      return data;
+
+      // parse features to include structured address components
+      const parsedFeatures = data.features.map((feature: any) => 
+        parseMapboxFeature(feature)
+      );
+
+      return {
+        ...data,
+        features: parsedFeatures
+      };
     }),
 
   //queries all other users and locations besides current user

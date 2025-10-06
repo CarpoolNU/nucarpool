@@ -10,11 +10,6 @@ import { PublicUser, PoiData } from "./types";
  * @returns non-sensitive information about a user.
  */
 export const convertToPublic = (user: User): PublicUser => {
-  const cleanAddressForPublicView = (address: string) => {
-    const startAddressAsList = user.startAddress.split(', ');
-    const cleanedAddress = startAddressAsList.length === 4 ? startAddressAsList[1] : startAddressAsList.length === 3 ? startAddressAsList[0] : "Exact Location Unavailable";
-    return cleanedAddress;
-  }
 
   return {
     id: user.id,
@@ -33,7 +28,9 @@ export const convertToPublic = (user: User): PublicUser => {
     endTime: user.endTime,
     coopEndDate: user.coopEndDate,
     coopStartDate: user.coopStartDate,
-    startAddress: cleanAddressForPublicView(user.startAddress),
+    startAddress: user.startCity && user.startState
+      ? `${user.startCity}, ${user.startState}`
+      : "Exact Location Unavailable",
     startCoordLng: user.startCoordLng,
     startCoordLat: user.startCoordLat,
     companyAddress: user.companyAddress,

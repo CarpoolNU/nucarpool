@@ -154,6 +154,12 @@ const Setup: NextPage = () => {
       startCoordLng: startAddressHook.selectedAddress.center[0],
       startCoordLat: startAddressHook.selectedAddress.center[1],
       seatAvail: values.role === "RIDER" ? 0 : values.seatAvail,
+      startStreet: startAddressHook.selectedAddress.street || '',
+      startCity: startAddressHook.selectedAddress.city || '',
+      startState: startAddressHook.selectedAddress.state || '',
+      companyStreet: companyAddressHook.selectedAddress.street || '',
+      companyCity: companyAddressHook.selectedAddress.city || '',
+      companyState: companyAddressHook.selectedAddress.state || '',
     };
     console.log(userInfo);
     if (selectedFile) {
@@ -220,24 +226,24 @@ const Setup: NextPage = () => {
       </div>
     );
   }
-  
+
   // Responsive classes based on isMobile
   const buttonContainerClass = isMobile
     ? "fixed left-1/2 bottom-6 transform -translate-x-1/2 flex flex-col items-center gap-3 z-50"
     : "absolute left-1/2 bottom-10 transform -translate-x-1/2 flex flex-col items-center gap-6";
-    
+
   const backButtonClass = isMobile
     ? "px-4 py-2 font-montserrat text-base text-black underline"
     : "px-6 py-3 font-montserrat text-lg text-black underline";
-    
+
   const continueBaseClass = isMobile
     ? "flex w-[170px] items-center justify-center rounded-full drop-shadow-[0_10px_3px_rgba(0,0,0,0.35)]"
     : "flex w-[200px] items-center justify-center rounded-full drop-shadow-[0_15px_4px_rgba(0,0,0,0.35)]";
-    
+
   const continueButtonDefaultClass = isMobile
     ? "bg-white text-black px-4 py-2"
     : "bg-white text-black px-6 py-3";
-    
+
   const continueButtonFinalStepClass = isMobile
     ? "bg-northeastern-red text-white px-4 py-2"
     : "bg-northeastern-red text-white px-6 py-3";
@@ -250,8 +256,8 @@ const Setup: NextPage = () => {
   // Container padding based on step and device
   const containerPadding = () => {
     if (step < 2) {
-      return isMobile 
-        ? "rounded-2xl bg-white px-6 py-10 drop-shadow-[0_15px_8px_rgba(0,0,0,0.35)]" 
+      return isMobile
+        ? "rounded-2xl bg-white px-6 py-10 drop-shadow-[0_15px_8px_rgba(0,0,0,0.35)]"
         : "rounded-2xl bg-white px-16 py-20 drop-shadow-[0_15px_8px_rgba(0,0,0,0.35)]";
     } else {
       return isMobile
@@ -263,9 +269,9 @@ const Setup: NextPage = () => {
   // Mobile heights for different steps
   const mobileHeights = {
     0: 500,
-    1: 700, 
-    2: 580, 
-    3: 700, 
+    1: 700,
+    2: 580,
+    3: 700,
     4: 700,
   };
 
@@ -276,13 +282,13 @@ const Setup: NextPage = () => {
       <h1 className={titleClass}>
         CarpoolNU
       </h1>
-      
+
       {step > 1 && (
         <div className={`absolute left-1/2 ${isMobile ? 'top-16' : 'top-[calc(50%-250px-60px)]'} -translate-x-1/2 transform z-20`}>
           <ProgressBar step={step - 2} />
         </div>
       )}
-      
+
       {/* Full screen flex container for perfect centering */}
       <div className="fixed inset-0 flex items-center justify-center">
         <SetupContainer
@@ -346,19 +352,18 @@ const Setup: NextPage = () => {
           )}
           <button
             type="button"
-            className={`${continueBaseClass} ${
-              step === 4 || watch("role") === Role.VIEWER
+            className={`${continueBaseClass} ${step === 4 || watch("role") === Role.VIEWER
                 ? continueButtonFinalStepClass
                 : continueButtonDefaultClass
-            }`}
+              }`}
             onClick={handleNextStep}
           >
             <div className={`flex items-center font-montserrat ${isMobile ? 'text-xl' : 'text-2xl'} font-bold`}>
               {watch("role") === Role.VIEWER
                 ? "View Map"
                 : step === 4
-                ? "Complete"
-                : "Continue"}
+                  ? "Complete"
+                  : "Continue"}
               {step !== 4 && watch("role") !== Role.VIEWER && (
                 <FaArrowRight className={`${isMobile ? 'ml-1' : 'ml-2'} text-black`} />
               )}

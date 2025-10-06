@@ -166,7 +166,7 @@ const Header = (props: HeaderProps) => {
       messageChannel.unbind("sendNotification");
       pusher.unsubscribe(`notification-${user?.id}`); 
     };
-  }, [props.data?.setSidebar]);
+  }, [props.data?.setSidebar, props.data, user?.id]);
 
   const renderClassName = (sidebarValue: string, sidebarText: string) => {
     if (sidebarValue == "explore" && sidebarText == "explore") {
@@ -255,7 +255,7 @@ const Header = (props: HeaderProps) => {
       props.data.setSidebar(tab as HeaderOptions);
       setActiveNav(tab as string);
     }
-  }, [router.query, props.data?.setSidebar]);
+  }, [router.query, props.data?.setSidebar, props.data]);
 
   const renderSidebarOptions = ({
     sidebarValue,

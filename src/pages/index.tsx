@@ -92,7 +92,7 @@ const Home: NextPage<any> = () => {
   const [otherUser, setOtherUser] = useState<PublicUser | null>(null);
   const isMapInitialized = useRef(false);
   const [mapStateLoaded, setMapStateLoaded] = useState(false);
-  const isMobile : boolean = useIsMobile();
+  const isMobile: boolean = useIsMobile();
   // const [mobileSidebarExpanded, setMobileSidebarExpanded] = useState<boolean>(false);
   const [mobileSelectedUserID, setmobileSelectedUserID] = useState<string | null>(null)
 
@@ -136,7 +136,7 @@ const Home: NextPage<any> = () => {
         sidebarRef.current.classList.remove('hidden');
       }
     }
-    
+
   };
 
   const [mapState, setMapState] = useState<mapboxgl.Map>();
@@ -227,58 +227,15 @@ const Home: NextPage<any> = () => {
   const sidebarRef = useRef<HTMLDivElement>(null);
   const lastScrollTop = useRef<number>(0);
 
-  const handleMobileSidebarExpand = (userId?: string) => {
-    if (userId) {
-      setmobileSelectedUserID(userId);
-      const allUsers = [...enhancedRecs, ...enhancedFavs, ...enhancedSentUsers, ...enhancedReceivedUsers];
-      const selectedPublicUser = allUsers.find(u => u.id === userId);
-      
-      if (selectedPublicUser && user && mapState && mapStateLoaded) {
-        onViewRouteClick(user, selectedPublicUser);
-      }
-    } 
-    else {
-      setmobileSelectedUserID(null);
-    }
-  };
 
-  useEffect(() => {
-    const handleScroll = (e: Event) => {
-      if (!isMobile || !sidebarRef.current || mobileSelectedUserID === null) return;
-      
-      const element = e.target as HTMLDivElement;
-      const scrollTop = element.scrollTop;
-      
-      if (scrollTop < lastScrollTop.current && scrollTop < 10) {
-        handleMobileSidebarExpand(); 
-      }
-      
-      lastScrollTop.current = scrollTop;
-    };
-    
-    const sidebarElement = sidebarRef.current;
-    if (sidebarElement && isMobile) {
-      sidebarElement.addEventListener('scroll', handleScroll);
-    }
-    
-    return () => {
-      if (sidebarElement) {
-        sidebarElement.removeEventListener('scroll', handleScroll);
-      }
-    };
-  }, [isMobile, mobileSelectedUserID, sidebarRef]);
-
-  
-
-  // Helper function to validate coordinates
-  const isValidCoordinates = (lng?: number, lat?: number): boolean => {
-    return lng !== undefined && 
-           lat !== undefined && 
-           !isNaN(lng) && 
-           !isNaN(lat) && 
-           isFinite(lng) && 
-           isFinite(lat);
-  };
+  const enhancedSentUsers = requests.sent.map((request: { toUser: any }) =>
+    extendPublicUser(request.toUser!)
+  );
+  const enhancedReceivedUsers = requests.received.map(
+    (request: { fromUser: any }) => extendPublicUser(request.fromUser!)
+  );
+  const enhancedRecs = recommendations.map(extendPublicUser);
+  const enhancedFavs = favorites.map(extendPublicUser);
 
   const onViewRouteClick = useCallback(
     (user: User, clickedUser: PublicUser) => {
@@ -286,17 +243,17 @@ const Home: NextPage<any> = () => {
         console.error("Map not fully initialized for route viewing");
         return;
       }
-      
+
       // Validate user and clickedUser have required coordinate properties
-      if (!user || !clickedUser || 
-          !isValidCoordinates(user.startCoordLng, user.startCoordLat) || 
-          !isValidCoordinates(user.companyCoordLng, user.companyCoordLat) || 
-          !isValidCoordinates(clickedUser.startCoordLng, clickedUser.startCoordLat) || 
-          !isValidCoordinates(clickedUser.companyCoordLng, clickedUser.companyCoordLat)) {
+      if (!user || !clickedUser ||
+        !isValidCoordinates(user.startCoordLng, user.startCoordLat) ||
+        !isValidCoordinates(user.companyCoordLng, user.companyCoordLat) ||
+        !isValidCoordinates(clickedUser.startCoordLng, clickedUser.startCoordLat) ||
+        !isValidCoordinates(clickedUser.companyCoordLng, clickedUser.companyCoordLat)) {
         console.error("Invalid user coordinates for route viewing");
         return;
       }
-      
+
       const isOtherUserInGeoList = geoJsonUsers.features.some(
         (f) => f.properties?.id === clickedUser.id
       );
@@ -329,11 +286,11 @@ const Home: NextPage<any> = () => {
         !isViewerAddressSelected && user.role === "VIEWER"
           ? undefined
           : {
-              startLat: userStartLat,
-              startLng: userStartLng,
-              endLat: userCompanyLat,
-              endLng: userCompanyLng,
-            };
+            startLat: userStartLat,
+            startLng: userStartLng,
+            endLat: userCompanyLat,
+            endLng: userCompanyLng,
+          };
 
       if (user.role !== "VIEWER") {
         updateUserLocation(mapState, userStartLng, userStartLat);
@@ -415,17 +372,73 @@ const Home: NextPage<any> = () => {
       mapStateLoaded,
       tempOtherUser,
       tempOtherUserMarkerActive,
+      isMobile,
     ]
   );
 
-  const enhancedSentUsers = requests.sent.map((request: { toUser: any }) =>
-    extendPublicUser(request.toUser!)
-  );
-  const enhancedReceivedUsers = requests.received.map(
-    (request: { fromUser: any }) => extendPublicUser(request.fromUser!)
-  );
-  const enhancedRecs = recommendations.map(extendPublicUser);
-  const enhancedFavs = favorites.map(extendPublicUser);
+  const handleMobileSidebarExpand = useCallback((userId?: string) => {
+    if (userId) {
+      setmobileSelectedUserID(userId);
+      const allUsers = [...enhancedRecs, ...enhancedFavs, ...enhancedSentUsers, ...enhancedReceivedUsers];
+      const selectedPublicUser = allUsers.find(u => u.id === userId);
+
+      if (selectedPublicUser && user && mapState && mapStateLoaded) {
+        onViewRouteClick(user, selectedPublicUser);
+      }
+    }
+    else {
+      setmobileSelectedUserID(null);
+    }
+  }, [
+    enhancedRecs,
+    enhancedFavs,
+    enhancedSentUsers,
+    enhancedReceivedUsers,
+    user,
+    mapState,
+    mapStateLoaded,
+    onViewRouteClick,
+    setmobileSelectedUserID
+  ]);
+
+  useEffect(() => {
+    const handleScroll = (e: Event) => {
+      if (!isMobile || !sidebarRef.current || mobileSelectedUserID === null) return;
+
+      const element = e.target as HTMLDivElement;
+      const scrollTop = element.scrollTop;
+
+      if (scrollTop < lastScrollTop.current && scrollTop < 10) {
+        handleMobileSidebarExpand();
+      }
+
+      lastScrollTop.current = scrollTop;
+    };
+
+    const sidebarElement = sidebarRef.current;
+    if (sidebarElement && isMobile) {
+      sidebarElement.addEventListener('scroll', handleScroll);
+    }
+
+    return () => {
+      if (sidebarElement) {
+        sidebarElement.removeEventListener('scroll', handleScroll);
+      }
+    };
+  }, [isMobile, mobileSelectedUserID, sidebarRef, handleMobileSidebarExpand]);
+
+
+
+  // Helper function to validate coordinates
+  const isValidCoordinates = (lng?: number, lat?: number): boolean => {
+    return lng !== undefined &&
+      lat !== undefined &&
+      !isNaN(lng) &&
+      !isNaN(lat) &&
+      isFinite(lng) &&
+      isFinite(lat);
+  };
+
   useEffect(() => {
     if (user && user.role !== "VIEWER") {
       // update filter params
@@ -547,26 +560,26 @@ const Home: NextPage<any> = () => {
           companyAddressSelected.center[0] !== 0))
     ) {
       // Validate coordinates before proceeding
-      const isViewerWithValidCoords = user.role === "VIEWER" && 
+      const isViewerWithValidCoords = user.role === "VIEWER" &&
         isValidCoordinates(startAddressSelected.center[0], startAddressSelected.center[1]) &&
         isValidCoordinates(companyAddressSelected.center[0], companyAddressSelected.center[1]);
-        
+
       const isNonViewerWithValidCoords = user.role !== "VIEWER" &&
         isValidCoordinates(user.startCoordLng, user.startCoordLat) &&
         isValidCoordinates(user.companyCoordLng, user.companyCoordLat);
-        
+
       if (!isViewerWithValidCoords && !isNonViewerWithValidCoords) {
         console.error("Invalid coordinates for initial route rendering");
         return;
       }
-      
+
       let userCoord = {
         startLat: user.startCoordLat,
         startLng: user.startCoordLng,
         endLat: user.companyCoordLat,
         endLng: user.companyCoordLng,
       };
-      
+
       if (user.role == "VIEWER") {
         userCoord = {
           startLng: startAddressSelected.center[0],
@@ -575,7 +588,7 @@ const Home: NextPage<any> = () => {
           endLat: companyAddressSelected.center[1],
         };
       }
-      
+
       if (tempOtherUserMarkerActive && tempOtherUser) {
         updateCompanyLocation(
           mapState,
@@ -613,6 +626,7 @@ const Home: NextPage<any> = () => {
     user,
     tempOtherUser,
     tempOtherUserMarkerActive,
+    isMobile,
   ]);
   useSearch({
     value: companyAddress,
@@ -630,11 +644,11 @@ const Home: NextPage<any> = () => {
   // Create a mobile banner component that will be added to the DOM
   const MobileBanner = () => {
     if (!isMobile) return null;
-    
+
     return (
-      <div 
+      <div
         className="absolute top-0 left-0 right-0 z-[9999] bg-yellow-100 text-black py-1 px-4 text-xs text-center"
-        style={{ 
+        style={{
           width: '100%',
           position: 'fixed',
           top: 0,
@@ -645,7 +659,7 @@ const Home: NextPage<any> = () => {
       </div>
     );
   };
-  
+
   if (!user) {
     return <Spinner />;
   }
@@ -716,10 +730,10 @@ const Home: NextPage<any> = () => {
             <title>CarpoolNU</title>
             <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
           </Head>
-          
+
           {/* Always render the banner outside of other containers */}
           <MobileBanner />
-          
+
           <div className="m-0 h-full max-h-screen w-full">
             {!isMobile && <Header
               data={{
@@ -729,39 +743,37 @@ const Home: NextPage<any> = () => {
               }}
             />}
             <div className={`flex h-[91.5%] overflow-hidden ${isMobile ? 'mt-5' : ''}`}>
-            {isMobile && sidebarType === "explore" && (
-              <div className={`absolute left-1/2 z-30 -translate-x-1/2 transform ${
-                mobileSelectedUserID !== null 
-                  ? 'hidden' 
-                  : 'top-12'
-              }`}>
-                <div className="h-1.5 w-16 rounded-full bg-gray-500 shadow-sm"></div>
-              </div>
-            )}
-            <div 
-              ref={sidebarRef}
-              className={`${isMobile 
-                ? `absolute left-0 z-20 w-full overflow-y-auto bg-white shadow-lg transition-all duration-300 rounded-t-3xl border-2 border-black ${
-                    mobileSelectedUserID !== null 
-                      ? 'bottom-12 h-[320px]' // Short height for single card view
-                      : 'top-14  h-[calc(100%-3.5rem)]' // Full height otherwise
+              {isMobile && sidebarType === "explore" && (
+                <div className={`absolute left-1/2 z-30 -translate-x-1/2 transform ${mobileSelectedUserID !== null
+                    ? 'hidden'
+                    : 'top-12'
+                  }`}>
+                  <div className="h-1.5 w-16 rounded-full bg-gray-500 shadow-sm"></div>
+                </div>
+              )}
+              <div
+                ref={sidebarRef}
+                className={`${isMobile
+                  ? `absolute left-0 z-20 w-full overflow-y-auto bg-white shadow-lg transition-all duration-300 rounded-t-3xl border-2 border-black ${mobileSelectedUserID !== null
+                    ? 'bottom-12 h-[320px]' // Short height for single card view
+                    : 'top-14  h-[calc(100%-3.5rem)]' // Full height otherwise
                   }`
-                : 'relative w-[25rem]'}`}>
+                  : 'relative w-[25rem]'}`}>
 
                 {isMobile && mobileSelectedUserID !== null && (
-                    <div className="flex-shrink-0 border-b border-gray-200 bg-gray-50 px-3 py-2">
-                      <button
-                        onClick={() => handleMobileSidebarExpand()}
-                        className="flex items-center text-northeastern-red"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mr-1">
-                          <polyline points="15 18 9 12 15 6"></polyline>
-                        </svg>
-                        <span className="font-medium">Back</span>
-                      </button>
-                    </div>
-                  )}
-               
+                  <div className="flex-shrink-0 border-b border-gray-200 bg-gray-50 px-3 py-2">
+                    <button
+                      onClick={() => handleMobileSidebarExpand()}
+                      className="flex items-center text-northeastern-red"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mr-1">
+                        <polyline points="15 18 9 12 15 6"></polyline>
+                      </svg>
+                      <span className="font-medium">Back</span>
+                    </button>
+                  </div>
+                )}
+
                 {mapState && (
                   <SidebarPage
                     setSort={setSort}
@@ -784,7 +796,7 @@ const Home: NextPage<any> = () => {
                   />
                 )}
               </div>
-              
+
 
               {!isMobile && <button
                 className="absolute bottom-[150px] right-[8px] z-10 flex h-8 w-8 items-center justify-center rounded-md border-2 border-solid border-gray-300 bg-white shadow-sm hover:bg-gray-200"
@@ -827,19 +839,19 @@ const Home: NextPage<any> = () => {
                   )}
                 </div>
                 {isMobile && (
-            <Header
-              data={{
-                sidebarValue: sidebarType,
-                setSidebar: setSidebarType,
-                disabled: user.status === "INACTIVE" && user.role !== "VIEWER",
-              }}
-              isMobile={true}
-            />
-          )}
+                  <Header
+                    data={{
+                      sidebarValue: sidebarType,
+                      setSidebar: setSidebarType,
+                      disabled: user.status === "INACTIVE" && user.role !== "VIEWER",
+                    }}
+                    isMobile={true}
+                  />
+                )}
               </div>
-              
+
             </div>
-            
+
           </div>
         </ToastProvider>
       </UserContext.Provider>

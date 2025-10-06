@@ -44,5 +44,5 @@ export default function useSearch({
     if (value) {
       query.refetch();
     }
-  }, [value]);
+  }, [value, query]);
 }

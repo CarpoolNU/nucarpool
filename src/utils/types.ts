@@ -85,6 +85,12 @@ export type UserInfo = {
   startCoordLat: number;
   companyAddress: string;
   daysWorking: boolean[];
+  startStreet: string;
+  startCity: string;
+  startState: string;
+  companyStreet: string;
+  companyCity: string;
+  companyState: string;
 };
 export type FiltersState = {
   days: number;
@@ -115,9 +121,6 @@ export type MapUser = {
   coopStartDate: Date | null;
   coopEndDate: Date | null;
   preferredName: string;
-  startPOILocation: string;
-  startPOICoordLng: number;
-  startPOICoordLat: number;
   companyAddress: string;
   companyCoordLng: number;
   companyCoordLat: number;
@@ -165,8 +168,22 @@ export type GeoJsonUsers = RouterOutput["mapbox"]["geoJsonUserList"];
 export type CarpoolAddress = {
   place_name: string;
   center: [longitude: number, latitude: number];
+  street?: string;
+  city?: string;
+  state?: string;
 };
-export type CarpoolFeature = Feature & CarpoolAddress;
+export type CarpoolFeature = {
+  id: string;
+  place_name: string;
+  center: [number, number];
+  street?: string;
+  city?: string;
+  state?: string;
+  // feature properties
+  geometry?: any;
+  properties?: any;
+  type?: string;
+};
 
 export type ButtonInfo = {
   text: string;
