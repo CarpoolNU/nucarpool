@@ -30,7 +30,7 @@ export const convertToPublic = (user: User): PublicUser => {
     coopStartDate: user.coopStartDate,
     startAddress: user.startCity && user.startState
       ? `${user.startCity}, ${user.startState}`
-      : "Exact Location Unavailable",
+      : user.startAddress || "Exact Location Unavailable",
     startCoordLng: user.startCoordLng,
     startCoordLat: user.startCoordLat,
     companyAddress: user.companyAddress,
