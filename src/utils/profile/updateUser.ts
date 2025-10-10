@@ -59,7 +59,7 @@ export const updateUser = async ({
 export const useEditUserMutation = (
   router: NextRouter,
   onComplete: () => void,
-  pushMap: boolean = true
+  pushMap: boolean = true,
 ) => {
   const utils = trpc.useContext();
 

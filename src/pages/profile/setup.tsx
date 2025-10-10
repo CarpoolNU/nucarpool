@@ -72,7 +72,7 @@ const Setup: NextPage = () => {
     refetchOnMount: true,
   });
   const editUserMutation = useEditUserMutation(router, () =>
-    setIsLoading(false)
+    setIsLoading(false),
   );
   const startAddressHook = useAddressSelection();
   const companyAddressHook = useAddressSelection();
@@ -138,7 +138,7 @@ const Setup: NextPage = () => {
 
   useEffect(() => {
     const seatAvail = watch("seatAvail");
-    if (role === Role.DRIVER && seatAvail <= 0) {
+    if (role === Role.DRIVER && (seatAvail ?? 0) <= 0) {
       setValue("seatAvail", 1);
     } else if (role !== Role.DRIVER) {
       setValue("seatAvail", 0);
@@ -153,13 +153,25 @@ const Setup: NextPage = () => {
       companyCoordLat: companyAddressHook.selectedAddress.center[1],
       startCoordLng: startAddressHook.selectedAddress.center[0],
       startCoordLat: startAddressHook.selectedAddress.center[1],
-      seatAvail: values.role === "RIDER" ? 0 : values.seatAvail,
-      startStreet: startAddressHook.selectedAddress.street || '',
-      startCity: startAddressHook.selectedAddress.city || '',
-      startState: startAddressHook.selectedAddress.state || '',
-      companyStreet: companyAddressHook.selectedAddress.street || '',
-      companyCity: companyAddressHook.selectedAddress.city || '',
-      companyState: companyAddressHook.selectedAddress.state || '',
+      seatAvail: values.role === "RIDER" ? 0 : (values.seatAvail ?? 1),
+      startStreet: startAddressHook.selectedAddress.street || "",
+      startCity: startAddressHook.selectedAddress.city || "",
+      startState: startAddressHook.selectedAddress.state || "",
+      companyStreet: companyAddressHook.selectedAddress.street || "",
+      companyCity: companyAddressHook.selectedAddress.city || "",
+      companyState: companyAddressHook.selectedAddress.state || "",
+      companyName: values.companyName ?? "",
+      profilePicture: values.profilePicture ?? "",
+      companyAddress: values.companyAddress ?? "",
+      startAddress: values.startAddress ?? "",
+      preferredName: values.preferredName ?? "",
+      pronouns: values.pronouns ?? "",
+      bio: values.bio ?? "",
+      daysWorking: values.daysWorking ?? [],
+      startTime: values.startTime ?? null,
+      endTime: values.endTime ?? null,
+      coopStartDate: values.coopStartDate ?? null,
+      coopEndDate: values.coopEndDate ?? null,
     };
     console.log(userInfo);
     if (selectedFile) {
@@ -279,12 +291,12 @@ const Setup: NextPage = () => {
     <div className="relative h-full w-full overflow-hidden">
       {!user?.licenseSigned && <ComplianceModal />}
       <div className="absolute inset-0 bg-floaty" />
-      <h1 className={titleClass}>
-        CarpoolNU
-      </h1>
+      <h1 className={titleClass}>CarpoolNU</h1>
 
       {step > 1 && (
-        <div className={`absolute left-1/2 ${isMobile ? 'top-16' : 'top-[calc(50%-250px-60px)]'} -translate-x-1/2 transform z-20`}>
+        <div
+          className={`absolute left-1/2 ${isMobile ? "top-16" : "top-[calc(50%-250px-60px)]"} -translate-x-1/2 transform z-20`}
+        >
           <ProgressBar step={step - 2} />
         </div>
       )}
@@ -292,11 +304,15 @@ const Setup: NextPage = () => {
       {/* Full screen flex container for perfect centering */}
       <div className="fixed inset-0 flex items-center justify-center">
         <SetupContainer
-          className={`${containerPadding()} ${isMobile ? 'w-[90%]' : ''} overflow-y-auto`}
-          style={isMobile ? {
-            height: `${mobileHeights[step as keyof typeof mobileHeights]}px`,
-            maxHeight: '85vh'
-          } : undefined}
+          className={`${containerPadding()} ${isMobile ? "w-[90%]" : ""} overflow-y-auto`}
+          style={
+            isMobile
+              ? {
+                  height: `${mobileHeights[step as keyof typeof mobileHeights]}px`,
+                  maxHeight: "85vh",
+                }
+              : undefined
+          }
         >
           {(step === 0 || step == 1) && (
             <InitialStep
@@ -308,7 +324,9 @@ const Setup: NextPage = () => {
             />
           )}
           {step === 2 && (
-            <div className={`relative z-0 ${isMobile ? 'scale-95 transform' : ''}`}>
+            <div
+              className={`relative z-0 ${isMobile ? "scale-95 transform" : ""}`}
+            >
               <StepTwo
                 control={control}
                 register={register}
@@ -352,20 +370,25 @@ const Setup: NextPage = () => {
           )}
           <button
             type="button"
-            className={`${continueBaseClass} ${step === 4 || watch("role") === Role.VIEWER
+            className={`${continueBaseClass} ${
+              step === 4 || watch("role") === Role.VIEWER
                 ? continueButtonFinalStepClass
                 : continueButtonDefaultClass
-              }`}
+            }`}
             onClick={handleNextStep}
           >
-            <div className={`flex items-center font-montserrat ${isMobile ? 'text-xl' : 'text-2xl'} font-bold`}>
+            <div
+              className={`flex items-center font-montserrat ${isMobile ? "text-xl" : "text-2xl"} font-bold`}
+            >
               {watch("role") === Role.VIEWER
                 ? "View Map"
                 : step === 4
                   ? "Complete"
                   : "Continue"}
               {step !== 4 && watch("role") !== Role.VIEWER && (
-                <FaArrowRight className={`${isMobile ? 'ml-1' : 'ml-2'} text-black`} />
+                <FaArrowRight
+                  className={`${isMobile ? "ml-1" : "ml-2"} text-black`}
+                />
               )}
             </div>
           </button>

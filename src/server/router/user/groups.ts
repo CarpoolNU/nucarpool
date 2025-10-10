@@ -48,7 +48,7 @@ export const groupsRouter = router({
       z.object({
         driverId: z.string(),
         riderId: z.string(),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const driver = await ctx.prisma.user.findUnique({
@@ -61,7 +61,7 @@ export const groupsRouter = router({
           message: "Driver not found",
         });
       }
-      
+
       const group = await ctx.prisma.carpoolGroup.create({
         data: {
           users: {
@@ -70,7 +70,7 @@ export const groupsRouter = router({
           message: driver.groupMessage || "",
         },
       });
-      
+
       const nGroup = await ctx.prisma.carpoolGroup.update({
         where: { id: group.id },
         data: {
@@ -94,7 +94,7 @@ export const groupsRouter = router({
     .input(
       z.object({
         groupId: z.string(),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const group = await ctx.prisma.carpoolGroup.findUnique({
@@ -130,7 +130,7 @@ export const groupsRouter = router({
         riderId: z.string(),
         groupId: z.string(),
         add: z.boolean(),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const driver = await ctx.prisma.user.findUnique({
@@ -198,7 +198,7 @@ export const groupsRouter = router({
       z.object({
         groupId: z.string(),
         message: z.string(),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const updatedGroup = await ctx.prisma.carpoolGroup.update({
@@ -213,7 +213,7 @@ export const groupsRouter = router({
     .input(
       z.object({
         message: z.string(),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const updatedUser = await ctx.prisma.user.update({

@@ -26,10 +26,12 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
 
   const request = useMemo(
     () => selectedUser.incomingRequest || selectedUser.outgoingRequest,
-    [selectedUser.incomingRequest, selectedUser.outgoingRequest]
+    [selectedUser.incomingRequest, selectedUser.outgoingRequest],
   );
 
-  const [conversationMessages, setConversationMessages] = useState(request?.conversation?.messages || []);
+  const [conversationMessages, setConversationMessages] = useState(
+    request?.conversation?.messages || [],
+  );
 
   // Persist default date r
   const defaultDateCreatedRef = useRef(new Date());
@@ -48,29 +50,29 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
 
   useEffect(() => {
     setConversationMessages(request?.conversation?.messages || []);
-  }, [request?.conversation?.messages])
+  }, [request?.conversation?.messages]);
 
   useEffect(() => {
     if (!request?.id) return;
-    
+
     const pusher = new Pusher(browserEnv.NEXT_PUBLIC_PUSHER_KEY, {
-      cluster: browserEnv.NEXT_PUBLIC_PUSHER_CLUSTER
+      cluster: browserEnv.NEXT_PUBLIC_PUSHER_CLUSTER,
     });
 
     const messageChannel = pusher.subscribe(`conversation-${request?.id}`);
 
-    messageChannel.bind("sendMessage", (data : {newMessage : Message}) => {
+    messageChannel.bind("sendMessage", (data: { newMessage: Message }) => {
       setConversationMessages((prevMessages) => {
         if (prevMessages.some((m) => m.id === data.newMessage.id)) {
-          return prevMessages; 
+          return prevMessages;
         }
         return [...prevMessages, data.newMessage];
       });
-    })
-  
+    });
+
     return () => {
       messageChannel.unbind("sendMessage");
-      pusher.unsubscribe(`conversation-${request?.id}`); 
+      pusher.unsubscribe(`conversation-${request?.id}`);
     };
   }, [request?.id]);
 
@@ -96,8 +98,8 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
         onSuccess,
         onError,
       }),
-      [onSuccess, onError]
-    )
+      [onSuccess, onError],
+    ),
   );
 
   // useref to store previous unread messages
@@ -147,7 +149,7 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
 
   const scrollToBottom = useCallback(() => {
     if (messagesEndRef.current) {
-      const container = messagesEndRef.current.closest('.overflow-y-auto');
+      const container = messagesEndRef.current.closest(".overflow-y-auto");
       if (container) {
         container.scrollTop = container.scrollHeight;
       }
@@ -170,10 +172,10 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
             const messageTime = message.dateCreated
               ? format(new Date(message.dateCreated), "h:mm aa")
               : "";
-            
+
             // Add ref to the last message of the last date group
-            const isLastMessage = 
-              dateIndex === messagesByDate.length - 1 && 
+            const isLastMessage =
+              dateIndex === messagesByDate.length - 1 &&
               messageIndex === messages.length - 1;
 
             return (

@@ -6,59 +6,62 @@ import { timeEnd } from "console";
 
 const prisma = new PrismaClient();
 
-async function reverseGeocode(lng: number, lat: number): Promise<{
+async function reverseGeocode(
+  lng: number,
+  lat: number,
+): Promise<{
   street: string;
   city: string;
   state: string;
   address: string;
 }> {
   const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
-  
+
   try {
     const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${mapboxToken}&types=address,place,locality,region`;
     const response = await fetch(url);
     const data = await response.json();
 
-    let street = '';
-    let city = '';
-    let state = '';
-    let address = '';
-    let buildingNumber = '';
+    let street = "";
+    let city = "";
+    let state = "";
+    let address = "";
+    let buildingNumber = "";
 
     // Try to extract address components from the response
     for (const feature of data.features) {
       // Look for address features to get street and building number
-      if (feature.place_type.includes('address')) {
+      if (feature.place_type.includes("address")) {
         // Try to extract building/house number from address text
-        const addressParts = feature.text.split(' ');
+        const addressParts = feature.text.split(" ");
         // Check if there exists a building number
         if (addressParts.length > 0 && !isNaN(Number(addressParts[0]))) {
           buildingNumber = addressParts[0];
-          street = addressParts.slice(1).join(' ');
+          street = addressParts.slice(1).join(" ");
         } else {
           street = feature.text;
         }
       }
 
       // Look for place features to get city name
-      if (feature.place_type.includes('place') && !city) {
+      if (feature.place_type.includes("place") && !city) {
         city = feature.text;
       }
-      
+
       // Look for region features to get state name
-      if (feature.place_type.includes('region') && !state) {
+      if (feature.place_type.includes("region") && !state) {
         state = feature.text;
       }
-      
+
       // Prefer POI names for the address field if available
-      if (feature.place_type.includes('poi') && !address) {
+      if (feature.place_type.includes("poi") && !address) {
         address = feature.text;
       }
     }
 
     // Append building number to street if it exists
     if (buildingNumber && street) {
-        street = `${buildingNumber} ${street}`;
+      street = `${buildingNumber} ${street}`;
     }
 
     // If no address was found, create one from the components
@@ -68,12 +71,12 @@ async function reverseGeocode(lng: number, lat: number): Promise<{
 
     return { street, city, state, address };
   } catch (error) {
-    console.error('Reverse geocoding failed:', error);
+    console.error("Reverse geocoding failed:", error);
     return {
-      street: '123 Main St',
-      city: 'Boston',
-      state: 'MA',
-      address: '123 Main St, Boston, MA'
+      street: "123 Main St",
+      city: "Boston",
+      state: "MA",
+      address: "123 Main St, Boston, MA",
     };
   }
 }
@@ -84,8 +87,8 @@ async function reverseGeocode(lng: number, lat: number): Promise<{
 const deleteUsers = async () => {
   await prisma.request.deleteMany({});
   await prisma.carpoolGroup.deleteMany({});
-  await prisma.message.deleteMany({}); 
-+ await prisma.user.deleteMany({});
+  await prisma.message.deleteMany({});
+  +(await prisma.user.deleteMany({}));
 };
 
 /**
@@ -100,8 +103,8 @@ const clearConnections = async () => {
         where: {
           OR: [{ fromUserId: user.id }, { toUserId: user.id }],
         },
-      })
-    )
+      }),
+    ),
   );
 
   await Promise.all(
@@ -117,8 +120,8 @@ const clearConnections = async () => {
               .map((_, idx) => ({ id: `${idx}` })),
           },
         },
-      })
-    )
+      }),
+    ),
   );
 };
 
@@ -138,8 +141,8 @@ const generateRequests = async (users: User[]) => {
             connect: { id: pickConnection(idx, users.length) },
           },
         },
-      })
-    )
+      }),
+    ),
   );
 };
 
@@ -172,8 +175,8 @@ const generateFavorites = async (users: User[]) => {
             connect: pickConnections(idx, users.length, 5),
           },
         },
-      })
-    )
+      }),
+    ),
   );
 };
 
@@ -188,7 +191,7 @@ const generateFavorites = async (users: User[]) => {
 const pickConnections = (
   userId: number,
   userCount: number,
-  favoriteCount: number
+  favoriteCount: number,
 ) => {
   const random = Random.create();
   return range(favoriteCount)
@@ -225,10 +228,10 @@ const generateGroups = async (users: User[]) => {
           prisma.user.update({
             where: { id: user.id },
             data: { carpool: { connect: { id: idx.toString() } } },
-          })
-        )
-      )
-    )
+          }),
+        ),
+      ),
+    ),
   );
 };
 
@@ -284,8 +287,8 @@ const createUserData = async () => {
   await deleteUsers();
   await Promise.all(
     users.map((user, index) =>
-      prisma.user.upsert(generateUser({ id: index.toString(), ...user }))
-    )
+      prisma.user.upsert(generateUser({ id: index.toString(), ...user })),
+    ),
   );
   const dbUsers = await prisma.user.findMany();
   await Promise.all([
@@ -328,12 +331,14 @@ const genRandomUsers = async ({
   const rand = (max: number) => max * random.random();
 
   const users = [];
-  
+
   for (let i = 0; i < count; i++) {
     const startMin = 15 * Math.floor(rand(3.9));
     const endMin = 15 * Math.floor(rand(3.9));
-    const startHour = timezone === "UTC" ? 2 + Math.floor(rand(3)) : 8 + Math.floor(rand(3));
-    const endHour = timezone === "UTC" ? 10 + Math.floor(rand(3)) : 16 + Math.floor(rand(3));
+    const startHour =
+      timezone === "UTC" ? 2 + Math.floor(rand(3)) : 8 + Math.floor(rand(3));
+    const endHour =
+      timezone === "UTC" ? 10 + Math.floor(rand(3)) : 16 + Math.floor(rand(3));
     const startTime = new Date(2023, 0, 1, startHour, startMin).toISOString();
     const endTime = new Date(2023, 0, 1, endHour, endMin).toISOString();
 

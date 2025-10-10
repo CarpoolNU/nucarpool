@@ -13,7 +13,7 @@ const updateCompanyLocation = (
   role: Role,
   userId: string,
   isCurrent: boolean = false,
-  remove: boolean = false
+  remove: boolean = false,
 ): void => {
   let img, sourceId: string, layerId: string;
 

@@ -70,7 +70,7 @@ const Index: NextPage = () => {
   const editUserMutation = useEditUserMutation(
     router,
     () => setIsLoading(false),
-    false
+    false,
   );
   const startAddressHook = useAddressSelection();
   const companyAddressHook = useAddressSelection();
@@ -136,7 +136,7 @@ const Index: NextPage = () => {
 
   useEffect(() => {
     const seatAvail = watch("seatAvail");
-    if (role === Role.DRIVER && seatAvail <= 0) {
+    if (role === Role.DRIVER && (seatAvail ?? 0) <= 0) {
       setValue("seatAvail", 1);
     } else if (role !== Role.DRIVER) {
       setValue("seatAvail", 0);
@@ -154,8 +154,8 @@ const Index: NextPage = () => {
       formValues.startAddress !== user?.startAddress ||
       formValues.preferredName !== user?.preferredName ||
       formValues.pronouns !== user?.pronouns ||
-      formValues.daysWorking.some(
-        (day, index) => day !== (user?.daysWorking.split(",")[index] === "1")
+      (formValues.daysWorking ?? []).some(
+        (day, index) => day !== (user?.daysWorking.split(",")[index] === "1"),
       ) ||
       formValues.startTime?.getTime() !== user?.startTime?.getTime() ||
       formValues.endTime?.getTime() !== user?.endTime?.getTime() ||
@@ -186,13 +186,25 @@ const Index: NextPage = () => {
       companyCoordLat: companyAddressHook.selectedAddress.center[1],
       startCoordLng: startAddressHook.selectedAddress.center[0],
       startCoordLat: startAddressHook.selectedAddress.center[1],
-      seatAvail: values.role === "RIDER" ? 0 : values.seatAvail,
-      startStreet: startAddressHook.selectedAddress.street || '',
-      startCity: startAddressHook.selectedAddress.city || '',
-      startState: startAddressHook.selectedAddress.state || '',
-      companyStreet: companyAddressHook.selectedAddress.street || '',
-      companyCity: companyAddressHook.selectedAddress.city || '',
-      companyState: companyAddressHook.selectedAddress.state || '',
+      seatAvail: values.role === "RIDER" ? 0 : (values.seatAvail ?? 0),
+      startStreet: startAddressHook.selectedAddress.street || "",
+      startCity: startAddressHook.selectedAddress.city || "",
+      startState: startAddressHook.selectedAddress.state || "",
+      companyStreet: companyAddressHook.selectedAddress.street || "",
+      companyCity: companyAddressHook.selectedAddress.city || "",
+      companyState: companyAddressHook.selectedAddress.state || "",
+      companyName: values.companyName ?? "",
+      profilePicture: values.profilePicture ?? "",
+      companyAddress: values.companyAddress ?? "",
+      startAddress: values.startAddress ?? "",
+      preferredName: values.preferredName ?? "",
+      pronouns: values.pronouns ?? "",
+      bio: values.bio ?? "",
+      daysWorking: values.daysWorking ?? [],
+      startTime: values.startTime ?? null,
+      endTime: values.endTime ?? null,
+      coopStartDate: values.coopStartDate ?? null,
+      coopEndDate: values.coopEndDate ?? null,
     };
     if (selectedFile) {
       try {
@@ -217,7 +229,7 @@ const Index: NextPage = () => {
     }
   };
   const onSubmitWithContinue: SubmitHandler<OnboardingFormInputs> = async (
-    values
+    values,
   ) => {
     await onSubmit(values);
     await onContinue();
@@ -231,7 +243,7 @@ const Index: NextPage = () => {
     if (firstErrorKey) {
       if (
         ["preferredName", "pronouns", "role", "bio", "seatAvail"].includes(
-          firstErrorKey
+          firstErrorKey,
         )
       ) {
         setOption("user");

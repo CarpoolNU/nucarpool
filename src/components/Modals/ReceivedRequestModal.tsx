@@ -66,7 +66,7 @@ const ReceivedRequestModal = (props: ReceivedModalProps): JSX.Element => {
     addToast(
       props.otherUser.preferredName +
         "'s request to carpool with you has been deleted.",
-      { appearance: "success" }
+      { appearance: "success" },
     );
   };
 
@@ -76,14 +76,14 @@ const ReceivedRequestModal = (props: ReceivedModalProps): JSX.Element => {
         addToast(
           "You do not have any space in your car to accept " +
             props.otherUser.preferredName +
-            "."
+            ".",
         );
         return false;
       }
       if (props.otherUser.carpoolId) {
         addToast(
           props.otherUser.preferredName +
-            " is already in an existing carpool group. Ask them to leave that group before attempting to join yours."
+            " is already in an existing carpool group. Ask them to leave that group before attempting to join yours.",
         );
         return false;
       }
@@ -93,7 +93,7 @@ const ReceivedRequestModal = (props: ReceivedModalProps): JSX.Element => {
         addToast(
           "You cannot join " +
             props.otherUser.preferredName +
-            "'s group until leaving your current carpool group."
+            "'s group until leaving your current carpool group.",
         );
         return false;
       }
@@ -135,7 +135,7 @@ const ReceivedRequestModal = (props: ReceivedModalProps): JSX.Element => {
       addToast(
         props.otherUser.preferredName +
           "'s request to carpool with you has been accepted. If you're a driver, do make sure you add information on the group page for your riders!",
-        { appearance: "success" }
+        { appearance: "success" },
       );
     }
   };

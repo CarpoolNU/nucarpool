@@ -13,7 +13,7 @@ import { GeoJSON } from "geojson";
 const addMapEvents = (
   map: Map,
   user: User,
-  setPopupUser: Dispatch<SetStateAction<PublicUser[] | null>>
+  setPopupUser: Dispatch<SetStateAction<PublicUser[] | null>>,
 ) => {
   map.addControl(new NavigationControl(), "bottom-right");
 
@@ -44,7 +44,7 @@ const addMapEvents = (
     if (pointFeatures.length === 0) return;
 
     const users = pointFeatures.map(
-      (feature) => feature.properties as PublicUser
+      (feature) => feature.properties as PublicUser,
     );
 
     setPopupUser(users);

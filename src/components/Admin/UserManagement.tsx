@@ -27,7 +27,7 @@ const UserManagement = ({ permission }: UserManagementProps) => {
       onError: (error) => {
         toast.error(`Failed to update permission: ${error.message}`);
       },
-    }
+    },
   );
   useEffect(() => {
     if (users) {

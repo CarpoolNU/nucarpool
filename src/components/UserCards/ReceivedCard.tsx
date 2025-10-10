@@ -18,7 +18,6 @@ export const ReceivedCard = (props: ReceivedCardProps): JSX.Element => {
   const user = useContext(UserContext);
   const [showModal, setShowModal] = useState(false);
 
-
   return (
     <>
       <div onClick={props.onClick} className="cursor-pointer">
@@ -43,7 +42,7 @@ export const ReceivedCard = (props: ReceivedCardProps): JSX.Element => {
             onClose={() => setShowModal(false)}
             req={props.otherUser.incomingRequest}
           />,
-          document.body
+          document.body,
         )}
     </>
   );

@@ -10,7 +10,7 @@ const pusher = new Pusher({
   key: serverEnv.NEXT_PUBLIC_PUSHER_KEY,
   secret: serverEnv.PUSHER_SECRET,
   cluster: serverEnv.NEXT_PUBLIC_PUSHER_CLUSTER,
-  useTLS: true
+  useTLS: true,
 });
 
 export const messageRouter = router({
@@ -94,7 +94,7 @@ export const messageRouter = router({
       z.object({
         requestId: z.string(),
         content: z.string(),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user?.id;
@@ -109,9 +109,8 @@ export const messageRouter = router({
         where: { requestId: input.requestId },
       });
 
-      // notify the frontend in real time 
+      // notify the frontend in real time
       if (conversation) {
-
         const newMessage = await ctx.prisma.message.create({
           data: {
             conversationId: conversation.id,
@@ -121,16 +120,20 @@ export const messageRouter = router({
         });
 
         const request = await ctx.prisma.request.findUnique({
-          where : {id : conversation.requestId}
-        })
-        
+          where: { id: conversation.requestId },
+        });
+
         pusher.trigger(`conversation-${input.requestId}`, "sendMessage", {
           newMessage: newMessage,
         });
 
-        pusher.trigger(`notification-${request?.toUserId}`, "sendNotification", {
-          newMessage: newMessage,
-        });
+        pusher.trigger(
+          `notification-${request?.toUserId}`,
+          "sendNotification",
+          {
+            newMessage: newMessage,
+          },
+        );
       }
 
       if (!conversation) {
@@ -149,7 +152,7 @@ export const messageRouter = router({
     .input(
       z.object({
         messageIds: z.array(z.string()),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user?.id;

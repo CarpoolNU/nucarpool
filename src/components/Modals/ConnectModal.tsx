@@ -28,7 +28,7 @@ const ConnectModal = (props: ConnectModalProps): JSX.Element => {
   const [requestSent, setRequestSent] = useState(false);
   const [customMessage, setCustomMessage] = useState("");
   const { profileImageUrl, imageLoadError } = useProfileImage(
-    props.otherUser.id
+    props.otherUser.id,
   );
   const isMobile = useIsMobile();
 
@@ -84,7 +84,7 @@ const ConnectModal = (props: ConnectModalProps): JSX.Element => {
       addToast(
         "A request to carpool has been sent to " +
           props.otherUser.preferredName,
-        { appearance: "success" }
+        { appearance: "success" },
       );
     }
   };
@@ -98,14 +98,14 @@ const ConnectModal = (props: ConnectModalProps): JSX.Element => {
 
   const est = "America/New_York";
 
-  const formatTime = (time : Date | null, starttime? : Date | null) => {
+  const formatTime = (time: Date | null, starttime?: Date | null) => {
     let timeInEST = dayjs.tz(time, est);
     const hour = starttime ? dayjs.tz(starttime, est).hour() : timeInEST.hour();
-  
-    if (hour >= 1 && hour < 5) { 
+
+    if (hour >= 1 && hour < 5) {
       timeInEST = dayjs.tz(time, "UTC");
     }
-  
+
     return timeInEST.format("h:mm A");
   };
 
@@ -151,18 +151,20 @@ const ConnectModal = (props: ConnectModalProps): JSX.Element => {
                       {props.otherUser.coopStartDate &&
                         props.otherUser.coopEndDate && (
                           <div className=" flex  justify-start align-middle">
-                            <div className={`${isMobile ? 'flex-col' : 'flex'} text-base`}>
+                            <div
+                              className={`${isMobile ? "flex-col" : "flex"} text-base`}
+                            >
                               <p className="pr-1">From:</p>
                               <p className="font-bold">
                                 {dayjs(props.otherUser.coopStartDate).format(
-                                  "MMMM"
+                                  "MMMM",
                                 )}
                               </p>
                               <p className="px-2  ">|</p>
                               <p className="pr-1">To:</p>
                               <p className="font-bold">
                                 {dayjs(props.otherUser.coopEndDate).format(
-                                  "MMMM"
+                                  "MMMM",
                                 )}
                               </p>
                             </div>
@@ -180,70 +182,75 @@ const ConnectModal = (props: ConnectModalProps): JSX.Element => {
                       </div>
                     </div>
                   )}
-                  {!isMobile && (<div className="flex flex-col gap-3 py-7 pl-12 md:w-1/2">
-                    {/*start location*/}
-                    <div className="flex  items-center">
-                      <div className="flex w-8 items-center justify-center">
-                        <Image
-                          src={StartIcon}
-                          width={30}
-                          height={30}
-                          alt="Start icon"
-                        />
-                      </div>
-                      <p className="ml-1.5  font-semibold">
-                        {props.otherUser.startAddress}
-                      </p>
-                    </div>
-
-                    {/*End location*/}
-                    <div className="flex items-center">
-                      <div className="flex w-8 items-center justify-center">
-                        <Image
-                          src={EndIcon}
-                          width={21}
-                          height={25}
-                          alt="End icon"
-                        />
-                      </div>
-                      <p className="ml-1.5 font-semibold">
-                        {props.otherUser.companyName}
-                      </p>
-                    </div>
-                    <div className="flex w-full items-center ">
-                      {daysOfWeek.map((day, index) => (
-                        <StaticDayBox
-                          className="!m-0.5 !h-7 !w-7 !text-base"
-                          key={index + day}
-                          day={day}
-                          isSelected={daysArray[index]}
-                        />
-                      ))}
-                    </div>
-                    {/* Start and end times */}
-
-                    <div className="flex w-full justify-between align-middle">
-                      <div className="flex  ">
-                        <p className="pr-1">Start:</p>
-                        <p className="font-semibold">
-                          {formatTime(props.otherUser.startTime)}
-                        </p>
-                        <p className="px-2 font-semibold">|</p>
-                        <p className="pr-1">End:</p>
-                        <p className="font-semibold">
-                          {formatTime(props.otherUser.endTime, props.otherUser.startTime)}
+                  {!isMobile && (
+                    <div className="flex flex-col gap-3 py-7 pl-12 md:w-1/2">
+                      {/*start location*/}
+                      <div className="flex  items-center">
+                        <div className="flex w-8 items-center justify-center">
+                          <Image
+                            src={StartIcon}
+                            width={30}
+                            height={30}
+                            alt="Start icon"
+                          />
+                        </div>
+                        <p className="ml-1.5  font-semibold">
+                          {props.otherUser.startAddress}
                         </p>
                       </div>
-                    </div>
-                    {props.otherUser.role === "DRIVER" && (
-                      <div className="flex flex-row">
-                        <div className="mr-1">Seats Available:</div>
-                        <div className="font-semibold">
-                          {props.otherUser.seatAvail}
+
+                      {/*End location*/}
+                      <div className="flex items-center">
+                        <div className="flex w-8 items-center justify-center">
+                          <Image
+                            src={EndIcon}
+                            width={21}
+                            height={25}
+                            alt="End icon"
+                          />
+                        </div>
+                        <p className="ml-1.5 font-semibold">
+                          {props.otherUser.companyName}
+                        </p>
+                      </div>
+                      <div className="flex w-full items-center ">
+                        {daysOfWeek.map((day, index) => (
+                          <StaticDayBox
+                            className="!m-0.5 !h-7 !w-7 !text-base"
+                            key={index + day}
+                            day={day}
+                            isSelected={daysArray[index]}
+                          />
+                        ))}
+                      </div>
+                      {/* Start and end times */}
+
+                      <div className="flex w-full justify-between align-middle">
+                        <div className="flex  ">
+                          <p className="pr-1">Start:</p>
+                          <p className="font-semibold">
+                            {formatTime(props.otherUser.startTime)}
+                          </p>
+                          <p className="px-2 font-semibold">|</p>
+                          <p className="pr-1">End:</p>
+                          <p className="font-semibold">
+                            {formatTime(
+                              props.otherUser.endTime,
+                              props.otherUser.startTime,
+                            )}
+                          </p>
                         </div>
                       </div>
-                    )}
-                  </div>)}
+                      {props.otherUser.role === "DRIVER" && (
+                        <div className="flex flex-row">
+                          <div className="mr-1">Seats Available:</div>
+                          <div className="font-semibold">
+                            {props.otherUser.seatAvail}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="flex w-full flex-col px-14">
                   <Dialog.Title className="mb-4 pt-2 text-center text-xl font-bold">
@@ -288,12 +295,16 @@ const ConnectModal = (props: ConnectModalProps): JSX.Element => {
                 <Dialog.Title className="mb-8 text-center text-2xl font-bold">
                   Your request has been sent!
                 </Dialog.Title>
-                {!isMobile && (<div className="mb-4 text-center">
-                  Click below to view or continue exploring.
-                </div>)}
-                {isMobile && (<div className="mb-4 text-center">
-                  View your requests on desktop!
-                </div>)}
+                {!isMobile && (
+                  <div className="mb-4 text-center">
+                    Click below to view or continue exploring.
+                  </div>
+                )}
+                {isMobile && (
+                  <div className="mb-4 text-center">
+                    View your requests on desktop!
+                  </div>
+                )}
                 <div className="flex w-full  justify-center space-x-7">
                   <div className="flex w-full  gap-6 md:w-3/4">
                     <button
@@ -302,12 +313,14 @@ const ConnectModal = (props: ConnectModalProps): JSX.Element => {
                     >
                       Close
                     </button>
-                    {!isMobile && (<button
-                      className="w-full rounded-md  bg-northeastern-red p-1 text-slate-50 hover:bg-red-700"
-                      onClick={handleViewRequest}
-                    >
-                      View Request
-                    </button>)}
+                    {!isMobile && (
+                      <button
+                        className="w-full rounded-md  bg-northeastern-red p-1 text-slate-50 hover:bg-red-700"
+                        onClick={handleViewRequest}
+                      >
+                        View Request
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

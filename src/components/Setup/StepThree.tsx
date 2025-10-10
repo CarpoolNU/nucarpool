@@ -35,7 +35,9 @@ const StepThree = ({
 
   return (
     <div className="flex flex-col items-center justify-center bg-white px-2">
-      <div className={`mb-4 text-center font-montserrat ${isMobile ? 'text-2xl' : 'text-3xl'} font-bold`}>
+      <div
+        className={`mb-4 text-center font-montserrat ${isMobile ? "text-2xl" : "text-3xl"} font-bold`}
+      >
         <span>When are you&nbsp;</span>
         <span className="text-northeastern-red">carpooling?</span>
       </div>
@@ -48,9 +50,9 @@ const StepThree = ({
             error={
               errors.daysWorking
                 ? {
-                  type: "custom",
-                  message: "Please select at least one day.",
-                }
+                    type: "custom",
+                    message: "Please select at least one day.",
+                  }
                 : undefined
             }
             label="Days of the Week"
@@ -65,7 +67,9 @@ const StepThree = ({
             />
           </div>
           {errors.daysWorking && (
-            <ErrorDisplay className="text-xs">{errors.daysWorking.message}</ErrorDisplay>
+            <ErrorDisplay className="text-xs">
+              {errors.daysWorking.message}
+            </ErrorDisplay>
           )}
         </div>
 
@@ -78,8 +82,8 @@ const StepThree = ({
           }}
           isDisabled={false}
           noteText="Please input the start and end times of your work, rather than your departure times."
-          noteClassName={`py-1 ${isMobile ? 'text-xs' : 'text-sm'}`}
-          containerClassName={`flex w-full flex-col ${isMobile ? 'mt-2' : 'mt-3'}`}
+          noteClassName={`py-1 ${isMobile ? "text-xs" : "text-sm"}`}
+          containerClassName={`flex w-full flex-col ${isMobile ? "mt-2" : "mt-3"}`}
           timePickerValues={{
             startTime: watch("startTime") || user?.startTime || undefined,
             endTime: watch("endTime") || user?.endTime || undefined,
@@ -87,7 +91,7 @@ const StepThree = ({
         />
 
         {/* Date Section */}
-        <div className={`flex w-full gap-4 ${isMobile ? 'mt-1' : 'mt-2'}`}>
+        <div className={`flex w-full gap-4 ${isMobile ? "mt-1" : "mt-2"}`}>
           {/* Start Date */}
           <div className="flex flex-col w-1/2">
             <EntryLabel
@@ -99,10 +103,12 @@ const StepThree = ({
             <DatePicker<Dayjs>
               id="coopStartDate"
               picker="month"
-              onChange={(date: Dayjs, dateString) => setValue("coopStartDate", date ? date.toDate() : null)}
+              onChange={(date: Dayjs, dateString) =>
+                setValue("coopStartDate", date ? date.toDate() : null)
+              }
               format="YYYY-MM"
               inputReadOnly={true}
-              className={`${isMobile ? 'h-10 text-base' : 'h-12 text-lg'} w-full border rounded-md p-2`}
+              className={`${isMobile ? "h-10 text-base" : "h-12 text-lg"} w-full border rounded-md p-2`}
             />
           </div>
 
@@ -116,18 +122,21 @@ const StepThree = ({
             <DatePicker<Dayjs>
               id="coopEndDate"
               picker="month"
-              onChange={(date: Dayjs, dateString) => setValue("coopEndDate", date ? date.toDate() : null)}
+              onChange={(date: Dayjs, dateString) =>
+                setValue("coopEndDate", date ? date.toDate() : null)
+              }
               format="YYYY-MM"
               inputReadOnly={true}
-              className={`${isMobile ? 'h-10 text-base' : 'h-12 text-lg'} w-full border rounded-md p-2`}
+              className={`${isMobile ? "h-10 text-base" : "h-12 text-lg"} w-full border rounded-md p-2`}
             />
           </div>
         </div>
 
         {/* Note for Date Section */}
         <div className="w-full">
-          <Note className={`py-1 ${isMobile ? 'text-xs' : 'text-sm'}`}>
-            Please indicate the start and end dates of your co-op. Approximate dates are acceptable.
+          <Note className={`py-1 ${isMobile ? "text-xs" : "text-sm"}`}>
+            Please indicate the start and end dates of your co-op. Approximate
+            dates are acceptable.
           </Note>
         </div>
       </div>

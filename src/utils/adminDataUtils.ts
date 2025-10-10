@@ -8,7 +8,7 @@ interface ItemWithDate {
 export const filterItemsByDate = (
   items: ItemWithDate[],
   startTimestamp: number,
-  endTimestamp: number
+  endTimestamp: number,
 ) => {
   return items.filter((item) => {
     const itemTimestamp = startOfWeek(item.dateCreated).getTime();
@@ -17,7 +17,7 @@ export const filterItemsByDate = (
 };
 export const countCumulativeItemsPerWeek = (
   items: ItemWithDate[],
-  weekLabels: Date[]
+  weekLabels: Date[],
 ): (number | null)[] => {
   const counts: (number | null)[] = [];
   let cumulativeCount = 0;
@@ -27,7 +27,7 @@ export const countCumulativeItemsPerWeek = (
     .slice()
     .sort(
       (a, b) =>
-        new Date(a.dateCreated).getTime() - new Date(b.dateCreated).getTime()
+        new Date(a.dateCreated).getTime() - new Date(b.dateCreated).getTime(),
     );
 
   weekLabels.forEach((weekStart, index) => {
@@ -56,10 +56,10 @@ export function generateWeekLabels(allDates: Date[]): Date[] {
 
   if (allDates.length > 0) {
     const minWeekDate = startOfWeek(
-      new Date(Math.min(...allDates.map((date) => date.getTime())))
+      new Date(Math.min(...allDates.map((date) => date.getTime()))),
     );
     const maxWeekDate = startOfWeek(
-      new Date(Math.max(...allDates.map((date) => date.getTime())))
+      new Date(Math.max(...allDates.map((date) => date.getTime()))),
     );
 
     const weeksDifference = differenceInWeeks(maxWeekDate, minWeekDate) + 1;
@@ -76,7 +76,7 @@ export function generateWeekLabels(allDates: Date[]): Date[] {
 export function getMinMaxDates(
   users: TempUser[],
   groups: TempGroup[],
-  requests: TempRequest[]
+  requests: TempRequest[],
 ): { minDate: number; maxDate: number } {
   const allTimestamps = [
     ...users.map((user) => user.dateCreated.getTime()),
@@ -96,46 +96,46 @@ export function filterDataForLineChart(
   users: TempUser[],
   groups: TempGroup[],
   requests: TempRequest[],
-  sliderRange: number[]
+  sliderRange: number[],
 ) {
   const activeUsers = users.filter((user) => user.status === "ACTIVE");
   const inactiveUsers = _.differenceBy(users, activeUsers);
   const riderRequests = requests.filter(
-    (request) => request.fromUser.role === "RIDER"
+    (request) => request.fromUser.role === "RIDER",
   );
   const driverRequests = requests.filter(
-    (request) => request.fromUser.role === "DRIVER"
+    (request) => request.fromUser.role === "DRIVER",
   );
 
   const filteredActiveUsers = filterItemsByDate(
     activeUsers,
     sliderRange[0],
-    sliderRange[1]
+    sliderRange[1],
   );
   const filteredInactiveUsers = filterItemsByDate(
     inactiveUsers,
     sliderRange[0],
-    sliderRange[1]
+    sliderRange[1],
   );
   const filteredGroups = filterItemsByDate(
     groups,
     sliderRange[0],
-    sliderRange[1]
+    sliderRange[1],
   );
   const filteredRequests = filterItemsByDate(
     requests,
     sliderRange[0],
-    sliderRange[1]
+    sliderRange[1],
   );
   const filteredDriverRequests = filterItemsByDate(
     driverRequests,
     sliderRange[0],
-    sliderRange[1]
+    sliderRange[1],
   );
   const filteredRiderRequests = filterItemsByDate(
     riderRequests,
     sliderRange[0],
-    sliderRange[1]
+    sliderRange[1],
   );
 
   return {
@@ -155,28 +155,28 @@ export function buildLineChartData(
   filteredRequests: ItemWithDate[],
   filteredDriverRequests: ItemWithDate[],
   filteredRiderRequests: ItemWithDate[],
-  weekLabels: Date[]
+  weekLabels: Date[],
 ) {
   const activeUserCount = countCumulativeItemsPerWeek(
     filteredActiveUsers,
-    weekLabels
+    weekLabels,
   );
   const inactiveUserCount = countCumulativeItemsPerWeek(
     filteredInactiveUsers,
-    weekLabels
+    weekLabels,
   );
   const groupCounts = countCumulativeItemsPerWeek(filteredGroups, weekLabels);
   const requestCount = countCumulativeItemsPerWeek(
     filteredRequests,
-    weekLabels
+    weekLabels,
   );
   const driverRequestCount = countCumulativeItemsPerWeek(
     filteredDriverRequests,
-    weekLabels
+    weekLabels,
   );
   const riderRequestCount = countCumulativeItemsPerWeek(
     filteredRiderRequests,
-    weekLabels
+    weekLabels,
   );
 
   return {

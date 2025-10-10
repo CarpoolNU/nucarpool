@@ -27,7 +27,7 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
       setCroppedArea(croppedAreaPercentage);
       setCroppedAreaPixels(croppedAreaPixels);
     },
-    []
+    [],
   );
 
   const handleCancel = () => {
@@ -41,7 +41,7 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
   };
 
   const handleFileChange = async (
-    event: React.ChangeEvent<HTMLInputElement>
+    event: React.ChangeEvent<HTMLInputElement>,
   ) => {
     const file = event.target.files?.[0];
     if (file) {
@@ -92,7 +92,7 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
 
       setCrop({ x: 0, y: 0 }); // ReCenter
     },
-    []
+    [],
   );
   const onCropChange = useCallback(
     (newCrop: Point) => {
@@ -108,64 +108,66 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
 
       boundedCrop.x = Math.min(
         Math.max(boundedCrop.x, -maxHorizontalMovement),
-        maxHorizontalMovement
+        maxHorizontalMovement,
       );
 
       boundedCrop.y = Math.min(
         Math.max(boundedCrop.y, -maxVerticalMovement),
-        maxVerticalMovement
+        maxVerticalMovement,
       );
 
       setCrop(boundedCrop);
     },
-    [zoom, minZoom]
+    [zoom, minZoom],
   );
 
   return (
     <>
-      {showModal && imageSrc && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm">
-          <div className="relative w-full max-w-lg overflow-hidden rounded-2xl border-8 border-gray-400 bg-white">
-            <div className="relative h-96 w-full">
-              <Cropper
-                image={imageSrc}
-                minZoom={minZoom}
-                maxZoom={10}
-                crop={crop}
-                zoom={zoom}
-                aspect={1}
-                showGrid={false}
-                onCropComplete={onCropComplete}
-                onZoomChange={setZoom}
-                onMediaLoaded={onMediaLoaded}
-                cropSize={{ width: 300, height: 300 }}
-                cropShape="round"
-                restrictPosition={false}
-                objectFit="contain"
-                onCropChange={onCropChange}
-              />
+      {showModal &&
+        imageSrc &&
+        createPortal(
+          <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm">
+            <div className="relative w-full max-w-lg overflow-hidden rounded-2xl border-8 border-gray-400 bg-white">
+              <div className="relative h-96 w-full">
+                <Cropper
+                  image={imageSrc}
+                  minZoom={minZoom}
+                  maxZoom={10}
+                  crop={crop}
+                  zoom={zoom}
+                  aspect={1}
+                  showGrid={false}
+                  onCropComplete={onCropComplete}
+                  onZoomChange={setZoom}
+                  onMediaLoaded={onMediaLoaded}
+                  cropSize={{ width: 300, height: 300 }}
+                  cropShape="round"
+                  restrictPosition={false}
+                  objectFit="contain"
+                  onCropChange={onCropChange}
+                />
+              </div>
+              <div className="flex w-full items-stretch justify-between p-4">
+                <button
+                  type="button"
+                  onClick={handleCancel}
+                  className="mr-2 rounded-lg bg-gray-300 px-8 py-2 font-montserrat text-lg text-black"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCrop}
+                  className="rounded-lg bg-northeastern-red px-8 py-2 font-montserrat text-lg text-white hover:bg-red-700"
+                >
+                  Crop Image
+                </button>
+              </div>
             </div>
-            <div className="flex w-full items-stretch justify-between p-4">
-              <button
-                type="button"
-                onClick={handleCancel}
-                className="mr-2 rounded-lg bg-gray-300 px-8 py-2 font-montserrat text-lg text-black"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleCrop}
-                className="rounded-lg bg-northeastern-red px-8 py-2 font-montserrat text-lg text-white hover:bg-red-700"
-              >
-                Crop Image
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
-  
+          </div>,
+          document.body,
+        )}
+
       <div className="mt-2 flex items-center">
         {croppedImageUrl ? (
           <div className="relative h-40 w-40 overflow-hidden rounded-full flex-shrink-0">
@@ -190,7 +192,7 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
             <AiOutlineUser className="h-28 w-28 text-white" />
           </div>
         )}
-  
+
         <div className="ml-4">
           <label
             htmlFor="fileInput"
@@ -209,6 +211,6 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
       </div>
     </>
   );
-}
+};
 
 export default ProfilePicture;

@@ -65,7 +65,7 @@ export const userRouter = router({
         companyStreet: z.string(),
         companyCity: z.string(),
         companyState: z.string(),
-      })
+      }),
     )
     .mutation(async ({ input, ctx }) => {
       const startTimeDate = input.startTime
@@ -115,7 +115,7 @@ export const userRouter = router({
     .input(
       z.object({
         contentType: z.string(),
-      })
+      }),
     )
     .query(async ({ ctx, input }) => {
       const { contentType } = input;

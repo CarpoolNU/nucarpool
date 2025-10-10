@@ -24,7 +24,11 @@ import {
   Request,
 } from "../utils/types";
 import { Role, User } from "@prisma/client";
-import { useGetDirections, viewRoute, clearDirections } from "../utils/map/viewRoute";
+import {
+  useGetDirections,
+  viewRoute,
+  clearDirections,
+} from "../utils/map/viewRoute";
 import { MapConnectPortal } from "../components/MapConnectPortal";
 import useSearch from "../utils/search";
 import AddressCombobox from "../components/Map/AddressCombobox";
@@ -94,7 +98,9 @@ const Home: NextPage<any> = () => {
   const [mapStateLoaded, setMapStateLoaded] = useState(false);
   const isMobile: boolean = useIsMobile();
   // const [mobileSidebarExpanded, setMobileSidebarExpanded] = useState<boolean>(false);
-  const [mobileSelectedUserID, setmobileSelectedUserID] = useState<string | null>(null)
+  const [mobileSelectedUserID, setmobileSelectedUserID] = useState<
+    string | null
+  >(null);
 
   useEffect(() => {
     const handler = debounce(() => {
@@ -117,7 +123,7 @@ const Home: NextPage<any> = () => {
       sort: sort,
       filters: filters,
     },
-    { refetchOnMount: true }
+    { refetchOnMount: true },
   );
   const { data: favorites = [] } = trpc.user.favorites.me.useQuery(undefined, {
     refetchOnMount: true,
@@ -133,10 +139,9 @@ const Home: NextPage<any> = () => {
     if (userId !== "") {
       setOtherUser(null);
       if (sidebarRef.current) {
-        sidebarRef.current.classList.remove('hidden');
+        sidebarRef.current.classList.remove("hidden");
       }
     }
-
   };
 
   const [mapState, setMapState] = useState<mapboxgl.Map>();
@@ -165,22 +170,22 @@ const Home: NextPage<any> = () => {
   const [companyAddress, setCompanyAddress] = useState("");
   const updateCompanyAddress = useMemo(
     () => debounce(setCompanyAddress, 250),
-    []
+    [],
   );
 
   const [startingAddress, setStartingAddress] = useState("");
   const updateStartingAddress = useMemo(
     () => debounce(setStartingAddress, 250),
-    []
+    [],
   );
 
   const extendPublicUser = useCallback(
     (user: PublicUser): EnhancedPublicUser => {
       const incomingReq: Request | undefined = requests.received.find(
-        (req) => req.fromUserId === user.id
+        (req) => req.fromUserId === user.id,
       );
       const outgoingReq: Request | undefined = requests.sent.find(
-        (req) => req.toUserId === user.id
+        (req) => req.toUserId === user.id,
       );
 
       return {
@@ -190,7 +195,7 @@ const Home: NextPage<any> = () => {
         outgoingRequest: outgoingReq,
       };
     },
-    [favorites, requests]
+    [favorites, requests],
   );
 
   const handleMessageSent = (selectedUserId: string) => {
@@ -217,9 +222,9 @@ const Home: NextPage<any> = () => {
   useEffect(() => {
     if (isMobile && sidebarRef.current) {
       if (selectedUser) {
-        sidebarRef.current.classList.add('hidden');
+        sidebarRef.current.classList.add("hidden");
       } else {
-        sidebarRef.current.classList.remove('hidden');
+        sidebarRef.current.classList.remove("hidden");
       }
     }
   }, [selectedUser, isMobile]);
@@ -227,12 +232,11 @@ const Home: NextPage<any> = () => {
   const sidebarRef = useRef<HTMLDivElement>(null);
   const lastScrollTop = useRef<number>(0);
 
-
   const enhancedSentUsers = requests.sent.map((request: { toUser: any }) =>
-    extendPublicUser(request.toUser!)
+    extendPublicUser(request.toUser!),
   );
   const enhancedReceivedUsers = requests.received.map(
-    (request: { fromUser: any }) => extendPublicUser(request.fromUser!)
+    (request: { fromUser: any }) => extendPublicUser(request.fromUser!),
   );
   const enhancedRecs = recommendations.map(extendPublicUser);
   const enhancedFavs = favorites.map(extendPublicUser);
@@ -245,20 +249,29 @@ const Home: NextPage<any> = () => {
       }
 
       // Validate user and clickedUser have required coordinate properties
-      if (!user || !clickedUser ||
+      if (
+        !user ||
+        !clickedUser ||
         !isValidCoordinates(user.startCoordLng, user.startCoordLat) ||
         !isValidCoordinates(user.companyCoordLng, user.companyCoordLat) ||
-        !isValidCoordinates(clickedUser.startCoordLng, clickedUser.startCoordLat) ||
-        !isValidCoordinates(clickedUser.companyCoordLng, clickedUser.companyCoordLat)) {
+        !isValidCoordinates(
+          clickedUser.startCoordLng,
+          clickedUser.startCoordLat,
+        ) ||
+        !isValidCoordinates(
+          clickedUser.companyCoordLng,
+          clickedUser.companyCoordLat,
+        )
+      ) {
         console.error("Invalid user coordinates for route viewing");
         return;
       }
 
       const isOtherUserInGeoList = geoJsonUsers.features.some(
-        (f) => f.properties?.id === clickedUser.id
+        (f) => f.properties?.id === clickedUser.id,
       );
       const isPrevOtherUserInGeoList = geoJsonUsers.features.some(
-        (f) => f.properties?.id === tempOtherUser?.id
+        (f) => f.properties?.id === tempOtherUser?.id,
       );
       const shouldRemoveMarker =
         tempOtherUserMarkerActive &&
@@ -286,11 +299,11 @@ const Home: NextPage<any> = () => {
         !isViewerAddressSelected && user.role === "VIEWER"
           ? undefined
           : {
-            startLat: userStartLat,
-            startLng: userStartLng,
-            endLat: userCompanyLat,
-            endLng: userCompanyLng,
-          };
+              startLat: userStartLat,
+              startLng: userStartLng,
+              endLat: userCompanyLat,
+              endLng: userCompanyLng,
+            };
 
       if (user.role !== "VIEWER") {
         updateUserLocation(mapState, userStartLng, userStartLat);
@@ -300,7 +313,7 @@ const Home: NextPage<any> = () => {
           userCompanyLat,
           user.role,
           user.id,
-          true
+          true,
         );
       }
       if (shouldRemoveMarker && tempOtherUser) {
@@ -311,7 +324,7 @@ const Home: NextPage<any> = () => {
           tempOtherUser.role,
           tempOtherUser.id,
           false,
-          true
+          true,
         );
         setTempOtherUserMarkerActive(false);
         setTempOtherUser(null);
@@ -324,7 +337,7 @@ const Home: NextPage<any> = () => {
           clickedUser.role,
           clickedUser.id,
           false,
-          false
+          false,
         );
         setTempOtherUserMarkerActive(true);
         setTempOtherUser(clickedUser);
@@ -338,7 +351,7 @@ const Home: NextPage<any> = () => {
         otherUser: clickedUser,
         map: mapState,
         userCoord,
-        isMobile
+        isMobile,
       };
 
       if (user.role === "RIDER") {
@@ -373,37 +386,45 @@ const Home: NextPage<any> = () => {
       tempOtherUser,
       tempOtherUserMarkerActive,
       isMobile,
-    ]
+    ],
   );
 
-  const handleMobileSidebarExpand = useCallback((userId?: string) => {
-    if (userId) {
-      setmobileSelectedUserID(userId);
-      const allUsers = [...enhancedRecs, ...enhancedFavs, ...enhancedSentUsers, ...enhancedReceivedUsers];
-      const selectedPublicUser = allUsers.find(u => u.id === userId);
+  const handleMobileSidebarExpand = useCallback(
+    (userId?: string) => {
+      if (userId) {
+        setmobileSelectedUserID(userId);
+        const allUsers = [
+          ...enhancedRecs,
+          ...enhancedFavs,
+          ...enhancedSentUsers,
+          ...enhancedReceivedUsers,
+        ];
+        const selectedPublicUser = allUsers.find((u) => u.id === userId);
 
-      if (selectedPublicUser && user && mapState && mapStateLoaded) {
-        onViewRouteClick(user, selectedPublicUser);
+        if (selectedPublicUser && user && mapState && mapStateLoaded) {
+          onViewRouteClick(user, selectedPublicUser);
+        }
+      } else {
+        setmobileSelectedUserID(null);
       }
-    }
-    else {
-      setmobileSelectedUserID(null);
-    }
-  }, [
-    enhancedRecs,
-    enhancedFavs,
-    enhancedSentUsers,
-    enhancedReceivedUsers,
-    user,
-    mapState,
-    mapStateLoaded,
-    onViewRouteClick,
-    setmobileSelectedUserID
-  ]);
+    },
+    [
+      enhancedRecs,
+      enhancedFavs,
+      enhancedSentUsers,
+      enhancedReceivedUsers,
+      user,
+      mapState,
+      mapStateLoaded,
+      onViewRouteClick,
+      setmobileSelectedUserID,
+    ],
+  );
 
   useEffect(() => {
     const handleScroll = (e: Event) => {
-      if (!isMobile || !sidebarRef.current || mobileSelectedUserID === null) return;
+      if (!isMobile || !sidebarRef.current || mobileSelectedUserID === null)
+        return;
 
       const element = e.target as HTMLDivElement;
       const scrollTop = element.scrollTop;
@@ -417,26 +438,26 @@ const Home: NextPage<any> = () => {
 
     const sidebarElement = sidebarRef.current;
     if (sidebarElement && isMobile) {
-      sidebarElement.addEventListener('scroll', handleScroll);
+      sidebarElement.addEventListener("scroll", handleScroll);
     }
 
     return () => {
       if (sidebarElement) {
-        sidebarElement.removeEventListener('scroll', handleScroll);
+        sidebarElement.removeEventListener("scroll", handleScroll);
       }
     };
   }, [isMobile, mobileSelectedUserID, sidebarRef, handleMobileSidebarExpand]);
 
-
-
   // Helper function to validate coordinates
   const isValidCoordinates = (lng?: number, lat?: number): boolean => {
-    return lng !== undefined &&
+    return (
+      lng !== undefined &&
       lat !== undefined &&
       !isNaN(lng) &&
       !isNaN(lat) &&
       isFinite(lng) &&
-      isFinite(lat);
+      isFinite(lat)
+    );
   };
 
   useEffect(() => {
@@ -481,7 +502,7 @@ const Home: NextPage<any> = () => {
             user.companyCoordLat,
             user.role,
             user.id,
-            true
+            true,
           );
         }
         setMapStateLoaded(true);
@@ -502,7 +523,7 @@ const Home: NextPage<any> = () => {
         updateUserLocation(
           mapState,
           startAddressSelected.center[0],
-          startAddressSelected.center[1]
+          startAddressSelected.center[1],
         );
         updateCompanyLocation(
           mapState,
@@ -510,7 +531,7 @@ const Home: NextPage<any> = () => {
           companyAddressSelected.center[1],
           Role.VIEWER,
           user.id,
-          true
+          true,
         );
       }
       if (otherUser) {
@@ -538,7 +559,7 @@ const Home: NextPage<any> = () => {
         tempOtherUser.role,
         tempOtherUser.id,
         false,
-        true
+        true,
       );
       setTempOtherUserMarkerActive(false);
       setTempOtherUser(null);
@@ -560,11 +581,19 @@ const Home: NextPage<any> = () => {
           companyAddressSelected.center[0] !== 0))
     ) {
       // Validate coordinates before proceeding
-      const isViewerWithValidCoords = user.role === "VIEWER" &&
-        isValidCoordinates(startAddressSelected.center[0], startAddressSelected.center[1]) &&
-        isValidCoordinates(companyAddressSelected.center[0], companyAddressSelected.center[1]);
+      const isViewerWithValidCoords =
+        user.role === "VIEWER" &&
+        isValidCoordinates(
+          startAddressSelected.center[0],
+          startAddressSelected.center[1],
+        ) &&
+        isValidCoordinates(
+          companyAddressSelected.center[0],
+          companyAddressSelected.center[1],
+        );
 
-      const isNonViewerWithValidCoords = user.role !== "VIEWER" &&
+      const isNonViewerWithValidCoords =
+        user.role !== "VIEWER" &&
         isValidCoordinates(user.startCoordLng, user.startCoordLat) &&
         isValidCoordinates(user.companyCoordLng, user.companyCoordLat);
 
@@ -597,7 +626,7 @@ const Home: NextPage<any> = () => {
           tempOtherUser.role,
           tempOtherUser.id,
           false,
-          true
+          true,
         );
         setTempOtherUserMarkerActive(false);
         setTempOtherUser(null);
@@ -607,7 +636,7 @@ const Home: NextPage<any> = () => {
         otherUser: undefined,
         map: mapState,
         userCoord,
-        isMobile
+        isMobile,
       };
 
       // Set initial points for directions or route viewing
@@ -649,10 +678,10 @@ const Home: NextPage<any> = () => {
       <div
         className="absolute top-0 left-0 right-0 z-[9999] bg-yellow-100 text-black py-1 px-4 text-xs text-center"
         style={{
-          width: '100%',
-          position: 'fixed',
+          width: "100%",
+          position: "fixed",
           top: 0,
-          zIndex: 9999
+          zIndex: 9999,
         }}
       >
         For the full experience, try using CarpoolNU on desktop
@@ -728,45 +757,68 @@ const Home: NextPage<any> = () => {
         >
           <Head>
             <title>CarpoolNU</title>
-            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+            <meta
+              name="viewport"
+              content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+            />
           </Head>
 
           {/* Always render the banner outside of other containers */}
           <MobileBanner />
 
           <div className="m-0 h-full max-h-screen w-full">
-            {!isMobile && <Header
-              data={{
-                sidebarValue: sidebarType,
-                setSidebar: setSidebarType,
-                disabled: user.status === "INACTIVE" && user.role !== "VIEWER",
-              }}
-            />}
-            <div className={`flex h-[91.5%] overflow-hidden ${isMobile ? 'mt-5' : ''}`}>
+            {!isMobile && (
+              <Header
+                data={{
+                  sidebarValue: sidebarType,
+                  setSidebar: setSidebarType,
+                  disabled:
+                    user.status === "INACTIVE" && user.role !== "VIEWER",
+                }}
+              />
+            )}
+            <div
+              className={`flex h-[91.5%] overflow-hidden ${isMobile ? "mt-5" : ""}`}
+            >
               {isMobile && sidebarType === "explore" && (
-                <div className={`absolute left-1/2 z-30 -translate-x-1/2 transform ${mobileSelectedUserID !== null
-                    ? 'hidden'
-                    : 'top-12'
-                  }`}>
+                <div
+                  className={`absolute left-1/2 z-30 -translate-x-1/2 transform ${
+                    mobileSelectedUserID !== null ? "hidden" : "top-12"
+                  }`}
+                >
                   <div className="h-1.5 w-16 rounded-full bg-gray-500 shadow-sm"></div>
                 </div>
               )}
               <div
                 ref={sidebarRef}
-                className={`${isMobile
-                  ? `absolute left-0 z-20 w-full overflow-y-auto bg-white shadow-lg transition-all duration-300 rounded-t-3xl border-2 border-black ${mobileSelectedUserID !== null
-                    ? 'bottom-12 h-[320px]' // Short height for single card view
-                    : 'top-14  h-[calc(100%-3.5rem)]' // Full height otherwise
-                  }`
-                  : 'relative w-[25rem]'}`}>
-
+                className={`${
+                  isMobile
+                    ? `absolute left-0 z-20 w-full overflow-y-auto bg-white shadow-lg transition-all duration-300 rounded-t-3xl border-2 border-black ${
+                        mobileSelectedUserID !== null
+                          ? "bottom-12 h-[320px]" // Short height for single card view
+                          : "top-14  h-[calc(100%-3.5rem)]" // Full height otherwise
+                      }`
+                    : "relative w-[25rem]"
+                }`}
+              >
                 {isMobile && mobileSelectedUserID !== null && (
                   <div className="flex-shrink-0 border-b border-gray-200 bg-gray-50 px-3 py-2">
                     <button
                       onClick={() => handleMobileSidebarExpand()}
                       className="flex items-center text-northeastern-red"
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mr-1">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="mr-1"
+                      >
                         <polyline points="15 18 9 12 15 6"></polyline>
                       </svg>
                       <span className="font-medium">Back</span>
@@ -797,13 +849,14 @@ const Home: NextPage<any> = () => {
                 )}
               </div>
 
-
-              {!isMobile && <button
-                className="absolute bottom-[150px] right-[8px] z-10 flex h-8 w-8 items-center justify-center rounded-md border-2 border-solid border-gray-300 bg-white shadow-sm hover:bg-gray-200"
-                id="fly"
-              >
-                <RiFocus3Line />
-              </button>}
+              {!isMobile && (
+                <button
+                  className="absolute bottom-[150px] right-[8px] z-10 flex h-8 w-8 items-center justify-center rounded-md border-2 border-solid border-gray-300 bg-white shadow-sm hover:bg-gray-200"
+                  id="fly"
+                >
+                  <RiFocus3Line />
+                </button>
+              )}
               <div className="relative flex-auto">
                 {/* Message Panel */}
                 {selectedUser && (
@@ -825,15 +878,17 @@ const Home: NextPage<any> = () => {
                 >
                   {user.role === "VIEWER" && viewerBox}
                   {!isMobile && <MapLegend role={user.role} />}
-                  {!isMobile && <MapConnectPortal
-                    otherUsers={popupUsers}
-                    extendUser={extendPublicUser}
-                    onViewRouteClick={onViewRouteClick}
-                    onViewRequest={handleUserSelect}
-                    onClose={() => {
-                      setPopupUsers(null);
-                    }}
-                  />}
+                  {!isMobile && (
+                    <MapConnectPortal
+                      otherUsers={popupUsers}
+                      extendUser={extendPublicUser}
+                      onViewRouteClick={onViewRouteClick}
+                      onViewRequest={handleUserSelect}
+                      onClose={() => {
+                        setPopupUsers(null);
+                      }}
+                    />
+                  )}
                   {user.status === "INACTIVE" && user.role !== "VIEWER" && (
                     <InactiveBlocker />
                   )}
@@ -843,15 +898,14 @@ const Home: NextPage<any> = () => {
                     data={{
                       sidebarValue: sidebarType,
                       setSidebar: setSidebarType,
-                      disabled: user.status === "INACTIVE" && user.role !== "VIEWER",
+                      disabled:
+                        user.status === "INACTIVE" && user.role !== "VIEWER",
                     }}
                     isMobile={true}
                   />
                 )}
               </div>
-
             </div>
-
           </div>
         </ToastProvider>
       </UserContext.Provider>

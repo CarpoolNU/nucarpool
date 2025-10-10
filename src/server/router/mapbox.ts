@@ -17,14 +17,16 @@ export const mapboxRouter = router({
     .input(
       z.object({
         value: z.string(),
-        types: z.union([
-          z.literal("address%2Cpostcode"),
-          z.literal("neighborhood%2Cplace"),
-        ]),
-        proximity: z.literal("ip"),
-        country: z.literal("us"),
-        autocomplete: z.literal(true),
-      })
+        types: z
+          .string()
+          .refine(
+            (val) =>
+              val === "address%2Cpostcode" || val === "neighborhood%2Cplace",
+          ),
+        proximity: z.string().refine((val) => val === "ip"),
+        country: z.string().refine((val) => val === "us"),
+        autocomplete: z.boolean().refine((val) => val === true),
+      }),
     )
     .query(async ({ input }): Promise<FeatureCollection> => {
       const endpoint = `https://api.mapbox.com/geocoding/v5/mapbox.places/${input.value}.json?access_token=${serverEnv.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}&autocomplete=${input.autocomplete}&country=${input.country}&proximity=${input.proximity}&types=${input.types}`;
@@ -39,13 +41,13 @@ export const mapboxRouter = router({
         });
 
       // parse features to include structured address components
-      const parsedFeatures = data.features.map((feature: any) => 
-        parseMapboxFeature(feature)
+      const parsedFeatures = data.features.map((feature: any) =>
+        parseMapboxFeature(feature),
       );
 
       return {
         ...data,
-        features: parsedFeatures
+        features: parsedFeatures,
       };
     }),
 
@@ -65,7 +67,7 @@ export const mapboxRouter = router({
         dateOverlap: z.number(), // 0 any, 1 partial, 2 full
         favorites: z.boolean(), // if true, only show users user has favorited
         messaged: z.boolean(), // if false, hide users user has messaged
-      })
+      }),
     )
     .query(async ({ ctx, input }) => {
       const id = ctx.session.user?.id;
@@ -114,15 +116,15 @@ export const mapboxRouter = router({
         where: userQuery,
       });
       const filtered = _.compact(
-        users.map(calculateScore(calcUser, input, "distance"))
+        users.map(calculateScore(calcUser, input, "distance")),
       );
       filtered.sort((a, b) => a.score - b.score);
       const sortedUsers = _.compact(
-        filtered.map((rec) => users.find((user) => user.id === rec.id))
+        filtered.map((rec) => users.find((user) => user.id === rec.id)),
       );
       const finalUsers =
         calcUser.role === Role.VIEWER ? sortedUsers : sortedUsers.slice(0, 150);
-      
+
       const finalPublicUsers = finalUsers.map(convertToPublic);
 
       // creates points for each user with coordinates at company location
@@ -154,7 +156,7 @@ export const mapboxRouter = router({
     .input(
       z.object({
         points: z.array(z.tuple([z.number(), z.number()])), // Array of tuples containing longitude and latitude
-      })
+      }),
     )
     .query(async ({ input }): Promise<DirectionsResponse> => {
       // Convert input to a string in the format required by the Mapbox API

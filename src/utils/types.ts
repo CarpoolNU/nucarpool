@@ -51,19 +51,19 @@ export type PoiData = {
 export type OnboardingFormInputs = {
   role: Role;
   status: Status;
-  seatAvail: number;
-  companyName: string;
-  profilePicture: string;
-  companyAddress: string;
-  startAddress: string;
-  preferredName: string;
-  pronouns: string;
-  daysWorking: boolean[];
-  startTime: Date | null;
-  endTime: Date | null;
-  coopStartDate: Date | null;
-  coopEndDate: Date | null;
-  bio: string;
+  seatAvail?: number;
+  companyName?: string;
+  profilePicture?: string;
+  companyAddress?: string;
+  startAddress?: string;
+  preferredName?: string;
+  pronouns?: string;
+  daysWorking?: boolean[];
+  startTime?: Date | null;
+  endTime?: Date | null;
+  coopStartDate?: Date | null;
+  coopEndDate?: Date | null;
+  bio?: string;
 };
 export type UserInfo = {
   role: Role;

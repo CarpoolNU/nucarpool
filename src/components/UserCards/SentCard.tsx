@@ -1,9 +1,5 @@
 import { useContext, useState } from "react";
-import {
-  EnhancedPublicUser,
-  Message,
-  PublicUser,
-} from "../../utils/types";
+import { EnhancedPublicUser, Message, PublicUser } from "../../utils/types";
 import { UserContext } from "../../utils/userContext";
 import { UserCard } from "./UserCard";
 import SentRequestModal from "../Modals/SentRequestModal";
@@ -22,7 +18,6 @@ interface SentCardProps {
 export const SentCard = (props: SentCardProps): JSX.Element => {
   const user = useContext(UserContext);
   const [showModal, setShowModal] = useState(false);
-
 
   return (
     <>
@@ -48,7 +43,7 @@ export const SentCard = (props: SentCardProps): JSX.Element => {
             onClose={() => setShowModal(false)}
             req={props.otherUser.outgoingRequest}
           />,
-          document.body
+          document.body,
         )}
     </>
   );

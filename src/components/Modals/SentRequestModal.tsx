@@ -46,7 +46,7 @@ const SentRequestModal = (props: SentModalProps): JSX.Element => {
       "Your request to carpool with " +
         props.otherUser.preferredName +
         " has been withdrawn.",
-      { appearance: "success" }
+      { appearance: "success" },
     );
   };
 

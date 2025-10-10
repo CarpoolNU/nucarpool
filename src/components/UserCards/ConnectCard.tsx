@@ -19,8 +19,8 @@ interface ConnectCardProps {
   onViewRouteClick: (user: User, otherUser: PublicUser) => void;
   onClose?: (action: string) => void;
   onViewRequest: (userId: string) => void;
-  mobileSelectedUser?: string | null,
-  handleMobileExpand?: (userId?: string) => void,
+  mobileSelectedUser?: string | null;
+  handleMobileExpand?: (userId?: string) => void;
 }
 
 export const ConnectCard = (props: ConnectCardProps): JSX.Element => {
@@ -34,7 +34,7 @@ export const ConnectCard = (props: ConnectCardProps): JSX.Element => {
       "You already have an incoming carpool request from " +
         props.otherUser.preferredName +
         ". Navigate to the received requests tab to connect with them!",
-      { appearance: "info" }
+      { appearance: "info" },
     );
   };
 
@@ -43,7 +43,7 @@ export const ConnectCard = (props: ConnectCardProps): JSX.Element => {
       "You already have an outgoing carpool request to " +
         props.otherUser.preferredName +
         ". Please wait for them to respond to your request!",
-      { appearance: "info" }
+      { appearance: "info" },
     );
   };
 
@@ -52,7 +52,7 @@ export const ConnectCard = (props: ConnectCardProps): JSX.Element => {
       "You do not have any seats available in your car to connect with " +
         props.otherUser.preferredName +
         ".",
-      { appearance: "info" }
+      { appearance: "info" },
     );
   };
 
@@ -117,7 +117,7 @@ export const ConnectCard = (props: ConnectCardProps): JSX.Element => {
             onViewRequest={props.onViewRequest}
             onClose={onClose}
           />,
-          document.body
+          document.body,
         )}
     </>
   );
