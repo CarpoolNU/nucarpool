@@ -6,6 +6,7 @@ import { Request, Role } from "@prisma/client";
 import { trpc } from "../../utils/trpc";
 import { toast } from "react-toastify";
 import { trackRequestResponse } from "../../utils/mixpanel";
+import React from 'react';
 
 interface ReceivedModalProps {
   user: User;
@@ -14,7 +15,7 @@ interface ReceivedModalProps {
   onClose: () => void;
 }
 
-const ReceivedRequestModal = (props: ReceivedModalProps): JSX.Element => {
+const ReceivedRequestModal = (props: ReceivedModalProps): React.JSX.Element => {
   const { addToast } = useToasts();
   const [isOpen, setIsOpen] = useState(true);
 

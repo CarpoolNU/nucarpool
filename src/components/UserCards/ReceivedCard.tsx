@@ -5,6 +5,7 @@ import { UserContext } from "../../utils/userContext";
 import { createPortal } from "react-dom";
 import ReceivedRequestModal from "../Modals/ReceivedRequestModal";
 import { Message } from "../../utils/types";
+import React from 'react';
 
 interface ReceivedCardProps {
   otherUser: EnhancedPublicUser;
@@ -14,7 +15,7 @@ interface ReceivedCardProps {
   isUnread: boolean;
   latestMessage?: Message;
 }
-export const ReceivedCard = (props: ReceivedCardProps): JSX.Element => {
+export const ReceivedCard = (props: ReceivedCardProps): React.JSX.Element => {
   const user = useContext(UserContext);
   const [showModal, setShowModal] = useState(false);
 

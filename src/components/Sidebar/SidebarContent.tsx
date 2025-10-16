@@ -72,7 +72,7 @@ const renderUserCard = (
   latestMessage: Message | undefined,
   handleMobileExpand?: (userId?: string) => void,
   mobileSelectedUser?: string | null,
-): JSX.Element => {
+): React.JSX.Element => {
   const handleClick = () => onCardClick(otherUser.id);
   switch (subType) {
     case "recommendations":

@@ -36,7 +36,7 @@ const getButtonClassName = (button: ButtonInfo): string => {
   );
 };
 
-export const UserCard = (props: UserCardProps): JSX.Element => {
+export const UserCard = (props: UserCardProps): React.JSX.Element => {
   const trpcUtils = trpc.useContext();
   const isMobile = useIsMobile();
   const { mutate: mutateFavorites } = trpc.user.favorites.edit.useMutation({
@@ -82,7 +82,7 @@ export const UserCard = (props: UserCardProps): JSX.Element => {
    *  Background color is red if the user is working on that day.
    */
   const DaysWorkingDisplay = (daysWorking: string) => {
-    const boxes: JSX.Element[] = [];
+    const boxes: React.JSX.Element[] = [];
     const days: string[] = ["S", "M", "Tu", "W", "Th", "F", "Sa"];
     for (let i = 0; i < daysWorking.length; i = i + 2) {
       let backgroundColor = "";

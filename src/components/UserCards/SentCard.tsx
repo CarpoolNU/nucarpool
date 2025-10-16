@@ -5,6 +5,7 @@ import { UserCard } from "./UserCard";
 import SentRequestModal from "../Modals/SentRequestModal";
 import { createPortal } from "react-dom";
 import { User } from "@prisma/client";
+import React from 'react';
 
 interface SentCardProps {
   otherUser: EnhancedPublicUser;
@@ -15,7 +16,7 @@ interface SentCardProps {
   latestMessage?: Message;
 }
 
-export const SentCard = (props: SentCardProps): JSX.Element => {
+export const SentCard = (props: SentCardProps): React.JSX.Element => {
   const user = useContext(UserContext);
   const [showModal, setShowModal] = useState(false);
 

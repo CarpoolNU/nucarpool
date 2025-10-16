@@ -13,6 +13,7 @@ import { UserContext } from "../../utils/userContext";
 import { Role } from "@prisma/client";
 import { trackEvent } from "../../utils/mixpanel";
 import useIsMobile from "../../utils/useIsMobile";
+import React from 'react';
 
 interface ConnectCardProps {
   otherUser: EnhancedPublicUser;
@@ -23,7 +24,7 @@ interface ConnectCardProps {
   handleMobileExpand?: (userId?: string) => void;
 }
 
-export const ConnectCard = (props: ConnectCardProps): JSX.Element => {
+export const ConnectCard = (props: ConnectCardProps): React.JSX.Element => {
   const user = useContext(UserContext);
   const [showModal, setShowModal] = useState(false);
   const { addToast } = useToasts();

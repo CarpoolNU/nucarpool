@@ -41,8 +41,8 @@ const CarpoolSection = ({
   const isViewer = watch("role") === Role.VIEWER;
 
   return (
-    <div className="relative  flex h-full  flex-col  justify-start">
-      <ProfileHeader className={"w-[700px] !text-4xl"}>
+    <div className="flex flex-col space-y-4">
+      <ProfileHeader className={"!text-4xl"}>
         Carpool Details
       </ProfileHeader>
 
@@ -105,22 +105,24 @@ const CarpoolSection = ({
       {errors.startAddress && (
         <ErrorDisplay>{errors.startAddress.message}</ErrorDisplay>
       )}
-      <EntryLabel
-        required={!isViewer}
-        error={errors.companyName}
-        className={"my-2 !text-lg"}
-        label="Workplace Name"
-      />
-      <TextField
-        className={`w-full`}
-        inputClassName={`h-12`}
-        label="Workplace Name"
-        isDisabled={isViewer}
-        id="companyName"
-        error={errors.companyName}
-        type="text"
-        {...register("companyName")}
-      />
+      <div className="relative -z-10">
+        <EntryLabel
+          required={!isViewer}
+          error={errors.companyName}
+          className={"my-2 !text-lg"}
+          label="Workplace Name"
+        />
+        <TextField
+          className={`w-full`}
+          inputClassName={`h-12`}
+          label="Workplace Name"
+          isDisabled={isViewer}
+          id="companyName"
+          error={errors.companyName}
+          type="text"
+          {...register("companyName")}
+        />
+      </div>
       <EntryLabel
         required={!isViewer}
         error={errors.companyAddress}

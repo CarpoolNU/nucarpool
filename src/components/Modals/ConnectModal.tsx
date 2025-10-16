@@ -22,7 +22,7 @@ interface ConnectModalProps {
   onViewRequest: (userId: string) => void;
 }
 
-const ConnectModal = (props: ConnectModalProps): JSX.Element => {
+const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
   const { addToast } = useToasts();
   const [isOpen, setIsOpen] = useState(true);
   const [requestSent, setRequestSent] = useState(false);
