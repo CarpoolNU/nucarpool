@@ -1,6 +1,6 @@
 import { EnhancedPublicUser, PublicUser, User } from "../../utils/types";
 import { UserCard } from "./UserCard";
-import { useContext, useState } from "react";
+import { useEffect, useContext, useState } from "react";
 import { UserContext } from "../../utils/userContext";
 import { createPortal } from "react-dom";
 import ReceivedRequestModal from "../Modals/ReceivedRequestModal";

@@ -41,7 +41,7 @@ export const userRouter = router({
       z.object({
         role: z.nativeEnum(Role),
         status: z.nativeEnum(Status),
-        seatAvail: z.number().int().min(0),
+        seatAvail: z.number().int().min(0).max(6),
         companyName: z.string(),
         companyAddress: z.string(),
         companyCoordLng: z.number(),

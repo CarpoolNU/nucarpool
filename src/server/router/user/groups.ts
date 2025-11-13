@@ -107,12 +107,24 @@ export const groupsRouter = router({
       });
       const usrLength = group ? group.users.length - 1 : 0;
 
+      const currentUser = await ctx.prisma.user.findUnique({
+        where: { id: ctx.session.user?.id },
+        select: { seatAvail: true }
+      });
+
+      if (!currentUser) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "User not found",
+        });
+      }
+
+      const newSeatAvail = Math.min(currentUser.seatAvail + usrLength, 6);
+
       await ctx.prisma.user.update({
         where: { id: ctx.session.user?.id },
         data: {
-          seatAvail: {
-            increment: usrLength,
-          },
+          seatAvail: newSeatAvail,
         },
       });
 
@@ -176,15 +188,28 @@ export const groupsRouter = router({
           },
         });
       } else {
+        const currentDriver = await ctx.prisma.user.findUnique({
+          where: { id: input.driverId },
+          select: { seatAvail: true }
+        });
+
+        if (!currentDriver) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Driver not found",
+          });
+        }
+
+        const newSeatAvail = Math.min(currentDriver.seatAvail + 1, 6);
+
         await ctx.prisma.user.update({
           where: { id: input.driverId },
           data: {
-            seatAvail: {
-              increment: 1,
-            },
+            seatAvail: newSeatAvail,
           },
         });
       }
+
       if (!updatedGroup) {
         throw new TRPCError({
           code: "BAD_REQUEST",

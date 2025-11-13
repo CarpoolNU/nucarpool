@@ -18,13 +18,13 @@ interface ReceivedModalProps {
 const ReceivedRequestModal = (props: ReceivedModalProps): React.JSX.Element => {
   const { addToast } = useToasts();
   const [isOpen, setIsOpen] = useState(true);
+  const utils = trpc.useUtils();
 
   const onClose = () => {
     setIsOpen(false);
     props.onClose();
   };
 
-  const utils = trpc.useContext();
   const { mutate: deleteRequest } = trpc.user.requests.delete.useMutation({
     onError: (error: any) => {
       toast.error(`Something went wrong: ${error.message}`);
@@ -42,6 +42,7 @@ const ReceivedRequestModal = (props: ReceivedModalProps): React.JSX.Element => {
     onSuccess() {
       utils.user.requests.me.invalidate();
       utils.user.me.invalidate();
+      utils.user.groups.me.invalidate();
     },
   });
 
@@ -52,6 +53,7 @@ const ReceivedRequestModal = (props: ReceivedModalProps): React.JSX.Element => {
     onSuccess() {
       utils.user.requests.me.invalidate();
       utils.user.me.invalidate();
+      utils.user.groups.me.invalidate();
     },
   });
 

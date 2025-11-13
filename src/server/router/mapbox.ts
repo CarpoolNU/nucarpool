@@ -164,7 +164,7 @@ export const mapboxRouter = router({
         .map(([lng, lat]) => `${lng},${lat}`)
         .join(";");
 
-      const endpoint = `https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${coordinates}?access_token=${serverEnv.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}`;
+      const endpoint = `https://api.mapbox.com/directions/v5/mapbox/driving/${coordinates}?access_token=${serverEnv.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}`;
       const data = await fetch(endpoint)
         .then((response) => response.json())
         .then((json) => {

@@ -85,7 +85,7 @@ const CarpoolSection = ({
         className={"my-2 !text-lg"}
         label="Home Address"
       />
-      <div>
+      <div className="z-10">
         <ControlledAddressCombobox
           isDisabled={isViewer}
           control={control}
@@ -105,24 +105,22 @@ const CarpoolSection = ({
       {errors.startAddress && (
         <ErrorDisplay>{errors.startAddress.message}</ErrorDisplay>
       )}
-      <div className="relative -z-10">
-        <EntryLabel
-          required={!isViewer}
-          error={errors.companyName}
-          className={"my-2 !text-lg"}
-          label="Workplace Name"
-        />
-        <TextField
-          className={`w-full`}
-          inputClassName={`h-12`}
-          label="Workplace Name"
-          isDisabled={isViewer}
-          id="companyName"
-          error={errors.companyName}
-          type="text"
-          {...register("companyName")}
-        />
-      </div>
+      <EntryLabel
+        required={!isViewer}
+        error={errors.companyName}
+        className={"my-2 !text-lg"}
+        label="Workplace Name"
+      />
+      <TextField
+        className={`w-full`}
+        inputClassName={`h-12`}
+        label="Workplace Name"
+        isDisabled={isViewer}
+        id="companyName"
+        error={errors.companyName}
+        type="text"
+        {...register("companyName")}
+      />
       <EntryLabel
         required={!isViewer}
         error={errors.companyAddress}
@@ -132,16 +130,16 @@ const CarpoolSection = ({
       <Note className={"mb-2"}>
         Note: Select the autocomplete results, even if you typed the address out
       </Note>
-      <ControlledAddressCombobox
-        isDisabled={isViewer}
-        control={control}
-        name={"companyAddress"}
-        addressSelected={companyAddressHook.selectedAddress}
-        addressSetter={companyAddressHook.setSelectedAddress}
-        addressSuggestions={companyAddressHook.suggestions}
-        error={errors.companyAddress}
-        addressUpdater={companyAddressHook.updateAddress}
-      />
+        <ControlledAddressCombobox
+          isDisabled={isViewer}
+          control={control}
+          name={"companyAddress"}
+          addressSelected={companyAddressHook.selectedAddress}
+          addressSetter={companyAddressHook.setSelectedAddress}
+          addressSuggestions={companyAddressHook.suggestions}
+          error={errors.companyAddress}
+          addressUpdater={companyAddressHook.updateAddress}
+        />
       {errors.companyAddress && (
         <ErrorDisplay>{errors.companyAddress.message}</ErrorDisplay>
       )}

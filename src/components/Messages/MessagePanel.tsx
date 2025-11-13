@@ -26,6 +26,7 @@ const MessagePanel = ({
   const [activeTab, setActiveTab] = useState<"message" | "map">("message");
   const utils = trpc.useContext();
   const user = useContext(UserContext);
+  const [hasCalculatedRoute, setHasCalculatedRoute] = useState(false);
 
   // Create request handlers
   const { handleAcceptRequest, handleRejectRequest } =
@@ -142,12 +143,20 @@ const MessagePanel = ({
   };
   const handleMapSwitch = () => {
     setActiveTab("map");
+    setHasCalculatedRoute(false);
   };
   useEffect(() => {
-    if (user && selectedUser && activeTab === "map") {
-      onViewRouteClick(user, selectedUser);
+    if (activeTab === "map" && user && selectedUser && !hasCalculatedRoute) {
+      try {
+        onViewRouteClick(user, selectedUser);
+        setHasCalculatedRoute(true);
+      } catch (error) {
+        console.error('Error calculating route:', error);
+        // do not set hasCalculatedRoute to true so we can retry
+      }
     }
-  }, [user, selectedUser, activeTab, onViewRouteClick]);
+  }, [activeTab, user, selectedUser, onViewRouteClick, hasCalculatedRoute]);
+
 
   return (
     <div className="flex h-full w-full flex-col">

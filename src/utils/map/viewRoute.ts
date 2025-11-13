@@ -346,13 +346,30 @@ export function useGetDirections({
           const source = map.getSource("route") as mapboxgl.GeoJSONSource;
           source.setData(lineStringFeature);
         } else {
+          // Try different layer positions - let's find one that works
           let beforeLayerId = "";
-          if (map.getLayer("layer-with-pulsing-dot")) {
-            beforeLayerId = "layer-with-pulsing-dot";
-          } else if (map.getLayer("riders")) {
-            beforeLayerId = "riders";
-          } else if (map.getLayer("drivers")) {
-            beforeLayerId = "drivers";
+          
+          // Try to find a good layer to place the route above
+          const layerIds = [
+            "road-label",           // Above road labels
+            "waterway-label",       // Above water labels  
+            "natural-label",        // Above natural feature labels
+            "poi-label",            // Above point of interest labels
+            "transit-label",        // Above transit labels
+          ];
+
+          // Find the first existing layer to place the route above
+          for (const layerId of layerIds) {
+            if (map.getLayer(layerId)) {
+              beforeLayerId = layerId;
+              break;
+            }
+          }
+
+          // If no specific layer found, use a safe default
+          if (!beforeLayerId) {
+            // Place above base map layers but below markers
+            beforeLayerId = "background";
           }
 
           map.addLayer(
@@ -368,11 +385,11 @@ export function useGetDirections({
                 "line-cap": "round",
               },
               paint: {
-                "line-color": "#4a89f3 ",
+                "line-color": "#4a89f3",
                 "line-width": 6,
               },
             },
-            beforeLayerId,
+            beforeLayerId
           );
         }
       },

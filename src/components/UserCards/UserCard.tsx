@@ -82,6 +82,9 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
    *  Background color is red if the user is working on that day.
    */
   const DaysWorkingDisplay = (daysWorking: string) => {
+    if (!daysWorking || typeof daysWorking !== 'string') {
+      return <div className="flex w-11/12 justify-between">No days set</div>;
+    }
     const boxes: React.JSX.Element[] = [];
     const days: string[] = ["S", "M", "Tu", "W", "Th", "F", "Sa"];
     for (let i = 0; i < daysWorking.length; i = i + 2) {

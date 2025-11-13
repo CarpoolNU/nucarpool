@@ -16,7 +16,7 @@ import { useRouter } from "next/router";
 import Spinner from "./Spinner";
 import Pusher from "pusher-js";
 import { browserEnv } from "../utils/env/browser";
-import { Message } from "../utils/types";
+import { Message, PublicUser } from "../utils/types";
 
 const HeaderDiv = styled.div`
   display: flex;
@@ -112,6 +112,7 @@ interface HeaderProps {
   profile?: boolean;
   checkChanges?: () => void;
   isMobile?: boolean;
+  onViewGroupRoute?: (driver: PublicUser, riders: PublicUser[]) => void;
 }
 
 export type HeaderOptions = "explore" | "requests";
@@ -214,7 +215,12 @@ const Header = (props: HeaderProps) => {
     isComingFromProfile.current = props.profile === true;
 
     if (props.checkChanges) {
-      props.checkChanges();
+      await props.checkChanges();
+    } else {
+      // explicit navigation
+      setIsLoading(true);
+      await router.push('/');
+      setIsLoading(false);
     }
   };
 
@@ -429,7 +435,10 @@ const Header = (props: HeaderProps) => {
         {renderMobileNav()}
         {displayGroup &&
           createPortal(
-            <GroupPage onClose={() => setDisplayGroup(false)} />,
+            <GroupPage
+              onClose={() => setDisplayGroup(false)}
+              onViewGroupRoute={props.onViewGroupRoute!}
+            />,
             document.body,
           )}
       </>
@@ -482,7 +491,10 @@ const Header = (props: HeaderProps) => {
 
       {displayGroup &&
         createPortal(
-          <GroupPage onClose={() => setDisplayGroup(false)} />,
+          <GroupPage
+            onClose={() => setDisplayGroup(false)}
+            onViewGroupRoute={props.onViewGroupRoute!}
+          />,
           document.body,
         )}
     </>

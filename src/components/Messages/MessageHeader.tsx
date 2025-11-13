@@ -79,7 +79,7 @@ const MessageHeader = ({
         </span>
       </div>
       <div className="relative flex items-center justify-between">
-        {hasIncomingRequest && !groupId && (
+        {(hasIncomingRequest && (!groupId || selectedUser.carpoolId !== groupId)) && (
           <>
             <button
               onClick={onReject}
@@ -95,7 +95,7 @@ const MessageHeader = ({
             </button>
           </>
         )}
-        {hasOutgoingRequest && !hasIncomingRequest && !groupId && (
+        {hasOutgoingRequest && !hasIncomingRequest && (!groupId || selectedUser.carpoolId !== groupId) && (
           <button
             onClick={onReject}
             className=" mr-10 rounded-lg border-2 border-black bg-white py-2 text-center text-lg font-medium text-black hover:bg-gray-100 md:px-12 lg:px-20"
@@ -103,7 +103,7 @@ const MessageHeader = ({
             Withdraw Request
           </button>
         )}
-        {groupId && (
+        {groupId && selectedUser.carpoolId === groupId && (
           <button
             onClick={onReject}
             className=" mr-10 rounded-lg border-2 border-black bg-white py-2 text-center text-lg font-medium text-black hover:bg-gray-100 md:px-12 lg:px-20"

@@ -85,12 +85,18 @@ const Index: NextPage = () => {
       setStartAddressSelected({
         place_name: user.startAddress,
         center: [user.startCoordLng, user.startCoordLat],
+        street: user.startStreet || "",
+        city: user.startCity || "",
+        state: user.startState || "",
       });
     }
     if (user?.companyAddress && user.companyAddress !== "") {
       setCompanyAddressSelected({
         place_name: user.companyAddress,
         center: [user.companyCoordLng, user.companyCoordLat],
+        street: user.companyStreet || "",
+        city: user.companyCity || "",
+        state: user.companyState || "",
       });
     }
   }, [user, setStartAddressSelected, setCompanyAddressSelected]);
@@ -110,7 +116,7 @@ const Index: NextPage = () => {
   });
 
   useEffect(() => {
-    if (initialLoad && user) {
+    if (user) {
       reset({
         role: user.role,
         seatAvail: user.seatAvail,
@@ -129,9 +135,9 @@ const Index: NextPage = () => {
         coopEndDate: user.coopEndDate!,
         bio: user.bio,
       });
-      setInitialLoad(false);
+      // remove setInitialLoad(false) so it reloads every time
     }
-  }, [initialLoad, reset, user]);
+  }, [reset, user]);
   const role = watch("role");
 
   useEffect(() => {
@@ -187,12 +193,12 @@ const Index: NextPage = () => {
       startCoordLng: startAddressHook.selectedAddress.center[0],
       startCoordLat: startAddressHook.selectedAddress.center[1],
       seatAvail: values.role === "RIDER" ? 0 : (values.seatAvail ?? 0),
-      startStreet: startAddressHook.selectedAddress.street || "",
-      startCity: startAddressHook.selectedAddress.city || "",
-      startState: startAddressHook.selectedAddress.state || "",
-      companyStreet: companyAddressHook.selectedAddress.street || "",
-      companyCity: companyAddressHook.selectedAddress.city || "",
-      companyState: companyAddressHook.selectedAddress.state || "",
+      startStreet: startAddressHook.selectedAddress.street || user?.startStreet || "",
+      startCity: startAddressHook.selectedAddress.city || user?.startCity || "",
+      startState: startAddressHook.selectedAddress.state || user?.startState || "",
+      companyStreet: companyAddressHook.selectedAddress.street || user?.companyStreet || "",
+      companyCity: companyAddressHook.selectedAddress.city || user?.companyCity || "",
+      companyState: companyAddressHook.selectedAddress.state || user?.companyState || "",
       companyName: values.companyName ?? "",
       profilePicture: values.profilePicture ?? "",
       companyAddress: values.companyAddress ?? "",
