@@ -34,17 +34,21 @@ const UserSection = ({
 }: UserSectionProps) => {
   const isMobile = useIsMobile();
   const isViewer = watch("role") === Role.VIEWER;
-  
+
   return (
     <div className="relative z-10 flex h-full flex-col justify-start">
-      <ProfileHeader className={isMobile ? "!text-2xl" : "!text-4xl"}>User Profile</ProfileHeader>
-      
+      <ProfileHeader className={isMobile ? "!text-2xl" : "!text-4xl"}>
+        User Profile
+      </ProfileHeader>
+
       <div className="flex font-montserrat text-2xl font-bold">
         I am a... <span className="text-northeastern-red">*</span>
       </div>
-      
+
       {/* Fixed layout issues */}
-      <div className={`${isMobile ? "flex-col" : "flex h-24 w-[700px]"} max-w-full items-end`}>
+      <div
+        className={`${isMobile ? "flex-col" : "flex h-24 w-[700px]"} max-w-full items-end`}
+      >
         {/* Radio buttons always in a row */}
         <div className="flex gap-8">
           <Radio
@@ -78,7 +82,9 @@ const UserSection = ({
 
         {/* Reduced gap between radio buttons and seat availability */}
         {watch("role") == Role.DRIVER && (
-          <div className={`${isMobile ? "w-full mt-2" : "flex-1"} flex flex-col`}>
+          <div
+            className={`${isMobile ? "w-full mt-2" : "flex-1"} flex flex-col`}
+          >
             <EntryLabel
               required={true}
               error={errors.seatAvail}
@@ -98,7 +104,7 @@ const UserSection = ({
           </div>
         )}
       </div>
-      
+
       <div className="my-2 flex w-full justify-between">
         <Note>
           {watch("role") === Role.DRIVER && (
@@ -118,15 +124,19 @@ const UserSection = ({
           <ErrorDisplay>{errors.seatAvail.message}</ErrorDisplay>
         )}
       </div>
-      
+
       <EntryLabel label="Personal Info" className="mb-4 mt-6 !text-2xl" />
-      
+
       {/* Profile picture section */}
-      <div className={`mb-12 ${isMobile ? "flex flex-col items-start" : "ml-10"} w-full`}>
+      <div
+        className={`mb-12 ${isMobile ? "flex flex-col items-start" : "ml-10"} w-full`}
+      >
         <ProfilePicture onFileSelected={onFileSelect} />
       </div>
 
-      <div className={`flex w-full ${isMobile ? "flex-col space-y-4" : "flex-row space-x-6"}`}>
+      <div
+        className={`flex w-full ${isMobile ? "flex-col space-y-4" : "flex-row space-x-6"}`}
+      >
         <div className={`${isMobile ? "w-full" : "w-3/5"} flex flex-col`}>
           <EntryLabel
             error={errors.preferredName}
@@ -168,7 +178,7 @@ const UserSection = ({
               input.value = displayValue;
               const adjustedCursor = Math.min(
                 cursorPosition + 1,
-                displayValue.length - 1
+                displayValue.length - 1,
               );
               input.setSelectionRange(adjustedCursor, adjustedCursor);
             }}
@@ -197,7 +207,7 @@ const UserSection = ({
           This intro will be shared with people you choose to connect with.
         </Note>
       </div>
-      
+
       <div className="py-8 font-montserrat">
         <button
           type="button"

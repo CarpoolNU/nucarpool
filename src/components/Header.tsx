@@ -1,4 +1,11 @@
-import React, { Dispatch, SetStateAction, useContext, useState, useEffect, useRef } from "react";
+import React, {
+  Dispatch,
+  SetStateAction,
+  useContext,
+  useState,
+  useEffect,
+  useRef,
+} from "react";
 import styled from "styled-components";
 import DropDownMenu from "./DropDownMenu";
 import { createPortal } from "react-dom";
@@ -9,7 +16,7 @@ import { useRouter } from "next/router";
 import Spinner from "./Spinner";
 import Pusher from "pusher-js";
 import { browserEnv } from "../utils/env/browser";
-import { Message } from "../utils/types";
+import { Message, PublicUser } from "../utils/types";
 
 const HeaderDiv = styled.div`
   display: flex;
@@ -49,7 +56,8 @@ const MobileNavItem = styled.div<{ active: boolean }>`
   align-items: center;
   padding: 8px 0;
   width: 25%;
-  border-bottom: ${props => props.active ? '4px solid #000' : '4px solid transparent'};
+  border-bottom: ${(props) =>
+    props.active ? "4px solid #000" : "4px solid transparent"};
   cursor: pointer;
 `;
 
@@ -85,7 +93,7 @@ export const SigninLogo = styled.h1`
   color: #f4f4f4;
   justify-content: center;
   width: 100%;
-  
+
   @media (max-width: 768px) {
     font-size: 32px;
     height: 70px;
@@ -104,6 +112,7 @@ interface HeaderProps {
   profile?: boolean;
   checkChanges?: () => void;
   isMobile?: boolean;
+  onViewGroupRoute?: (driver: PublicUser, riders: PublicUser[]) => void;
 }
 
 export type HeaderOptions = "explore" | "requests";
@@ -116,57 +125,59 @@ const Header = (props: HeaderProps) => {
   const user = useContext(UserContext);
   const router = useRouter();
 
-  const [currentunreadMessagesCount, setCurrentunreadMessagesCount] = useState(0);
+  const [currentunreadMessagesCount, setCurrentunreadMessagesCount] =
+    useState(0);
   const [displayGroup, setDisplayGroup] = useState<boolean>(false);
-  
+
   // Check if we're explicitly passed isMobile or detect it ourselves
   const [internalIsMobile, setInternalIsMobile] = useState(false);
-  const isMobile = props.isMobile !== undefined ? props.isMobile : internalIsMobile;
-  
+  const isMobile =
+    props.isMobile !== undefined ? props.isMobile : internalIsMobile;
+
   // Track if user is coming from profile page
   const isComingFromProfile = useRef(false);
 
   // Only run our own detection if isMobile isn't passed as a prop
   useEffect(() => {
     if (props.isMobile !== undefined) return;
-    
+
     const checkIfMobile = () => {
       setInternalIsMobile(window.innerWidth <= 768);
     };
-    
+
     // Initial check
     checkIfMobile();
-    
+
     // Add event listener for window resize
-    window.addEventListener('resize', checkIfMobile);
-    
+    window.addEventListener("resize", checkIfMobile);
+
     // Cleanup
-    return () => window.removeEventListener('resize', checkIfMobile);
+    return () => window.removeEventListener("resize", checkIfMobile);
   }, [props.isMobile]);
 
   useEffect(() => {
     if (!user?.id) return;
 
     const pusher = new Pusher(browserEnv.NEXT_PUBLIC_PUSHER_KEY, {
-      cluster: browserEnv.NEXT_PUBLIC_PUSHER_CLUSTER
+      cluster: browserEnv.NEXT_PUBLIC_PUSHER_CLUSTER,
     });
 
     const messageChannel = pusher.subscribe(`notification-${user?.id}`);
 
-    messageChannel.bind("sendNotification", (data : {newMessage : Message}) => {
-      props.data?.setSidebar(prev => {
+    messageChannel.bind("sendNotification", (data: { newMessage: Message }) => {
+      props.data?.setSidebar((prev) => {
         if (prev !== "requests") {
-          setCurrentunreadMessagesCount(prev => prev + 1);
+          setCurrentunreadMessagesCount((prev) => prev + 1);
         }
-        return prev
+        return prev;
       });
-    })
+    });
 
     return () => {
       messageChannel.unbind("sendNotification");
-      pusher.unsubscribe(`notification-${user?.id}`); 
+      pusher.unsubscribe(`notification-${user?.id}`);
     };
-  }, [props.data?.setSidebar]);
+  }, [props.data?.setSidebar, props.data, user?.id]);
 
   const renderClassName = (sidebarValue: string, sidebarText: string) => {
     if (sidebarValue == "explore" && sidebarText == "explore") {
@@ -202,36 +213,43 @@ const Header = (props: HeaderProps) => {
   const handleMapClick = async () => {
     // Note if we're on profile
     isComingFromProfile.current = props.profile === true;
-    
+
     if (props.checkChanges) {
-      props.checkChanges();
+      await props.checkChanges();
+    } else {
+      // explicit navigation
+      setIsLoading(true);
+      await router.push('/');
+      setIsLoading(false);
     }
   };
 
   const handleMobileNavClick = (option: string) => {
     setActiveNav(option);
-    
+
     // Check if coming from profile
-    const comingFromProfile = router.pathname.includes('/profile');
-    
+    const comingFromProfile = router.pathname.includes("/profile");
+
     if (option === "explore" || option === "requests") {
       setIsLoading(true);
-      
+
       if (comingFromProfile) {
         // For real mobile devices, we need to ensure navigation completes
         // before attempting reload
         window.location.href = `/?tab=${option}`;
         // Don't use timeout - let the browser handle the navigation naturally
       } else {
-        router.push({
-          pathname: "/",
-          query: { tab: option }
-        }).finally(() => {
-          setIsLoading(false);
-          if (props.data?.setSidebar) {
-            props.data.setSidebar(option as HeaderOptions);
-          }
-        });
+        router
+          .push({
+            pathname: "/",
+            query: { tab: option },
+          })
+          .finally(() => {
+            setIsLoading(false);
+            if (props.data?.setSidebar) {
+              props.data.setSidebar(option as HeaderOptions);
+            }
+          });
         if (option === "requests") {
           setCurrentunreadMessagesCount(0);
         }
@@ -241,7 +259,7 @@ const Header = (props: HeaderProps) => {
     } else if (option === "profile") {
       // Note we're going to profile
       isComingFromProfile.current = false;
-      
+
       setIsLoading(true);
       router.push("/profile").finally(() => {
         setIsLoading(false);
@@ -251,11 +269,15 @@ const Header = (props: HeaderProps) => {
 
   useEffect(() => {
     const { tab } = router.query;
-    if (tab && (tab === "explore" || tab === "requests") && props.data?.setSidebar) {
+    if (
+      tab &&
+      (tab === "explore" || tab === "requests") &&
+      props.data?.setSidebar
+    ) {
       props.data.setSidebar(tab as HeaderOptions);
       setActiveNav(tab as string);
     }
-  }, [router.query, props.data?.setSidebar]);
+  }, [router.query, props.data?.setSidebar, props.data]);
 
   const renderSidebarOptions = ({
     sidebarValue,
@@ -273,11 +295,12 @@ const Header = (props: HeaderProps) => {
         </div>
       );
     }
-    
+
     const handleSidebarChange = (option: HeaderOptions) => {
       // Check if we're coming from profile page
-      const comingFromProfile = props.profile === true || router.pathname.includes('/profile');
-      
+      const comingFromProfile =
+        props.profile === true || router.pathname.includes("/profile");
+
       if (comingFromProfile) {
         // Simplify navigation from profile page - don't force reload
         window.location.href = `/?tab=${option}`;
@@ -288,7 +311,7 @@ const Header = (props: HeaderProps) => {
         }
       }
     };
-    
+
     return (
       <div className="pr-8 ">
         <button
@@ -311,7 +334,9 @@ const Header = (props: HeaderProps) => {
           {(unreadMessagesCount !== 0 || currentunreadMessagesCount !== 0) && (
             <span className="absolute right-0 top-0 flex h-6 w-6 items-center justify-center rounded-full bg-white">
               <span className="text-xs font-bold text-northeastern-red">
-                {currentunreadMessagesCount !== 0  ? currentunreadMessagesCount : unreadMessagesCount}
+                {currentunreadMessagesCount !== 0
+                  ? currentunreadMessagesCount
+                  : unreadMessagesCount}
               </span>
             </span>
           )}
@@ -337,63 +362,66 @@ const Header = (props: HeaderProps) => {
   };
 
   const renderMobileNav = () => {
-    
-    const isProfilePage = router.pathname.includes('/profile');
-  
-    const currentActiveTab = isProfilePage 
-      ? "profile" 
-      : (props.data?.sidebarValue || activeNav);
-      
+    const isProfilePage = router.pathname.includes("/profile");
+
+    const currentActiveTab = isProfilePage
+      ? "profile"
+      : props.data?.sidebarValue || activeNav;
+
     const navItems = [
-      { 
-        id: "explore", 
-        icon: "⚭", 
-        label: "Explore" 
+      {
+        id: "explore",
+        icon: "⚭",
+        label: "Explore",
       },
-      { 
-        id: "requests", 
-        icon: "👥", 
+      {
+        id: "requests",
+        icon: "👥",
         label: "Requests",
-        badge: unreadMessagesCount !== 0 || currentunreadMessagesCount !== 0
+        badge: unreadMessagesCount !== 0 || currentunreadMessagesCount !== 0,
       },
-      { 
-        id: "profile", 
-        icon: "👤", 
-        label: "Profile" 
-      }
+      {
+        id: "profile",
+        icon: "👤",
+        label: "Profile",
+      },
     ];
 
     return (
       <MobileNav>
         {navItems.map((item) => (
-          <MobileNavItem 
-            key={item.id} 
+          <MobileNavItem
+            key={item.id}
             active={currentActiveTab === item.id}
             onClick={() => {
-                handleMobileNavClick(item.id);
+              handleMobileNavClick(item.id);
             }}
           >
-            <div style={{ fontSize: '24px' }}>{item.icon}</div>
-            <div style={{ position: 'relative' }}>
+            <div style={{ fontSize: "24px" }}>{item.icon}</div>
+            <div style={{ position: "relative" }}>
               {item.badge && (
-                <span style={{ 
-                  position: 'absolute', 
-                  top: '-18px', 
-                  right: '-10px',
-                  background: '#c8102e',
-                  color: 'white',
-                  borderRadius: '50%',
-                  width: '20px',
-                  height: '20px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '12px'
-                }}>
-                  {currentunreadMessagesCount !== 0 ? currentunreadMessagesCount : unreadMessagesCount}
+                <span
+                  style={{
+                    position: "absolute",
+                    top: "-18px",
+                    right: "-10px",
+                    background: "#c8102e",
+                    color: "white",
+                    borderRadius: "50%",
+                    width: "20px",
+                    height: "20px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "12px",
+                  }}
+                >
+                  {currentunreadMessagesCount !== 0
+                    ? currentunreadMessagesCount
+                    : unreadMessagesCount}
                 </span>
               )}
-              <span style={{ fontSize: '12px' }}>{item.label}</span>
+              <span style={{ fontSize: "12px" }}>{item.label}</span>
             </div>
           </MobileNavItem>
         ))}
@@ -407,8 +435,11 @@ const Header = (props: HeaderProps) => {
         {renderMobileNav()}
         {displayGroup &&
           createPortal(
-            <GroupPage onClose={() => setDisplayGroup(false)} />,
-            document.body
+            <GroupPage
+              onClose={() => setDisplayGroup(false)}
+              onViewGroupRoute={props.onViewGroupRoute!}
+            />,
+            document.body,
           )}
       </>
     );
@@ -417,7 +448,11 @@ const Header = (props: HeaderProps) => {
   return (
     <>
       <HeaderDiv>
-        {props.signIn ? <SigninLogo>CarpoolNU</SigninLogo> :  <Logo>CarpoolNU</Logo>}
+        {props.signIn ? (
+          <SigninLogo>CarpoolNU</SigninLogo>
+        ) : (
+          <Logo>CarpoolNU</Logo>
+        )}
         {props.admin ? (
           <div className="flex items-center">
             <button
@@ -456,8 +491,11 @@ const Header = (props: HeaderProps) => {
 
       {displayGroup &&
         createPortal(
-          <GroupPage onClose={() => setDisplayGroup(false)} />,
-          document.body
+          <GroupPage
+            onClose={() => setDisplayGroup(false)}
+            onViewGroupRoute={props.onViewGroupRoute!}
+          />,
+          document.body,
         )}
     </>
   );

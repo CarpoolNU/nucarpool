@@ -16,9 +16,9 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
   const isMobile = useIsMobile();
 
   const baseButton = isMobile
-  ? "flex-1 py-3 relative flex flex-col items-center justify-center text-black font-montserrat text-base"
-  : "py-2 relative items-center flex gap-2 text-black font-montserrat text-xl lg:text-2xl";
-  
+    ? "flex-1 py-3 relative flex flex-col items-center justify-center text-black font-montserrat text-base"
+    : "py-2 relative items-center flex gap-2 text-black font-montserrat text-xl lg:text-2xl";
+
   const selectedButton = isMobile
     ? "font-bold !text-northeastern-red border-b-4 border-northeastern-red"
     : "font-bold !text-northeastern-red";
@@ -36,7 +36,7 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
             </div>
             <span>Profile</span>
           </button>
-          
+
           <button
             className={`${baseButton} ${option === "carpool" ? selectedButton : ""}`}
             onClick={() => setOption("carpool")}
@@ -46,13 +46,18 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
             </div>
             <span>Carpool</span>
           </button>
-          
+
           <button
             className={`${baseButton} ${option === "account" ? selectedButton : ""}`}
             onClick={() => setOption("account")}
           >
             <div className="relative w-8 h-8 mb-1">
-              <Image src={checkbox} alt="checkbox" layout="fill" objectFit="contain" />
+              <Image
+                src={checkbox}
+                alt="checkbox"
+                layout="fill"
+                objectFit="contain"
+              />
             </div>
             <span>Account</span>
           </button>
@@ -60,7 +65,6 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
       </div>
     );
   }
-
 
   return (
     <div className="my-10 h-full w-full  ">

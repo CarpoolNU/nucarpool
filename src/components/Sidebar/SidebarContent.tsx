@@ -72,7 +72,7 @@ const renderUserCard = (
   latestMessage: Message | undefined,
   handleMobileExpand?: (userId?: string) => void,
   mobileSelectedUser?: string | null,
-): JSX.Element => {
+): React.JSX.Element => {
   const handleClick = () => onCardClick(otherUser.id);
   switch (subType) {
     case "recommendations":
@@ -173,7 +173,7 @@ export const SidebarContent = (props: SidebarContentProps) => {
       const { isUnread, latestActivityDate } = getCardSortingData(
         user.id,
         request,
-        latestMessage
+        latestMessage,
       );
 
       return { otherUser, isUnread, latestActivityDate, latestMessage };
@@ -182,11 +182,15 @@ export const SidebarContent = (props: SidebarContentProps) => {
       return b.latestActivityDate.getTime() - a.latestActivityDate.getTime();
     });
 
-    const filteredSortedUserCards = isMobile && props.mobileSelectedUser
-      ? sortedUserCards.filter(({ otherUser }) => otherUser.id === props.mobileSelectedUser)
+  const filteredSortedUserCards =
+    isMobile && props.mobileSelectedUser
+      ? sortedUserCards.filter(
+          ({ otherUser }) => otherUser.id === props.mobileSelectedUser,
+        )
       : sortedUserCards;
-        
-    const renderedUserCards = filteredSortedUserCards.map(({ otherUser, isUnread, latestMessage }) =>
+
+  const renderedUserCards = filteredSortedUserCards.map(
+    ({ otherUser, isUnread, latestMessage }) =>
       renderUserCard(
         props.subType,
         otherUser,
@@ -198,20 +202,22 @@ export const SidebarContent = (props: SidebarContentProps) => {
         !latestMessage ? undefined : latestMessage,
         props.handleMobileExpand,
         props.mobileSelectedUser,
-      )
-    )
+      ),
+  );
 
   return (
     <div className="relative h-full px-3.5">
-      <div className={`relative h-full ${isMobile && props.mobileSelectedUser === null ? 'overflow-y-scroll' : isMobile && props.mobileSelectedUser !== null ? 'overflow-hidden' : 'overflow-y-scroll'} pb-32 scrollbar scrollbar-track-stone-100 scrollbar-thumb-busy-red scrollbar-track-rounded-full scrollbar-thumb-rounded-full`}>
+      <div
+        className={`relative h-full ${isMobile && props.mobileSelectedUser === null ? "overflow-y-scroll" : isMobile && props.mobileSelectedUser !== null ? "overflow-hidden" : "overflow-y-scroll"} pb-32 scrollbar scrollbar-track-stone-100 scrollbar-thumb-busy-red scrollbar-track-rounded-full scrollbar-thumb-rounded-full`}
+      >
         {props.userCardList.length === 0 ||
         (props.disabled && props.subType !== "favorites") ? (
           <div className="m-4 text-center text-lg font-light">
             {emptyMessage(props.subType, props.disabled)}
           </div>
-        ) : 
+        ) : (
           renderedUserCards
-        }
+        )}
       </div>
     </div>
   );

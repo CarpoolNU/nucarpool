@@ -96,7 +96,7 @@ function AdminData() {
     filteredRequests,
     filteredDriverRequests,
     filteredRiderRequests,
-    weekLabels
+    weekLabels,
   );
   const formatter = (value: any) => format(new Date(value), "MMM dd, yyyy");
   const onSliderChange = (value: number[]) => {
@@ -109,18 +109,18 @@ function AdminData() {
   const totalConversationCount = conversations ? conversations.length : 0;
 
   const conversationsWithMessage = conversations?.filter(
-    (conversation) => conversation._count.messages > 1
+    (conversation) => conversation._count.messages > 1,
   );
   const avgConvWithMsg = conversationsWithMessage
     ? conversationsWithMessage.reduce(
         (acc, curr) => acc + curr._count.messages,
-        totalCountWithMsg
+        totalCountWithMsg,
       ) / conversationsWithMessage.length
     : 0;
   const avgMsg = conversations
     ? conversations.reduce(
         (acc, curr) => acc + curr._count.messages,
-        totalCount
+        totalCount,
       ) / conversations.length
     : 0;
   const totalWithMsgCount = conversationsWithMessage
@@ -129,13 +129,13 @@ function AdminData() {
 
   const groupCount = groups.filter((group) => group._count.users > 1).length;
   const ridersInGroup = activeUsers.filter(
-    (user) => user.role === "RIDER" && user.carpoolId && user.carpoolId !== ""
+    (user) => user.role === "RIDER" && user.carpoolId && user.carpoolId !== "",
   );
   const driversInGroup = activeUsers.filter(
-    (user) => user.role === "DRIVER" && user.carpoolId && user.carpoolId !== ""
+    (user) => user.role === "DRIVER" && user.carpoolId && user.carpoolId !== "",
   );
   const totalDrivers = activeUsers.filter(
-    (user) => user.role === "DRIVER"
+    (user) => user.role === "DRIVER",
   ).length;
   const totalRiders = activeUsers.length - totalDrivers;
   const percentDriversInGroup =
@@ -146,13 +146,13 @@ function AdminData() {
     Math.round((ridersInGroup.length / groupCount) * 10) / 10;
   const activeOnboardedUsers = activeUsers.filter((user) => user.isOnboarded);
   const activeNotOnboardedUsers = activeUsers.filter(
-    (user) => !user.isOnboarded
+    (user) => !user.isOnboarded,
   );
   const inactiveOnboardedUsers = users.filter(
-    (user) => user.status !== "ACTIVE" && user.isOnboarded
+    (user) => user.status !== "ACTIVE" && user.isOnboarded,
   );
   const inactiveNotOnboardedUsers = users.filter(
-    (user) => user.status !== "ACTIVE" && !user.isOnboarded
+    (user) => user.status !== "ACTIVE" && !user.isOnboarded,
   );
 
   const totalAO = activeOnboardedUsers.length;
@@ -217,11 +217,11 @@ function AdminData() {
 
     csvRows.push(["Total", totalAO, totalANO, totalIO, totalINO].join(","));
     csvRows.push(
-      ["Driver", driverAO, driverANO, driverIO, driverINO].join(",")
+      ["Driver", driverAO, driverANO, driverIO, driverINO].join(","),
     );
     csvRows.push(["Rider", riderAO, riderANO, riderIO, riderINO].join(","));
     csvRows.push(
-      ["Viewer", viewerAO, viewerANO, viewerIO, viewerINO].join(",")
+      ["Viewer", viewerAO, viewerANO, viewerIO, viewerINO].join(","),
     );
 
     return csvRows.join("\n");
@@ -235,7 +235,7 @@ function AdminData() {
 
     days.forEach((day, i) => {
       csvRows.push(
-        [day, riderDayCount[i] ?? "", driverDayCount[i] ?? ""].join(",")
+        [day, riderDayCount[i] ?? "", driverDayCount[i] ?? ""].join(","),
       );
     });
 

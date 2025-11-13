@@ -16,7 +16,7 @@ import { formatDateToMonth, handleMonthChange } from "../../utils/dateUtils";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import { Switch } from "@mui/material";
 import { DatePicker } from "antd";
-import dayjs, {Dayjs} from "dayjs";
+import dayjs, { Dayjs } from "dayjs";
 
 interface AccountSectionProps {
   errors: FieldErrors<OnboardingFormInputs>;
@@ -35,18 +35,22 @@ const AccountSection = ({
 }: AccountSectionProps) => {
   const isMobile = useIsMobile();
   const isViewer = watch("role") === Role.VIEWER;
-  
+
   return (
-    <div className={`flex h-fit ${isMobile ? "w-full" : "w-[700px]"} flex-col justify-start`}>
-      <ProfileHeader className={isMobile ? "!text-2xl" : "!text-4xl"}>Account Status</ProfileHeader>
-      
+    <div
+      className={`flex h-fit ${isMobile ? "w-full" : "w-[700px]"} flex-col justify-start`}
+    >
+      <ProfileHeader className={isMobile ? "!text-2xl" : "!text-4xl"}>
+        Account Status
+      </ProfileHeader>
+
       <span>
         Profile is currently{" "}
         <span className="font-bold">
           {watch("status") === Status.ACTIVE ? "ACTIVE" : "INACTIVE"}{" "}
         </span>
       </span>
-      
+
       <div className="mt-2 w-full">
         {!isViewer && (
           <Controller
@@ -61,7 +65,7 @@ const AccountSection = ({
                       checked={field.value === Status.ACTIVE}
                       onChange={(e) =>
                         field.onChange(
-                          e.target.checked ? Status.ACTIVE : Status.INACTIVE
+                          e.target.checked ? Status.ACTIVE : Status.INACTIVE,
                         )
                       }
                       color="default"
@@ -98,14 +102,16 @@ const AccountSection = ({
             )}
           />
         )}
-        
+
         <EntryLabel
           label="Co-op Term Dates"
           className={"mb-6 mt-12 !text-2xl"}
         />
-        
+
         {/* Date pickers stack on mobile for better fit */}
-        <div className={`flex ${isMobile ? "flex-col gap-4" : "w-2/3 gap-8 lg:w-full"}`}>
+        <div
+          className={`flex ${isMobile ? "flex-col gap-4" : "w-2/3 gap-8 lg:w-full"}`}
+        >
           <div className="flex flex-1 flex-col">
             <EntryLabel
               required={!isViewer}
@@ -118,14 +124,19 @@ const AccountSection = ({
               picker="month"
               disabled={isViewer}
               {...(watch("coopStartDate") && {
-                defaultValue: dayjs(formatDateToMonth(watch("coopStartDate")), "YYYY/MM"),
+                defaultValue: dayjs(
+                  formatDateToMonth(watch("coopStartDate") ?? null),
+                  "YYYY/MM",
+                ),
               })}
-              onChange={(date : Dayjs, dateString) => setValue("coopStartDate", date ? date.toDate() : null)}
-              format="YYYY-MM" 
+              onChange={(date: Dayjs, dateString) =>
+                setValue("coopStartDate", date ? date.toDate() : null)
+              }
+              format="YYYY-MM"
               className="h-14 text-lg w-full border rounded-md p-2"
             />
           </div>
-          
+
           <div className="flex flex-1 flex-col">
             <EntryLabel
               required={!isViewer}
@@ -138,20 +149,25 @@ const AccountSection = ({
               picker="month"
               disabled={isViewer}
               {...(watch("coopEndDate") && {
-                defaultValue: dayjs(formatDateToMonth(watch("coopEndDate")), "YYYY/MM"),
+                defaultValue: dayjs(
+                  formatDateToMonth(watch("coopEndDate") ?? null),
+                  "YYYY/MM",
+                ),
               })}
-              onChange={(date : Dayjs, dateString) => setValue("coopEndDate", date ? date.toDate() : null)}
-              format="YYYY-MM" 
+              onChange={(date: Dayjs, dateString) =>
+                setValue("coopEndDate", date ? date.toDate() : null)
+              }
+              format="YYYY-MM"
               className="h-14 text-lg w-full border rounded-md p-2"
             />
           </div>
         </div>
-        
+
         <Note className="py-2">
           Please indicate the start and the end dates of your co-op. If you
           don&apos;t know exact dates, you can use approximate dates.
         </Note>
-        
+
         <div className="py-8 font-montserrat">
           <button
             type="button"

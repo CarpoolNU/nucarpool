@@ -26,6 +26,7 @@ const MessagePanel = ({
   const [activeTab, setActiveTab] = useState<"message" | "map">("message");
   const utils = trpc.useContext();
   const user = useContext(UserContext);
+  const [hasCalculatedRoute, setHasCalculatedRoute] = useState(false);
 
   // Create request handlers
   const { handleAcceptRequest, handleRejectRequest } =
@@ -57,14 +58,17 @@ const MessagePanel = ({
 
     const converstationMessages = request.conversation?.messages;
 
-     // If the last message from the recipient is less than 5 mins old, don't send email notification
-     if (converstationMessages && converstationMessages.length > 0) {
+    // If the last message from the recipient is less than 5 mins old, don't send email notification
+    if (converstationMessages && converstationMessages.length > 0) {
       const recipientMessages = converstationMessages.filter(
-        (msg) => msg.userId === selectedUser.id
+        (msg) => msg.userId === selectedUser.id,
       );
-      const lastMessageFromRecipient = recipientMessages[recipientMessages.length - 1];
+      const lastMessageFromRecipient =
+        recipientMessages[recipientMessages.length - 1];
       if (lastMessageFromRecipient) {
-        const lastMsgTime = new Date(lastMessageFromRecipient.dateCreated).getTime();
+        const lastMsgTime = new Date(
+          lastMessageFromRecipient.dateCreated,
+        ).getTime();
         const minsDiff = (Date.now() - lastMsgTime) / (1000 * 60);
         if (minsDiff < 5) {
           return;
@@ -83,7 +87,7 @@ const MessagePanel = ({
       });
     } else {
       console.error(
-        "Unable to send message notification: Missing email address"
+        "Unable to send message notification: Missing email address",
       );
     }
   };
@@ -104,8 +108,8 @@ const MessagePanel = ({
     const request = selectedUser.incomingRequest;
     if (!request) return;
 
-    trackRequestResponse('accept', user.role);
-    
+    trackRequestResponse("accept", user.role);
+
     await handleAcceptRequest(user, selectedUser, request);
 
     // Send acceptance notification email
@@ -119,7 +123,7 @@ const MessagePanel = ({
       });
     } else {
       console.error(
-        "Unable to send acceptance notification: Missing email address"
+        "Unable to send acceptance notification: Missing email address",
       );
     }
 
@@ -133,18 +137,26 @@ const MessagePanel = ({
       selectedUser.incomingRequest || selectedUser.outgoingRequest;
     if (!request) return;
 
-    trackRequestResponse('decline', user.role);
+    trackRequestResponse("decline", user.role);
 
     await handleRejectRequest(user, selectedUser, request);
   };
   const handleMapSwitch = () => {
     setActiveTab("map");
+    setHasCalculatedRoute(false);
   };
   useEffect(() => {
-    if (user && selectedUser && activeTab === "map") {
-      onViewRouteClick(user, selectedUser);
+    if (activeTab === "map" && user && selectedUser && !hasCalculatedRoute) {
+      try {
+        onViewRouteClick(user, selectedUser);
+        setHasCalculatedRoute(true);
+      } catch (error) {
+        console.error('Error calculating route:', error);
+        // do not set hasCalculatedRoute to true so we can retry
+      }
     }
-  }, [user, selectedUser, activeTab, onViewRouteClick]);
+  }, [activeTab, user, selectedUser, onViewRouteClick, hasCalculatedRoute]);
+
 
   return (
     <div className="flex h-full w-full flex-col">

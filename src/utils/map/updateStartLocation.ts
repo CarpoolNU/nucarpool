@@ -1,17 +1,14 @@
-import mapboxgl, { MapLayerMouseEvent } from "mapbox-gl";
-import BlueEnd from "../../../public/user-dest.png";
-import BlueDriverEnd from "../../../public/user-dest-driver.png";
-import RedDriverEnd from "../../../public/driver-dest.png";
-import OrangeRiderEnd from "../../../public/rider-dest.png";
-import { Role } from "@prisma/client";
+import mapboxgl from "mapbox-gl";
 import { GeoJSON } from "geojson";
+import { Role } from "@prisma/client";
 import { PublicUser } from "../types";
-import { getPointClickHandler } from "./handlers";
+import DriverStart from "../../../public/driver-start.png";
+import RiderStart from "../../../public/rider-start.png";
 
-const updateCompanyLocation = (
+const updateStartLocation = (
   map: mapboxgl.Map,
-  companyLongitude: number,
-  companyLatitude: number,
+  startLongitude: number,
+  startLatitude: number,
   role: Role,
   userId: string,
   userData?: PublicUser,
@@ -21,14 +18,14 @@ const updateCompanyLocation = (
   let img, sourceId: string, layerId: string;
 
   if (isCurrent) {
-    img = role === Role.DRIVER ? BlueDriverEnd.src : BlueEnd.src;
-    sourceId = "current-user-company-source";
-    layerId = "current-user-company-layer";
+    // For current user, we use the pulsing dot from updateUserLocation
+    return; // Don't create a separate marker for current user start
   } else {
-    img = role === Role.DRIVER ? RedDriverEnd.src : OrangeRiderEnd.src;
-    sourceId = `other-user-${userId}-company-source`;
-    layerId = `other-user-${userId}-company-layer`;
+    img = role === Role.DRIVER ? DriverStart.src : RiderStart.src;
+    sourceId = `other-user-${userId}-start-source`;
+    layerId = `other-user-${userId}-start-layer`;
   }
+
   if (remove) {
     if (map.getLayer(layerId)) {
       map.removeLayer(layerId);
@@ -41,6 +38,7 @@ const updateCompanyLocation = (
     }
     return;
   }
+
   map.loadImage(img, (error, image) => {
     if (error) throw error;
 
@@ -50,11 +48,12 @@ const updateCompanyLocation = (
         map.addImage(imageId, image);
       }
     }
+
     const feature: GeoJSON.Feature<GeoJSON.Point> = {
       type: "Feature",
       geometry: {
         type: "Point",
-        coordinates: [companyLongitude, companyLatitude],
+        coordinates: [startLongitude, startLatitude],
       },
       properties: userData || {
         id: userId,
@@ -84,16 +83,8 @@ const updateCompanyLocation = (
           "icon-size": 0.33,
         },
       }, "waterway-label");
-      if (!isCurrent) {
-        // click event for request user markers
-        const handlePointClick = getPointClickHandler();
-        map.on("click", layerId, (e) => {
-          if (!e.features) return;
-          handlePointClick!(e as MapLayerMouseEvent);
-        });
-      }
     }
   });
 };
 
-export default updateCompanyLocation;
+export default updateStartLocation;

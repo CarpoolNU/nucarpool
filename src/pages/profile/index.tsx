@@ -70,7 +70,7 @@ const Index: NextPage = () => {
   const editUserMutation = useEditUserMutation(
     router,
     () => setIsLoading(false),
-    false
+    false,
   );
   const startAddressHook = useAddressSelection();
   const companyAddressHook = useAddressSelection();
@@ -85,12 +85,18 @@ const Index: NextPage = () => {
       setStartAddressSelected({
         place_name: user.startAddress,
         center: [user.startCoordLng, user.startCoordLat],
+        street: user.startStreet || "",
+        city: user.startCity || "",
+        state: user.startState || "",
       });
     }
     if (user?.companyAddress && user.companyAddress !== "") {
       setCompanyAddressSelected({
         place_name: user.companyAddress,
         center: [user.companyCoordLng, user.companyCoordLat],
+        street: user.companyStreet || "",
+        city: user.companyCity || "",
+        state: user.companyState || "",
       });
     }
   }, [user, setStartAddressSelected, setCompanyAddressSelected]);
@@ -110,7 +116,7 @@ const Index: NextPage = () => {
   });
 
   useEffect(() => {
-    if (initialLoad && user) {
+    if (user) {
       reset({
         role: user.role,
         seatAvail: user.seatAvail,
@@ -129,14 +135,14 @@ const Index: NextPage = () => {
         coopEndDate: user.coopEndDate!,
         bio: user.bio,
       });
-      setInitialLoad(false);
+      // remove setInitialLoad(false) so it reloads every time
     }
-  }, [initialLoad, reset, user]);
+  }, [reset, user]);
   const role = watch("role");
 
   useEffect(() => {
     const seatAvail = watch("seatAvail");
-    if (role === Role.DRIVER && seatAvail <= 0) {
+    if (role === Role.DRIVER && (seatAvail ?? 0) <= 0) {
       setValue("seatAvail", 1);
     } else if (role !== Role.DRIVER) {
       setValue("seatAvail", 0);
@@ -154,8 +160,8 @@ const Index: NextPage = () => {
       formValues.startAddress !== user?.startAddress ||
       formValues.preferredName !== user?.preferredName ||
       formValues.pronouns !== user?.pronouns ||
-      formValues.daysWorking.some(
-        (day, index) => day !== (user?.daysWorking.split(",")[index] === "1")
+      (formValues.daysWorking ?? []).some(
+        (day, index) => day !== (user?.daysWorking.split(",")[index] === "1"),
       ) ||
       formValues.startTime?.getTime() !== user?.startTime?.getTime() ||
       formValues.endTime?.getTime() !== user?.endTime?.getTime() ||
@@ -186,7 +192,25 @@ const Index: NextPage = () => {
       companyCoordLat: companyAddressHook.selectedAddress.center[1],
       startCoordLng: startAddressHook.selectedAddress.center[0],
       startCoordLat: startAddressHook.selectedAddress.center[1],
-      seatAvail: values.role === "RIDER" ? 0 : values.seatAvail,
+      seatAvail: values.role === "RIDER" ? 0 : (values.seatAvail ?? 0),
+      startStreet: startAddressHook.selectedAddress.street || user?.startStreet || "",
+      startCity: startAddressHook.selectedAddress.city || user?.startCity || "",
+      startState: startAddressHook.selectedAddress.state || user?.startState || "",
+      companyStreet: companyAddressHook.selectedAddress.street || user?.companyStreet || "",
+      companyCity: companyAddressHook.selectedAddress.city || user?.companyCity || "",
+      companyState: companyAddressHook.selectedAddress.state || user?.companyState || "",
+      companyName: values.companyName ?? "",
+      profilePicture: values.profilePicture ?? "",
+      companyAddress: values.companyAddress ?? "",
+      startAddress: values.startAddress ?? "",
+      preferredName: values.preferredName ?? "",
+      pronouns: values.pronouns ?? "",
+      bio: values.bio ?? "",
+      daysWorking: values.daysWorking ?? [],
+      startTime: values.startTime ?? null,
+      endTime: values.endTime ?? null,
+      coopStartDate: values.coopStartDate ?? null,
+      coopEndDate: values.coopEndDate ?? null,
     };
     if (selectedFile) {
       try {
@@ -211,7 +235,7 @@ const Index: NextPage = () => {
     }
   };
   const onSubmitWithContinue: SubmitHandler<OnboardingFormInputs> = async (
-    values
+    values,
   ) => {
     await onSubmit(values);
     await onContinue();
@@ -225,7 +249,7 @@ const Index: NextPage = () => {
     if (firstErrorKey) {
       if (
         ["preferredName", "pronouns", "role", "bio", "seatAvail"].includes(
-          firstErrorKey
+          firstErrorKey,
         )
       ) {
         setOption("user");
@@ -271,10 +295,52 @@ const Index: NextPage = () => {
           <ProfileSidebar option={option} setOption={setOption} />
         </div>
       )}
-        
-        {isMobile ? (
-          <div className="absolute top-[6rem] bottom-16 left-0 right-0 overflow-y-auto">
-            <div className="px-8 pt-6 pb-24">
+
+      {isMobile ? (
+        <div className="absolute top-[6rem] bottom-16 left-0 right-0 overflow-y-auto">
+          <div className="px-8 pt-6 pb-24">
+            {option === "user" ? (
+              <UserSection
+                watch={watch}
+                onFileSelect={setSelectedFile}
+                errors={errors}
+                register={register}
+                onSubmit={handleSubmit(onSubmit, onError)}
+                setValue={setValue}
+              />
+            ) : option === "carpool" ? (
+              <CarpoolSection
+                watch={watch}
+                onFileSelect={setSelectedFile}
+                errors={errors}
+                register={register}
+                setValue={setValue}
+                onSubmit={handleSubmit(onSubmit, onError)}
+                startAddressHook={startAddressHook}
+                companyAddressHook={companyAddressHook}
+                control={control}
+              />
+            ) : option === "account" ? (
+              <AccountSection
+                control={control}
+                watch={watch}
+                onSubmit={handleSubmit(onSubmit, onError)}
+                errors={errors}
+                setValue={setValue}
+              />
+            ) : (
+              <></>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="relative h-[91.5%] w-full grid grid-cols-[250px_repeat(2,1fr)] overflow-hidden">
+          <div className="sticky top-0 col-start-1 col-end-2 h-full w-[250px] border-r-4 border-busy-red bg-stone-100 lg:w-[350px]">
+            <ProfileSidebar option={option} setOption={setOption} />
+          </div>
+
+          <div className="col-start-2 col-end-4 flex h-full shrink items-start justify-center overflow-y-auto overflow-x-hidden">
+            <div className="mt-10 w-full max-w-2xl px-8">
               {option === "user" ? (
                 <UserSection
                   watch={watch}
@@ -309,51 +375,9 @@ const Index: NextPage = () => {
               )}
             </div>
           </div>
-        ) : (
-          <div className="relative h-[91.5%] w-full grid grid-cols-[250px_repeat(2,1fr)] overflow-hidden">
-            <div className="sticky top-0 col-start-1 col-end-2 h-full w-[250px] border-r-4 border-busy-red bg-stone-100 lg:w-[350px]">
-              <ProfileSidebar option={option} setOption={setOption} />
-            </div>
-            
-            <div className="col-start-2 col-end-4 flex h-full shrink items-start justify-center overflow-y-auto overflow-x-hidden">
-              <div className="mt-10 lg:-translate-x-[175px]">
-                {option === "user" ? (
-                  <UserSection
-                    watch={watch}
-                    onFileSelect={setSelectedFile}
-                    errors={errors}
-                    register={register}
-                    onSubmit={handleSubmit(onSubmit, onError)}
-                    setValue={setValue}
-                  />
-                ) : option === "carpool" ? (
-                  <CarpoolSection
-                    watch={watch}
-                    onFileSelect={setSelectedFile}
-                    errors={errors}
-                    register={register}
-                    setValue={setValue}
-                    onSubmit={handleSubmit(onSubmit, onError)}
-                    startAddressHook={startAddressHook}
-                    companyAddressHook={companyAddressHook}
-                    control={control}
-                  />
-                ) : option === "account" ? (
-                  <AccountSection
-                    control={control}
-                    watch={watch}
-                    onSubmit={handleSubmit(onSubmit, onError)}
-                    errors={errors}
-                    setValue={setValue}
-                  />
-                ) : (
-                  <></>
-                )}
-              </div>
-            </div>
-            </div>
-            )} 
-      </div>
+        </div>
+      )}
+    </div>
   );
 };
 export default Index;

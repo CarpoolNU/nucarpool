@@ -104,7 +104,7 @@ export const adminDataRouter = router({
       z.object({
         userId: z.string(),
         permission: z.nativeEnum(Permission),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const permission = ctx.session.user?.permission;

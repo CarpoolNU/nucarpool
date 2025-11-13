@@ -51,7 +51,7 @@ ChartJS.register(
   BarElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
 );
 
 interface BarChartOnboardingProps {

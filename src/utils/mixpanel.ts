@@ -15,7 +15,7 @@ mixpanel.init(mixpanelToken, {
 
 export const trackEvent = (
   eventName: string,
-  properties?: Record<string, any>
+  properties?: Record<string, any>,
 ) => {
   mixpanel.track(eventName, properties);
 };
@@ -38,13 +38,16 @@ export const trackProfileCompletion = (role: string, status: string) => {
 // Add this new function
 export const trackViewRoute = (role: string) => {
   trackEvent("View Route Clicked", {
-    role
+    role,
   });
 };
 
-export const trackRequestResponse = (action: "accept" | "decline", role: string) => {
+export const trackRequestResponse = (
+  action: "accept" | "decline",
+  role: string,
+) => {
   trackEvent("Request Response", {
     action,
-    role
+    role,
   });
 };
