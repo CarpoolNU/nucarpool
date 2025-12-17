@@ -7,15 +7,19 @@ import { Role, User } from "@prisma/client";
 import Spinner from "./Spinner";
 import { toast } from "react-toastify";
 import { PublicUser } from "../utils/types";
+import useIsMobile from "../utils/useIsMobile";
 
 interface GroupPageProps {
   onClose: () => void;
   onViewGroupRoute: (driver: PublicUser, riders: PublicUser[]) => void;
+  isMobile?: boolean;
+  onPreviewRoute?: () => void;
 }
 
 export const GroupPage = (props: GroupPageProps) => {
   const [isOpen, setIsOpen] = useState<boolean>(true);
   const curUser = useContext(UserContext);
+  const isMobile = useIsMobile();
 
   const onClose = () => {
     setIsOpen(false);
@@ -30,14 +34,32 @@ export const GroupPage = (props: GroupPageProps) => {
     <Dialog open={isOpen} onClose={onClose} className="relative z-50">
       <div className="fixed inset-0 backdrop-blur-sm" aria-hidden="true">
         <div className="fixed inset-0 flex items-center justify-center p-4">
-          <Dialog.Panel className="flex h-4/6 w-4/6 flex-col content-center justify-center gap-4 overflow-hidden rounded-md bg-white py-9 shadow-md">
-            <Dialog.Title className="text-center text-3xl font-bold">
-              Group Page
-            </Dialog.Title>
-            <GroupBody 
-              curUser={curUser} 
-              onClose={onClose} 
+          <Dialog.Panel
+            className={`flex flex-col content-center justify-center gap-4 overflow-hidden bg-white shadow-md ${isMobile
+                ? "h-[85vh] w-[85vw] rounded-lg p-4"
+                : "h-4/6 w-4/6 rounded-md py-9"
+              }`}
+          >
+            <div className="relative">
+              <Dialog.Title className={`text-center font-bold ${isMobile ? "text-2xl" : "text-3xl"}`}>
+                My Group
+              </Dialog.Title>
+              {isMobile && (
+                <button
+                  onClick={onClose}
+                  className="absolute top-0 right-0 text-gray-500 text-2xl hover:text-gray-700"
+                  aria-label="Close"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+            <GroupBody
+              curUser={curUser}
+              onClose={onClose}
               onViewGroupRoute={props.onViewGroupRoute}
+              isMobile={isMobile}
+              onPreviewRoute={props.onPreviewRoute}
             />
           </Dialog.Panel>
         </div>
@@ -50,15 +72,25 @@ const GroupBody = ({
   curUser,
   onClose,
   onViewGroupRoute,
+  isMobile,
+  onPreviewRoute,
 }: {
   curUser: User;
   onClose: () => void;
   onViewGroupRoute: (driver: PublicUser, riders: PublicUser[]) => void;
+  isMobile?: boolean;
+  onPreviewRoute?: () => void;
 }) => {
   return !curUser?.carpoolId ? (
     <NoGroupInfo role={curUser.role} onClose={onClose} />
   ) : (
-    <GroupInfo curUser={curUser} onClose={onClose} onViewGroupRoute={onViewGroupRoute} />
+    <GroupInfo
+      curUser={curUser}
+      onClose={onClose}
+      onViewGroupRoute={onViewGroupRoute}
+      isMobile={isMobile}
+      onPreviewRoute={onPreviewRoute}
+    />
   );
 };
 
@@ -153,10 +185,14 @@ const GroupInfo = ({
   curUser,
   onClose,
   onViewGroupRoute,
+  isMobile,
+  onPreviewRoute,
 }: {
   curUser: User;
   onClose: () => void;
   onViewGroupRoute: (driver: PublicUser, riders: PublicUser[]) => void;
+  isMobile?: boolean;
+  onPreviewRoute?: () => void;
 }) => {
   const utils = trpc.useUtils();
   const { data: group } = trpc.user.groups.me.useQuery();
@@ -196,7 +232,11 @@ const GroupInfo = ({
   const handleViewCombinedRoute = () => {
     if (driver && riders.length > 0) {
       onViewGroupRoute(driver, riders);
-      onClose(); // close modal after showing the route
+      if (isMobile && onPreviewRoute) {
+        onPreviewRoute();
+      } else {
+        onClose(); // close modal after showing the route
+      }
     }
   };
 
@@ -236,7 +276,7 @@ const GroupInfo = ({
           </p>
         </div>
       )}
-      
+
       <div className="mx-16 mt-2 flex flex-col flex-grow min-h-0">
         <div className="flex flex-col divide-y-2 rounded-md border px-2 h-full overflow-y-auto">
           <GroupMembers users={users} onClose={onClose} />

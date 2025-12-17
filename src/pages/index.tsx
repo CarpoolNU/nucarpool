@@ -106,6 +106,7 @@ const Home: NextPage<any> = () => {
   const [mobileSelectedUserID, setmobileSelectedUserID] = useState<
     string | null
   >(null);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     const handler = debounce(() => {
@@ -186,18 +187,18 @@ const Home: NextPage<any> = () => {
 
   const extendPublicUser = useCallback(
     (user: PublicUser): EnhancedPublicUser => {
-      const incomingReq: Request | undefined = requests.received.find(
-        (req) => req.fromUserId === user.id,
+      const incomingReq = requests.received.find(
+        (req) => req.fromUser?.id === user.id,
       );
-      const outgoingReq: Request | undefined = requests.sent.find(
-        (req) => req.toUserId === user.id,
+      const outgoingReq = requests.sent.find(
+        (req) => req.toUser?.id === user.id,
       );
 
       return {
         ...user,
         isFavorited: favorites.some((favs) => favs.id === user.id),
-        incomingRequest: incomingReq,
-        outgoingRequest: outgoingReq,
+        incomingRequest: incomingReq?.fromUser && incomingReq?.toUser ? incomingReq as any : undefined,
+        outgoingRequest: outgoingReq?.fromUser && outgoingReq?.toUser ? outgoingReq as any : undefined,
       };
     },
     [favorites, requests],
@@ -214,7 +215,9 @@ const Home: NextPage<any> = () => {
     if (!selectedUserId || !requests) return null;
     const allRequests = [...requests.sent, ...requests.received];
     for (const request of allRequests) {
-      const user: any =
+      if (!request.fromUser || !request.toUser) continue;
+
+      const user: PublicUser =
         request.fromUser.id === selectedUserId
           ? request.fromUser
           : request.toUser;
@@ -237,12 +240,13 @@ const Home: NextPage<any> = () => {
   const sidebarRef = useRef<HTMLDivElement>(null);
   const lastScrollTop = useRef<number>(0);
 
-  const enhancedSentUsers = requests.sent.map((request: { toUser: any }) =>
-    extendPublicUser(request.toUser!),
-  );
-  const enhancedReceivedUsers = requests.received.map(
-    (request: { fromUser: any }) => extendPublicUser(request.fromUser!),
-  );
+  const enhancedSentUsers = requests.sent
+    .filter((request) => request.toUser !== null)
+    .map((request) => extendPublicUser(request.toUser!));
+
+  const enhancedReceivedUsers = requests.received
+    .filter((request) => request.fromUser !== null)
+    .map((request) => extendPublicUser(request.fromUser!));
   const enhancedRecs = recommendations.map(extendPublicUser);
   const enhancedFavs = favorites.map(extendPublicUser);
 
@@ -430,7 +434,7 @@ const Home: NextPage<any> = () => {
 
     // clear existing routes first
     clearDirections(mapState);
-    clearMarkers();
+    clearMarkers(mapState);
 
     // helper function to calculate straight-line distance
     const calculateDistance = (coord1: [number, number], coord2: [number, number]): number => {
@@ -542,6 +546,8 @@ const Home: NextPage<any> = () => {
 
     // driver's markers (if driver is not current user)
     if (driver.id !== user.id) {
+      const driverName = driver.preferredName || driver.name || "Driver";
+      
       // driver's start location
       updateStartLocation(
         mapState,
@@ -550,7 +556,9 @@ const Home: NextPage<any> = () => {
         driver.role,
         driver.id,
         driver,
-        false // isCurrent = false
+        false,
+        false,
+        `${driverName} Start`
       );
 
       // driver's company location
@@ -561,13 +569,17 @@ const Home: NextPage<any> = () => {
         driver.role,
         driver.id,
         driver,
-        false // isCurrent = false
+        false,
+        false,
+        `${driverName} Dest.`
       );
     }
 
     // each rider's markers (if rider is not current user)
-    riders.forEach(rider => {
+    riders.forEach((rider, index) => {
       if (rider.id !== user.id) {
+        const riderName = rider.preferredName || rider.name || `Rider ${index + 1}`;
+        
         // rider's start location
         updateStartLocation(
           mapState,
@@ -576,7 +588,9 @@ const Home: NextPage<any> = () => {
           rider.role,
           rider.id,
           rider,
-          false // isCurrent = false
+          false,
+          false,
+          `${riderName} Start`
         );
 
         // rider's company location
@@ -587,7 +601,9 @@ const Home: NextPage<any> = () => {
           rider.role,
           rider.id,
           rider,
-          false // isCurrent = false
+          false,
+          false,
+          `${riderName} Dest.`
         );
       }
     });
@@ -609,10 +625,15 @@ const Home: NextPage<any> = () => {
 
   }, [mapState, user]);
 
+  const handleSidebarToggle = () => {
+    setIsSidebarCollapsed(!isSidebarCollapsed);
+  };
+
   const handleMobileSidebarExpand = useCallback(
     (userId?: string) => {
       if (userId) {
         setmobileSelectedUserID(userId);
+        setIsSidebarCollapsed(false); // Expand when viewing details
         const allUsers = [
           ...enhancedRecs,
           ...enhancedFavs,
@@ -732,6 +753,28 @@ const Home: NextPage<any> = () => {
   }, [mapContainerRef, user]);
 
   useEffect(() => {
+    if (!mapState) return;
+
+    const handleResize = () => {
+      // small delay to ensure container has resized
+      setTimeout(() => {
+        if (mapState) {
+          mapState.resize();
+        }
+      }, 100);
+    };
+
+    // resize when window size changes
+    window.addEventListener('resize', handleResize);
+
+    handleResize();
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [mapState, isMobile]);
+
+  useEffect(() => {
     if (mapState && geoJsonUsers && mapStateLoaded) {
       updateGeoJsonUsers(mapState, geoJsonUsers);
     }
@@ -741,6 +784,8 @@ const Home: NextPage<any> = () => {
     setSelectedUserId(null);
     // Clear other user and related route data when sidebar type changes
     setOtherUser(null);
+    // Reset collapsed state when switching tabs
+    setIsSidebarCollapsed(false);
     if (tempOtherUserMarkerActive && tempOtherUser && mapState) {
       updateCompanyLocation(
         mapState,
@@ -973,23 +1018,30 @@ const Home: NextPage<any> = () => {
             <div
               className={`flex h-[91.5%] overflow-hidden ${isMobile ? "mt-5" : ""}`}
             >
-              {isMobile && sidebarType === "explore" && (
+              {isMobile && (sidebarType === "explore" || sidebarType === "requests") && mobileSelectedUserID === null && (
                 <div
-                  className={`absolute left-1/2 z-30 -translate-x-1/2 transform ${mobileSelectedUserID !== null ? "hidden" : "top-12"
-                    }`}
+                  onClick={handleSidebarToggle}
+                  className={`absolute left-1/2 z-30 -translate-x-1/2 transform cursor-pointer transition-all duration-300 ${
+                    isSidebarCollapsed ? "bottom-16" : "bottom-[calc(100%-6rem)]"
+                  }`}
+                  style={{ padding: '12px 0' }}
                 >
-                  <div className="h-1.5 w-16 rounded-full bg-gray-500 shadow-sm"></div>
+                  <div className="h-2 w-20 rounded-full bg-gray-500 shadow-sm transition-colors hover:bg-gray-600"></div>
                 </div>
               )}
               <div
                 ref={sidebarRef}
-                className={`${isMobile
-                  ? `absolute left-0 z-20 w-full overflow-y-auto bg-white shadow-lg transition-all duration-300 rounded-t-3xl border-2 border-black ${mobileSelectedUserID !== null
-                    ? "bottom-12 h-[320px]"
-                    : "top-14  h-[calc(100%-3.5rem)]"
-                  }`
-                  : "relative w-[25rem]"
-                  }`}
+                className={`${
+                  isMobile
+                    ? `absolute left-0 z-20 w-full overflow-y-auto bg-white shadow-lg transition-all duration-300 rounded-t-3xl border-2 border-black ${
+                        mobileSelectedUserID !== null
+                          ? "bottom-12 h-[320px]"
+                          : isSidebarCollapsed
+                          ? "bottom-12 h-0 opacity-0 pointer-events-none"
+                          : "bottom-12 h-[calc(100%-8.5rem)]"
+                      }`
+                    : "relative w-[25rem]"
+                }`}
               >
                 {isMobile && mobileSelectedUserID !== null && (
                   <div className="flex-shrink-0 border-b border-gray-200 bg-gray-50 px-3 py-2">

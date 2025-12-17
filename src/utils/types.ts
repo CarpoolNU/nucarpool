@@ -156,13 +156,76 @@ export type PublicUser = {
   carpoolId: string | null;
 };
 
-export type EnhancedPublicUser = PublicUser & {
-  isFavorited: boolean;
-  incomingRequest?: Request;
-  outgoingRequest?: Request;
+export type Request = {
+  id: string;
+  message: string;
+  fromUserId: string;
+  toUserId: string;
+  fromUser: PublicUser | null;
+  toUser: PublicUser | null;
+  conversation?: Conversation | null;
+  conversationId: string | null;
+  dateCreated: Date;
 };
 
-export type User = RouterOutput["user"]["me"];
+export type ValidRequest = Omit<Request, 'fromUser' | 'toUser'> & {
+  fromUser: PublicUser;
+  toUser: PublicUser;
+};
+
+export type EnhancedPublicUser = PublicUser & {
+  isFavorited: boolean;
+  incomingRequest?: ValidRequest;
+  outgoingRequest?: ValidRequest;
+};
+
+/**
+ * User type returned from user.me query
+ * This represents a User with CarpoolSearch and Location data merged in
+ * via the adapter pattern in the backend
+ */
+export type User = {
+  id: string;
+  name: string | null;
+  email: string | null;
+  emailVerified: Date | null;
+  image: string | null;
+  bio: string;
+  preferredName: string;
+  pronouns: string;
+  permission: Permission;
+  isOnboarded: boolean;
+  licenseSigned: boolean;
+  dateCreated: Date;
+  dateModified: Date;
+  // Fields merged from CarpoolSearch
+  role: Role;
+  status: Status;
+  seatAvail: number;
+  companyName: string;
+  daysWorking: string;
+  startTime: Date | null;
+  endTime: Date | null;
+  coopStartDate: Date | null;
+  coopEndDate: Date | null;
+  carpoolId: string | null;
+  groupMessage: string | null;
+  // Fields merged from Location (homeLocation)
+  startCoordLng: number;
+  startCoordLat: number;
+  startStreet: string;
+  startCity: string;
+  startState: string;
+  startAddress: string;
+  // Fields merged from Location (companyLocation)
+  companyCoordLng: number;
+  companyCoordLat: number;
+  companyStreet: string;
+  companyCity: string;
+  companyState: string;
+  companyAddress: string;
+};
+
 export type GeoJsonUsers = RouterOutput["mapbox"]["geoJsonUserList"];
 
 export type CarpoolAddress = {
@@ -194,18 +257,6 @@ export type ButtonInfo = {
 type Admin = {
   iso_3166_1_alpha3: string;
   iso_3166_1: string;
-};
-
-export type Request = {
-  id: string;
-  message: string;
-  fromUserId: string;
-  toUserId: string;
-  fromUser: User | PublicUser;
-  toUser: User | PublicUser;
-  conversation?: Conversation | null;
-  conversationId: string | null;
-  dateCreated: Date;
 };
 
 export type Conversation = {

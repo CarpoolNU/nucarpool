@@ -12,11 +12,33 @@ import DriverEnd from "../../../public/driver-dest.png";
 import RiderEnd from "../../../public/rider-dest.png";
 
 const previousMarkers: (mapboxgl.Marker | mapboxgl.Popup)[] = [];
-export const clearMarkers = () => {
+
+// Updated clearMarkers to also remove text label layers created by updateStartLocation and updateCompanyLocation
+export const clearMarkers = (map?: mapboxgl.Map) => {
+  // Clear the original popup/marker system
   previousMarkers.forEach((element) => {
     element.remove();
   });
   previousMarkers.length = 0;
+  
+  // clear text label layers created by the custom label system
+  if (map) {
+    const layers = map.getStyle().layers;
+    if (layers) {
+      // find and remove all text layers that match our naming pattern
+      layers.forEach((layer) => {
+        if (layer.id.includes('-text-layer')) {
+          try {
+            if (map.getLayer(layer.id)) {
+              map.removeLayer(layer.id);
+            }
+          } catch (e) {
+            console.warn(`Could not remove layer ${layer.id}:`, e);
+          }
+        }
+      });
+    }
+  }
 };
 
 export const clearDirections = (map: mapboxgl.Map) => {
@@ -67,7 +89,7 @@ export const viewRoute = (props: ViewRouteProps) => {
     return;
   }
 
-  clearMarkers();
+  clearMarkers(props.map);
   clearDirections(props.map);
   const redCircle = createMarkerEl(DriverStart);
   const selfStartPopup = createPopup("My Start");

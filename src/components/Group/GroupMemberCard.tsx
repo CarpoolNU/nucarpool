@@ -137,7 +137,7 @@ export const GroupMemberCard = (props: GroupMemberCardProps) => {
       </div>
       {props.buttonText && props.buttonFunc && (
         <button
-          className="mx-2 h-full w-[150px] rounded-md bg-red-700 text-white"
+          className="mx-2 h-full w-[150px] rounded-md bg-red-700 text-xs sm:text-sm md:text-base text-white"
           onClick={() => props.buttonFunc && props.buttonFunc(props.user.id)}
         >
           {props.buttonText}

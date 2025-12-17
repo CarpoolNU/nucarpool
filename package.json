@@ -20,7 +20,11 @@
     "build:development": "NODE_ENV=development prisma generate & next build",
     "build:production": "NODE_ENV=production prisma generate & next build",
     "migrate:addresses": "ts-node scripts/migrate-structured-addresses.ts",
-    "migrate:addresses:dry-run": "ts-node scripts/migrate-structured-addresses.ts --dry-run"
+    "migrate:addresses:dry-run": "ts-node scripts/migrate-structured-addresses.ts --dry-run",
+    "transfer:addresses": "ts-node scripts/transfer-addresses-to-locations.ts",
+    "transfer:addresses:dry-run": "ts-node scripts/transfer-addresses-to-locations.ts --dry-run",
+    "transfer:carpoolsearch": "ts-node scripts/transfer-user-data-to-carpoolsearch.ts",
+    "transfer:carpoolsearch:dry-run": "ts-node scripts/transfer-user-data-to-carpoolsearch.ts --dry-run"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

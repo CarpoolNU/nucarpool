@@ -15,25 +15,76 @@ import {
   getPresignedImageUrl,
 } from "../../utils/uploadToS3";
 import { adminDataRouter } from "./user/admin";
+
 const getPresignedDownloadUrlInput = z.object({
   userId: z.string().optional(),
 });
+
 // user router to get information about or edit users
 export const userRouter = router({
   me: protectedRouter.query(async ({ ctx }) => {
-    const id = ctx.session.user?.id;
+    const userId = ctx.session.user?.id;
+    
+    if (!userId) {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "User not authenticated",
+      });
+    }
+
+    // get user with CarpoolSearch data
     const user = await ctx.prisma.user.findUnique({
-      where: { id },
+      where: { id: userId },
+      include: {
+        carpoolSearches: {
+          include: {
+            homeLocation: true,
+            companyLocation: true,
+          },
+        },
+      },
     });
 
     // throws TRPCError if no user with ID exists
     if (!user) {
       throw new TRPCError({
         code: "NOT_FOUND",
-        message: `No profile with id '${id}'`,
+        message: `No profile with id '${userId}'`,
       });
     }
-    return user;
+
+    // get the first (active) CarpoolSearch
+    const carpoolSearch = user.carpoolSearches[0];
+
+    // merge CarpoolSearch data into user object for backwards compatibility
+    return {
+      ...user,
+      // override with CarpoolSearch data if it exists
+      role: carpoolSearch?.role ?? user.role,
+      status: carpoolSearch?.status ?? user.status,
+      seatAvail: carpoolSearch?.seatsAvail ?? user.seatAvail,
+      companyName: carpoolSearch?.companyName ?? user.companyName,
+      daysWorking: carpoolSearch?.daysWorking ?? user.daysWorking,
+      startTime: carpoolSearch?.startTime ?? user.startTime,
+      endTime: carpoolSearch?.endTime ?? user.endTime,
+      coopStartDate: carpoolSearch?.startDate ?? user.coopStartDate,
+      coopEndDate: carpoolSearch?.endDate ?? user.coopEndDate,
+      groupMessage: carpoolSearch?.groupMessage ?? user.groupMessage,
+      carpoolId: carpoolSearch?.carpoolId ?? user.carpoolId,
+      // override with Location data if it exists
+      startCoordLng: carpoolSearch?.homeLocation?.coordLng ?? user.startCoordLng,
+      startCoordLat: carpoolSearch?.homeLocation?.coordLat ?? user.startCoordLat,
+      startStreet: carpoolSearch?.homeLocation?.street ?? user.startStreet,
+      startCity: carpoolSearch?.homeLocation?.city ?? user.startCity,
+      startState: carpoolSearch?.homeLocation?.state ?? user.startState,
+      startAddress: carpoolSearch?.homeLocation?.streetAddress ?? user.startAddress,
+      companyCoordLng: carpoolSearch?.companyLocation?.coordLng ?? user.companyCoordLng,
+      companyCoordLat: carpoolSearch?.companyLocation?.coordLat ?? user.companyCoordLat,
+      companyStreet: carpoolSearch?.companyLocation?.street ?? user.companyStreet,
+      companyCity: carpoolSearch?.companyLocation?.city ?? user.companyCity,
+      companyState: carpoolSearch?.companyLocation?.state ?? user.companyState,
+      companyAddress: carpoolSearch?.companyLocation?.streetAddress ?? user.companyAddress,
+    };
   }),
 
   edit: protectedRouter
@@ -76,39 +127,119 @@ export const userRouter = router({
         : undefined;
 
       const id = ctx.session.user?.id;
-      const user = await ctx.prisma.user.update({
+      if (!id) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "User not authenticated",
+        });
+      }
+
+      await ctx.prisma.user.update({
         where: { id },
         data: {
-          role: input.role,
-          status: input.status,
-          seatAvail: input.seatAvail,
-          companyName: input.companyName,
-          companyAddress: input.companyAddress,
-          companyCoordLng: input.companyCoordLng,
-          companyCoordLat: input.companyCoordLat,
-          startAddress: input.startAddress,
-          startCoordLng: input.startCoordLng,
-          startCoordLat: input.startCoordLat,
-          companyStreet: input.companyStreet,
-          companyCity: input.companyCity,
-          companyState: input.companyState,
-          startStreet: input.startStreet,
-          startCity: input.startCity,
-          startState: input.startState,
           preferredName: input.preferredName,
           pronouns: input.pronouns,
           isOnboarded: input.isOnboarded,
-          daysWorking: input.daysWorking,
-          startTime: startTimeDate,
-          endTime: endTimeDate,
-          coopEndDate: input.coopEndDate,
-          coopStartDate: input.coopStartDate,
           bio: input.bio,
           licenseSigned: input.licenseSigned,
         },
       });
 
-      return user;
+      // home location - find or create
+      let homeLocation = await ctx.prisma.location.findFirst({
+        where: {
+          street: input.startStreet,
+          city: input.startCity,
+          state: input.startState,
+          streetAddress: input.startAddress,
+        },
+      });
+
+      if (!homeLocation) {
+        homeLocation = await ctx.prisma.location.create({
+          data: {
+            street: input.startStreet,
+            city: input.startCity,
+            state: input.startState,
+            streetAddress: input.startAddress,
+            coordLng: input.startCoordLng,
+            coordLat: input.startCoordLat,
+          },
+        });
+      }
+
+      // company location - find or create
+      let companyLocation = await ctx.prisma.location.findFirst({
+        where: {
+          street: input.companyStreet,
+          city: input.companyCity,
+          state: input.companyState,
+          streetAddress: input.companyAddress,
+        },
+      });
+
+      if (!companyLocation) {
+        companyLocation = await ctx.prisma.location.create({
+          data: {
+            street: input.companyStreet,
+            city: input.companyCity,
+            state: input.companyState,
+            streetAddress: input.companyAddress,
+            coordLng: input.companyCoordLng,
+            coordLat: input.companyCoordLat,
+          },
+        });
+      }
+
+      // CarpoolSearch - find or create
+      const existingSearch = await ctx.prisma.carpoolSearch.findFirst({
+        where: { userId: id },
+      });
+
+      const carpoolSearchData = {
+        role: input.role,
+        status: input.status,
+        seatsAvail: input.seatAvail,
+        companyName: input.companyName,
+        daysWorking: input.daysWorking,
+        startTime: startTimeDate,
+        endTime: endTimeDate,
+        startDate: input.coopStartDate,
+        endDate: input.coopEndDate,
+        homeLocationId: homeLocation.id,
+        companyLocationId: companyLocation.id,
+      };
+
+      if (existingSearch) {
+        await ctx.prisma.carpoolSearch.update({
+          where: { id: existingSearch.id },
+          data: carpoolSearchData,
+        });
+      } else {
+        await ctx.prisma.carpoolSearch.create({
+          data: {
+            userId: id,
+            carpoolId: null,
+            groupMessage: null,
+            ...carpoolSearchData,
+          },
+        });
+      }
+
+      // return the updated user with CarpoolSearch data
+      const updatedUser = await ctx.prisma.user.findUnique({
+        where: { id },
+        include: {
+          carpoolSearches: {
+            include: {
+              homeLocation: true,
+              companyLocation: true,
+            },
+          },
+        },
+      });
+
+      return updatedUser;
     }),
 
   getPresignedUrl: protectedRouter
@@ -117,12 +248,12 @@ export const userRouter = router({
         contentType: z.string(),
       }),
     )
-    .query(async ({ ctx, input }) => {
+    .query(async ({ ctx, input }): Promise<{ url: string } | undefined> => {
       const { contentType } = input;
-      const fileName = ctx.session.user?.id;
+      const fileName: string | undefined = ctx.session.user?.id;
       if (fileName) {
         try {
-          const url = await generatePresignedUrl(fileName, contentType);
+          const url: string = await generatePresignedUrl(fileName, contentType);
           return { url };
         } catch (error) {
           throw new TRPCError({
@@ -134,12 +265,14 @@ export const userRouter = router({
     }),
   getPresignedDownloadUrl: protectedRouter
     .input(getPresignedDownloadUrlInput)
-    .query(async ({ ctx, input }) => {
-      const userId = input.userId ?? ctx.session.user?.id;
+    .query(async ({ ctx, input }): Promise<{ url: string } | undefined> => {
+      const userId: string | undefined = input.userId ?? ctx.session.user?.id;
       if (userId) {
         try {
           const url = await getPresignedImageUrl(userId);
-          return { url };
+          if (url) {
+            return { url };
+          }
         } catch (error) {
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
@@ -149,7 +282,7 @@ export const userRouter = router({
       }
     }),
 
-  //merging secondary user routes
+  // merging secondary user routes
   favorites: favoritesRouter,
   messages: messageRouter,
   recommendations: recommendationsRouter,

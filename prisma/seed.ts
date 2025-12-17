@@ -84,11 +84,13 @@ async function reverseGeocode(
 /**
  * Deletes all entries in the user table.
  */
-const deleteUsers = async () => {
+const deleteAllData = async () => {
   await prisma.request.deleteMany({});
+  await prisma.carpoolSearch.deleteMany({});
+  await prisma.location.deleteMany({});
   await prisma.carpoolGroup.deleteMany({});
   await prisma.message.deleteMany({});
-  +(await prisma.user.deleteMany({}));
+  await prisma.user.deleteMany({});
 };
 
 /**
@@ -128,9 +130,9 @@ const clearConnections = async () => {
 /**
  * Generates requests between users in our database.
  */
-const generateRequests = async (users: User[]) => {
+const generateRequests = async (userIds: string[]) => {
   await Promise.all(
-    users.map((_, idx) =>
+    userIds.map((_, idx) =>
       prisma.request.create({
         data: {
           message: "Hello",
@@ -138,7 +140,7 @@ const generateRequests = async (users: User[]) => {
             connect: { id: idx.toString() },
           },
           toUser: {
-            connect: { id: pickConnection(idx, users.length) },
+            connect: { id: pickConnection(idx, userIds.length) },
           },
         },
       }),
@@ -163,16 +165,16 @@ const pickConnection = (userId: number, limit: number) => {
 /**
  * Generates favorites between users in our database.
  */
-const generateFavorites = async (users: User[]) => {
+const generateFavorites = async (userIds: string[]) => {
   await Promise.all(
-    users.map((_, idx) =>
+    userIds.map((_, idx) =>
       prisma.user.update({
         where: {
           id: `${idx}`,
         },
         data: {
           favorites: {
-            connect: pickConnections(idx, users.length, 5),
+            connect: pickConnections(idx, userIds.length, 5),
           },
         },
       }),
@@ -205,12 +207,13 @@ const pickConnections = (
 /**
  * Generates favorites between users in our database.
  */
-const generateGroups = async (users: User[]) => {
-  const groups: User[][] = [];
+const generateGroups = async (userIds: string[]): Promise<Map<string, string>> => {
+  const userToGroupMap = new Map<string, string>();
+  const groups: string[][] = [];
   let i = 0;
   for (let j = 0; j < 10; j++) {
     for (let k = 0; k < 4; k++) {
-      (groups[j] ??= []).push(users[i]);
+      (groups[j] ??= []).push(userIds[i]);
       i++;
     }
   }
@@ -221,18 +224,38 @@ const generateGroups = async (users: User[]) => {
     })),
   });
 
-  await Promise.all(
-    groups.map((group, idx) =>
-      Promise.all(
-        group.map((user) =>
-          prisma.user.update({
-            where: { id: user.id },
-            data: { carpool: { connect: { id: idx.toString() } } },
-          }),
-        ),
-      ),
-    ),
-  );
+  // Build the mapping for later use when creating CarpoolSearch
+  groups.forEach((group, idx) => {
+    group.forEach((userId) => {
+      userToGroupMap.set(userId, idx.toString());
+    });
+  });
+
+  return userToGroupMap;
+};
+
+// Type for generated user data (includes all fields for CarpoolSearch/Location)
+type GeneratedUserData = {
+  id: string;
+  role: Role;
+  seatAvail: number;
+  companyCoordLng: number;
+  companyCoordLat: number;
+  startCoordLng: number;
+  startCoordLat: number;
+  daysWorking: string;
+  startTime: string;
+  endTime: string;
+  coopStartDate: Date | null;
+  coopEndDate: Date | null;
+  companyAddress: string;
+  startAddress: string;
+  companyStreet: string;
+  companyCity: string;
+  companyState: string;
+  startStreet: string;
+  startCity: string;
+  startState: string;
 };
 
 /**
@@ -281,21 +304,122 @@ const createUserData = async () => {
     }),
   ]);
 
-  const users = userGroups.flat();
+  const usersData: GeneratedUserData[] = userGroups.flat().map((user, index) => ({
+    id: index.toString(),
+    ...user,
+  }));
 
   await clearConnections();
-  await deleteUsers();
+  await deleteAllData();
+  
+  // Create users with only non-migrated fields
   await Promise.all(
-    users.map((user, index) =>
-      prisma.user.upsert(generateUser({ id: index.toString(), ...user })),
+    usersData.map((userData) =>
+      prisma.user.upsert(generateUser({ id: userData.id } as GenerateUserInput & { id: string })),
     ),
   );
-  const dbUsers = await prisma.user.findMany();
+  
+  const userIds = usersData.map(u => u.id);
+  
+  // Generate groups and get the userId -> groupId mapping
+  const userToGroupMap = await generateGroups(userIds);
+  
   await Promise.all([
-    generateFavorites(dbUsers),
-    generateRequests(dbUsers),
-    generateGroups(dbUsers),
+    generateFavorites(userIds),
+    generateRequests(userIds),
   ]);
+
+  // create Location and CarpoolSearch records for each user
+  for (const userData of usersData) {
+    try {
+      // find or create home location
+      let homeLocation = null;
+
+      // only search for existing location if we have valid address data
+      if (userData.startStreet && userData.startCity && userData.startState) {
+        homeLocation = await prisma.location.findFirst({
+          where: {
+            street: userData.startStreet,
+            city: userData.startCity,
+            state: userData.startState,
+            streetAddress: userData.startAddress || '',
+          },
+        });
+      }
+
+      // if not found or address was empty, create new location
+      if (!homeLocation) {
+        homeLocation = await prisma.location.create({
+          data: {
+            street: userData.startStreet || '',
+            city: userData.startCity || '',
+            state: userData.startState || '',
+            streetAddress: userData.startAddress || '',
+            coordLng: userData.startCoordLng,
+            coordLat: userData.startCoordLat,
+          },
+        });
+      }
+
+      // find or create company location
+      let companyLocation = null;
+
+      // only search for existing location if we have valid address data
+      if (userData.companyStreet && userData.companyCity && userData.companyState) {
+        companyLocation = await prisma.location.findFirst({
+          where: {
+            street: userData.companyStreet,
+            city: userData.companyCity,
+            state: userData.companyState,
+            streetAddress: userData.companyAddress || '',
+          },
+        });
+      }
+
+      // if not found or address was empty, create new location
+      if (!companyLocation) {
+        companyLocation = await prisma.location.create({
+          data: {
+            street: userData.companyStreet || '',
+            city: userData.companyCity || '',
+            state: userData.companyState || '',
+            streetAddress: userData.companyAddress || '',
+            coordLng: userData.companyCoordLng,
+            coordLat: userData.companyCoordLat,
+          },
+        });
+      }
+
+      // get carpoolId from the mapping
+      const carpoolId = userToGroupMap.get(userData.id) || null;
+
+      // Parse time strings to Date objects
+      const startTimeDate = userData.startTime ? new Date(userData.startTime) : null;
+      const endTimeDate = userData.endTime ? new Date(userData.endTime) : null;
+
+      // create CarpoolSearch
+      await prisma.carpoolSearch.create({
+        data: {
+          userId: userData.id,
+          role: userData.role as Role,
+          status: "ACTIVE",
+          seatsAvail: userData.seatAvail || 0,
+          companyName: "Sandbox Inc.",
+          daysWorking: userData.daysWorking || '',
+          startTime: startTimeDate,
+          endTime: endTimeDate,
+          startDate: userData.coopStartDate,
+          endDate: userData.coopEndDate,
+          carpoolId: carpoolId,
+          groupMessage: null,
+          homeLocationId: homeLocation.id,
+          companyLocationId: companyLocation.id,
+        },
+      });
+    } catch (error) {
+      console.error(`Failed to create CarpoolSearch for user ${userData.id}:`, error);
+    }
+  }
 };
 
 /**
@@ -354,7 +478,8 @@ const genRandomUsers = async ({
     ]);
 
     const output = {
-      role: "RIDER",
+      role: "RIDER" as Role,
+      seatAvail: 0,
       startTime,
       startCoordLat: userStartLat,
       startCoordLng: userStartLng,
@@ -365,6 +490,8 @@ const genRandomUsers = async ({
         .fill(undefined)
         .map((_, ind) => (rand(1) < 0.5 ? "0" : "1"))
         .join(","),
+      coopStartDate: null,
+      coopEndDate: null,
       // Add the new structured address fields
       startStreet: startAddress.street,
       startCity: startAddress.city,
@@ -380,7 +507,7 @@ const genRandomUsers = async ({
     if (rand(1) < 0.5) {
       users.push({
         ...output,
-        role: "DRIVER",
+        role: "DRIVER" as Role,
         seatAvail: Math.ceil(rand(3)),
       });
     } else {
@@ -425,3 +552,4 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
+  
