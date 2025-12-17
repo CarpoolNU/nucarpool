@@ -23,15 +23,15 @@ export const messageRouter = router({
       });
     }
 
-    const user = await ctx.prisma.user.findUnique({
-      where: { id: userId },
+    const carpoolSearch = await ctx.prisma.carpoolSearch.findFirst({
+      where: { userId },
       select: { role: true },
     });
 
-    if (!user) {
+    if (!carpoolSearch) {
       throw new TRPCError({
         code: "NOT_FOUND",
-        message: "User not found",
+        message: "User carpool search not found",
       });
     }
 
@@ -48,15 +48,23 @@ export const messageRouter = router({
                 {
                   fromUserId: userId,
                   toUser: {
-                    role: { not: user.role },
-                    AND: { role: { not: "VIEWER" } },
+                    carpoolSearches: {
+                      some: {
+                        role: { not: carpoolSearch.role },
+                        AND: { role: { not: "VIEWER" } },
+                      },
+                    },
                   },
                 },
                 {
                   toUserId: userId,
                   fromUser: {
-                    role: { not: user.role },
-                    AND: { role: { not: "VIEWER" } },
+                    carpoolSearches: {
+                      some: {
+                        role: { not: carpoolSearch.role },
+                        AND: { role: { not: "VIEWER" } },
+                      },
+                    },
                   },
                 },
               ],

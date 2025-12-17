@@ -2,7 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedRouter, router } from "../createRouter";
 
-import { convertToPublic } from "../../../utils/publicUser";
+import { convertCarpoolSearchToPublic } from "../../../utils/publicUser";
 
 // use this router to manage invitations
 export const requestsRouter = router({
@@ -69,27 +69,103 @@ export const requestsRouter = router({
       });
     }
 
+    // get current user CarpoolSearch
+    const currentUserSearch = await ctx.prisma.carpoolSearch.findFirst({
+      where: { userId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+            bio: true,
+            preferredName: true,
+            pronouns: true,
+          }
+        },
+        homeLocation: true,
+        companyLocation: true,
+      },
+    });
+
+    if (!currentUserSearch) {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: `No carpool search found for user ${userId}`,
+      });
+    }
+
+    // get CarpoolSearches for all users in sent requests
+    const sentUserIds = user.sentRequests.map((req) => req.toUserId);
+    const sentCarpoolSearches = await ctx.prisma.carpoolSearch.findMany({
+      where: {
+        userId: { in: sentUserIds },
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+            bio: true,
+            preferredName: true,
+            pronouns: true,
+          }
+        },
+        homeLocation: true,
+        companyLocation: true,
+      },
+    });
+
+    // get CarpoolSearches for all users in received requests
+    const receivedUserIds = user.receivedRequests.map((req) => req.fromUserId);
+    const receivedCarpoolSearches = await ctx.prisma.carpoolSearch.findMany({
+      where: {
+        userId: { in: receivedUserIds },
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+            bio: true,
+            preferredName: true,
+            pronouns: true,
+          }
+        },
+        homeLocation: true,
+        companyLocation: true,
+      },
+    });
+
     const sent = user.sentRequests.map((req) => {
+      const toUserSearch = sentCarpoolSearches.find(s => s.userId === req.toUserId);
       return {
         ...req,
-        fromUser: convertToPublic(user),
-        toUser: convertToPublic(req.toUser),
+        fromUser: convertCarpoolSearchToPublic(currentUserSearch),
+        toUser: toUserSearch ? convertCarpoolSearchToPublic(toUserSearch) : null,
       };
     });
 
     const received = user.receivedRequests.map((req) => {
+      const fromUserSearch = receivedCarpoolSearches.find(s => s.userId === req.fromUserId);
       return {
         ...req,
-        fromUser: convertToPublic(req.fromUser),
-        toUser: convertToPublic(user),
+        fromUser: fromUserSearch ? convertCarpoolSearchToPublic(fromUserSearch) : null,
+        toUser: convertCarpoolSearchToPublic(currentUserSearch),
       };
     });
+
     const sentGoodRole = sent.filter(
-      (req) => req.toUser.role !== user.role && req.toUser.role !== "VIEWER",
+      (req) => req.toUser && req.toUser.role !== currentUserSearch.role && req.toUser.role !== "VIEWER",
     );
     const recGoodRole = received.filter(
       (req) =>
-        req.fromUser.role !== user.role && req.fromUser.role !== "VIEWER",
+        req.fromUser && req.fromUser.role !== currentUserSearch.role && req.fromUser.role !== "VIEWER",
     );
     return { sent: sentGoodRole, received: recGoodRole };
   }),

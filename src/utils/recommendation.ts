@@ -1,4 +1,4 @@
-import { Role, Status, User } from "@prisma/client";
+import { Role, Status, CarpoolSearch, Location } from "@prisma/client";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -61,6 +61,35 @@ interface CommonUser {
   endTime?: Date | null;
   daysWorking: string;
 }
+
+// Type for CarpoolSearch with relations
+type CarpoolSearchWithLocations = CarpoolSearch & {
+  user: { id: string };
+  homeLocation: Location | null;
+  companyLocation: Location | null;
+};
+
+/**
+ * Converts a CarpoolSearch to the CommonUser interface for scoring
+ */
+const carpoolSearchToCommonUser = (search: CarpoolSearchWithLocations): CommonUser => {
+  return {
+    id: search.user.id,
+    role: search.role,
+    seatAvail: search.seatsAvail,
+    coopStartDate: search.startDate,
+    coopEndDate: search.endDate,
+    startCoordLat: search.homeLocation?.coordLat ?? 0,
+    startCoordLng: search.homeLocation?.coordLng ?? 0,
+    companyCoordLat: search.companyLocation?.coordLat ?? 0,
+    companyCoordLng: search.companyLocation?.coordLng ?? 0,
+    carpoolId: search.carpoolId,
+    startTime: search.startTime,
+    endTime: search.endTime,
+    daysWorking: search.daysWorking,
+  };
+};
+
 /**
  * Converts a comma separated string representing user's days working to a boolean array
  * @param user The user to calculate days for
@@ -80,16 +109,19 @@ const dayConversion = (user: CommonUser) => {
  * @param sort The parameter to score by
  * @returns A function that takes in a user and returns their score relative to `currentUser`
  */
-export const calculateScore = <T extends CommonUser>(
-  currentUser: T,
+export const calculateScore = (
+  currentUserSearch: CarpoolSearchWithLocations,
   inputs: FInputs,
   sort: string,
-): ((user: T) => Recommendation | undefined) => {
+): ((userSearch: CarpoolSearchWithLocations) => Recommendation | undefined) => {
+  const currentUser = carpoolSearchToCommonUser(currentUserSearch);
   const currentUserDays = inputs.daysWorking
     .split(",")
     .map((str) => str === "1");
 
-  return (user: T) => {
+  return (userSearch: CarpoolSearchWithLocations) => {
+    const user = carpoolSearchToCommonUser(userSearch);
+    
     if (
       (currentUser.role === "RIDER" &&
         (user.role === "RIDER" || user.seatAvail === 0)) ||
@@ -282,36 +314,7 @@ export type GenerateUserInput = {
  */
 export const generateUser = ({
   id,
-  role,
-  seatAvail = undefined,
-  companyCoordLng,
-  companyCoordLat,
-  startCoordLng,
-  startCoordLat,
-  daysWorking,
-  startTime,
-  endTime,
-  coopStartDate,
-  coopEndDate,
-  companyAddress,
-  startAddress,
-  companyStreet,
-  companyCity,
-  companyState,
-  startStreet,
-  startCity,
-  startState,
 }: GenerateUserInput & { id: string }) => {
-  if (daysWorking.length != 13) {
-    throw new Error("Given an invalid string for daysWorking");
-  }
-
-  dayjs.extend(utc);
-  dayjs.extend(timezone);
-  const [startHours, startMinutes] = startTime
-    .split(":")
-    .map((s) => _.toInteger(s));
-
   const updated_obj = {
     id: id,
     name: `User ${id}`,
@@ -321,32 +324,10 @@ export const generateUser = ({
     bio: `My name is User ${id}. I like to drive`,
     pronouns: "they/them",
     preferredName: `User ${id}`,
-    role: role,
-    status: "ACTIVE" as Status,
-    seatAvail: seatAvail || 0,
-    companyName: "Sandbox Inc.",
-    companyAddress: companyAddress || "",
-    companyCoordLng: companyCoordLng,
-    companyCoordLat: companyCoordLat,
-    startAddress: startAddress || "",
-    startCoordLng: startCoordLng,
-    startCoordLat: startCoordLat,
     isOnboarded: true,
-    daysWorking: daysWorking,
-    startTime: startTime,
-    endTime: endTime,
-    coopEndDate: coopEndDate,
-    coopStartDate: coopStartDate,
-    carpoolId: null,
     licenseSigned: true,
     dateCreated: new Date(),
     dateModified: new Date(),
-    companyStreet: companyStreet || "",
-    companyCity: companyCity || "",
-    companyState: companyState || "",
-    startStreet: startStreet || "",
-    startCity: startCity || "",
-    startState: startState || "",
   };
   return {
     where: { id: id },

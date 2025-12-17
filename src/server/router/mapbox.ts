@@ -3,11 +3,11 @@ import { z } from "zod";
 import { protectedRouter, router } from "./createRouter";
 import { Feature, FeatureCollection } from "geojson";
 import { serverEnv } from "../../utils/env/server";
-import { Role, Status } from "@prisma/client";
+import { Role, Status, CarpoolSearch, Location } from "@prisma/client";
 import { DirectionsResponse } from "../../utils/types";
-import { convertToPublic, roundCoord } from "../../utils/publicUser";
+import { convertCarpoolSearchToPublic, roundCoord } from "../../utils/publicUser";
 import _ from "lodash";
-import { calculateScore } from "../../utils/recommendation";
+import { calculateScore, Recommendation } from "../../utils/recommendation";
 import { parseMapboxFeature } from "../../utils/map/parseAddress";
 
 // router for interacting with the Mapbox API
@@ -70,62 +70,97 @@ export const mapboxRouter = router({
       }),
     )
     .query(async ({ ctx, input }) => {
-      const id = ctx.session.user?.id;
-      const currentUser = await ctx.prisma.user.findUnique({
-        where: {
-          id: id,
-        },
-        include: {
-          favorites: input.favorites,
-          sentRequests: !input.messaged,
-          receivedRequests: !input.messaged,
-        },
-      });
-
-      if (!currentUser) {
+      const userId = ctx.session.user?.id;
+      
+      if (!userId) {
         throw new TRPCError({
-          code: "NOT_FOUND",
-          message: `No user with id ${id}.`,
+          code: "UNAUTHORIZED",
+          message: "User not authenticated.",
         });
       }
 
-      const { favorites, sentRequests, receivedRequests, ...calcUser } =
-        currentUser;
+      const currentUserSearch = await ctx.prisma.carpoolSearch.findFirst({
+        where: { userId },
+        include: {
+          user: {
+            include: {
+              favorites: input.favorites,
+              sentRequests: !input.messaged,
+              receivedRequests: !input.messaged,
+            }
+          },
+          homeLocation: true,
+          companyLocation: true,
+        },
+      });
 
-      let userQuery: { id: any; isOnboarded: boolean; status: Status } = {
-        id: { not: id },
-        isOnboarded: true,
-        status: Status.ACTIVE,
-      };
+      if (!currentUserSearch) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: `No carpool search found for user ${userId}.`,
+        });
+      }
 
+      const { favorites, sentRequests, receivedRequests } = currentUserSearch.user;
+
+      let excludedUserIds: string[] = [userId];
+      
       // Hide users user has messaged
       if (!input.messaged) {
-        userQuery.id["notIn"] = [
+        excludedUserIds.push(
           ...sentRequests.map((r) => r.toUserId),
-          ...receivedRequests.map((r) => r.fromUserId),
-        ];
+          ...receivedRequests.map((r) => r.fromUserId)
+        );
       }
+
+      // construct Query with Filters
+      let carpoolSearchQuery: any = {
+        userId: { notIn: excludedUserIds },
+        status: Status.ACTIVE,
+        user: {
+          isOnboarded: true,
+        }
+      };
 
       // Favorites filter
       if (input.favorites) {
-        userQuery.id["in"] = favorites.map((f) => f.id);
+        carpoolSearchQuery.userId = {
+          ...carpoolSearchQuery.userId,
+          in: favorites.map((f) => f.id)
+        };
       }
 
-      // Construct Query with Filters
-      const users = await ctx.prisma.user.findMany({
-        where: userQuery,
+      const carpoolSearches = await ctx.prisma.carpoolSearch.findMany({
+        where: carpoolSearchQuery,
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              image: true,
+              bio: true,
+              preferredName: true,
+              pronouns: true,
+              isOnboarded: true,
+            }
+          },
+          homeLocation: true,
+          companyLocation: true,
+        },
       });
-      const filtered = _.compact(
-        users.map(calculateScore(calcUser, input, "distance")),
-      );
-      filtered.sort((a, b) => a.score - b.score);
-      const sortedUsers = _.compact(
-        filtered.map((rec) => users.find((user) => user.id === rec.id)),
-      );
-      const finalUsers =
-        calcUser.role === Role.VIEWER ? sortedUsers : sortedUsers.slice(0, 150);
 
-      const finalPublicUsers = finalUsers.map(convertToPublic);
+      const filtered: Recommendation[] = _.compact(
+        carpoolSearches.map(calculateScore(currentUserSearch, input, "distance")),
+      );
+      filtered.sort((a: Recommendation, b: Recommendation) => a.score - b.score);
+      const sortedSearches = _.compact(
+        filtered.map((rec) => carpoolSearches.find((search) => search.user.id === rec.id)),
+      );
+      const finalSearches =
+        currentUserSearch.role === Role.VIEWER ? sortedSearches : sortedSearches.slice(0, 150);
+
+      const finalPublicUsers = finalSearches.map(convertCarpoolSearchToPublic);
 
       // creates points for each user with coordinates at company location
       const features: Feature[] = finalPublicUsers.map((u) => {

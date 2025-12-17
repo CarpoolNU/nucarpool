@@ -17,6 +17,7 @@ import Spinner from "./Spinner";
 import Pusher from "pusher-js";
 import { browserEnv } from "../utils/env/browser";
 import { Message, PublicUser } from "../utils/types";
+import { HiOutlineMap, HiOutlineChatAlt2, HiOutlineUserGroup, HiOutlineUser } from "react-icons/hi";
 
 const HeaderDiv = styled.div`
   display: flex;
@@ -255,7 +256,14 @@ const Header = (props: HeaderProps) => {
         }
       }
     } else if (option === "group") {
-      setDisplayGroup(true);
+      if (comingFromProfile) {
+        // Navigate to map page with query parameter to show group modal
+        setIsLoading(true);
+        window.location.href = "/?showGroup=true";
+      } else {
+        // Already on map page, just show the modal
+        setDisplayGroup(true);
+      }
     } else if (option === "profile") {
       // Note we're going to profile
       isComingFromProfile.current = false;
@@ -268,7 +276,21 @@ const Header = (props: HeaderProps) => {
   };
 
   useEffect(() => {
-    const { tab } = router.query;
+    const { tab, showGroup } = router.query;
+
+    // Handle showGroup parameter (from profile -> My Group navigation)
+    if (showGroup === "true") {
+      setDisplayGroup(true);
+      // Clean up URL parameter after showing modal
+      const { showGroup: _, ...restQuery } = router.query;
+      if (Object.keys(restQuery).length > 0) {
+        router.replace({ pathname: "/", query: restQuery }, undefined, { shallow: true });
+      } else {
+        router.replace("/", undefined, { shallow: true });
+      }
+    }
+
+    // Handle tab parameter (explore/requests navigation)
     if (
       tab &&
       (tab === "explore" || tab === "requests") &&
@@ -277,7 +299,7 @@ const Header = (props: HeaderProps) => {
       props.data.setSidebar(tab as HeaderOptions);
       setActiveNav(tab as string);
     }
-  }, [router.query, props.data?.setSidebar, props.data]);
+  }, [router.query, props.data?.setSidebar, props.data, router]);
 
   const renderSidebarOptions = ({
     sidebarValue,
@@ -366,23 +388,30 @@ const Header = (props: HeaderProps) => {
 
     const currentActiveTab = isProfilePage
       ? "profile"
-      : props.data?.sidebarValue || activeNav;
+      : displayGroup
+        ? "group"
+        : props.data?.sidebarValue || activeNav;
 
     const navItems = [
       {
         id: "explore",
-        icon: "⚭",
+        icon: <HiOutlineMap />,
         label: "Explore",
       },
       {
         id: "requests",
-        icon: "👥",
+        icon: <HiOutlineChatAlt2 />,
         label: "Requests",
         badge: unreadMessagesCount !== 0 || currentunreadMessagesCount !== 0,
       },
       {
+        id: "group",
+        icon: <HiOutlineUserGroup />,
+        label: "My Group",
+      },
+      {
         id: "profile",
-        icon: "👤",
+        icon: <HiOutlineUser />,
         label: "Profile",
       },
     ];
@@ -421,7 +450,7 @@ const Header = (props: HeaderProps) => {
                     : unreadMessagesCount}
                 </span>
               )}
-              <span style={{ fontSize: "12px" }}>{item.label}</span>
+              <span style={{ fontSize: "12px", fontWeight: "500" }}>{item.label}</span>
             </div>
           </MobileNavItem>
         ))}
@@ -451,7 +480,12 @@ const Header = (props: HeaderProps) => {
         {props.signIn ? (
           <SigninLogo>CarpoolNU</SigninLogo>
         ) : (
-          <Logo>CarpoolNU</Logo>
+          <Logo
+            onClick={() => router.push('/')}
+            style={{ cursor: 'pointer' }}
+          >
+            CarpoolNU
+          </Logo>
         )}
         {props.admin ? (
           <div className="flex items-center">

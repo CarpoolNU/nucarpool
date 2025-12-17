@@ -1,4 +1,4 @@
-import { User } from "@prisma/client";
+import { Location, CarpoolSearch, User } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
 import { serverEnv } from "./env/server";
 import { PublicUser, PoiData } from "./types";
@@ -37,6 +37,56 @@ export const convertToPublic = (user: User): PublicUser => {
     companyCoordLng: user.companyCoordLng,
     companyCoordLat: user.companyCoordLat,
     carpoolId: user.carpoolId,
+  };
+};
+
+/**
+ * Converts a CarpoolSearch record (with relations) to a PublicUser.
+ *
+ * @param search an active CarpoolSearch record with user and location relations
+ * @returns non-sensitive information about a user from CarpoolSearch
+ */
+ export const convertCarpoolSearchToPublic = (
+  search: CarpoolSearch & {
+    user: {
+      id: string;
+      name: string | null;
+      email: string | null;
+      image: string | null;
+      bio: string;
+      preferredName: string;
+      pronouns: string;
+    };
+    homeLocation: Location | null;
+    companyLocation: Location | null;
+  }
+): PublicUser => {
+  return {
+    id: search.user.id,
+    name: search.user.name,
+    email: search.user.email,
+    image: search.user.image,
+    bio: search.user.bio,
+    preferredName: search.user.preferredName,
+    pronouns: search.user.pronouns,
+    role: search.role,
+    status: search.status,
+    seatAvail: search.seatsAvail,
+    companyName: search.companyName,
+    daysWorking: search.daysWorking,
+    startTime: search.startTime,
+    endTime: search.endTime,
+    coopEndDate: search.endDate,
+    coopStartDate: search.startDate,
+    startAddress: search.homeLocation 
+      ? `${search.homeLocation.city}, ${search.homeLocation.state}`
+      : "Exact Location Unavailable",
+    startCoordLng: search.homeLocation?.coordLng ?? 0,
+    startCoordLat: search.homeLocation?.coordLat ?? 0,
+    companyAddress: search.companyLocation?.streetAddress ?? "",
+    companyCoordLng: search.companyLocation?.coordLng ?? 0,
+    companyCoordLat: search.companyLocation?.coordLat ?? 0,
+    carpoolId: search.carpoolId,
   };
 };
 
