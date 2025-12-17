@@ -224,6 +224,12 @@ export type User = {
   companyCity: string;
   companyState: string;
   companyAddress: string;
+  companyPOIAddress: string;
+  companyPOICoordLng: number;
+  companyPOICoordLat: number;
+  startPOILocation: string;
+  startPOICoordLng: number;
+  startPOICoordLat: number;
 };
 
 export type GeoJsonUsers = RouterOutput["mapbox"]["geoJsonUserList"];
