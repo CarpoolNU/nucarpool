@@ -20,7 +20,7 @@ export type TempGroup = {
   id: string;
   dateCreated: Date;
   _count: {
-    users: number;
+    carpoolSearches: number;
   };
 };
 export type TempRequest = {
@@ -129,7 +129,8 @@ export type MapUser = {
   carpoolId: string | null;
 };
 
-// describes a user's public data along with their POIs
+// PublicUser - describes a user's public data
+// This represents merged data from User + CarpoolSearch + Location
 export type PublicUser = {
   id: string;
   name: string | null;

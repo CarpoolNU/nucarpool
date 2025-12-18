@@ -1,5 +1,5 @@
 import { ErrorDisplay, Note, ProfileHeader } from "../../styles/profile";
-import { Role, User } from "@prisma/client";
+import { Role } from "@prisma/client";
 import { EntryLabel } from "../EntryLabel";
 import { TextField } from "../TextField";
 import {
@@ -11,7 +11,7 @@ import {
   UseFormSetValue,
   UseFormWatch,
 } from "react-hook-form";
-import { OnboardingFormInputs } from "../../utils/types";
+import { OnboardingFormInputs, User } from "../../utils/types";
 import ControlledAddressCombobox from "./ControlledAddressCombobox";
 import { useAddressSelection } from "../../utils/useAddressSelection";
 import SelectDays from "../Shared/Schedule/SelectDays";

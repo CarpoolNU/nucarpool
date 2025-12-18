@@ -1,4 +1,4 @@
-import { OnboardingFormInputs } from "../../utils/types";
+import { OnboardingFormInputs, User } from "../../utils/types";
 import {
   UseFormWatch,
   FieldErrors,
@@ -6,8 +6,6 @@ import {
   Controller,
   UseFormSetValue,
 } from "react-hook-form";
-
-import { User } from "@prisma/client";
 import { ErrorDisplay, Note } from "../../styles/profile";
 import { EntryLabel } from "../EntryLabel";
 import { DatePicker } from "antd";

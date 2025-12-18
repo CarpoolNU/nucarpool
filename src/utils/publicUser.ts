@@ -1,12 +1,12 @@
-import { Location, CarpoolSearch, User } from "@prisma/client";
+import { Location, CarpoolSearch } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
 import { serverEnv } from "./env/server";
-import { PublicUser, PoiData } from "./types";
+import { PublicUser, PoiData, User } from "./types";
 
 /**
  * Converts the given ``User`` to a ``PublicUser``, as to hide sensitive data.
  *
- * @param user a rider or driver.
+ * @param user a rider or driver (merged User type from API).
  * @returns non-sensitive information about a user.
  */
 export const convertToPublic = (user: User): PublicUser => {

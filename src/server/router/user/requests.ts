@@ -20,13 +20,6 @@ export const requestsRouter = router({
       where: { id: userId },
       include: {
         sentRequests: {
-          where: {
-            toUser: {
-              is: {
-                status: { not: "INACTIVE" },
-              },
-            },
-          },
           include: {
             toUser: true,
             conversation: {
@@ -40,13 +33,6 @@ export const requestsRouter = router({
           },
         },
         receivedRequests: {
-          where: {
-            fromUser: {
-              is: {
-                status: { not: "INACTIVE" },
-              },
-            },
-          },
           include: {
             fromUser: true,
             conversation: {
@@ -101,6 +87,7 @@ export const requestsRouter = router({
     const sentCarpoolSearches = await ctx.prisma.carpoolSearch.findMany({
       where: {
         userId: { in: sentUserIds },
+        status: { not: "INACTIVE" },
       },
       include: {
         user: {
@@ -124,6 +111,7 @@ export const requestsRouter = router({
     const receivedCarpoolSearches = await ctx.prisma.carpoolSearch.findMany({
       where: {
         userId: { in: receivedUserIds },
+        status: { not: "INACTIVE" },
       },
       include: {
         user: {

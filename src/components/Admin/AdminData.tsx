@@ -127,7 +127,7 @@ function AdminData() {
     ? conversationsWithMessage.length
     : 0;
 
-  const groupCount = groups.filter((group) => group._count.users > 1).length;
+  const groupCount = groups.filter((group) => group._count.carpoolSearches > 1).length;
   const ridersInGroup = activeUsers.filter(
     (user) => user.role === "RIDER" && user.carpoolId && user.carpoolId !== "",
   );
