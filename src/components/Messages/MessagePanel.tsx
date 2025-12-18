@@ -1,12 +1,11 @@
 import React, { useState, useContext, useEffect } from "react";
-import { EnhancedPublicUser, PublicUser } from "../../utils/types";
+import { EnhancedPublicUser, PublicUser, User } from "../../utils/types";
 import MessageHeader from "./MessageHeader";
 import MessageContent from "./MessageContent";
 import SendBar from "./SendBar";
 import { trpc } from "../../utils/trpc";
 import { createRequestHandlers } from "../../utils/requestHandlers";
 import { UserContext } from "../../utils/userContext";
-import { User } from "@prisma/client";
 import { toast } from "react-toastify";
 import { trackRequestResponse } from "../../utils/mixpanel";
 

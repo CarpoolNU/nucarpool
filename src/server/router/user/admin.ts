@@ -56,24 +56,16 @@ export const adminDataRouter = router({
       where: {
         AND: [
           {
-            users: {
+            carpoolSearches: {
               some: {
-                carpoolSearches: {
-                  some: {
-                    role: Role.DRIVER,
-                  },
-                },
+                role: Role.DRIVER,
               },
             },
           },
           {
-            users: {
+            carpoolSearches: {
               some: {
-                carpoolSearches: {
-                  some: {
-                    role: Role.RIDER,
-                  },
-                },
+                role: Role.RIDER,
               },
             },
           },
@@ -84,7 +76,7 @@ export const adminDataRouter = router({
         dateCreated: true,
         _count: {
           select: {
-            users: true,
+            carpoolSearches: true,
           },
         },
       },

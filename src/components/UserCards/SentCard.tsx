@@ -1,10 +1,9 @@
 import { useContext, useState } from "react";
-import { EnhancedPublicUser, Message, PublicUser } from "../../utils/types";
+import { EnhancedPublicUser, Message, PublicUser, User } from "../../utils/types";
 import { UserContext } from "../../utils/userContext";
 import { UserCard } from "./UserCard";
 import SentRequestModal from "../Modals/SentRequestModal";
 import { createPortal } from "react-dom";
-import { User } from "@prisma/client";
 import React from 'react';
 
 interface SentCardProps {

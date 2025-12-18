@@ -3,10 +3,10 @@ import { useContext, useState, useEffect } from "react";
 import { GroupMembers } from "./Group/GroupMemberCard";
 import { trpc } from "../utils/trpc";
 import { UserContext } from "../utils/userContext";
-import { Role, User } from "@prisma/client";
+import { Role } from "@prisma/client";
 import Spinner from "./Spinner";
 import { toast } from "react-toastify";
-import { PublicUser } from "../utils/types";
+import { PublicUser, User } from "../utils/types";
 import useIsMobile from "../utils/useIsMobile";
 
 interface GroupPageProps {

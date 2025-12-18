@@ -24,7 +24,7 @@ const getPresignedDownloadUrlInput = z.object({
 export const userRouter = router({
   me: protectedRouter.query(async ({ ctx }) => {
     const userId = ctx.session.user?.id;
-    
+
     if (!userId) {
       throw new TRPCError({
         code: "UNAUTHORIZED",
@@ -59,31 +59,39 @@ export const userRouter = router({
     // merge CarpoolSearch data into user object for backwards compatibility
     return {
       ...user,
-      // override with CarpoolSearch data if it exists
-      role: carpoolSearch?.role ?? user.role,
-      status: carpoolSearch?.status ?? user.status,
-      seatAvail: carpoolSearch?.seatsAvail ?? user.seatAvail,
-      companyName: carpoolSearch?.companyName ?? user.companyName,
-      daysWorking: carpoolSearch?.daysWorking ?? user.daysWorking,
-      startTime: carpoolSearch?.startTime ?? user.startTime,
-      endTime: carpoolSearch?.endTime ?? user.endTime,
-      coopStartDate: carpoolSearch?.startDate ?? user.coopStartDate,
-      coopEndDate: carpoolSearch?.endDate ?? user.coopEndDate,
-      groupMessage: carpoolSearch?.groupMessage ?? user.groupMessage,
-      carpoolId: carpoolSearch?.carpoolId ?? user.carpoolId,
-      // override with Location data if it exists
-      startCoordLng: carpoolSearch?.homeLocation?.coordLng ?? user.startCoordLng,
-      startCoordLat: carpoolSearch?.homeLocation?.coordLat ?? user.startCoordLat,
-      startStreet: carpoolSearch?.homeLocation?.street ?? user.startStreet,
-      startCity: carpoolSearch?.homeLocation?.city ?? user.startCity,
-      startState: carpoolSearch?.homeLocation?.state ?? user.startState,
-      startAddress: carpoolSearch?.homeLocation?.streetAddress ?? user.startAddress,
-      companyCoordLng: carpoolSearch?.companyLocation?.coordLng ?? user.companyCoordLng,
-      companyCoordLat: carpoolSearch?.companyLocation?.coordLat ?? user.companyCoordLat,
-      companyStreet: carpoolSearch?.companyLocation?.street ?? user.companyStreet,
-      companyCity: carpoolSearch?.companyLocation?.city ?? user.companyCity,
-      companyState: carpoolSearch?.companyLocation?.state ?? user.companyState,
-      companyAddress: carpoolSearch?.companyLocation?.streetAddress ?? user.companyAddress,
+      // CarpoolSearch data
+      role: carpoolSearch?.role ?? Role.VIEWER,
+      status: carpoolSearch?.status ?? Status.ACTIVE,
+      seatAvail: carpoolSearch?.seatsAvail ?? 0,
+      companyName: carpoolSearch?.companyName ?? '',
+      daysWorking: carpoolSearch?.daysWorking ?? '',
+      startTime: carpoolSearch?.startTime ?? null,
+      endTime: carpoolSearch?.endTime ?? null,
+      coopStartDate: carpoolSearch?.startDate ?? null,
+      coopEndDate: carpoolSearch?.endDate ?? null,
+      groupMessage: carpoolSearch?.groupMessage ?? null,
+      carpoolId: carpoolSearch?.carpoolId ?? null,
+      // Location data (homeLocation)
+      startCoordLng: carpoolSearch?.homeLocation?.coordLng ?? 0,
+      startCoordLat: carpoolSearch?.homeLocation?.coordLat ?? 0,
+      startStreet: carpoolSearch?.homeLocation?.street ?? '',
+      startCity: carpoolSearch?.homeLocation?.city ?? '',
+      startState: carpoolSearch?.homeLocation?.state ?? '',
+      startAddress: carpoolSearch?.homeLocation?.streetAddress ?? '',
+      // Location data (companyLocation)
+      companyCoordLng: carpoolSearch?.companyLocation?.coordLng ?? 0,
+      companyCoordLat: carpoolSearch?.companyLocation?.coordLat ?? 0,
+      companyStreet: carpoolSearch?.companyLocation?.street ?? '',
+      companyCity: carpoolSearch?.companyLocation?.city ?? '',
+      companyState: carpoolSearch?.companyLocation?.state ?? '',
+      companyAddress: carpoolSearch?.companyLocation?.streetAddress ?? '',
+      // POI fields (empty defaults for now)
+      companyPOIAddress: '',
+      companyPOICoordLng: 0,
+      companyPOICoordLat: 0,
+      startPOILocation: '',
+      startPOICoordLng: 0,
+      startPOICoordLat: 0,
     };
   }),
 

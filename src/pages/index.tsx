@@ -18,6 +18,7 @@ import type {
   PublicUser,
   EnhancedPublicUser,
   Request,
+  User,
 } from "../utils/types";
 import {
   CarpoolAddress,
@@ -25,7 +26,7 @@ import {
   FiltersState,
   GeoJsonUsers,
 } from "../utils/types";
-import { Role, User } from "@prisma/client";
+import { Role } from "@prisma/client";
 import {
   useGetDirections,
   viewRoute,
