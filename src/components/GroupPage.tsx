@@ -275,12 +275,9 @@ const MobileGroupInfo = ({
     }
   };
 
-  const handleViewCombinedRoute = () => {
+  const handleMobileViewCombinedRoute = () => {
     if (driver) {
       onViewGroupRoute(driver, riders);
-      if (onPreviewRoute) {
-        onPreviewRoute();
-      }
     }
   };
 
@@ -352,7 +349,7 @@ const MobileGroupInfo = ({
       {driver && (
         <div className="sticky bottom-0 bg-white border-t border-gray-200 p-4 -mx-4">
           <button
-            onClick={handleViewCombinedRoute}
+            onClick={handleMobileViewCombinedRoute}
             className="w-full bg-red-700 text-white py-4 px-4 rounded-lg font-semibold hover:bg-red-800 transition-colors flex items-center justify-center space-x-2"
           >
             <svg
