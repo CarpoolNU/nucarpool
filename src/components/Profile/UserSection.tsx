@@ -13,6 +13,7 @@ import {
 import { OnboardingFormInputs } from "../../utils/types";
 import ProfilePicture from "./ProfilePicture";
 import useIsMobile from "../../utils/useIsMobile";
+import { signOut } from "next-auth/react";
 
 interface UserSectionProps {
   register: UseFormRegister<OnboardingFormInputs>;
@@ -34,6 +35,10 @@ const UserSection = ({
 }: UserSectionProps) => {
   const isMobile = useIsMobile();
   const isViewer = watch("role") === Role.VIEWER;
+
+  const logout = () => {
+    signOut();
+  };
 
   return (
     <div className="relative z-10 flex h-full flex-col justify-start">
@@ -208,13 +213,22 @@ const UserSection = ({
         </Note>
       </div>
 
-      <div className="py-8 font-montserrat">
+      <div className="flex flex-col gap-5 py-8 font-montserrat">
         <button
           type="button"
           className="w-full rounded-lg bg-northeastern-red py-3 text-lg text-white hover:bg-red-700"
           onClick={onSubmit}
+          aria-label="Save Changes"
         >
           Save Changes
+        </button>
+        <button
+          type="button"
+          onClick={logout}
+          className="w-full rounded-lg bg-gray-600 py-3 text-lg text-white hover:bg-gray-900"
+          aria-label="Sign Out"
+        >
+          Sign Out
         </button>
       </div>
     </div>
