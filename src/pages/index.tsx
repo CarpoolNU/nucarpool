@@ -246,8 +246,6 @@ const Home: NextPage<any> = () => {
 
   const sidebarRef = useRef<HTMLDivElement>(null);
   const lastScrollTop = useRef<number>(0);
-  // reset internal state when sidebar type changes
-  const [groupPageKey, setGroupPageKey] = useState(0);
 
   const enhancedSentUsers = requests.sent
     .filter((request) => request.toUser !== null)
@@ -1135,7 +1133,6 @@ const Home: NextPage<any> = () => {
                     collapseSidebar={(collapsed) =>
                       setIsSidebarCollapsed(collapsed)
                     }
-                    groupPageKey={groupPageKey}
                   />
                 )}
               </div>
@@ -1184,20 +1181,35 @@ const Home: NextPage<any> = () => {
                     <InactiveBlocker />
                   )}
                 </div>
-                {/* Mobile: show reopen button when sidebar collapsed to bring back My Group */}
-                {isMobile && isSidebarCollapsed && groupPageKey === 0 && (
-                  <button
-                    onClick={() => {
-                      setSidebarType("mygroup");
-                      setIsSidebarCollapsed(false);
-                      setmobileSelectedUserID(null);
-                    }}
-                    className="flex absolute bottom-16 left-1/2 -translate-x-1/2 transform z-30 items-center gap-2 rounded-full bg-red-500/90 px-4 py-2 shadow-md border border-red-300 text-sm font-medium text-white hover:bg-red-500/30 transition-colors"
-                    aria-label="Group Details"
-                  >
-                    <span>Group Details</span>
-                  </button>
-                )}
+                {/* Mobile: show reopen button when sidebar collapsed and user is on My Group page, to bring back My Group */}
+                {isMobile &&
+                  isSidebarCollapsed &&
+                  sidebarType === "mygroup" && (
+                    <button
+                      onClick={() => {
+                        setSidebarType("mygroup");
+                        setIsSidebarCollapsed(false);
+                        setmobileSelectedUserID(null);
+                      }}
+                      className="flex absolute bottom-16 left-1/2 -translate-x-1/2 transform z-30 items-center gap-1 rounded-full bg-white/90 px-4 py-2 shadow-md border border-gray-300 text-sm font-medium hover:bg-white transition-colors"
+                      aria-label="Group Details"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <polyline points="15 18 9 12 15 6"></polyline>
+                      </svg>
+                      <span>Group Details</span>
+                    </button>
+                  )}
                 {isMobile && (
                   <Header
                     data={{

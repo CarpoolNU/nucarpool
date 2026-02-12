@@ -35,7 +35,6 @@ interface SidebarProps {
   handleMobileExpand: (userId?: string) => void;
   onViewGroupRoute?: (driver: PublicUser, riders: PublicUser[]) => void;
   collapseSidebar: (collapsed: boolean) => void;
-  groupPageKey: number;
 }
 
 export const SidebarPage = (props: SidebarProps) => {
@@ -74,7 +73,6 @@ export const SidebarPage = (props: SidebarProps) => {
   } else if (props.sidebarType === "mygroup") {
     return (
       <GroupPage
-        key={props.groupPageKey}
         onClose={() => props.collapseSidebar(true)}
         onViewGroupRoute={props.onViewGroupRoute || (() => {})}
         isMobile={true}
