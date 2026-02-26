@@ -20,14 +20,14 @@ export const clearMarkers = (map?: mapboxgl.Map) => {
     element.remove();
   });
   previousMarkers.length = 0;
-  
+
   // clear text label layers created by the custom label system
   if (map) {
     const layers = map.getStyle().layers;
     if (layers) {
       // find and remove all text layers that match our naming pattern
       layers.forEach((layer) => {
-        if (layer.id.includes('-text-layer')) {
+        if (layer.id.includes("-text-layer")) {
           try {
             if (map.getLayer(layer.id)) {
               map.removeLayer(layer.id);
@@ -259,12 +259,20 @@ export const viewRoute = (props: ViewRouteProps) => {
     }
   }
 
-  // Final validation before fitting bounds
+  // Final validation before fitting bounds - early return if no valid coordinates
   if (
     minLng === undefined ||
     minLat === undefined ||
     maxLng === undefined ||
-    maxLat === undefined ||
+    maxLat === undefined
+  ) {
+    console.warn(
+      "No valid coordinates available for fitBounds - skipping map bounds adjustment",
+    );
+    return;
+  }
+
+  if (
     isNaN(minLng) ||
     isNaN(minLat) ||
     isNaN(maxLng) ||
@@ -370,14 +378,14 @@ export function useGetDirections({
         } else {
           // Try different layer positions - let's find one that works
           let beforeLayerId = "";
-          
+
           // Try to find a good layer to place the route above
           const layerIds = [
-            "road-label",           // Above road labels
-            "waterway-label",       // Above water labels  
-            "natural-label",        // Above natural feature labels
-            "poi-label",            // Above point of interest labels
-            "transit-label",        // Above transit labels
+            "road-label", // Above road labels
+            "waterway-label", // Above water labels
+            "natural-label", // Above natural feature labels
+            "poi-label", // Above point of interest labels
+            "transit-label", // Above transit labels
           ];
 
           // Find the first existing layer to place the route above
@@ -411,7 +419,7 @@ export function useGetDirections({
                 "line-width": 6,
               },
             },
-            beforeLayerId
+            beforeLayerId,
           );
         }
       },

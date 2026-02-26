@@ -17,7 +17,12 @@ import Spinner from "./Spinner";
 import Pusher from "pusher-js";
 import { browserEnv } from "../utils/env/browser";
 import { Message, PublicUser } from "../utils/types";
-import { HiOutlineMap, HiOutlineChatAlt2, HiOutlineUserGroup, HiOutlineUser } from "react-icons/hi";
+import {
+  HiOutlineMap,
+  HiOutlineChatAlt2,
+  HiOutlineUserGroup,
+  HiOutlineUser,
+} from "react-icons/hi";
 
 const HeaderDiv = styled.div`
   display: flex;
@@ -116,7 +121,7 @@ interface HeaderProps {
   onViewGroupRoute?: (driver: PublicUser, riders: PublicUser[]) => void;
 }
 
-export type HeaderOptions = "explore" | "requests";
+export type HeaderOptions = "explore" | "requests" | "mygroup";
 
 const Header = (props: HeaderProps) => {
   const [isLoading, setIsLoading] = useState(false);
@@ -220,7 +225,7 @@ const Header = (props: HeaderProps) => {
     } else {
       // explicit navigation
       setIsLoading(true);
-      await router.push('/');
+      await router.push("/");
       setIsLoading(false);
     }
   };
@@ -231,7 +236,7 @@ const Header = (props: HeaderProps) => {
     // Check if coming from profile
     const comingFromProfile = router.pathname.includes("/profile");
 
-    if (option === "explore" || option === "requests") {
+    if (option === "explore" || option === "requests" || option === "mygroup") {
       setIsLoading(true);
 
       if (comingFromProfile) {
@@ -255,15 +260,6 @@ const Header = (props: HeaderProps) => {
           setCurrentunreadMessagesCount(0);
         }
       }
-    } else if (option === "group") {
-      if (comingFromProfile) {
-        // Navigate to map page with query parameter to show group modal
-        setIsLoading(true);
-        window.location.href = "/?showGroup=true";
-      } else {
-        // Already on map page, just show the modal
-        setDisplayGroup(true);
-      }
     } else if (option === "profile") {
       // Note we're going to profile
       isComingFromProfile.current = false;
@@ -284,16 +280,18 @@ const Header = (props: HeaderProps) => {
       // Clean up URL parameter after showing modal
       const { showGroup: _, ...restQuery } = router.query;
       if (Object.keys(restQuery).length > 0) {
-        router.replace({ pathname: "/", query: restQuery }, undefined, { shallow: true });
+        router.replace({ pathname: "/", query: restQuery }, undefined, {
+          shallow: true,
+        });
       } else {
         router.replace("/", undefined, { shallow: true });
       }
     }
 
-    // Handle tab parameter (explore/requests navigation)
+    // Handle tab parameter (explore/requests/mygroup navigation)
     if (
       tab &&
-      (tab === "explore" || tab === "requests") &&
+      (tab === "explore" || tab === "requests" || tab === "mygroup") &&
       props.data?.setSidebar
     ) {
       props.data.setSidebar(tab as HeaderOptions);
@@ -389,7 +387,7 @@ const Header = (props: HeaderProps) => {
     const currentActiveTab = isProfilePage
       ? "profile"
       : displayGroup
-        ? "group"
+        ? "mygroup"
         : props.data?.sidebarValue || activeNav;
 
     const navItems = [
@@ -405,7 +403,7 @@ const Header = (props: HeaderProps) => {
         badge: unreadMessagesCount !== 0 || currentunreadMessagesCount !== 0,
       },
       {
-        id: "group",
+        id: "mygroup",
         icon: <HiOutlineUserGroup />,
         label: "My Group",
       },
@@ -450,7 +448,9 @@ const Header = (props: HeaderProps) => {
                     : unreadMessagesCount}
                 </span>
               )}
-              <span style={{ fontSize: "12px", fontWeight: "500" }}>{item.label}</span>
+              <span style={{ fontSize: "12px", fontWeight: "500" }}>
+                {item.label}
+              </span>
             </div>
           </MobileNavItem>
         ))}
@@ -480,10 +480,7 @@ const Header = (props: HeaderProps) => {
         {props.signIn ? (
           <SigninLogo>CarpoolNU</SigninLogo>
         ) : (
-          <Logo
-            onClick={() => router.push('/')}
-            style={{ cursor: 'pointer' }}
-          >
+          <Logo onClick={() => router.push("/")} style={{ cursor: "pointer" }}>
             CarpoolNU
           </Logo>
         )}

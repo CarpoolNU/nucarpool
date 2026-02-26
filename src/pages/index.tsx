@@ -198,8 +198,14 @@ const Home: NextPage<any> = () => {
       return {
         ...user,
         isFavorited: favorites.some((favs) => favs.id === user.id),
-        incomingRequest: incomingReq?.fromUser && incomingReq?.toUser ? incomingReq as any : undefined,
-        outgoingRequest: outgoingReq?.fromUser && outgoingReq?.toUser ? outgoingReq as any : undefined,
+        incomingRequest:
+          incomingReq?.fromUser && incomingReq?.toUser
+            ? (incomingReq as any)
+            : undefined,
+        outgoingRequest:
+          outgoingReq?.fromUser && outgoingReq?.toUser
+            ? (outgoingReq as any)
+            : undefined,
       };
     },
     [favorites, requests],
@@ -253,7 +259,6 @@ const Home: NextPage<any> = () => {
 
   const onViewRouteClick = useCallback(
     (user: User, clickedUser: PublicUser) => {
-
       // clear rider start markers from group route when viewing individual routes
       if (mapState) {
         clearRiderStartMarkers(mapState);
@@ -261,12 +266,13 @@ const Home: NextPage<any> = () => {
 
       // add null checks for required objects
       if (!geoJsonUsers || !mapState || !user || !clickedUser) {
-        console.error('Required objects not available for route viewing');
+        console.error("Required objects not available for route viewing");
         return;
       }
 
       // skip parts that might reset state if in request context
-      const isInRequestContext = selectedUserId && selectedUserId === clickedUser.id;
+      const isInRequestContext =
+        selectedUserId && selectedUserId === clickedUser.id;
 
       if (!isInRequestContext) {
         setOtherUser(clickedUser);
@@ -276,21 +282,29 @@ const Home: NextPage<any> = () => {
       if (
         !isValidCoordinates(user.startCoordLng, user.startCoordLat) ||
         !isValidCoordinates(user.companyCoordLng, user.companyCoordLat) ||
-        !isValidCoordinates(clickedUser.startCoordLng, clickedUser.startCoordLat) ||
-        !isValidCoordinates(clickedUser.companyCoordLng, clickedUser.companyCoordLat)
+        !isValidCoordinates(
+          clickedUser.startCoordLng,
+          clickedUser.startCoordLat,
+        ) ||
+        !isValidCoordinates(
+          clickedUser.companyCoordLng,
+          clickedUser.companyCoordLat,
+        )
       ) {
         console.error("Invalid user coordinates for route viewing");
         return;
       }
 
       // add null check for geoJsonUsers.features
-      const isOtherUserInGeoList = geoJsonUsers.features?.some(
-        (f) => f.properties?.id === clickedUser.id,
-      ) ?? false;
+      const isOtherUserInGeoList =
+        geoJsonUsers.features?.some(
+          (f) => f.properties?.id === clickedUser.id,
+        ) ?? false;
 
-      const isPrevOtherUserInGeoList = geoJsonUsers.features?.some(
-        (f) => f.properties?.id === tempOtherUser?.id,
-      ) ?? false;
+      const isPrevOtherUserInGeoList =
+        geoJsonUsers.features?.some(
+          (f) => f.properties?.id === tempOtherUser?.id,
+        ) ?? false;
 
       const shouldRemoveMarker =
         tempOtherUserMarkerActive &&
@@ -318,11 +332,11 @@ const Home: NextPage<any> = () => {
         !isViewerAddressSelected && user.role === "VIEWER"
           ? undefined
           : {
-            startLat: userStartLat,
-            startLng: userStartLng,
-            endLat: userCompanyLat,
-            endLng: userCompanyLng,
-          };
+              startLat: userStartLat,
+              startLng: userStartLng,
+              endLat: userCompanyLat,
+              endLng: userCompanyLng,
+            };
 
       if (user.role !== "VIEWER") {
         updateUserLocation(mapState, userStartLng, userStartLat);
@@ -399,7 +413,11 @@ const Home: NextPage<any> = () => {
           [userCompanyLng, userCompanyLat],
           [clickedUser.companyCoordLng, clickedUser.companyCoordLat],
         ]);
-      } else if (user.role === "DRIVER" || isViewerAddressSelected || !!selectedUserId) {
+      } else if (
+        user.role === "DRIVER" ||
+        isViewerAddressSelected ||
+        !!selectedUserId
+      ) {
         setPoints([
           [userStartLng, userStartLat],
           [clickedUser.startCoordLng, clickedUser.startCoordLat],
@@ -427,204 +445,223 @@ const Home: NextPage<any> = () => {
     ],
   );
 
-  const onViewGroupRoute = useCallback((driver: PublicUser, riders: PublicUser[]) => {
-    if (!mapState || !user) {
-      console.error('Map or user not available for group route viewing');
-      return;
-    }
+  const onViewGroupRoute = useCallback(
+    (driver: PublicUser, riders: PublicUser[]) => {
+      if (!mapState || !user) {
+        console.error("Map or user not available for group route viewing");
+        return;
+      }
 
-    // clear existing routes first
-    clearDirections(mapState);
-    clearMarkers(mapState);
+      // clear existing routes first
+      clearDirections(mapState);
+      clearMarkers(mapState);
 
-    // helper function to calculate straight-line distance
-    const calculateDistance = (coord1: [number, number], coord2: [number, number]): number => {
-      const [lng1, lat1] = coord1;
-      const [lng2, lat2] = coord2;
-      return Math.sqrt(Math.pow(lng2 - lng1, 2) + Math.pow(lat2 - lat1, 2));
-    };
+      // helper function to calculate straight-line distance
+      const calculateDistance = (
+        coord1: [number, number],
+        coord2: [number, number],
+      ): number => {
+        const [lng1, lat1] = coord1;
+        const [lng2, lat2] = coord2;
+        return Math.sqrt(Math.pow(lng2 - lng1, 2) + Math.pow(lat2 - lat1, 2));
+      };
 
-    // create optimized waypoints using constraint-aware nearest neighbor
-    const waypoints: [number, number][] = [
-      [driver.startCoordLng, driver.startCoordLat] // driver start
-    ];
+      // create optimized waypoints using constraint-aware nearest neighbor
+      const waypoints: [number, number][] = [
+        [driver.startCoordLng, driver.startCoordLat], // driver start
+      ];
 
-    let currentLocation: [number, number] = [driver.startCoordLng, driver.startCoordLat];
-    const remainingPickups = new Set(riders.map(rider => rider.id));
-    const completedDropoffs = new Set<string>();
-    const pickedUpRiders = new Set<string>(); // track which riders are in car
+      let currentLocation: [number, number] = [
+        driver.startCoordLng,
+        driver.startCoordLat,
+      ];
+      const remainingPickups = new Set(riders.map((rider) => rider.id));
+      const completedDropoffs = new Set<string>();
+      const pickedUpRiders = new Set<string>(); // track which riders are in car
 
-    // map for quick rider lookup
-    const riderMap = new Map(riders.map(rider => [rider.id, rider]));
+      // map for quick rider lookup
+      const riderMap = new Map(riders.map((rider) => [rider.id, rider]));
 
-    while (remainingPickups.size > 0 || pickedUpRiders.size > 0) {
-      // find all candidate points we can visit next
-      const candidatePoints: Array<{
-        type: 'pickup' | 'dropoff';
-        riderId: string;
-        coordinates: [number, number];
-        distance: number;
-      }> = [];
+      while (remainingPickups.size > 0 || pickedUpRiders.size > 0) {
+        // find all candidate points we can visit next
+        const candidatePoints: Array<{
+          type: "pickup" | "dropoff";
+          riderId: string;
+          coordinates: [number, number];
+          distance: number;
+        }> = [];
 
-      // add all remaining pickups as candidates
-      remainingPickups.forEach(riderId => {
-        const rider = riderMap.get(riderId)!;
-        const distance = calculateDistance(currentLocation, [rider.startCoordLng, rider.startCoordLat]);
-        candidatePoints.push({
-          type: 'pickup',
-          riderId,
-          coordinates: [rider.startCoordLng, rider.startCoordLat],
-          distance
+        // add all remaining pickups as candidates
+        remainingPickups.forEach((riderId) => {
+          const rider = riderMap.get(riderId)!;
+          const distance = calculateDistance(currentLocation, [
+            rider.startCoordLng,
+            rider.startCoordLat,
+          ]);
+          candidatePoints.push({
+            type: "pickup",
+            riderId,
+            coordinates: [rider.startCoordLng, rider.startCoordLat],
+            distance,
+          });
         });
-      });
 
-      // add dropoffs only for riders already picked up
-      pickedUpRiders.forEach(riderId => {
-        const rider = riderMap.get(riderId)!;
-        const distance = calculateDistance(currentLocation, [rider.companyCoordLng, rider.companyCoordLat]);
-        candidatePoints.push({
-          type: 'dropoff',
-          riderId,
-          coordinates: [rider.companyCoordLng, rider.companyCoordLat],
-          distance
+        // add dropoffs only for riders already picked up
+        pickedUpRiders.forEach((riderId) => {
+          const rider = riderMap.get(riderId)!;
+          const distance = calculateDistance(currentLocation, [
+            rider.companyCoordLng,
+            rider.companyCoordLat,
+          ]);
+          candidatePoints.push({
+            type: "dropoff",
+            riderId,
+            coordinates: [rider.companyCoordLng, rider.companyCoordLat],
+            distance,
+          });
         });
-      });
 
-      // sort candidates by distance
-      candidatePoints.sort((a, b) => a.distance - b.distance);
+        // sort candidates by distance
+        candidatePoints.sort((a, b) => a.distance - b.distance);
 
-      // find the closest valid candidate
-      let chosenCandidate = null;
+        // find the closest valid candidate
+        let chosenCandidate = null;
 
-      for (const candidate of candidatePoints) {
-        if (candidate.type === 'dropoff') {
-          // dropoffs always valid if rider is picked up
-          chosenCandidate = candidate;
-          break;
+        for (const candidate of candidatePoints) {
+          if (candidate.type === "dropoff") {
+            // dropoffs always valid if rider is picked up
+            chosenCandidate = candidate;
+            break;
+          } else {
+            chosenCandidate = candidate;
+            break;
+          }
+        }
+
+        if (!chosenCandidate) break;
+
+        // add chosen point to waypoints
+        waypoints.push(chosenCandidate.coordinates);
+        currentLocation = chosenCandidate.coordinates;
+
+        // update state based on chosen point
+        if (chosenCandidate.type === "pickup") {
+          remainingPickups.delete(chosenCandidate.riderId);
+          pickedUpRiders.add(chosenCandidate.riderId);
         } else {
-          chosenCandidate = candidate;
-          break;
+          // dropoff
+          pickedUpRiders.delete(chosenCandidate.riderId);
+          completedDropoffs.add(chosenCandidate.riderId);
         }
       }
 
-      if (!chosenCandidate) break;
+      // end route at driver destination
+      waypoints.push([driver.companyCoordLng, driver.companyCoordLat]);
 
-      // add chosen point to waypoints
-      waypoints.push(chosenCandidate.coordinates);
-      currentLocation = chosenCandidate.coordinates;
+      console.log("Optimized route waypoints:", waypoints);
 
-      // update state based on chosen point
-      if (chosenCandidate.type === 'pickup') {
-        remainingPickups.delete(chosenCandidate.riderId);
-        pickedUpRiders.add(chosenCandidate.riderId);
-      } else { // dropoff
-        pickedUpRiders.delete(chosenCandidate.riderId);
-        completedDropoffs.add(chosenCandidate.riderId);
-      }
-    }
+      // set points for the directions query
+      setPoints(waypoints);
 
-    // end route at driver destination
-    waypoints.push([driver.companyCoordLng, driver.companyCoordLat]);
-
-    console.log('Optimized route waypoints:', waypoints);
-
-    // set points for the directions query
-    setPoints(waypoints);
-
-    // MARKER MANAGEMENT - Show markers for ALL group members
-    if (user.role !== "VIEWER") {
-      updateUserLocation(mapState, user.startCoordLng, user.startCoordLat);
-      updateCompanyLocation(
-        mapState,
-        user.companyCoordLng,
-        user.companyCoordLat,
-        user.role,
-        user.id,
-        user,
-        true,
-      );
-    }
-
-    // driver's markers (if driver is not current user)
-    if (driver.id !== user.id) {
-      const driverName = driver.preferredName || driver.name || "Driver";
-      
-      // driver's start location
-      updateStartLocation(
-        mapState,
-        driver.startCoordLng,
-        driver.startCoordLat,
-        driver.role,
-        driver.id,
-        driver,
-        false,
-        false,
-        `${driverName} Start`
-      );
-
-      // driver's company location
-      updateCompanyLocation(
-        mapState,
-        driver.companyCoordLng,
-        driver.companyCoordLat,
-        driver.role,
-        driver.id,
-        driver,
-        false,
-        false,
-        `${driverName} Dest.`
-      );
-    }
-
-    // each rider's markers (if rider is not current user)
-    riders.forEach((rider, index) => {
-      if (rider.id !== user.id) {
-        const riderName = rider.preferredName || rider.name || `Rider ${index + 1}`;
-        
-        // rider's start location
-        updateStartLocation(
-          mapState,
-          rider.startCoordLng,
-          rider.startCoordLat,
-          rider.role,
-          rider.id,
-          rider,
-          false,
-          false,
-          `${riderName} Start`
-        );
-
-        // rider's company location
+      // MARKER MANAGEMENT - Show markers for ALL group members
+      if (user.role !== "VIEWER") {
+        updateUserLocation(mapState, user.startCoordLng, user.startCoordLat);
         updateCompanyLocation(
           mapState,
-          rider.companyCoordLng,
-          rider.companyCoordLat,
-          rider.role,
-          rider.id,
-          rider,
-          false,
-          false,
-          `${riderName} Dest.`
+          user.companyCoordLng,
+          user.companyCoordLat,
+          user.role,
+          user.id,
+          user,
+          true,
         );
       }
-    });
 
-    // fit map to show all group members' locations
-    const allCoords = [
-      [driver.startCoordLng, driver.startCoordLat],
-      [driver.companyCoordLng, driver.companyCoordLat],
-      ...riders.map(rider => [rider.startCoordLng, rider.startCoordLat]),
-      ...riders.map(rider => [rider.companyCoordLng, rider.companyCoordLat]),
-    ];
+      // driver's markers (if driver is not current user)
+      if (driver.id !== user.id) {
+        const driverName = driver.preferredName || driver.name || "Driver";
 
-    const bounds = new mapboxgl.LngLatBounds();
-    allCoords.forEach(coord => {
-      bounds.extend([coord[0], coord[1]]);
-    });
+        // driver's start location
+        updateStartLocation(
+          mapState,
+          driver.startCoordLng,
+          driver.startCoordLat,
+          driver.role,
+          driver.id,
+          driver,
+          false,
+          false,
+          `${driverName} Start`,
+        );
 
-    mapState.fitBounds(bounds, { padding: 50 });
+        // driver's company location
+        updateCompanyLocation(
+          mapState,
+          driver.companyCoordLng,
+          driver.companyCoordLat,
+          driver.role,
+          driver.id,
+          driver,
+          false,
+          false,
+          `${driverName} Dest.`,
+        );
+      }
 
-  }, [mapState, user]);
+      // each rider's markers (if rider is not current user)
+      riders.forEach((rider, index) => {
+        if (rider.id !== user.id) {
+          const riderName =
+            rider.preferredName || rider.name || `Rider ${index + 1}`;
+
+          // rider's start location
+          updateStartLocation(
+            mapState,
+            rider.startCoordLng,
+            rider.startCoordLat,
+            rider.role,
+            rider.id,
+            rider,
+            false,
+            false,
+            `${riderName} Start`,
+          );
+
+          // rider's company location
+          updateCompanyLocation(
+            mapState,
+            rider.companyCoordLng,
+            rider.companyCoordLat,
+            rider.role,
+            rider.id,
+            rider,
+            false,
+            false,
+            `${riderName} Dest.`,
+          );
+        }
+      });
+
+      // fit map to show all group members' locations
+      const allCoords = [
+        [driver.startCoordLng, driver.startCoordLat],
+        [driver.companyCoordLng, driver.companyCoordLat],
+        ...riders.map((rider) => [rider.startCoordLng, rider.startCoordLat]),
+        ...riders.map((rider) => [
+          rider.companyCoordLng,
+          rider.companyCoordLat,
+        ]),
+      ];
+
+      const bounds = new mapboxgl.LngLatBounds();
+      allCoords.forEach((coord) => {
+        bounds.extend([coord[0], coord[1]]);
+      });
+
+      mapState.fitBounds(bounds, { padding: 50 });
+    },
+    [mapState, user],
+  );
 
   const handleSidebarToggle = () => {
     setIsSidebarCollapsed(!isSidebarCollapsed);
@@ -766,12 +803,12 @@ const Home: NextPage<any> = () => {
     };
 
     // resize when window size changes
-    window.addEventListener('resize', handleResize);
+    window.addEventListener("resize", handleResize);
 
     handleResize();
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      window.removeEventListener("resize", handleResize);
     };
   }, [mapState, isMobile]);
 
@@ -1019,17 +1056,21 @@ const Home: NextPage<any> = () => {
             <div
               className={`flex h-[91.5%] overflow-hidden ${isMobile ? "mt-5" : ""}`}
             >
-              {isMobile && (sidebarType === "explore" || sidebarType === "requests") && mobileSelectedUserID === null && (
-                <div
-                  onClick={handleSidebarToggle}
-                  className={`absolute left-1/2 z-30 -translate-x-1/2 transform cursor-pointer transition-all duration-300 ${
-                    isSidebarCollapsed ? "bottom-16" : "bottom-[calc(100%-6rem)]"
-                  }`}
-                  style={{ padding: '12px 0' }}
-                >
-                  <div className="h-2 w-20 rounded-full bg-gray-500 shadow-sm transition-colors hover:bg-gray-600"></div>
-                </div>
-              )}
+              {isMobile &&
+                (sidebarType === "explore" || sidebarType === "requests") &&
+                mobileSelectedUserID === null && (
+                  <div
+                    onClick={handleSidebarToggle}
+                    className={`absolute left-1/2 z-30 -translate-x-1/2 transform cursor-pointer transition-all duration-300 ${
+                      isSidebarCollapsed
+                        ? "bottom-16"
+                        : "bottom-[calc(100%-6rem)]"
+                    }`}
+                    style={{ padding: "12px 0" }}
+                  >
+                    <div className="h-2 w-20 rounded-full bg-gray-500 shadow-sm transition-colors hover:bg-gray-600"></div>
+                  </div>
+                )}
               <div
                 ref={sidebarRef}
                 className={`${
@@ -1038,8 +1079,8 @@ const Home: NextPage<any> = () => {
                         mobileSelectedUserID !== null
                           ? "bottom-12 h-[320px]"
                           : isSidebarCollapsed
-                          ? "bottom-12 h-0 opacity-0 pointer-events-none"
-                          : "bottom-12 h-[calc(100%-8.5rem)]"
+                            ? "bottom-12 h-0 opacity-0 pointer-events-none"
+                            : "bottom-12 h-[calc(100%-8.5rem)]"
                       }`
                     : "relative w-[25rem]"
                 }`}
@@ -1088,6 +1129,10 @@ const Home: NextPage<any> = () => {
                     selectedUser={selectedUser}
                     mobileSelectedUser={mobileSelectedUserID}
                     handleMobileExpand={handleMobileSidebarExpand}
+                    onViewGroupRoute={onViewGroupRoute}
+                    collapseSidebar={(collapsed) =>
+                      setIsSidebarCollapsed(collapsed)
+                    }
                   />
                 )}
               </div>
@@ -1136,6 +1181,35 @@ const Home: NextPage<any> = () => {
                     <InactiveBlocker />
                   )}
                 </div>
+                {/* Mobile: show reopen button when sidebar collapsed and user is on My Group page, to bring back My Group */}
+                {isMobile &&
+                  isSidebarCollapsed &&
+                  sidebarType === "mygroup" && (
+                    <button
+                      onClick={() => {
+                        setSidebarType("mygroup");
+                        setIsSidebarCollapsed(false);
+                        setmobileSelectedUserID(null);
+                      }}
+                      className="flex absolute bottom-16 left-1/2 -translate-x-1/2 transform z-30 items-center gap-1 rounded-full bg-white/90 px-4 py-2 shadow-md border border-gray-300 text-sm font-medium hover:bg-white transition-colors"
+                      aria-label="Group Details"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <polyline points="15 18 9 12 15 6"></polyline>
+                      </svg>
+                      <span>Group Details</span>
+                    </button>
+                  )}
                 {isMobile && (
                   <Header
                     data={{
