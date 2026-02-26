@@ -124,17 +124,34 @@ interface GroupMemberCardProps {
 export const GroupMemberCard = (props: GroupMemberCardProps) => {
   return (
     <div className="flex items-center py-3">
-      <div className="mx-2 flex-1">
-        <div className="flex flex-row">
+      {/* Avatar */}
+      <div className="flex-shrink-0 mx-2">
+        <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
+          <span className="text-gray-600 font-medium text-lg">
+            {props.user.preferredName.charAt(0).toUpperCase()}
+          </span>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 mx-2">
+        <div className="flex flex-row gap-2">
           <h1 className="text-xl font-bold">{props.user.preferredName}</h1>
-          <p className="text-xl">
-            {"\u00A0| " +
-              (props.user.role === Role.DRIVER ? "Driver" : "Rider")}
+          <p
+            className={`text-m ${
+              props.user.role === Role.DRIVER
+                ? "bg-blue-100 text-blue-800 rounded-md px-1"
+                : "bg-green-100 text-green-800 rounded-md px-1"
+            }`}
+          >
+            {/* {"\u00A0| "} */}
+            {props.user.role === Role.DRIVER ? "Driver" : "Rider"}
           </p>
         </div>
         <p className="text-sm">{props.user.email}</p>
-        <div className="flex-grow"></div>
       </div>
+
+      {/* Button */}
       {props.buttonText && props.buttonFunc && (
         <button
           className="mx-2 h-full w-[150px] rounded-md bg-red-700 text-xs sm:text-sm md:text-base text-white"

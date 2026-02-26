@@ -92,7 +92,7 @@ export const GroupPage = (props: GroupPageProps) => {
     <Dialog open={isOpen} onClose={onClose} className="relative z-50">
       <div className="fixed inset-0 backdrop-blur-sm" aria-hidden="true">
         <div className="fixed inset-0 flex items-center justify-center p-4">
-          <Dialog.Panel className="flex flex-col content-center justify-center gap-4 overflow-hidden bg-white shadow-md h-4/6 w-4/6 rounded-md py-9">
+          <Dialog.Panel className="flex flex-col content-center justify-center gap-1 overflow-hidden bg-white shadow-lg h-4/6 w-4/6 rounded-md py-9">
             <div className="relative">
               <Dialog.Title className="text-center font-bold text-3xl">
                 My Group
@@ -771,9 +771,7 @@ const GroupInfo = ({
         </div>
       ) : (
         <div className="flex flex-col py-1 flex-shrink-0">
-          <div className="text-center mb-2">
-            Carpool Information from Driver
-          </div>
+          <div className="text-center mb-2">Driver Message</div>
           <p className="flex-1 justify-center rounded-md border px-3 py-2 text-center text-sm shadow-sm">
             {groupMessage != ""
               ? groupMessage
@@ -794,8 +792,21 @@ const GroupInfo = ({
           <div className="flex flex-col items-center">
             <button
               onClick={handleViewCombinedRoute}
-              className="w-1/2 rounded-md bg-northeastern-red py-3 px-4 text-white font-medium hover:bg-red-700 transition-colors"
+              className="flex flex-row items-center gap-1 justify-center w-1/2 rounded-md bg-northeastern-red py-3 px-4 text-white font-medium hover:bg-red-700 transition-colors"
             >
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 4m0 13V4m-6 3l6-3"
+                />
+              </svg>
               Preview Group Route
             </button>
             <p className="mt-2 text-xs text-gray-500 text-center max-w-xs mx-auto">
