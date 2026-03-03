@@ -63,8 +63,8 @@ export const userRouter = router({
       role: carpoolSearch?.role ?? Role.VIEWER,
       status: carpoolSearch?.status ?? Status.ACTIVE,
       seatAvail: carpoolSearch?.seatsAvail ?? 0,
-      companyName: carpoolSearch?.companyName ?? '',
-      daysWorking: carpoolSearch?.daysWorking ?? '',
+      companyName: carpoolSearch?.companyName ?? "",
+      daysWorking: carpoolSearch?.daysWorking ?? "",
       startTime: carpoolSearch?.startTime ?? null,
       endTime: carpoolSearch?.endTime ?? null,
       coopStartDate: carpoolSearch?.startDate ?? null,
@@ -74,22 +74,22 @@ export const userRouter = router({
       // Location data (homeLocation)
       startCoordLng: carpoolSearch?.homeLocation?.coordLng ?? 0,
       startCoordLat: carpoolSearch?.homeLocation?.coordLat ?? 0,
-      startStreet: carpoolSearch?.homeLocation?.street ?? '',
-      startCity: carpoolSearch?.homeLocation?.city ?? '',
-      startState: carpoolSearch?.homeLocation?.state ?? '',
-      startAddress: carpoolSearch?.homeLocation?.streetAddress ?? '',
+      startStreet: carpoolSearch?.homeLocation?.street ?? "",
+      startCity: carpoolSearch?.homeLocation?.city ?? "",
+      startState: carpoolSearch?.homeLocation?.state ?? "",
+      startAddress: carpoolSearch?.homeLocation?.streetAddress ?? "",
       // Location data (companyLocation)
       companyCoordLng: carpoolSearch?.companyLocation?.coordLng ?? 0,
       companyCoordLat: carpoolSearch?.companyLocation?.coordLat ?? 0,
-      companyStreet: carpoolSearch?.companyLocation?.street ?? '',
-      companyCity: carpoolSearch?.companyLocation?.city ?? '',
-      companyState: carpoolSearch?.companyLocation?.state ?? '',
-      companyAddress: carpoolSearch?.companyLocation?.streetAddress ?? '',
+      companyStreet: carpoolSearch?.companyLocation?.street ?? "",
+      companyCity: carpoolSearch?.companyLocation?.city ?? "",
+      companyState: carpoolSearch?.companyLocation?.state ?? "",
+      companyAddress: carpoolSearch?.companyLocation?.streetAddress ?? "",
       // POI fields (empty defaults for now)
-      companyPOIAddress: '',
+      companyPOIAddress: "",
       companyPOICoordLng: 0,
       companyPOICoordLat: 0,
-      startPOILocation: '',
+      startPOILocation: "",
       startPOICoordLng: 0,
       startPOICoordLat: 0,
     };
@@ -289,6 +289,26 @@ export const userRouter = router({
         }
       }
     }),
+
+  completeTutorial: protectedRouter.mutation(async ({ ctx }) => {
+    const userId = ctx.session.user?.id;
+
+    if (!userId) {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "User not authenticated",
+      });
+    }
+
+    const updatedUser = await ctx.prisma.user.update({
+      where: { id: userId },
+      data: {
+        tutorialCompleted: true,
+      },
+    });
+
+    return updatedUser;
+  }),
 
   // merging secondary user routes
   favorites: favoritesRouter,
