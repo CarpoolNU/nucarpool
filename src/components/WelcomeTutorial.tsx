@@ -43,6 +43,10 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
     setCurrentStep(1);
   };
 
+  const handleNextStep = () => {
+    setCurrentStep((prev) => prev + 1);
+  };
+
   const handleSkip = () => {
     onComplete?.();
   };
@@ -76,7 +80,7 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
           </h1>
 
           <p className="mb-8 text-gray-600 leading-relaxed">
-            Let's take a quick tour to help you get started.
+            Let&apos;s take a quick tour to help you get started.
           </p>
 
           {/* Action buttons */}
@@ -106,7 +110,9 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
   };
 
   const renderSidebarStep = () => (
-    <div className="fixed left-[425px] top-1/2 transform -translate-y-1/2 z-50 w-full max-w-md rounded-2xl bg-[#D5706A] p-8 shadow-2xl">
+    <div
+      className={`fixed ${currentStep === 1 ? "left-[425px]" : currentStep === 2 ? "left-1/2 transform -translate-x-1/2" : "right-[50px]"} ${currentStep === 2 || currentStep === 3 ? "top-1/4" : "top-1/2"} transform -translate-y-1/2 z-50 w-full max-w-md rounded-2xl bg-[#D5706A] p-8 shadow-2xl`}
+    >
       {/* Close button */}
       <button
         onClick={handleSkip}
@@ -120,12 +126,18 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
       <div className="text-left">
         {/* Title */}
         <h2 className="mb-4 text-2xl font-bold text-white">
-          These are drivers
+          {currentStep === 1 && "These are drivers"}
+          {currentStep === 2 && "This is the map"}
+          {currentStep === 3 && "This is the navigation bar"}
         </h2>
 
         <p className="mb-8 text-white leading-relaxed">
-          The sidebar on the left is your main tool for finding carpool matches
-          and connecting with other users.
+          {currentStep === 1 &&
+            "Browse through available drivers in your area. You can view their profiles, ratings, and routes."}
+          {currentStep === 2 &&
+            "Explore the map to find the best routes and nearby drivers."}
+          {currentStep === 3 &&
+            "Use the navigation bar to access different features and settings."}
         </p>
 
         {/* Action buttons */}
@@ -135,11 +147,11 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
             disabled={isLoading}
             className="w-full rounded-lg px-6 py-3 font-medium text-white text-left transition-colors"
           >
-            Done? Click here to skip.
+            Done? <u>Click here to skip.</u>
           </button>
 
           <button
-            onClick={handleComplete}
+            onClick={handleNextStep}
             disabled={isLoading}
             className="flex w-full items-center justify-center rounded-lg bg-northeastern-red px-6 py-3 font-medium text-white transition-colors hover:bg-northeastern-red-dark disabled:opacity-50"
           >
