@@ -9,6 +9,7 @@ import {
   FaMapMarkerAlt,
   FaSearch,
 } from "react-icons/fa";
+import { useRouter } from "next/router";
 
 interface WelcomeTutorialProps {
   onComplete?: () => void;
@@ -17,7 +18,8 @@ interface WelcomeTutorialProps {
 const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
   const { data: session } = useSession();
   const [isLoading, setIsLoading] = useState(false);
-  const [currentStep, setCurrentStep] = useState(0); // 0: welcome, 1: sidebar explanation
+  const [currentStep, setCurrentStep] = useState(0); // 0: Welcome, 1: Sidebar explanation 2: Map 3: Navigation
+  const router = useRouter();
 
   const utils = trpc.useContext();
 
@@ -44,7 +46,10 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
   };
 
   const handleNextStep = () => {
-    setCurrentStep((prev) => prev + 1);
+    // If we're on the last step on the home page, proceed to profile steps
+    currentStep < 3
+      ? setCurrentStep((prev) => prev + 1)
+      : router.push("/profile");
   };
 
   const handleSkip = () => {
@@ -109,7 +114,7 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
     );
   };
 
-  const renderSidebarStep = () => (
+  const renderHomeTutorialSteps = () => (
     <div
       className={`fixed ${currentStep === 1 ? "left-[425px]" : currentStep === 2 ? "left-1/2 transform -translate-x-1/2" : "right-[50px]"} ${currentStep === 2 || currentStep === 3 ? "top-1/4" : "top-1/2"} transform -translate-y-1/2 z-50 w-full max-w-md rounded-2xl bg-[#D5706A] p-8 shadow-2xl`}
     >
@@ -211,6 +216,8 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
     </div>
   );
 
+  const renderProfileSteps = () => <div> test </div>;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Blurred background overlay */}
@@ -220,7 +227,11 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
       />
 
       {/* Tutorial content based on current step */}
-      {currentStep === 0 ? renderWelcomeStep() : renderSidebarStep()}
+      {currentStep === 0
+        ? renderWelcomeStep()
+        : currentStep <= 3
+          ? renderHomeTutorialSteps()
+          : renderProfileSteps()}
     </div>
   );
 };
