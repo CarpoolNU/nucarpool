@@ -65,7 +65,7 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
         {/* Close button */}
         <button
           onClick={handleSkip}
-          className="absolute right-4 top-4 rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+          className="absolute right-4 top-4 rounded-full p-2 text-gray-300 hover:bg-gray-100 hover:text-gray-700"
           disabled={isLoading}
         >
           <FaTimes size={16} />
@@ -113,10 +113,46 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
     <div
       className={`fixed ${currentStep === 1 ? "left-[425px]" : currentStep === 2 ? "left-1/2 transform -translate-x-1/2" : "right-[50px]"} ${currentStep === 2 || currentStep === 3 ? "top-1/4" : "top-1/2"} transform -translate-y-1/2 z-50 w-full max-w-md rounded-2xl bg-[#D5706A] p-8 shadow-2xl`}
     >
+      {/* Triangle pointer */}
+      {(currentStep === 1 || currentStep === 2 || currentStep === 3) && (
+        <div
+          className={`absolute ${currentStep === 1 ? "left-0 top-1/2 transform -translate-y-1/2 -translate-x-full" : currentStep === 2 ? "left-1/2 bottom-0 transform -translate-x-1/2 translate-y-full" : currentStep === 3 ? "left-1/2 top-0 transform -translate-x-1/2 -translate-y-full" : "right-0 top-1/2 transform -translate-y-1/2 translate-x-full"}`}
+        >
+          <div
+            className="w-0 h-0"
+            style={
+              currentStep === 1
+                ? {
+                    borderTop: "12px solid transparent",
+                    borderBottom: "12px solid transparent",
+                    borderRight: "12px solid #D5706A",
+                  }
+                : currentStep === 2
+                  ? {
+                      borderLeft: "12px solid transparent",
+                      borderRight: "12px solid transparent",
+                      borderTop: "12px solid #D5706A",
+                    }
+                  : currentStep === 3
+                    ? {
+                        borderLeft: "12px solid transparent",
+                        borderRight: "12px solid transparent",
+                        borderBottom: "12px solid #D5706A",
+                      }
+                    : {
+                        borderTop: "12px solid transparent",
+                        borderBottom: "12px solid transparent",
+                        borderLeft: "12px solid #D5706A",
+                      }
+            }
+          />
+        </div>
+      )}
+
       {/* Close button */}
       <button
         onClick={handleSkip}
-        className="absolute right-4 top-4 rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+        className="absolute right-4 top-4 rounded-full p-2 text-gray-300 hover:bg-gray-100 hover:text-gray-700"
         disabled={isLoading}
       >
         <FaTimes size={16} />
@@ -131,7 +167,7 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
           {currentStep === 3 && "This is the navigation bar"}
         </h2>
 
-        {/* Thin horizontal line */}
+        {/* Thin horizontal line to divide text*/}
         <div className="w-full h-0.5 bg-gray-300 mb-6"></div>
 
         <p className="mb-8 font-montserrat text-white leading-relaxed">
