@@ -72,14 +72,14 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
         </button>
 
         {/* Content */}
-        <div className="text-center">
+        <div className="font-montserrat text-center">
           {/* Welcome message */}
           <h1 className="mb-4 text-2xl font-bold text-gray-800">
             Welcome to Carpool, <br></br>
             {session.user.name.split(" ")[0]}!
           </h1>
 
-          <p className="mb-8 text-gray-600 leading-relaxed">
+          <p className="mb-8 font-montserrat text-gray-600 leading-relaxed">
             Let&apos;s take a quick tour to help you get started.
           </p>
 
@@ -88,7 +88,7 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
             <button
               onClick={handleSkip}
               disabled={isLoading}
-              className="w-full rounded-lg border border-gray-300 px-6 py-3 font-medium text-gray-700 transition-colors hover:bg-gray-50"
+              className="w-full rounded-lg border border-gray-300 px-6 py-3 font-montserrat font-medium text-gray-700 transition-colors hover:bg-gray-50"
             >
               Skip for now
             </button>
@@ -96,7 +96,7 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
             <button
               onClick={handleStartTutorial}
               disabled={isLoading}
-              className="flex w-full items-center justify-center rounded-lg bg-northeastern-red px-6 py-3 font-medium text-white transition-colors hover:bg-northeastern-red-dark disabled:opacity-50"
+              className="flex w-full items-center justify-center rounded-lg bg-northeastern-red px-6 py-3 font-montserrat font-medium text-white transition-colors hover:bg-northeastern-red-dark disabled:opacity-50"
             >
               <div className="flex items-center">
                 Show Me Around
@@ -125,13 +125,16 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
       {/* Content */}
       <div className="text-left">
         {/* Title */}
-        <h2 className="mb-4 text-2xl font-bold text-white">
+        <h2 className="mb-4 font-montserrat text-2xl font-bold text-white">
           {currentStep === 1 && "These are drivers"}
           {currentStep === 2 && "This is the map"}
           {currentStep === 3 && "This is the navigation bar"}
         </h2>
 
-        <p className="mb-8 text-white leading-relaxed">
+        {/* Thin horizontal line */}
+        <div className="w-full h-0.5 bg-gray-300 mb-6"></div>
+
+        <p className="mb-8 font-montserrat text-white leading-relaxed">
           {currentStep === 1 &&
             "Browse through available drivers in your area. You can view their profiles, ratings, and routes."}
           {currentStep === 2 &&
@@ -141,11 +144,11 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
         </p>
 
         {/* Action buttons */}
-        <div className="flex flex-row space-x-3">
+        <div className="flex flex-row space-x-3 justify-between">
           <button
             onClick={handleSkip}
             disabled={isLoading}
-            className="w-full rounded-lg px-6 py-3 font-medium text-white text-left transition-colors"
+            className="flex-shrink-0 rounded-lg px-3 py-2 font-montserrat font-medium text-white text-left transition-colors whitespace-nowrap"
           >
             Done? <u>Click here to skip.</u>
           </button>
@@ -153,7 +156,7 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
           <button
             onClick={handleNextStep}
             disabled={isLoading}
-            className="flex w-full items-center justify-center rounded-lg bg-northeastern-red px-6 py-3 font-medium text-white transition-colors hover:bg-northeastern-red-dark disabled:opacity-50"
+            className="flex items-center justify-center rounded-lg bg-[#B35C56] px-4 py-2 font-montserrat font-medium text-white transition-colors hover:bg-[#A14B4B] disabled:opacity-50 whitespace-nowrap"
           >
             {isLoading ? (
               <div className="flex items-center">
