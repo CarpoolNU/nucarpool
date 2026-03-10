@@ -148,10 +148,13 @@ const Home: NextPage<any> = () => {
   // Tutorial logic: Show tutorial if user is onboarded but hasn't completed tutorial
   useEffect(() => {
     if (session?.user && user) {
-      const shouldShowTutorial = session.user.isOnboarded;
-      //commented out for testing
-      //&& !session.user.tutorialCompleted;
-      setShowTutorial(shouldShowTutorial);
+      const shouldShowTutorial =
+        session.user.isOnboarded && !session.user.tutorialCompleted;
+
+      // Force show for testing - remove this line when done testing
+      const forceShowTutorial = false;
+
+      setShowTutorial(shouldShowTutorial || forceShowTutorial);
     }
   }, [session, user]);
 
