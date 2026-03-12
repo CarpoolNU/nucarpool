@@ -152,7 +152,7 @@ const Home: NextPage<any> = () => {
         session.user.isOnboarded && !session.user.tutorialCompleted;
 
       // Force show for testing - remove this line when done testing
-      const forceShowTutorial = false;
+      const forceShowTutorial = true;
 
       setShowTutorial(shouldShowTutorial || forceShowTutorial);
     }

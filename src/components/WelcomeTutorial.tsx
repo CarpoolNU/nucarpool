@@ -48,6 +48,7 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
     if (!session?.user?.name) return;
 
     const driverObj = driver({
+      popoverClass: "welcome-tutorial-popover",
       showProgress: true,
       allowClose: true,
       overlayColor: "rgba(0, 0, 0, 0.4)",
