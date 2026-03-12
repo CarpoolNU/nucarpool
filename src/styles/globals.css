@@ -91,6 +91,10 @@ input[type="month"]::-webkit-calendar-picker-indicator {
   transform: translateY(-1px);
 }
 
+.welcome-tutorial-popover .driver-popover-close-btn {
+  color: white !important;
+}
+
 .welcome-tutorial-popover .driver-popover-close-btn:hover {
   color: gray !important;
 }

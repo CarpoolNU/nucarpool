@@ -25,7 +25,7 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
       await update();
       setIsCompleting(false); // Reset completion flag
       onComplete?.();
-      toast.success("Welcome to NU Carpool!");
+      toast.success("Tutorial completed!");
     },
     onError: (error) => {
       console.error("Error completing tutorial:", error);
@@ -58,7 +58,7 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
             title: `Welcome to Carpool, ${session.user.name.split(" ")[0]}!`,
             description:
               "Let's take a quick tour to help you get started with NU Carpool.",
-            showButtons: ["next"],
+            showButtons: ["next", "close"],
             nextBtnText: "Show Me Around",
           },
         },
