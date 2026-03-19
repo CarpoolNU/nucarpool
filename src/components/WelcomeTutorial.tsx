@@ -16,7 +16,8 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
   const { data: session, update } = useSession();
   const router = useRouter();
   const [isCompleting, setIsCompleting] = useState(false);
-  const [initialIsMobile] = useState(useIsMobile());
+  // Use the exact same mobile detection as the main page
+  const isMobile = useIsMobile();
 
   const utils = trpc.useContext();
 
@@ -49,170 +50,169 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
   useEffect(() => {
     if (!session?.user?.name) return;
 
-    const driverObj = driver({
-      popoverClass: "welcome-tutorial-popover",
-      showProgress: true,
-      allowClose: true,
-      overlayColor: "rgba(0, 0, 0, 0.4)",
-      steps: [
-        {
-          popover: {
-            title: `Welcome to Carpool, ${session.user.name.split(" ")[0]}!`,
-            description:
-              "Let's take a quick tour to help you get started with NU Carpool.",
-            showButtons: ["next", "close"],
-            nextBtnText: "Show Me Around",
-          },
-        },
-        {
-          element:
-            '.z-10.flex.h-full.flex-shrink-0.flex-col.bg-white.text-left, [data-testid="explore-sidebar"]',
-          popover: {
-            title: "These are drivers",
-            description:
-              "Browse through available drivers in your area. You can view their profiles, ratings, and routes.",
-            side: "right",
-            align: "start",
-          },
-        },
-        {
-          element: "#map",
-          popover: {
-            title: "This is the map",
-            description:
-              "Explore the map to find the best routes and nearby drivers.",
-            side: "top",
-            align: "center",
-          },
-        },
-        {
-          element: '.pr-8, [data-testid="navigation"]',
-          popover: {
-            title: "This is the navigation bar",
-            description:
-              "Navigate through your requests, group details, and profile.",
-            side: "bottom",
-            align: "center",
-          },
-        },
-        {
-          popover: {
-            title: "You're all set!",
-            description:
-              "Enjoy using NU Carpool to find or offer rides with your fellow students.",
-            showButtons: ["close"],
-          },
-        },
-      ],
-      onCloseClick: () => {
-        handleComplete();
-        return true; // Allow close
-      },
-      // Handle normal tour completion
-      onDestroyed: () => {
-        handleComplete();
-      },
-      // Handle early exit with confirmation
-      onDestroyStarted: () => {
-        if (
-          driverObj.hasNextStep() &&
-          !confirm("Are you sure you want to skip the tour?")
-        ) {
-          return false; // Prevent destruction
-        }
-        driverObj.destroy(); // Ensure all instances are destroyed
-        return true; // Allow destruction
-      },
-    });
+    let driverInstance: any;
 
-    const driverMobileObj = driver({
-      popoverClass: "welcome-tutorial-popover",
-      showProgress: true,
-      allowClose: true,
-      overlayColor: "rgba(0, 0, 0, 0.4)",
-      steps: [
-        {
-          popover: {
-            title: `Welcome to Carpool, ${session.user.name.split(" ")[0]}!`,
-            description:
-              "Let's take a quick tour to help you get started with NU Carpool.",
-            showButtons: ["next", "close"],
-            nextBtnText: "Show Me Around",
+    if (!isMobile) {
+      // Desktop driver configuration
+      driverInstance = driver({
+        popoverClass: "welcome-tutorial-popover",
+        showProgress: true,
+        allowClose: true,
+        overlayColor: "rgba(0, 0, 0, 0.4)",
+        steps: [
+          {
+            popover: {
+              title: `Welcome to Carpool, ${session.user.name.split(" ")[0]}!`,
+              description:
+                "Let's take a quick tour to help you get started with NU Carpool.",
+              showButtons: ["next", "close"],
+              nextBtnText: "Show Me Around",
+            },
           },
-        },
-        {
-          element: '[data-testid="explore-sidebar"]',
-          popover: {
-            title: "These are drivers",
-            description:
-              "Browse through available drivers in your area. You can view their profiles, ratings, and routes.",
-            side: "top",
-            align: "center",
+          {
+            element: '[data-testid="explore-sidebar"]',
+            popover: {
+              title: "These are drivers",
+              description:
+                "Browse through available drivers in your area. You can view their profiles, ratings, and routes.",
+              side: "right",
+              align: "start",
+            },
           },
-        },
-        {
-          element: "#map",
-          popover: {
-            title: "This is the map",
-            description:
-              "Explore the map to find the best routes and nearby drivers.",
-            side: "top",
-            align: "center",
+          {
+            element: "#map",
+            popover: {
+              title: "This is the map",
+              description:
+                "Explore the map to find the best routes and nearby drivers.",
+              side: "top",
+              align: "center",
+            },
           },
-        },
-        {
-          element: '[data-testid="navigation"]',
-          popover: {
-            title: "This is the navigation bar",
-            description:
-              "Navigate through your requests, group details, and profile.",
-            side: "top",
-            align: "center",
+          {
+            element: '[data-testid="navigation-desktop"]',
+            popover: {
+              title: "This is the navigation bar",
+              description:
+                "Navigate through your requests, group details, and profile.",
+              side: "bottom",
+              align: "center",
+            },
           },
-        },
-        {
-          popover: {
-            title: "You're all set!",
-            description:
-              "Enjoy using NU Carpool to find or offer rides with your fellow students.",
-            showButtons: ["close"],
+          {
+            popover: {
+              title: "You're all set!",
+              description:
+                "Enjoy using NU Carpool to find or offer rides with your fellow students.",
+              showButtons: ["close"],
+            },
           },
+        ],
+        onCloseClick: () => {
+          handleComplete();
+          return true; // Allow close
         },
-      ],
-      onCloseClick: () => {
-        handleComplete();
-        return true; // Allow close
-      },
-      // Handle normal tour completion
-      onDestroyed: () => {
-        handleComplete();
-      },
-      // Handle early exit with confirmation
-      onDestroyStarted: () => {
-        if (
-          driverObj.hasNextStep() &&
-          !confirm("Are you sure you want to skip the tour?")
-        ) {
-          return false; // Prevent destruction
-        }
-        driverObj.destroy(); // Ensure all instances are destroyed
-        driverMobileObj.destroy(); // Ensure all instances are destroyed
-        return true; // Allow destruction
-      },
-    });
-
-    // Start the tour
-    if (!initialIsMobile) {
-      driverObj.drive();
+        // Handle normal tour completion
+        onDestroyed: () => {
+          handleComplete();
+        },
+        // Handle early exit with confirmation
+        onDestroyStarted: () => {
+          if (
+            driverInstance.hasNextStep() &&
+            !confirm("Are you sure you want to skip the tour?")
+          ) {
+            return false; // Prevent destruction
+          }
+          driverInstance.destroy(); // Ensure all instances are destroyed
+          return true; // Allow destruction
+        },
+      });
     } else {
-      driverMobileObj.drive();
+      // Mobile driver configuration
+      driverInstance = driver({
+        popoverClass: "welcome-tutorial-popover",
+        showProgress: true,
+        allowClose: true,
+        overlayColor: "rgba(0, 0, 0, 0.4)",
+        steps: [
+          {
+            popover: {
+              title: `Welcome to Carpool, ${session.user.name.split(" ")[0]}!`,
+              description:
+                "Let's take a quick tour to help you get started with NU Carpool.",
+              showButtons: ["next", "close"],
+              nextBtnText: "Show Me Around",
+            },
+          },
+          {
+            element: '[data-testid="explore-sidebar"]',
+            popover: {
+              title: "These are drivers",
+              description:
+                "Browse through available drivers in your area. You can view their profiles, ratings, and routes.",
+              side: "top",
+              align: "center",
+            },
+          },
+          {
+            element: "#map",
+            popover: {
+              title: "This is the map",
+              description:
+                "Explore the map to find the best routes and nearby drivers.",
+              side: "top",
+              align: "center",
+            },
+          },
+          {
+            element: '[data-testid="navigation"]',
+            popover: {
+              title: "This is the navigation bar",
+              description:
+                "Navigate through your requests, group details, and profile.",
+              side: "top",
+              align: "center",
+            },
+          },
+          {
+            popover: {
+              title: "You're all set!",
+              description:
+                "Enjoy using NU Carpool to find or offer rides with your fellow students.",
+              showButtons: ["close"],
+            },
+          },
+        ],
+        onCloseClick: () => {
+          handleComplete();
+          return true; // Allow close
+        },
+        // Handle normal tour completion
+        onDestroyed: () => {
+          handleComplete();
+        },
+        // Handle early exit with confirmation
+        onDestroyStarted: () => {
+          if (
+            driverInstance.hasNextStep() &&
+            !confirm("Are you sure you want to skip the tour?")
+          ) {
+            return false; // Prevent destruction
+          }
+          driverInstance.destroy(); // Ensure all instances are destroyed
+          return true; // Allow destruction
+        },
+      });
     }
 
+    // Start the appropriate tour
+    driverInstance.drive();
+
     return () => {
-      driverObj.destroy();
-      driverMobileObj.destroy();
+      driverInstance.destroy();
     };
-  }, [session?.user?.name, handleComplete, initialIsMobile]);
+  }, [session?.user?.name, handleComplete, isMobile]);
 
   if (!session?.user?.name) {
     return null;

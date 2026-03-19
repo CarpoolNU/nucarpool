@@ -69,7 +69,10 @@ const ExploreSidebar = (props: ExploreSidebarProps) => {
     { value: "time", label: "Time" },
   ];
   return (
-    <div className="z-10 flex h-full flex-shrink-0 flex-col bg-white text-left">
+    <div
+      className="z-10 flex h-full flex-shrink-0 flex-col bg-white text-left"
+      data-testid="explore-sidebar"
+    >
       <div className={`flex-row px-5 ${isMobile ? "py-0" : "py-3"}`}>
         {!isMobile && (
           <div className="flex justify-center gap-3">

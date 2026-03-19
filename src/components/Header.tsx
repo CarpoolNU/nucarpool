@@ -333,7 +333,7 @@ const Header = (props: HeaderProps) => {
     };
 
     return (
-      <div className="pr-8 ">
+      <div className="pr-8" data-testid="navigation-desktop">
         <button
           onClick={() => {
             handleSidebarChange("explore");
