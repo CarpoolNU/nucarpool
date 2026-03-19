@@ -28,7 +28,6 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
       await update();
       setIsCompleting(false); // Reset completion flag
       onComplete?.();
-      toast.success("Tutorial completed!");
     },
     onError: (error) => {
       console.error("Error completing tutorial:", error);
