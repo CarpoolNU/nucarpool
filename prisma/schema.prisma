@@ -139,6 +139,7 @@ model User {
   sessions         Session[] // can have multiple settings
   permission       Permission      @default(USER)
   isOnboarded      Boolean         @default(false) @map("is_onboarded")
+  tutorialCompleted Boolean        @default(false) @map("tutorial_completed")
   licenseSigned    Boolean         @default(false) @map("license_signed")
   favoritedBy      User[]          @relation("Favorites")
   favorites        User[]          @relation("Favorites")

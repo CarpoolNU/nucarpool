@@ -333,7 +333,7 @@ const Header = (props: HeaderProps) => {
     };
 
     return (
-      <div className="pr-8 ">
+      <div className="pr-8" data-testid="navigation-desktop">
         <button
           onClick={() => {
             handleSidebarChange("explore");
@@ -395,27 +395,31 @@ const Header = (props: HeaderProps) => {
         id: "explore",
         icon: <HiOutlineMap />,
         label: "Explore",
+        testId: "explore-sidebar",
       },
       {
         id: "requests",
         icon: <HiOutlineChatAlt2 />,
         label: "Requests",
         badge: unreadMessagesCount !== 0 || currentunreadMessagesCount !== 0,
+        testId: "requests-sidebar",
       },
       {
         id: "mygroup",
         icon: <HiOutlineUserGroup />,
         label: "My Group",
+        testId: "mygroup-sidebar",
       },
       {
         id: "profile",
         icon: <HiOutlineUser />,
         label: "Profile",
+        testId: "profile-sidebar",
       },
     ];
 
     return (
-      <MobileNav>
+      <MobileNav data-testid="navigation">
         {navItems.map((item) => (
           <MobileNavItem
             key={item.id}
@@ -423,6 +427,7 @@ const Header = (props: HeaderProps) => {
             onClick={() => {
               handleMobileNavClick(item.id);
             }}
+            data-testid={item.testId}
           >
             <div style={{ fontSize: "24px" }}>{item.icon}</div>
             <div style={{ position: "relative" }}>

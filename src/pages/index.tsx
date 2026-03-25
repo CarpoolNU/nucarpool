@@ -9,8 +9,9 @@ import Head from "next/head";
 import { trpc } from "../utils/trpc";
 import { browserEnv } from "../utils/env/browser";
 import Header, { HeaderOptions } from "../components/Header";
-import { getSession } from "next-auth/react";
+import { getSession, useSession } from "next-auth/react";
 import Spinner from "../components/Spinner";
+import WelcomeTutorial from "../components/WelcomeTutorial";
 import { UserContext } from "../utils/userContext";
 import _, { debounce } from "lodash";
 import { SidebarPage } from "../components/Sidebar/Sidebar";
@@ -78,6 +79,9 @@ export async function getServerSideProps(context: GetServerSidePropsContext) {
 }
 
 const Home: NextPage<any> = () => {
+  const { data: session } = useSession();
+  const [showTutorial, setShowTutorial] = useState(false);
+
   const initialFilters: FiltersState = {
     days: 0,
     flexDays: 1,
@@ -140,6 +144,19 @@ const Home: NextPage<any> = () => {
   });
   const { data: requests = { sent: [], received: [] } } = requestsQuery;
   const utils = trpc.useContext();
+
+  // Tutorial logic: Show tutorial if user is onboarded but hasn't completed tutorial
+  useEffect(() => {
+    if (session?.user && user) {
+      const shouldShowTutorial =
+        session.user.isOnboarded && !session.user.tutorialCompleted;
+      setShowTutorial(shouldShowTutorial);
+    }
+  }, [session, user]);
+
+  const handleTutorialComplete = () => {
+    setShowTutorial(false);
+  };
 
   const handleUserSelect = (userId: string) => {
     setSelectedUserId(userId);
@@ -1040,6 +1057,11 @@ const Home: NextPage<any> = () => {
 
           {/* Always render the banner outside of other containers */}
           <MobileBanner />
+
+          {/* Tutorial overlay for first-time users */}
+          {showTutorial && (
+            <WelcomeTutorial onComplete={handleTutorialComplete} />
+          )}
 
           <div className="m-0 h-full max-h-screen w-full">
             {!isMobile && (
