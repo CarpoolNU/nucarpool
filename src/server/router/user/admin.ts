@@ -2,7 +2,6 @@ import { adminRouter, router } from "../createRouter";
 import { z } from "zod";
 import { Permission, Role } from "@prisma/client";
 import { convertCarpoolSearchToPublic } from "../../../utils/publicUser";
-import { mockSession } from "next-auth/client/__tests__/helpers/mocks";
 
 // Router for admin dashboard queries, only Managers can edit roles
 // User must be Manager or Admin to view user data
@@ -24,7 +23,7 @@ export const adminDataRouter = router({
     });
 
     // get CarpoolSearch data for each user
-    const userIds = users.map(u => u.id);
+    const userIds = users.map((u) => u.id);
     const carpoolSearches = await ctx.prisma.carpoolSearch.findMany({
       where: {
         userId: { in: userIds },
@@ -39,13 +38,13 @@ export const adminDataRouter = router({
     });
 
     // merge CarpoolSearch data into user objects
-    return users.map(user => {
-      const carpoolSearch = carpoolSearches.find(cs => cs.userId === user.id);
+    return users.map((user) => {
+      const carpoolSearch = carpoolSearches.find((cs) => cs.userId === user.id);
       return {
         ...user,
-        role: carpoolSearch?.role ?? 'VIEWER',
-        status: carpoolSearch?.status ?? 'INACTIVE',
-        daysWorking: carpoolSearch?.daysWorking ?? '',
+        role: carpoolSearch?.role ?? "VIEWER",
+        status: carpoolSearch?.status ?? "INACTIVE",
+        daysWorking: carpoolSearch?.daysWorking ?? "",
         carpoolId: carpoolSearch?.carpoolId ?? null,
       };
     });
@@ -112,7 +111,7 @@ export const adminDataRouter = router({
     });
 
     // get CarpoolSearches for all users in messages
-    const userIds = messages.map(m => m.User.id);
+    const userIds = messages.map((m) => m.User.id);
     const carpoolSearches = await ctx.prisma.carpoolSearch.findMany({
       where: {
         userId: { in: userIds },
@@ -135,10 +134,14 @@ export const adminDataRouter = router({
     });
 
     return messages.map((message) => {
-      const carpoolSearch = carpoolSearches.find(cs => cs.userId === message.User.id);
+      const carpoolSearch = carpoolSearches.find(
+        (cs) => cs.userId === message.User.id,
+      );
       return {
         ...message,
-        User: carpoolSearch ? convertCarpoolSearchToPublic(carpoolSearch) : null,
+        User: carpoolSearch
+          ? convertCarpoolSearchToPublic(carpoolSearch)
+          : null,
       };
     });
   }),
@@ -153,7 +156,7 @@ export const adminDataRouter = router({
     });
 
     // get CarpoolSearch data for all fromUsers
-    const userIds = requests.map(r => r.fromUserId);
+    const userIds = requests.map((r) => r.fromUserId);
     const carpoolSearches = await ctx.prisma.carpoolSearch.findMany({
       where: {
         userId: { in: userIds },
@@ -164,13 +167,15 @@ export const adminDataRouter = router({
       },
     });
 
-    return requests.map(request => {
-      const carpoolSearch = carpoolSearches.find(cs => cs.userId === request.fromUserId);
+    return requests.map((request) => {
+      const carpoolSearch = carpoolSearches.find(
+        (cs) => cs.userId === request.fromUserId,
+      );
       return {
         id: request.id,
         dateCreated: request.dateCreated,
         fromUser: {
-          role: carpoolSearch?.role ?? 'VIEWER',
+          role: carpoolSearch?.role ?? "VIEWER",
         },
       };
     });
