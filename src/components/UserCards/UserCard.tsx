@@ -218,20 +218,56 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
         </div>
       )}
 
-      {/* Fifth row - Start and end times */}
+      {/* Fifth row - Start and end times / Pickup window */}
       {!(isMobile && props.isMobileCondensedLayout) && (
-        <div className="m-0 flex w-full justify-between align-middle">
-          <div className="flex text-sm ">
-            <p className="pr-1">Job Start:</p>
-            <p className="font-semibold">
-              {formatTime(props.otherUser.startTime)}
-            </p>
-            <p className="px-2 font-semibold">|</p>
-            <p className="pr-1">Job End:</p>
-            <p className="font-semibold">
-              {formatTime(props.otherUser.endTime, props.otherUser.startTime)}
-            </p>
+        <div className="m-0 flex w-full flex-col gap-1">
+          <div className="flex text-sm">
+            {props.otherUser.role === "RIDER" ? (
+              // Driver: Show as pickup window for clarity
+              <>
+                <p className="pr-1">Pickup Window:</p>
+                <p className="font-semibold">
+                  {formatTime(props.otherUser.startTime)}
+                </p>
+                <p className="px-2 font-semibold">-</p>
+                <p className="font-semibold">
+                  {formatTime(
+                    props.otherUser.endTime,
+                    props.otherUser.startTime,
+                  )}
+                </p>
+                <p className="pl-2 text-xs text-gray-600 italic">
+                  (earliest - latest departure)
+                </p>
+              </>
+            ) : (
+              // Rider: Show job times
+              <>
+                <p className="pr-1">Job Start:</p>
+                <p className="font-semibold">
+                  {formatTime(props.otherUser.startTime)}
+                </p>
+                <p className="px-2 font-semibold">|</p>
+                <p className="pr-1">Job End:</p>
+                <p className="font-semibold">
+                  {formatTime(
+                    props.otherUser.endTime,
+                    props.otherUser.startTime,
+                  )}
+                </p>
+              </>
+            )}
           </div>
+          {/* Suggested pickup time for riders */}
+          {props.otherUser.role === "DRIVER" && (
+            <div className="flex text-xs text-gray-600">
+              <p className="pr-1">Suggested Pickup:</p>
+              <p className="font-semibold">
+                {formatTime(props.otherUser.startTime)}
+              </p>
+              <p className="pl-2 italic">(based on job start time)</p>
+            </div>
+          )}
         </div>
       )}
       {/* Sixth row - coop Start and end dates */}
