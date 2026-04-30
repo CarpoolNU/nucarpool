@@ -2,7 +2,12 @@ import Rating from "@mui/material/Rating";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
-import { ButtonInfo, EnhancedPublicUser, PublicUser, User } from "../../utils/types";
+import {
+  ButtonInfo,
+  EnhancedPublicUser,
+  PublicUser,
+  User,
+} from "../../utils/types";
 import { trpc } from "../../utils/trpc";
 import { toast } from "react-toastify";
 import React, { useContext } from "react";
@@ -81,7 +86,7 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
    *  Background color is red if the user is working on that day.
    */
   const DaysWorkingDisplay = (daysWorking: string) => {
-    if (!daysWorking || typeof daysWorking !== 'string') {
+    if (!daysWorking || typeof daysWorking !== "string") {
       return <div className="flex w-11/12 justify-between">No days set</div>;
     }
     const boxes: React.JSX.Element[] = [];
@@ -217,12 +222,12 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
       {!(isMobile && props.isMobileCondensedLayout) && (
         <div className="m-0 flex w-full justify-between align-middle">
           <div className="flex text-sm ">
-            <p className="pr-1">Start:</p>
+            <p className="pr-1">Job Start:</p>
             <p className="font-semibold">
               {formatTime(props.otherUser.startTime)}
             </p>
             <p className="px-2 font-semibold">|</p>
-            <p className="pr-1">End:</p>
+            <p className="pr-1">Job End:</p>
             <p className="font-semibold">
               {formatTime(props.otherUser.endTime, props.otherUser.startTime)}
             </p>
