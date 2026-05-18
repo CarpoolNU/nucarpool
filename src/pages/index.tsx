@@ -132,7 +132,7 @@ const Home: NextPage<any> = () => {
   const { data: recommendations = [] } = trpc.user.recommendations.me.useQuery(
     {
       sort: sort,
-      filters: filters,
+      filters: debouncedFilters,
     },
     { refetchOnMount: true },
   );

@@ -20,7 +20,7 @@ export default function useSearch({
   type: "address%2Cpostcode" | "neighborhood%2Cplace";
   setFunc: Dispatch<SetStateAction<CarpoolFeature[]>>;
 }) {
-  const query = trpc.mapbox.search.useQuery(
+  const { refetch } = trpc.mapbox.search.useQuery(
     {
       value: value,
       types: type,
@@ -42,7 +42,7 @@ export default function useSearch({
   );
   useEffect(() => {
     if (value) {
-      query.refetch();
+      refetch();
     }
-  }, [value, query]);
+  }, [value, refetch]);
 }
