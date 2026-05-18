@@ -342,7 +342,7 @@ export function useGetDirections({
   points: [number, number][];
   map: mapboxgl.Map;
 }) {
-  const query = trpc.mapbox.getDirections.useQuery(
+  const { refetch } = trpc.mapbox.getDirections.useQuery(
     {
       points: points,
     },
@@ -433,7 +433,7 @@ export function useGetDirections({
   useEffect(() => {
     // ensures that we don't run on page load
     if (points.length !== 0 && map !== undefined) {
-      query.refetch();
+      refetch();
     }
-  }, [points, map, query]);
+  }, [points, map, refetch]);
 }
