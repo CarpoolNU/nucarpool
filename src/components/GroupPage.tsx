@@ -16,6 +16,267 @@ interface GroupPageProps {
   onPreviewRoute?: () => void;
 }
 
+type GroupDetails = {
+  notes: string;
+  pickupStart: string;
+  pickupEnd: string;
+  gasSplit: string;
+  musicPreference: string;
+};
+
+const GROUP_DETAILS_PREFIX = "GROUP_DETAILS_V1:";
+const NOTES_MAX_LENGTH = 90;
+
+const DEFAULT_GROUP_DETAILS: GroupDetails = {
+  notes: "",
+  pickupStart: "",
+  pickupEnd: "",
+  gasSplit: "",
+  musicPreference: "",
+};
+
+const gasSplitOptions = [
+  "Equal split",
+  "By rider distance",
+  "Driver covers gas",
+  "Optional rider contribution",
+  "Custom",
+];
+
+const musicPreferenceOptions = [
+  "No preference",
+  "Pop",
+  "Hip-hop",
+  "R&B",
+  "Electronic",
+  "Rock",
+  "Podcasts",
+  "Quiet ride",
+];
+
+const isValidTime = (value: string) => /^\d{2}:\d{2}$/.test(value);
+
+const normalizeDetails = (details: GroupDetails): GroupDetails => ({
+  notes: details.notes.slice(0, NOTES_MAX_LENGTH).trim(),
+  pickupStart: isValidTime(details.pickupStart) ? details.pickupStart : "",
+  pickupEnd: isValidTime(details.pickupEnd) ? details.pickupEnd : "",
+  gasSplit: details.gasSplit.slice(0, 40).trim(),
+  musicPreference: details.musicPreference.slice(0, 40).trim(),
+});
+
+const parseGroupDetails = (message?: string | null): GroupDetails => {
+  if (!message) {
+    return DEFAULT_GROUP_DETAILS;
+  }
+
+  if (message.startsWith(GROUP_DETAILS_PREFIX)) {
+    try {
+      const parsed = JSON.parse(
+        message.slice(GROUP_DETAILS_PREFIX.length),
+      ) as Partial<GroupDetails>;
+
+      return normalizeDetails({
+        notes: parsed.notes ?? "",
+        pickupStart: parsed.pickupStart ?? "",
+        pickupEnd: parsed.pickupEnd ?? "",
+        gasSplit: parsed.gasSplit ?? "",
+        musicPreference: parsed.musicPreference ?? "",
+      });
+    } catch {
+      return {
+        ...DEFAULT_GROUP_DETAILS,
+        notes: message,
+      };
+    }
+  }
+
+  return {
+    ...DEFAULT_GROUP_DETAILS,
+    notes: message,
+  };
+};
+
+const serializeGroupDetails = (details: GroupDetails): string => {
+  const normalized = normalizeDetails(details);
+  const hasAnyValue = Object.values(normalized).some((value) => value !== "");
+
+  if (!hasAnyValue) {
+    return "";
+  }
+
+  return `${GROUP_DETAILS_PREFIX}${JSON.stringify(normalized)}`;
+};
+
+const formatTime = (time: string) => {
+  if (!isValidTime(time)) {
+    return "Not set";
+  }
+
+  const [hour, minute] = time.split(":");
+  const hourNum = Number(hour);
+  const period = hourNum >= 12 ? "PM" : "AM";
+  const hour12 = hourNum % 12 === 0 ? 12 : hourNum % 12;
+
+  return `${hour12}:${minute} ${period}`;
+};
+
+const GroupDetailsForm = ({
+  details,
+  setDetails,
+}: {
+  details: GroupDetails;
+  setDetails: (details: GroupDetails) => void;
+}) => {
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className="mb-1 block text-sm font-medium text-gray-800">
+          Group Note
+        </label>
+        <textarea
+          className="w-full min-h-[72px] px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 resize-none"
+          maxLength={NOTES_MAX_LENGTH}
+          value={details.notes}
+          onChange={(e) =>
+            setDetails({
+              ...details,
+              notes: e.target.value,
+            })
+          }
+          placeholder="Anything else riders should know about the carpool..."
+        />
+        <p className="mt-1 text-xs text-gray-500 text-right">
+          {details.notes.length}/{NOTES_MAX_LENGTH}
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-800">
+            Pickup window start
+          </label>
+          <input
+            type="time"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+            value={details.pickupStart}
+            onChange={(e) =>
+              setDetails({
+                ...details,
+                pickupStart: e.target.value,
+              })
+            }
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-800">
+            Pickup window end
+          </label>
+          <input
+            type="time"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+            value={details.pickupEnd}
+            onChange={(e) =>
+              setDetails({
+                ...details,
+                pickupEnd: e.target.value,
+              })
+            }
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-800">
+            Gas split
+          </label>
+          <select
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:border-red-500"
+            value={details.gasSplit}
+            onChange={(e) =>
+              setDetails({
+                ...details,
+                gasSplit: e.target.value,
+              })
+            }
+          >
+            <option value="">Select gas split</option>
+            {gasSplitOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-800">
+            Music preference
+          </label>
+          <select
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:border-red-500"
+            value={details.musicPreference}
+            onChange={(e) =>
+              setDetails({
+                ...details,
+                musicPreference: e.target.value,
+              })
+            }
+          >
+            <option value="">Select music preference</option>
+            {musicPreferenceOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const GroupDetailsPreview = ({
+  details,
+  emptyMessage,
+}: {
+  details: GroupDetails;
+  emptyMessage: string;
+}) => {
+  const hasAnyDetails = Object.values(normalizeDetails(details)).some(
+    (value) => value !== "",
+  );
+
+  if (!hasAnyDetails) {
+    return (
+      <p className="text-sm text-gray-600 rounded-md border px-3 py-2">
+        {emptyMessage}
+      </p>
+    );
+  }
+
+  return (
+    <div className="rounded-md border p-3 space-y-2 text-sm text-gray-700">
+      <div>
+        <span className="font-semibold text-gray-900">
+          Suggested Pickup Window:
+        </span>{" "}
+        {formatTime(details.pickupStart)} - {formatTime(details.pickupEnd)}
+      </div>
+      <div>
+        <span className="font-semibold text-gray-900">Gas Split:</span>{" "}
+        {details.gasSplit || "Not set"}
+      </div>
+      <div>
+        <span className="font-semibold text-gray-900">Music Preference:</span>{" "}
+        {details.musicPreference || "Not set"}
+      </div>
+      {details.notes && (
+        <div>
+          <span className="font-semibold text-gray-900">Group Note:</span>{" "}
+          {details.notes}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const MobileGroupPage = ({
   curUser,
   onClose,
@@ -115,7 +376,9 @@ export const GroupPage = (props: GroupPageProps) => {
 const MobileNoGroupInfo = ({ role }: { role: Role }) => {
   const utils = trpc.useContext();
   const { data: user } = trpc.user.me.useQuery();
-  const [groupMessage, setGroupMessage] = useState(user?.groupMessage ?? "");
+  const [groupDetails, setGroupDetails] = useState<GroupDetails>(
+    parseGroupDetails(user?.groupMessage ?? ""),
+  );
   const { mutate: updateUserMessage } =
     trpc.user.groups.updateUserMessage.useMutation({
       onSuccess: () => {
@@ -124,14 +387,14 @@ const MobileNoGroupInfo = ({ role }: { role: Role }) => {
     });
 
   useEffect(() => {
-    if (user?.groupMessage) {
-      setGroupMessage(user.groupMessage);
+    if (user?.groupMessage !== undefined) {
+      setGroupDetails(parseGroupDetails(user.groupMessage ?? ""));
     }
   }, [user]);
 
   const handleMessageSubmit = async () => {
     if (user?.id && role === "DRIVER") {
-      await updateUserMessage({ message: groupMessage });
+      await updateUserMessage({ message: serializeGroupDetails(groupDetails) });
     }
   };
 
@@ -172,17 +435,13 @@ const MobileNoGroupInfo = ({ role }: { role: Role }) => {
             Driver Information
           </h2>
           <p className="text-sm text-gray-600 mb-4">
-            Share any information that riders joining your carpool should know.
-            Include your preferred departure time, communication method, gas
-            split preference, and the vibe you&apos;re going for.
+            Share specific details your riders should know before they join.
           </p>
 
           <div className="space-y-4">
-            <textarea
-              className="w-full min-h-[100px] px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 resize-none"
-              value={groupMessage}
-              onChange={(e) => setGroupMessage(e.target.value)}
-              placeholder="Tell riders about your carpool preferences..."
+            <GroupDetailsForm
+              details={groupDetails}
+              setDetails={setGroupDetails}
             />
 
             <button
@@ -196,16 +455,15 @@ const MobileNoGroupInfo = ({ role }: { role: Role }) => {
             </button>
           </div>
 
-          {groupMessage && (
-            <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-              <h3 className="text-sm font-medium text-gray-900 mb-2">
-                Message Preview
-              </h3>
-              <p className="text-sm text-gray-700 italic">
-                &quot;{groupMessage}&quot;
-              </p>
-            </div>
-          )}
+          <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+            <h3 className="text-sm font-medium text-gray-900 mb-2">
+              Message Preview
+            </h3>
+            <GroupDetailsPreview
+              details={groupDetails}
+              emptyMessage="Add details above so riders know what to expect."
+            />
+          </div>
         </div>
       )}
 
@@ -245,7 +503,9 @@ const MobileGroupInfo = ({
   const utils = trpc.useUtils();
   const { data: group } = trpc.user.groups.me.useQuery();
   const users = group?.users ?? [];
-  const [groupMessage, setGroupMessage] = useState(group?.message ?? "");
+  const [groupDetails, setGroupDetails] = useState<GroupDetails>(
+    parseGroupDetails(group?.message ?? ""),
+  );
 
   const driver = users.find((user) => user.role === Role.DRIVER);
   const riders = users.filter((user) => user.role === Role.RIDER);
@@ -264,14 +524,15 @@ const MobileGroupInfo = ({
 
   useEffect(() => {
     if (group?.message !== undefined) {
-      setGroupMessage(group.message);
+      setGroupDetails(parseGroupDetails(group.message));
     }
   }, [group]);
 
   const handleMessageSubmit = async () => {
     if (group?.id && curUser?.role === "DRIVER") {
-      await updateMessage({ groupId: group.id, message: groupMessage });
-      await updateUserMessage({ message: groupMessage });
+      const serializedDetails = serializeGroupDetails(groupDetails);
+      await updateMessage({ groupId: group.id, message: serializedDetails });
+      await updateUserMessage({ message: serializedDetails });
     }
   };
 
@@ -288,23 +549,18 @@ const MobileGroupInfo = ({
         {curUser?.role === "DRIVER" ? (
           <>
             <h2 className="text-lg font-semibold text-gray-900 mb-3">
-              Group Message
+              Group Details
             </h2>
             <p className="text-sm text-gray-600 mb-4">
-              Share important updates with your riders
+              Keep these details up to date for your riders.
             </p>
             <div className="space-y-4">
-              <textarea
-                className="w-full min-h-[80px] px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 resize-none"
-                maxLength={140}
-                value={groupMessage}
-                onChange={(e) => setGroupMessage(e.target.value)}
-                placeholder="Share updates with your group..."
+              <GroupDetailsForm
+                details={groupDetails}
+                setDetails={setGroupDetails}
               />
               <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-500">
-                  {groupMessage.length}/140
-                </span>
+                <span className="text-xs text-gray-500">Visible to riders</span>
                 <button
                   className="bg-red-700 text-white py-2 px-6 rounded-lg font-medium hover:bg-red-800 transition-colors"
                   onClick={async () => {
@@ -320,13 +576,13 @@ const MobileGroupInfo = ({
         ) : (
           <>
             <h2 className="text-lg font-semibold text-gray-900 mb-3">
-              Driver Message
+              Driver Details
             </h2>
             <div className="bg-gray-50 rounded-lg p-4 border-l-4 border-red-500">
-              <p className="text-gray-700">
-                {groupMessage ||
-                  "No message from your driver yet. Check back for updates!"}
-              </p>
+              <GroupDetailsPreview
+                details={groupDetails}
+                emptyMessage="No details from your driver yet."
+              />
             </div>
           </>
         )}
@@ -610,8 +866,9 @@ interface NoGroupInfoProps {
 const NoGroupInfo = ({ role }: NoGroupInfoProps) => {
   const utils = trpc.useContext();
   const { data: user } = trpc.user.me.useQuery();
-  const [preview, setPreview] = useState("");
-  const [groupMessage, setGroupMessage] = useState(user?.groupMessage ?? "");
+  const [groupDetails, setGroupDetails] = useState<GroupDetails>(
+    parseGroupDetails(user?.groupMessage ?? ""),
+  );
   const { mutate: updateUserMessage } =
     trpc.user.groups.updateUserMessage.useMutation({
       onSuccess: () => {
@@ -621,16 +878,14 @@ const NoGroupInfo = ({ role }: NoGroupInfoProps) => {
     });
 
   useEffect(() => {
-    if (user?.groupMessage) {
-      setGroupMessage(user.groupMessage);
-      setPreview(user.groupMessage);
+    if (user?.groupMessage !== undefined) {
+      setGroupDetails(parseGroupDetails(user.groupMessage ?? ""));
     }
   }, [user]);
 
   const handleMessageSubmit = async () => {
     if (user?.id && role === "DRIVER") {
-      await updateUserMessage({ message: groupMessage });
-      setPreview(groupMessage);
+      await updateUserMessage({ message: serializeGroupDetails(groupDetails) });
     }
   };
 
@@ -644,21 +899,13 @@ const NoGroupInfo = ({ role }: NoGroupInfoProps) => {
         <>
           {role === "DRIVER" && (
             <div className="mb-8 flex flex-col py-1">
-              <div className="my-1 text-xs italic text-slate-400">
-                Below, share any information that you would like riders joining
-                your Carpool to know. You can indicate when you generally like
-                to be leaving your place, what your preferred method of
-                communication is, what your preference is to split gas and what
-                your Carpool vibe will be like.
-              </div>
-              <div className="flex flex-row gap-2">
-                <textarea
-                  className="form-input min-h-[50px] flex-grow resize-none rounded-md py-2 shadow-sm"
-                  value={groupMessage}
-                  onChange={(e) => setGroupMessage(e.target.value)}
-                />
+              <GroupDetailsForm
+                details={groupDetails}
+                setDetails={setGroupDetails}
+              />
+              <div className="flex justify-center mt-2">
                 <button
-                  className="h-full w-[150px] rounded-md bg-red-700 py-2 text-white hover:bg-red-800 transition-colors"
+                  className="w-[150px] rounded-md bg-red-700 py-2 text-white hover:bg-red-800 transition-colors"
                   onClick={async () => {
                     await handleMessageSubmit();
                     toast.success("Group message successfully saved!");
@@ -667,17 +914,6 @@ const NoGroupInfo = ({ role }: NoGroupInfoProps) => {
                   Submit
                 </button>
               </div>
-              <h3 className="mt-4 flex w-full text-center font-montserrat text-xl font-semibold">
-                Preview Message
-              </h3>
-              <div className="my-1 text-xs italic text-slate-400">
-                When you accept a request or a rider joins your group, they will
-                see the message displayed here! You can change your group
-                message at anytime.
-              </div>
-              <p className="mt-2 min-h-10 flex-1 justify-center rounded-md border px-3 py-2 text-center text-sm shadow-sm">
-                {preview}
-              </p>
             </div>
           )}
           <div className="flex flex-grow items-center justify-center text-xl font-light">
@@ -705,7 +941,9 @@ const GroupInfo = ({
   const utils = trpc.useUtils();
   const { data: group } = trpc.user.groups.me.useQuery();
   const users = group?.users ?? [];
-  const [groupMessage, setGroupMessage] = useState(group?.message ?? "");
+  const [groupDetails, setGroupDetails] = useState<GroupDetails>(
+    parseGroupDetails(group?.message ?? ""),
+  );
 
   const driver = users.find((user) => user.role === Role.DRIVER);
   const riders = users.filter((user) => user.role === Role.RIDER);
@@ -726,14 +964,15 @@ const GroupInfo = ({
 
   useEffect(() => {
     if (group?.message !== undefined) {
-      setGroupMessage(group.message);
+      setGroupDetails(parseGroupDetails(group.message));
     }
   }, [group]);
 
   const handleMessageSubmit = async () => {
     if (group?.id && curUser?.role === "DRIVER") {
-      await updateMessage({ groupId: group.id, message: groupMessage });
-      await updateUserMessage({ message: groupMessage });
+      const serializedDetails = serializeGroupDetails(groupDetails);
+      await updateMessage({ groupId: group.id, message: serializedDetails });
+      await updateUserMessage({ message: serializedDetails });
     }
   };
 
@@ -749,17 +988,15 @@ const GroupInfo = ({
       {curUser?.role === "DRIVER" ? (
         <div className="flex flex-col py-1 flex-shrink-0">
           <div className="my-1 text-xs italic text-slate-400">
-            Use this text box to share important communication with your riders!
+            Share your group details so riders know what to expect.
           </div>
-          <div className="flex flex-row gap-4">
-            <textarea
-              className="form-input h-10 min-h-[50px] flex-grow resize-none rounded-md py-2 shadow-sm"
-              maxLength={140}
-              value={groupMessage}
-              onChange={(e) => setGroupMessage(e.target.value)}
-            />
+          <GroupDetailsForm
+            details={groupDetails}
+            setDetails={setGroupDetails}
+          />
+          <div className="flex justify-center mt-2">
             <button
-              className="h-full w-[150px] rounded-md bg-red-700 text-white hover:bg-red-800 transition-colors"
+              className="w-[150px] rounded-md bg-red-700 py-2 text-white hover:bg-red-800 transition-colors"
               onClick={async () => {
                 await handleMessageSubmit();
                 toast.success("Group message successfully saved!");
@@ -771,12 +1008,11 @@ const GroupInfo = ({
         </div>
       ) : (
         <div className="flex flex-col py-1 flex-shrink-0">
-          <div className="text-center mb-2">Driver Message</div>
-          <p className="flex-1 justify-center rounded-md border px-3 py-2 text-center text-sm shadow-sm">
-            {groupMessage != ""
-              ? groupMessage
-              : "Keep a look out for messages from your driver on this message board!"}
-          </p>
+          <div className="text-center mb-2">Driver Details</div>
+          <GroupDetailsPreview
+            details={groupDetails}
+            emptyMessage="Keep a look out for details from your driver on this board!"
+          />
         </div>
       )}
 
