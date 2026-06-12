@@ -18,10 +18,9 @@ interface GroupPageProps {
 
 type GroupDetails = {
   notes: string;
-  pickupStart: string;
-  pickupEnd: string;
-  gasSplit: string;
   musicPreference: string;
+  conversationStyle: string;
+  rideVibe: string;
 };
 
 const GROUP_DETAILS_PREFIX = "GROUP_DETAILS_V1:";
@@ -29,19 +28,10 @@ const NOTES_MAX_LENGTH = 90;
 
 const DEFAULT_GROUP_DETAILS: GroupDetails = {
   notes: "",
-  pickupStart: "",
-  pickupEnd: "",
-  gasSplit: "",
   musicPreference: "",
+  conversationStyle: "",
+  rideVibe: "",
 };
-
-const gasSplitOptions = [
-  "Equal split",
-  "By rider distance",
-  "Driver covers gas",
-  "Optional rider contribution",
-  "Custom",
-];
 
 const musicPreferenceOptions = [
   "No preference",
@@ -54,14 +44,27 @@ const musicPreferenceOptions = [
   "Quiet ride",
 ];
 
-const isValidTime = (value: string) => /^\d{2}:\d{2}$/.test(value);
+const conversationStyleOptions = [
+  "No preference",
+  "Quiet",
+  "Light chat",
+  "Talkative",
+  "Depends on mood",
+];
+
+const rideVibeOptions = [
+  "No preference",
+  "Chill",
+  "Energetic",
+  "Focus / study",
+  "Morning calm",
+];
 
 const normalizeDetails = (details: GroupDetails): GroupDetails => ({
   notes: details.notes.slice(0, NOTES_MAX_LENGTH).trim(),
-  pickupStart: isValidTime(details.pickupStart) ? details.pickupStart : "",
-  pickupEnd: isValidTime(details.pickupEnd) ? details.pickupEnd : "",
-  gasSplit: details.gasSplit.slice(0, 40).trim(),
   musicPreference: details.musicPreference.slice(0, 40).trim(),
+  conversationStyle: details.conversationStyle.slice(0, 40).trim(),
+  rideVibe: details.rideVibe.slice(0, 40).trim(),
 });
 
 const parseGroupDetails = (message?: string | null): GroupDetails => {
@@ -77,10 +80,9 @@ const parseGroupDetails = (message?: string | null): GroupDetails => {
 
       return normalizeDetails({
         notes: parsed.notes ?? "",
-        pickupStart: parsed.pickupStart ?? "",
-        pickupEnd: parsed.pickupEnd ?? "",
-        gasSplit: parsed.gasSplit ?? "",
         musicPreference: parsed.musicPreference ?? "",
+        conversationStyle: parsed.conversationStyle ?? "",
+        rideVibe: parsed.rideVibe ?? "",
       });
     } catch {
       return {
@@ -107,19 +109,6 @@ const serializeGroupDetails = (details: GroupDetails): string => {
   return `${GROUP_DETAILS_PREFIX}${JSON.stringify(normalized)}`;
 };
 
-const formatTime = (time: string) => {
-  if (!isValidTime(time)) {
-    return "Not set";
-  }
-
-  const [hour, minute] = time.split(":");
-  const hourNum = Number(hour);
-  const period = hourNum >= 12 ? "PM" : "AM";
-  const hour12 = hourNum % 12 === 0 ? 12 : hourNum % 12;
-
-  return `${hour12}:${minute} ${period}`;
-};
-
 const GroupDetailsForm = ({
   details,
   setDetails,
@@ -128,13 +117,16 @@ const GroupDetailsForm = ({
   setDetails: (details: GroupDetails) => void;
 }) => {
   return (
-    <div className="space-y-4">
-      <div>
+    <div className="space-y-6">
+      <div className="rounded-lg border border-gray-200 bg-white p-4">
+        <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+          Group Message
+        </div>
         <label className="mb-1 block text-sm font-medium text-gray-800">
           Group Note
         </label>
         <textarea
-          className="w-full min-h-[72px] px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 resize-none"
+          className="min-h-[96px] w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-red-500 focus:ring-2 focus:ring-red-500"
           maxLength={NOTES_MAX_LENGTH}
           value={details.notes}
           onChange={(e) =>
@@ -145,87 +137,82 @@ const GroupDetailsForm = ({
           }
           placeholder="Anything else riders should know about the carpool..."
         />
-        <p className="mt-1 text-xs text-gray-500 text-right">
+        <p className="mt-1 text-right text-xs text-gray-500">
           {details.notes.length}/{NOTES_MAX_LENGTH}
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-800">
-            Pickup window start
-          </label>
-          <input
-            type="time"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-            value={details.pickupStart}
-            onChange={(e) =>
-              setDetails({
-                ...details,
-                pickupStart: e.target.value,
-              })
-            }
-          />
+      <div className="rounded-lg border border-gray-200 bg-white p-4">
+        <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+          Personality Preferences
         </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-800">
-            Pickup window end
-          </label>
-          <input
-            type="time"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-            value={details.pickupEnd}
-            onChange={(e) =>
-              setDetails({
-                ...details,
-                pickupEnd: e.target.value,
-              })
-            }
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-800">
-            Gas split
-          </label>
-          <select
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:border-red-500"
-            value={details.gasSplit}
-            onChange={(e) =>
-              setDetails({
-                ...details,
-                gasSplit: e.target.value,
-              })
-            }
-          >
-            <option value="">Select gas split</option>
-            {gasSplitOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-800">
-            Music preference
-          </label>
-          <select
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:border-red-500"
-            value={details.musicPreference}
-            onChange={(e) =>
-              setDetails({
-                ...details,
-                musicPreference: e.target.value,
-              })
-            }
-          >
-            <option value="">Select music preference</option>
-            {musicPreferenceOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-800">
+              Music preference
+            </label>
+            <select
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-red-500 focus:ring-2 focus:ring-red-500"
+              value={details.musicPreference}
+              onChange={(e) =>
+                setDetails({
+                  ...details,
+                  musicPreference: e.target.value,
+                })
+              }
+            >
+              <option value="">Select music preference</option>
+              {musicPreferenceOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-800">
+              Conversation style
+            </label>
+            <select
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-red-500 focus:ring-2 focus:ring-red-500"
+              value={details.conversationStyle}
+              onChange={(e) =>
+                setDetails({
+                  ...details,
+                  conversationStyle: e.target.value,
+                })
+              }
+            >
+              <option value="">Select conversation style</option>
+              {conversationStyleOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-800">
+              Ride vibe
+            </label>
+            <select
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-red-500 focus:ring-2 focus:ring-red-500"
+              value={details.rideVibe}
+              onChange={(e) =>
+                setDetails({
+                  ...details,
+                  rideVibe: e.target.value,
+                })
+              }
+            >
+              <option value="">Select ride vibe</option>
+              {rideVibeOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
     </div>
@@ -252,25 +239,30 @@ const GroupDetailsPreview = ({
   }
 
   return (
-    <div className="rounded-md border p-3 space-y-2 text-sm text-gray-700">
-      <div>
-        <span className="font-semibold text-gray-900">
-          Suggested Pickup Window:
-        </span>{" "}
-        {formatTime(details.pickupStart)} - {formatTime(details.pickupEnd)}
+    <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-700">
+      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+        Current Preferences
       </div>
-      <div>
-        <span className="font-semibold text-gray-900">Gas Split:</span>{" "}
-        {details.gasSplit || "Not set"}
-      </div>
-      <div>
-        <span className="font-semibold text-gray-900">Music Preference:</span>{" "}
-        {details.musicPreference || "Not set"}
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div className="rounded-md bg-gray-50 px-3 py-2">
+          <span className="font-semibold text-gray-900">Music:</span>{" "}
+          {details.musicPreference || "Not set"}
+        </div>
+        <div className="rounded-md bg-gray-50 px-3 py-2">
+          <span className="font-semibold text-gray-900">Conversation:</span>{" "}
+          {details.conversationStyle || "Not set"}
+        </div>
+        <div className="rounded-md bg-gray-50 px-3 py-2 sm:col-span-2">
+          <span className="font-semibold text-gray-900">Ride vibe:</span>{" "}
+          {details.rideVibe || "Not set"}
+        </div>
       </div>
       {details.notes && (
-        <div>
-          <span className="font-semibold text-gray-900">Group Note:</span>{" "}
-          {details.notes}
+        <div className="rounded-md border border-gray-200 px-3 py-2">
+          <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Group Note
+          </div>
+          <p className="text-sm text-gray-700">{details.notes}</p>
         </div>
       )}
     </div>
@@ -353,7 +345,7 @@ export const GroupPage = (props: GroupPageProps) => {
     <Dialog open={isOpen} onClose={onClose} className="relative z-50">
       <div className="fixed inset-0 backdrop-blur-sm" aria-hidden="true">
         <div className="fixed inset-0 flex items-center justify-center p-4">
-          <Dialog.Panel className="flex flex-col content-center justify-center gap-1 overflow-hidden bg-white shadow-lg h-4/6 w-4/6 rounded-md py-9">
+          <Dialog.Panel className="flex flex-col content-center justify-start gap-1 overflow-y-auto bg-white shadow-lg h-4/6 w-4/6 rounded-md py-9">
             <div className="relative">
               <Dialog.Title className="text-center font-bold text-3xl">
                 My Group
