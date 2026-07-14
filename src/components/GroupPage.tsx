@@ -122,9 +122,6 @@ const GroupDetailsForm = ({
         <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
           Group Message
         </div>
-        <label className="mb-1 block text-sm font-medium text-gray-800">
-          Group Note
-        </label>
         <textarea
           className="min-h-[96px] w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-red-500 focus:ring-2 focus:ring-red-500"
           maxLength={NOTES_MAX_LENGTH}
@@ -191,28 +188,6 @@ const GroupDetailsForm = ({
               ))}
             </select>
           </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-800">
-              Ride vibe
-            </label>
-            <select
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-red-500 focus:ring-2 focus:ring-red-500"
-              value={details.rideVibe}
-              onChange={(e) =>
-                setDetails({
-                  ...details,
-                  rideVibe: e.target.value,
-                })
-              }
-            >
-              <option value="">Select ride vibe</option>
-              {rideVibeOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </div>
         </div>
       </div>
     </div>
@@ -251,10 +226,6 @@ const GroupDetailsPreview = ({
         <div className="rounded-md bg-gray-50 px-3 py-2">
           <span className="font-semibold text-gray-900">Conversation:</span>{" "}
           {details.conversationStyle || "Not set"}
-        </div>
-        <div className="rounded-md bg-gray-50 px-3 py-2 sm:col-span-2">
-          <span className="font-semibold text-gray-900">Ride vibe:</span>{" "}
-          {details.rideVibe || "Not set"}
         </div>
       </div>
       {details.notes && (
@@ -890,12 +861,12 @@ const NoGroupInfo = ({ role }: NoGroupInfoProps) => {
       ) : (
         <>
           {role === "DRIVER" && (
-            <div className="mb-8 flex flex-col py-1">
+            <div className="mb-3 flex flex-col py-1">
               <GroupDetailsForm
                 details={groupDetails}
                 setDetails={setGroupDetails}
               />
-              <div className="flex justify-center mt-2">
+              <div className="mt-2 flex justify-center">
                 <button
                   className="w-[150px] rounded-md bg-red-700 py-2 text-white hover:bg-red-800 transition-colors"
                   onClick={async () => {
@@ -908,7 +879,7 @@ const NoGroupInfo = ({ role }: NoGroupInfoProps) => {
               </div>
             </div>
           )}
-          <div className="flex flex-grow items-center justify-center text-xl font-light">
+          <div className="flex flex-growitems-center justify-center text-xl font-light">
             You are not currently part of a carpool group
           </div>
         </>
@@ -986,7 +957,7 @@ const GroupInfo = ({
             details={groupDetails}
             setDetails={setGroupDetails}
           />
-          <div className="flex justify-center mt-2">
+          <div className="flex justify-center mt2">
             <button
               className="w-[150px] rounded-md bg-red-700 py-2 text-white hover:bg-red-800 transition-colors"
               onClick={async () => {
