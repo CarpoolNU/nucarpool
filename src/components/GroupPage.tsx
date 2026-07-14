@@ -861,12 +861,12 @@ const NoGroupInfo = ({ role }: NoGroupInfoProps) => {
       ) : (
         <>
           {role === "DRIVER" && (
-            <div className="mb-3 flex flex-col py-1">
+            <div className="mb-2 flex flex-col py-1">
               <GroupDetailsForm
                 details={groupDetails}
                 setDetails={setGroupDetails}
               />
-              <div className="mt-2 flex justify-center">
+              <div className="mt-3 flex justify-center">
                 <button
                   className="w-[150px] rounded-md bg-red-700 py-2 text-white hover:bg-red-800 transition-colors"
                   onClick={async () => {
@@ -879,7 +879,7 @@ const NoGroupInfo = ({ role }: NoGroupInfoProps) => {
               </div>
             </div>
           )}
-          <div className="flex flex-growitems-center justify-center text-xl font-light">
+          <div className="flex flex-grow items-center justify-center text-xl font-light">
             You are not currently part of a carpool group
           </div>
         </>
