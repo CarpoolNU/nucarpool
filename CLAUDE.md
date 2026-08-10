@@ -86,6 +86,74 @@ There are no test files yet. Jest uses the `ts-jest` preset with the default `no
 - Env vars are validated with `envsafe` at import time; missing required values can prevent startup. `NEXTAUTH_SECRET` has a development default. AWS keys use **suffixed** names — `ACCESS_KEY_ID_AWS`, `SECRET_ACCESS_KEY_AWS`, `REGION_AWS`; standard `AWS_*` names fail validation. Full list in the README.
 - Five UI systems coexist (Tailwind, Headless UI, MUI, Ant Design, styled-components). Use the one already present in the file being edited; do not add a sixth.
 
+## External knowledge — Confluence and Jira
+
+Reached through the `atlassian` MCP server. Reads are fine when relevant; writes
+follow the rules below and in **Work tracking**.
+
+- **Confluence** is the authoritative home for long-form team, engineering,
+  infrastructure, operational, and process documentation — deployment, AWS,
+  PlanetScale, environment setup, PRDs, research. Little of it is in this repo.
+- **Jira project `SCRUM`** ("Carpool Main") tracks work. When a request references
+  `SCRUM-###`, retrieve that issue before acting.
+- Search Confluence only when a task needs knowledge this repo does not contain,
+  and fetch the specific pages needed — not whole spaces.
+- Tickets define **what** should change; this repo and its READMEs define **how**
+  the code works today. Tickets are often thin — never invent missing scope, ask.
+- Confluence pages may be stale. Verify technical claims against the code.
+- Jira and Confluence writes are available. Use them when the current task is
+  explicitly about project management or documentation, when **Work tracking**
+  below authorizes it, or when an established workflow does — never as an
+  unannounced side effect. Say what you changed.
+
+## Work tracking
+
+Jira project `SCRUM` is the source of truth for engineering work, and meaningful
+work should be associated with an issue.
+
+When you discover an actionable bug, regression, tech-debt item, or follow-up
+during development: **search Jira first** — if a matching issue exists, reference
+it rather than filing a duplicate. If none exists and the problem is outside the
+current task's scope, create the issue. Filing it is authorized; you do not need
+to be asked.
+
+**Do not widen the current change or PR to fix an unrelated discovery.** Track it
+in Jira and stay on the active ticket.
+
+Give a new issue the evidence you have: affected area, observed vs. expected
+behavior, impact, relevant paths, and the ticket you were on when you found it.
+Do not file trivial observations, speculation, or anything the active ticket
+already covers.
+
+## Git and GitHub
+
+**GitHub branch protection on `main` is UNVERIFIED** — the current developer
+cannot access repository Settings, so its configuration has not been confirmed
+either way. Assume nothing rejects a bad push server-side: these rules and
+`.claude/settings.json` are the only protection you can rely on.
+
+Implementation work happens on a feature branch off a freshly fetched
+`origin/main`, and pull requests target `main`. Use `staging` only if the
+current team workflow explicitly requires it.
+
+**Before every commit and every push, run `git rev-parse --abbrev-ref HEAD`.** If
+it returns `main` or `staging`, stop and say so — do not commit, do not push.
+
+You may create and update feature branches, commit and push them, create and
+update pull requests against `main`, and inspect PR checks and status.
+
+**Your workflow ends at the pull request.** Report the PR and its check status,
+then stop. Never merge a PR, and never move a ticket to `Done` — both follow the
+merge, and the user performs every merge manually through GitHub.
+
+- Never commit implementation work to `main` or `staging`, and never push either
+  branch.
+- Never test branch protection by pushing to `main`. Local `main` may be ahead of
+  `origin/main`, so a "test" push can land real commits.
+- Stage specific paths. Never `git add -A` or `git commit -a` — the working tree
+  may hold unrelated changes that must stay out of the commit and PR.
+- Never force-push a shared branch or bypass branch protection.
+
 ## References
 
 - [`README.md`](README.md) — setup and the full environment variable list
