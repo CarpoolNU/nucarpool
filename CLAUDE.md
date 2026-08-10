@@ -146,8 +146,17 @@ it rather than filing a duplicate. If none exists and the problem is outside the
 current task's scope, create the issue. Filing it is authorized; you do not need
 to be asked.
 
+**A newly created discovered issue stays in `To Do`.** Filing is not starting.
+Move it to `In Progress` only when the request authorizes working on that problem
+(for example "find and fix", "resolve", "work on") **and** you actually begin work
+on it. Discovery, creation, or apparent importance are never sufficient on their
+own. User intent decides whether a request is find-only or find-and-fix; absent
+explicit authorization to fix, assume find-only.
+
 **Do not widen the current change or PR to fix an unrelated discovery.** Track it
-in Jira and stay on the active ticket.
+in Jira and stay on the active ticket. If a request did authorize fixing what you
+find, you may switch the active ticket — but state the scope change explicitly and
+keep it a separate PR unless the problems are genuinely inseparable.
 
 Give a new issue the evidence you have: affected area, observed vs. expected
 behavior, impact, relevant paths, and the ticket you were on when you found it.

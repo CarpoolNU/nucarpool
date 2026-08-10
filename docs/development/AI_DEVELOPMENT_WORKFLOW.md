@@ -339,6 +339,27 @@ so is moving the ticket to `Done`.
 
 ## 11. Discovered-issue workflow
 
+### How you ask determines what happens
+
+Three usage modes. The difference matters, because it decides whether a discovered problem gets
+_filed_ or gets _fixed_:
+
+| You say                                                         | Claude does                                                                                                                                   | New tickets land in            |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| **"Find problems in X"** / "audit X for bugs"                   | Investigates, files or references issues, keeps auditing, reports findings. **Does not start fixing.**                                        | `To Do`                        |
+| **"Find problems in X and fix them"** / "resolve what you find" | Same discovery, then makes the issue active, moves it to `In Progress` when work actually starts, and runs the pipeline to a review-ready PR. | `In Progress` once work begins |
+| **"Work on SCRUM-220"**                                         | Retrieves that ticket and runs the normal pipeline.                                                                                           | n/a — existing ticket          |
+
+Absent explicit authorization to fix, Claude assumes **find only**. An audit that quietly starts
+rewriting code has exceeded its mandate, and you would be reviewing changes you never asked for.
+
+**A newly discovered ticket stays in `To Do`.** Filing is not starting. It moves to
+`In Progress` only when the request authorized fixing _and_ work actually begins — never merely
+because the problem was found, filed, or looks important. That way the board tells you what is
+genuinely underway rather than what was noticed.
+
+### The procedure
+
 You will find unrelated problems while working. Do not fix them in the current PR.
 
 ```
@@ -349,11 +370,15 @@ search Jira for a duplicate     ← always first
 exists? ──yes──► reference it, move on
    │ no
    ↓
-outside current scope? ──yes──► file an issue, return to the active ticket
+outside current scope? ──yes──► file an issue (To Do), return to the active ticket
    │ no
    ↓
 it's part of the active ticket → fix it
 ```
+
+If the request authorized find-and-fix, Claude may switch the active ticket to a discovered
+issue — but it states the scope change explicitly and keeps it a separate PR unless the two
+problems are genuinely inseparable. One issue, one coherent PR.
 
 Why: a PR fixing three unrelated things is hard to review, hard to revert, and hides its own
 risk. Widening scope mid-change is how small tickets become un-reviewable.
