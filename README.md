@@ -1,57 +1,96 @@
-# NU Carpool
+# NUCarpool
 
-##
-
-This is a web app for Northeastern University's students to assists them in finding groups for carpooling while on co-op.
-
-## Get Started
-
-- Clone the project, add environment variables (listed below) in `.env`.
-
-```env
-# Prisma
-
-
-# DATABASE_URL =
-
-# Next Auth
-
-NEXTAUTH_SECRET=
-NEXTAUTH_URL=
-
-#MixPanel (use any value for local development)
-NEXT_PUBLIC_MIXPANEL_PROJECT_TOKEN=
-# Mapbox
-
-NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=
-
-# AWS
-ACCESS_KEY_ID_AWS=
-SECRET_ACCESS_KEY_AWS=
-REGION_AWS=
-
-#Azure Provider (Can be switched out for other Auth Providers)
-AZURE_CLIENT_ID=
-AZURE_CLIENT_SECRET=
-AZURE_TENANT_ID=
-
-# Google Auth Provider (used in the non-prod environment)
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-
-# Environment Configuration
-BUILD_ENV=
-NEXT_PUBLIC_ENV=
-```
-
-Then do `yarn` and `yarn dev` to get the project running.
+NUCarpool (CarpoolNU) is a web app that helps Northeastern University students find carpool partners while on co-op. Students sign in with their Northeastern account, enter their commute and work schedule, and pick a role — driver, rider, or viewer. The app ranks compatible students by how well their commute and schedule overlap, shows them on a map, and lets them connect, message each other, and form carpool groups.
 
 ## Tech Stack
 
-- Framework: NextJS + Typescript
-- Component Library: TailwindCSS + Headless UI
-- Authentication: NextAuth
-- Map API: Mapbox
-- Backend: Serverless with trpc + Prisma + mysql (hosted on PlanetScale)
+- **Next.js** (Pages Router), **React**, and **TypeScript**
+- **tRPC** with **Zod** and **TanStack React Query** — typesafe API between the frontend and server
+- **Prisma** ORM on **MySQL**
+- **NextAuth** — Azure AD (Northeastern SSO); Google sign-in is added only when `NEXT_PUBLIC_ENV=staging`
+- **Mapbox GL JS** — map, geocoding, and routing
+- **Pusher** — real-time messaging
+- **AWS SES** for notification email, **AWS S3** for profile pictures
+- **Mixpanel** — analytics
+- **Tailwind CSS**, with Headless UI, MUI, and Ant Design components
+- **Docker Compose** — local MySQL
+- **Yarn** (Classic) — package manager
 
-This is also known as the T3 Stack. More details can be found [here](https://init.tips).
+## Getting Started
+
+Requires Node 20, Yarn 1.x, and Docker.
+
+```bash
+git clone git@github.com:CarpoolNU/nucarpool.git
+cd nucarpool
+yarn install
+```
+
+Create a `.env` in the repository root containing the variables below. There is no `.env.example` — ask a maintainer for development credentials. The app validates these at startup and will not boot if one is missing.
+
+Then start the database, set up the schema, and run the app:
+
+```bash
+yarn db:start     # local MySQL in Docker
+yarn db:schema    # prisma migrate dev && prisma generate
+yarn seed         # optional: populate with generated users
+yarn dev
+```
+
+The app runs at <http://localhost:3000>. `yarn startup` runs `yarn db:start` and `yarn dev` together.
+
+## Environment Variables
+
+Placeholders only — never commit real values. `.env` is gitignored.
+
+```env
+# Database — MYSQL_* are read by docker-compose; the app itself only uses DATABASE_URL,
+# so its user, password, port, and database name must match the container.
+DATABASE_URL="mysql://<user>:<password>@localhost:<MYSQL_PORT>/<MYSQL_DATABASE>"
+MYSQL_PORT="<host-port>"
+MYSQL_ROOT_PASSWORD="<local-only-password>"
+MYSQL_DATABASE="<database-name>"
+
+# Authentication
+NEXTAUTH_SECRET="<random-secret>"
+NEXTAUTH_URL="http://localhost:3000"
+AZURE_CLIENT_ID="<azure-client-id>"
+AZURE_CLIENT_SECRET="<azure-client-secret>"
+AZURE_TENANT_ID="<azure-tenant-id>"
+GOOGLE_CLIENT_ID="<google-client-id>"
+GOOGLE_CLIENT_SECRET="<google-client-secret>"
+
+# AWS (SES + S3) — note the suffixed names; standard AWS_* names will fail validation
+ACCESS_KEY_ID_AWS="<aws-access-key-id>"
+SECRET_ACCESS_KEY_AWS="<aws-secret-access-key>"
+REGION_AWS="<aws-region>"
+
+# Mapbox
+NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN="<mapbox-public-token>"
+
+# Pusher
+NEXT_PUBLIC_PUSHER_KEY="<pusher-key>"
+NEXT_PUBLIC_PUSHER_CLUSTER="<pusher-cluster>"
+PUSHER_APP_ID="<pusher-app-id>"
+PUSHER_SECRET="<pusher-secret>"
+
+# Mixpanel — any non-empty value works locally
+NEXT_PUBLIC_MIXPANEL_PROJECT_TOKEN="<mixpanel-token>"
+
+# Optional — "staging" enables Google sign-in and namespaces S3 uploads
+NEXT_PUBLIC_ENV="<environment-name>"
+```
+
+## Useful Commands
+
+| Command                          | Purpose                                           |
+| -------------------------------- | ------------------------------------------------- |
+| `yarn dev`                       | Start the development server on port 3000         |
+| `yarn startup`                   | Start the local database, then the dev server     |
+| `yarn build`                     | Production build                                  |
+| `yarn lint`                      | Run ESLint                                        |
+| `yarn tsc`                       | Type check                                        |
+| `yarn test`                      | Run Jest (no test files exist yet)                |
+| `yarn db:start` / `yarn db:stop` | Start / stop the local MySQL container            |
+| `yarn db:schema`                 | Apply migrations and regenerate the Prisma client |
+| `yarn seed`                      | Populate the database with generated users        |
