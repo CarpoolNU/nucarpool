@@ -63,14 +63,15 @@ Three ideas carry the design:
 
 ## 3. Repository configuration files
 
-| File                                                   | Role                                                                                                    | In git |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- | ------ |
-| [`CLAUDE.md`](../../CLAUDE.md)                         | Durable project instructions: commands, architecture gotchas, safety, git policy. Loaded every session. | yes    |
-| [`.claude/settings.json`](../../.claude/settings.json) | Permission model: allowed / prompted / forbidden tools. **Source of truth.**                            | yes    |
-| `.claude/settings.local.json`                          | Your machine-local overrides. Personal.                                                                 | no     |
-| [`.mcp.json`](../../.mcp.json)                         | Declares the Atlassian MCP server. URL only — no credentials.                                           | yes    |
-| [`README.md`](../../README.md)                         | Human setup: stack, environment variables, commands.                                                    | yes    |
-| [`.github/workflows/`](../../.github/workflows/)       | CI — see [§14](#14-ci-behavior).                                                                        | yes    |
+| File                                                                               | Role                                                                                                    | In git |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------ |
+| [`CLAUDE.md`](../../CLAUDE.md)                                                     | Durable project instructions: commands, architecture gotchas, safety, git policy. Loaded every session. | yes    |
+| [`.claude/settings.json`](../../.claude/settings.json)                             | Permission model: allowed / prompted / forbidden tools. **Source of truth.**                            | yes    |
+| `.claude/settings.local.json`                                                      | Your machine-local overrides. Personal.                                                                 | no     |
+| [`.claude/skills/jira-ticket/SKILL.md`](../../.claude/skills/jira-ticket/SKILL.md) | The repeatable procedure for executing a ticket — see [§10](#10-standard-engineering-lifecycle).        | yes    |
+| [`.mcp.json`](../../.mcp.json)                                                     | Declares the Atlassian MCP server. URL only — no credentials.                                           | yes    |
+| [`README.md`](../../README.md)                                                     | Human setup: stack, environment variables, commands.                                                    | yes    |
+| [`.github/workflows/`](../../.github/workflows/)                                   | CI — see [§14](#14-ci-behavior).                                                                        | yes    |
 
 Layer-specific docs: [`src/server/router/README.md`](../../src/server/router/README.md)
 (tRPC routers, context, auth) and [`src/server/db/README.md`](../../src/server/db/README.md)
@@ -238,6 +239,13 @@ editing a PR prompts you. Merging is blocked outright.
 > output lands in the conversation.
 
 ## 10. Standard engineering lifecycle
+
+> **This lifecycle is executable.** The step-by-step procedure lives in the
+> [`jira-ticket` Skill](../../.claude/skills/jira-ticket/SKILL.md), which Claude Code invokes
+> when you ask it to work on a ticket ("work on SCRUM-215"). This section explains the shape
+> and the reasoning; the Skill is what actually runs. Keeping them separate is deliberate —
+> three layers, three jobs: **CLAUDE.md** holds permanent rules, **`.claude/settings.json`**
+> holds permissions, and the **Skill** holds the repeatable procedure.
 
 ```
 establish Jira issue    ← FIRST. work is never anonymous          [To Do]
