@@ -1,0 +1,134 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__atlassian__getJiraIssue",
+      "mcp__atlassian__searchJiraIssuesUsingJql",
+      "mcp__atlassian__getVisibleJiraProjects",
+      "mcp__atlassian__getJiraProjectIssueTypesMetadata",
+      "mcp__atlassian__getJiraIssueTypeMetaWithFields",
+      "mcp__atlassian__getTransitionsForJiraIssue",
+      "mcp__atlassian__getJiraIssueRemoteIssueLinks",
+      "mcp__atlassian__getIssueLinkTypes",
+      "mcp__atlassian__lookupJiraAccountId",
+      "mcp__atlassian__atlassianUserInfo",
+      "mcp__atlassian__getAccessibleAtlassianResources",
+      "mcp__atlassian__searchConfluenceUsingCql",
+      "mcp__atlassian__getConfluencePage",
+      "mcp__atlassian__getPagesInConfluenceSpace",
+      "mcp__atlassian__getConfluenceSpaces",
+      "mcp__atlassian__getConfluencePageDescendants",
+      "mcp__atlassian__getConfluencePageFooterComments",
+      "mcp__atlassian__getConfluencePageInlineComments",
+      "mcp__atlassian__getConfluenceCommentChildren",
+
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git ls-files:*)",
+      "Bash(git fetch:*)",
+      "Bash(git branch)",
+      "Bash(git remote -v)",
+
+      "Bash(git switch -c:*)",
+      "Bash(git checkout -b:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+
+      "Bash(gh pr view:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr diff:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)",
+
+      "Bash(yarn lint)",
+      "Bash(yarn tsc)",
+      "Bash(yarn test:*)"
+    ],
+
+    "ask": [
+      "Bash(git push:*)",
+      "Bash(gh pr create:*)",
+      "Bash(gh pr edit:*)",
+      "Bash(gh pr ready:*)",
+      "Bash(gh pr comment:*)",
+      "Bash(gh api:*)",
+
+      "Bash(yarn db:schema)",
+      "Bash(yarn db:schema *)",
+      "Edit(package.json)",
+      "Edit(yarn.lock)",
+      "Edit(package-lock.json)",
+
+      "mcp__atlassian__createJiraIssue",
+      "mcp__atlassian__editJiraIssue",
+      "mcp__atlassian__transitionJiraIssue",
+      "mcp__atlassian__addCommentToJiraIssue",
+      "mcp__atlassian__createIssueLink",
+
+      "mcp__atlassian__createConfluencePage",
+      "mcp__atlassian__updateConfluencePage",
+      "mcp__atlassian__createConfluenceFooterComment",
+      "mcp__atlassian__createConfluenceInlineComment"
+    ],
+
+    "deny": [
+      "Read(.env)",
+      "Read(.env.*)",
+      "Edit(.env)",
+      "Write(.env)",
+
+      "mcp__atlassian__addWorklogToJiraIssue",
+      "mcp__atlassian__createCompassComponent",
+      "mcp__atlassian__createCompassComponentRelationship",
+      "mcp__atlassian__createCompassCustomFieldDefinition",
+      "mcp__atlassian__addTeamworkGraphContext",
+
+      "Bash(gh pr merge:*)",
+      "Bash(gh api -X PUT:*)",
+      "Bash(gh api -X POST:*)",
+      "Bash(gh api -X PATCH:*)",
+      "Bash(gh api -X DELETE:*)",
+      "Bash(gh api --method PUT:*)",
+      "Bash(gh api --method POST:*)",
+      "Bash(gh api --method PATCH:*)",
+      "Bash(gh api --method DELETE:*)",
+
+      "Bash(git add -A:*)",
+      "Bash(git add --all:*)",
+      "Bash(git add .)",
+      "Bash(git add :/)",
+      "Bash(git commit -a:*)",
+      "Bash(git commit --all:*)",
+      "Bash(git commit -am:*)",
+
+      "Bash(git push origin main:*)",
+      "Bash(git push origin staging:*)",
+      "Bash(git push -u origin main:*)",
+      "Bash(git push -u origin staging:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+
+      "Bash(yarn seed:*)",
+      "Bash(yarn run seed:*)",
+      "Bash(yarn prisma db seed:*)",
+      "Bash(npx prisma db seed:*)",
+      "Bash(prisma db seed:*)",
+      "Bash(yarn build:preview)",
+      "Bash(yarn build:preview *)",
+      "Bash(yarn run build:preview)",
+      "Bash(yarn run build:preview *)",
+      "Bash(yarn prisma db push:*)",
+      "Bash(npx prisma db push:*)",
+      "Bash(prisma db push:*)",
+      "Bash(yarn prisma migrate reset:*)",
+      "Bash(npx prisma migrate reset:*)",
+      "Bash(prisma migrate reset:*)",
+
+      "Bash(python scripts/emailtemplate.py:*)",
+      "Bash(python3 scripts/emailtemplate.py:*)"
+    ]
+  }
+}
