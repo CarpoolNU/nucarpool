@@ -111,6 +111,35 @@ follow the rules below and in **Work tracking**.
 Jira project `SCRUM` is the source of truth for engineering work, and meaningful
 work should be associated with an issue.
 
+**Jira status lifecycle** — keep the active issue's status synchronized with the
+actual state of the work:
+
+```
+To Do → In Progress ⇄ Blocked → Code Review → Done (human only)
+```
+
+- `To Do` — issue exists but actual work has not started. Creating or selecting
+  an issue does not move it.
+- `In Progress` — transition when you begin actual implementation,
+  investigation, or documentation work.
+- `Blocked` — **exception state.** Use only when work genuinely cannot continue:
+  missing access, an external dependency, a required human or team decision,
+  unavailable required information, or another real blocker to useful progress.
+  Do **not** use it for ordinary uncertainty you can resolve by investigating
+  the repo, Jira, Confluence, or git history. When transitioning, comment with
+  what is blocking the work and what is needed to resume. Transition back to
+  `In Progress` when the blocker clears.
+- `Code Review` — transition only after the feature branch is pushed **and** the
+  PR actually exists. Pair it with a comment carrying the PR link and a concise
+  summary.
+- `Done` — **never set by you.** It follows the human merge, set manually in
+  Jira or by future deterministic automation.
+
+A ticket in `Code Review` with no PR, or `Done` with nothing merged, indicates the Jira status is inconsistent with the actual state of the work.
+
+Resolve transitions by workflow status **name**, not by a hard-coded transition
+ID — IDs are project configuration and can change.
+
 When you discover an actionable bug, regression, tech-debt item, or follow-up
 during development: **search Jira first** — if a matching issue exists, reference
 it rather than filing a duplicate. If none exists and the problem is outside the
@@ -142,9 +171,32 @@ it returns `main` or `staging`, stop and say so — do not commit, do not push.
 You may create and update feature branches, commit and push them, create and
 update pull requests against `main`, and inspect PR checks and status.
 
-**Your workflow ends at the pull request.** Report the PR and its check status,
-then stop. Never merge a PR, and never move a ticket to `Done` — both follow the
-merge, and the user performs every merge manually through GitHub.
+**You own delivery through PR readiness. The human owns the merge.** Creating the
+PR is not the finish line — a PR that has not been checked is not delivered. The
+merge is the boundary, and it is not yours.
+
+After the PR exists, keep working: transition the issue to `Code Review`, comment
+the PR link plus a concise implementation summary, then inspect the PR's checks
+and its final diff. Confirm the PR contains only the intended changes, and verify
+the ticket's acceptance criteria against what was actually implemented.
+
+If a check fails **because of the current change**: diagnose it, fix it, validate
+locally, then commit and push to the **same** feature branch and re-check. Never
+open a new branch or PR to fix the current PR's own failures. Repeat as
+reasonably necessary until the PR is review-ready.
+
+If a check exposes an **unrelated** problem, use the discovered-issue workflow
+above — reference or file a Jira issue, and do not scope-creep the current PR. If
+an unrelated failure genuinely prevents the PR from becoming review-ready and
+cannot be resolved within this ticket, use `Blocked`.
+
+Report remaining risks or unmet acceptance criteria rather than implying the work
+is clean when it is not.
+
+**Stop only when either** the PR is ready for human review, **or** you are
+genuinely blocked and Jira accurately reflects that. Never merge a PR, and never
+move a ticket to `Done` — both follow the merge, and the user performs every
+merge manually through GitHub.
 
 - Never commit implementation work to `main` or `staging`, and never push either
   branch.
@@ -153,6 +205,8 @@ merge, and the user performs every merge manually through GitHub.
 - Stage specific paths. Never `git add -A` or `git commit -a` — the working tree
   may hold unrelated changes that must stay out of the commit and PR.
 - Never force-push a shared branch or bypass branch protection.
+- Never merge by any route — not `gh pr merge`, not a GitHub API call, not the
+  web UI. Merging is the human's, without exception.
 
 ## References
 
