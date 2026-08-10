@@ -22,6 +22,20 @@ the finish line.
 Do not copy the tech stack, data model, environment variables, or permission lists into your
 reasoning output — consult them where they live.
 
+## 0. Read what the request authorizes
+
+Filing a ticket and fixing a problem are different acts. Decide which the user asked for
+**before** you touch anything, because it determines ticket status.
+
+| Request               | Example                                                           | You do                                                                                                                                  |
+| --------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| **Find / audit only** | "find problems in the messaging system", "audit this for bugs"    | Investigate. File or reference issues. Leave new ones in `To Do`. **Do not start fixing.** Keep auditing, then report.                  |
+| **Find and fix**      | "find problems and fix them", "audit X and resolve what you find" | Investigate. Establish the issue. Make it active, move it to `In Progress` when work actually starts, run the pipeline to PR readiness. |
+| **Explicit ticket**   | "work on SCRUM-220"                                               | Retrieve it, `In Progress` when work starts, run the pipeline.                                                                          |
+
+Absent explicit authorization to fix, assume **find only**. "Find" is not "fix" — an audit that
+silently starts changing code has exceeded its mandate.
+
 ## 1. Establish the Jira issue — always first
 
 No implementation begins as an anonymous, untracked change.
@@ -161,7 +175,7 @@ Then stop. The human reviews and merges.
 
 ## Discovered-issue workflow
 
-When you find a new actionable problem mid-task:
+When you find a new actionable problem:
 
 1. Is it part of the active ticket? If yes, handle it in scope.
 2. If not — **do not scope-creep the current PR.** Search Jira first, with more than one
@@ -169,10 +183,38 @@ When you find a new actionable problem mid-task:
 3. Match found → reference it.
 4. No match → create an issue carrying the evidence you have: affected area, observed vs.
    expected behavior, impact, relevant paths, and the ticket you were on when you found it.
-5. Return to the original task.
+5. **Leave the new issue in `To Do`** (see the status rule below).
+6. Return to the original task.
 
 Do not file trivial observations, speculation, duplicates, or anything the active ticket
 already covers.
+
+### Status of a discovered ticket
+
+**A newly discovered ticket defaults to `To Do`.** It moves to `In Progress` only when **both**
+hold:
+
+1. the request authorizes working on the discovered problem ("find and fix", "resolve",
+   "implement", "work on"), **and**
+2. you actually begin work on that ticket.
+
+Never move it merely because it was discovered, was created, looks important, or is worth
+fixing later. **Creating a ticket is not starting work.** Status must describe reality, and a
+board full of `In Progress` tickets nobody is touching tells the team nothing.
+
+### Switching the active ticket
+
+Default: file it, leave it `To Do`, finish the ticket you are on.
+
+Only when the request explicitly authorized find-and-fix may a discovered ticket become the
+active work item — and then:
+
+- establish the Jira issue first
+- **state the scope change out loud**; never switch silently
+- keep it a separate PR unless the two problems are genuinely inseparable
+
+Prefer one issue to one coherent PR. Never quietly bundle unrelated fixes into one PR — a
+reviewer cannot approve half a diff.
 
 ## Blocked
 
