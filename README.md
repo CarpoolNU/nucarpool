@@ -97,7 +97,7 @@ NEXT_PUBLIC_ENV="<environment-name>"
 
 ## Documentation
 
-This project is developed with Claude Code following a Jira-first workflow. Read the workflow guide before your first contribution — it covers conventions this README does not. The layer docs are worth reading before you edit the layer they describe.
+This project is developed with a Jira workflow. Read the workflow guide before your first contribution — it covers conventions this README does not. The layer docs are worth reading before you edit the layer they describe.
 
 | Document                                                                        | Covers                                                                                                                                                                                                                |
 | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
