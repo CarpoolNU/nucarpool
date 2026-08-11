@@ -37,3 +37,10 @@ yarn-error.log*
 
 # local DB
 nucarpool-db-data/
+
+# Claude Code
+# .claude/settings.json and .claude/skills/ are intentionally tracked — they are
+# the shared permission guardrails and workflow. Only per-machine overrides,
+# which Claude Code writes itself when you approve a permission permanently,
+# are personal. Never commit them.
+.claude/settings.local.json
