@@ -26,7 +26,13 @@ cd nucarpool
 yarn install
 ```
 
-Create a `.env` in the repository root containing the variables below. There is no `.env.example` — ask a maintainer for development credentials. The app validates these at startup and will not boot if one is missing.
+Create a `.env` in the repository root by copying the example file, then fill in real values:
+
+```bash
+cp .env.example .env
+```
+
+Ask a maintainer for development credentials. The app validates these at startup and will not boot if one is missing.
 
 Then start the database, set up the schema, and run the app:
 
@@ -41,45 +47,16 @@ The app runs at <http://localhost:3000>. `yarn startup` runs `yarn db:start` and
 
 ## Environment Variables
 
-Placeholders only — never commit real values. `.env` is gitignored.
+[`.env.example`](.env.example) is the authoritative list. It documents every variable, grouped by service, with placeholder values and notes on which are optional. Copy it to `.env` and fill in real values — never commit them, and keep placeholders only in `.env.example` itself. `.env` is gitignored.
 
-```env
-# Database — MYSQL_* are read by docker-compose; the app itself only uses DATABASE_URL,
-# so its user, password, port, and database name must match the container.
-DATABASE_URL="mysql://<user>:<password>@localhost:<MYSQL_PORT>/<MYSQL_DATABASE>"
-MYSQL_PORT="<host-port>"
-MYSQL_ROOT_PASSWORD="<local-only-password>"
-MYSQL_DATABASE="<database-name>"
+Four things that commonly trip people up:
 
-# Authentication
-NEXTAUTH_SECRET="<random-secret>"
-NEXTAUTH_URL="http://localhost:3000"
-AZURE_CLIENT_ID="<azure-client-id>"
-AZURE_CLIENT_SECRET="<azure-client-secret>"
-AZURE_TENANT_ID="<azure-tenant-id>"
-GOOGLE_CLIENT_ID="<google-client-id>"
-GOOGLE_CLIENT_SECRET="<google-client-secret>"
+- **AWS keys use suffixed names** — `ACCESS_KEY_ID_AWS`, `SECRET_ACCESS_KEY_AWS`, `REGION_AWS`. The standard `AWS_*` names fail validation.
+- **`MYSQL_*` are read only by Docker Compose**, to provision the container. The app reads `DATABASE_URL`, so the user, password, port, and database name inside it must match the container's.
+- **`NEXT_PUBLIC_*` variables are inlined into the client bundle** at build time and are therefore public. Everything else is server-only.
+- **`GOOGLE_*` are required even locally.** The Google sign-in button only appears when `NEXT_PUBLIC_ENV=staging`, but the variables are validated in every environment.
 
-# AWS (SES + S3) — note the suffixed names; standard AWS_* names will fail validation
-ACCESS_KEY_ID_AWS="<aws-access-key-id>"
-SECRET_ACCESS_KEY_AWS="<aws-secret-access-key>"
-REGION_AWS="<aws-region>"
-
-# Mapbox
-NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN="<mapbox-public-token>"
-
-# Pusher
-NEXT_PUBLIC_PUSHER_KEY="<pusher-key>"
-NEXT_PUBLIC_PUSHER_CLUSTER="<pusher-cluster>"
-PUSHER_APP_ID="<pusher-app-id>"
-PUSHER_SECRET="<pusher-secret>"
-
-# Mixpanel — any non-empty value works locally
-NEXT_PUBLIC_MIXPANEL_PROJECT_TOKEN="<mixpanel-token>"
-
-# Optional — "staging" enables Google sign-in and namespaces S3 uploads
-NEXT_PUBLIC_ENV="<environment-name>"
-```
+Validation runs at import time in [`src/utils/env/browser.ts`](src/utils/env/browser.ts) and [`src/utils/env/server.ts`](src/utils/env/server.ts), which is why a missing variable stops the app from starting rather than failing later.
 
 ## Useful Commands
 
