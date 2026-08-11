@@ -67,7 +67,7 @@ Three ideas carry the design:
 | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------ |
 | [`CLAUDE.md`](../../CLAUDE.md)                                                     | Durable project instructions: commands, architecture gotchas, safety, git policy. Loaded every session. | yes    |
 | [`.claude/settings.json`](../../.claude/settings.json)                             | Permission model: allowed / prompted / forbidden tools. **Source of truth.**                            | yes    |
-| `.claude/settings.local.json`                                                      | Your machine-local overrides. Personal.                                                                 | no     |
+| `.claude/settings.local.json`                                                      | Your machine-local overrides. Personal, gitignored — never commit it.                                   | no     |
 | [`.claude/skills/jira-ticket/SKILL.md`](../../.claude/skills/jira-ticket/SKILL.md) | The repeatable procedure for executing a ticket — see [§10](#10-standard-engineering-lifecycle).        | yes    |
 | [`.mcp.json`](../../.mcp.json)                                                     | Declares the Atlassian MCP server. URL only — no credentials.                                           | yes    |
 | [`README.md`](../../README.md)                                                     | Human setup: stack, environment variables, commands.                                                    | yes    |
@@ -407,7 +407,10 @@ either gated behind you or off the table.
 - **`ask` is a real decision point.** A declined prompt means _don't_ — adjust, don't retry the
   same call another way.
 
-Personal overrides go in `.claude/settings.local.json`. Keep it out of git ([§17](#17-known-limitations-and-teamadmin-responsibilities)).
+Personal overrides go in `.claude/settings.local.json` — Claude Code writes it for you the
+first time you approve a permission permanently. It is gitignored, so you will not normally see
+it in `git status`. **Never commit it:** your machine's overrides would silently become
+everyone's.
 
 ## 13. Git safety
 
@@ -495,8 +498,6 @@ part of the job** — see [§10](#10-standard-engineering-lifecycle). Inspect wi
 **Open items a future developer may pick up:**
 
 - Confirm and document branch protection once someone has admin access.
-- `.claude/settings.local.json` is not in the repository `.gitignore` (tracked as SCRUM-216),
-  so it can show up as untracked in a fresh clone. Do not commit it.
 - There is no test suite yet, so `test.yml` is a placeholder in practice.
 
 Everything else in this document describes **current** behavior; only the items above are open

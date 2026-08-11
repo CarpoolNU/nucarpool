@@ -52,6 +52,10 @@ There are no test files yet. Jest uses the `ts-jest` preset with the default `no
 **Repo hygiene**
 
 - Do not modify `package.json`, `yarn.lock`, or dependencies during unrelated work.
+- Never stage or commit `.claude/settings.local.json`. It is gitignored and holds one
+  developer's machine-local permission overrides; committing it would change what Claude Code
+  is allowed to do for the whole team. `.claude/settings.json` is the shared file and stays
+  tracked.
 
 ## Architecture essentials
 
