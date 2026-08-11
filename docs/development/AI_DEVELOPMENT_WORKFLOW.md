@@ -72,6 +72,7 @@ Three ideas carry the design:
 | [`.mcp.json`](../../.mcp.json)                                                     | Declares the Atlassian MCP server. URL only — no credentials.                                           | yes    |
 | [`README.md`](../../README.md)                                                     | Human setup: stack, environment variables, commands.                                                    | yes    |
 | [`.github/workflows/`](../../.github/workflows/)                                   | CI — see [§14](#14-ci-behavior).                                                                        | yes    |
+| [`.github/dependabot.yml`](../../.github/dependabot.yml)                           | Dependency update automation — see [§14](#14-ci-behavior).                                              | yes    |
 
 Layer-specific docs: [`src/server/router/README.md`](../../src/server/router/README.md)
 (tRPC routers, context, auth) and [`src/server/db/README.md`](../../src/server/db/README.md)
@@ -451,6 +452,27 @@ Because lint and type-check fire on different triggers, **checking CI after the 
 part of the job** — see [§10](#10-standard-engineering-lifecycle). Inspect with
 `gh pr checks` and `gh run view`; both are read-only and need no approval.
 
+### Dependency updates
+
+[`.github/dependabot.yml`](../../.github/dependabot.yml) configures Dependabot for the `npm`
+ecosystem (`package.json` and `yarn.lock`) and for the actions pinned in
+[`.github/workflows/`](../../.github/workflows/). Both run weekly, Monday morning Eastern.
+
+- Packages that have to move together are **grouped** into one pull request: `@aws-sdk/*`,
+  `prisma` with `@prisma/client`, `@trpc/*`, `react` with `react-dom` and their types,
+  `@mui/*` with `@emotion/*`, `antd` with `rc-*`, and the Chart.js set. Bumping any of these
+  in isolation breaks the build, so those groups include majors.
+- Everything else batches by risk: minor and patch updates arrive as one production and one
+  development pull request, while **majors arrive individually** so each can be reviewed and
+  tested on its own.
+- A 7-day cooldown holds brand-new releases back, giving a yanked or compromised publish time
+  to be withdrawn before it reaches a pull request.
+- Dependabot pull requests run the same CI as everything else. Their `GITHUB_TOKEN` is
+  read-only and they cannot read repository secrets — fine here, since no current workflow
+  needs one.
+- **Version updates begin as soon as the config is on `main`. Security updates do not** — see
+  [§17](#17-known-limitations-and-teamadmin-responsibilities).
+
 ## 15. Security considerations
 
 - **Secrets.** Never print, echo, or copy `.env` values into output, code, or commits.
@@ -494,6 +516,10 @@ part of the job** — see [§10](#10-standard-engineering-lifecycle). Inspect wi
   treat the repository-side rules above as the protection you can actually rely on.
 - Whether CI checks are _required_ before merge; who can merge; whether review is mandatory.
 - PlanetScale deploy-request permissions.
+- **Dependabot alerts and security updates.** [`.github/dependabot.yml`](../../.github/dependabot.yml)
+  turns on scheduled _version_ updates by itself, but the vulnerability-driven _security_
+  updates are a repository setting, under Settings → Code security. Until an admin enables
+  them, the repository gets routine scheduled upgrades and no alert-triggered patches.
 
 **Open items a future developer may pick up:**
 
