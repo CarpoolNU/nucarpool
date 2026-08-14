@@ -1,0 +1,106 @@
+# Dependabot configuration (SCRUM-181).
+# Reference: https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference
+#
+# Version updates begin automatically once this file is on the default branch.
+# Vulnerability-driven security updates additionally require "Dependabot alerts"
+# and "Dependabot security updates" to be turned on under
+# Settings -> Code security. Those toggles are repository settings and cannot be
+# enabled from this file.
+version: 2
+
+updates:
+  # ---------------------------------------------------------------------------
+  # npm ecosystem — package.json and yarn.lock at the repository root.
+  # Yarn Classic is the package manager; the "npm" ecosystem covers it.
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "chore"
+      prefix-development: "chore"
+      include: "scope"
+    # Let a release age on the registry before adopting it, so publishes that
+    # are yanked or found to be compromised have time to be withdrawn.
+    cooldown:
+      default-days: 7
+    groups:
+      # These packages are coupled and have to move together — bumping one
+      # without its siblings breaks the build, so these groups deliberately
+      # include major versions as well.
+      aws-sdk:
+        patterns:
+          - "@aws-sdk/*"
+      prisma:
+        patterns:
+          - "prisma"
+          - "@prisma/client"
+      trpc:
+        patterns:
+          - "@trpc/*"
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+      mui:
+        patterns:
+          - "@mui/*"
+          - "@emotion/*"
+      antd:
+        patterns:
+          - "antd"
+          - "rc-*"
+      chart:
+        patterns:
+          - "chart.js"
+          - "chartjs-*"
+          - "react-chartjs-2"
+
+      # Everything else: minor and patch updates batch into two pull requests.
+      # Majors are left out of these groups on purpose, so each one arrives as
+      # its own pull request that can be reviewed and tested individually.
+      production-minor-and-patch:
+        dependency-type: "production"
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      development-minor-and-patch:
+        dependency-type: "development"
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ---------------------------------------------------------------------------
+  # GitHub Actions used by the workflows in .github/workflows.
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    cooldown:
+      default-days: 7
+    groups:
+      actions-minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
