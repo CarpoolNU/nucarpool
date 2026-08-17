@@ -1,0 +1,40 @@
+name: Build
+
+# Trigger policy, shared by lint / tsc / test / build / env-contract (SCRUM-248):
+#   pull_request     - gates every PR before it can merge into main
+#   push to main     - catches anything that reaches main by another route
+# Deliberately not `on: [push]`: while a PR is open that runs every check twice,
+# once for the branch push and once for the pull_request event.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: install node v20
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 20
+          cache: yarn
+      - run: yarn install --frozen-lockfile
+      # `yarn build` is bare `next build` and does not generate the Prisma
+      # client. @prisma/client's postinstall normally generates it during
+      # install, but making it explicit means the build no longer depends on an
+      # install side effect that `--ignore-scripts` would silently remove.
+      - name: generate prisma client
+        run: yarn prisma generate
+      # `next build` imports src/utils/env/{browser,server}.ts, which validate
+      # with envsafe at import time, so every required variable must be present
+      # or the build fails while collecting page data. These are throwaway
+      # placeholders derived from the env contract itself - building the app
+      # never requires real credentials or a reachable database.
+      - name: provide placeholder build environment
+        run: node scripts/check-env-contract.js --github-env >> "$GITHUB_ENV"
+      # Never `yarn build:preview` - that script runs `prisma db push` and
+      # re-seeds the database.
+      - run: yarn build

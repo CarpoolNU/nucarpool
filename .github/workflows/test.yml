@@ -1,16 +1,27 @@
 name: Tests
 
-on: [push]
+# Trigger policy, shared by lint / tsc / test / build / env-contract (SCRUM-248):
+#   pull_request     - gates every PR before it can merge into main
+#   push to main     - catches anything that reaches main by another route
+# Deliberately not `on: [push]`: while a PR is open that runs every check twice,
+# once for the branch push and once for the pull_request event.
+on:
+  pull_request:
+  push:
+    branches: [main]
 
 jobs:
   test:
+    name: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
-      - name: install node v18.16
-        uses: actions/setup-node@v1
+      - uses: actions/checkout@v7.0.1
+      - name: install node v20
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: 20
-      - run: yarn install
+          cache: yarn
+      - run: yarn install --frozen-lockfile
+      # --passWithNoTests keeps this green while the repo has no test files, so
+      # this gate currently proves nothing. Adding real tests is SCRUM-211.
       - run: yarn test --passWithNoTests
-
