@@ -957,7 +957,7 @@ const GroupInfo = ({
             details={groupDetails}
             setDetails={setGroupDetails}
           />
-          <div className="flex justify-center mt2">
+          <div className="mt-2 flex justify-center">
             <button
               className="w-[150px] rounded-md bg-red-700 py-2 text-white hover:bg-red-800 transition-colors"
               onClick={async () => {
