@@ -1,4 +1,4 @@
-name: Lint
+name: Env Contract
 
 # Trigger policy, shared by lint / tsc / test / build / env-contract (SCRUM-248):
 #   pull_request     - gates every PR before it can merge into main
@@ -10,9 +10,13 @@ on:
   push:
     branches: [main]
 
+# The build job satisfies envsafe with placeholder values, which means a build
+# alone can never notice that a newly required variable was left out of
+# .env.example. This job is that missing check, kept separate so the two
+# concerns fail independently and for legible reasons.
 jobs:
-  lint:
-    name: lint
+  env-contract:
+    name: env-contract
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
@@ -20,9 +24,7 @@ jobs:
         uses: actions/setup-node@v7.0.0
         with:
           node-version: 20
-          cache: yarn
-      - run: yarn install --frozen-lockfile
-      # The `lint` script pins --max-warnings=0. Several rules that matter here,
-      # notably react-hooks/exhaustive-deps, are warnings rather than errors, and
-      # without that flag they would never fail this check.
-      - run: yarn lint
+      # Intentionally no `yarn install`: the check is dependency-free, so this
+      # job stays fast and keeps reporting even when installation is broken.
+      - name: check .env.example against the app's env contract
+        run: node scripts/check-env-contract.js
