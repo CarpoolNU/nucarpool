@@ -430,27 +430,47 @@ enforcement by GitHub. See [§17](#17-known-limitations-and-teamadmin-responsibi
 
 ## 14. CI behavior
 
-Current workflows in [`.github/workflows/`](../../.github/workflows/), all on Node 20:
+Current workflows in [`.github/workflows/`](../../.github/workflows/). The five checks all run
+on Node 20; `auto-comment.yml` is not a check and runs no Node of its own:
 
 | Workflow                                                       | Trigger                            | Runs                                                                    |
 | -------------------------------------------------------------- | ---------------------------------- | ----------------------------------------------------------------------- |
-| [`lint.yml`](../../.github/workflows/lint.yml)                 | pull request                       | `yarn lint`                                                             |
-| [`tsc.yml`](../../.github/workflows/tsc.yml)                   | push                               | `yarn tsc`                                                              |
-| [`test.yml`](../../.github/workflows/test.yml)                 | push                               | `yarn test --passWithNoTests`                                           |
+| [`lint.yml`](../../.github/workflows/lint.yml)                 | PR + push to `main`                | `yarn lint` (ESLint, `--max-warnings=0`)                                |
+| [`tsc.yml`](../../.github/workflows/tsc.yml)                   | PR + push to `main`                | `yarn tsc`                                                              |
+| [`test.yml`](../../.github/workflows/test.yml)                 | PR + push to `main`                | `yarn test --passWithNoTests`                                           |
+| [`build.yml`](../../.github/workflows/build.yml)               | PR + push to `main`                | `prisma generate`, then `yarn build` against placeholder env values     |
+| [`env-contract.yml`](../../.github/workflows/env-contract.yml) | PR + push to `main`                | `node scripts/check-env-contract.js`                                    |
 | [`auto-comment.yml`](../../.github/workflows/auto-comment.yml) | PR touching `prisma/schema.prisma` | comments a reminder to open a PlanetScale deploy request before merging |
 
-- Lint runs on PRs; type-check and tests on pushes. Separate triggers, so a green PR page is
-  not the same as a green type-check — check both.
-- `--passWithNoTests` is load-bearing: **there are no test files yet.** Tests pass because
-  nothing runs. Component tests would first need `jest-environment-jsdom` and a React testing
-  library (Jest currently uses `ts-jest` with the default `node` environment).
+- All five checks share one trigger policy: **every pull request, plus pushes to `main`.** They
+  deliberately do not run on pushes to other branches — while a PR is open that would run
+  everything twice, once for the push and once for the `pull_request` event. The practical
+  consequence is that pushing a branch with no PR yet gets you no CI feedback.
+- Every job that needs dependencies installs with `yarn install --frozen-lockfile`, so CI tests
+  the locked dependency set rather than whatever resolves that day. `env-contract.yml` is the
+  exception: its check is dependency-free, so it skips installation and stays fast and useful
+  even when installation itself is broken.
+- `build.yml` needs **no secrets.** `next build` imports the envsafe modules, which validate at
+  import time, so the job supplies throwaway placeholder values derived from the env contract
+  itself. Nothing queries the database during a build.
+- `env-contract.yml` exists because those placeholders always satisfy envsafe — a build alone
+  can never notice that a newly required variable was left out of `.env.example`. The check
+  derives the required names from [`src/utils/env/`](../../src/utils/env/) and fails when the
+  template does not document them. Run it locally with `yarn check:env`.
+- `--max-warnings=0` on lint is load-bearing: several rules that matter here, notably
+  `react-hooks/exhaustive-deps`, are warnings rather than errors and would otherwise never
+  fail the check.
+- `--passWithNoTests` is load-bearing in the other direction: **there are no test files yet.**
+  Tests pass because nothing runs. Component tests would first need `jest-environment-jsdom`
+  and a React testing library (Jest currently uses `ts-jest` with the default `node`
+  environment).
 - Whether these checks are _required_ before merge is a branch-protection setting, not
   something CI enforces.
 - A husky pre-commit hook runs `npx pretty-quick --staged` locally.
 
-Because lint and type-check fire on different triggers, **checking CI after the PR exists is
-part of the job** — see [§10](#10-standard-engineering-lifecycle). Inspect with
-`gh pr checks` and `gh run view`; both are read-only and need no approval.
+**Checking CI after the PR exists is part of the job** — see
+[§10](#10-standard-engineering-lifecycle). Inspect with `gh pr checks` and `gh run view`; both
+are read-only and need no approval.
 
 ### Dependency updates
 
