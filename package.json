@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint --max-warnings=0",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings=0",
     "check:env": "node scripts/check-env-contract.js",
     "db:start": "docker-compose -f docker-compose.yml up -d",
     "db:stop": "docker-compose -f docker-compose.yml down",
