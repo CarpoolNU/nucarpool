@@ -12,7 +12,7 @@
     "db:stop": "docker-compose -f docker-compose.yml down",
     "db:schema": "prisma migrate dev && prisma generate",
     "seed": "yarn prisma db seed",
-    "prepare": "husky install",
+    "prepare": "husky",
     "test": "jest",
     "vercel-build": "./vercel.sh",
     "build:preview": "prisma generate && echo \"y\" | prisma db push && next build && yarn prisma db seed",
