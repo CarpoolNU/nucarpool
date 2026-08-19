@@ -72,7 +72,9 @@ type CarpoolSearchWithLocations = CarpoolSearch & {
 /**
  * Converts a CarpoolSearch to the CommonUser interface for scoring
  */
-const carpoolSearchToCommonUser = (search: CarpoolSearchWithLocations): CommonUser => {
+const carpoolSearchToCommonUser = (
+  search: CarpoolSearchWithLocations,
+): CommonUser => {
   return {
     id: search.user.id,
     role: search.role,
@@ -121,7 +123,7 @@ export const calculateScore = (
 
   return (userSearch: CarpoolSearchWithLocations) => {
     const user = carpoolSearchToCommonUser(userSearch);
-    
+
     if (
       (currentUser.role === "RIDER" &&
         (user.role === "RIDER" || user.seatAvail === 0)) ||
@@ -307,14 +309,18 @@ export type GenerateUserInput = {
 };
 
 /**
- * Creates a full user object from a skeleton of critical user information
+ * Creates a full user object from a user id.
  *
- * @param userInfo an object containing user info that we want to switch up between users
- * @returns a full user object to insert into the database, with some fields hardcoded due to lack of significance
+ * Only the id is needed: since the migration that moved role, schedule, seats
+ * and coordinates off `User` and onto `CarpoolSearch`, everything else on the
+ * user row is either derived from the id or hardcoded. The parameter used to be
+ * typed `GenerateUserInput & { id: string }`, which forced every caller into a
+ * cast to supply fields this function never read.
+ *
+ * @param userInfo an object carrying the id to build the user around
+ * @returns an upsert argument for the user row
  */
-export const generateUser = ({
-  id,
-}: GenerateUserInput & { id: string }) => {
+export const generateUser = ({ id }: { id: string }) => {
   const updated_obj = {
     id: id,
     name: `User ${id}`,

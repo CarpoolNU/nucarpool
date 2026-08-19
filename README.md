@@ -65,7 +65,9 @@ On Apple Silicon the container now runs natively rather than under x86 emulation
 
 ### Seeding resets your local data
 
-`yarn seed` is **not additive**. Before inserting anything, [`prisma/seed.ts`](prisma/seed.ts) deletes every row from `request`, `carpool_search`, `location`, `group`, `message` and `user`, then inserts about 70 generated users with fixed ids and 10 groups. It also makes roughly 140 Mapbox reverse-geocode calls, which consume API quota.
+`yarn seed` is **not additive**. Before inserting anything, [`prisma/seed.ts`](prisma/seed.ts) deletes every row from `request`, `message`, `conversation`, `carpool_search`, `location`, `group` and `user`, then inserts about 70 generated users with fixed ids, 10 groups, and one request per user — each request with a conversation and a short two-sided message thread, so the messaging UI has something to render.
+
+Addresses are synthesised offline and deterministically, so seeding makes **no network calls and consumes no Mapbox quota**. Set `SEED_REVERSE_GEOCODE=1` to reverse geocode against Mapbox instead; results are cached per coordinate, and any failure falls back to a synthesised address.
 
 Three commands reach that script, not one:
 

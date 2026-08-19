@@ -1,154 +1,122 @@
 import { CarpoolGroup, PrismaClient, Role, User } from "@prisma/client";
 import { range } from "lodash";
 import Random from "random-seed";
-import { generateUser, GenerateUserInput } from "../src/utils/recommendation";
+import { generateUser } from "../src/utils/recommendation";
 import { timeEnd } from "console";
 import {
   assertSeedTargetIsLocal,
   SEED_OVERRIDE_ENV,
   SeedGuardError,
 } from "../src/utils/seedGuard";
+import {
+  AddressResolver,
+  createAddressResolver,
+} from "../src/utils/seedAddresses";
 
 const prisma = new PrismaClient();
 
-async function reverseGeocode(
-  lng: number,
-  lat: number,
-): Promise<{
-  street: string;
-  city: string;
-  state: string;
-  address: string;
-}> {
-  const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
-
-  try {
-    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${mapboxToken}&types=address,place,locality,region`;
-    const response = await fetch(url);
-    const data = await response.json();
-
-    let street = "";
-    let city = "";
-    let state = "";
-    let address = "";
-    let buildingNumber = "";
-
-    // Try to extract address components from the response
-    for (const feature of data.features) {
-      // Look for address features to get street and building number
-      if (feature.place_type.includes("address")) {
-        // Try to extract building/house number from address text
-        const addressParts = feature.text.split(" ");
-        // Check if there exists a building number
-        if (addressParts.length > 0 && !isNaN(Number(addressParts[0]))) {
-          buildingNumber = addressParts[0];
-          street = addressParts.slice(1).join(" ");
-        } else {
-          street = feature.text;
-        }
-      }
-
-      // Look for place features to get city name
-      if (feature.place_type.includes("place") && !city) {
-        city = feature.text;
-      }
-
-      // Look for region features to get state name
-      if (feature.place_type.includes("region") && !state) {
-        state = feature.text;
-      }
-
-      // Prefer POI names for the address field if available
-      if (feature.place_type.includes("poi") && !address) {
-        address = feature.text;
-      }
-    }
-
-    // Append building number to street if it exists
-    if (buildingNumber && street) {
-      street = `${buildingNumber} ${street}`;
-    }
-
-    // If no address was found, create one from the components
-    if (!address) {
-      address = `${street}, ${city}, ${state}`;
-    }
-
-    return { street, city, state, address };
-  } catch (error) {
-    console.error("Reverse geocoding failed:", error);
-    return {
-      street: "123 Main St",
-      city: "Boston",
-      state: "MA",
-      address: "123 Main St, Boston, MA",
-    };
-  }
-}
+/**
+ * Every table the seed writes to, in an order safe to delete in: rows that
+ * reference another table go first.
+ *
+ * `conversation` is included because it was previously missed. Under
+ * `relationMode = "prisma"` there is no database-level foreign key, so orphaned
+ * conversations simply survived a re-seed pointing at deleted requests — and
+ * since `Conversation.requestId` is `@unique`, a later request reusing an id
+ * would collide with one of those ghosts.
+ */
+export const SEED_DELETE_ORDER = [
+  "request",
+  "message",
+  "conversation",
+  "carpoolSearch",
+  "location",
+  "carpoolGroup",
+  "user",
+] as const;
 
 /**
- * Deletes all entries in the user table.
+ * Deletes every row the seed is responsible for.
+ *
+ * This replaces the previous `clearConnections()` pass, which ran immediately
+ * before this and issued roughly 4,900 no-op `favorites.disconnect` writes
+ * against rows that were about to be deleted anyway.
  */
-const deleteAllData = async () => {
+export const deleteAllData = async () => {
   await prisma.request.deleteMany({});
+  await prisma.message.deleteMany({});
+  await prisma.conversation.deleteMany({});
   await prisma.carpoolSearch.deleteMany({});
   await prisma.location.deleteMany({});
   await prisma.carpoolGroup.deleteMany({});
-  await prisma.message.deleteMany({});
   await prisma.user.deleteMany({});
 };
 
 /**
- * Clears connections between users.
+ * Creates one request together with the conversation and messages the
+ * application would have created alongside it.
+ *
+ * Mirrors `requests.create` in `src/server/router/user/requests.ts`: the request
+ * carries an empty `message` column, the conversation is keyed by `requestId`,
+ * the request is then back-linked through `conversationId`, and the greeting
+ * lives in a `Message` row rather than on the request.
+ *
+ * A reply from the recipient is added as well, left unread, so the messaging UI
+ * has a two-sided thread and an unread indicator to render locally.
  */
-const clearConnections = async () => {
-  const users = await prisma.user.findMany();
+export const seedRequestWithConversation = async (
+  fromUserId: string,
+  toUserId: string,
+) => {
+  const request = await prisma.request.create({
+    data: {
+      message: "",
+      fromUser: { connect: { id: fromUserId } },
+      toUser: { connect: { id: toUserId } },
+    },
+  });
 
-  await Promise.all(
-    users.map((user) =>
-      prisma.request.deleteMany({
-        where: {
-          OR: [{ fromUserId: user.id }, { toUserId: user.id }],
-        },
-      }),
-    ),
-  );
+  const conversation = await prisma.conversation.create({
+    data: { requestId: request.id },
+  });
 
-  await Promise.all(
-    users.map((user) =>
-      prisma.user.update({
-        where: {
-          id: user.id,
-        },
-        data: {
-          favorites: {
-            disconnect: new Array(70)
-              .fill(undefined)
-              .map((_, idx) => ({ id: `${idx}` })),
-          },
-        },
-      }),
-    ),
-  );
+  await prisma.request.update({
+    where: { id: request.id },
+    data: { conversationId: conversation.id },
+  });
+
+  await prisma.message.create({
+    data: {
+      conversationId: conversation.id,
+      userId: fromUserId,
+      content: `Hi! I saw we have similar commutes — want to carpool?`,
+      isRead: true,
+    },
+  });
+
+  await prisma.message.create({
+    data: {
+      conversationId: conversation.id,
+      userId: toUserId,
+      content: `Sounds good, what time do you usually leave?`,
+      isRead: false,
+    },
+  });
+
+  return { requestId: request.id, conversationId: conversation.id };
 };
 
 /**
- * Generates requests between users in our database.
+ * Generates requests between users in our database, each with a conversation
+ * and messages so the messaging feature is exercisable against seeded data.
  */
 const generateRequests = async (userIds: string[]) => {
   await Promise.all(
     userIds.map((_, idx) =>
-      prisma.request.create({
-        data: {
-          message: "Hello",
-          fromUser: {
-            connect: { id: idx.toString() },
-          },
-          toUser: {
-            connect: { id: pickConnection(idx, userIds.length) },
-          },
-        },
-      }),
+      seedRequestWithConversation(
+        idx.toString(),
+        pickConnection(idx, userIds.length),
+      ),
     ),
   );
 };
@@ -268,47 +236,59 @@ type GeneratedUserData = {
 /**
  * Creates users and adds them to the database.
  */
-const createUserData = async () => {
+const createUserData = async (resolveAddress: AddressResolver) => {
   // updated function to handle async getRandomUsers
   const userGroups = await Promise.all([
-    genRandomUsers({
-      // MISSION HILL => DOWNTOWN
-      startCoordLat: 42.33,
-      startCoordLng: -71.1,
-      companyCoordLat: 42.35,
-      companyCoordLng: -71.06,
-      count: 30,
-      seed: "sjafdlsdjfjadljflasjkfdl;",
-    }),
-    genRandomUsers({
-      // CAMPUS => WALTHAM
-      startCoordLat: 42.34,
-      startCoordLng: -71.09,
-      companyCoordLat: 42.4,
-      companyCoordLng: -71.26,
-      count: 10,
-      seed: "kajshdkfjhasdkjfhla",
-    }),
-    genRandomUsers({
-      // MISSION HILL => CAMBRIDGE
-      startCoordLat: 42.32,
-      startCoordLng: -71.095,
-      companyCoordLat: 42.37,
-      companyCoordLng: -71.1,
-      count: 15,
-      seed: "asjfwieoiroqweiaof",
-      timezone: "UTC",
-    }),
-    genRandomUsers({
-      // BROOKLINE => FENWAY
-      startCoordLat: 42.346,
-      startCoordLng: -71.127,
-      companyCoordLat: 42.344,
-      companyCoordLng: -71.1,
-      count: 15,
-      seed: "dfsiuyisryrklewuoiadusruasi",
-      timezone: "UTC",
-    }),
+    genRandomUsers(
+      {
+        // MISSION HILL => DOWNTOWN
+        startCoordLat: 42.33,
+        startCoordLng: -71.1,
+        companyCoordLat: 42.35,
+        companyCoordLng: -71.06,
+        count: 30,
+        seed: "sjafdlsdjfjadljflasjkfdl;",
+      },
+      resolveAddress,
+    ),
+    genRandomUsers(
+      {
+        // CAMPUS => WALTHAM
+        startCoordLat: 42.34,
+        startCoordLng: -71.09,
+        companyCoordLat: 42.4,
+        companyCoordLng: -71.26,
+        count: 10,
+        seed: "kajshdkfjhasdkjfhla",
+      },
+      resolveAddress,
+    ),
+    genRandomUsers(
+      {
+        // MISSION HILL => CAMBRIDGE
+        startCoordLat: 42.32,
+        startCoordLng: -71.095,
+        companyCoordLat: 42.37,
+        companyCoordLng: -71.1,
+        count: 15,
+        seed: "asjfwieoiroqweiaof",
+        timezone: "UTC",
+      },
+      resolveAddress,
+    ),
+    genRandomUsers(
+      {
+        // BROOKLINE => FENWAY
+        startCoordLat: 42.346,
+        startCoordLng: -71.127,
+        companyCoordLat: 42.344,
+        companyCoordLng: -71.1,
+        count: 15,
+        seed: "dfsiuyisryrklewuoiadusruasi",
+        timezone: "UTC",
+      },
+      resolveAddress,
+    ),
   ]);
 
   const usersData: GeneratedUserData[] = userGroups
@@ -318,15 +298,12 @@ const createUserData = async () => {
       ...user,
     }));
 
-  await clearConnections();
   await deleteAllData();
 
   // Create users with only non-migrated fields
   await Promise.all(
     usersData.map((userData) =>
-      prisma.user.upsert(
-        generateUser({ id: userData.id } as GenerateUserInput & { id: string }),
-      ),
+      prisma.user.upsert(generateUser({ id: userData.id })),
     ),
   );
 
@@ -431,9 +408,12 @@ const createUserData = async () => {
         },
       });
     } catch (error) {
-      console.error(
-        `Failed to create CarpoolSearch for user ${userData.id}:`,
-        error,
+      // Fail the whole run. This used to log and continue, so a partially
+      // seeded database — some users with no location or carpool search —
+      // looked like a successful seed.
+      throw new Error(
+        `Failed to seed location and carpool search for user ${userData.id}`,
+        { cause: error },
       );
     }
   }
@@ -446,27 +426,31 @@ const createUserData = async () => {
  *               including the start/end coordinates to congregate data
  *               around, the offset of that congregation (how spread should
  *               the points be), the num of outputs, and a random seed.
- * @returns An array of size "count" with GenerateUserInput examples.
+ * @param resolveAddress resolves a coordinate to a street address
+ * @returns An array of size "count" of generated user data, without ids.
  */
-const genRandomUsers = async ({
-  startCoordLat,
-  startCoordLng,
-  companyCoordLat,
-  companyCoordLng,
-  coordOffset = 0.03,
-  count,
-  seed,
-  timezone,
-}: {
-  startCoordLat: number;
-  startCoordLng: number;
-  companyCoordLat: number;
-  companyCoordLng: number;
-  coordOffset?: number;
-  count: number;
-  seed?: string;
-  timezone?: string;
-}): Promise<any[]> => {
+const genRandomUsers = async (
+  {
+    startCoordLat,
+    startCoordLng,
+    companyCoordLat,
+    companyCoordLng,
+    coordOffset = 0.03,
+    count,
+    seed,
+    timezone,
+  }: {
+    startCoordLat: number;
+    startCoordLng: number;
+    companyCoordLat: number;
+    companyCoordLng: number;
+    coordOffset?: number;
+    count: number;
+    seed?: string;
+    timezone?: string;
+  },
+  resolveAddress: AddressResolver,
+): Promise<Omit<GeneratedUserData, "id">[]> => {
   const random = Random.create(seed);
   const doubleOffset = coordOffset * 2;
   const rand = (max: number) => max * random.random();
@@ -488,10 +472,11 @@ const genRandomUsers = async ({
     const userCompanyLat = companyCoordLat - coordOffset + rand(doubleOffset);
     const userCompanyLng = companyCoordLng - coordOffset + rand(doubleOffset);
 
-    // Reverse geocode to get structured address data
+    // Resolve structured address data. Offline and free unless
+    // SEED_REVERSE_GEOCODE opts into Mapbox — see src/utils/seedAddresses.ts.
     const [startAddress, companyAddress] = await Promise.all([
-      reverseGeocode(userStartLng, userStartLat),
-      reverseGeocode(userCompanyLng, userCompanyLat),
+      resolveAddress(userStartLng, userStartLat),
+      resolveAddress(userCompanyLng, userCompanyLat),
     ]);
 
     const output = {
@@ -558,10 +543,10 @@ const addFavorites = async (userId: string, ids: string[]) => {
  * Populates our database with fake data.
  */
 const main = async () => {
-  // First statement in the script. createUserData() wipes six tables, and it is
-  // reached by `yarn seed`, by `yarn build:preview`, and by a database reset
-  // during `yarn db:schema`. Refuse anything that is not a local database before
-  // doing any work — this also avoids the ~140 Mapbox geocode calls further down.
+  // First statement in the script. createUserData() wipes every table in
+  // SEED_DELETE_ORDER, and it is reached by `yarn seed`, by `yarn build:preview`,
+  // and by a database reset during `yarn db:schema`. Refuse anything that is not
+  // a local database before doing any work.
   const target = assertSeedTargetIsLocal();
 
   if (target.reason === "override") {
@@ -574,20 +559,25 @@ const main = async () => {
     );
   }
 
-  await createUserData();
+  await createUserData(createAddressResolver());
 };
 
-main()
-  .catch((e) => {
-    // A guard refusal is an expected, self-explanatory message rather than a
-    // crash, so print it without a stack trace that would bury the reason.
-    if (e instanceof SeedGuardError) {
-      console.error(e.message);
-    } else {
-      console.error(e);
-    }
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+// Only run when executed as a script (`prisma db seed` runs `ts-node
+// prisma/seed.ts`). Guarding this keeps the module importable, so the helpers
+// above can be exercised by tests without seeding anything.
+if (require.main === module) {
+  main()
+    .catch((e) => {
+      // A guard refusal is an expected, self-explanatory message rather than a
+      // crash, so print it without a stack trace that would bury the reason.
+      if (e instanceof SeedGuardError) {
+        console.error(e.message);
+      } else {
+        console.error(e);
+      }
+      process.exit(1);
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
+}
