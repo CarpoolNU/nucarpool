@@ -37,13 +37,31 @@ Ask a maintainer for development credentials. The app validates these at startup
 Then start the database, set up the schema, and run the app:
 
 ```bash
-yarn db:start     # local MySQL in Docker
+yarn db:start     # local MySQL 8.0 in Docker
 yarn db:schema    # prisma migrate dev && prisma generate
 yarn seed         # optional: populate with generated users
 yarn dev
 ```
 
 The app runs at <http://localhost:3000>. `yarn startup` runs `yarn db:start` and `yarn dev` together.
+
+### Upgrading an existing local database
+
+The local container tracks MySQL 8.0 to match the major version PlanetScale serves. It was previously pinned to 5.7. On first start, 8.0 attempts an in-place upgrade of a 5.7 data directory — but that upgrade only succeeds if 5.7 shut down cleanly. If the container was ever force-stopped, InnoDB refuses (`Upgrade is not supported after a crash or shutdown with innodb_fast_shutdown = 2`) and the container exits 1.
+
+Chasing a clean-shutdown upgrade is not worth it for generated development data. If you set this project up before the version change, replace the data directory once:
+
+```bash
+yarn db:stop
+mv nucarpool-db-data nucarpool-db-data.mysql57-backup   # or delete it outright
+yarn db:start                                           # 8.0 initializes a fresh data directory
+yarn db:schema                                          # apply all migrations
+yarn seed                                               # optional: regenerate sample users
+```
+
+This discards your local rows. That is safe — the directory is gitignored, holds only generated development data, and `yarn seed` recreates it. Nothing on PlanetScale is affected. Once the new container is up, `rm -rf nucarpool-db-data.mysql57-backup` to reclaim the space.
+
+On Apple Silicon the container now runs natively rather than under x86 emulation, because 8.0 publishes an arm64 image and 5.7 did not.
 
 ## Environment Variables
 

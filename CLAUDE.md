@@ -19,7 +19,7 @@ yarn tsc          # type check (no npm script; resolves node_modules/.bin/tsc)
 yarn check:env    # .env.example covers every variable the app requires
 yarn test         # jest
 yarn test -- path/to/file.test.ts     # single file
-yarn db:start / yarn db:stop          # local MySQL 5.7 in Docker
+yarn db:start / yarn db:stop          # local MySQL 8.0 in Docker
 yarn db:schema                        # prisma migrate dev && prisma generate
 ```
 
