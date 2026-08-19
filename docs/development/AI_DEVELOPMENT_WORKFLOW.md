@@ -85,7 +85,7 @@ Prerequisites: Node 20 (CI uses 20), Docker, Yarn Classic 1.x, git.
 ```bash
 git clone <repo-url> && cd nucarpool
 yarn                  # Yarn Classic — not npm, not pnpm
-yarn db:start         # local MySQL 5.7 in Docker
+yarn db:start         # local MySQL 8.0 in Docker
 yarn dev              # http://localhost:3000
 ```
 

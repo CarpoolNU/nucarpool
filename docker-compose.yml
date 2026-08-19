@@ -1,10 +1,11 @@
-version: "3"
-
 services:
   mysql:
-    platform: linux/x86_64
     container_name: mysql-on-docker
-    image: mysql:5.7
+    # MySQL 8.0 matches the major version PlanetScale serves, so migrations are
+    # exercised against equivalent behaviour before the deploy request. 8.0 also
+    # publishes a native linux/arm64 image, which is why there is no `platform:`
+    # override here — 5.7 was amd64-only and ran emulated on Apple Silicon.
+    image: mysql:8.0
     ports:
       - "${MYSQL_PORT}:3306"
     expose:
@@ -13,7 +14,8 @@ services:
       MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD}"
       MYSQL_DATABASE: "${MYSQL_DATABASE}"
     volumes:
+      # A bind mount, not a named volume: the data directory sits in the
+      # repository root and is gitignored. 8.0 only starts on a data directory
+      # left by 5.7 if 5.7 shut down cleanly, so an existing one usually has to
+      # be replaced — see "Upgrading an existing local database" in README.md.
       - ./nucarpool-db-data:/var/lib/mysql
-
-volumes:
-  nucarpool-db-data:
