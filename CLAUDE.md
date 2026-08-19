@@ -36,7 +36,7 @@ Test coverage is narrow but no longer empty: [`src/utils/seedGuard.test.ts`](src
 
 **Database — these commands destroy data**
 
-- `yarn seed` **wipes the database first**. [`prisma/seed.ts`](prisma/seed.ts) deletes every row from `request`, `carpool_search`, `location`, `group`, `message`, and `user`, then inserts ~70 generated users. It also makes ~140 Mapbox reverse-geocode calls.
+- `yarn seed` **wipes the database first**. [`prisma/seed.ts`](prisma/seed.ts) deletes every row from `request`, `message`, `conversation`, `carpool_search`, `location`, `group`, and `user`, then inserts ~70 generated users, each with a request, a conversation and two messages. Addresses are synthesised offline, so it makes **no** Mapbox calls unless `SEED_REVERSE_GEOCODE=1` is set — see [`src/utils/seedAddresses.ts`](src/utils/seedAddresses.ts).
 - [`src/utils/seedGuard.ts`](src/utils/seedGuard.ts) refuses to seed a non-local host, fails closed on a missing or unparseable `DATABASE_URL`, and covers all three seed paths because it runs inside `seed.ts` itself. `SEED_ALLOW_REMOTE=1` overrides it. **The guard does not relax any rule here** — seed commands remain denied in [`.claude/settings.json`](.claude/settings.json), and the override must never be set to make something work.
 - `yarn build:preview` runs `prisma db push` auto-confirmed with `echo "y"` **and then re-seeds**. It can force-alter a schema and wipe data — never run it to "test the build"; use `yarn build`.
 - `yarn db:schema` runs `prisma migrate dev`, which writes migrations and may prompt to reset the local database on drift. **If it resets, Prisma runs the seed script automatically** — so this command can wipe and regenerate data without `yarn seed` being typed. Opt out with `npx prisma migrate dev --skip-seed`; appending the flag to `yarn db:schema` does not work, because yarn passes it to `prisma generate` instead.
@@ -47,7 +47,7 @@ Test coverage is narrow but no longer empty: [`src/utils/seedGuard.test.ts`](src
 
 - `user.email.*` procedures send **real mail** through AWS SES.
 - `user.message.sendMessage` fires **real Pusher events** on `conversation-{requestId}` and `notification-{toUserId}`.
-- `mapbox.*` procedures, [`src/utils/map/geocode.ts`](src/utils/map/geocode.ts), and the seed script consume Mapbox API quota.
+- `mapbox.*` procedures and [`src/utils/map/geocode.ts`](src/utils/map/geocode.ts) consume Mapbox API quota. The seed script does not, unless `SEED_REVERSE_GEOCODE=1` opts in.
 - [`scripts/emailtemplate.py`](scripts/emailtemplate.py) is active infrastructure — it creates/updates the SES templates the app sends. Running it mutates templates in the configured AWS account.
 - Verify which environment your credentials point at before triggering any of these. Do not exercise them against shared or production resources.
 
