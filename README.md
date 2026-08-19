@@ -39,7 +39,7 @@ Then start the database, set up the schema, and run the app:
 ```bash
 yarn db:start     # local MySQL 8.0 in Docker
 yarn db:schema    # prisma migrate dev && prisma generate
-yarn seed         # optional: populate with generated users
+yarn seed         # optional: DELETES all rows, then inserts generated users
 yarn dev
 ```
 
@@ -63,6 +63,39 @@ This discards your local rows. That is safe — the directory is gitignored, hol
 
 On Apple Silicon the container now runs natively rather than under x86 emulation, because 8.0 publishes an arm64 image and 5.7 did not.
 
+### Seeding resets your local data
+
+`yarn seed` is **not additive**. Before inserting anything, [`prisma/seed.ts`](prisma/seed.ts) deletes every row from `request`, `carpool_search`, `location`, `group`, `message` and `user`, then inserts about 70 generated users with fixed ids and 10 groups. It also makes roughly 140 Mapbox reverse-geocode calls, which consume API quota.
+
+Three commands reach that script, not one:
+
+| Command              | How it seeds                                                                                          |
+| -------------------- | ----------------------------------------------------------------------------------------------------- |
+| `yarn seed`          | Directly                                                                                              |
+| `yarn build:preview` | Force-pushes the schema, then re-seeds                                                                |
+| `yarn db:schema`     | Only if `prisma migrate dev` resets the database — **Prisma then runs the seed script automatically** |
+
+The third is the surprising one, because it is part of normal setup. To apply migrations without seeding, run `npx prisma migrate dev --skip-seed`; appending the flag to `yarn db:schema` does not work, because yarn passes it to `prisma generate` instead.
+
+Because the script writes to whatever `DATABASE_URL` points at, [`src/utils/seedGuard.ts`](src/utils/seedGuard.ts) checks the target host before the first delete and refuses anything that is not local:
+
+```
+Refusing to seed.
+
+DATABASE_URL points at the non-local host "aws.connect.psdb.cloud".
+...
+```
+
+Allowed hosts are `localhost`, `127.0.0.1`, `::1`, `0.0.0.0`, `mysql` and `mysql-on-docker`. The guard fails closed — a missing or unparseable `DATABASE_URL` is refused rather than assumed local — and compares the hostname only, so a password containing `localhost` cannot fake a match. To extend the list, edit `LOCAL_HOSTNAMES` in that file.
+
+If you genuinely need to seed a non-local database, opt in for that single command:
+
+```bash
+SEED_ALLOW_REMOTE=1 yarn seed
+```
+
+Think carefully before you do. Against staging or production this deletes every user, group, message, request, location and carpool search, and the app cannot undo it. `yarn build:preview` is deliberately **not** given the override, so it now fails the guard if it is ever pointed at a remote database.
+
 ## Environment Variables
 
 [`.env.example`](.env.example) is the authoritative list. It documents every variable, grouped by service, with placeholder values and notes on which are optional. Copy it to `.env` and fill in real values — never commit them, and keep placeholders only in `.env.example` itself. `.env` is gitignored.
@@ -78,17 +111,17 @@ Validation runs at import time in [`src/utils/env/browser.ts`](src/utils/env/bro
 
 ## Useful Commands
 
-| Command                          | Purpose                                           |
-| -------------------------------- | ------------------------------------------------- |
-| `yarn dev`                       | Start the development server on port 3000         |
-| `yarn startup`                   | Start the local database, then the dev server     |
-| `yarn build`                     | Production build                                  |
-| `yarn lint`                      | Run ESLint                                        |
-| `yarn tsc`                       | Type check                                        |
-| `yarn test`                      | Run Jest (no test files exist yet)                |
-| `yarn db:start` / `yarn db:stop` | Start / stop the local MySQL container            |
-| `yarn db:schema`                 | Apply migrations and regenerate the Prisma client |
-| `yarn seed`                      | Populate the database with generated users        |
+| Command                          | Purpose                                              |
+| -------------------------------- | ---------------------------------------------------- |
+| `yarn dev`                       | Start the development server on port 3000            |
+| `yarn startup`                   | Start the local database, then the dev server        |
+| `yarn build`                     | Production build                                     |
+| `yarn lint`                      | Run ESLint                                           |
+| `yarn tsc`                       | Type check                                           |
+| `yarn test`                      | Run Jest (unit tests for the seed guard)             |
+| `yarn db:start` / `yarn db:stop` | Start / stop the local MySQL container               |
+| `yarn db:schema`                 | Apply migrations and regenerate the Prisma client    |
+| `yarn seed`                      | **Wipes** the database, then inserts generated users |
 
 ## Documentation
 

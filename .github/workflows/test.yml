@@ -22,6 +22,7 @@ jobs:
           node-version: 20
           cache: yarn
       - run: yarn install --frozen-lockfile
-      # --passWithNoTests keeps this green while the repo has no test files, so
-      # this gate currently proves nothing. Adding real tests is SCRUM-211.
-      - run: yarn test --passWithNoTests
+      # --passWithNoTests was dropped with SCRUM-212, which added the first test
+      # files. An empty run should now fail rather than pass silently. Broader
+      # end-to-end coverage is still SCRUM-211.
+      - run: yarn test

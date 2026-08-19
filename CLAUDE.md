@@ -25,7 +25,7 @@ yarn db:schema                        # prisma migrate dev && prisma generate
 
 Run `yarn lint` and `yarn tsc` before calling work done. CI runs five checks on Node 20 — `lint`, `tsc`, `test`, `build`, and `env-contract` — on every pull request and on pushes to `main`; [`.github/workflows/`](.github/workflows/) is authoritative for the triggers. `build` runs a real `next build` against placeholder environment values, so a PR can no longer go green while the app fails to build. `env-contract` fails when a variable required by [`src/utils/env/`](src/utils/env/) is missing from `.env.example`. `lint` pins `--max-warnings=0`, which matters because rules like `react-hooks/exhaustive-deps` are warnings rather than errors. A husky pre-commit hook runs `npx pretty-quick --staged`.
 
-There are no test files yet. Jest uses the `ts-jest` preset with the default `node` environment and no setup files — component tests would need `jest-environment-jsdom` and a React testing library added first.
+Test coverage is narrow but no longer empty: [`src/utils/seedGuard.test.ts`](src/utils/seedGuard.test.ts) is the only suite, and `test.yml` no longer passes `--passWithNoTests`, so an empty run fails. Jest uses the `ts-jest` preset with the default `node` environment and no setup files — component tests would need `jest-environment-jsdom` and a React testing library added first. A passing `yarn test` still says nothing about components, routers, or pages.
 
 ## Safety
 
@@ -37,6 +37,7 @@ There are no test files yet. Jest uses the `ts-jest` preset with the default `no
 **Database — these commands destroy data**
 
 - `yarn seed` **wipes the database first**. [`prisma/seed.ts`](prisma/seed.ts) deletes every row from `request`, `carpool_search`, `location`, `group`, `message`, and `user`, then inserts ~70 generated users. It also makes ~140 Mapbox reverse-geocode calls.
+- [`src/utils/seedGuard.ts`](src/utils/seedGuard.ts) refuses to seed a non-local host, fails closed on a missing or unparseable `DATABASE_URL`, and covers all three seed paths because it runs inside `seed.ts` itself. `SEED_ALLOW_REMOTE=1` overrides it. **The guard does not relax any rule here** — seed commands remain denied in [`.claude/settings.json`](.claude/settings.json), and the override must never be set to make something work.
 - `yarn build:preview` runs `prisma db push` auto-confirmed with `echo "y"` **and then re-seeds**. It can force-alter a schema and wipe data — never run it to "test the build"; use `yarn build`.
 - `yarn db:schema` runs `prisma migrate dev`, which writes migrations and may prompt to reset the local database on drift. **If it resets, Prisma runs the seed script automatically** — so this command can wipe and regenerate data without `yarn seed` being typed. Opt out with `npx prisma migrate dev --skip-seed`; appending the flag to `yarn db:schema` does not work, because yarn passes it to `prisma generate` instead.
 - Before running any of these, confirm `DATABASE_URL` targets the local Docker MySQL — not staging, production, or PlanetScale. Ask if unsure.

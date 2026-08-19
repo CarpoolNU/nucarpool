@@ -88,8 +88,10 @@ Run what the change warrants — normally `yarn lint` and `yarn tsc`, plus `yarn
 relevant, and any task-specific checks (for docs: formatting, link and anchor resolution, a
 secrets scan).
 
-**Report test results honestly.** There is currently no test suite, so `yarn test` passes
-because nothing runs. That is a vacuous pass, not coverage — never present it as coverage.
+**Report test results honestly.** The suite covers one module — the seed guard
+(`src/utils/seedGuard.test.ts`). A passing `yarn test` therefore says nothing about
+components, routers, or pages, so never present it as coverage of anything you did not
+actually test.
 
 Failure caused by your change → fix it and revalidate. Failure that is unrelated → the
 discovered-issue workflow below; do not expand scope.
