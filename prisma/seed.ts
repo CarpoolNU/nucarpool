@@ -3,6 +3,11 @@ import { range } from "lodash";
 import Random from "random-seed";
 import { generateUser, GenerateUserInput } from "../src/utils/recommendation";
 import { timeEnd } from "console";
+import {
+  assertSeedTargetIsLocal,
+  SEED_OVERRIDE_ENV,
+  SeedGuardError,
+} from "../src/utils/seedGuard";
 
 const prisma = new PrismaClient();
 
@@ -207,7 +212,9 @@ const pickConnections = (
 /**
  * Generates favorites between users in our database.
  */
-const generateGroups = async (userIds: string[]): Promise<Map<string, string>> => {
+const generateGroups = async (
+  userIds: string[],
+): Promise<Map<string, string>> => {
   const userToGroupMap = new Map<string, string>();
   const groups: string[][] = [];
   let i = 0;
@@ -304,30 +311,31 @@ const createUserData = async () => {
     }),
   ]);
 
-  const usersData: GeneratedUserData[] = userGroups.flat().map((user, index) => ({
-    id: index.toString(),
-    ...user,
-  }));
+  const usersData: GeneratedUserData[] = userGroups
+    .flat()
+    .map((user, index) => ({
+      id: index.toString(),
+      ...user,
+    }));
 
   await clearConnections();
   await deleteAllData();
-  
+
   // Create users with only non-migrated fields
   await Promise.all(
     usersData.map((userData) =>
-      prisma.user.upsert(generateUser({ id: userData.id } as GenerateUserInput & { id: string })),
+      prisma.user.upsert(
+        generateUser({ id: userData.id } as GenerateUserInput & { id: string }),
+      ),
     ),
   );
-  
-  const userIds = usersData.map(u => u.id);
-  
+
+  const userIds = usersData.map((u) => u.id);
+
   // Generate groups and get the userId -> groupId mapping
   const userToGroupMap = await generateGroups(userIds);
-  
-  await Promise.all([
-    generateFavorites(userIds),
-    generateRequests(userIds),
-  ]);
+
+  await Promise.all([generateFavorites(userIds), generateRequests(userIds)]);
 
   // create Location and CarpoolSearch records for each user
   for (const userData of usersData) {
@@ -342,7 +350,7 @@ const createUserData = async () => {
             street: userData.startStreet,
             city: userData.startCity,
             state: userData.startState,
-            streetAddress: userData.startAddress || '',
+            streetAddress: userData.startAddress || "",
           },
         });
       }
@@ -351,10 +359,10 @@ const createUserData = async () => {
       if (!homeLocation) {
         homeLocation = await prisma.location.create({
           data: {
-            street: userData.startStreet || '',
-            city: userData.startCity || '',
-            state: userData.startState || '',
-            streetAddress: userData.startAddress || '',
+            street: userData.startStreet || "",
+            city: userData.startCity || "",
+            state: userData.startState || "",
+            streetAddress: userData.startAddress || "",
             coordLng: userData.startCoordLng,
             coordLat: userData.startCoordLat,
           },
@@ -365,13 +373,17 @@ const createUserData = async () => {
       let companyLocation = null;
 
       // only search for existing location if we have valid address data
-      if (userData.companyStreet && userData.companyCity && userData.companyState) {
+      if (
+        userData.companyStreet &&
+        userData.companyCity &&
+        userData.companyState
+      ) {
         companyLocation = await prisma.location.findFirst({
           where: {
             street: userData.companyStreet,
             city: userData.companyCity,
             state: userData.companyState,
-            streetAddress: userData.companyAddress || '',
+            streetAddress: userData.companyAddress || "",
           },
         });
       }
@@ -380,10 +392,10 @@ const createUserData = async () => {
       if (!companyLocation) {
         companyLocation = await prisma.location.create({
           data: {
-            street: userData.companyStreet || '',
-            city: userData.companyCity || '',
-            state: userData.companyState || '',
-            streetAddress: userData.companyAddress || '',
+            street: userData.companyStreet || "",
+            city: userData.companyCity || "",
+            state: userData.companyState || "",
+            streetAddress: userData.companyAddress || "",
             coordLng: userData.companyCoordLng,
             coordLat: userData.companyCoordLat,
           },
@@ -394,7 +406,9 @@ const createUserData = async () => {
       const carpoolId = userToGroupMap.get(userData.id) || null;
 
       // Parse time strings to Date objects
-      const startTimeDate = userData.startTime ? new Date(userData.startTime) : null;
+      const startTimeDate = userData.startTime
+        ? new Date(userData.startTime)
+        : null;
       const endTimeDate = userData.endTime ? new Date(userData.endTime) : null;
 
       // create CarpoolSearch
@@ -405,7 +419,7 @@ const createUserData = async () => {
           status: "ACTIVE",
           seatsAvail: userData.seatAvail || 0,
           companyName: "Sandbox Inc.",
-          daysWorking: userData.daysWorking || '',
+          daysWorking: userData.daysWorking || "",
           startTime: startTimeDate,
           endTime: endTimeDate,
           startDate: userData.coopStartDate,
@@ -417,7 +431,10 @@ const createUserData = async () => {
         },
       });
     } catch (error) {
-      console.error(`Failed to create CarpoolSearch for user ${userData.id}:`, error);
+      console.error(
+        `Failed to create CarpoolSearch for user ${userData.id}:`,
+        error,
+      );
     }
   }
 };
@@ -541,15 +558,36 @@ const addFavorites = async (userId: string, ids: string[]) => {
  * Populates our database with fake data.
  */
 const main = async () => {
+  // First statement in the script. createUserData() wipes six tables, and it is
+  // reached by `yarn seed`, by `yarn build:preview`, and by a database reset
+  // during `yarn db:schema`. Refuse anything that is not a local database before
+  // doing any work — this also avoids the ~140 Mapbox geocode calls further down.
+  const target = assertSeedTargetIsLocal();
+
+  if (target.reason === "override") {
+    console.warn(
+      `WARNING: ${SEED_OVERRIDE_ENV} is set. Seeding the NON-LOCAL host "${target.hostname}" and deleting its existing rows.`,
+    );
+  } else {
+    console.log(
+      `Seeding "${target.hostname}". Existing rows will be deleted first.`,
+    );
+  }
+
   await createUserData();
 };
 
 main()
   .catch((e) => {
-    console.error(e);
+    // A guard refusal is an expected, self-explanatory message rather than a
+    // crash, so print it without a stack trace that would bury the reason.
+    if (e instanceof SeedGuardError) {
+      console.error(e.message);
+    } else {
+      console.error(e);
+    }
     process.exit(1);
   })
   .finally(async () => {
     await prisma.$disconnect();
   });
-  

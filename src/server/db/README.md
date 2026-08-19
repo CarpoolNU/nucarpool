@@ -5,7 +5,7 @@ This directory holds the Prisma client the rest of the app shares. The schema, m
 - [`client.ts`](./client.ts) — creates and exports the `PrismaClient` singleton
 - [`../../../prisma/schema.prisma`](../../../prisma/schema.prisma) — the data model
 - [`../../../prisma/migrations/`](../../../prisma/migrations) — ordered SQL migrations
-- [`../../../prisma/seed.ts`](../../../prisma/seed.ts) — generated data for local development
+- [`../../../prisma/seed.ts`](../../../prisma/seed.ts) — generated data for local development. **Destructive**: it deletes every row from six tables before inserting. [`../../utils/seedGuard.ts`](../../utils/seedGuard.ts) refuses to run it against any host outside a local allowlist; see [Seeding resets your local data](../../../README.md#seeding-resets-your-local-data).
 
 ## The client
 

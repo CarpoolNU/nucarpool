@@ -437,7 +437,7 @@ on Node 20; `auto-comment.yml` is not a check and runs no Node of its own:
 | -------------------------------------------------------------- | ---------------------------------- | ----------------------------------------------------------------------- |
 | [`lint.yml`](../../.github/workflows/lint.yml)                 | PR + push to `main`                | `yarn lint` (ESLint, `--max-warnings=0`)                                |
 | [`tsc.yml`](../../.github/workflows/tsc.yml)                   | PR + push to `main`                | `yarn tsc`                                                              |
-| [`test.yml`](../../.github/workflows/test.yml)                 | PR + push to `main`                | `yarn test --passWithNoTests`                                           |
+| [`test.yml`](../../.github/workflows/test.yml)                 | PR + push to `main`                | `yarn test` (Jest)                                                      |
 | [`build.yml`](../../.github/workflows/build.yml)               | PR + push to `main`                | `prisma generate`, then `yarn build` against placeholder env values     |
 | [`env-contract.yml`](../../.github/workflows/env-contract.yml) | PR + push to `main`                | `node scripts/check-env-contract.js`                                    |
 | [`auto-comment.yml`](../../.github/workflows/auto-comment.yml) | PR touching `prisma/schema.prisma` | comments a reminder to open a PlanetScale deploy request before merging |
@@ -460,10 +460,12 @@ on Node 20; `auto-comment.yml` is not a check and runs no Node of its own:
 - `--max-warnings=0` on lint is load-bearing: several rules that matter here, notably
   `react-hooks/exhaustive-deps`, are warnings rather than errors and would otherwise never
   fail the check.
-- `--passWithNoTests` is load-bearing in the other direction: **there are no test files yet.**
-  Tests pass because nothing runs. Component tests would first need `jest-environment-jsdom`
-  and a React testing library (Jest currently uses `ts-jest` with the default `node`
-  environment).
+- `test` runs real tests as of SCRUM-212, which added unit tests for the seed guard
+  ([`src/utils/seedGuard.test.ts`](../../src/utils/seedGuard.test.ts)) and dropped
+  `--passWithNoTests`, so an empty run now fails instead of passing silently. Coverage is
+  still narrow — one module, no component or end-to-end tests. Component tests would first
+  need `jest-environment-jsdom` and a React testing library, since Jest uses `ts-jest` with
+  the default `node` environment. Broader coverage is SCRUM-211.
 - Whether these checks are _required_ before merge is a branch-protection setting, not
   something CI enforces.
 - A husky pre-commit hook runs `npx pretty-quick --staged` locally.
@@ -501,6 +503,10 @@ ecosystem (`package.json` and `yarn.lock`) and for the actions pinned in
   `yarn build:preview` force-pushes the schema and re-seeds. Never run `build:preview` to
   "test the build" — use `yarn build`. Confirm `DATABASE_URL` targets local Docker MySQL
   before any schema or seed command. Both are denied in settings for a reason.
+  [`src/utils/seedGuard.ts`](../../src/utils/seedGuard.ts) additionally refuses to seed any
+  host outside a local allowlist, so a misdirected `DATABASE_URL` fails loudly instead of
+  wiping a shared database. Treat that guard as a backstop, not as permission to run seed
+  commands — the deny rules still apply.
 - **External services with real side effects.** Email procedures send real mail via AWS SES;
   messaging fires real Pusher events; Mapbox calls consume quota. Verify which environment
   your credentials point at first.
@@ -544,7 +550,8 @@ ecosystem (`package.json` and `yarn.lock`) and for the actions pinned in
 **Open items a future developer may pick up:**
 
 - Confirm and document branch protection once someone has admin access.
-- There is no test suite yet, so `test.yml` is a placeholder in practice.
+- Test coverage is narrow: `test.yml` now runs real tests, but only for the seed guard. No
+  component, router, or end-to-end coverage exists (SCRUM-211).
 
 Everything else in this document describes **current** behavior; only the items above are open
 or planned.
