@@ -460,12 +460,18 @@ on Node 20; `auto-comment.yml` is not a check and runs no Node of its own:
 - `--max-warnings=0` on lint is load-bearing: several rules that matter here, notably
   `react-hooks/exhaustive-deps`, are warnings rather than errors and would otherwise never
   fail the check.
-- `test` runs real tests as of SCRUM-212, which added unit tests for the seed guard
-  ([`src/utils/seedGuard.test.ts`](../../src/utils/seedGuard.test.ts)) and dropped
-  `--passWithNoTests`, so an empty run now fails instead of passing silently. Coverage is
-  still narrow — one module, no component or end-to-end tests. Component tests would first
-  need `jest-environment-jsdom` and a React testing library, since Jest uses `ts-jest` with
-  the default `node` environment. Broader coverage is SCRUM-211.
+- `test` runs real tests as of SCRUM-212, which dropped `--passWithNoTests` so an empty run
+  fails instead of passing silently. SCRUM-211 widened coverage to the recommendation scoring
+  algorithm, the `PublicUser` converters, onboarding validation, Mapbox address parsing, email
+  parameter building, the admin dashboard aggregations, and the tRPC authorization middleware.
+  Test files are co-located as `*.test.ts` beside the module they cover.
+  [`jest.setup.env.js`](../../jest.setup.env.js) supplies placeholder values by reusing the
+  `--github-env` mode of `scripts/check-env-contract.js`, the same source `build.yml` uses, so
+  suites that import `serverEnv` — directly or through `appRouter` — load without a `.env`.
+  Everything still runs on mocks: no component, browser or real-database tests exist. Those are SCRUM-263 (disposable MySQL in CI) and
+  SCRUM-264 (Playwright smoke journeys); component tests would first need
+  `jest-environment-jsdom` and a React testing library, since Jest uses `ts-jest` with the
+  default `node` environment.
 - Whether these checks are _required_ before merge is a branch-protection setting, not
   something CI enforces.
 - A husky pre-commit hook runs `npx pretty-quick --staged` locally.
