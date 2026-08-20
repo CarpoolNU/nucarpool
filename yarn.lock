@@ -1827,20 +1827,20 @@
   resolved "https://registry.npmjs.org/@tanstack/virtual-core/-/virtual-core-3.10.9.tgz"
   integrity sha512-kBknKOKzmeR7lN+vSadaKWXaLS0SZZG+oqpQ/k80Q6g9REn6zRHS/ZYdrIzHnpHgy/eWs00SujveUN/GJT2qTw==
 
-"@trpc/client@^10.45.2":
-  version "10.45.2"
-  resolved "https://registry.npmjs.org/@trpc/client/-/client-10.45.2.tgz"
-  integrity sha512-ykALM5kYWTLn1zYuUOZ2cPWlVfrXhc18HzBDyRhoPYN0jey4iQHEFSEowfnhg1RvYnrAVjNBgHNeSAXjrDbGwg==
+"@trpc/client@^11.18.0":
+  version "11.18.0"
+  resolved "https://registry.yarnpkg.com/@trpc/client/-/client-11.18.0.tgz#8fc48fe709f5d41ca15343ac06e56b1fda3e484a"
+  integrity sha512-wOqeg3Fvl25V1ZisQhUD3K8G60ZJDlSGJNSyeXrLH24xAo5w6GSR2Kzb1cSNY9Y+IQ2YZvYGZstBU+V/ulo/ow==
 
-"@trpc/next@^10.33.0":
-  version "10.45.2"
-  resolved "https://registry.npmjs.org/@trpc/next/-/next-10.45.2.tgz"
-  integrity sha512-RSORmfC+/nXdmRY1pQ0AalsVgSzwNAFbZLYHiTvPM5QQ8wmMEHilseCYMXpu0se/TbPt9zVR6Ka2d7O6zxKkXg==
+"@trpc/next@^11.18.0":
+  version "11.18.0"
+  resolved "https://registry.yarnpkg.com/@trpc/next/-/next-11.18.0.tgz#30cd2e2e4bbec68f78bebd04ff3e4990f3a887bc"
+  integrity sha512-ocwbruAWMGX9hY3HFg86X4jAcoF2v+xx+A2jDn72SbttRRG2hXR+XKPjrLc1dDJC0oi+/2DJEbL14+k1pyY5og==
 
-"@trpc/react-query@^10.33.0":
-  version "10.45.2"
-  resolved "https://registry.npmjs.org/@trpc/react-query/-/react-query-10.45.2.tgz"
-  integrity sha512-BAqb9bGZIscroradlNx+Cc9522R+idY3BOSf5z0jHUtkxdMbjeGKxSSMxxu7JzoLqSIEC+LVzL3VvF8sdDWaZQ==
+"@trpc/react-query@^11.18.0":
+  version "11.18.0"
+  resolved "https://registry.yarnpkg.com/@trpc/react-query/-/react-query-11.18.0.tgz#b4ca5e62c16f8627bc049618fb085ff920a17d16"
+  integrity sha512-C1+Wwm2pCeUJucI+bnFpxGYjNuvV+ko1BC1T9tUxBVdrhHRCdn9ubxdevdLSAa49XRJRJiZnSuzl3Ys/yvs1vg==
 
 "@trpc/react@^9.27.4":
   version "9.27.4"
@@ -1849,10 +1849,10 @@
   dependencies:
     "@babel/runtime" "^7.9.0"
 
-"@trpc/server@^10.45.2":
-  version "10.45.2"
-  resolved "https://registry.npmjs.org/@trpc/server/-/server-10.45.2.tgz"
-  integrity sha512-wOrSThNNE4HUnuhJG6PfDRp4L2009KDVxsd+2VYH8ro6o/7/jwYZ8Uu5j+VaW+mOmc8EHerHzGcdbGNQSAUPgg==
+"@trpc/server@^11.18.0":
+  version "11.18.0"
+  resolved "https://registry.yarnpkg.com/@trpc/server/-/server-11.18.0.tgz#171e10de17455fa2692618c005f64d496826f9fc"
+  integrity sha512-JAvXOuNTxgXjIDfQaOvDq1j66LMNfDJUH1IU7Slfn8EvRv2EkH6ehu3A7zpYhjO0syHHiYg77v2lG2JFJgvw7Q==
 
 "@tsconfig/node10@^1.0.7":
   version "1.0.11"
