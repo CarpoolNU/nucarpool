@@ -46,6 +46,28 @@ export type FInputs = {
 /** Provides a very approximate coordinate distance to mile conversion */
 const coordToMile = (dist: number) => dist * 88;
 
+/**
+ * Minutes between two times of day (SCRUM-235).
+ *
+ * Both times are collapsed to a minute offset from midnight before subtracting.
+ * The previous form — |Δhours| * 60 + |Δminutes| — took the absolute value of
+ * each component separately, so a pair whose minutes ran backwards relative to
+ * its hours was overstated: 9:50 against 10:00 read as 110 minutes rather than
+ * 10. That inflated difference both filtered out compatible users and penalised
+ * their score.
+ *
+ * Only the clock reading is used, so the caller's date is irrelevant — which
+ * suits `startTime`/`endTime`, stored as `@db.Time(0)` with no date component.
+ * The two readings are taken through the same accessor, so a shared timezone
+ * offset cancels in the subtraction; the underlying storage ambiguity is
+ * SCRUM-239 and is deliberately not addressed here.
+ */
+const minutesApart = (a: Date, b: Date) => {
+  const minutesOfDay = (time: Date) => time.getHours() * 60 + time.getMinutes();
+
+  return Math.abs(minutesOfDay(a) - minutesOfDay(b));
+};
+
 interface CommonUser {
   id: string;
   role: string;
@@ -170,16 +192,8 @@ export const calculateScore = (
       user.startTime &&
       user.endTime
     ) {
-      startTime =
-        Math.abs(currentUser.startTime.getHours() - user.startTime.getHours()) *
-          60 +
-        Math.abs(
-          currentUser.startTime.getMinutes() - user.startTime.getMinutes(),
-        );
-      endTime =
-        Math.abs(currentUser.endTime.getHours() - user.endTime.getHours()) *
-          60 +
-        Math.abs(currentUser.endTime.getMinutes() - user.endTime.getMinutes());
+      startTime = minutesApart(currentUser.startTime, user.startTime);
+      endTime = minutesApart(currentUser.endTime, user.endTime);
       if (
         (startTime > inputs.startTime * 60 && inputs.startTime < 4) ||
         (endTime > inputs.endTime * 60 && inputs.endTime < 4)
