@@ -8,7 +8,7 @@ import { Status } from "@prisma/client";
 export const favoritesRouter = router({
   me: protectedRouter.query(async ({ ctx }) => {
     const userId = ctx.session.user?.id;
-    
+
     if (!userId) {
       throw new TRPCError({
         code: "UNAUTHORIZED",
@@ -63,7 +63,7 @@ export const favoritesRouter = router({
             bio: true,
             preferredName: true,
             pronouns: true,
-          }
+          },
         },
         homeLocation: true,
         companyLocation: true,
@@ -80,16 +80,32 @@ export const favoritesRouter = router({
   }),
   edit: protectedRouter
     .input(
-      z.object({
-        userId: z.string(),
-        favoriteId: z.string(),
-        add: z.boolean(),
-      }),
+      z
+        .object({
+          // The owning user is deliberately absent from this input (SCRUM-223).
+          // It used to be a client-supplied `userId` that was passed straight to
+          // `where`, which let any signed-in caller edit anyone else's favorites.
+          // The owner now comes from the session and cannot be influenced by the
+          // client; `.strict()` makes a re-added `userId` a BAD_REQUEST rather
+          // than a silently ignored field.
+          favoriteId: z.string(),
+          add: z.boolean(),
+        })
+        .strict(),
     )
     .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user?.id;
+
+      if (!userId) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "User not authenticated.",
+        });
+      }
+
       await ctx.prisma.user.update({
         where: {
-          id: input.userId,
+          id: userId,
         },
         data: {
           favorites: {
