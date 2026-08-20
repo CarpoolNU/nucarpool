@@ -56,14 +56,14 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
   );
 
   const user = useContext(UserContext);
+  // The owning user is no longer sent (SCRUM-223) — the server takes it from
+  // the session. The `if (user)` guard this replaces existed only to narrow
+  // `user` for `user.id`; the component already returns early when it is absent.
   const handleFavorite = (favoriteId: string, add: boolean) => {
-    if (user) {
-      mutateFavorites({
-        userId: user.id,
-        favoriteId,
-        add,
-      });
-    }
+    mutateFavorites({
+      favoriteId,
+      add,
+    });
   };
 
   dayjs.extend(utc);
