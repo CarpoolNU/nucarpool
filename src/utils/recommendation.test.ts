@@ -271,14 +271,95 @@ describe("calculateScore", () => {
       ).toBe(true);
     });
 
-    it("compares hours and minutes separately, reading 9:50 vs 10:00 as 110 minutes apart (SCRUM-235)", () => {
+    it("reads 9:50 vs 10:00 as 10 minutes apart, not 110 (SCRUM-235)", () => {
       const current = rider({ startTime: at(9, 50), endTime: at(17) });
       const candidate = driver({ startTime: at(10, 0), endTime: at(17) });
 
-      // A true 10 minute gap would clear a 1 hour cutoff. This implementation
-      // computes |9-10| * 60 + |50-0| = 110 minutes and rejects the pair.
-      expect(isMatch(current, candidate, { startTime: 1 })).toBe(false);
-      expect(isMatch(current, candidate, { startTime: 2 })).toBe(true);
+      // The pair is 10 minutes apart, so it clears every cutoff the UI offers,
+      // down to the tightest. The previous implementation computed
+      // |9-10| * 60 + |50-0| = 110 minutes and rejected this at a 1 hour cutoff.
+      expect(isMatch(current, candidate, { startTime: 1 })).toBe(true);
+      expect(isMatch(current, candidate, { startTime: 0.25 })).toBe(true);
+    });
+
+    it.each([
+      {
+        label: "minutes running backwards across the hour",
+        currentStart: at(9, 50),
+        candidateStart: at(10, 0),
+        minutes: 10,
+      },
+      {
+        label: "minutes running forwards across the hour",
+        currentStart: at(8, 45),
+        candidateStart: at(9, 15),
+        minutes: 30,
+      },
+      {
+        label: "a whole hour on the same minute",
+        currentStart: at(9, 0),
+        candidateStart: at(10, 0),
+        minutes: 60,
+      },
+      {
+        label: "the same time",
+        currentStart: at(9, 0),
+        candidateStart: at(9, 0),
+        minutes: 0,
+      },
+      {
+        label: "minutes only, within one hour",
+        currentStart: at(9, 15),
+        candidateStart: at(9, 45),
+        minutes: 30,
+      },
+      {
+        label: "a candidate earlier than the current user",
+        currentStart: at(10, 0),
+        candidateStart: at(9, 50),
+        minutes: 10,
+      },
+    ])(
+      "measures $label as $minutes minutes, at the filter boundary",
+      ({ currentStart, candidateStart, minutes }) => {
+        const current = rider({ startTime: currentStart, endTime: at(17) });
+        const candidate = driver({
+          startTime: candidateStart,
+          endTime: at(17),
+        });
+
+        // The filter excludes when the difference is strictly greater than the
+        // cutoff, so a cutoff of exactly the true gap keeps the pair and one
+        // minute below it drops them. That brackets the value from both sides.
+        expect(isMatch(current, candidate, { startTime: minutes / 60 })).toBe(
+          true,
+        );
+
+        if (minutes > 0) {
+          expect(
+            isMatch(current, candidate, { startTime: (minutes - 1) / 60 }),
+          ).toBe(false);
+        }
+      },
+    );
+
+    it("applies the same measurement to the end time", () => {
+      // The end time runs through the same helper; this guards against the fix
+      // being applied to only one of the two.
+      const current = rider({ startTime: at(9), endTime: at(16, 50) });
+      const candidate = driver({ startTime: at(9), endTime: at(17, 0) });
+
+      expect(isMatch(current, candidate, { endTime: 10 / 60 })).toBe(true);
+      expect(isMatch(current, candidate, { endTime: 9 / 60 })).toBe(false);
+    });
+
+    it("scores a 10 minute gap far better than the old arithmetic did", () => {
+      // Scoring reads the same value as the filter, so the correction has to
+      // show up in the score too: 10/80 of the start-time weight, not 80/80.
+      const current = rider({ startTime: at(9, 50), endTime: at(17) });
+      const candidate = driver({ startTime: at(10, 0), endTime: at(17) });
+
+      expect(score(current, candidate)).toBeCloseTo((10 / 80) * 0.1);
     });
   });
 
