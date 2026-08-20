@@ -55,7 +55,7 @@
     "@trpc/server": "^10.45.2",
     "@types/styled-components": "5.1.34",
     "antd": "5.27.4",
-    "axios": "1.12.2",
+    "axios": "1.18.0",
     "chart.js": "4.5.1",
     "chartjs-adapter-date-fns": "^3.0.0",
     "chartjs-plugin-zoom": "^2.2.0",
