@@ -29,6 +29,30 @@ updates:
     # are yanked or found to be compromised have time to be withdrawn.
     cooldown:
       default-days: 7
+    # Version ceilings, applied before grouping — a package listed here is
+    # filtered out of its group's pull request rather than pinning the group.
+    #
+    # Prisma is held at v4 (SCRUM-266). Without a ceiling the `prisma` group
+    # proposes 4.x -> 7.x in one pull request: three majors, and a migration
+    # project rather than a dependency bump. The group is kept below so the two
+    # packages still move together whenever the pin is lifted.
+    #
+    # 4.16.2 is the final 4.x release, so nothing further will be offered in
+    # practice. Scoping to majors rather than ignoring Prisma outright states
+    # the intent — "stay on this major" — and would still admit a backported
+    # 4.x patch if one ever shipped.
+    #
+    # Caveat: `ignore` suppresses security pull requests too. Because v4 is end
+    # of life, a Prisma advisory would only ever be fixed in v5+, so no
+    # automated PR will appear for one. Alerts still surface in the Security
+    # tab; acting on one means deliberately lifting this pin.
+    ignore:
+      - dependency-name: "prisma"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "@prisma/client"
+        update-types:
+          - "version-update:semver-major"
     groups:
       # These packages are coupled and have to move together — bumping one
       # without its siblings breaks the build, so these groups deliberately
@@ -36,6 +60,9 @@ updates:
       aws-sdk:
         patterns:
           - "@aws-sdk/*"
+      # Prisma is the exception to the "majors included" note above: the ignore
+      # rule holds it at v4, so this group only ever carries 4.x updates until
+      # that pin is lifted.
       prisma:
         patterns:
           - "prisma"
