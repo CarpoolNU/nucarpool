@@ -254,7 +254,7 @@ export const emailsRouter = router({
           senderEmail: sender.email,
           receiverName: recipient.name,
           receiverEmail: recipient.email,
-          isDriver: await isDriver(ctx.prisma, recipient.id),
+          recipientIsDriver: await isDriver(ctx.prisma, recipient.id),
           messagePreview: input.messagePreview,
         },
         "request",
@@ -375,17 +375,21 @@ export const emailsRouter = router({
 
       assertDeliverable(recipient.email);
 
-      // Deliberately the *sender's* role, preserving exactly what the client
-      // used to pass. Note that the two acceptance templates are worded for the
-      // recipient, so this selects the opposite one — a pre-existing content
-      // bug tracked as SCRUM-268, deliberately not changed in this security fix.
+      // The *recipient's* role, same as the request flow above (SCRUM-268).
+      // This used to pass the caller's role, preserved from what the client
+      // sent before SCRUM-225. Both acceptance templates are worded for the
+      // recipient and the two roles in a pair are complementary, so supplying
+      // the sender's role always selected the opposite template: a driver
+      // accepting a rider's request told the rider "…accepted your request for
+      // them to join your group", which describes the driver's side, not the
+      // rider's.
       const emailParams = generateEmailParams(
         {
           senderName: sender.name,
           senderEmail: sender.email,
           receiverName: recipient.name,
           receiverEmail: recipient.email,
-          isDriver: await isDriver(ctx.prisma, callerId),
+          recipientIsDriver: await isDriver(ctx.prisma, recipient.id),
         },
         "acceptance",
         true,

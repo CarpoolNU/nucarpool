@@ -274,6 +274,30 @@ describe("user.emails.sendRequestNotification — participants only, addresses f
     expect(db.sentParams().Template).toBe("DriverRequestTemplate");
   });
 
+  it("picks the rider template when the recipient rides", async () => {
+    // The mirror of the case above. Without it the assertion is satisfied by
+    // a hard-coded template, which is close to the SCRUM-268 defect.
+    const db = buildEmailDb({
+      request: {
+        id: REQUEST_ID,
+        fromUserId: BOB,
+        toUserId: ALICE,
+        conversationId: CONVERSATION_ID,
+      },
+    });
+    const { caller } = callerFor(sessionFor(BOB), db);
+
+    await caller.user.emails.sendRequestNotification({
+      requestId: REQUEST_ID,
+      messagePreview: "x",
+    });
+
+    expect(db.sentParams().Destination.ToAddresses).toEqual([
+      "alice@example.com",
+    ]);
+    expect(db.sentParams().Template).toBe("RiderRequestTemplate");
+  });
+
   it("refuses to mail the caller themselves", async () => {
     // `user.requests.create` does not stop a self-request, so a row with both
     // ends the same is reachable. It must not turn into mail.
@@ -612,6 +636,54 @@ describe("user.emails.sendAcceptanceNotification — participants only", () => {
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
 
     expect(db.ses).not.toHaveBeenCalled();
+  });
+
+  /**
+   * SCRUM-268. Both acceptance templates address the recipient in the second
+   * person, so the choice between them is a fact about the recipient:
+   *
+   *   DriverAcceptanceTemplate  "...accepted your request for them to join your group"
+   *   RiderAcceptanceTemplate   "...accepted your request to join their Carpool group"
+   *
+   * The flow used to supply the *caller's* role. Because the two roles in a
+   * pair are complementary that was always the wrong one, so every acceptance
+   * email was worded for the other party. Asserting both directions is the
+   * point: a test that only checks one could pass with the role hard-coded.
+   */
+  it("tells a rider their request was accepted, when a driver accepts", async () => {
+    // Alice (rider) asked to join Bob's (driver) carpool; Bob accepts.
+    const { caller, db } = callerFor(sessionFor(BOB));
+
+    await caller.user.emails.sendAcceptanceNotification({
+      requestId: REQUEST_ID,
+    });
+
+    expect(db.sentParams().Destination.ToAddresses).toEqual([
+      "alice@example.com",
+    ]);
+    expect(db.sentParams().Template).toBe("RiderAcceptanceTemplate");
+  });
+
+  it("tells a driver their invitation was accepted, when a rider accepts", async () => {
+    // The other direction: Bob (driver) invited Alice (rider), Alice accepts.
+    const db = buildEmailDb({
+      request: {
+        id: REQUEST_ID,
+        fromUserId: BOB,
+        toUserId: ALICE,
+        conversationId: CONVERSATION_ID,
+      },
+    });
+    const { caller } = callerFor(sessionFor(ALICE), db);
+
+    await caller.user.emails.sendAcceptanceNotification({
+      requestId: REQUEST_ID,
+    });
+
+    expect(db.sentParams().Destination.ToAddresses).toEqual([
+      "bob@example.com",
+    ]);
+    expect(db.sentParams().Template).toBe("DriverAcceptanceTemplate");
   });
 });
 
