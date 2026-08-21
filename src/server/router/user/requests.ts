@@ -194,6 +194,19 @@ export const requestsRouter = router({
           message: "User not authenticated",
         });
       }
+      // A request to yourself is not something the UI can produce — ConnectModal
+      // opens from someone else's card — but `toId` is client input on a
+      // mutation any signed-in caller can reach (SCRUM-278). The duplicate
+      // guard below cannot catch it: for a self-request both halves of its OR
+      // are the same pair, so the first one always passes and the row is
+      // created, along with a Conversation and an initial Message.
+      if (input.toId === userId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Cannot send a carpool request to yourself.",
+        });
+      }
+
       const existingRequests = await ctx.prisma.request.findMany({
         where: {
           OR: [
