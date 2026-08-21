@@ -14,10 +14,12 @@ import { trpc } from "../utils/trpc";
 import { UserContext } from "../utils/userContext";
 import { useRouter } from "next/router";
 import Spinner from "./Spinner";
-import Pusher from "pusher-js";
 import { notificationChannel } from "../utils/pusherChannels";
-import { browserEnv } from "../utils/env/browser";
-import { Message, PublicUser } from "../utils/types";
+import {
+  acquirePusherClient,
+  releasePusherClient,
+} from "../utils/pusherClient";
+import { PublicUser } from "../utils/types";
 import {
   HiOutlineMap,
   HiOutlineChatAlt2,
@@ -162,16 +164,25 @@ const Header = (props: HeaderProps) => {
     return () => window.removeEventListener("resize", checkIfMobile);
   }, [props.isMobile]);
 
+  // `props.data` is an object literal rebuilt by `Home` on every render — every
+  // filter change, query settle, map event and hover — so depending on it made
+  // the subscription effect below tear down and re-run continuously, opening a
+  // fresh WebSocket each time (SCRUM-238). Holding the setter in a ref lets that
+  // effect depend on the user id alone.
+  const setSidebarRef = useRef(props.data?.setSidebar);
+  useEffect(() => {
+    setSidebarRef.current = props.data?.setSidebar;
+  }, [props.data?.setSidebar]);
+
   useEffect(() => {
     const userId = user?.id;
     if (!userId) return;
 
-    // Private channel: Pusher will not join it until /api/pusher/auth signs
-    // the subscription for this session (SCRUM-224).
-    const pusher = new Pusher(browserEnv.NEXT_PUBLIC_PUSHER_KEY, {
-      cluster: browserEnv.NEXT_PUBLIC_PUSHER_CLUSTER,
-      authEndpoint: "/api/pusher/auth",
-    });
+    // Shared client, created on first acquire and disconnected when the last
+    // holder releases it (SCRUM-238). Private channel: Pusher will not join it
+    // until /api/pusher/auth signs the subscription for this session
+    // (SCRUM-224).
+    const pusher = acquirePusherClient();
 
     const channelName = notificationChannel(userId);
     const messageChannel = pusher.subscribe(channelName);
@@ -182,10 +193,12 @@ const Header = (props: HeaderProps) => {
       console.error(`Could not subscribe to ${channelName}`, status);
     });
 
-    messageChannel.bind("sendNotification", (data: { newMessage: Message }) => {
-      props.data?.setSidebar((prev) => {
+    messageChannel.bind("sendNotification", () => {
+      // The setter is used to *read* the current sidebar without changing it —
+      // the updater returns `prev` untouched.
+      setSidebarRef.current?.((prev) => {
         if (prev !== "requests") {
-          setCurrentunreadMessagesCount((prev) => prev + 1);
+          setCurrentunreadMessagesCount((count) => count + 1);
         }
         return prev;
       });
@@ -195,8 +208,9 @@ const Header = (props: HeaderProps) => {
       messageChannel.unbind("sendNotification");
       messageChannel.unbind("pusher:subscription_error");
       pusher.unsubscribe(channelName);
+      releasePusherClient();
     };
-  }, [props.data?.setSidebar, props.data, user?.id]);
+  }, [user?.id]);
 
   const renderClassName = (sidebarValue: string, sidebarText: string) => {
     if (sidebarValue == "explore" && sidebarText == "explore") {
