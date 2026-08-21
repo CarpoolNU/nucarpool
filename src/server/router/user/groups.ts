@@ -5,6 +5,7 @@ import _ from "lodash";
 import { Role, CarpoolGroup, User } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import { convertCarpoolSearchToPublic } from "../../../utils/publicUser";
+import { NO_SEATS_MESSAGE, clampSeats } from "../../../utils/carpoolSeats";
 
 /**
  * Carpool group authorization (SCRUM-220).
@@ -99,6 +100,46 @@ const requireRequestBetween = async (
       "A carpool request between these users is required before they can share a group.",
     );
   }
+};
+
+/**
+ * Takes one seat from the driver, atomically (SCRUM-229).
+ *
+ * The `seatsAvail: { gt: 0 }` in the filter makes this a compare-and-swap: the
+ * database decrements only if a seat is actually free, and `count` tells us
+ * whether it did. The old shape — read the row, compare in JS, then decrement —
+ * could not go below zero only by luck of timing, and `create` skipped the
+ * comparison entirely, so the first rider added to a full driver left
+ * `seatsAvail` at -1. Two riders accepting at the same instant could do the
+ * same even where the check existed.
+ */
+const reserveSeat = async (prisma: PrismaClientLike, driverUserId: string) => {
+  const reserved = await prisma.carpoolSearch.updateMany({
+    where: { userId: driverUserId, seatsAvail: { gt: 0 } },
+    data: { seatsAvail: { decrement: 1 } },
+  });
+
+  if (reserved.count === 0) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: NO_SEATS_MESSAGE });
+  }
+};
+
+/**
+ * Gives seats back to a driver, never exceeding the maximum. Read-modify-write
+ * rather than an atomic `increment`, because the value has to be clamped and
+ * Prisma cannot express that in one statement. Over-crediting under concurrent
+ * removals is bounded by the clamp.
+ */
+const releaseSeats = async (
+  prisma: PrismaClientLike,
+  carpoolSearchId: string,
+  currentSeats: number,
+  seatsToRelease: number,
+) => {
+  await prisma.carpoolSearch.update({
+    where: { id: carpoolSearchId },
+    data: { seatsAvail: clampSeats(currentSeats + seatsToRelease) },
+  });
 };
 
 // use this router to create and manage groups
@@ -196,6 +237,10 @@ export const groupsRouter = router({
         });
       }
 
+      // Reserve before building anything: this is the step that can legitimately
+      // fail, and failing after the group exists would strand it.
+      await reserveSeat(ctx.prisma, input.driverId);
+
       const group = await ctx.prisma.carpoolGroup.create({
         data: {
           message: driverSearch.groupMessage || "",
@@ -213,22 +258,6 @@ export const groupsRouter = router({
         where: { userId: input.riderId },
         data: { carpoolId: group.id },
       });
-
-      // decrement driver's available seats
-      const existingSearch = await ctx.prisma.carpoolSearch.findFirst({
-        where: { userId: input.driverId },
-      });
-
-      if (existingSearch) {
-        await ctx.prisma.carpoolSearch.update({
-          where: { id: existingSearch.id },
-          data: {
-            seatsAvail: {
-              decrement: 1,
-            },
-          },
-        });
-      }
 
       return group;
     }),
@@ -249,6 +278,10 @@ export const groupsRouter = router({
         include: { user: true },
       });
 
+      const driver = memberCarpoolSearches.find(
+        (member) => member.role === Role.DRIVER,
+      );
+
       // clear carpoolId for all group members
       await ctx.prisma.carpoolSearch.updateMany({
         where: {
@@ -257,45 +290,20 @@ export const groupsRouter = router({
         data: { carpoolId: null },
       });
 
-      const usrLength = memberCarpoolSearches.length - 1;
-
-      const currentUserId = ctx.session.user?.id;
-      if (!currentUserId) {
-        throw new TRPCError({
-          code: "UNAUTHORIZED",
-          message: "User not authenticated",
-        });
-      }
-
-      const currentUserSearch = await ctx.prisma.carpoolSearch.findFirst({
-        where: { userId: currentUserId },
-        select: { seatsAvail: true },
-      });
-
-      if (!currentUserSearch) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "User carpool search not found",
-        });
-      }
-
-      const newSeatAvail = Math.min(
-        currentUserSearch.seatsAvail + usrLength,
-        6,
-      );
-
-      // update seats available in CarpoolSearch
-      const existingSearch = await ctx.prisma.carpoolSearch.findFirst({
-        where: { userId: currentUserId },
-      });
-
-      if (existingSearch) {
-        await ctx.prisma.carpoolSearch.update({
-          where: { id: existingSearch.id },
-          data: {
-            seatsAvail: newSeatAvail,
-          },
-        });
+      // The seats belong to the driver, whoever pressed the button. This used
+      // to read and write the *session user's* row, so a rider deleting the
+      // group took the seats and the driver never got them back (SCRUM-229).
+      // The driver is taken from the membership captured above, before the
+      // carpoolIds were cleared.
+      if (driver) {
+        // Every member other than the driver was occupying a seat.
+        const releasedSeats = memberCarpoolSearches.length - 1;
+        await releaseSeats(
+          ctx.prisma,
+          driver.id,
+          driver.seatsAvail,
+          releasedSeats,
+        );
       }
 
       return await ctx.prisma.carpoolGroup.delete({
@@ -370,18 +378,13 @@ export const groupsRouter = router({
         }
       }
 
-      const driverSearch = await ctx.prisma.carpoolSearch.findFirst({
-        where: { userId: input.driverId },
-      });
-
-      if (driverSearch && driverSearch.seatsAvail === 0 && input.add) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Driver does not have space available in their car",
-        });
-      }
-
       if (input.add) {
+        // Reserve the seat before linking the rider: the compare-and-swap both
+        // rejects a full driver and prevents two simultaneous accepts from
+        // taking the same seat. Replaces a read-compare-then-decrement that
+        // could do neither reliably (SCRUM-229).
+        await reserveSeat(ctx.prisma, input.driverId);
+
         // when adding rider, set carpoolId for the rider
         await ctx.prisma.carpoolSearch.updateMany({
           where: { userId: input.riderId },
@@ -406,50 +409,27 @@ export const groupsRouter = router({
         });
       }
 
-      if (input.add) {
-        // decrement driver's available seats
-        const existingSearch = await ctx.prisma.carpoolSearch.findFirst({
+      // Adding already took its seat above. Removing gives one back, to the
+      // driver named on the request, clamped to the shared maximum.
+      if (!input.add) {
+        const driverSearch = await ctx.prisma.carpoolSearch.findFirst({
           where: { userId: input.driverId },
+          select: { id: true, seatsAvail: true },
         });
 
-        if (existingSearch) {
-          await ctx.prisma.carpoolSearch.update({
-            where: { id: existingSearch.id },
-            data: {
-              seatsAvail: {
-                decrement: 1,
-              },
-            },
-          });
-        }
-      } else {
-        const currentDriverSearch = await ctx.prisma.carpoolSearch.findFirst({
-          where: { userId: input.driverId },
-          select: { seatsAvail: true },
-        });
-
-        if (!currentDriverSearch) {
+        if (!driverSearch) {
           throw new TRPCError({
             code: "NOT_FOUND",
             message: "Driver not found",
           });
         }
 
-        const newSeatAvail = Math.min(currentDriverSearch.seatsAvail + 1, 6);
-
-        // increment driver's available seats
-        const existingSearch = await ctx.prisma.carpoolSearch.findFirst({
-          where: { userId: input.driverId },
-        });
-
-        if (existingSearch) {
-          await ctx.prisma.carpoolSearch.update({
-            where: { id: existingSearch.id },
-            data: {
-              seatsAvail: newSeatAvail,
-            },
-          });
-        }
+        await releaseSeats(
+          ctx.prisma,
+          driverSearch.id,
+          driverSearch.seatsAvail,
+          1,
+        );
       }
 
       const group = await ctx.prisma.carpoolGroup.findUnique({

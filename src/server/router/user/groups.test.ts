@@ -1,6 +1,7 @@
 import { Permission, Role } from "@prisma/client";
 import type { Session } from "next-auth";
 import { appRouter } from "../index";
+import { MAX_SEATS_AVAILABLE } from "../../../utils/carpoolSeats";
 import type { Context } from "../context";
 
 /**
@@ -87,10 +88,25 @@ const buildGroupsDb = (opts?: {
   );
   const requests = opts?.requests ?? [[DRIVER, RIDER_1]];
 
-  const matches = (row: SearchRow, where: any = {}) =>
-    (where.userId === undefined || row.userId === where.userId) &&
-    (where.carpoolId === undefined || row.carpoolId === where.carpoolId) &&
-    (where.id === undefined || row.id === where.id);
+  // Understands the `seatsAvail: { gt: n }` filter that `reserveSeat` relies on
+  // (SCRUM-229). Without it the mock matches on userId alone and the
+  // compare-and-swap can never fail, which would make the seat tests vacuous.
+  const matches = (row: SearchRow, where: any = {}) => {
+    if (where.userId !== undefined && row.userId !== where.userId) return false;
+    if (where.carpoolId !== undefined && row.carpoolId !== where.carpoolId)
+      return false;
+    if (where.id !== undefined && row.id !== where.id) return false;
+
+    const seats = where.seatsAvail;
+    if (seats !== undefined) {
+      if (typeof seats === "number" && row.seatsAvail !== seats) return false;
+      if (seats?.gt !== undefined && !(row.seatsAvail > seats.gt)) return false;
+      if (seats?.gte !== undefined && !(row.seatsAvail >= seats.gte))
+        return false;
+    }
+
+    return true;
+  };
 
   const carpoolSearch = {
     findFirst: jest.fn(async ({ where }: any) => {
@@ -116,6 +132,12 @@ const buildGroupsDb = (opts?: {
       const affected = searches.filter((r) => matches(r, where));
       for (const row of affected) {
         if (data.carpoolId !== undefined) row.carpoolId = data.carpoolId;
+        if (typeof data.seatsAvail === "number")
+          row.seatsAvail = data.seatsAvail;
+        if (data.seatsAvail?.decrement)
+          row.seatsAvail -= data.seatsAvail.decrement;
+        if (data.seatsAvail?.increment)
+          row.seatsAvail += data.seatsAvail.increment;
       }
       return { count: affected.length };
     }),
@@ -161,6 +183,10 @@ const buildGroupsDb = (opts?: {
   return {
     prisma: { carpoolSearch, carpoolGroup, request },
     groupIds: () => [...groups.keys()].sort(),
+    seatsOf: (userId: string) =>
+      searches.find((r) => r.userId === userId)?.seatsAvail,
+    seatsOfSearch: (searchId: string) =>
+      searches.find((r) => r.id === searchId)?.seatsAvail,
     messageOf: (id: string) => groups.get(id)?.message,
     carpoolIdOf: (userId: string) =>
       searches.find((r) => r.userId === userId)?.carpoolId,
@@ -504,5 +530,303 @@ describe("user.groups — authentication gate", () => {
     expect(db.groupIds()).toEqual([GROUP]);
     expect(db.messageOf(GROUP)).toBe("original message");
     expect(db.carpoolGroup.delete).not.toHaveBeenCalled();
+  });
+});
+
+describe("seat accounting — deleting restores seats to the driver (SCRUM-229)", () => {
+  it("credits the driver for every rider the group held", async () => {
+    // Two riders were occupying two seats; the driver gets both back.
+    const { caller, db } = callerFor(sessionFor(DRIVER));
+
+    await caller.user.groups.delete({ groupId: GROUP });
+
+    expect(db.seatsOf(DRIVER)).toBe(4); // started at 2
+  });
+
+  it("credits nobody but the driver", async () => {
+    // The defect: this read and wrote the *session user's* row, so whoever
+    // pressed the button took the seats. Riders must be untouched.
+    const { caller, db } = callerFor(sessionFor(DRIVER));
+
+    await caller.user.groups.delete({ groupId: GROUP });
+
+    expect(db.seatsOf(RIDER_1)).toBe(0);
+    expect(db.seatsOf(RIDER_2)).toBe(0);
+  });
+
+  it("credits the driver's row for *this* group, not just their first row", async () => {
+    // The schema permits several CarpoolSearch rows per user (CLAUDE.md notes
+    // the code assumes one). The old lookup was
+    // `findFirst({ where: { userId } })` with no group scoping, so with an
+    // unrelated row ordered first the seats landed on the wrong row entirely —
+    // reachable today, unlike the "rider deletes the group" case, which
+    // SCRUM-220 now prevents.
+    const db = buildGroupsDb({
+      searches: [
+        {
+          id: "s-driver-unrelated",
+          userId: DRIVER,
+          role: Role.DRIVER,
+          carpoolId: null,
+          seatsAvail: 1,
+          groupMessage: "",
+        },
+        {
+          id: "s-driver",
+          userId: DRIVER,
+          role: Role.DRIVER,
+          carpoolId: GROUP,
+          seatsAvail: 2,
+          groupMessage: "",
+        },
+        {
+          id: "s-rider-1",
+          userId: RIDER_1,
+          role: Role.RIDER,
+          carpoolId: GROUP,
+          seatsAvail: 0,
+          groupMessage: "",
+        },
+      ],
+    });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await caller.user.groups.delete({ groupId: GROUP });
+
+    expect(db.seatsOfSearch("s-driver")).toBe(3); // 2 + the one rider
+    expect(db.seatsOfSearch("s-driver-unrelated")).toBe(1); // untouched
+  });
+
+  it("never credits past the maximum", async () => {
+    const db = buildGroupsDb({
+      searches: [
+        {
+          id: "s-driver",
+          userId: DRIVER,
+          role: Role.DRIVER,
+          carpoolId: GROUP,
+          seatsAvail: 5,
+          groupMessage: "",
+        },
+        {
+          id: "s-rider-1",
+          userId: RIDER_1,
+          role: Role.RIDER,
+          carpoolId: GROUP,
+          seatsAvail: 0,
+          groupMessage: "",
+        },
+        {
+          id: "s-rider-2",
+          userId: RIDER_2,
+          role: Role.RIDER,
+          carpoolId: GROUP,
+          seatsAvail: 0,
+          groupMessage: "",
+        },
+      ],
+    });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await caller.user.groups.delete({ groupId: GROUP });
+
+    // 5 + 2 would be 7; the shared maximum is 6.
+    expect(db.seatsOf(DRIVER)).toBe(MAX_SEATS_AVAILABLE);
+  });
+});
+
+describe("seat accounting — a full driver cannot take another rider", () => {
+  const fullDriver = (carpoolId: string | null) =>
+    buildGroupsDb({
+      searches: [
+        {
+          id: "s-driver",
+          userId: DRIVER,
+          role: Role.DRIVER,
+          carpoolId,
+          seatsAvail: 0,
+          groupMessage: "",
+        },
+        {
+          id: "s-outsider",
+          userId: OUTSIDER,
+          role: Role.RIDER,
+          carpoolId: null,
+          seatsAvail: 0,
+          groupMessage: "",
+        },
+      ],
+      groups: carpoolId ? [{ id: GROUP, message: "m" }] : [],
+      requests: [[DRIVER, OUTSIDER]],
+    });
+
+  it("rejects create and leaves seats at zero rather than -1", async () => {
+    // The defect: create had no availability check at all and decremented
+    // unconditionally, so the first rider took a full driver to -1.
+    const db = fullDriver(null);
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await expect(
+      caller.user.groups.create({ driverId: DRIVER, riderId: OUTSIDER }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    expect(db.seatsOf(DRIVER)).toBe(0);
+    expect(db.groupIds()).toEqual([]);
+    expect(db.carpoolIdOf(OUTSIDER)).toBeNull();
+  });
+
+  it("rejects edit-add and does not link the rider", async () => {
+    const db = fullDriver(GROUP);
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await expect(
+      caller.user.groups.edit({
+        driverId: DRIVER,
+        riderId: OUTSIDER,
+        groupId: GROUP,
+        add: true,
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    expect(db.seatsOf(DRIVER)).toBe(0);
+    expect(db.carpoolIdOf(OUTSIDER)).toBeNull();
+  });
+});
+
+describe("seat accounting — normal joins and leaves", () => {
+  it("takes a seat when a group is created", async () => {
+    const db = buildGroupsDb({
+      searches: [
+        {
+          id: "s-driver",
+          userId: DRIVER,
+          role: Role.DRIVER,
+          carpoolId: null,
+          seatsAvail: 3,
+          groupMessage: "",
+        },
+        {
+          id: "s-rider-1",
+          userId: RIDER_1,
+          role: Role.RIDER,
+          carpoolId: null,
+          seatsAvail: 0,
+          groupMessage: "",
+        },
+      ],
+      groups: [],
+      requests: [[DRIVER, RIDER_1]],
+    });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await caller.user.groups.create({ driverId: DRIVER, riderId: RIDER_1 });
+
+    expect(db.seatsOf(DRIVER)).toBe(2);
+  });
+
+  it("takes a seat when a rider is added to an existing group", async () => {
+    const db = buildGroupsDb({ requests: [[DRIVER, OUTSIDER]] });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await caller.user.groups.edit({
+      driverId: DRIVER,
+      riderId: OUTSIDER,
+      groupId: GROUP,
+      add: true,
+    });
+
+    expect(db.seatsOf(DRIVER)).toBe(1); // started at 2
+  });
+
+  it("gives a seat back when a rider is removed", async () => {
+    const { caller, db } = callerFor(sessionFor(DRIVER));
+
+    await caller.user.groups.edit({
+      driverId: DRIVER,
+      riderId: RIDER_1,
+      groupId: GROUP,
+      add: false,
+    });
+
+    expect(db.seatsOf(DRIVER)).toBe(3); // started at 2
+  });
+
+  it("gives a seat back when a rider leaves of their own accord", async () => {
+    // The credit still goes to the driver, not the departing rider.
+    const { caller, db } = callerFor(sessionFor(RIDER_1));
+
+    await caller.user.groups.edit({
+      driverId: DRIVER,
+      riderId: RIDER_1,
+      groupId: GROUP,
+      add: false,
+    });
+
+    expect(db.seatsOf(DRIVER)).toBe(3);
+    expect(db.seatsOf(RIDER_1)).toBe(0);
+  });
+
+  it("never returns a seat past the maximum", async () => {
+    const db = buildGroupsDb({
+      searches: [
+        {
+          id: "s-driver",
+          userId: DRIVER,
+          role: Role.DRIVER,
+          carpoolId: GROUP,
+          seatsAvail: MAX_SEATS_AVAILABLE,
+          groupMessage: "",
+        },
+        {
+          id: "s-rider-1",
+          userId: RIDER_1,
+          role: Role.RIDER,
+          carpoolId: GROUP,
+          seatsAvail: 0,
+          groupMessage: "",
+        },
+        {
+          id: "s-rider-2",
+          userId: RIDER_2,
+          role: Role.RIDER,
+          carpoolId: GROUP,
+          seatsAvail: 0,
+          groupMessage: "",
+        },
+      ],
+    });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await caller.user.groups.edit({
+      driverId: DRIVER,
+      riderId: RIDER_1,
+      groupId: GROUP,
+      add: false,
+    });
+
+    expect(db.seatsOf(DRIVER)).toBe(MAX_SEATS_AVAILABLE);
+  });
+
+  it("keeps seats within range across a sequence of joins and leaves", async () => {
+    // The property the ticket actually asks for, over a realistic sequence.
+    const db = buildGroupsDb({ requests: [[DRIVER, OUTSIDER]] });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    const edit = (riderId: string, add: boolean) =>
+      caller.user.groups.edit({
+        driverId: DRIVER,
+        riderId,
+        groupId: GROUP,
+        add,
+      });
+
+    await edit(OUTSIDER, true);
+    await edit(OUTSIDER, false);
+    await edit(OUTSIDER, true);
+    await edit(RIDER_1, false);
+
+    const seats = db.seatsOf(DRIVER)!;
+    expect(seats).toBeGreaterThanOrEqual(0);
+    expect(seats).toBeLessThanOrEqual(MAX_SEATS_AVAILABLE);
   });
 });

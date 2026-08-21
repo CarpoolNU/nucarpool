@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedRouter, router } from "./createRouter";
+import { MAX_SEATS_AVAILABLE } from "../../utils/carpoolSeats";
 import { Role } from "@prisma/client";
 import { Status } from "@prisma/client";
 import _ from "lodash";
@@ -100,7 +101,7 @@ export const userRouter = router({
       z.object({
         role: z.nativeEnum(Role),
         status: z.nativeEnum(Status),
-        seatAvail: z.number().int().min(0).max(6),
+        seatAvail: z.number().int().min(0).max(MAX_SEATS_AVAILABLE),
         companyName: z.string(),
         companyAddress: z.string(),
         companyCoordLng: z.number(),

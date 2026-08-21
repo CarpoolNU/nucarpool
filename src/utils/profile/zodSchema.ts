@@ -1,12 +1,18 @@
 import { z } from "zod";
 import { Role, Status } from "@prisma/client";
+import { MAX_SEATS_AVAILABLE } from "../carpoolSeats";
 
 const custom = z.ZodIssueCode.custom;
 export const onboardSchema = z
   .object({
     role: z.nativeEnum(Role),
     status: z.nativeEnum(Status),
-    seatAvail: z.number().int().nonnegative().max(6).optional(),
+    seatAvail: z
+      .number()
+      .int()
+      .nonnegative()
+      .max(MAX_SEATS_AVAILABLE)
+      .optional(),
     companyName: z.string().optional(),
     companyAddress: z.string().optional(),
     startAddress: z.string().optional(),
