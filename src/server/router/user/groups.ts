@@ -3,13 +3,109 @@ import { z } from "zod";
 import { router, protectedRouter } from "../createRouter";
 import _ from "lodash";
 import { Role, CarpoolGroup, User } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 import { convertCarpoolSearchToPublic } from "../../../utils/publicUser";
+
+/**
+ * Carpool group authorization (SCRUM-220).
+ *
+ * Every mutation here is `protectedRouter`, but that only proves a session
+ * exists — and every NUCarpool user has one. Group and user ids arrived
+ * straight from client input, so any signed-in student could dissolve other
+ * people's groups, evict riders, insert users, or rewrite a driver's message.
+ *
+ * The rules below are not invented: they are what the UI already enforces by
+ * showing or hiding buttons, now enforced on the server as well.
+ *
+ * | Action                  | Who may do it                                          | UI evidence                                            |
+ * | ----------------------- | ------------------------------------------------------ | ------------------------------------------------------ |
+ * | `create`                | either named party, and only with a request between them | `initiateGroup` runs from an accepted request          |
+ * | `edit` (add a rider)    | the group's driver, or the rider adding themselves       | same accept flow; a rider joins the driver's group     |
+ * | `edit` (remove a rider) | the driver removes anyone; a rider removes only themselves | "Remove" is driver-only; riders get "Leave Group"    |
+ * | `delete`                | the group's driver                                       | "Delete Group" renders only when `role === DRIVER`     |
+ * | `updateMessage`         | the group's driver                                       | `handleMessageSubmit` is gated on `role === "DRIVER"`  |
+ *
+ * "The group's driver" means a `CarpoolSearch` whose `carpoolId` is the group
+ * and whose `role` is DRIVER — `CarpoolGroup` itself stores no owner.
+ *
+ * Adding requires a `Request` between the two users because that request *is*
+ * the invitation; without it a rider could self-join any stranger's group.
+ * Requests survive acceptance today (SCRUM-228); if that is ever fixed to
+ * delete them, this check has to move ahead of the deletion.
+ */
+
+/** Just the Prisma surface these helpers touch, so they are easy to test. */
+type PrismaClientLike = Pick<PrismaClient, "carpoolSearch" | "request">;
+
+const forbidden = (message: string) =>
+  new TRPCError({ code: "FORBIDDEN", message });
+
+const requireCallerId = (userId: string | undefined): string => {
+  if (!userId) {
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "User not authenticated.",
+    });
+  }
+  return userId;
+};
+
+/** The caller's own membership row for `groupId`, or null if not a member. */
+const membershipOf = async (
+  prisma: PrismaClientLike,
+  userId: string,
+  groupId: string,
+) =>
+  prisma.carpoolSearch.findFirst({
+    where: { userId, carpoolId: groupId },
+    select: { id: true, role: true },
+  });
+
+/** Throws unless the caller is the DRIVER of `groupId`. */
+const requireGroupDriver = async (
+  prisma: PrismaClientLike,
+  callerId: string,
+  groupId: string,
+) => {
+  const membership = await membershipOf(prisma, callerId, groupId);
+
+  if (!membership) {
+    throw forbidden("You are not a member of this carpool group.");
+  }
+  if (membership.role !== Role.DRIVER) {
+    throw forbidden("Only the group's driver can perform this action.");
+  }
+  return membership;
+};
+
+/** Throws unless a request exists between the two users, in either direction. */
+const requireRequestBetween = async (
+  prisma: PrismaClientLike,
+  driverId: string,
+  riderId: string,
+) => {
+  const request = await prisma.request.findFirst({
+    where: {
+      OR: [
+        { fromUserId: driverId, toUserId: riderId },
+        { fromUserId: riderId, toUserId: driverId },
+      ],
+    },
+    select: { id: true },
+  });
+
+  if (!request) {
+    throw forbidden(
+      "A carpool request between these users is required before they can share a group.",
+    );
+  }
+};
 
 // use this router to create and manage groups
 export const groupsRouter = router({
   me: protectedRouter.query(async ({ ctx }) => {
     const userId = ctx.session.user?.id;
-    
+
     if (!userId) {
       throw new TRPCError({
         code: "UNAUTHORIZED",
@@ -57,7 +153,7 @@ export const groupsRouter = router({
             bio: true,
             preferredName: true,
             pronouns: true,
-          }
+          },
         },
         homeLocation: true,
         companyLocation: true,
@@ -78,6 +174,17 @@ export const groupsRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      const callerId = requireCallerId(ctx.session.user?.id);
+
+      // The caller has to be one of the two people being put in the group, and
+      // the pair has to have an actual request between them.
+      if (callerId !== input.driverId && callerId !== input.riderId) {
+        throw forbidden(
+          "You can only create a carpool group that you are part of.",
+        );
+      }
+      await requireRequestBetween(ctx.prisma, input.driverId, input.riderId);
+
       const driverSearch = await ctx.prisma.carpoolSearch.findFirst({
         where: { userId: input.driverId },
       });
@@ -132,6 +239,10 @@ export const groupsRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      // Dissolving the group is the driver's call; a rider leaves instead.
+      const callerId = requireCallerId(ctx.session.user?.id);
+      await requireGroupDriver(ctx.prisma, callerId, input.groupId);
+
       // Find all CarpoolSearches that reference this group
       const memberCarpoolSearches = await ctx.prisma.carpoolSearch.findMany({
         where: { carpoolId: input.groupId },
@@ -158,7 +269,7 @@ export const groupsRouter = router({
 
       const currentUserSearch = await ctx.prisma.carpoolSearch.findFirst({
         where: { userId: currentUserId },
-        select: { seatsAvail: true }
+        select: { seatsAvail: true },
       });
 
       if (!currentUserSearch) {
@@ -168,7 +279,10 @@ export const groupsRouter = router({
         });
       }
 
-      const newSeatAvail = Math.min(currentUserSearch.seatsAvail + usrLength, 6);
+      const newSeatAvail = Math.min(
+        currentUserSearch.seatsAvail + usrLength,
+        6,
+      );
 
       // update seats available in CarpoolSearch
       const existingSearch = await ctx.prisma.carpoolSearch.findFirst({
@@ -200,6 +314,62 @@ export const groupsRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      const callerId = requireCallerId(ctx.session.user?.id);
+
+      if (input.add) {
+        // Joining: either the driver brings a rider in, or a rider joins the
+        // driver's group themselves. Both come out of accepting a request, so
+        // one has to exist; otherwise a rider could join any stranger's group.
+        if (callerId !== input.driverId && callerId !== input.riderId) {
+          throw forbidden(
+            "You can only add someone to your own carpool group.",
+          );
+        }
+        if (callerId !== input.driverId && input.riderId !== callerId) {
+          throw forbidden("You can only add yourself to a carpool group.");
+        }
+        await requireRequestBetween(ctx.prisma, input.driverId, input.riderId);
+
+        // The target group must actually be the named driver's group.
+        const driverMembership = await membershipOf(
+          ctx.prisma,
+          input.driverId,
+          input.groupId,
+        );
+        if (!driverMembership || driverMembership.role !== Role.DRIVER) {
+          throw forbidden("That carpool group does not belong to this driver.");
+        }
+      } else {
+        // Leaving or evicting: the caller must be in the group, and unless
+        // they are its driver they may only remove themselves.
+        const callerMembership = await membershipOf(
+          ctx.prisma,
+          callerId,
+          input.groupId,
+        );
+        if (!callerMembership) {
+          throw forbidden("You are not a member of this carpool group.");
+        }
+        if (
+          callerMembership.role !== Role.DRIVER &&
+          input.riderId !== callerId
+        ) {
+          throw forbidden("Only the group's driver can remove another member.");
+        }
+
+        const targetMembership = await membershipOf(
+          ctx.prisma,
+          input.riderId,
+          input.groupId,
+        );
+        if (!targetMembership) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "That user is not a member of this carpool group.",
+          });
+        }
+      }
+
       const driverSearch = await ctx.prisma.carpoolSearch.findFirst({
         where: { userId: input.driverId },
       });
@@ -255,7 +425,7 @@ export const groupsRouter = router({
       } else {
         const currentDriverSearch = await ctx.prisma.carpoolSearch.findFirst({
           where: { userId: input.driverId },
-          select: { seatsAvail: true }
+          select: { seatsAvail: true },
         });
 
         if (!currentDriverSearch) {
@@ -301,7 +471,7 @@ export const groupsRouter = router({
 
       const updatedGroup = {
         ...group,
-        users: memberCarpoolSearches.map(cs => cs.user),
+        users: memberCarpoolSearches.map((cs) => cs.user),
       };
 
       return updatedGroup;
@@ -314,6 +484,10 @@ export const groupsRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      // The group message is the driver's; riders only read it.
+      const callerId = requireCallerId(ctx.session.user?.id);
+      await requireGroupDriver(ctx.prisma, callerId, input.groupId);
+
       const updatedGroup = await ctx.prisma.carpoolGroup.update({
         where: { id: input.groupId },
         data: {
@@ -330,7 +504,7 @@ export const groupsRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user?.id;
-      
+
       if (!userId) {
         throw new TRPCError({
           code: "UNAUTHORIZED",
