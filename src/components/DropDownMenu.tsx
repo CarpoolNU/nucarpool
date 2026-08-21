@@ -13,7 +13,11 @@ const DropDownMenu = () => {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
 
-  const { profileImageUrl, imageLoadError } = useProfileImage();
+  const {
+    profileImageUrl,
+    imageLoadError,
+    isLoading: isProfileImageLoading,
+  } = useProfileImage();
 
   const logout = () => {
     signOut();
@@ -34,7 +38,9 @@ const DropDownMenu = () => {
       )}
       <Menu>
         <Menu.Button className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full">
-          {profileImageUrl && !imageLoadError ? (
+          {isProfileImageLoading ? (
+            <div className="h-14 w-14 rounded-full bg-gray-400" />
+          ) : profileImageUrl && !imageLoadError ? (
             <Image
               src={profileImageUrl}
               alt="Profile Image"

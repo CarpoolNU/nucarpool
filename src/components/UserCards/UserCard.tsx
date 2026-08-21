@@ -51,9 +51,11 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
       trpcUtils.user.favorites.me.invalidate();
     },
   });
-  const { profileImageUrl, imageLoadError } = useProfileImage(
-    props.otherUser.id,
-  );
+  const {
+    profileImageUrl,
+    imageLoadError,
+    isLoading: isProfileImageLoading,
+  } = useProfileImage(props.otherUser.id);
 
   const user = useContext(UserContext);
   // The owning user is no longer sent (SCRUM-223) — the server takes it from
@@ -130,7 +132,9 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
     >
       <div className={"-ml-2 mb-1 flex flex-row items-center"}>
         {/* Profile Image */}
-        {profileImageUrl && !imageLoadError ? (
+        {isProfileImageLoading ? (
+          <div className="h-14 w-14  rounded-full bg-gray-200" />
+        ) : profileImageUrl && !imageLoadError ? (
           <Image
             src={profileImageUrl}
             alt={`${props.otherUser.preferredName}'s Profile Image`}

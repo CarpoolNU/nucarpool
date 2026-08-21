@@ -28,7 +28,11 @@ const MessageHeader = ({
   const handleClose = () => {
     onClose("");
   };
-  const { profileImageUrl, imageLoadError } = useProfileImage(selectedUser.id);
+  const {
+    profileImageUrl,
+    imageLoadError,
+    isLoading: isProfileImageLoading,
+  } = useProfileImage(selectedUser.id);
 
   if (ismobile) {
     return (
@@ -62,7 +66,9 @@ const MessageHeader = ({
   return (
     <div className="flex items-center justify-between border-b bg-white p-8">
       <div className="flex items-center">
-        {profileImageUrl && !imageLoadError ? (
+        {isProfileImageLoading ? (
+          <div className="h-20 w-20 rounded-full bg-gray-200" />
+        ) : profileImageUrl && !imageLoadError ? (
           <Image
             src={profileImageUrl}
             alt={`${selectedUser.preferredName}'s Profile Image`}

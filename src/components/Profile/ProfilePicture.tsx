@@ -20,7 +20,11 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null);
   const [showModal, setShowModal] = useState<boolean>(false);
 
-  const { profileImageUrl, imageLoadError } = useProfileImage();
+  const {
+    profileImageUrl,
+    imageLoadError,
+    isLoading: isProfileImageLoading,
+  } = useProfileImage();
 
   const onCropComplete = useCallback(
     (croppedAreaPercentage: any, croppedAreaPixels: any) => {
@@ -178,6 +182,8 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
               objectFit="cover"
             />
           </div>
+        ) : isProfileImageLoading ? (
+          <div className="h-40 w-40 rounded-full bg-gray-400 flex-shrink-0" />
         ) : profileImageUrl && !imageLoadError ? (
           <div className="relative h-40 w-40 items-center justify-center overflow-hidden rounded-full flex-shrink-0">
             <Image

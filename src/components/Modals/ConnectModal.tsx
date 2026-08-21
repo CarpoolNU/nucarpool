@@ -27,9 +27,11 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
   const [isOpen, setIsOpen] = useState(true);
   const [requestSent, setRequestSent] = useState(false);
   const [customMessage, setCustomMessage] = useState("");
-  const { profileImageUrl, imageLoadError } = useProfileImage(
-    props.otherUser.id,
-  );
+  const {
+    profileImageUrl,
+    imageLoadError,
+    isLoading: isProfileImageLoading,
+  } = useProfileImage(props.otherUser.id);
   const isMobile = useIsMobile();
 
   const onClose = async (action: string) => {
@@ -140,7 +142,9 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                 <div className="relative  flex w-full">
                   <div className="flex w-full flex-row gap-4  px-6 md:px-12">
                     <div className="relative inline-block h-28 w-28">
-                      {profileImageUrl && !imageLoadError ? (
+                      {isProfileImageLoading ? (
+                        <div className="h-28 w-28 rounded-full bg-gray-200" />
+                      ) : profileImageUrl && !imageLoadError ? (
                         <Image
                           src={profileImageUrl}
                           alt={`${props.otherUser.preferredName}'s Profile Image`}
