@@ -1,0 +1,24 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - yarn install --frozen-lockfile
+        - npx prisma generate
+    build:
+      commands:
+        - env | grep -e ACCESS >> .env.production
+        - env | grep -e DATABASE >> .env.production
+        - env | grep -e GOOGLE >> .env.production
+        - env | grep -e NEXTAUTH_URL >> .env.production
+        - env | grep -e NEXTAUTH_SECRET >> .env.production
+        - env | grep -e REGION >> .env.production
+        - env | grep -e SECRET >> .env.production
+        - env | grep -e AZURE >> .env.production
+        - env | grep -e PUSHER >> .env.production
+        - yarn run build:${BUILD_ENV}
+
+  artifacts:
+    baseDirectory: .next
+    files:
+      - "**/*"
