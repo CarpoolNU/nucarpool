@@ -65,7 +65,24 @@ const nextConfig = {
   // Do not advertise the framework and its version.
   poweredByHeader: false,
   images: {
+    // Pinned to the Next.js 15 default. Next.js 16 raised the built-in default
+    // from 60 seconds to 4 hours (14400s), which is a sensible default for
+    // stable remote images but not for ours: profile pictures are S3 presigned
+    // URLs, and `useProfileImage` currently requests a freshly signed URL twice
+    // per avatar per view (SCRUM-242). Each distinct signature is its own
+    // optimizer cache key, so a 4-hour retention multiplies cache entries for
+    // URLs that are already dead — the signature expires after an hour.
+    //
+    // This pin keeps the framework upgrade behaviour-neutral. Raising it is a
+    // real decision, and it belongs with SCRUM-242 once presigned URLs are
+    // cached and stable, not inside a dependency bump.
+    minimumCacheTTL: 60,
     // `images.domains` is deprecated in favour of remotePatterns.
+    //
+    // No `search` key on these patterns, deliberately: Next 16's
+    // `matchRemotePattern` only compares query strings when `search` is
+    // defined, so leaving it out is what allows the presigned S3 signature
+    // query string through. Adding `search` here would break every avatar.
     remotePatterns: [
       {
         protocol: "https",
