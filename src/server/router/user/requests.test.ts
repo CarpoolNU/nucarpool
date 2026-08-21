@@ -306,6 +306,77 @@ describe("user.requests.create — the duplicate guard still holds", () => {
   });
 });
 
+describe("user.requests.create — a caller cannot request themselves", () => {
+  /**
+   * SCRUM-278. The UI never produces this — ConnectModal opens from someone
+   * else's card — but `toId` is client input on a mutation any signed-in
+   * caller can reach.
+   *
+   * The duplicate guard cannot catch it. For a self-request both halves of
+   * its `OR` are `{ fromUserId: me, toUserId: me }`, so nothing pre-existing
+   * matches on the first attempt and the row is created.
+   */
+  it("rejects a request whose recipient is the caller", async () => {
+    const { caller, db } = callerFor(sessionFor(USER_A));
+
+    await expect(
+      caller.user.requests.create({ toId: USER_A, message: "hello" }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    expect(db.rows()).toEqual([]);
+  });
+
+  it("writes no Conversation or Message either", async () => {
+    // The row is not the only thing `create` produces, and the two it leaves
+    // behind outlive it: `delete` removes only the Request, so a self-request
+    // that got through would strand its Conversation and Message for good.
+    const { caller, db } = callerFor(sessionFor(USER_A));
+
+    await expect(
+      caller.user.requests.create({ toId: USER_A, message: "hello" }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    expect(db.prisma.conversation.create).not.toHaveBeenCalled();
+    expect(db.prisma.message.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects before querying for duplicates at all", async () => {
+    const { caller, db } = callerFor(sessionFor(USER_A));
+
+    await expect(
+      caller.user.requests.create({ toId: USER_A, message: "hello" }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    expect(db.prisma.request.findMany).not.toHaveBeenCalled();
+    expect(db.create).not.toHaveBeenCalled();
+  });
+
+  it("still allows a request to somebody else", async () => {
+    // The guard compares against the session id, so it must not reject on any
+    // other basis — a check on the wrong variable would fail here.
+    const { caller, db } = callerFor(sessionFor(USER_A));
+
+    await caller.user.requests.create({ toId: USER_B, message: "hello" });
+
+    expect(db.rows()).toEqual([
+      expect.objectContaining({ fromUserId: USER_A, toUserId: USER_B }),
+    ]);
+  });
+
+  it("compares against the session, not a fixed id", async () => {
+    // The same `toId` that is a self-request for USER_A is an ordinary request
+    // for anyone else. Without this, a guard that rejected USER_A outright —
+    // or compared the wrong pair of variables — would still look correct.
+    const { caller, db } = callerFor(sessionFor(USER_B));
+
+    await caller.user.requests.create({ toId: USER_A, message: "hello" });
+
+    expect(db.rows()).toEqual([
+      expect.objectContaining({ fromUserId: USER_B, toUserId: USER_A }),
+    ]);
+  });
+});
+
 describe("user.requests.delete — only a participant may clear a request", () => {
   const seeded = () => buildRequestsDb([requestRow("req-1", USER_A, USER_B)]);
 
