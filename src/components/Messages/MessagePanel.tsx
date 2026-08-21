@@ -53,11 +53,10 @@ const MessagePanel = ({
     const requestId = request?.id;
     if (!requestId) return;
 
-    sendMessage.mutate({ requestId, content });
-
     const converstationMessages = request.conversation?.messages;
 
     // If the last message from the recipient is less than 5 mins old, don't send email notification
+    let notifyByEmail = true;
     if (converstationMessages && converstationMessages.length > 0) {
       const recipientMessages = converstationMessages.filter(
         (msg) => msg.userId === selectedUser.id,
@@ -70,25 +69,24 @@ const MessagePanel = ({
         ).getTime();
         const minsDiff = (Date.now() - lastMsgTime) / (1000 * 60);
         if (minsDiff < 5) {
-          return;
+          notifyByEmail = false;
         }
       }
     }
 
-    // Send email notification
-    if (user && user.email && selectedUser.email) {
-      sendMessageNotification({
-        senderName: user.preferredName || "",
-        senderEmail: user.email,
-        receiverName: selectedUser.preferredName || "",
-        receiverEmail: selectedUser.email,
-        messageText: content,
-      });
-    } else {
-      console.error(
-        "Unable to send message notification: Missing email address",
-      );
-    }
+    // The notification body is read from the stored message (SCRUM-225), so it
+    // has to be sent once the write has landed rather than alongside it. The
+    // server applies its own cooldown; this check only avoids a pointless call.
+    sendMessage.mutate(
+      { requestId, content },
+      {
+        onSuccess: () => {
+          if (notifyByEmail) {
+            sendMessageNotification({ requestId });
+          }
+        },
+      },
+    );
   };
 
   const { mutate: sendAcceptanceNotification } =
@@ -111,20 +109,9 @@ const MessagePanel = ({
 
     await handleAcceptRequest(user, selectedUser, request);
 
-    // Send acceptance notification email
-    if (user.email && selectedUser.email) {
-      sendAcceptanceNotification({
-        senderName: user.preferredName || "",
-        senderEmail: user.email,
-        receiverName: selectedUser.preferredName || "",
-        receiverEmail: selectedUser.email,
-        isDriver: user.role === "DRIVER",
-      });
-    } else {
-      console.error(
-        "Unable to send acceptance notification: Missing email address",
-      );
-    }
+    // Both parties and the template are resolved server-side from the request
+    // (SCRUM-225).
+    sendAcceptanceNotification({ requestId: request.id });
 
     onCloseConversation(""); // Close the conversation after accepting
   };
@@ -150,12 +137,11 @@ const MessagePanel = ({
         onViewRouteClick(user, selectedUser);
         setHasCalculatedRoute(true);
       } catch (error) {
-        console.error('Error calculating route:', error);
+        console.error("Error calculating route:", error);
         // do not set hasCalculatedRoute to true so we can retry
       }
     }
   }, [activeTab, user, selectedUser, onViewRouteClick, hasCalculatedRoute]);
-
 
   return (
     <div className="flex h-full w-full flex-col">

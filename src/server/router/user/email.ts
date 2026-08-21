@@ -1,144 +1,321 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { router, protectedRouter } from "../createRouter";
-import _ from "lodash";
 import { generateEmailParams } from "../../../utils/email";
-import {
-  SendEmailCommand,
-  SendTemplatedEmailCommand,
-  SendTemplatedEmailCommandInput,
-} from "@aws-sdk/client-ses";
-const gmailEmailSchema = z
-  .string()
-  .email()
-  .refine(
-    (email) =>
-      (process.env.NEXT_PUBLIC_ENV === "staging" &&
-        email.toLowerCase().endsWith("@gmail.com")) ||
-      process.env.NEXT_PUBLIC_ENV !== "staging",
-    {
+import { SendTemplatedEmailCommand } from "@aws-sdk/client-ses";
+import type { PrismaClient } from "@prisma/client";
+
+/**
+ * Notification email (SCRUM-225).
+ *
+ * These procedures used to take `senderName`, `senderEmail`, `receiverName`,
+ * `receiverEmail` and the body straight from client input, so any signed-in
+ * user could send arbitrary text to an arbitrary address from the NUCarpool SES
+ * identity. Every one of those values is now derived on the server:
+ *
+ *  - the sender is `ctx.session.user.id`, looked up for its stored name/address;
+ *  - the recipient is resolved from the referenced request (or, for a brand new
+ *    carpool request, the referenced user), never from an address in the input;
+ *  - the body comes from the stored `Message` row where one exists.
+ *
+ * The client therefore chooses *which* of its own conversations to notify about,
+ * and nothing else. Bodies are rendered by SES templates through Handlebars
+ * `{{ }}`, which HTML-escapes, so no additional escaping is applied here.
+ */
+
+/** Per-sender, per-conversation cooldown for message notifications. */
+const MESSAGE_NOTIFICATION_COOLDOWN_MS = 5 * 60 * 1000;
+
+/** Longest request preview accepted; mirrors the 250-char cap in ConnectModal. */
+const MAX_PREVIEW_LENGTH = 250;
+
+type Party = { id: string; name: string; email: string };
+
+/**
+ * Staging may only send to gmail.com. This used to be a Zod refinement on the
+ * client-supplied address; addresses now come from the database, so the same
+ * rule is applied to the resolved recipient instead. The code and message are
+ * unchanged so the behaviour a staging user sees is the same.
+ */
+const assertDeliverable = (email: string) => {
+  if (
+    process.env.NEXT_PUBLIC_ENV === "staging" &&
+    !email.toLowerCase().endsWith("@gmail.com")
+  ) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
       message:
         "Only gmail.com email addresses are accepted in the staging environment",
+    });
+  }
+};
+
+const requireSessionUserId = (userId: string | undefined): string => {
+  if (!userId) {
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "User not authenticated",
+    });
+  }
+  return userId;
+};
+
+/** A user is only a usable email party if we hold an address for them. */
+const toParty = (user: {
+  id: string;
+  preferredName: string;
+  name: string | null;
+  email: string | null;
+}): Party | null =>
+  user.email
+    ? {
+        id: user.id,
+        name: user.preferredName || user.name || "",
+        email: user.email,
+      }
+    : null;
+
+const loadParty = async (
+  prisma: PrismaClient,
+  userId: string,
+): Promise<Party | null> => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, preferredName: true, name: true, email: true },
+  });
+  return user ? toParty(user) : null;
+};
+
+/** `true` when the user's carpool search says they drive. */
+const isDriver = async (prisma: PrismaClient, userId: string) => {
+  const search = await prisma.carpoolSearch.findFirst({
+    where: { userId },
+    select: { role: true },
+  });
+  return search?.role === "DRIVER";
+};
+
+/**
+ * Resolves the two ends of a notification about an existing request, refusing
+ * any caller who is not a party to it. This is the check that makes an
+ * arbitrary recipient impossible: the address is read from the counterpart on
+ * the request row, so a caller can only ever mail someone they are already in a
+ * request with.
+ */
+const resolveRequestParties = async (
+  prisma: PrismaClient,
+  requestId: string,
+  callerId: string,
+) => {
+  const request = await prisma.request.findUnique({
+    where: { id: requestId },
+    select: {
+      id: true,
+      fromUserId: true,
+      toUserId: true,
+      conversationId: true,
     },
-  );
+  });
+
+  if (!request) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: `No request with id '${requestId}'`,
+    });
+  }
+
+  if (request.fromUserId !== callerId && request.toUserId !== callerId) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "You are not a participant in this request.",
+    });
+  }
+
+  const otherUserId =
+    request.fromUserId === callerId ? request.toUserId : request.fromUserId;
+
+  const [sender, recipient] = await Promise.all([
+    loadParty(prisma, callerId),
+    loadParty(prisma, otherUserId),
+  ]);
+
+  return { request, sender, recipient };
+};
 
 export const emailsRouter = router({
+  /**
+   * Notifies `toId` that the caller has requested to carpool.
+   *
+   * This one resolves the recipient from a user id rather than a request id,
+   * because the connect flow sends the mail *before* creating the request
+   * (SCRUM-234), so no request row exists yet. The recipient is still a real
+   * NUCarpool user at their stored address — an arbitrary address remains
+   * impossible. Once SCRUM-234 reorders that flow this can take a `requestId`
+   * and verify the relationship as the other two procedures do.
+   */
   sendRequestNotification: protectedRouter
     .input(
-      z.object({
-        senderName: z.string(),
-        senderEmail: gmailEmailSchema,
-        receiverName: z.string(),
-        receiverEmail: gmailEmailSchema,
-        isDriver: z.boolean(),
-        messagePreview: z.string(),
-      }),
+      z
+        .object({
+          toId: z.string(),
+          messagePreview: z.string().max(MAX_PREVIEW_LENGTH),
+        })
+        .strict(),
     )
     .mutation(async ({ ctx, input }) => {
-      const emailParams = generateEmailParams(input, "request", false);
-      try {
-        const response = await ctx.sesClient.send(
-          new SendTemplatedEmailCommand(emailParams),
-        );
-        console.log(
-          `Request email sent successfully to ${input.receiverEmail}.`,
-        );
-        console.log("SES Response:", JSON.stringify(response, null, 2));
-        return response;
-      } catch (error) {
-        console.error("Error sending email:", error);
-        throw error;
-      }
-    }),
+      const callerId = requireSessionUserId(ctx.session.user?.id);
 
-  sendMessageNotification: protectedRouter
-    .input(
-      z.object({
-        senderName: z.string(),
-        senderEmail: gmailEmailSchema,
-        receiverName: z.string(),
-        receiverEmail: gmailEmailSchema,
-        messageText: z.string(),
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
-      const emailParams = generateEmailParams(input, "message", false);
-      try {
-        const response = await ctx.sesClient.send(
-          new SendTemplatedEmailCommand(emailParams),
-        );
-        console.log(
-          `Message notification sent successfully to ${input.receiverEmail}`,
-        );
-        console.log("SES Response:", JSON.stringify(response, null, 2));
-        return response;
-      } catch (error) {
-        console.error("Error sending message notification:", error);
-        throw error;
+      if (input.toId === callerId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Cannot send a carpool request to yourself.",
+        });
       }
-    }),
 
-  sendAcceptanceNotification: protectedRouter
-    .input(
-      z.object({
-        senderName: z.string(),
-        senderEmail: gmailEmailSchema,
-        receiverName: z.string(),
-        receiverEmail: gmailEmailSchema,
-        isDriver: z.boolean(),
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
-      const emailParams = generateEmailParams(input, "acceptance", true);
-      try {
-        const response = await ctx.sesClient.send(
-          new SendTemplatedEmailCommand(emailParams),
-        );
-        console.log(
-          `Acceptance notification sent successfully to ${input.receiverEmail}. CC: ${input.senderEmail}`,
-        );
-        console.log("SES Response:", JSON.stringify(response, null, 2));
-        return response;
-      } catch (error) {
-        console.error("Error sending acceptance notification:", error);
-        throw error;
+      const [sender, recipient] = await Promise.all([
+        loadParty(ctx.prisma, callerId),
+        loadParty(ctx.prisma, input.toId),
+      ]);
+
+      if (!sender || !recipient) {
+        return { sent: false as const, reason: "missing_email_address" };
       }
-    }),
 
-  // Add the connectEmail mutation
-  connectEmail: protectedRouter
-    .input(
-      z.object({
-        sendingUserName: z.string(),
-        sendingUserEmail: gmailEmailSchema,
-        receivingUserName: z.string(),
-        receivingUserEmail: gmailEmailSchema,
-        body: z.string(),
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
+      assertDeliverable(recipient.email);
+
+      // Template choice follows the *recipient's* role, matching what the
+      // connect modal used to send from the client.
       const emailParams = generateEmailParams(
         {
-          senderName: input.sendingUserName,
-          senderEmail: input.sendingUserEmail,
-          receiverName: input.receivingUserName,
-          receiverEmail: input.receivingUserEmail,
-          messageText: input.body,
+          senderName: sender.name,
+          senderEmail: sender.email,
+          receiverName: recipient.name,
+          receiverEmail: recipient.email,
+          isDriver: await isDriver(ctx.prisma, recipient.id),
+          messagePreview: input.messagePreview,
+        },
+        "request",
+        false,
+      );
+
+      await ctx.sesClient.send(new SendTemplatedEmailCommand(emailParams));
+      return { sent: true as const };
+    }),
+
+  /**
+   * Notifies the caller's counterpart about the caller's latest message in the
+   * conversation attached to `requestId`. The body is read from the stored
+   * `Message` row, so the client cannot supply text of its own.
+   */
+  sendMessageNotification: protectedRouter
+    .input(z.object({ requestId: z.string() }).strict())
+    .mutation(async ({ ctx, input }) => {
+      const callerId = requireSessionUserId(ctx.session.user?.id);
+      const { request, sender, recipient } = await resolveRequestParties(
+        ctx.prisma,
+        input.requestId,
+        callerId,
+      );
+
+      if (!sender || !recipient) {
+        return { sent: false as const, reason: "missing_email_address" };
+      }
+      if (!request.conversationId) {
+        return { sent: false as const, reason: "no_conversation" };
+      }
+
+      // The message being announced: the caller's most recent in this thread.
+      const latest = await ctx.prisma.message.findFirst({
+        where: { conversationId: request.conversationId, userId: callerId },
+        orderBy: { dateCreated: "desc" },
+        select: { id: true, content: true, dateCreated: true },
+      });
+
+      if (!latest) {
+        return { sent: false as const, reason: "no_message_to_notify" };
+      }
+
+      // Per-sender, per-conversation rate limit. If the caller already sent
+      // another message here within the cooldown, a notification has very
+      // likely just gone out, so this one is dropped. Derived from stored
+      // Message rows, so it survives a page reload and cannot be bypassed by
+      // calling the procedure directly — unlike the client-side check in
+      // MessagePanel, which is a UX nicety rather than a control.
+      const recentPriorMessages = await ctx.prisma.message.count({
+        where: {
+          conversationId: request.conversationId,
+          userId: callerId,
+          id: { not: latest.id },
+          dateCreated: {
+            gte: new Date(
+              latest.dateCreated.getTime() - MESSAGE_NOTIFICATION_COOLDOWN_MS,
+            ),
+          },
+        },
+      });
+
+      if (recentPriorMessages > 0) {
+        return { sent: false as const, reason: "rate_limited" };
+      }
+
+      assertDeliverable(recipient.email);
+
+      const emailParams = generateEmailParams(
+        {
+          senderName: sender.name,
+          senderEmail: sender.email,
+          receiverName: recipient.name,
+          receiverEmail: recipient.email,
+          messageText: latest.content,
         },
         "message",
         false,
       );
-      try {
-        const response = await ctx.sesClient.send(
-          new SendTemplatedEmailCommand(emailParams),
-        );
-        console.log(
-          `Connect email sent successfully to ${input.receivingUserEmail}. CC: ${input.sendingUserEmail}`,
-        );
-        console.log("SES Response:", JSON.stringify(response, null, 2));
-        return response;
-      } catch (error) {
-        console.error("Error sending connect email:", error);
-        throw error;
+
+      await ctx.sesClient.send(new SendTemplatedEmailCommand(emailParams));
+      return { sent: true as const };
+    }),
+
+  /**
+   * Notifies the counterpart that the caller accepted their carpool request.
+   *
+   * Relies on the request row still existing after acceptance, which it does
+   * today only because accepting never resolves the request (SCRUM-228). If
+   * that is fixed to delete the row, this lookup has to move ahead of it.
+   */
+  sendAcceptanceNotification: protectedRouter
+    .input(z.object({ requestId: z.string() }).strict())
+    .mutation(async ({ ctx, input }) => {
+      const callerId = requireSessionUserId(ctx.session.user?.id);
+      const { sender, recipient } = await resolveRequestParties(
+        ctx.prisma,
+        input.requestId,
+        callerId,
+      );
+
+      if (!sender || !recipient) {
+        return { sent: false as const, reason: "missing_email_address" };
       }
+
+      assertDeliverable(recipient.email);
+
+      // Deliberately the *sender's* role, preserving exactly what the client
+      // used to pass. Note that the two acceptance templates are worded for the
+      // recipient, so this selects the opposite one — a pre-existing content
+      // bug tracked as SCRUM-268, deliberately not changed in this security fix.
+      const emailParams = generateEmailParams(
+        {
+          senderName: sender.name,
+          senderEmail: sender.email,
+          receiverName: recipient.name,
+          receiverEmail: recipient.email,
+          isDriver: await isDriver(ctx.prisma, callerId),
+        },
+        "acceptance",
+        true,
+      );
+
+      await ctx.sesClient.send(new SendTemplatedEmailCommand(emailParams));
+      return { sent: true as const };
     }),
 });
