@@ -48,42 +48,62 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
   };
 
   const utils = trpc.useContext();
+
+  // Declared before the request mutation so that mutation's onSuccess can call
+  // it. Names, addresses and the driver/rider template are resolved
+  // server-side from `toId` (SCRUM-225).
+  const { mutate: sendConnectEmail } =
+    trpc.user.emails.sendRequestNotification.useMutation({
+      // By the time this runs the request already exists, so a failure here is
+      // a failure to notify — not a failure to send the request. Saying
+      // "something went wrong" would tell the user the opposite of the truth
+      // (SCRUM-234).
+      onError: (error: any) => {
+        toast.error(
+          `Your request was sent, but we could not email ${props.otherUser.preferredName}: ${error.message}`,
+        );
+      },
+    });
+
   const { mutate: createRequests } = trpc.user.requests.create.useMutation({
     onError: (error: any) => {
       toast.error(`Something went wrong: ${error.message}`);
     },
-    async onSuccess() {
+    // Everything that tells either person the request exists now waits for the
+    // write to land (SCRUM-234). Previously the email was sent first and the
+    // success toast fired on click, so a CONFLICT — routine, since accepting
+    // never clears a request (SCRUM-228) — produced a success toast, an error
+    // toast, and an email for a request that was never created.
+    onSuccess: (_data, variables) => {
       setRequestSent(true);
-    },
-  });
-  const { mutate: sendConnectEmail } =
-    trpc.user.emails.sendRequestNotification.useMutation({
-      onError: (error: any) => {
-        toast.error(`Something went wrong: ${error.message}`);
-      },
-      onSuccess: () => {
-        console.log("Email sent successfully");
-      },
-    });
-
-  const handleOnClick = () => {
-    if (props.user.email && props.otherUser.email) {
-      // Names, addresses and the driver/rider template are all resolved
-      // server-side from `toId` now (SCRUM-225).
-      sendConnectEmail({
-        toId: props.otherUser.id,
-        messagePreview: customMessage,
-      });
-      createRequests({
-        toId: props.otherUser.id,
-        message: customMessage,
-      });
       addToast(
         "A request to carpool has been sent to " +
           props.otherUser.preferredName,
         { appearance: "success" },
       );
+      // Taken from the mutation variables rather than component state, so the
+      // preview is exactly the text that was submitted.
+      sendConnectEmail({
+        toId: variables.toId,
+        messagePreview: variables.message,
+      });
+    },
+  });
+
+  const handleOnClick = () => {
+    if (!props.user.email || !props.otherUser.email) {
+      // This used to be a silent no-op — the button did nothing at all, with
+      // no request, no email and no feedback (SCRUM-234).
+      toast.error(
+        `A carpool request needs an email address for both you and ${props.otherUser.preferredName}. Please check your profile.`,
+      );
+      return;
     }
+
+    createRequests({
+      toId: props.otherUser.id,
+      message: customMessage,
+    });
   };
   const daysOfWeek = ["Su", "M", "Tu", "W", "Th", "F", "S"];
   const daysArray = props.otherUser.daysWorking
