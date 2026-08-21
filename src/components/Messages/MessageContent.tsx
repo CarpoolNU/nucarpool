@@ -10,9 +10,11 @@ import { EnhancedPublicUser, Message } from "../../utils/types";
 import { format, isSameDay } from "date-fns";
 import { trpc } from "../../utils/trpc";
 import { UserContext } from "../../utils/userContext";
-import Pusher from "pusher-js";
 import { conversationChannel } from "../../utils/pusherChannels";
-import { browserEnv } from "../../utils/env/browser";
+import {
+  acquirePusherClient,
+  releasePusherClient,
+} from "../../utils/pusherClient";
 
 interface MessageContentProps {
   selectedUser: EnhancedPublicUser;
@@ -57,12 +59,11 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
     const requestId = request?.id;
     if (!requestId) return;
 
-    // Private channel: Pusher will not join it until /api/pusher/auth signs
-    // the subscription for this session (SCRUM-224).
-    const pusher = new Pusher(browserEnv.NEXT_PUBLIC_PUSHER_KEY, {
-      cluster: browserEnv.NEXT_PUBLIC_PUSHER_CLUSTER,
-      authEndpoint: "/api/pusher/auth",
-    });
+    // Shared client, created on first acquire and disconnected when the last
+    // holder releases it (SCRUM-238). Private channel: Pusher will not join it
+    // until /api/pusher/auth signs the subscription for this session
+    // (SCRUM-224).
+    const pusher = acquirePusherClient();
 
     const channelName = conversationChannel(requestId);
     const messageChannel = pusher.subscribe(channelName);
@@ -86,6 +87,7 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
       messageChannel.unbind("sendMessage");
       messageChannel.unbind("pusher:subscription_error");
       pusher.unsubscribe(channelName);
+      releasePusherClient();
     };
   }, [request?.id]);
 
