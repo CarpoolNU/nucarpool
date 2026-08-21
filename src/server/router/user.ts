@@ -272,22 +272,30 @@ export const userRouter = router({
         }
       }
     }),
+  /**
+   * Always resolves an object, never `undefined` (SCRUM-242).
+   *
+   * React Query treats a query function that resolves `undefined` as a
+   * failure ("... data is undefined"), and a query in the error state
+   * refetches on every mount regardless of staleTime or refetchOnMount. This
+   * procedure used to return `undefined` for a user with no profile picture,
+   * so those users - the majority - were never cacheable and paid an S3
+   * HeadObject on every avatar mount. `{ url: null }` is a cacheable success.
+   */
   getPresignedDownloadUrl: protectedRouter
     .input(getPresignedDownloadUrlInput)
-    .query(async ({ ctx, input }): Promise<{ url: string } | undefined> => {
+    .query(async ({ ctx, input }): Promise<{ url: string | null }> => {
       const userId: string | undefined = input.userId ?? ctx.session.user?.id;
-      if (userId) {
-        try {
-          const url = await getPresignedImageUrl(userId);
-          if (url) {
-            return { url };
-          }
-        } catch (error) {
-          throw new TRPCError({
-            code: "INTERNAL_SERVER_ERROR",
-            message: "Failed to generate a pre-signed URL",
-          });
-        }
+      if (!userId) {
+        return { url: null };
+      }
+      try {
+        return { url: await getPresignedImageUrl(userId) };
+      } catch (error) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to generate a pre-signed URL",
+        });
       }
     }),
 

@@ -28,7 +28,11 @@ const MessageHeader = ({
   const handleClose = () => {
     onClose("");
   };
-  const { profileImageUrl, imageLoadError } = useProfileImage(selectedUser.id);
+  const {
+    profileImageUrl,
+    imageLoadError,
+    isLoading: isProfileImageLoading,
+  } = useProfileImage(selectedUser.id);
 
   if (ismobile) {
     return (
@@ -62,7 +66,9 @@ const MessageHeader = ({
   return (
     <div className="flex items-center justify-between border-b bg-white p-8">
       <div className="flex items-center">
-        {profileImageUrl && !imageLoadError ? (
+        {isProfileImageLoading ? (
+          <div className="h-20 w-20 rounded-full bg-gray-200" />
+        ) : profileImageUrl && !imageLoadError ? (
           <Image
             src={profileImageUrl}
             alt={`${selectedUser.preferredName}'s Profile Image`}
@@ -79,30 +85,33 @@ const MessageHeader = ({
         </span>
       </div>
       <div className="relative flex items-center justify-between">
-        {(hasIncomingRequest && (!groupId || selectedUser.carpoolId !== groupId)) && (
-          <>
+        {hasIncomingRequest &&
+          (!groupId || selectedUser.carpoolId !== groupId) && (
+            <>
+              <button
+                onClick={onReject}
+                className="mr-10 rounded-lg border-2 border-black bg-white py-2 text-center text-lg font-medium  text-black hover:bg-gray-100 sm:px-8 md:px-12 lg:px-20"
+              >
+                Reject
+              </button>
+              <button
+                onClick={onAccept}
+                className=" mr-10 rounded-lg border-2 border-northeastern-red bg-northeastern-red py-2 text-center text-lg font-medium  text-white hover:bg-red-700 sm:px-8 md:px-12 lg:px-20"
+              >
+                Accept
+              </button>
+            </>
+          )}
+        {hasOutgoingRequest &&
+          !hasIncomingRequest &&
+          (!groupId || selectedUser.carpoolId !== groupId) && (
             <button
               onClick={onReject}
-              className="mr-10 rounded-lg border-2 border-black bg-white py-2 text-center text-lg font-medium  text-black hover:bg-gray-100 sm:px-8 md:px-12 lg:px-20"
+              className=" mr-10 rounded-lg border-2 border-black bg-white py-2 text-center text-lg font-medium text-black hover:bg-gray-100 md:px-12 lg:px-20"
             >
-              Reject
+              Withdraw Request
             </button>
-            <button
-              onClick={onAccept}
-              className=" mr-10 rounded-lg border-2 border-northeastern-red bg-northeastern-red py-2 text-center text-lg font-medium  text-white hover:bg-red-700 sm:px-8 md:px-12 lg:px-20"
-            >
-              Accept
-            </button>
-          </>
-        )}
-        {hasOutgoingRequest && !hasIncomingRequest && (!groupId || selectedUser.carpoolId !== groupId) && (
-          <button
-            onClick={onReject}
-            className=" mr-10 rounded-lg border-2 border-black bg-white py-2 text-center text-lg font-medium text-black hover:bg-gray-100 md:px-12 lg:px-20"
-          >
-            Withdraw Request
-          </button>
-        )}
+          )}
         {groupId && selectedUser.carpoolId === groupId && (
           <button
             onClick={onReject}

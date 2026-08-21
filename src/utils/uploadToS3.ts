@@ -37,24 +37,65 @@ export async function generatePresignedUrl(
     throw new Error("Could not generate pre-signed URL");
   }
 }
+
+/**
+ * How long a presigned *download* URL stays valid.
+ *
+ * Exported because useProfileImage serves these URLs from a client-side cache
+ * and the cache window has to fit inside this one — see the invariant pinned
+ * in uploadToS3.test.ts.
+ */
+export const PRESIGNED_DOWNLOAD_EXPIRY_SECONDS = 3600;
+
+/**
+ * A 404 from HeadObject is the normal answer for every user who has never
+ * uploaded a picture, so it is not logged (SCRUM-242) - it used to produce a
+ * console.error per avatar per page view.
+ *
+ * Deliberately narrow: a 403 can also mean "key absent" when the caller lacks
+ * s3:ListBucket, but it equally means broken credentials, which is worth
+ * seeing in the logs. Both still return null, so the UI behaviour is the same
+ * either way; only the logging differs.
+ */
+function isObjectNotFound(error: unknown): boolean {
+  const status = (error as { $metadata?: { httpStatusCode?: number } })
+    ?.$metadata?.httpStatusCode;
+  return status === 404 || (error as { name?: string })?.name === "NotFound";
+}
+
+/**
+ * Returns a presigned GET URL for the user's profile picture, or null if they
+ * do not have one.
+ *
+ * Note on cost: getSignedUrl is a local HMAC computation and makes no network
+ * call. The HeadObject above is the only AWS API request here, and it exists
+ * purely to tell "no picture" apart from "picture exists" so the UI can show
+ * its fallback icon instead of a broken image.
+ */
 export async function getPresignedImageUrl(fileName: string) {
   const build = process.env.NEXT_PUBLIC_ENV;
   const key = `profile-pictures/${build}/${fileName}`;
-  const expiry = 3600;
+  const expiry = PRESIGNED_DOWNLOAD_EXPIRY_SECONDS;
 
   try {
     // Check if the object exists
     await s3Client.send(
       new HeadObjectCommand({ Bucket: "carpoolnubucket", Key: key }),
     );
+  } catch (error) {
+    if (!isObjectNotFound(error)) {
+      console.error("Error getting image url", error);
+    }
+    return null;
+  }
 
+  try {
     // If the object exists, generate a pre-signed URL
     const command = new GetObjectCommand({
       Bucket: "carpoolnubucket",
       Key: key,
     });
-    const url = await getSignedUrl(s3Client, command, { expiresIn: expiry });
-    return url;
+    return await getSignedUrl(s3Client, command, { expiresIn: expiry });
   } catch (error) {
     console.error("Error getting image url", error);
     return null;
