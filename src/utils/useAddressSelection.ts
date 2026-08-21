@@ -9,7 +9,7 @@ export const useAddressSelection = (
     center: [0, 0],
     street: "",
     city: "",
-    state: ""
+    state: "",
   },
 ) => {
   const [selectedAddress, setSelectedAddress] =
@@ -21,7 +21,7 @@ export const useAddressSelection = (
 
   useSearch({
     value: address,
-    type: "address%2Cpostcode",
+    type: "address",
     setFunc: setSuggestions,
   });
 

@@ -951,13 +951,13 @@ const Home: NextPage<any> = () => {
   ]);
   useSearch({
     value: companyAddress,
-    type: "address%2Cpostcode",
+    type: "address",
     setFunc: setCompanyAddressSuggestions,
   });
 
   useSearch({
     value: startingAddress,
-    type: "address%2Cpostcode",
+    type: "address",
     setFunc: setStartAddressSuggestions,
   });
   useGetDirections({ points: points, map: mapState! });

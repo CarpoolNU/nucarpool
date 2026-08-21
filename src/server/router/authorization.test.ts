@@ -150,13 +150,9 @@ describe("protectedRouter", () => {
 
     await expectTrpcError(
       () =>
-        caller.mapbox.search({
-          value: "",
-          types: "address%2Cpostcode",
-          proximity: "ip",
-          country: "us",
-          autocomplete: true,
-        }),
+        // Deliberately invalid input: an empty `value` fails the schema, so
+        // this asserts the auth middleware rejects first.
+        caller.mapbox.search({ value: "", types: "address" }),
       "UNAUTHORIZED",
     );
   });
