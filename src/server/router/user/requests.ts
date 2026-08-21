@@ -216,7 +216,7 @@ export const requestsRouter = router({
         });
       }
 
-      const request = await ctx.prisma.request.create({
+      let request = await ctx.prisma.request.create({
         data: {
           message: "",
           fromUser: {
@@ -238,8 +238,9 @@ export const requestsRouter = router({
           },
         });
 
-        // Update the request with the conversation ID
-        await ctx.prisma.request.update({
+        // Update the request with the conversation ID. Reassigned rather than
+        // discarded so the value returned below carries the conversation.
+        request = await ctx.prisma.request.update({
           where: { id: request.id },
           data: { conversationId: conversation.id },
         });
@@ -253,6 +254,11 @@ export const requestsRouter = router({
           userId: userId,
         },
       });
+
+      // Returned so the caller has an id to announce (SCRUM-270). This used to
+      // return nothing, which is why ConnectModal had to notify by `toId` and
+      // the email procedure had to accept a bare user id.
+      return request;
     }),
 
   delete: protectedRouter

@@ -88,11 +88,18 @@ const buildEmailDb = (opts?: {
     fromUserId: string;
     toUserId: string;
     conversationId: string | null;
+    dateCreated?: Date;
   } | null;
   messages?: MessageRow[];
+  /**
+   * Rows behind `request.count`, which backs the per-sender budget on
+   * `sendRequestNotification`. Separate from `request` because the count is
+   * over the caller's whole recent history, not the one row being announced.
+   */
+  senderRequests?: { fromUserId: string; dateCreated: Date }[];
 }) => {
   const users = new Map((opts?.users ?? defaultUsers).map((u) => [u.id, u]));
-  const request =
+  const rawRequest =
     opts?.request === undefined
       ? {
           id: REQUEST_ID,
@@ -101,6 +108,12 @@ const buildEmailDb = (opts?: {
           conversationId: CONVERSATION_ID,
         }
       : opts?.request;
+  // Fresh unless a test says otherwise: a request notification only fires for
+  // a request that was just created.
+  const request = rawRequest
+    ? { dateCreated: new Date(), ...rawRequest }
+    : rawRequest;
+  const senderRequests = opts?.senderRequests ?? [];
   const messages = opts?.messages ?? [];
 
   const userFindUnique = jest.fn(
@@ -115,6 +128,15 @@ const buildEmailDb = (opts?: {
   const requestFindUnique = jest.fn(async ({ where }: any) =>
     request && request.id === where.id ? { ...request } : null,
   );
+
+  const requestCount = jest.fn(async ({ where }: any) => {
+    const since = where.dateCreated?.gte as Date | undefined;
+    return senderRequests.filter(
+      (r) =>
+        r.fromUserId === where.fromUserId &&
+        (since === undefined || r.dateCreated.getTime() >= since.getTime()),
+    ).length;
+  });
 
   const messageFindFirst = jest.fn(async ({ where, orderBy }: any) => {
     const matching = messages
@@ -153,7 +175,7 @@ const buildEmailDb = (opts?: {
     prisma: {
       user: { findUnique: userFindUnique },
       carpoolSearch: { findFirst: carpoolSearchFindFirst },
-      request: { findUnique: requestFindUnique },
+      request: { findUnique: requestFindUnique, count: requestCount },
       message: { findFirst: messageFindFirst, count: messageCount },
     },
     ses,
@@ -188,12 +210,12 @@ const callerFor = (session: Session | null, db = buildEmailDb()) => {
 /** Reaches past the compiler to send what an untrusted HTTP client could. */
 const asAny = (payload: Record<string, unknown>) => payload as any;
 
-describe("user.emails.sendRequestNotification — addresses come from the database", () => {
+describe("user.emails.sendRequestNotification — participants only, addresses from the database", () => {
   it("sends to the stored address of the referenced user", async () => {
     const { caller, db } = callerFor(sessionFor(ALICE));
 
     await caller.user.emails.sendRequestNotification({
-      toId: BOB,
+      requestId: REQUEST_ID,
       messagePreview: "hello",
     });
 
@@ -208,13 +230,13 @@ describe("user.emails.sendRequestNotification — addresses come from the databa
   });
 
   it("ignores any address the client tries to supply, rejecting the payload", async () => {
-    // The attack: name a real user in toId but redirect delivery elsewhere.
+    // The attack: reference a real request but redirect delivery elsewhere.
     const { caller, db } = callerFor(sessionFor(ALICE));
 
     await expect(
       caller.user.emails.sendRequestNotification(
         asAny({
-          toId: BOB,
+          requestId: REQUEST_ID,
           messagePreview: "x",
           receiverEmail: "attacker@evil.test",
         }),
@@ -230,7 +252,7 @@ describe("user.emails.sendRequestNotification — addresses come from the databa
     await expect(
       caller.user.emails.sendRequestNotification(
         asAny({
-          toId: BOB,
+          requestId: REQUEST_ID,
           messagePreview: "x",
           senderName: "NUCarpool Security",
         }),
@@ -244,7 +266,7 @@ describe("user.emails.sendRequestNotification — addresses come from the databa
     const { caller, db } = callerFor(sessionFor(ALICE));
 
     await caller.user.emails.sendRequestNotification({
-      toId: BOB,
+      requestId: REQUEST_ID,
       messagePreview: "x",
     });
 
@@ -253,11 +275,21 @@ describe("user.emails.sendRequestNotification — addresses come from the databa
   });
 
   it("refuses to mail the caller themselves", async () => {
-    const { caller, db } = callerFor(sessionFor(ALICE));
+    // `user.requests.create` does not stop a self-request, so a row with both
+    // ends the same is reachable. It must not turn into mail.
+    const db = buildEmailDb({
+      request: {
+        id: REQUEST_ID,
+        fromUserId: ALICE,
+        toUserId: ALICE,
+        conversationId: CONVERSATION_ID,
+      },
+    });
+    const { caller } = callerFor(sessionFor(ALICE), db);
 
     await expect(
       caller.user.emails.sendRequestNotification({
-        toId: ALICE,
+        requestId: REQUEST_ID,
         messagePreview: "x",
       }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
@@ -270,12 +302,148 @@ describe("user.emails.sendRequestNotification — addresses come from the databa
 
     await expect(
       caller.user.emails.sendRequestNotification({
-        toId: BOB,
+        requestId: REQUEST_ID,
         messagePreview: "x".repeat(251),
       }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
 
     expect(db.ses).not.toHaveBeenCalled();
+  });
+
+  it("refuses a caller who is not part of the request", async () => {
+    // The reported hole (SCRUM-270): this used to take a bare `toId`, and
+    // every PublicUser the map and recommendations return carries a user id,
+    // so any signed-in student could mail any other registered user.
+    const { caller, db } = callerFor(sessionFor(MALLORY));
+
+    await expect(
+      caller.user.emails.sendRequestNotification({
+        requestId: REQUEST_ID,
+        messagePreview: "x",
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(db.ses).not.toHaveBeenCalled();
+  });
+
+  it("refuses the recipient of the request, not just a stranger", async () => {
+    // Bob is a party to the request, so the shared participant check passes.
+    // He still must not be able to mail Alice "someone wants to carpool with
+    // you" about Alice's own request.
+    const { caller, db } = callerFor(sessionFor(BOB));
+
+    await expect(
+      caller.user.emails.sendRequestNotification({
+        requestId: REQUEST_ID,
+        messagePreview: "x",
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(db.ses).not.toHaveBeenCalled();
+  });
+
+  it("refuses a request id that does not exist", async () => {
+    const { caller, db } = callerFor(sessionFor(ALICE));
+
+    await expect(
+      caller.user.emails.sendRequestNotification({
+        requestId: "no-such-request",
+        messagePreview: "x",
+      }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+    expect(db.ses).not.toHaveBeenCalled();
+  });
+
+  it("will not re-announce a request that is no longer new", async () => {
+    // Without this the procedure can be called over and over against one
+    // long-lived row, mailing the same person as many times as the caller
+    // likes — the volume half of the problem.
+    const db = buildEmailDb({
+      request: {
+        id: REQUEST_ID,
+        fromUserId: ALICE,
+        toUserId: BOB,
+        conversationId: CONVERSATION_ID,
+        dateCreated: new Date(Date.now() - 6 * 60 * 1000),
+      },
+    });
+    const { caller } = callerFor(sessionFor(ALICE), db);
+
+    const result = await caller.user.emails.sendRequestNotification({
+      requestId: REQUEST_ID,
+      messagePreview: "x",
+    });
+
+    expect(result).toEqual({ sent: false, reason: "request_not_recent" });
+    expect(db.ses).not.toHaveBeenCalled();
+  });
+
+  it("still announces a request created moments ago", async () => {
+    const db = buildEmailDb({
+      request: {
+        id: REQUEST_ID,
+        fromUserId: ALICE,
+        toUserId: BOB,
+        conversationId: CONVERSATION_ID,
+        dateCreated: new Date(Date.now() - 30 * 1000),
+      },
+    });
+    const { caller } = callerFor(sessionFor(ALICE), db);
+
+    await expect(
+      caller.user.emails.sendRequestNotification({
+        requestId: REQUEST_ID,
+        messagePreview: "x",
+      }),
+    ).resolves.toEqual({ sent: true });
+    expect(db.ses).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops a sender who has made more than ten requests in the last hour", async () => {
+    const recently = (minutesAgo: number) => ({
+      fromUserId: ALICE,
+      dateCreated: new Date(Date.now() - minutesAgo * 60 * 1000),
+    });
+    const db = buildEmailDb({
+      senderRequests: Array.from({ length: 11 }, (_, i) => recently(i)),
+    });
+    const { caller } = callerFor(sessionFor(ALICE), db);
+
+    const result = await caller.user.emails.sendRequestNotification({
+      requestId: REQUEST_ID,
+      messagePreview: "x",
+    });
+
+    expect(result).toEqual({ sent: false, reason: "rate_limited" });
+    expect(db.ses).not.toHaveBeenCalled();
+  });
+
+  it("counts only the caller's own recent requests toward that budget", async () => {
+    const db = buildEmailDb({
+      senderRequests: [
+        // Someone else being busy must not silence Alice...
+        ...Array.from({ length: 20 }, () => ({
+          fromUserId: MALLORY,
+          dateCreated: new Date(),
+        })),
+        // ...nor must Alice's own requests from yesterday.
+        ...Array.from({ length: 20 }, () => ({
+          fromUserId: ALICE,
+          dateCreated: new Date(Date.now() - 25 * 60 * 60 * 1000),
+        })),
+        { fromUserId: ALICE, dateCreated: new Date() },
+      ],
+    });
+    const { caller } = callerFor(sessionFor(ALICE), db);
+
+    await expect(
+      caller.user.emails.sendRequestNotification({
+        requestId: REQUEST_ID,
+        messagePreview: "x",
+      }),
+    ).resolves.toEqual({ sent: true });
+    expect(db.ses).toHaveBeenCalledTimes(1);
   });
 
   it("sends nothing when we hold no address for the recipient", async () => {
@@ -294,7 +462,7 @@ describe("user.emails.sendRequestNotification — addresses come from the databa
     const { caller } = callerFor(sessionFor(ALICE), db);
 
     const result = await caller.user.emails.sendRequestNotification({
-      toId: BOB,
+      requestId: REQUEST_ID,
       messagePreview: "x",
     });
 
@@ -454,7 +622,7 @@ describe("user.emails — staging still restricts recipients", () => {
 
     await expect(
       caller.user.emails.sendRequestNotification({
-        toId: BOB,
+        requestId: REQUEST_ID,
         messagePreview: "x",
       }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
@@ -479,7 +647,7 @@ describe("user.emails — staging still restricts recipients", () => {
     const { caller } = callerFor(sessionFor(ALICE), db);
 
     await caller.user.emails.sendRequestNotification({
-      toId: BOB,
+      requestId: REQUEST_ID,
       messagePreview: "x",
     });
 
@@ -493,7 +661,7 @@ describe("user.emails — authentication gate and removed surface", () => {
 
     await expect(
       caller.user.emails.sendRequestNotification({
-        toId: BOB,
+        requestId: REQUEST_ID,
         messagePreview: "x",
       }),
     ).rejects.toMatchObject({ code: "UNAUTHORIZED" });

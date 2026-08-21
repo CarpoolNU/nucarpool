@@ -53,7 +53,7 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
 
   // Declared before the request mutation so that mutation's onSuccess can call
   // it. Names, addresses and the driver/rider template are resolved
-  // server-side from `toId` (SCRUM-225).
+  // server-side from the request the id refers to (SCRUM-225, SCRUM-270).
   const { mutate: sendConnectEmail } =
     trpc.user.emails.sendRequestNotification.useMutation({
       // By the time this runs the request already exists, so a failure here is
@@ -76,17 +76,19 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
     // success toast fired on click, so a CONFLICT — routine, since accepting
     // never clears a request (SCRUM-228) — produced a success toast, an error
     // toast, and an email for a request that was never created.
-    onSuccess: (_data, variables) => {
+    onSuccess: (request, variables) => {
       setRequestSent(true);
       addToast(
         "A request to carpool has been sent to " +
           props.otherUser.preferredName,
         { appearance: "success" },
       );
-      // Taken from the mutation variables rather than component state, so the
-      // preview is exactly the text that was submitted.
+      // The id comes from the row the mutation just created, so the server can
+      // check the caller is party to it (SCRUM-270). The preview is taken from
+      // the mutation variables rather than component state, so it is exactly
+      // the text that was submitted.
       sendConnectEmail({
-        toId: variables.toId,
+        requestId: request.id,
         messagePreview: variables.message,
       });
     },
