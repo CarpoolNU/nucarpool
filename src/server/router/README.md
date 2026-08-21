@@ -87,6 +87,8 @@ Note what the input above does **not** contain: the id of the user being edited.
 
 This is not hypothetical. `favorites.edit` shipped without the first of these and let any signed-in user rewrite anyone else's favorites ([SCRUM-223](https://carpoolnu.atlassian.net/browse/SCRUM-223)); a full-repository audit then found the same class of gap in the requests, messages, groups, and email routers.
 
+Where a router's rules are more than "the caller owns the row", they are written down next to the code rather than here, so they cannot drift from it. The carpool group rules — who may delete a group, evict a rider, or edit the group message — are tabulated at the top of [`user/groups.ts`](./user/groups.ts).
+
 ## Composition and frontend access
 
 Subrouters nest by key, so the router path _is_ the call path:
