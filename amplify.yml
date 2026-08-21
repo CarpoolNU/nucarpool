@@ -1,3 +1,19 @@
+# AWS Amplify Hosting build spec.
+#
+# A file at this path takes precedence over the build settings in the Amplify
+# console, so this is the authoritative definition of how the app is built and
+# what is deployed.
+#
+# `BUILD_ENV` selects the package.json script (`build:development` or
+# `build:production`) and is set per branch in the console.
+#
+# The `env | grep` lines write the container's environment into
+# .env.production so `envsafe` can read it at build time. They match variable
+# *names*; no secret value appears in this file. `.env.production` is
+# gitignored.
+#
+# Amplify Hosting's Next.js compute support covers Next.js 12 through 15 (see
+# SCRUM-273). Bumping the framework past that fails at deploy, not at build.
 version: 1
 frontend:
   phases:
