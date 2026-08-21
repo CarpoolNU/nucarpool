@@ -68,7 +68,7 @@ export const requestsRouter = router({
             bio: true,
             preferredName: true,
             pronouns: true,
-          }
+          },
         },
         homeLocation: true,
         companyLocation: true,
@@ -99,7 +99,7 @@ export const requestsRouter = router({
             bio: true,
             preferredName: true,
             pronouns: true,
-          }
+          },
         },
         homeLocation: true,
         companyLocation: true,
@@ -123,7 +123,7 @@ export const requestsRouter = router({
             bio: true,
             preferredName: true,
             pronouns: true,
-          }
+          },
         },
         homeLocation: true,
         companyLocation: true,
@@ -131,40 +131,60 @@ export const requestsRouter = router({
     });
 
     const sent = user.sentRequests.map((req) => {
-      const toUserSearch = sentCarpoolSearches.find(s => s.userId === req.toUserId);
+      const toUserSearch = sentCarpoolSearches.find(
+        (s) => s.userId === req.toUserId,
+      );
       return {
         ...req,
         fromUser: convertCarpoolSearchToPublic(currentUserSearch),
-        toUser: toUserSearch ? convertCarpoolSearchToPublic(toUserSearch) : null,
+        toUser: toUserSearch
+          ? convertCarpoolSearchToPublic(toUserSearch)
+          : null,
       };
     });
 
     const received = user.receivedRequests.map((req) => {
-      const fromUserSearch = receivedCarpoolSearches.find(s => s.userId === req.fromUserId);
+      const fromUserSearch = receivedCarpoolSearches.find(
+        (s) => s.userId === req.fromUserId,
+      );
       return {
         ...req,
-        fromUser: fromUserSearch ? convertCarpoolSearchToPublic(fromUserSearch) : null,
+        fromUser: fromUserSearch
+          ? convertCarpoolSearchToPublic(fromUserSearch)
+          : null,
         toUser: convertCarpoolSearchToPublic(currentUserSearch),
       };
     });
 
     const sentGoodRole = sent.filter(
-      (req) => req.toUser && req.toUser.role !== currentUserSearch.role && req.toUser.role !== "VIEWER",
+      (req) =>
+        req.toUser &&
+        req.toUser.role !== currentUserSearch.role &&
+        req.toUser.role !== "VIEWER",
     );
     const recGoodRole = received.filter(
       (req) =>
-        req.fromUser && req.fromUser.role !== currentUserSearch.role && req.fromUser.role !== "VIEWER",
+        req.fromUser &&
+        req.fromUser.role !== currentUserSearch.role &&
+        req.fromUser.role !== "VIEWER",
     );
     return { sent: sentGoodRole, received: recGoodRole };
   }),
 
   create: protectedRouter
     .input(
-      z.object({
-        fromId: z.string(),
-        toId: z.string(),
-        message: z.string(),
-      }),
+      z
+        .object({
+          // The sender is deliberately absent from this input (SCRUM-221). It
+          // used to be a client-supplied `fromId` that became the request's
+          // `fromUser`, so any signed-in caller could send a request that
+          // appeared to come from someone else. The sender now comes from the
+          // session and cannot be influenced by the client; `.strict()` makes a
+          // re-added `fromId` a BAD_REQUEST rather than a silently ignored field.
+          toId: z.string(),
+          message: z.string(),
+        })
+        .strict(),
     )
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user?.id;
@@ -178,12 +198,12 @@ export const requestsRouter = router({
         where: {
           OR: [
             {
-              fromUserId: input.fromId,
+              fromUserId: userId,
               toUserId: input.toId,
             },
             {
               fromUserId: input.toId,
-              toUserId: input.fromId,
+              toUserId: userId,
             },
           ],
         },
@@ -192,7 +212,7 @@ export const requestsRouter = router({
       if (existingRequests.length != 0) {
         throw new TRPCError({
           code: "CONFLICT",
-          message: `Existing request between '${input.toId} and ${input.fromId}'`,
+          message: `Existing request between '${input.toId} and ${userId}'`,
         });
       }
 
@@ -200,7 +220,7 @@ export const requestsRouter = router({
         data: {
           message: "",
           fromUser: {
-            connect: { id: input.fromId },
+            connect: { id: userId },
           },
           toUser: {
             connect: { id: input.toId },
@@ -242,6 +262,14 @@ export const requestsRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user?.id;
+      if (!userId) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "User not authenticated",
+        });
+      }
+
       const invitation = await ctx.prisma.request.findUnique({
         where: { id: input.invitationId },
       });
@@ -253,24 +281,20 @@ export const requestsRouter = router({
         });
       }
 
+      // Both parties may clear a request: the sender withdraws it, the
+      // recipient declines it (`handleRejectRequest` in requestHandlers.ts).
+      // Before SCRUM-221 there was no check at all, so any signed-in user could
+      // delete strangers' pending requests out of their Requests tab.
+      if (invitation.fromUserId !== userId && invitation.toUserId !== userId) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You are not a participant in this request.",
+        });
+      }
+
       await ctx.prisma.request.delete({
         where: {
           id: input.invitationId,
-        },
-      });
-    }),
-  edit: protectedRouter
-    .input(
-      z.object({
-        invitationId: z.string(),
-        message: z.string(),
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
-      return await ctx.prisma.request.update({
-        where: { id: input.invitationId },
-        data: {
-          message: input.message,
         },
       });
     }),
