@@ -32,6 +32,7 @@ import { appRouter } from "../index";
 
 const SENDER = "user-from";
 const RECIPIENT = "user-to";
+const OUTSIDER = "user-outsider";
 const REQUEST_ID = "request-1";
 const CONVERSATION_ID = "conversation-1";
 
@@ -298,5 +299,77 @@ describe("sendMessage — guards", () => {
 
     expect(db.messages()).toEqual([]);
     expect(mockTrigger).not.toHaveBeenCalled();
+  });
+});
+
+describe("sendMessage — only participants may write (SCRUM-222)", () => {
+  it("refuses a third party with FORBIDDEN, writing nothing and broadcasting nothing", async () => {
+    // The defect: any signed-in user holding a request id could inject a
+    // message into a stranger's thread. It would be attributed to them in the
+    // UI, broadcast on the conversation channel, and emailed.
+    const { caller, db } = callerFor(sessionFor(OUTSIDER));
+
+    await expect(
+      caller.user.messages.sendMessage({
+        requestId: REQUEST_ID,
+        content: "injected",
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(db.messages()).toEqual([]);
+    expect(db.prisma.message.create).not.toHaveBeenCalled();
+    expect(mockTrigger).not.toHaveBeenCalled();
+  });
+
+  it("does not create a conversation on behalf of a third party either", async () => {
+    // Authorization has to precede find-or-create, or an unauthorized call
+    // still leaves a conversation row behind.
+    const db = buildMessageDb({ conversation: null });
+    const { caller } = callerFor(sessionFor(OUTSIDER), db);
+
+    await expect(
+      caller.user.messages.sendMessage({
+        requestId: REQUEST_ID,
+        content: "injected",
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(db.prisma.conversation.create).not.toHaveBeenCalled();
+    expect(db.prisma.request.update).not.toHaveBeenCalled();
+  });
+
+  it("still lets both real participants write", async () => {
+    for (const party of [SENDER, RECIPIENT]) {
+      const db = buildMessageDb();
+      const { caller } = callerFor(sessionFor(party), db);
+
+      await caller.user.messages.sendMessage({
+        requestId: REQUEST_ID,
+        content: "hello",
+      });
+
+      expect(db.messages()).toHaveLength(1);
+    }
+  });
+});
+
+describe("user.messages.getMessages — removed rather than scoped", () => {
+  it("is no longer exposed by the router", async () => {
+    // It returned an entire conversation for any conversation id, having read
+    // the session user and then never used it. Its only two callers ever came
+    // in commits that were later reverted, so the surface was unreachable.
+    const paths = Object.keys((appRouter as any)._def.procedures);
+
+    expect(paths).toContain("user.messages.sendMessage");
+    expect(paths).toContain("user.messages.markMessagesAsRead");
+    expect(paths).not.toContain("user.messages.getMessages");
+  });
+
+  it("left the admin procedure of the same name alone", async () => {
+    // `user.admin.getMessages` is a different, adminRouter-gated procedure that
+    // AdminData.tsx does use; removing the messages one must not touch it.
+    const paths = Object.keys((appRouter as any)._def.procedures);
+
+    expect(paths).toContain("user.admin.getMessages");
   });
 });
