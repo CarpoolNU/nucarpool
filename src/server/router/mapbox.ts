@@ -5,7 +5,10 @@ import { Feature, FeatureCollection } from "geojson";
 import { serverEnv } from "../../utils/env/server";
 import { Role, Status, CarpoolSearch, Location } from "@prisma/client";
 import { DirectionsResponse } from "../../utils/types";
-import { convertCarpoolSearchToPublic, roundCoord } from "../../utils/publicUser";
+import {
+  convertCarpoolSearchToPublic,
+  roundCoord,
+} from "../../utils/publicUser";
 import _ from "lodash";
 import { calculateScore, Recommendation } from "../../utils/recommendation";
 import { parseMapboxFeature } from "../../utils/map/parseAddress";
@@ -71,7 +74,7 @@ export const mapboxRouter = router({
     )
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user?.id;
-      
+
       if (!userId) {
         throw new TRPCError({
           code: "UNAUTHORIZED",
@@ -87,7 +90,7 @@ export const mapboxRouter = router({
               favorites: input.favorites,
               sentRequests: !input.messaged,
               receivedRequests: !input.messaged,
-            }
+            },
           },
           homeLocation: true,
           companyLocation: true,
@@ -101,15 +104,16 @@ export const mapboxRouter = router({
         });
       }
 
-      const { favorites, sentRequests, receivedRequests } = currentUserSearch.user;
+      const { favorites, sentRequests, receivedRequests } =
+        currentUserSearch.user;
 
       let excludedUserIds: string[] = [userId];
-      
+
       // Hide users user has messaged
       if (!input.messaged) {
         excludedUserIds.push(
           ...sentRequests.map((r) => r.toUserId),
-          ...receivedRequests.map((r) => r.fromUserId)
+          ...receivedRequests.map((r) => r.fromUserId),
         );
       }
 
@@ -119,14 +123,14 @@ export const mapboxRouter = router({
         status: Status.ACTIVE,
         user: {
           isOnboarded: true,
-        }
+        },
       };
 
       // Favorites filter
       if (input.favorites) {
         carpoolSearchQuery.userId = {
           ...carpoolSearchQuery.userId,
-          in: favorites.map((f) => f.id)
+          in: favorites.map((f) => f.id),
         };
       }
 
@@ -143,7 +147,7 @@ export const mapboxRouter = router({
               preferredName: true,
               pronouns: true,
               isOnboarded: true,
-            }
+            },
           },
           homeLocation: true,
           companyLocation: true,
@@ -151,14 +155,22 @@ export const mapboxRouter = router({
       });
 
       const filtered: Recommendation[] = _.compact(
-        carpoolSearches.map(calculateScore(currentUserSearch, input, "distance")),
+        carpoolSearches.map(
+          calculateScore(currentUserSearch, input, "distance"),
+        ),
       );
-      filtered.sort((a: Recommendation, b: Recommendation) => a.score - b.score);
+      filtered.sort(
+        (a: Recommendation, b: Recommendation) => a.score - b.score,
+      );
       const sortedSearches = _.compact(
-        filtered.map((rec) => carpoolSearches.find((search) => search.user.id === rec.id)),
+        filtered.map((rec) =>
+          carpoolSearches.find((search) => search.user.id === rec.id),
+        ),
       );
       const finalSearches =
-        currentUserSearch.role === Role.VIEWER ? sortedSearches : sortedSearches.slice(0, 150);
+        currentUserSearch.role === Role.VIEWER
+          ? sortedSearches
+          : sortedSearches.slice(0, 150);
 
       const finalPublicUsers = finalSearches.map(convertCarpoolSearchToPublic);
 

@@ -9,7 +9,7 @@ export const useAddressSelection = (
     center: [0, 0],
     street: "",
     city: "",
-    state: ""
+    state: "",
   },
 ) => {
   const [selectedAddress, setSelectedAddress] =

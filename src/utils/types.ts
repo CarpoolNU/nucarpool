@@ -169,7 +169,7 @@ export type Request = {
   dateCreated: Date;
 };
 
-export type ValidRequest = Omit<Request, 'fromUser' | 'toUser'> & {
+export type ValidRequest = Omit<Request, "fromUser" | "toUser"> & {
   fromUser: PublicUser;
   toUser: PublicUser;
 };

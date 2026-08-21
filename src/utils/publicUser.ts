@@ -46,7 +46,7 @@ export const convertToPublic = (user: User): PublicUser => {
  * @param search an active CarpoolSearch record with user and location relations
  * @returns non-sensitive information about a user from CarpoolSearch
  */
- export const convertCarpoolSearchToPublic = (
+export const convertCarpoolSearchToPublic = (
   search: CarpoolSearch & {
     user: {
       id: string;
@@ -59,7 +59,7 @@ export const convertToPublic = (user: User): PublicUser => {
     };
     homeLocation: Location | null;
     companyLocation: Location | null;
-  }
+  },
 ): PublicUser => {
   return {
     id: search.user.id,
@@ -78,7 +78,7 @@ export const convertToPublic = (user: User): PublicUser => {
     endTime: search.endTime,
     coopEndDate: search.endDate,
     coopStartDate: search.startDate,
-    startAddress: search.homeLocation 
+    startAddress: search.homeLocation
       ? `${search.homeLocation.city}, ${search.homeLocation.state}`
       : "Exact Location Unavailable",
     startCoordLng: search.homeLocation?.coordLng ?? 0,
