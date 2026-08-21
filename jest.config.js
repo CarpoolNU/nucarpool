@@ -160,10 +160,16 @@ module.exports = {
   //   "**/?(*.)+(spec|test).[tj]s?(x)"
   // ],
 
-  // An array of regexp pattern strings that are matched against all test paths, matched tests are skipped
-  // testPathIgnorePatterns: [
-  //   "/node_modules/"
-  // ],
+  // An array of regexp pattern strings that are matched against all test paths,
+  // matched tests are skipped.
+  //
+  // "/\\.next/" is not part of Jest's default and must stay (SCRUM-269). Next
+  // compiles anything under src/pages/ into .next/server/pages/, and a compiled
+  // bundle still contains the `describe`/`it` calls of any test that got swept
+  // in. Without this, `yarn test` after a local `yarn build` fails on a build
+  // artifact rather than on source - a confusing failure that CI never sees,
+  // because every CI job starts from a clean checkout.
+  testPathIgnorePatterns: ["/node_modules/", "/\\.next/"],
 
   // The regexp pattern or array of patterns that Jest uses to detect test files
   // testRegex: [],

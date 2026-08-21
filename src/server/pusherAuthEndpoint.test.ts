@@ -10,6 +10,14 @@ import type { NextApiRequest, NextApiResponse } from "next";
  *
  * `next-auth`, the Prisma client and the Pusher server client are all mocked,
  * so no session store, database or Pusher credential is touched.
+ *
+ * Deliberately NOT co-located with the handler it covers (SCRUM-269). Every
+ * other test in this repository sits next to its module, but under
+ * src/pages/ a filename is also a route: Next's default `pageExtensions`
+ * includes `.ts`, so `auth.test.ts` was compiled and shipped as
+ * `/api/pusher/auth.test`. It lives here instead, beside the
+ * `pusherChannelAuth` half of the same feature. `scripts/check-page-routes.js`
+ * enforces that no test file moves back under src/pages/.
  */
 
 const mockGetServerSession = jest.fn();
@@ -21,29 +29,29 @@ jest.mock("next-auth", () => ({
   getServerSession: (...args: unknown[]) => mockGetServerSession(...args),
 }));
 
-jest.mock("../auth/[...nextauth]", () => ({
+jest.mock("../pages/api/auth/[...nextauth]", () => ({
   __esModule: true,
   authOptions: {},
 }));
 
-jest.mock("../../../server/db/client", () => ({
+jest.mock("./db/client", () => ({
   __esModule: true,
   prisma: {},
 }));
 
-jest.mock("../../../server/pusher", () => ({
+jest.mock("./pusher", () => ({
   __esModule: true,
   pusherServer: {
     authorizeChannel: (...args: unknown[]) => mockAuthorizeChannel(),
   },
 }));
 
-jest.mock("../../../server/pusherChannelAuth", () => ({
+jest.mock("./pusherChannelAuth", () => ({
   __esModule: true,
   canSubscribe: (...args: unknown[]) => mockCanSubscribe(...args),
 }));
 
-import handler from "./auth";
+import handler from "../pages/api/pusher/auth";
 
 const USER = "user-alice";
 const CHANNEL = "private-notification-user-alice";
