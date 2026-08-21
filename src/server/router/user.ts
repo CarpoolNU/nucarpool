@@ -16,6 +16,7 @@ import {
   getPresignedImageUrl,
 } from "../../utils/uploadToS3";
 import { adminDataRouter } from "./user/admin";
+import { resolveOwnedLocations } from "../db/locationOwnership";
 
 const getPresignedDownloadUrlInput = z.object({
   userId: z.string().optional(),
@@ -154,19 +155,22 @@ export const userRouter = router({
         },
       });
 
-      // home location - find or create
-      let homeLocation = await ctx.prisma.location.findFirst({
-        where: {
-          street: input.startStreet,
-          city: input.startCity,
-          state: input.startState,
-          streetAddress: input.startAddress,
-        },
+      // CarpoolSearch - find or create
+      const existingSearch = await ctx.prisma.carpoolSearch.findFirst({
+        where: { userId: id },
       });
 
-      if (!homeLocation) {
-        homeLocation = await ctx.prisma.location.create({
-          data: {
+      // Home and company Locations belong to this CarpoolSearch and nobody
+      // else, so the coordinates just submitted are always what gets stored
+      // (SCRUM-232). This used to match an existing row on address text alone
+      // and reuse whatever coordinates that row already had.
+      const { homeLocationId, companyLocationId } = await resolveOwnedLocations(
+        ctx.prisma,
+        {
+          carpoolSearchId: existingSearch?.id ?? null,
+          currentHomeLocationId: existingSearch?.homeLocationId ?? null,
+          currentCompanyLocationId: existingSearch?.companyLocationId ?? null,
+          home: {
             street: input.startStreet,
             city: input.startCity,
             state: input.startState,
@@ -174,22 +178,7 @@ export const userRouter = router({
             coordLng: input.startCoordLng,
             coordLat: input.startCoordLat,
           },
-        });
-      }
-
-      // company location - find or create
-      let companyLocation = await ctx.prisma.location.findFirst({
-        where: {
-          street: input.companyStreet,
-          city: input.companyCity,
-          state: input.companyState,
-          streetAddress: input.companyAddress,
-        },
-      });
-
-      if (!companyLocation) {
-        companyLocation = await ctx.prisma.location.create({
-          data: {
+          company: {
             street: input.companyStreet,
             city: input.companyCity,
             state: input.companyState,
@@ -197,13 +186,8 @@ export const userRouter = router({
             coordLng: input.companyCoordLng,
             coordLat: input.companyCoordLat,
           },
-        });
-      }
-
-      // CarpoolSearch - find or create
-      const existingSearch = await ctx.prisma.carpoolSearch.findFirst({
-        where: { userId: id },
-      });
+        },
+      );
 
       const carpoolSearchData = {
         role: input.role,
@@ -215,8 +199,8 @@ export const userRouter = router({
         endTime: endTimeDate,
         startDate: input.coopStartDate,
         endDate: input.coopEndDate,
-        homeLocationId: homeLocation.id,
-        companyLocationId: companyLocation.id,
+        homeLocationId,
+        companyLocationId,
       };
 
       if (existingSearch) {
