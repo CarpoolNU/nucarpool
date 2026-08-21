@@ -43,11 +43,6 @@ export type TempMessage = {
   content: string;
   User: PublicUser;
 };
-export type PoiData = {
-  location: string;
-  coordLng: number;
-  coordLat: number;
-};
 export type OnboardingFormInputs = {
   role: Role;
   status: Status;

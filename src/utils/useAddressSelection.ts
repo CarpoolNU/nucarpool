@@ -21,7 +21,7 @@ export const useAddressSelection = (
 
   useSearch({
     value: address,
-    type: "address%2Cpostcode",
+    type: "address",
     setFunc: setSuggestions,
   });
 

@@ -12,36 +12,80 @@ import {
 import _ from "lodash";
 import { calculateScore, Recommendation } from "../../utils/recommendation";
 import { parseMapboxFeature } from "../../utils/map/parseAddress";
+import {
+  MAPBOX_DIRECTIONS_MAX_POINTS,
+  MAPBOX_DIRECTIONS_MIN_POINTS,
+  MAPBOX_SEARCH_MAX_LENGTH,
+  MAPBOX_SEARCH_TYPES,
+  buildDirectionsUrl,
+  buildGeocodingSearchUrl,
+} from "../../utils/map/mapboxUrls";
 
 // router for interacting with the Mapbox API
 export const mapboxRouter = router({
-  //search address query
+  /**
+   * Address autocomplete, proxied so the Mapbox token stays server-side.
+   *
+   * The input is deliberately narrow (SCRUM-244): the caller chooses the
+   * search text and which of two categories to search, and nothing else.
+   * `autocomplete`, `country` and `proximity` used to be sent by the client
+   * and interpolated straight into the upstream URL, along with a
+   * pre-encoded `types` string, which meant the client controlled part of a
+   * URL our server issues. They are fixed in buildGeocodingSearchUrl now.
+   */
   search: protectedRouter
     .input(
       z.object({
-        value: z.string(),
-        types: z
-          .string()
-          .refine(
-            (val) =>
-              val === "address%2Cpostcode" || val === "neighborhood%2Cplace",
-          ),
-        proximity: z.string().refine((val) => val === "ip"),
-        country: z.string().refine((val) => val === "us"),
-        autocomplete: z.boolean().refine((val) => val === true),
+        value: z.string().trim().min(1).max(MAPBOX_SEARCH_MAX_LENGTH),
+        types: z.enum(
+          Object.keys(MAPBOX_SEARCH_TYPES) as [
+            keyof typeof MAPBOX_SEARCH_TYPES,
+            ...(keyof typeof MAPBOX_SEARCH_TYPES)[],
+          ],
+        ),
       }),
     )
     .query(async ({ input }): Promise<FeatureCollection> => {
-      const endpoint = `https://api.mapbox.com/geocoding/v5/mapbox.places/${input.value}.json?access_token=${serverEnv.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}&autocomplete=${input.autocomplete}&country=${input.country}&proximity=${input.proximity}&types=${input.types}`;
-      const data = await fetch(endpoint)
-        .then((response) => response.json())
-        .catch((err) => {
-          throw new TRPCError({
-            code: "INTERNAL_SERVER_ERROR",
-            message: "Unexpected error. Please try again.",
-            cause: err,
-          });
+      const endpoint = buildGeocodingSearchUrl({
+        value: input.value,
+        type: input.types,
+        accessToken: serverEnv.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN,
+      });
+
+      const response = await fetch(endpoint).catch((err) => {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Unexpected error. Please try again.",
+          cause: err,
         });
+      });
+
+      // A non-2xx from Mapbox used to fall through to `data.features.map`,
+      // which threw a TypeError on the error body rather than surfacing the
+      // failure.
+      if (!response.ok) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Unexpected error. Please try again.",
+          cause: new Error(`Mapbox geocoding responded ${response.status}`),
+        });
+      }
+
+      const data = await response.json().catch((err) => {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Unexpected error. Please try again.",
+          cause: err,
+        });
+      });
+
+      if (!Array.isArray(data?.features)) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Unexpected error. Please try again.",
+          cause: new Error("Mapbox geocoding response had no features array"),
+        });
+      }
 
       // parse features to include structured address components
       const parsedFeatures = data.features.map((feature: any) =>
@@ -202,16 +246,26 @@ export const mapboxRouter = router({
   getDirections: protectedRouter
     .input(
       z.object({
-        points: z.array(z.tuple([z.number(), z.number()])), // Array of tuples containing longitude and latitude
+        // Array of tuples containing longitude and latitude. Bounded so a
+        // single call cannot ask Mapbox for an arbitrarily long route, and
+        // range-checked so nonsense coordinates are rejected here rather than
+        // forwarded (SCRUM-244).
+        points: z
+          .array(
+            z.tuple([
+              z.number().min(-180).max(180),
+              z.number().min(-90).max(90),
+            ]),
+          )
+          .min(MAPBOX_DIRECTIONS_MIN_POINTS)
+          .max(MAPBOX_DIRECTIONS_MAX_POINTS),
       }),
     )
     .query(async ({ input }): Promise<DirectionsResponse> => {
-      // Convert input to a string in the format required by the Mapbox API
-      const coordinates = input.points
-        .map(([lng, lat]) => `${lng},${lat}`)
-        .join(";");
-
-      const endpoint = `https://api.mapbox.com/directions/v5/mapbox/driving/${coordinates}?access_token=${serverEnv.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}`;
+      const endpoint = buildDirectionsUrl({
+        points: input.points,
+        accessToken: serverEnv.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN,
+      });
       const data = await fetch(endpoint)
         .then((response) => response.json())
         .then((json) => {
