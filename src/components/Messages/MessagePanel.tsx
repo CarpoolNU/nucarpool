@@ -32,6 +32,11 @@ const MessagePanel = ({
     createRequestHandlers(utils);
 
   const sendMessage = trpc.user.messages.sendMessage.useMutation({
+    // Without this a failed send was completely invisible (SCRUM-230): the
+    // composed text disappeared from the box and nothing was ever delivered.
+    onError: (error: any) => {
+      toast.error(`Your message could not be sent: ${error.message}`);
+    },
     onSuccess: () => {
       onMessageSent(selectedUser.id);
     },
