@@ -317,67 +317,32 @@ const createUserData = async (resolveAddress: AddressResolver) => {
   // create Location and CarpoolSearch records for each user
   for (const userData of usersData) {
     try {
-      // find or create home location
-      let homeLocation = null;
+      // A Location belongs to one slot of one CarpoolSearch, so every user
+      // gets their own pair of rows (SCRUM-232). This used to reuse an
+      // existing row whose address text matched, which silently gave the
+      // seeded user the *other* user's coordinates - so local data did not
+      // reproduce the geometry the recommendation algorithm is scored on.
+      const homeLocation = await prisma.location.create({
+        data: {
+          street: userData.startStreet || "",
+          city: userData.startCity || "",
+          state: userData.startState || "",
+          streetAddress: userData.startAddress || "",
+          coordLng: userData.startCoordLng,
+          coordLat: userData.startCoordLat,
+        },
+      });
 
-      // only search for existing location if we have valid address data
-      if (userData.startStreet && userData.startCity && userData.startState) {
-        homeLocation = await prisma.location.findFirst({
-          where: {
-            street: userData.startStreet,
-            city: userData.startCity,
-            state: userData.startState,
-            streetAddress: userData.startAddress || "",
-          },
-        });
-      }
-
-      // if not found or address was empty, create new location
-      if (!homeLocation) {
-        homeLocation = await prisma.location.create({
-          data: {
-            street: userData.startStreet || "",
-            city: userData.startCity || "",
-            state: userData.startState || "",
-            streetAddress: userData.startAddress || "",
-            coordLng: userData.startCoordLng,
-            coordLat: userData.startCoordLat,
-          },
-        });
-      }
-
-      // find or create company location
-      let companyLocation = null;
-
-      // only search for existing location if we have valid address data
-      if (
-        userData.companyStreet &&
-        userData.companyCity &&
-        userData.companyState
-      ) {
-        companyLocation = await prisma.location.findFirst({
-          where: {
-            street: userData.companyStreet,
-            city: userData.companyCity,
-            state: userData.companyState,
-            streetAddress: userData.companyAddress || "",
-          },
-        });
-      }
-
-      // if not found or address was empty, create new location
-      if (!companyLocation) {
-        companyLocation = await prisma.location.create({
-          data: {
-            street: userData.companyStreet || "",
-            city: userData.companyCity || "",
-            state: userData.companyState || "",
-            streetAddress: userData.companyAddress || "",
-            coordLng: userData.companyCoordLng,
-            coordLat: userData.companyCoordLat,
-          },
-        });
-      }
+      const companyLocation = await prisma.location.create({
+        data: {
+          street: userData.companyStreet || "",
+          city: userData.companyCity || "",
+          state: userData.companyState || "",
+          streetAddress: userData.companyAddress || "",
+          coordLng: userData.companyCoordLng,
+          coordLat: userData.companyCoordLat,
+        },
+      });
 
       // get carpoolId from the mapping
       const carpoolId = userToGroupMap.get(userData.id) || null;
