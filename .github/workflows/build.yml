@@ -38,3 +38,10 @@ jobs:
       # Never `yarn build:preview` - that script runs `prisma db push` and
       # re-seeds the database.
       - run: yarn build
+      # SCRUM-269. Under the Pages Router a filename is a URL, so a co-located
+      # `*.test.ts` is compiled and shipped as an endpoint. Nothing else here
+      # notices: `next build` compiles it happily and the `test` job reads
+      # source, never the route table. Checked against the real manifest this
+      # build just produced rather than inferred from filenames.
+      - name: assert no test file was compiled into a route
+        run: node scripts/check-page-routes.js --manifest
