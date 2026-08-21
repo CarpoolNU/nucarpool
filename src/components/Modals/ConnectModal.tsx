@@ -68,12 +68,10 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
 
   const handleOnClick = () => {
     if (props.user.email && props.otherUser.email) {
+      // Names, addresses and the driver/rider template are all resolved
+      // server-side from `toId` now (SCRUM-225).
       sendConnectEmail({
-        senderName: props.user.preferredName,
-        senderEmail: props.user.email,
-        receiverName: props.otherUser.preferredName,
-        receiverEmail: props.otherUser.email,
-        isDriver: props.otherUser.role === "DRIVER",
+        toId: props.otherUser.id,
         messagePreview: customMessage,
       });
       createRequests({
