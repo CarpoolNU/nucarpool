@@ -18,9 +18,9 @@ const base = {
   receiverEmail: "grace@northeastern.edu",
 };
 
-const requestSchema = (isDriver: boolean): RequestEmailSchema => ({
+const requestSchema = (recipientIsDriver: boolean): RequestEmailSchema => ({
   ...base,
-  isDriver,
+  recipientIsDriver,
   messagePreview: "Would you like to carpool?",
 });
 
@@ -29,9 +29,11 @@ const messageSchema = (): MessageEmailSchema => ({
   messageText: "See you at 8:45",
 });
 
-const acceptanceSchema = (isDriver: boolean): AcceptanceEmailSchema => ({
+const acceptanceSchema = (
+  recipientIsDriver: boolean,
+): AcceptanceEmailSchema => ({
   ...base,
-  isDriver,
+  recipientIsDriver,
 });
 
 const templateData = (params: { TemplateData?: string }) =>
@@ -41,31 +43,31 @@ describe("generateEmailParams", () => {
   it.each([
     {
       type: "request" as const,
-      isDriver: true,
+      recipientIsDriver: true,
       template: "DriverRequestTemplate",
     },
     {
       type: "request" as const,
-      isDriver: false,
+      recipientIsDriver: false,
       template: "RiderRequestTemplate",
     },
     {
       type: "acceptance" as const,
-      isDriver: true,
+      recipientIsDriver: true,
       template: "DriverAcceptanceTemplate",
     },
     {
       type: "acceptance" as const,
-      isDriver: false,
+      recipientIsDriver: false,
       template: "RiderAcceptanceTemplate",
     },
   ])(
-    "selects $template for a $type when isDriver=$isDriver",
-    ({ type, isDriver, template }) => {
+    "selects $template for a $type when recipientIsDriver=$recipientIsDriver",
+    ({ type, recipientIsDriver, template }) => {
       const schema =
         type === "request"
-          ? requestSchema(isDriver)
-          : acceptanceSchema(isDriver);
+          ? requestSchema(recipientIsDriver)
+          : acceptanceSchema(recipientIsDriver);
 
       expect(generateEmailParams(schema, type, false).Template).toBe(template);
     },
