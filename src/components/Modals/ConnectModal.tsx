@@ -77,7 +77,6 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
         messagePreview: customMessage,
       });
       createRequests({
-        fromId: props.user.id,
         toId: props.otherUser.id,
         message: customMessage,
       });
