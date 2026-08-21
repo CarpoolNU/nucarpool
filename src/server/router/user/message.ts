@@ -1,17 +1,12 @@
 import { TRPCError } from "@trpc/server";
 import { protectedRouter, router } from "../createRouter";
 import { z } from "zod";
-import Pusher from "pusher";
-import { serverEnv } from "../../../utils/env/server";
 import { message } from "antd";
-
-const pusher = new Pusher({
-  appId: serverEnv.PUSHER_APP_ID,
-  key: serverEnv.NEXT_PUBLIC_PUSHER_KEY,
-  secret: serverEnv.PUSHER_SECRET,
-  cluster: serverEnv.NEXT_PUBLIC_PUSHER_CLUSTER,
-  useTLS: true,
-});
+import { pusherServer } from "../../pusher";
+import {
+  conversationChannel,
+  notificationChannel,
+} from "../../../utils/pusherChannels";
 
 export const messageRouter = router({
   getUnreadMessageCount: protectedRouter.query(async ({ ctx }) => {
@@ -167,12 +162,16 @@ export const messageRouter = router({
       // surfacing as an unhandled rejection.
       try {
         await Promise.all([
-          pusher.trigger(`conversation-${input.requestId}`, "sendMessage", {
-            newMessage,
-          }),
-          pusher.trigger(`notification-${recipientId}`, "sendNotification", {
-            newMessage,
-          }),
+          pusherServer.trigger(
+            conversationChannel(input.requestId),
+            "sendMessage",
+            { newMessage },
+          ),
+          pusherServer.trigger(
+            notificationChannel(recipientId),
+            "sendNotification",
+            { newMessage },
+          ),
         ]);
       } catch (error) {
         console.error(

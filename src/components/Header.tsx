@@ -15,6 +15,7 @@ import { UserContext } from "../utils/userContext";
 import { useRouter } from "next/router";
 import Spinner from "./Spinner";
 import Pusher from "pusher-js";
+import { notificationChannel } from "../utils/pusherChannels";
 import { browserEnv } from "../utils/env/browser";
 import { Message, PublicUser } from "../utils/types";
 import {
@@ -162,13 +163,24 @@ const Header = (props: HeaderProps) => {
   }, [props.isMobile]);
 
   useEffect(() => {
-    if (!user?.id) return;
+    const userId = user?.id;
+    if (!userId) return;
 
+    // Private channel: Pusher will not join it until /api/pusher/auth signs
+    // the subscription for this session (SCRUM-224).
     const pusher = new Pusher(browserEnv.NEXT_PUBLIC_PUSHER_KEY, {
       cluster: browserEnv.NEXT_PUBLIC_PUSHER_CLUSTER,
+      authEndpoint: "/api/pusher/auth",
     });
 
-    const messageChannel = pusher.subscribe(`notification-${user?.id}`);
+    const channelName = notificationChannel(userId);
+    const messageChannel = pusher.subscribe(channelName);
+
+    // Authorization is a new failure mode; without this it would fail silently
+    // and look like the unread badge had simply stopped working.
+    messageChannel.bind("pusher:subscription_error", (status: unknown) => {
+      console.error(`Could not subscribe to ${channelName}`, status);
+    });
 
     messageChannel.bind("sendNotification", (data: { newMessage: Message }) => {
       props.data?.setSidebar((prev) => {
@@ -181,7 +193,8 @@ const Header = (props: HeaderProps) => {
 
     return () => {
       messageChannel.unbind("sendNotification");
-      pusher.unsubscribe(`notification-${user?.id}`);
+      messageChannel.unbind("pusher:subscription_error");
+      pusher.unsubscribe(channelName);
     };
   }, [props.data?.setSidebar, props.data, user?.id]);
 

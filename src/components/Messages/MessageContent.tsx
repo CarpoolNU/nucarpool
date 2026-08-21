@@ -11,6 +11,7 @@ import { format, isSameDay } from "date-fns";
 import { trpc } from "../../utils/trpc";
 import { UserContext } from "../../utils/userContext";
 import Pusher from "pusher-js";
+import { conversationChannel } from "../../utils/pusherChannels";
 import { browserEnv } from "../../utils/env/browser";
 
 interface MessageContentProps {
@@ -53,13 +54,24 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
   }, [request?.conversation?.messages]);
 
   useEffect(() => {
-    if (!request?.id) return;
+    const requestId = request?.id;
+    if (!requestId) return;
 
+    // Private channel: Pusher will not join it until /api/pusher/auth signs
+    // the subscription for this session (SCRUM-224).
     const pusher = new Pusher(browserEnv.NEXT_PUBLIC_PUSHER_KEY, {
       cluster: browserEnv.NEXT_PUBLIC_PUSHER_CLUSTER,
+      authEndpoint: "/api/pusher/auth",
     });
 
-    const messageChannel = pusher.subscribe(`conversation-${request?.id}`);
+    const channelName = conversationChannel(requestId);
+    const messageChannel = pusher.subscribe(channelName);
+
+    // Authorization is a new failure mode; without this it would fail silently
+    // and look like messaging had simply stopped updating.
+    messageChannel.bind("pusher:subscription_error", (status: unknown) => {
+      console.error(`Could not subscribe to ${channelName}`, status);
+    });
 
     messageChannel.bind("sendMessage", (data: { newMessage: Message }) => {
       setConversationMessages((prevMessages) => {
@@ -72,7 +84,8 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
 
     return () => {
       messageChannel.unbind("sendMessage");
-      pusher.unsubscribe(`conversation-${request?.id}`);
+      messageChannel.unbind("pusher:subscription_error");
+      pusher.unsubscribe(channelName);
     };
   }, [request?.id]);
 

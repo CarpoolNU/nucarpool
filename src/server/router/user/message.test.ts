@@ -1,6 +1,10 @@
 import { Permission } from "@prisma/client";
 import type { Session } from "next-auth";
 import type { Context } from "../context";
+import {
+  conversationChannel,
+  notificationChannel,
+} from "../../../utils/pusherChannels";
 
 /**
  * Correctness tests for `user.messages.sendMessage` (SCRUM-230).
@@ -127,7 +131,9 @@ const callerFor = (session: Session | null, db = buildMessageDb()) => {
 const triggeredChannels = () => mockTrigger.mock.calls.map((c: any[]) => c[0]);
 
 const notificationChannels = () =>
-  triggeredChannels().filter((c: string) => c.startsWith("notification-"));
+  triggeredChannels().filter((c: string) =>
+    c.startsWith("private-notification-"),
+  );
 
 beforeEach(() => {
   mockTrigger.mockClear();
@@ -142,7 +148,7 @@ describe("sendMessage — the notification goes to the other party", () => {
       content: "hello",
     });
 
-    expect(notificationChannels()).toEqual([`notification-${RECIPIENT}`]);
+    expect(notificationChannels()).toEqual([notificationChannel(RECIPIENT)]);
   });
 
   it("notifies the request's sender when the recipient replies", async () => {
@@ -155,7 +161,7 @@ describe("sendMessage — the notification goes to the other party", () => {
       content: "replying",
     });
 
-    expect(notificationChannels()).toEqual([`notification-${SENDER}`]);
+    expect(notificationChannels()).toEqual([notificationChannel(SENDER)]);
   });
 
   it("never notifies the author of the message", async () => {
@@ -168,7 +174,7 @@ describe("sendMessage — the notification goes to the other party", () => {
         content: "x",
       });
 
-      expect(notificationChannels()).not.toContain(`notification-${author}`);
+      expect(notificationChannels()).not.toContain(notificationChannel(author));
     }
   });
 
@@ -180,7 +186,7 @@ describe("sendMessage — the notification goes to the other party", () => {
       content: "hello",
     });
 
-    expect(triggeredChannels()).toContain(`conversation-${REQUEST_ID}`);
+    expect(triggeredChannels()).toContain(conversationChannel(REQUEST_ID));
   });
 });
 
@@ -240,7 +246,7 @@ describe("sendMessage — the message is always persisted", () => {
       content: "first message",
     });
 
-    expect(notificationChannels()).toEqual([`notification-${SENDER}`]);
+    expect(notificationChannels()).toEqual([notificationChannel(SENDER)]);
   });
 
   it("returns the created message so the client can tell it landed", async () => {
@@ -371,5 +377,23 @@ describe("user.messages.getMessages — removed rather than scoped", () => {
     const paths = Object.keys((appRouter as any)._def.procedures);
 
     expect(paths).toContain("user.admin.getMessages");
+  });
+});
+
+describe("sendMessage — broadcasts only on private channels (SCRUM-224)", () => {
+  it("uses the private- prefix on every channel it triggers", async () => {
+    // Without the prefix Pusher treats the channel as public and never calls
+    // the auth endpoint, so the subscription check silently stops applying.
+    const { caller } = callerFor(sessionFor(SENDER));
+
+    await caller.user.messages.sendMessage({
+      requestId: REQUEST_ID,
+      content: "hello",
+    });
+
+    expect(triggeredChannels()).toHaveLength(2);
+    for (const channel of triggeredChannels()) {
+      expect(channel).toMatch(/^private-/);
+    }
   });
 });
