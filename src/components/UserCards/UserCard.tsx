@@ -1,7 +1,6 @@
 import Rating from "@mui/material/Rating";
 import dayjs from "dayjs";
-import utc from "dayjs/plugin/utc";
-import timezone from "dayjs/plugin/timezone";
+import { formatScheduleTime } from "../../utils/scheduleTime";
 import {
   ButtonInfo,
   EnhancedPublicUser,
@@ -66,22 +65,6 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
       favoriteId,
       add,
     });
-  };
-
-  dayjs.extend(utc);
-  dayjs.extend(timezone);
-
-  const est = "America/New_York";
-
-  const formatTime = (time: Date | null, starttime?: Date | null) => {
-    let timeInEST = dayjs.tz(time, est);
-    const hour = starttime ? dayjs.tz(starttime, est).hour() : timeInEST.hour();
-
-    if (hour >= 1 && hour < 5) {
-      timeInEST = dayjs.tz(time, "UTC");
-    }
-
-    return timeInEST.format("h:mm A");
   };
 
   <q></q>; /** Creates a div with 7 boxes, each representing a day of the week.
@@ -228,12 +211,12 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
           <div className="flex text-sm ">
             <p className="pr-1">Job Start:</p>
             <p className="font-semibold">
-              {formatTime(props.otherUser.startTime)}
+              {formatScheduleTime(props.otherUser.startTime)}
             </p>
             <p className="px-2 font-semibold">|</p>
             <p className="pr-1">Job End:</p>
             <p className="font-semibold">
-              {formatTime(props.otherUser.endTime, props.otherUser.startTime)}
+              {formatScheduleTime(props.otherUser.endTime)}
             </p>
           </div>
         </div>
