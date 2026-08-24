@@ -43,8 +43,35 @@ export type FInputs = {
   daysWorking: string;
 };
 
-/** Provides a very approximate coordinate distance to mile conversion */
-const coordToMile = (dist: number) => dist * 88;
+/** Miles covered by one degree of latitude: 2 * pi * R / 360, with R = 3958.8 mi. */
+const MILES_PER_DEGREE_LATITUDE = 69.09;
+
+/**
+ * Straight-line miles between two coordinates.
+ *
+ * The previous form was `sqrt(dLat^2 + dLng^2) * 88`, which treated a degree of
+ * longitude as covering the same ground as a degree of latitude. At Boston's
+ * latitude a degree of longitude is only about 74% as wide, so east-west
+ * separation was overstated by roughly a third relative to north-south and the
+ * mile-denominated filters did not mean the same thing in every direction
+ * (SCRUM-236).
+ *
+ * Equirectangular with a cosine correction is within a fraction of a percent of
+ * haversine at commute range, for one cosine.
+ */
+const milesBetween = (
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number,
+): number => {
+  const meanLatitudeRadians = (((lat1 + lat2) / 2) * Math.PI) / 180;
+  const northSouth = (lat1 - lat2) * MILES_PER_DEGREE_LATITUDE;
+  const eastWest =
+    (lng1 - lng2) * MILES_PER_DEGREE_LATITUDE * Math.cos(meanLatitudeRadians);
+
+  return Math.sqrt(northSouth * northSouth + eastWest * eastWest);
+};
 
 /**
  * Minutes between two times of day (SCRUM-235).
@@ -126,7 +153,10 @@ const dayConversion = (user: CommonUser) => {
 /**
  * Generates a function that can be mapped across users to calculate recommendation scores relative to
  * a single user. If the score in any area exceeds predetermined cutoffs, the function will return undefined.
- * Scores are scaled to be between 0 and 1, where 0 indicates a perfect match.
+ * Under the `any` sort every factor is weighted once and the weights sum to 1,
+ * so a score lies between 0 and 1, where 0 indicates a perfect match. The
+ * `distance` sort returns raw combined mileage and `time` returns the two
+ * normalised time components, so neither is on that scale.
  *
  * @param currentUser The user to generate a recommendation callback for
  * @param inputs The filter inputs to replace 'cutoffs'
@@ -156,18 +186,18 @@ export const calculateScore = (
       return undefined;
     }
 
-    const startDistance = coordToMile(
-      Math.sqrt(
-        Math.pow(currentUser.startCoordLat - user.startCoordLat, 2) +
-          Math.pow(currentUser.startCoordLng - user.startCoordLng, 2),
-      ),
+    const startDistance = milesBetween(
+      currentUser.startCoordLat,
+      currentUser.startCoordLng,
+      user.startCoordLat,
+      user.startCoordLng,
     );
 
-    const endDistance = coordToMile(
-      Math.sqrt(
-        Math.pow(currentUser.companyCoordLat - user.companyCoordLat, 2) +
-          Math.pow(currentUser.companyCoordLng - user.companyCoordLng, 2),
-      ),
+    const endDistance = milesBetween(
+      currentUser.companyCoordLat,
+      currentUser.companyCoordLng,
+      user.companyCoordLat,
+      user.companyCoordLng,
     );
     const userDays = dayConversion(user);
     // check number of days users both go in, also count number of days current user goes in
@@ -240,55 +270,56 @@ export const calculateScore = (
     } else if (partialOverlap) {
       dateScore = 0.5;
     }
-    let sDistanceScore;
-    let eDistanceScore;
     let finalScore = 0;
-    let daysScore;
-    // Sorting portion
+    // Sorting portion. Every component is a penalty in 0..1 and the sort is
+    // ascending, so lower is a better match.
     if (sort == "any") {
-      sDistanceScore =
-        startDistance > cutoffs.startDistance
-          ? 1
-          : startDistance / cutoffs.startDistance;
-      eDistanceScore =
-        endDistance > cutoffs.endDistance
-          ? 1
-          : endDistance / cutoffs.endDistance;
-      daysScore = 1 - daysHelper.bothUsersDays / daysHelper.currentUserDays;
+      const sDistanceScore = Math.min(startDistance / cutoffs.startDistance, 1);
+      const eDistanceScore = Math.min(endDistance / cutoffs.endDistance, 1);
+      // `bothUsersDays / currentUserDays` divided by zero whenever the filter
+      // carried no working days, which the map sends on first render and for
+      // every VIEWER, and the resulting NaN made the whole sort arbitrary. With
+      // no days requested there is no overlap to measure, so days contribute
+      // nothing rather than poisoning the comparison (SCRUM-236).
+      const daysScore =
+        daysHelper.currentUserDays === 0
+          ? 0
+          : 1 - daysHelper.bothUsersDays / daysHelper.currentUserDays;
+
+      // Each factor is counted exactly once. Distance used to be added twice -
+      // once unclamped, so a distant pair could outweigh every other factor -
+      // and days twice whenever both schedules were known. The weights sum to
+      // 1, so counting each once is what keeps the score inside 0..1 as the
+      // doc comment claims (SCRUM-236).
       finalScore =
-        (startDistance / cutoffs.startDistance) * weights.startDistance +
-        (endDistance / cutoffs.endDistance) * weights.endDistance +
+        sDistanceScore * weights.startDistance +
+        eDistanceScore * weights.endDistance +
         daysScore * weights.days +
         dateScore * weights.overlap;
 
       if (startTime !== undefined && endTime !== undefined) {
-        let eTimeScore =
-          endTime > cutoffs.endTime ? 1 : endTime / cutoffs.endTime;
-        let sTimeScore =
-          startTime > cutoffs.startTime ? 1 : startTime / cutoffs.startTime;
+        const sTimeScore = Math.min(startTime / cutoffs.startTime, 1);
+        const eTimeScore = Math.min(endTime / cutoffs.endTime, 1);
 
         finalScore +=
-          sDistanceScore * weights.startDistance +
-          eDistanceScore * weights.endDistance +
-          sTimeScore * weights.startTime +
-          eTimeScore * weights.endTime +
-          daysScore * weights.days;
+          sTimeScore * weights.startTime + eTimeScore * weights.endTime;
       } else {
-        finalScore +=
-          weights.startTime +
-          weights.endTime +
-          sDistanceScore * weights.startDistance +
-          eDistanceScore * weights.endDistance;
+        // An unknown schedule takes the full time penalty: it cannot rank
+        // better than a schedule that is known to clash.
+        finalScore += weights.startTime + weights.endTime;
       }
     } else if (sort === "distance") {
       finalScore = startDistance + endDistance;
     } else if (sort === "time") {
       if (startTime !== undefined && endTime !== undefined) {
-        let eTimeScore =
-          endTime > cutoffs.endTime ? 1 : endTime / cutoffs.endTime;
-        let sTimeScore =
-          startTime > cutoffs.startTime ? 1 : startTime / cutoffs.startTime;
-        finalScore = eTimeScore + sTimeScore;
+        const sTimeScore = Math.min(startTime / cutoffs.startTime, 1);
+        const eTimeScore = Math.min(endTime / cutoffs.endTime, 1);
+        finalScore = sTimeScore + eTimeScore;
+      } else {
+        // Leaving this at 0 ranked a candidate with no recorded schedule as the
+        // best possible match under a sort that is entirely about schedule.
+        // Both components cap at 1, so 2 is the worst score here (SCRUM-236).
+        finalScore = 2;
       }
     }
 
