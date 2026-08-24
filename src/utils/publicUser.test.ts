@@ -2,6 +2,7 @@ import { Permission, Role, Status } from "@prisma/client";
 import type { CarpoolSearch, Location } from "@prisma/client";
 import {
   convertCarpoolSearchToPublic,
+  convertCarpoolSearchToPublicWithExactHome,
   convertToPublic,
   roundCoord,
 } from "./publicUser";
@@ -258,6 +259,85 @@ describe("convertCarpoolSearchToPublic", () => {
       Object.keys(fromUser).sort(),
     );
     expect(fromSearch).toEqual(fromUser);
+  });
+});
+
+describe("home coordinate precision (SCRUM-226)", () => {
+  /**
+   * `startAddress` is deliberately coarsened to "City, State", but the raw home
+   * coordinate used to ride along beside it in bulk responses, where it could
+   * just be reverse-geocoded. The rule is now: neighbourhood precision by
+   * default, full precision only for a counterpart.
+   */
+  const preciseHome = location({
+    coordLng: -71.08874812,
+    coordLat: 42.33907341,
+  });
+
+  it("coarsens the home coordinate for a viewer with no relationship", () => {
+    const result = convertCarpoolSearchToPublic(
+      buildSearch({}, { homeLocation: preciseHome }),
+    );
+
+    expect(result.startCoordLng).toBe(-71.09);
+    expect(result.startCoordLat).toBe(42.34);
+  });
+
+  it("keeps the home coordinate exact for a counterpart", () => {
+    const result = convertCarpoolSearchToPublicWithExactHome(
+      buildSearch({}, { homeLocation: preciseHome }),
+    );
+
+    expect(result.startCoordLng).toBe(-71.08874812);
+    expect(result.startCoordLat).toBe(42.33907341);
+  });
+
+  it("gives two users on different streets in one neighbourhood the same published point", () => {
+    // The point of coarsening: a published coordinate should describe an area,
+    // not a household, so nearby users become indistinguishable.
+    const a = convertCarpoolSearchToPublic(
+      buildSearch(
+        {},
+        { homeLocation: location({ coordLng: -71.0887, coordLat: 42.339 }) },
+      ),
+    );
+    const b = convertCarpoolSearchToPublic(
+      buildSearch(
+        {},
+        { homeLocation: location({ coordLng: -71.0912, coordLat: 42.3402 }) },
+      ),
+    );
+
+    expect([a.startCoordLng, a.startCoordLat]).toEqual([
+      b.startCoordLng,
+      b.startCoordLat,
+    ]);
+  });
+
+  it("leaves the company coordinate exact, because a workplace is not a home", () => {
+    const result = convertCarpoolSearchToPublic(
+      buildSearch(
+        {},
+        {
+          companyLocation: location({
+            coordLng: -71.05123456,
+            coordLat: 42.35123456,
+          }),
+        },
+      ),
+    );
+
+    expect(result.companyCoordLng).toBe(-71.05123456);
+    expect(result.companyCoordLat).toBe(42.35123456);
+  });
+
+  it("reports zero rather than inventing a point when the home Location is missing", () => {
+    const result = convertCarpoolSearchToPublic(
+      buildSearch({}, { homeLocation: null }),
+    );
+
+    expect(result.startCoordLng).toBe(0);
+    expect(result.startCoordLat).toBe(0);
   });
 });
 
