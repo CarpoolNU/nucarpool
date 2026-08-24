@@ -4,7 +4,7 @@ import { router, protectedRouter } from "../createRouter";
 import _ from "lodash";
 import { Role, CarpoolGroup, User } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
-import { convertCarpoolSearchToPublic } from "../../../utils/publicUser";
+import { convertCarpoolSearchToPublicWithExactHome } from "../../../utils/publicUser";
 import { NO_SEATS_MESSAGE, clampSeats } from "../../../utils/carpoolSeats";
 
 /**
@@ -203,7 +203,12 @@ export const groupsRouter = router({
 
     const updatedGroup = {
       ...group,
-      users: memberCarpoolSearches.map(convertCarpoolSearchToPublic),
+      // Group members are counterparts: they have agreed to carpool together and
+      // the group route is drawn from their home coordinates, so these keep full
+      // precision (SCRUM-226).
+      users: memberCarpoolSearches.map(
+        convertCarpoolSearchToPublicWithExactHome,
+      ),
     };
     return updatedGroup;
   }),

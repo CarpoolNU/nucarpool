@@ -2,7 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedRouter, router } from "../createRouter";
 
-import { convertCarpoolSearchToPublic } from "../../../utils/publicUser";
+import { convertCarpoolSearchToPublicWithExactHome } from "../../../utils/publicUser";
 
 // use this router to manage invitations
 export const requestsRouter = router({
@@ -136,9 +136,9 @@ export const requestsRouter = router({
       );
       return {
         ...req,
-        fromUser: convertCarpoolSearchToPublic(currentUserSearch),
+        fromUser: convertCarpoolSearchToPublicWithExactHome(currentUserSearch),
         toUser: toUserSearch
-          ? convertCarpoolSearchToPublic(toUserSearch)
+          ? convertCarpoolSearchToPublicWithExactHome(toUserSearch)
           : null,
       };
     });
@@ -150,9 +150,9 @@ export const requestsRouter = router({
       return {
         ...req,
         fromUser: fromUserSearch
-          ? convertCarpoolSearchToPublic(fromUserSearch)
+          ? convertCarpoolSearchToPublicWithExactHome(fromUserSearch)
           : null,
-        toUser: convertCarpoolSearchToPublic(currentUserSearch),
+        toUser: convertCarpoolSearchToPublicWithExactHome(currentUserSearch),
       };
     });
 
