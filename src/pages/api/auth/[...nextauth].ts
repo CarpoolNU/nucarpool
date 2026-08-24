@@ -40,14 +40,23 @@ export const authOptions: NextAuthOptions = {
   },
   secret: serverEnv.NEXTAUTH_SECRET,
   logger: {
+    // NextAuth passes provider payloads through `metadata`, which can carry
+    // token material and the signing-in user's address. The code identifies
+    // the fault on its own, so metadata stays out of production logs.
     error(code, metadata) {
-      console.error(code, metadata);
+      if (process.env.NODE_ENV === "production") {
+        console.error(code);
+      } else {
+        console.error(code, metadata);
+      }
     },
     warn(code) {
       console.warn(code);
     },
     debug(code, metadata) {
-      console.debug(code, metadata);
+      if (process.env.NODE_ENV !== "production") {
+        console.debug(code, metadata);
+      }
     },
   },
   adapter: CustomPrismaAdapter(prisma),

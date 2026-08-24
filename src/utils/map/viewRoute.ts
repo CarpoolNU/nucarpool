@@ -13,6 +13,25 @@ import RiderEnd from "../../../public/rider-dest.png";
 
 const previousMarkers: (mapboxgl.Marker | mapboxgl.Popup)[] = [];
 
+/**
+ * Names the coordinate fields that failed validation. These guards trip when
+ * any one value is unusable, so the surrounding object still holds the valid
+ * ones - and a valid pair is somebody's home. Log which field was bad, never
+ * what it held.
+ */
+const invalidCoordFields = (
+  values: Record<string, number | null | undefined>,
+): string[] =>
+  Object.entries(values)
+    .filter(
+      ([, value]) =>
+        value === null ||
+        value === undefined ||
+        isNaN(value) ||
+        !isFinite(value),
+    )
+    .map(([name]) => name);
+
 // Updated clearMarkers to also remove text label layers created by updateStartLocation and updateCompanyLocation
 export const clearMarkers = (map?: mapboxgl.Map) => {
   // Clear the original popup/marker system
@@ -139,10 +158,12 @@ export const viewRoute = (props: ViewRouteProps) => {
       !isFinite(otherCompanyLat)
     ) {
       console.error("Invalid coordinates in otherUser", {
-        otherStartLng,
-        otherStartLat,
-        otherCompanyLng,
-        otherCompanyLat,
+        invalidFields: invalidCoordFields({
+          otherStartLng,
+          otherStartLat,
+          otherCompanyLng,
+          otherCompanyLat,
+        }),
       });
       return;
     }
@@ -217,10 +238,12 @@ export const viewRoute = (props: ViewRouteProps) => {
       !isFinite(userEndLat)
     ) {
       console.error("Invalid coordinates in userCoord", {
-        userStartLng,
-        userStartLat,
-        userEndLng,
-        userEndLat,
+        invalidFields: invalidCoordFields({
+          userStartLng,
+          userStartLat,
+          userEndLng,
+          userEndLat,
+        }),
       });
       // If we have no valid coordinates at all, just return
       if (minLng === undefined) {
@@ -283,10 +306,7 @@ export const viewRoute = (props: ViewRouteProps) => {
     !isFinite(maxLat)
   ) {
     console.error("Invalid bounds for fitBounds", {
-      minLng,
-      minLat,
-      maxLng,
-      maxLat,
+      invalidFields: invalidCoordFields({ minLng, minLat, maxLng, maxLat }),
     });
     return;
   }
@@ -313,7 +333,27 @@ export const viewRoute = (props: ViewRouteProps) => {
           ),
       )
     ) {
-      console.error("Invalid values in bounds array", bounds);
+      console.error(
+        "Invalid values in bounds array",
+        // bounds is [[swLng, swLat], [neLng, neLat]] derived from real
+        // coordinates, so report only which corner is unusable.
+        {
+          invalidCorners: bounds
+            .map((coord, index) =>
+              Array.isArray(coord) &&
+              coord.some(
+                (value) =>
+                  value === null ||
+                  value === undefined ||
+                  isNaN(value) ||
+                  !isFinite(value),
+              )
+                ? index
+                : null,
+            )
+            .filter((index) => index !== null),
+        },
+      );
       return;
     }
 

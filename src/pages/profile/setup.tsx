@@ -173,7 +173,6 @@ const Setup: NextPage = () => {
       coopStartDate: values.coopStartDate ?? null,
       coopEndDate: values.coopEndDate ?? null,
     };
-    console.log(userInfo);
     if (selectedFile) {
       try {
         await uploadFile();
