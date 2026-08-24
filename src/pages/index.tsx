@@ -575,8 +575,6 @@ const Home: NextPage<any> = () => {
       // end route at driver destination
       waypoints.push([driver.companyCoordLng, driver.companyCoordLat]);
 
-      console.log("Optimized route waypoints:", waypoints);
-
       // set points for the directions query
       setPoints(waypoints);
 
