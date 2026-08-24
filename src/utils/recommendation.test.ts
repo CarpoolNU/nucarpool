@@ -4,9 +4,13 @@ import type { FInputs } from "./recommendation";
 import {
   anyFilters,
   at,
+  BOSTON,
   buildSearch,
   day,
+  milesEastOf,
   milesNorth,
+  milesNorthOf,
+  ORIGIN,
   SearchFixture,
   TERM_END,
   TERM_START,
@@ -541,6 +545,64 @@ describe("calculateScore", () => {
     });
   });
 
+  describe("distance measurement (SCRUM-236)", () => {
+    /**
+     * Distance used to be `sqrt(dLat^2 + dLng^2) * 88`, which treats a degree of
+     * longitude as covering the same ground as a degree of latitude. At Boston's
+     * latitude a degree of longitude is only ~74% as wide, so east-west
+     * separation read about a third too far and the mile filters did not mean
+     * the same thing in every direction.
+     */
+    const atBoston = () => rider({ home: BOSTON, company: BOSTON });
+
+    it("converts a degree of latitude to about 69 miles", () => {
+      const oneDegreeNorth = driver({
+        home: { lat: 1, lng: 0 },
+        company: ORIGIN,
+      });
+
+      expect(
+        score(
+          rider({ home: ORIGIN, company: ORIGIN }),
+          oneDegreeNorth,
+          {},
+          "distance",
+        ),
+      ).toBeCloseTo(69.09, 1);
+    });
+
+    it("scores a pair the same distance east and north identically", () => {
+      const north = driver({
+        home: milesNorthOf(BOSTON, 5),
+        company: BOSTON,
+      });
+      const east = driver({ home: milesEastOf(BOSTON, 5), company: BOSTON });
+
+      expect(score(atBoston(), north)).toBeCloseTo(score(atBoston(), east)!, 5);
+    });
+
+    it("applies a 6 mile filter the same east-west as north-south", () => {
+      const within = { startDistance: 6 };
+
+      for (const displace of [milesNorthOf, milesEastOf]) {
+        expect(
+          isMatch(
+            atBoston(),
+            driver({ home: displace(BOSTON, 5), company: BOSTON }),
+            within,
+          ),
+        ).toBe(true);
+        expect(
+          isMatch(
+            atBoston(),
+            driver({ home: displace(BOSTON, 7), company: BOSTON }),
+            within,
+          ),
+        ).toBe(false);
+      }
+    });
+  });
+
   describe("score weighting under the 'any' sort", () => {
     it("gives an identical, co-located candidate a perfect score of 0", () => {
       expect(score(rider(), driver())).toBeCloseTo(0);
@@ -557,17 +619,35 @@ describe("calculateScore", () => {
       const homeApart = score(rider(), driver({ home: milesNorth(3) }));
       const companyApart = score(rider(), driver({ company: milesNorth(3) }));
 
-      expect(homeApart).toBeCloseTo(0.2);
-      expect(companyApart).toBeCloseTo(0.4);
+      expect(homeApart).toBeCloseTo(0.1);
+      expect(companyApart).toBeCloseTo(0.2);
       expect(companyApart).toBeCloseTo(homeApart! * 2);
     });
 
-    it("keeps growing the distance penalty past the 6 mile scoring cutoff (SCRUM-236)", () => {
-      // Only one of the two distance terms is clamped at the cutoff, so the total
-      // keeps rising instead of saturating.
-      expect(score(rider(), driver({ home: milesNorth(3) }))).toBeCloseTo(0.2);
-      expect(score(rider(), driver({ home: milesNorth(6) }))).toBeCloseTo(0.4);
-      expect(score(rider(), driver({ home: milesNorth(12) }))).toBeCloseTo(0.6);
+    it("saturates the distance penalty at the 6 mile cutoff (SCRUM-236)", () => {
+      // Distance used to be added twice, once without a ceiling, so the penalty
+      // kept climbing and a distant pair could outweigh every other factor.
+      expect(score(rider(), driver({ home: milesNorth(3) }))).toBeCloseTo(0.1);
+      expect(score(rider(), driver({ home: milesNorth(6) }))).toBeCloseTo(0.2);
+      expect(score(rider(), driver({ home: milesNorth(12) }))).toBeCloseTo(0.2);
+    });
+
+    it("never exceeds 1, the sum of the weights (SCRUM-236)", () => {
+      const worst = score(
+        rider(),
+        driver({
+          home: milesNorth(50),
+          company: milesNorth(50),
+          startTime: at(20),
+          endTime: at(23),
+          daysWorking: "0,0,0,0,0,0,0",
+          coopStart: day(2030, 1, 1),
+          coopEnd: day(2030, 6, 1),
+        }),
+      );
+
+      expect(worst).toBeLessThanOrEqual(1);
+      expect(worst).toBeCloseTo(1);
     });
 
     it("scores a one hour schedule difference at three quarters of the time weight", () => {
@@ -594,8 +674,8 @@ describe("calculateScore", () => {
         coopEnd: day(2024, 9, 1),
       });
 
-      // 0.2 home distance + 0.12 days (1 - 2/5, counted twice) + 0.05 partial overlap
-      expect(score(rider(), candidate)).toBeCloseTo(0.37);
+      // 0.1 home distance + 0.06 days (1 - 2/5) + 0.05 partial overlap
+      expect(score(rider(), candidate)).toBeCloseTo(0.21);
     });
 
     it("ranks a closer, better aligned candidate ahead of a worse one", () => {
@@ -625,10 +705,24 @@ describe("calculateScore", () => {
       ).toBeCloseTo(0.75);
     });
 
-    it("scores every candidate 0 when sorting by time without recorded schedules (SCRUM-236)", () => {
-      expect(
-        score(rider(), driver({ startTime: null, endTime: null }), {}, "time"),
-      ).toBe(0);
+    it("ranks an unrecorded schedule worst when sorting by time (SCRUM-236)", () => {
+      // Lower is better, so leaving this at 0 made a candidate with no schedule
+      // the top result of a sort that is entirely about schedule.
+      const unknown = score(
+        rider(),
+        driver({ startTime: null, endTime: null }),
+        {},
+        "time",
+      );
+      const knownButClashing = score(
+        rider(),
+        driver({ startTime: at(13), endTime: at(21) }),
+        {},
+        "time",
+      );
+
+      expect(unknown).toBe(2);
+      expect(unknown!).toBeGreaterThanOrEqual(knownButClashing!);
     });
 
     it("scores every candidate 0 for an unrecognised sort key", () => {
@@ -657,10 +751,18 @@ describe("calculateScore", () => {
       expect(result?.id).toBe("user-42");
     });
 
-    it("produces NaN scores when the filter records no working days (SCRUM-236)", () => {
-      // `daysWorking: ""` is the initial filter state on the map page and is never
-      // replaced for VIEWER accounts, so 1 - 0/0 leaks NaN into the ranking.
-      expect(score(rider(), driver(), { daysWorking: "" })).toBeNaN();
+    it("stays finite when the filter records no working days (SCRUM-236)", () => {
+      // `daysWorking: ""` is the initial filter state on the map page and is
+      // never replaced for VIEWER accounts. `1 - 0/0` used to leak NaN into
+      // every score, and NaN comparisons made the whole sort arbitrary.
+      const identical = score(rider(), driver(), { daysWorking: "" });
+      const distant = score(rider(), driver({ home: milesNorth(3) }), {
+        daysWorking: "",
+      });
+
+      expect(identical).toBe(0);
+      expect(Number.isFinite(distant)).toBe(true);
+      expect(identical!).toBeLessThan(distant!);
     });
 
     it("excludes nobody on the day filter when the filter records no days", () => {
@@ -693,7 +795,7 @@ describe("calculateScore", () => {
       ).toBeUndefined();
       expect(
         scorer(driver({ id: "c", home: milesNorth(3) }))?.score,
-      ).toBeCloseTo(0.2);
+      ).toBeCloseTo(0.1);
     });
   });
 });

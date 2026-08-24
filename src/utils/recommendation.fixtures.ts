@@ -20,15 +20,37 @@ export type SearchFixture = CarpoolSearch & {
 
 export type Coord = { lat: number; lng: number };
 
-/** Mirrors the `coordToMile` conversion factor inside recommendation.ts. */
-const MILES_PER_COORD_UNIT = 88;
+/** Mirrors `MILES_PER_DEGREE_LATITUDE` inside recommendation.ts. */
+const MILES_PER_DEGREE_LATITUDE = 69.09;
 
 export const ORIGIN: Coord = { lat: 0, lng: 0 };
 
-/** A coordinate exactly `miles` north of `ORIGIN` under that conversion. */
+/** Boston, for tests that care about the latitude correction on longitude. */
+export const BOSTON: Coord = { lat: 42.34, lng: -71.09 };
+
+/** A coordinate exactly `miles` north of `ORIGIN`. */
 export const milesNorth = (miles: number): Coord => ({
-  lat: miles / MILES_PER_COORD_UNIT,
+  lat: miles / MILES_PER_DEGREE_LATITUDE,
   lng: 0,
+});
+
+/** A coordinate exactly `miles` due north of `from`. */
+export const milesNorthOf = (from: Coord, miles: number): Coord => ({
+  lat: from.lat + miles / MILES_PER_DEGREE_LATITUDE,
+  lng: from.lng,
+});
+
+/**
+ * A coordinate exactly `miles` due east of `from`.
+ *
+ * A degree of longitude narrows with latitude, so the conversion needs the
+ * cosine that `milesNorthOf` does not.
+ */
+export const milesEastOf = (from: Coord, miles: number): Coord => ({
+  lat: from.lat,
+  lng:
+    from.lng +
+    miles / (MILES_PER_DEGREE_LATITUDE * Math.cos((from.lat * Math.PI) / 180)),
 });
 
 /**
