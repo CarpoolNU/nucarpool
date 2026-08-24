@@ -9,6 +9,7 @@ import { Note } from "../../styles/profile";
 import { EntryLabel } from "../EntryLabel";
 import { TextField } from "../TextField";
 import ProfilePicture from "../Profile/ProfilePicture";
+import { PROFILE_TEXT_MAX_LENGTH } from "../../utils/textLimits";
 
 interface StepFourProps {
   errors: FieldErrors<OnboardingFormInputs>;
@@ -86,7 +87,7 @@ const StepFour = ({
         <EntryLabel error={errors.bio} label="About Me" />
         <textarea
           className="form-input w-full resize-none rounded-md border-black px-3 py-2"
-          maxLength={188}
+          maxLength={PROFILE_TEXT_MAX_LENGTH}
           disabled={false}
           {...register("bio")}
         />

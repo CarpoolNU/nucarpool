@@ -13,6 +13,9 @@ import { formatScheduleTime } from "../../utils/scheduleTime";
 import useProfileImage from "../../utils/useProfileImage";
 import { AiOutlineUser } from "react-icons/ai";
 import useIsMobile from "../../utils/useIsMobile";
+// 250 was hardcoded here and nowhere else, five short of the column it is
+// written to. The limit now comes from one place (SCRUM-231).
+import { MESSAGE_MAX_LENGTH } from "../../utils/textLimits";
 
 interface ConnectModalProps {
   user: User;
@@ -267,13 +270,15 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                   </p>
                   <textarea
                     className="form-input mb-2 flex max-h-32 min-h-16 w-full rounded-lg  border border-stone-400 px-6   shadow-sm"
-                    maxLength={250}
+                    maxLength={MESSAGE_MAX_LENGTH}
                     defaultValue={customMessage}
                     placeholder={"Send a message"}
                     onChange={(e) => setCustomMessage(e.target.value)}
                   ></textarea>
                   <div className=" mb-1 h-6 w-full text-sm text-stone-400">
-                    <div className="text-end ">{customMessage.length}/250</div>
+                    <div className="text-end ">
+                      {customMessage.length}/{MESSAGE_MAX_LENGTH}
+                    </div>
                   </div>
                   <div className="flex w-full  justify-center space-x-7">
                     <div className="flex w-full justify-center gap-6 md:w-3/4">

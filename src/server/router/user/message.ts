@@ -7,6 +7,7 @@ import {
   conversationChannel,
   notificationChannel,
 } from "../../../utils/pusherChannels";
+import { MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
 
 export const messageRouter = router({
   getUnreadMessageCount: protectedRouter.query(async ({ ctx }) => {
@@ -84,7 +85,12 @@ export const messageRouter = router({
     .input(
       z.object({
         requestId: z.string(),
-        content: z.string(),
+        // Bounded because `message.content` is `VARCHAR(255)` (SCRUM-231). An
+        // unbounded input reached the database and threw there, after the send
+        // bar had already cleared the user's text. Trimmed before the length
+        // checks so whitespace neither passes `.min(1)` nor consumes the cap,
+        // and so the stored value matches what `SendBar` sends.
+        content: z.string().trim().min(1).max(MESSAGE_MAX_LENGTH),
       }),
     )
     .mutation(async ({ ctx, input }) => {

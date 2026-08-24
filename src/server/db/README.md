@@ -47,6 +47,28 @@ Boston is hardcoded because the product is Northeastern co-op students; a schedu
 
 A calendar day, taken by Prisma from the **UTC** date of whatever `Date` it is handed. Build these with [`lastDayOfMonthUTC`](../../utils/dateUtils.ts) rather than `new Date(year, month, 0)`: the local-time form stored the previous day for anyone at a positive UTC offset, because local midnight is the day before in UTC.
 
+## Text lengths
+
+MySQL runs in strict mode, so a value wider than its column makes the write **throw**, not truncate. Prisma surfaces that as `P2000` and tRPC turns it into an `INTERNAL_SERVER_ERROR` — a 500 for what is really a validation problem, raised after the UI has already accepted the text. Every Zod input that writes free text to a bounded column therefore carries a `.max()` matching that column (SCRUM-231).
+
+An unannotated `String` on MySQL is `VARCHAR(191)`, which is why so many of these are 191 rather than something chosen.
+
+| Column                                                  | Width          | Bounded by                                   | Limit                     |
+| ------------------------------------------------------- | -------------- | -------------------------------------------- | ------------------------- |
+| `message.content`                                       | `VARCHAR(255)` | `messages.sendMessage`, `requests.create`    | `MESSAGE_MAX_LENGTH`      |
+| `user.bio`                                              | `VARCHAR(191)` | `user.edit`, `onboardSchema`                 | `PROFILE_TEXT_MAX_LENGTH` |
+| `user.preferred_name`                                   | `VARCHAR(191)` | `user.edit`, `onboardSchema`                 | `PROFILE_TEXT_MAX_LENGTH` |
+| `user.pronouns`                                         | `VARCHAR(191)` | `user.edit`, `onboardSchema`                 | `PROFILE_TEXT_MAX_LENGTH` |
+| `carpool_search.company_name`                           | `VARCHAR(191)` | `user.edit`, `onboardSchema`                 | `PROFILE_TEXT_MAX_LENGTH` |
+| `carpool_search.group_message`                          | `TEXT`         | —                                            | —                         |
+| `group.message`                                         | `VARCHAR(191)` | — **see below**                              | —                         |
+| `request.message`                                       | `VARCHAR(255)` | never written; `requests.create` stores `""` | —                         |
+| `location.street`, `.street_address`, `.city`, `.state` | `VARCHAR(191)` | — parsed from a Mapbox feature, not typed    | —                         |
+
+The values live in [`textLimits.ts`](../../utils/textLimits.ts) so the form, the tRPC input and the column cannot drift apart. Add a `.max()` there and reference it; do not write the number inline.
+
+**`group.message` is not yet bounded, and it can overflow today.** `GroupPage` serialises the whole driver-preferences form into it as `GROUP_DETAILS_V1:{…json…}`, which costs ~87 characters of prefix and JSON structure before any content. A 90-character note plus two of the fixed preference options already exceeds 191, and the save fails with no error shown — `updateMessage` has no `onError`, and the success toast fires from the click handler regardless. The column was widened to `TEXT` by `20241119202706_add_text_type` and then narrowed back to `VARCHAR(191)` by `20251114054152_add_location_table`, because `CarpoolGroup.message` in `schema.prisma` is a plain `String`. Restoring `@db.Text` is the fix, and it needs a migration and a PlanetScale deploy request.
+
 ## Changing the schema
 
 After editing `schema.prisma`:

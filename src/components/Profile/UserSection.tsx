@@ -14,6 +14,7 @@ import { OnboardingFormInputs } from "../../utils/types";
 import ProfilePicture from "./ProfilePicture";
 import useIsMobile from "../../utils/useIsMobile";
 import { signOut } from "next-auth/react";
+import { PROFILE_TEXT_MAX_LENGTH } from "../../utils/textLimits";
 
 interface UserSectionProps {
   register: UseFormRegister<OnboardingFormInputs>;
@@ -204,7 +205,7 @@ const UserSection = ({
                            ? "border-gray-100 bg-gray-200 text-gray-400"
                            : ""
                        } border-black px-3 py-2`}
-          maxLength={188}
+          maxLength={PROFILE_TEXT_MAX_LENGTH}
           disabled={isViewer}
           {...register("bio")}
         />

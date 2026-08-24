@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 import type { Session } from "next-auth";
 import { appRouter } from "../index";
 import type { Context } from "../context";
+import { MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
 
 /**
  * Authorization tests for the `user.requests` router (SCRUM-221).
@@ -473,5 +474,47 @@ describe("user.requests.edit — removed rather than authorized", () => {
     expect(paths).toContain("user.requests.create");
     expect(paths).toContain("user.requests.delete");
     expect(paths).not.toContain("user.requests.edit");
+  });
+});
+
+describe("user.requests.create — the opening message is bounded (SCRUM-231)", () => {
+  // The input goes to `message.content`, not to `request.message`: the handler
+  // writes `""` to the request row and puts the text in the conversation's
+  // first `Message`. Both columns are `VARCHAR(255)`; neither was bounded here.
+  const atLimit = "a".repeat(MESSAGE_MAX_LENGTH);
+
+  it("accepts a message of exactly the column width", async () => {
+    const { caller, db } = callerFor(sessionFor(USER_A));
+
+    await caller.user.requests.create({ toId: USER_B, message: atLimit });
+
+    expect(db.messages()).toEqual([
+      expect.objectContaining({ content: atLimit }),
+    ]);
+  });
+
+  it("rejects one character past it, creating no request at all", async () => {
+    const { caller, db } = callerFor(sessionFor(USER_A));
+
+    await expect(
+      caller.user.requests.create({ toId: USER_B, message: `${atLimit}!` }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    // The row, its conversation and its message are three separate writes, and
+    // the length failure used to land on the last of them.
+    expect(db.rows()).toEqual([]);
+    expect(db.messages()).toEqual([]);
+  });
+
+  it("still allows a request with no message", async () => {
+    // ConnectModal's textarea starts empty and its Send button never required
+    // text, so `.min(1)` here would break a supported flow.
+    const { caller, db } = callerFor(sessionFor(USER_A));
+
+    await caller.user.requests.create({ toId: USER_B, message: "" });
+
+    expect(db.rows()).toEqual([
+      expect.objectContaining({ fromUserId: USER_A, toUserId: USER_B }),
+    ]);
   });
 });

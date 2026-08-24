@@ -3,6 +3,7 @@ import { z } from "zod";
 import { protectedRouter, router } from "../createRouter";
 
 import { convertCarpoolSearchToPublicWithExactHome } from "../../../utils/publicUser";
+import { MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
 
 // use this router to manage invitations
 export const requestsRouter = router({
@@ -182,7 +183,12 @@ export const requestsRouter = router({
           // session and cannot be influenced by the client; `.strict()` makes a
           // re-added `fromId` a BAD_REQUEST rather than a silently ignored field.
           toId: z.string(),
-          message: z.string(),
+          // This becomes the conversation's first `Message`, so it is bound by
+          // `message.content`'s `VARCHAR(255)` like any other (SCRUM-231).
+          // Deliberately not `.min(1)`: ConnectModal's textarea starts empty
+          // and its Send button never required text, so sending a bare request
+          // is an existing flow rather than an oversight to close here.
+          message: z.string().trim().max(MESSAGE_MAX_LENGTH),
         })
         .strict(),
     )

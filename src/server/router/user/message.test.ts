@@ -5,6 +5,7 @@ import {
   conversationChannel,
   notificationChannel,
 } from "../../../utils/pusherChannels";
+import { MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
 
 /**
  * Correctness tests for `user.messages.sendMessage` (SCRUM-230).
@@ -395,5 +396,82 @@ describe("sendMessage — broadcasts only on private channels (SCRUM-224)", () =
     for (const channel of triggeredChannels()) {
       expect(channel).toMatch(/^private-/);
     }
+  });
+});
+
+describe("sendMessage — content is bounded by its column (SCRUM-231)", () => {
+  // `message.content` is `VARCHAR(255)` and MySQL runs in strict mode, so an
+  // oversized value threw at the database rather than truncating. The input had
+  // neither `.max()` nor `.min(1)`, and `SendBar` had no cap at all, so the
+  // user's text was cleared from the box for a write that never landed.
+  const atLimit = "a".repeat(MESSAGE_MAX_LENGTH);
+
+  it("accepts a message of exactly the column width", async () => {
+    const { caller, db } = callerFor(sessionFor(SENDER));
+
+    await caller.user.messages.sendMessage({
+      requestId: REQUEST_ID,
+      content: atLimit,
+    });
+
+    expect(db.messages()).toEqual([
+      expect.objectContaining({ content: atLimit }),
+    ]);
+  });
+
+  it("rejects one character past it, writing nothing and broadcasting nothing", async () => {
+    const { caller, db } = callerFor(sessionFor(SENDER));
+
+    await expect(
+      caller.user.messages.sendMessage({
+        requestId: REQUEST_ID,
+        content: `${atLimit}!`,
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    expect(db.messages()).toEqual([]);
+    expect(mockTrigger).not.toHaveBeenCalled();
+  });
+
+  it("rejects empty and whitespace-only content", async () => {
+    // `SendBar` refuses to send these, but the procedure is reachable without
+    // it, and an empty row renders as a blank bubble in the thread.
+    for (const content of ["", "   ", "\n\t"]) {
+      const { caller, db } = callerFor(sessionFor(SENDER));
+
+      await expect(
+        caller.user.messages.sendMessage({ requestId: REQUEST_ID, content }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+      expect(db.messages()).toEqual([]);
+    }
+  });
+
+  it("stores the trimmed text, so padding cannot buy extra width", async () => {
+    const { caller, db } = callerFor(sessionFor(SENDER));
+
+    await caller.user.messages.sendMessage({
+      requestId: REQUEST_ID,
+      content: "  hello  ",
+    });
+
+    expect(db.messages()).toEqual([
+      expect.objectContaining({ content: "hello" }),
+    ]);
+  });
+
+  it("measures the trimmed text against the limit", async () => {
+    // Trim runs before the length check, so surrounding whitespace on an
+    // otherwise legal message is not what pushes it over.
+    const { caller, db } = callerFor(sessionFor(SENDER));
+
+    await caller.user.messages.sendMessage({
+      requestId: REQUEST_ID,
+      content: `   ${atLimit}   `,
+    });
+
+    expect(db.messages()).toEqual([
+      expect.objectContaining({ content: atLimit }),
+    ]);
   });
 });

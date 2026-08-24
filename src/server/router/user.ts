@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedRouter, router } from "./createRouter";
 import { MAX_SEATS_AVAILABLE } from "../../utils/carpoolSeats";
+import { PROFILE_TEXT_MAX_LENGTH } from "../../utils/textLimits";
 import { Role } from "@prisma/client";
 import { Status } from "@prisma/client";
 import _ from "lodash";
@@ -103,22 +104,27 @@ export const userRouter = router({
         role: z.nativeEnum(Role),
         status: z.nativeEnum(Status),
         seatAvail: z.number().int().min(0).max(MAX_SEATS_AVAILABLE),
-        companyName: z.string(),
+        // `company_name`, `preferred_name`, `pronouns` and `bio` are all
+        // `VARCHAR(191)`, and every one of them was unbounded here (SCRUM-231).
+        // The forms cap the two name fields and the bio, but nothing capped
+        // `companyName` at all, so a pasted value over the width failed the
+        // whole profile save inside Prisma instead of at the boundary.
+        companyName: z.string().max(PROFILE_TEXT_MAX_LENGTH),
         companyAddress: z.string(),
         companyCoordLng: z.number(),
         companyCoordLat: z.number(),
         startAddress: z.string(),
         startCoordLng: z.number(),
         startCoordLat: z.number(),
-        preferredName: z.string(),
-        pronouns: z.string(),
+        preferredName: z.string().max(PROFILE_TEXT_MAX_LENGTH),
+        pronouns: z.string().max(PROFILE_TEXT_MAX_LENGTH),
         isOnboarded: z.boolean(),
         daysWorking: z.string(),
         startTime: z.optional(z.string()),
         endTime: z.optional(z.string()),
         coopStartDate: z.date().nullable(),
         coopEndDate: z.date().nullable(),
-        bio: z.string(),
+        bio: z.string().max(PROFILE_TEXT_MAX_LENGTH),
         licenseSigned: z.boolean(),
         startStreet: z.string(),
         startCity: z.string(),
