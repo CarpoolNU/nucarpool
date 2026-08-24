@@ -52,11 +52,16 @@ const MessagePanel = ({
       },
     });
 
-  const handleSendMessage = (content: string) => {
+  const handleSendMessage = async (content: string) => {
     const request =
       selectedUser.incomingRequest || selectedUser.outgoingRequest;
     const requestId = request?.id;
-    if (!requestId) return;
+    if (!requestId) {
+      // Used to be a bare `return`, which let `SendBar` clear the box for a
+      // message that was never sent anywhere (SCRUM-231).
+      toast.error("This conversation is no longer available.");
+      throw new Error("No request for the selected conversation");
+    }
 
     const converstationMessages = request.conversation?.messages;
 
@@ -82,16 +87,15 @@ const MessagePanel = ({
     // The notification body is read from the stored message (SCRUM-225), so it
     // has to be sent once the write has landed rather than alongside it. The
     // server applies its own cooldown; this check only avoids a pointless call.
-    sendMessage.mutate(
-      { requestId, content },
-      {
-        onSuccess: () => {
-          if (notifyByEmail) {
-            sendMessageNotification({ requestId });
-          }
-        },
-      },
-    );
+    // `mutateAsync` rather than `mutate` so `SendBar` finds out whether the
+    // write landed and can leave the text in the box if it did not
+    // (SCRUM-231). The rejection is caught there; the toast still comes from
+    // `onError` above.
+    await sendMessage.mutateAsync({ requestId, content });
+
+    if (notifyByEmail) {
+      sendMessageNotification({ requestId });
+    }
   };
 
   const { mutate: sendAcceptanceNotification } =

@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 import type { Session } from "next-auth";
 import { appRouter } from "./index";
 import type { Context } from "./context";
+import { PROFILE_TEXT_MAX_LENGTH } from "../../utils/textLimits";
 
 /**
  * Contract tests for `user.getPresignedDownloadUrl` (SCRUM-242).
@@ -384,5 +385,54 @@ describe("user.edit — Location ownership", () => {
     // Same row rewritten, so the second save left nothing behind.
     expect(db.searchFor(SESSION_USER)?.homeLocationId).toBe(firstHomeId);
     expect(db.prisma.location.create).toHaveBeenCalledTimes(2);
+  });
+});
+
+/**
+ * `user.edit` writes four `VARCHAR(191)` columns — `user.bio`,
+ * `user.preferred_name`, `user.pronouns` and `carpool_search.company_name` —
+ * and every one of them arrived as an unbounded `z.string()` (SCRUM-231).
+ * MySQL runs in strict mode, so an oversized value failed the whole profile
+ * save inside Prisma rather than being refused at the boundary.
+ */
+describe("user.edit — profile text is bounded by its columns (SCRUM-231)", () => {
+  const fields = ["bio", "preferredName", "pronouns", "companyName"] as const;
+  const atLimit = "a".repeat(PROFILE_TEXT_MAX_LENGTH);
+
+  it.each(fields)(
+    "rejects an over-length %s, writing nothing",
+    async (field) => {
+      const db = buildEditDb();
+      const caller = editCallerFor(SESSION_USER, db);
+
+      await expect(
+        caller.user.edit(editInput({ [field]: `${atLimit}!` })),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+      expect(db.prisma.location.create).not.toHaveBeenCalled();
+      expect(db.prisma.carpoolSearch.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(fields)("saves %s at exactly the column width", async (field) => {
+    // The positive control: the cap has to sit at the column width, not below
+    // it, or it silently becomes a shorter product limit nobody chose.
+    const db = buildEditDb();
+    const caller = editCallerFor(SESSION_USER, db);
+
+    await expect(
+      caller.user.edit(editInput({ [field]: atLimit })),
+    ).resolves.toBeDefined();
+  });
+
+  it("leaves the address fields unbounded", async () => {
+    // These are filled from a Mapbox suggestion rather than typed, and capping
+    // them would only exchange one kind of failed save for another.
+    const db = buildEditDb();
+    const caller = editCallerFor(SESSION_USER, db);
+
+    await expect(
+      caller.user.edit(editInput({ companyAddress: "a".repeat(500) })),
+    ).resolves.toBeDefined();
   });
 });

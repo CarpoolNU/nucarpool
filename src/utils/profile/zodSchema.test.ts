@@ -1,5 +1,6 @@
 import { Role, Status } from "@prisma/client";
 import { onboardSchema, profileDefaultValues } from "./zodSchema";
+import { PROFILE_TEXT_MAX_LENGTH } from "../textLimits";
 
 /**
  * `onboardSchema` is the gate that decides whether a profile is complete enough to
@@ -168,5 +169,30 @@ describe("profileDefaultValues", () => {
 
   it("provides one entry per day of the week", () => {
     expect(profileDefaultValues.daysWorking).toHaveLength(7);
+  });
+});
+
+describe("onboardSchema — text bounded by its column (SCRUM-231)", () => {
+  // `companyName`, `preferredName`, `pronouns` and `bio` are all `VARCHAR(191)`.
+  // The inputs cap typing and pasting; this catches anything set another way,
+  // and turns an over-length value into a field error instead of a failed save.
+  const fields = ["companyName", "preferredName", "pronouns", "bio"] as const;
+
+  it.each(fields)("rejects an over-length %s", (field) => {
+    expect(
+      issuePaths({
+        ...completeRider,
+        [field]: "a".repeat(PROFILE_TEXT_MAX_LENGTH + 1),
+      }),
+    ).toContain(field);
+  });
+
+  it.each(fields)("accepts %s at exactly the column width", (field) => {
+    expect(
+      issuePaths({
+        ...completeRider,
+        [field]: "a".repeat(PROFILE_TEXT_MAX_LENGTH),
+      }),
+    ).not.toContain(field);
   });
 });
