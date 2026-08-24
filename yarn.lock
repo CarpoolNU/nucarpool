@@ -2009,13 +2009,6 @@
   resolved "https://registry.yarnpkg.com/@types/lodash/-/lodash-4.17.25.tgz#69765ac7bcddb0eb072961cf292524a8f5b3c2c0"
   integrity sha512-+K1NIO8I+F9/wNulfVvu23QYd0Pe9/OCqRrim4NoYIf1VoEDL90Ve4ClzpyqBLc7NpGGWRvYNCKZ1BE/Jpf8dQ==
 
-"@types/mapbox-gl@3.5.0":
-  version "3.5.0"
-  resolved "https://registry.yarnpkg.com/@types/mapbox-gl/-/mapbox-gl-3.5.0.tgz#e70a4aba8c5a6b7e120aa50a527d8788cbc7d8ab"
-  integrity sha512-3wVAUTC6q1UKatLP9YxFBnGJWi3neJUF9OKeyRdUf/BsYjZAP35xmZkL4zogVJbO3vdExuSVYCAkzUXjpjdhOg==
-  dependencies:
-    mapbox-gl "*"
-
 "@types/mapbox__polyline@^1.0.2":
   version "1.0.5"
   resolved "https://registry.npmjs.org/@types/mapbox__polyline/-/mapbox__polyline-1.0.5.tgz"
@@ -5619,7 +5612,7 @@ map-obj@^4.0.0:
   resolved "https://registry.npmjs.org/map-obj/-/map-obj-4.3.0.tgz"
   integrity sha512-hdN1wVrZbb29eBGiGjJbeP8JbKjq1urkHJ/LIP/NY48MZ1QVXUsQBV1G1zvYFHn1XE06cwjBsOI2K3Ulnj1YXQ==
 
-mapbox-gl@*, mapbox-gl@^3.28.1:
+mapbox-gl@^3.28.1:
   version "3.29.0"
   resolved "https://registry.yarnpkg.com/mapbox-gl/-/mapbox-gl-3.29.0.tgz#6a1e918c177a6baeef4329078e6ec0171180fd55"
   integrity sha512-Fnh1WLsZMfihwRZY5scp456iQuZo9G97tTpb26bf/Ejsi/L7O+4dE9+I03VoOor2ul3DEOp6F2P3273omyVsNw==

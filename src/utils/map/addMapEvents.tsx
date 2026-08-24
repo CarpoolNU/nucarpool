@@ -26,7 +26,10 @@ const addMapEvents = (
     const clusterId = features[0]!.properties!.cluster_id;
     const source = map.getSource("company-locations") as GeoJSONSource;
     source.getClusterExpansionZoom(clusterId, (err, zoom) => {
-      if (err) return;
+      // mapbox-gl v3 types this callback as Callback<number>, so `zoom` is
+      // `number | null | undefined` - easeTo takes `number | undefined`, and a
+      // cluster with no expansion zoom is nothing to ease to.
+      if (err || zoom == null) return;
       if (features[0]!.geometry.type === "Point") {
         map.easeTo({
           center: [
@@ -40,12 +43,15 @@ const addMapEvents = (
   });
 
   map.on("click", (e) => {
-    const allPointLayers = map.getStyle().layers
-      .filter(layer => layer.type === 'symbol')
-      .map(layer => layer.id);
-    
-    const pointFeatures = map.queryRenderedFeatures(e.point, { layers: allPointLayers });
-    
+    const allPointLayers = map
+      .getStyle()
+      .layers.filter((layer) => layer.type === "symbol")
+      .map((layer) => layer.id);
+
+    const pointFeatures = map.queryRenderedFeatures(e.point, {
+      layers: allPointLayers,
+    });
+
     if (pointFeatures.length > 0 && handlePointClick) {
       handlePointClick(e as MapLayerMouseEvent);
     }
