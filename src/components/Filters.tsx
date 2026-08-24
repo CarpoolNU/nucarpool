@@ -3,6 +3,7 @@ import { FaMinus, FaPlus } from "react-icons/fa6";
 import { FaTimes } from "react-icons/fa";
 import Checkbox from "@mui/material/Checkbox";
 import { FiltersState } from "../utils/types";
+import { formatDateToMonth, lastDayOfMonthUTC } from "../utils/dateUtils";
 import { TextField } from "./TextField";
 import StaticDayBox from "./Sidebar/StaticDayBox";
 
@@ -67,25 +68,23 @@ const Filters = ({
     setStartTimeOpen(false);
     setTermDatesOpen(false);
   };
+  // Third copy of this pair, now shared with the onboarding form so the term
+  // dates a filter compares against are built the same way the stored co-op
+  // dates are (SCRUM-239).
   const handleMonthChange =
     (field: keyof FiltersState) =>
     (event: React.ChangeEvent<HTMLInputElement>) => {
-      const [year, month] = event.target.value.split("-").map(Number);
-      const lastDay = new Date(year, month, 0);
+      const lastDay = lastDayOfMonthUTC(event.target.value);
+
+      if (!lastDay) {
+        return;
+      }
+
       setFilters((prev) => ({
         ...prev,
         [field]: lastDay,
       }));
     };
-
-  const formatDateToMonth = (date: Date | null) => {
-    if (!date) {
-      return undefined;
-    }
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    return `${year}-${month}`;
-  };
   const handleRangeChange = (
     field: keyof FiltersState,
     event: React.ChangeEvent<HTMLInputElement>,

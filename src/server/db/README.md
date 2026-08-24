@@ -31,6 +31,22 @@ See the [router README](../router/README.md) for how that context is built.
 - **`relationMode = "prisma"`** — foreign keys are emulated by Prisma instead of enforced by the database. Relation scalar fields therefore need explicit `@@index` entries, and `onDelete: Cascade` is carried out by Prisma, not MySQL.
 - `Account`, `Session`, `User`, and `VerificationToken` back NextAuth through the Prisma adapter. Changing them can break sign-in.
 
+## Dates and times
+
+Two columns on `CarpoolSearch` store a moment without a zone, so the convention matters (SCRUM-239).
+
+**Schedule times — `startTime` / `endTime` (`DateTime? @db.Time(0)`)**
+
+A time of day in **UTC**, with no date attached. `user.edit` parses the ISO string the client sends and Prisma writes the UTC time of day out of it, so a student picking 9:00 AM in Boston is stored as `14:00:00`.
+
+Render with [`formatScheduleTime`](../../utils/scheduleTime.ts), which converts to `America/New_York`. Every schedule time in the UI goes through that one helper — do not format these columns inline. `UserCard` and `ConnectModal` each used to carry a copy that reinterpreted the value as UTC when the Boston hour fell between 01:00 and 04:59, which was a guess about rows predating the standardisation in SCRUM-147 / SCRUM-157 and mislabelled genuine early shifts.
+
+Boston is hardcoded because the product is Northeastern co-op students; a schedule has no meaning in the viewer's own zone.
+
+**Co-op dates — `startDate` / `endDate` (`DateTime? @db.Date`)**
+
+A calendar day, taken by Prisma from the **UTC** date of whatever `Date` it is handed. Build these with [`lastDayOfMonthUTC`](../../utils/dateUtils.ts) rather than `new Date(year, month, 0)`: the local-time form stored the previous day for anyone at a positive UTC offset, because local midnight is the day before in UTC.
+
 ## Changing the schema
 
 After editing `schema.prisma`:
