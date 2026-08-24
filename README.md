@@ -18,7 +18,7 @@ NUCarpool is a web app that helps Northeastern University students find carpool 
 
 ## Getting Started
 
-Requires Node 20, Yarn 1.x, and Docker.
+Requires Node 22 (the version in `.nvmrc`), Yarn 1.x, and Docker.
 
 ```bash
 git clone git@github.com:CarpoolNU/nucarpool.git

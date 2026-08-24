@@ -20,10 +20,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
-      - name: install node v20
+      - name: install node
         uses: actions/setup-node@v7.0.0
         with:
-          node-version: 20
+          node-version-file: .nvmrc
       # Intentionally no `yarn install`: the check is dependency-free, so this
       # job stays fast and keeps reporting even when installation is broken.
       - name: check .env.example against the app's env contract
