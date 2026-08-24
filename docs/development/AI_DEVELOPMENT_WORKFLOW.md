@@ -80,7 +80,7 @@ Layer-specific docs: [`src/server/router/README.md`](../../src/server/router/REA
 
 ## 4. First-time setup
 
-Prerequisites: Node 20 (CI uses 20), Docker, Yarn Classic 1.x, git.
+Prerequisites: Node 22 (pinned in `.nvmrc`, which CI and `engines.node` both follow), Docker, Yarn Classic 1.x, git.
 
 ```bash
 git clone <repo-url> && cd nucarpool
@@ -431,7 +431,8 @@ enforcement by GitHub. See [§17](#17-known-limitations-and-teamadmin-responsibi
 ## 14. CI behavior
 
 Current workflows in [`.github/workflows/`](../../.github/workflows/). The five checks all run
-on Node 20; `auto-comment.yml` is not a check and runs no Node of its own:
+on the Node version in [`.nvmrc`](../../.nvmrc) (22); `auto-comment.yml` is not a check and runs
+no Node of its own:
 
 | Workflow                                                       | Trigger                            | Runs                                                                    |
 | -------------------------------------------------------------- | ---------------------------------- | ----------------------------------------------------------------------- |
