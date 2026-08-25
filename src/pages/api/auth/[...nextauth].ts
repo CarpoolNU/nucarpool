@@ -61,8 +61,13 @@ export const authOptions: NextAuthOptions = {
   },
   adapter: CustomPrismaAdapter(prisma),
 
+  // Google is a staging-only provider: production is Northeastern SSO only.
+  // Read through the validated environment rather than `process.env` so an
+  // unrecognised value cannot quietly fall through to the Azure-only branch —
+  // or, worse, a stray "staging" in production silently open Google sign-in to
+  // anyone with a Google account (SCRUM-247).
   providers:
-    process.env.NEXT_PUBLIC_ENV === "staging"
+    serverEnv.NEXT_PUBLIC_ENV === "staging"
       ? [
           GoogleProvider({
             clientId: serverEnv.GOOGLE_CLIENT_ID,

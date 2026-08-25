@@ -37,6 +37,26 @@ jest.mock("@aws-sdk/s3-request-presigner", () => ({
   getSignedUrl: (...args: unknown[]) => mockGetSignedUrl(...args),
 }));
 
+/**
+ * `NEXT_PUBLIC_ENV` is now validated against an allow-list at import time
+ * (SCRUM-247), so this suite mocks the env module rather than assigning to
+ * `process.env` mid-run: envsafe reads the variable once, when the module first
+ * loads, and a later assignment would not be seen. It also means the value has
+ * to be a real one — the previous `"test-env"` is not a deployment.
+ */
+const DEPLOY_ENV = "staging";
+
+// Read through a getter, not a plain property: `jest.mock` is hoisted above the
+// `const` above, so the factory cannot capture it eagerly — but the getter body
+// does not run until `uploadToS3` reads the value, long after both are defined.
+jest.mock("./env/browser", () => ({
+  browserEnv: {
+    get NEXT_PUBLIC_ENV() {
+      return DEPLOY_ENV;
+    },
+  },
+}));
+
 import { GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import {
   PRESIGNED_DOWNLOAD_EXPIRY_SECONDS,
@@ -61,7 +81,6 @@ let errorSpy: jest.SpyInstance;
 
 beforeEach(() => {
   jest.clearAllMocks();
-  process.env.NEXT_PUBLIC_ENV = "test-env";
   errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -78,11 +97,11 @@ describe("getPresignedImageUrl", () => {
 
     expect(HeadObjectCommand).toHaveBeenCalledWith({
       Bucket: "carpoolnubucket",
-      Key: `profile-pictures/test-env/${USER_ID}`,
+      Key: `profile-pictures/${DEPLOY_ENV}/${USER_ID}`,
     });
     expect(GetObjectCommand).toHaveBeenCalledWith({
       Bucket: "carpoolnubucket",
-      Key: `profile-pictures/test-env/${USER_ID}`,
+      Key: `profile-pictures/${DEPLOY_ENV}/${USER_ID}`,
     });
     expect(errorSpy).not.toHaveBeenCalled();
   });

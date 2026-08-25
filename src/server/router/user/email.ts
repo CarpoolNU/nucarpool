@@ -2,6 +2,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { router, protectedRouter } from "../createRouter";
 import { generateEmailParams } from "../../../utils/email";
+import { browserEnv } from "../../../utils/env/browser";
 import { SendTemplatedEmailCommand } from "@aws-sdk/client-ses";
 import type { PrismaClient } from "@prisma/client";
 
@@ -66,7 +67,7 @@ type Party = { id: string; name: string; email: string };
  */
 const assertDeliverable = (email: string) => {
   if (
-    process.env.NEXT_PUBLIC_ENV === "staging" &&
+    browserEnv.NEXT_PUBLIC_ENV === "staging" &&
     !email.toLowerCase().endsWith("@gmail.com")
   ) {
     throw new TRPCError({
