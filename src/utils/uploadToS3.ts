@@ -10,7 +10,7 @@ import { browserEnv } from "./env/browser";
 
 // Create an S3 client instance
 const s3Client = new S3Client({
-  region: "us-east-2",
+  region: serverEnv.S3_REGION,
   credentials: {
     accessKeyId: serverEnv.AWS_ACCESS_KEY_ID,
     secretAccessKey: serverEnv.AWS_SECRET_ACCESS_KEY,
@@ -23,7 +23,7 @@ export async function generatePresignedUrl(
 ) {
   const build = browserEnv.NEXT_PUBLIC_ENV;
   const command = new PutObjectCommand({
-    Bucket: "carpoolnubucket",
+    Bucket: serverEnv.S3_BUCKET_NAME,
     Key: `profile-pictures/${build}/${fileName}`,
     ContentType: contentType,
   });
@@ -80,7 +80,7 @@ export async function getPresignedImageUrl(fileName: string) {
   try {
     // Check if the object exists
     await s3Client.send(
-      new HeadObjectCommand({ Bucket: "carpoolnubucket", Key: key }),
+      new HeadObjectCommand({ Bucket: serverEnv.S3_BUCKET_NAME, Key: key }),
     );
   } catch (error) {
     if (!isObjectNotFound(error)) {
@@ -92,7 +92,7 @@ export async function getPresignedImageUrl(fileName: string) {
   try {
     // If the object exists, generate a pre-signed URL
     const command = new GetObjectCommand({
-      Bucket: "carpoolnubucket",
+      Bucket: serverEnv.S3_BUCKET_NAME,
       Key: key,
     });
     return await getSignedUrl(s3Client, command, { expiresIn: expiry });

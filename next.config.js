@@ -1,5 +1,19 @@
 /** @type {import('next').NextConfig} */
 
+const { resolveS3Config } = require("./src/utils/env/s3Config");
+
+/**
+ * The profile-picture bucket, resolved once and used for both the CSP `img-src`
+ * entry and the `images.remotePatterns` host below (SCRUM-282). Those were two
+ * separate copies of the same literal, and an image host the CSP did not permit
+ * would have been a report-only violation nobody noticed until enforcement.
+ *
+ * This runs outside envsafe — `next.config.js` is loaded before any TypeScript
+ * exists — but reads the same variables and the same defaults that
+ * `serverEnv` validates, from `s3Config.js`.
+ */
+const { host: s3Host } = resolveS3Config();
+
 /**
  * Content Security Policy (SCRUM-257).
  *
@@ -32,7 +46,7 @@ const contentSecurityPolicy = [
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' data: https://fonts.gstatic.com",
-  "img-src 'self' data: blob: https://lh3.googleusercontent.com https://carpoolnubucket.s3.us-east-2.amazonaws.com https://*.mapbox.com",
+  `img-src 'self' data: blob: https://lh3.googleusercontent.com https://${s3Host} https://*.mapbox.com`,
   "connect-src 'self' https://*.mapbox.com https://*.mixpanel.com https://*.pusher.com wss://*.pusher.com",
   "worker-src 'self' blob:",
   "child-src 'self' blob:",
@@ -74,7 +88,7 @@ const nextConfig = {
       },
       {
         protocol: "https",
-        hostname: "carpoolnubucket.s3.us-east-2.amazonaws.com",
+        hostname: s3Host,
         pathname: "/**",
       },
     ],
