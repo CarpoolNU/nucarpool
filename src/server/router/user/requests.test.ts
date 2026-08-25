@@ -4,6 +4,7 @@ import type { Session } from "next-auth";
 import { appRouter } from "../index";
 import type { Context } from "../context";
 import { MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
+import { cloneState, withTransaction } from "../transactionMock";
 
 /**
  * Authorization tests for the `user.requests` router (SCRUM-221).
@@ -124,6 +125,23 @@ const buildRequestsDb = (seed: RequestRow[] = []) => {
       requestId: data.requestId,
     };
     conversations.set(row.id, row);
+
+    // `requests.create` writes the conversation and its first message as one
+    // nested create (SCRUM-233), so the mock has to honour the nested form or
+    // the first message would silently vanish here and nowhere else.
+    if (data.messages?.create) {
+      const nested = Array.isArray(data.messages.create)
+        ? data.messages.create
+        : [data.messages.create];
+      for (const message of nested) {
+        messages.push({
+          conversationId: row.id,
+          content: message.content,
+          userId: message.userId,
+        });
+      }
+    }
+
     return { ...row };
   });
 
@@ -136,8 +154,10 @@ const buildRequestsDb = (seed: RequestRow[] = []) => {
     return { id: `message-${messages.length}`, ...data };
   });
 
-  return {
-    prisma: {
+  // `requests.create` commits its four writes as one transaction (SCRUM-233),
+  // so the mock rolls back on a throw rather than merely passing through.
+  const prisma = withTransaction(
+    {
       request: { findMany, create, findUnique, update, delete: destroy },
       conversation: {
         findUnique: conversationFindUnique,
@@ -145,6 +165,23 @@ const buildRequestsDb = (seed: RequestRow[] = []) => {
       },
       message: { create: messageCreate },
     },
+    () => ({
+      requests: cloneState(requests),
+      conversations: cloneState(conversations),
+      messages: cloneState(messages),
+    }),
+    (before) => {
+      requests.clear();
+      for (const [id, row] of before.requests) requests.set(id, row);
+      conversations.clear();
+      for (const [id, row] of before.conversations) conversations.set(id, row);
+      messages.length = 0;
+      messages.push(...before.messages);
+    },
+  );
+
+  return {
+    prisma,
     /** Every surviving request row, ordered by id for stable assertions. */
     rows: () => [...requests.values()].sort((a, b) => a.id.localeCompare(b.id)),
     messages: () => [...messages],
@@ -516,5 +553,60 @@ describe("user.requests.create — the opening message is bounded (SCRUM-231)", 
     expect(db.rows()).toEqual([
       expect.objectContaining({ fromUserId: USER_A, toUserId: USER_B }),
     ]);
+  });
+});
+
+/**
+ * Atomicity of `user.requests.create` (SCRUM-233).
+ *
+ * A request, its conversation, the link between them and the first message used
+ * to be four independent awaits, so a failure part-way through could leave a
+ * request with no conversation, or a conversation never linked back to its
+ * request. `relationMode = "prisma"` rejects neither, and nothing reconciles
+ * them afterwards, so the half-built thread persisted.
+ */
+describe("user.requests.create is atomic", () => {
+  it("leaves no request, conversation or message when the link write fails", async () => {
+    const db = buildRequestsDb();
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    // The request and the conversation-with-message are already written by the
+    // time the link is set, so this is the failure that used to survive.
+    db.update.mockImplementationOnce(async () => {
+      throw new Error("connection lost");
+    });
+
+    await expect(
+      caller.user.requests.create({ toId: USER_B, message: "hello" }),
+    ).rejects.toThrow("connection lost");
+
+    expect(db.rows()).toEqual([]);
+    expect(db.messages()).toEqual([]);
+  });
+
+  it("writes the opening message exactly once on the happy path", async () => {
+    // The conversation and its first message are now a single nested create.
+    // A nested form the mock did not understand would silently drop the
+    // message, so this pins that it still arrives — and only once.
+    const db = buildRequestsDb();
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await caller.user.requests.create({ toId: USER_B, message: "hello" });
+
+    expect(db.messages()).toEqual([
+      expect.objectContaining({ content: "hello", userId: USER_A }),
+    ]);
+  });
+
+  it("no longer looks for a conversation that cannot exist yet", async () => {
+    // The request is created a statement earlier with a fresh cuid, so nothing
+    // could reference it: the old `conversation.findUnique({ requestId })` could
+    // only ever return null, making the false branch of its `if` unreachable.
+    const db = buildRequestsDb();
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await caller.user.requests.create({ toId: USER_B, message: "hello" });
+
+    expect(db.prisma.conversation.findUnique).not.toHaveBeenCalled();
   });
 });

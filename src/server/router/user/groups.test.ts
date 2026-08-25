@@ -3,6 +3,7 @@ import type { Session } from "next-auth";
 import { appRouter } from "../index";
 import { MAX_SEATS_AVAILABLE } from "../../../utils/carpoolSeats";
 import type { Context } from "../context";
+import { cloneState, withTransaction } from "../transactionMock";
 
 /**
  * Authorization tests for the carpool groups router (SCRUM-220).
@@ -180,8 +181,28 @@ const buildGroupsDb = (opts?: {
     }),
   };
 
+  // The groups mutations wrap their writes in `prisma.$transaction`
+  // (SCRUM-233), so the mock rolls back on a throw. Restoring in place matters:
+  // the delegates above close over these exact references.
+  const prisma = withTransaction(
+    { carpoolSearch, carpoolGroup, request },
+    () => ({
+      searches: cloneState(searches),
+      groups: cloneState(groups),
+      requests: cloneState(requests),
+    }),
+    (before) => {
+      searches.length = 0;
+      searches.push(...before.searches);
+      groups.clear();
+      for (const [id, row] of before.groups) groups.set(id, row);
+      requests.length = 0;
+      requests.push(...before.requests);
+    },
+  );
+
   return {
-    prisma: { carpoolSearch, carpoolGroup, request },
+    prisma,
     groupIds: () => [...groups.keys()].sort(),
     seatsOf: (userId: string) =>
       searches.find((r) => r.userId === userId)?.seatsAvail,
@@ -909,5 +930,162 @@ describe("seat accounting — normal joins and leaves", () => {
     const seats = db.seatsOf(DRIVER)!;
     expect(seats).toBeGreaterThanOrEqual(0);
     expect(seats).toBeLessThanOrEqual(MAX_SEATS_AVAILABLE);
+  });
+});
+
+/**
+ * Atomicity of the group mutations (SCRUM-233).
+ *
+ * Each of these writes to two or three tables. They used to be independent
+ * awaits, so a failure part-way through committed the earlier writes and
+ * abandoned the rest — and because `relationMode = "prisma"` enforces no
+ * foreign keys, nothing rejected the result and no job ever reconciled it.
+ *
+ * Every test here forces one write in the middle of a sequence to fail and then
+ * asserts the database looks exactly as it did beforehand. The mock's
+ * `$transaction` rolls back on a throw, so a procedure that stopped using it
+ * would fail these rather than quietly leaking again.
+ */
+describe("group mutations are atomic", () => {
+  const twoUnlinkedUsers = () => [
+    {
+      id: "s-driver",
+      userId: DRIVER,
+      role: Role.DRIVER,
+      carpoolId: null,
+      seatsAvail: 3,
+      groupMessage: "",
+    },
+    {
+      id: "s-rider-1",
+      userId: RIDER_1,
+      role: Role.RIDER,
+      carpoolId: null,
+      seatsAvail: 0,
+      groupMessage: "",
+    },
+  ];
+
+  /**
+   * Fails the nth call to a mocked delegate, letting the earlier ones through.
+   *
+   * `mockImplementationOnce` is not enough here: `reserveSeat` is itself a
+   * `carpoolSearch.updateMany`, so failing the *first* call stops at the
+   * reservation and the test proves nothing — the seat was never spent and no
+   * group was ever built. The interesting failures are the later writes, once
+   * there is partial state to leave behind.
+   */
+  const failOnCall = (mock: jest.Mock, callNumber: number) => {
+    const real = mock.getMockImplementation()!;
+    let calls = 0;
+    mock.mockImplementation(async (args: any) => {
+      calls += 1;
+      if (calls === callNumber) throw new Error("connection lost");
+      return real(args);
+    });
+  };
+
+  it("create leaves no group and no spent seat when linking the rider fails", async () => {
+    const db = buildGroupsDb({
+      searches: twoUnlinkedUsers(),
+      groups: [],
+      requests: [[DRIVER, RIDER_1]],
+    });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    // updateMany #1 reserves the seat and #2 links the driver, so failing #3
+    // means the seat is already spent, the group already exists and the driver
+    // is already linked. That is the state that used to survive.
+    failOnCall(db.carpoolSearch.updateMany, 3);
+
+    await expect(
+      caller.user.groups.create({ driverId: DRIVER, riderId: RIDER_1 }),
+    ).rejects.toThrow("connection lost");
+
+    expect(db.groupIds()).toEqual([]);
+    expect(db.seatsOf(DRIVER)).toBe(3);
+    expect(db.carpoolIdOf(DRIVER)).toBeNull();
+    expect(db.carpoolIdOf(RIDER_1)).toBeNull();
+  });
+
+  it("delete leaves the group intact rather than orphaning it", async () => {
+    const db = buildGroupsDb();
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    // Members are detached before the group row is removed. Failing on the
+    // removal is what used to leave a group nobody pointed at — and one the
+    // driver could no longer delete, because the membership check would no
+    // longer find them in it.
+    db.carpoolGroup.delete.mockImplementationOnce(async () => {
+      throw new Error("connection lost");
+    });
+
+    await expect(caller.user.groups.delete({ groupId: GROUP })).rejects.toThrow(
+      "connection lost",
+    );
+
+    expect(db.groupIds()).toEqual([GROUP]);
+    expect(db.carpoolIdOf(DRIVER)).toBe(GROUP);
+    expect(db.carpoolIdOf(RIDER_1)).toBe(GROUP);
+    expect(db.carpoolIdOf(RIDER_2)).toBe(GROUP);
+
+    // The driver is still the driver of a group they can still dissolve, which
+    // is the property the un-transactioned version destroyed.
+    await expect(
+      caller.user.groups.delete({ groupId: GROUP }),
+    ).resolves.toBeTruthy();
+    expect(db.groupIds()).toEqual([]);
+  });
+
+  it("edit-add returns the seat when linking the rider fails", async () => {
+    // Joining needs a request between the two (SCRUM-220), so the outsider
+    // being added has one here.
+    const db = buildGroupsDb({
+      requests: [
+        [DRIVER, RIDER_1],
+        [DRIVER, OUTSIDER],
+      ],
+    });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+    const seatsBefore = db.seatsOf(DRIVER)!;
+
+    // #1 is the reservation, #2 links the rider — so fail #2, with the seat
+    // already taken.
+    failOnCall(db.carpoolSearch.updateMany, 2);
+
+    await expect(
+      caller.user.groups.edit({
+        driverId: DRIVER,
+        riderId: OUTSIDER,
+        groupId: GROUP,
+        add: true,
+      }),
+    ).rejects.toThrow("connection lost");
+
+    expect(db.seatsOf(DRIVER)).toBe(seatsBefore);
+    expect(db.carpoolIdOf(OUTSIDER)).toBeNull();
+  });
+
+  it("edit-remove keeps the rider in the group when crediting the seat fails", async () => {
+    const db = buildGroupsDb();
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+    const seatsBefore = db.seatsOf(DRIVER)!;
+
+    // Release is the last write, after the rider has already been detached.
+    db.carpoolSearch.update.mockImplementationOnce(async () => {
+      throw new Error("connection lost");
+    });
+
+    await expect(
+      caller.user.groups.edit({
+        driverId: DRIVER,
+        riderId: RIDER_1,
+        groupId: GROUP,
+        add: false,
+      }),
+    ).rejects.toThrow("connection lost");
+
+    expect(db.carpoolIdOf(RIDER_1)).toBe(GROUP);
+    expect(db.seatsOf(DRIVER)).toBe(seatsBefore);
   });
 });

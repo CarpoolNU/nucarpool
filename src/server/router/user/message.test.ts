@@ -6,6 +6,7 @@ import {
   notificationChannel,
 } from "../../../utils/pusherChannels";
 import { MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
+import { cloneState, withTransaction } from "../transactionMock";
 
 /**
  * Correctness tests for `user.messages.sendMessage` (SCRUM-230).
@@ -66,7 +67,7 @@ const buildMessageDb = (opts?: {
 
   let linkedConversationId: string | null = conversation?.id ?? null;
 
-  const prisma = {
+  const delegates = {
     request: {
       findUnique: jest.fn(async ({ where }: any) =>
         request && request.id === where.id ? { ...request } : null,
@@ -98,6 +99,25 @@ const buildMessageDb = (opts?: {
       }),
     },
   };
+
+  // `sendMessage` repairs a missing conversation and writes the message as one
+  // transaction (SCRUM-233). `conversation` and `linkedConversationId` are
+  // rebound rather than mutated, so restoring them is a plain assignment here
+  // rather than an in-place edit through a shared reference.
+  const prisma = withTransaction(
+    delegates,
+    () => ({
+      conversation: cloneState(conversation),
+      linkedConversationId,
+      messages: cloneState(messages),
+    }),
+    (before) => {
+      conversation = before.conversation;
+      linkedConversationId = before.linkedConversationId;
+      messages.length = 0;
+      messages.push(...before.messages);
+    },
+  );
 
   return {
     prisma,
@@ -473,5 +493,60 @@ describe("sendMessage — content is bounded by its column (SCRUM-231)", () => {
     expect(db.messages()).toEqual([
       expect.objectContaining({ content: atLimit }),
     ]);
+  });
+});
+
+/**
+ * Atomicity of `sendMessage` (SCRUM-233).
+ *
+ * Repairing a missing conversation takes two writes, because the link lives on
+ * both `Conversation.requestId` and `Request.conversationId`. Untransactioned,
+ * those plus the message were three independent awaits, so a failure could
+ * create and link a conversation and then lose the text the user had typed.
+ */
+describe("sendMessage is atomic", () => {
+  it("leaves no conversation behind when writing the message fails", async () => {
+    // No conversation yet, so this exercises the repair path added by
+    // SCRUM-230 — the one that writes twice before the message.
+    const db = buildMessageDb({ conversation: null });
+    const { caller } = callerFor(sessionFor(SENDER), db);
+
+    db.prisma.message.create.mockImplementationOnce(async () => {
+      throw new Error("connection lost");
+    });
+
+    await expect(
+      caller.user.messages.sendMessage({
+        requestId: REQUEST_ID,
+        content: "hello",
+      }),
+    ).rejects.toThrow("connection lost");
+
+    expect(db.conversationId()).toBeNull();
+    expect(db.linkedConversationId()).toBeNull();
+    expect(db.messages()).toEqual([]);
+  });
+
+  it("broadcasts nothing when the write fails", async () => {
+    // Pusher sits outside the transaction on purpose: an event cannot be rolled
+    // back. That is only safe while it stays strictly downstream of the write,
+    // which is what this pins — move a trigger above the transaction and this
+    // fails. Note it asserts ordering, not rollback: the throw short-circuits
+    // before Pusher either way.
+    const db = buildMessageDb({ conversation: null });
+    const { caller } = callerFor(sessionFor(SENDER), db);
+
+    db.prisma.message.create.mockImplementationOnce(async () => {
+      throw new Error("connection lost");
+    });
+
+    await expect(
+      caller.user.messages.sendMessage({
+        requestId: REQUEST_ID,
+        content: "hello",
+      }),
+    ).rejects.toThrow("connection lost");
+
+    expect(triggeredChannels()).toEqual([]);
   });
 });
