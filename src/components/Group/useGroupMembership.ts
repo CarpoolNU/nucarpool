@@ -25,9 +25,9 @@ import { PublicUser } from "../../utils/types";
  *     `carpoolId` was missing (unhandled, no feedback); mobile silently did
  *     nothing. Both now surface an error toast.
  *
- * Toasts go through `react-toastify`. The desktop copy used `react-toast-
- * notifications` for the same three events, which is the older of the two
- * libraries in this repo and the less used.
+ * Toasts go through `react-toastify`. The desktop copy used a second toast
+ * library for the same three events; that one has since been removed, so
+ * `react-toastify` is now the only one (SCRUM-275).
  */
 
 type UseGroupMembershipArgs = {
