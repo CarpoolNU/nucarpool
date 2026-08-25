@@ -1251,7 +1251,6 @@ const Home: NextPage<any> = () => {
                       disabled:
                         user.status === "INACTIVE" && user.role !== "VIEWER",
                     }}
-                    isMobile={true}
                     onViewGroupRoute={onViewGroupRoute}
                   />
                 )}

@@ -20,6 +20,7 @@ import {
   releasePusherClient,
 } from "../utils/pusherClient";
 import { PublicUser } from "../utils/types";
+import useIsMobile from "../utils/useIsMobile";
 import {
   HiOutlineMap,
   HiOutlineChatAlt2,
@@ -133,7 +134,6 @@ interface HeaderProps {
   signIn?: boolean;
   profile?: boolean;
   checkChanges?: () => void;
-  isMobile?: boolean;
   onViewGroupRoute?: (driver: PublicUser, riders: PublicUser[]) => void;
 }
 
@@ -151,31 +151,16 @@ const Header = (props: HeaderProps) => {
     useState(0);
   const [displayGroup, setDisplayGroup] = useState<boolean>(false);
 
-  // Check if we're explicitly passed isMobile or detect it ourselves
-  const [internalIsMobile, setInternalIsMobile] = useState(false);
-  const isMobile =
-    props.isMobile !== undefined ? props.isMobile : internalIsMobile;
+  // One shared definition, rather than a private `<= 768` check plus an optional
+  // prop that let a caller disagree with it. `index.tsx` passed `isMobile={true}`
+  // for its mobile instance and nothing for its desktop instance, so the desktop
+  // header measured 768 while the page around it measured 640 - and every
+  // viewport in between rendered the desktop layout with the mobile bottom
+  // navigation and no usable header (SCRUM-237).
+  const isMobile = useIsMobile();
 
   // Track if user is coming from profile page
   const isComingFromProfile = useRef(false);
-
-  // Only run our own detection if isMobile isn't passed as a prop
-  useEffect(() => {
-    if (props.isMobile !== undefined) return;
-
-    const checkIfMobile = () => {
-      setInternalIsMobile(window.innerWidth <= 768);
-    };
-
-    // Initial check
-    checkIfMobile();
-
-    // Add event listener for window resize
-    window.addEventListener("resize", checkIfMobile);
-
-    // Cleanup
-    return () => window.removeEventListener("resize", checkIfMobile);
-  }, [props.isMobile]);
 
   // `props.data` is an object literal rebuilt by `Home` on every render — every
   // filter change, query settle, map event and hover — so depending on it made
