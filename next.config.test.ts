@@ -137,6 +137,53 @@ describe("security headers are sent on every route", () => {
   });
 });
 
+describe("violation reports have somewhere to go", () => {
+  /**
+   * SCRUM-283. A report-only policy with no reporting destination is inert: it
+   * blocks nothing and tells nobody, so the enforcement decision has no data
+   * behind it. These pin the two halves of the wiring, which are easy to break
+   * independently — `report-to` naming a group no header defines fails silently,
+   * and so does a `Reporting-Endpoints` group nothing refers to.
+   */
+  const REPORT_PATH = "/api/csp-report";
+
+  it("names the collector through the legacy report-uri directive", async () => {
+    // Deprecated, but still the only form Safari and Firefox implement, so
+    // dropping it would lose reports from a large share of real traffic.
+    expect((await cspDirectives()).get("report-uri")).toBe(REPORT_PATH);
+  });
+
+  it("names a reporting group that the Reporting-Endpoints header defines", async () => {
+    const group = (await cspDirectives()).get("report-to");
+    const endpoints = (await headerValue("Reporting-Endpoints"))!;
+
+    expect(group).toBeDefined();
+    // The group name is a free-form label; what matters is that the header
+    // actually defines the one the directive asks for.
+    expect(endpoints).toContain(`${group}="`);
+    expect(endpoints).toContain(REPORT_PATH);
+  });
+
+  it("points both forms at the same collector", async () => {
+    const directives = await cspDirectives();
+    const endpoints = (await headerValue("Reporting-Endpoints"))!;
+
+    // Two destinations that disagree would split the reports into two places
+    // depending on the reader's browser, which is worse than having one.
+    expect(endpoints).toContain(`"${directives.get("report-uri")}"`);
+  });
+
+  it("keeps the collector same-origin and relative", async () => {
+    // An absolute URL would have to hard-code a hostname, and the same build
+    // runs on preview, staging and production. A relative path resolves against
+    // whichever document reported.
+    const reportUri = (await cspDirectives()).get("report-uri")!;
+
+    expect(reportUri.startsWith("/")).toBe(true);
+    expect(reportUri).not.toContain("//");
+  });
+});
+
 describe("the CSP is still report-only", () => {
   it("ships as Report-Only and not as an enforcing policy", async () => {
     const keys = (await headersFor()).map((entry) => entry.key);

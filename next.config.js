@@ -15,6 +15,17 @@ const { resolveS3Config } = require("./src/utils/env/s3Config");
 const { host: s3Host } = resolveS3Config();
 
 /**
+ * Where the browser sends CSP violation reports (SCRUM-283).
+ *
+ * A relative path on purpose. Both `report-uri` and `Reporting-Endpoints`
+ * resolve their value against the document, so this reaches the app's own
+ * collector without the deployed hostname having to be known at build time —
+ * which it is not, since the same build runs on Amplify preview URLs, staging
+ * and production.
+ */
+const CSP_REPORT_PATH = "/api/csp-report";
+
+/**
  * Content Security Policy (SCRUM-257).
  *
  * Sent as `Content-Security-Policy-Report-Only` on purpose: violations are
@@ -54,6 +65,14 @@ const contentSecurityPolicy = [
   "base-uri 'self'",
   "form-action 'self'",
   "object-src 'none'",
+  // Both reporting forms, because browsers split on which they implement
+  // (SCRUM-283). `report-to` is the current standard and pairs with the
+  // `Reporting-Endpoints` header below; `report-uri` is deprecated but is still
+  // the only one Safari and Firefox support. They do not double-report: a
+  // browser that understands `report-to` ignores `report-uri` when both are
+  // present, which is exactly the precedence we want.
+  `report-uri ${CSP_REPORT_PATH}`,
+  "report-to csp-endpoint",
 ].join("; ");
 
 const securityHeaders = [
@@ -70,6 +89,13 @@ const securityHeaders = [
   {
     key: "Permissions-Policy",
     value: "camera=(), microphone=(), geolocation=()",
+  },
+  // Defines the `csp-endpoint` group that `report-to` above refers to
+  // (SCRUM-283). Without this header that directive names nothing and is
+  // silently inert, which is the failure mode SCRUM-283 was filed about.
+  {
+    key: "Reporting-Endpoints",
+    value: `csp-endpoint="${CSP_REPORT_PATH}"`,
   },
   { key: "Content-Security-Policy-Report-Only", value: contentSecurityPolicy },
 ];

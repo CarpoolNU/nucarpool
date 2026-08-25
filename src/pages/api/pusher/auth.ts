@@ -14,9 +14,10 @@ import { canSubscribe } from "../../../server/pusherChannelAuth";
  * subscription, which is what stops a client subscribing to a stranger's
  * conversation or notification feed.
  *
- * This is the only non-tRPC endpoint in the app. It has to be, because Pusher
- * defines the contract: a form-encoded POST of `socket_id` and `channel_name`,
- * answered with the signed payload.
+ * One of two non-tRPC endpoints in the app, alongside `api/csp-report.ts`, and
+ * for the same underlying reason: something outside this codebase defines the
+ * contract. Here it is Pusher, which requires a form-encoded POST of
+ * `socket_id` and `channel_name`, answered with the signed payload.
  */
 export default async function handler(
   req: NextApiRequest,
