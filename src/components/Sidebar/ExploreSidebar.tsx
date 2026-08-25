@@ -11,10 +11,14 @@ import { FaFilter } from "react-icons/fa6";
 import CustomSelect from "./CustomSelect";
 import { UserContext } from "../../utils/userContext";
 import useIsMobile from "../../utils/useIsMobile";
+import { QueryState } from "../../utils/queryState";
 
 interface ExploreSidebarProps {
   recs: EnhancedPublicUser[];
   favs: EnhancedPublicUser[];
+  /** Load state of each list, kept separate because the tab picks between them. */
+  recsState: QueryState;
+  favsState: QueryState;
   setFilters: React.Dispatch<React.SetStateAction<FiltersState>>;
   defaultFilters: FiltersState;
   setSort: React.Dispatch<React.SetStateAction<string>>;
@@ -147,6 +151,9 @@ const ExploreSidebar = (props: ExploreSidebarProps) => {
               curOption == "recommendations" ? props.recs : props.favs
             }
             subType={curOption}
+            loadState={
+              curOption == "recommendations" ? props.recsState : props.favsState
+            }
             disabled={props.disabled}
             onViewRouteClick={props.viewRoute}
             onCardClick={() => {}}

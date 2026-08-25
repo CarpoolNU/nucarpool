@@ -14,6 +14,7 @@ import { trpc } from "../../utils/trpc";
 import _ from "lodash";
 import { Request } from "@prisma/client";
 import React from "react";
+import { QueryState } from "../../utils/queryState";
 
 interface SidebarProps {
   sidebarType: HeaderOptions;
@@ -28,6 +29,9 @@ interface SidebarProps {
   favs: EnhancedPublicUser[];
   received: EnhancedPublicUser[];
   sent: EnhancedPublicUser[];
+  recsState: QueryState;
+  favsState: QueryState;
+  requestsState: QueryState;
   onViewRouteClick: (user: User, otherUser: PublicUser) => void;
   onUserSelect: (userId: string) => void;
   selectedUser: EnhancedPublicUser | null;
@@ -52,6 +56,8 @@ export const SidebarPage = (props: SidebarProps) => {
         defaultFilters={props.defaultFilters}
         recs={props.recs}
         favs={props.favs}
+        recsState={props.recsState}
+        favsState={props.favsState}
         disabled={disabled}
         viewRoute={props.onViewRouteClick}
         onViewRequest={props.onUserSelect}
@@ -64,6 +70,7 @@ export const SidebarPage = (props: SidebarProps) => {
       <RequestSidebar
         received={props.received.reverse()}
         sent={props.sent.reverse()}
+        requestsState={props.requestsState}
         disabled={disabled}
         viewRoute={props.onViewRouteClick}
         onUserSelect={props.onUserSelect}

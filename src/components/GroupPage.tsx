@@ -15,6 +15,7 @@ import {
   musicPreferenceOptions,
 } from "./Group/groupDetails";
 import { useGroupDetails } from "./Group/useGroupDetails";
+import { QueryError } from "./QueryError";
 
 /**
  * The "My Group" screen.
@@ -334,7 +335,8 @@ const GroupSection = ({
   onViewGroupRoute: (driver: PublicUser, riders: PublicUser[]) => void;
   onClose: () => void;
 }) => {
-  const { data: group } = trpc.user.groups.me.useQuery();
+  const groupQuery = trpc.user.groups.me.useQuery();
+  const { data: group } = groupQuery;
   const users = group?.users ?? [];
   const driver = users.find((user) => user.role === Role.DRIVER);
   const riders = users.filter((user) => user.role === Role.RIDER);
@@ -373,6 +375,36 @@ const GroupSection = ({
     onViewRoute,
     onClose,
   };
+
+  // The group tab gets the same three states as the sidebar lists (SCRUM-241).
+  // Without this, a failure and a group that has been deleted underneath a stale
+  // `carpoolId` both left `GroupMembers` rendering a spinner with no driver to
+  // find, indefinitely.
+  if (groupQuery.isError) {
+    return (
+      <QueryError
+        variant="page"
+        subject="your group"
+        onRetry={() => {
+          void groupQuery.refetch();
+        }}
+      />
+    );
+  }
+
+  if (groupQuery.isLoading) {
+    return <Spinner />;
+  }
+
+  // Settled, and there is genuinely no group - the membership pointed at a row
+  // that is gone. Delegate to the real no-group container rather than rendering
+  // its view here: that container owns the `user.me` query and the save path
+  // that writes to the driver's own message, so the form on this screen still
+  // works. Rendering the view directly would leave a Submit button wired to
+  // nothing.
+  if (!group) {
+    return <NoGroupSection role={curUser.role} variant={variant} />;
+  }
 
   return variant === "mobile" ? (
     <MobileGroupView
