@@ -117,14 +117,16 @@ const ExploreSidebar = (props: ExploreSidebarProps) => {
                 className="!w-1/2"
               />
               <button
+                type="button"
                 className={`rounded-full p-3 ${
                   filtersActive
                     ? "bg-northeastern-red text-white"
                     : "bg-stone-100 text-black"
                 }`}
                 onClick={() => setFiltersOpen(true)}
+                aria-label="Open filters"
               >
-                <FaFilter className="text-xl " />
+                <FaFilter className="text-xl " aria-hidden="true" />
               </button>
             </div>
           )}

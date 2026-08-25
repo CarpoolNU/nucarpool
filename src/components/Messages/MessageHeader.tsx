@@ -37,13 +37,19 @@ const MessageHeader = ({
   if (ismobile) {
     return (
       <div className="relative flex items-center border-b bg-white py-4">
-        <button className="absolute left-4 text-gray-600" onClick={handleClose}>
+        <button
+          type="button"
+          className="absolute left-4 text-gray-600"
+          onClick={handleClose}
+          aria-label="Back to conversations"
+        >
           <svg
             xmlns="http://www.w3.org/2000/svg"
             className="h-6 w-6"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
+            aria-hidden="true"
           >
             <path
               strokeLinecap="round"

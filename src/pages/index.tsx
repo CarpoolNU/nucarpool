@@ -785,7 +785,7 @@ const Home: NextPage<any> = () => {
       newMap.on("load", () => {
         newMap.setMaxZoom(13);
         setMapState(newMap);
-        addMapEvents(newMap, user, setPopupUsers);
+        addMapEvents(newMap, setPopupUsers);
 
         // Initial setting of user and company locations
         if (user.role !== "VIEWER") {
@@ -1049,7 +1049,7 @@ const Home: NextPage<any> = () => {
             <title>CarpoolNU</title>
             <meta
               name="viewport"
-              content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+              content="width=device-width, initial-scale=1"
             />
           </Head>
 
@@ -1079,17 +1079,22 @@ const Home: NextPage<any> = () => {
               {isMobile &&
                 (sidebarType === "explore" || sidebarType === "requests") &&
                 mobileSelectedUserID === null && (
-                  <div
+                  <button
+                    type="button"
                     onClick={handleSidebarToggle}
-                    className={`absolute left-1/2 z-30 -translate-x-1/2 transform cursor-pointer transition-all duration-300 ${
+                    aria-expanded={!isSidebarCollapsed}
+                    aria-label={
+                      isSidebarCollapsed ? "Show the list" : "Hide the list"
+                    }
+                    className={`absolute left-1/2 z-30 -translate-x-1/2 transform cursor-pointer transition-all duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-northeastern-red ${
                       isSidebarCollapsed
                         ? "bottom-16"
                         : "bottom-[calc(100%-6rem)]"
                     }`}
                     style={{ padding: "12px 0" }}
                   >
-                    <div className="h-2 w-20 rounded-full bg-gray-500 shadow-sm transition-colors hover:bg-gray-600"></div>
-                  </div>
+                    <span className="block h-2 w-20 rounded-full bg-gray-500 shadow-sm transition-colors hover:bg-gray-600"></span>
+                  </button>
                 )}
               <div
                 ref={sidebarRef}
@@ -1122,6 +1127,7 @@ const Home: NextPage<any> = () => {
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         className="mr-1"
+                        aria-hidden="true"
                       >
                         <polyline points="15 18 9 12 15 6"></polyline>
                       </svg>
@@ -1159,10 +1165,17 @@ const Home: NextPage<any> = () => {
 
               {!isMobile && (
                 <button
+                  type="button"
                   className="absolute bottom-[150px] right-[8px] z-10 flex h-8 w-8 items-center justify-center rounded-md border-2 border-solid border-gray-300 bg-white shadow-sm hover:bg-gray-200"
-                  id="fly"
+                  aria-label="Recentre the map on your workplace"
+                  onClick={() =>
+                    mapState?.flyTo({
+                      center: [user.companyCoordLng, user.companyCoordLat],
+                      essential: true,
+                    })
+                  }
                 >
-                  <RiFocus3Line />
+                  <RiFocus3Line aria-hidden="true" />
                 </button>
               )}
               <div className="relative flex-auto">

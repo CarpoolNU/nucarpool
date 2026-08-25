@@ -370,6 +370,7 @@ const MobileNoGroupInfo = ({ role }: { role: Role }) => {
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
+            aria-hidden="true"
           >
             <path
               strokeLinecap="round"
@@ -436,6 +437,7 @@ const MobileNoGroupInfo = ({ role }: { role: Role }) => {
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
+          aria-hidden="true"
         >
           <path
             strokeLinecap="round"
@@ -576,6 +578,7 @@ const MobileGroupInfo = ({
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
+              aria-hidden="true"
             >
               <path
                 strokeLinecap="round"
@@ -998,6 +1001,7 @@ const GroupInfo = ({
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
+                aria-hidden="true"
               >
                 <path
                   strokeLinecap="round"

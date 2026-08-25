@@ -1,10 +1,15 @@
 import { useContext, useState } from "react";
-import { EnhancedPublicUser, Message, PublicUser, User } from "../../utils/types";
+import {
+  EnhancedPublicUser,
+  Message,
+  PublicUser,
+  User,
+} from "../../utils/types";
 import { UserContext } from "../../utils/userContext";
 import { UserCard } from "./UserCard";
 import SentRequestModal from "../Modals/SentRequestModal";
 import { createPortal } from "react-dom";
-import React from 'react';
+import React from "react";
 
 interface SentCardProps {
   otherUser: EnhancedPublicUser;
@@ -21,7 +26,25 @@ export const SentCard = (props: SentCardProps): React.JSX.Element => {
 
   return (
     <>
-      <div onClick={props.onClick} className="cursor-pointer">
+      {/* Not a <button>: UserCard embeds a MUI <Rating>, and a button may not
+          contain other interactive controls. A roled, focusable region gives
+          keyboard users the same activation without that nesting (SCRUM-254).
+          No aria-label - the card's own text supplies the accessible name, so
+          this cannot leak a name that UserCard deliberately hides from
+          VIEWER-role users. */}
+      <div
+        role="button"
+        tabIndex={0}
+        aria-current={props.selectedUser?.id === props.otherUser.id}
+        onClick={props.onClick}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            props.onClick();
+          }
+        }}
+        className="cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-northeastern-red"
+      >
         <UserCard
           otherUser={props.otherUser}
           message={props.latestMessage?.content}

@@ -21,13 +21,21 @@ const FilterSection = ({
 }: FilterSectionProps) => (
   <div className="px-3 ">
     <div className="flex flex-shrink flex-col border-b border-gray-200 py-4">
-      <div
-        className="flex cursor-pointer items-center justify-between"
-        onClick={toggleOpen}
-      >
-        <h3 className="text-lg font-semibold">{title}</h3>
-        {isOpen ? <FaMinus /> : <FaPlus />}
-      </div>
+      <h3 className="text-lg font-semibold">
+        <button
+          type="button"
+          className="flex w-full cursor-pointer items-center justify-between text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-northeastern-red"
+          onClick={toggleOpen}
+          aria-expanded={isOpen}
+        >
+          {title}
+          {isOpen ? (
+            <FaMinus aria-hidden="true" />
+          ) : (
+            <FaPlus aria-hidden="true" />
+          )}
+        </button>
+      </h3>
       {isOpen && <div className="mt-3">{children}</div>}
     </div>
   </div>
@@ -139,8 +147,17 @@ const Filters = ({
           <h2 className="flex-1 self-end text-center text-xl font-semibold">
             Filters
           </h2>
-          <button className="flex-1  pt-1 " onClick={onClose}>
-            <FaTimes size={20} className="justify-self-end" />
+          <button
+            type="button"
+            className="flex-1  pt-1 "
+            onClick={onClose}
+            aria-label="Close filters"
+          >
+            <FaTimes
+              size={20}
+              className="justify-self-end"
+              aria-hidden="true"
+            />
           </button>
         </div>
       </div>
