@@ -81,7 +81,54 @@ This creates a migration, applies it to your local MySQL container, and regenera
 
 Avoid `prisma db push`. It applies changes without recording a migration, which leaves your local database out of sync with the committed migration history.
 
-Schema changes also require a PlanetScale deploy request before merging — a GitHub Action comments on any PR that touches `schema.prisma`.
+### What migrations are for here, and what they are not
+
+Two mechanisms exist, and they do different jobs. Conflating them is what caused SCRUM-227.
+
+|                                              | Mechanism                                                                                       | Applies to                                                    |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| **Migration history** (`prisma/migrations/`) | `prisma migrate dev` locally; replayed in CI                                                    | local databases, CI databases, any newly provisioned database |
+| **Shared schema promotion**                  | `prisma db push` to PlanetScale staging, then a **PlanetScale Deploy Request** staging → `main` | PlanetScale staging and `main`                                |
+
+**Migration files are not applied to PlanetScale.** Nothing in the deploy pipeline runs `prisma migrate deploy` — the Amplify build runs `prisma generate` and `next build`, and PlanetScale Deploy Requests diff branch schemas without reading `prisma/migrations/` or `_prisma_migrations`. Migration history exists so that _anything built from the repository_ reproduces `schema.prisma`: a fresh clone, a CI database, a restore, a new branch.
+
+That separation is deliberate and was reviewed in SCRUM-271. Adopting `prisma migrate deploy` for shared environments would need every shared branch baselined with `prisma migrate resolve --applied` for all existing migrations, and would bypass the online-schema-change and safe-migration behaviour a Deploy Request provides. It is not planned. If it is ever revisited, it needs its own ticket and a baselining plan.
+
+So a schema change is two commits' worth of work in two places:
+
+1. **In the repository** — edit `schema.prisma`, run `yarn db:schema`, commit the new folder under `prisma/migrations/`.
+2. **In PlanetScale** — push the schema to staging, then open a Deploy Request to promote staging → `main`. A GitHub Action comments a reminder on any PR that touches `schema.prisma`.
+
+Doing only the second is how `tutorial_completed` came to exist in every shared database while no migration created it, which meant a database built from migration history alone failed every `User` query with `P2022` — no sign-in and no account creation. See SCRUM-227.
+
+### CI enforces step 1
+
+The `schema` check ([`schema.yml`](../../../.github/workflows/schema.yml), SCRUM-271) replays the committed migration history into a throwaway MySQL 8.0 service container and fails if the result differs from `schema.prisma`:
+
+```bash
+prisma validate
+prisma migrate diff \
+  --from-migrations ./prisma/migrations \
+  --to-schema-datamodel ./prisma/schema.prisma \
+  --shadow-database-url "$SHADOW_DATABASE_URL" \
+  --exit-code
+```
+
+`--exit-code` makes it a gate: `0` no difference, `1` error, `2` differences found. It fails closed, so an unreachable shadow database is a red check rather than a false green.
+
+**If you run that command locally, point `--shadow-database-url` at a throwaway database.** `--from-migrations` _wipes_ whatever it is given, because that is where it replays the migrations. Never your development database.
+
+The check proves migration history matches `schema.prisma`. It says nothing about what PlanetScale contains — that is still step 2, and still a human decision.
+
+### `build:preview` remains a hazard
+
+```
+build:preview = prisma generate && echo "y" | prisma db push && next build && prisma db seed
+```
+
+Nothing invokes this script; every reference to it in the repository is a warning. It is worth knowing why it is dangerous anyway: `prisma db push` is step 2 and **has no host guard**, unlike `yarn seed`, which [`seedGuard.ts`](../../utils/seedGuard.ts) restricts to a localhost allowlist. Pointed at a shared database it would force-alter the schema successfully, and only the _seed_ at step 4 would be refused. The guard fires after the schema damage, not before it.
+
+Removing the script is tracked in SCRUM-249.
 
 ## Location ownership
 
