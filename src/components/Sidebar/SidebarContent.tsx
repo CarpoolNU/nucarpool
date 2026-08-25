@@ -15,10 +15,18 @@ import {
 } from "../../utils/latestMessage";
 import { UserContext } from "../../utils/userContext";
 import useIsMobile from "../../utils/useIsMobile";
+import { QueryState } from "../../utils/queryState";
+import { QueryError } from "../QueryError";
 
 interface SidebarContentProps {
   subType: string;
   userCardList: EnhancedPublicUser[];
+  /**
+   * Whether the list behind this tab loaded. Without it an empty
+   * `userCardList` meant three different things - loading, failed, and genuinely
+   * empty - and all three rendered the same "no results" copy (SCRUM-241).
+   */
+  loadState: QueryState;
   onViewRouteClick: (user: User, otherUser: PublicUser) => void;
   disabled: boolean;
   onCardClick: (userId: string) => void;
@@ -40,6 +48,24 @@ const emptyMessages = {
   sent: "You have no current outgoing requests. Send requests to other users through the recommendations sidebar!",
   received: "You have no current incoming requests. Hold tight!",
   all: "You have no incoming or outgoing requests. Send a request or hold tight!",
+};
+
+/** Completes "We could not load ..." in the error state. */
+const errorSubject = (card: string): string => {
+  switch (card) {
+    case "recommendations":
+      return "your recommendations";
+    case "favorites":
+      return "your favorites";
+    case "sent":
+      return "your sent requests";
+    case "received":
+      return "your received requests";
+    case "all":
+      return "your requests";
+    default:
+      return "this list";
+  }
 };
 
 const emptyMessage = (card: string, disabled: boolean): string => {
@@ -210,8 +236,23 @@ export const SidebarContent = (props: SidebarContentProps) => {
       <div
         className={`relative h-full ${isMobile && props.mobileSelectedUser === null ? "overflow-y-scroll" : isMobile && props.mobileSelectedUser !== null ? "overflow-hidden" : "overflow-y-scroll"} pb-32 scrollbar scrollbar-track-stone-100 scrollbar-thumb-busy-red scrollbar-track-rounded-full scrollbar-thumb-rounded-full`}
       >
-        {props.userCardList.length === 0 ||
-        (props.disabled && props.subType !== "favorites") ? (
+        {/* Order matters. Viewer mode comes first because it is a role, not a
+            load result - a VIEWER has no use for a retry on a list they cannot
+            act on. Then failure, then loading, and only then "nothing here". */}
+        {props.disabled && props.subType !== "favorites" ? (
+          <div className="m-4 text-center text-lg font-light">
+            {emptyMessage(props.subType, props.disabled)}
+          </div>
+        ) : props.loadState.status === "error" ? (
+          <QueryError
+            subject={errorSubject(props.subType)}
+            onRetry={props.loadState.retry}
+          />
+        ) : props.loadState.status === "loading" ? (
+          <div className="m-4 flex justify-center">
+            <Spinner />
+          </div>
+        ) : props.userCardList.length === 0 ? (
           <div className="m-4 text-center text-lg font-light">
             {emptyMessage(props.subType, props.disabled)}
           </div>

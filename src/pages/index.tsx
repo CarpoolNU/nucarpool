@@ -15,6 +15,8 @@ import WelcomeTutorial from "../components/WelcomeTutorial";
 import { UserContext } from "../utils/userContext";
 import _, { debounce } from "lodash";
 import { SidebarPage } from "../components/Sidebar/Sidebar";
+import { QueryError } from "../components/QueryError";
+import { toQueryState } from "../utils/queryState";
 import type {
   PublicUser,
   EnhancedPublicUser,
@@ -128,21 +130,34 @@ const Home: NextPage<any> = () => {
   const { data: geoJsonUsers } =
     trpc.mapbox.geoJsonUserList.useQuery(debouncedFilters);
 
-  const { data: user = null } = trpc.user.me.useQuery();
-  const { data: recommendations = [] } = trpc.user.recommendations.me.useQuery(
+  // Held as whole query objects rather than destructured to `data` alone: the
+  // error and loading states are what tell an empty list apart from a failed one
+  // (SCRUM-241).
+  const userQuery = trpc.user.me.useQuery();
+  const { data: user = null } = userQuery;
+
+  const recommendationsQuery = trpc.user.recommendations.me.useQuery(
     {
       sort: sort,
       filters: debouncedFilters,
     },
     { refetchOnMount: true },
   );
-  const { data: favorites = [] } = trpc.user.favorites.me.useQuery(undefined, {
+  const { data: recommendations = [] } = recommendationsQuery;
+
+  const favoritesQuery = trpc.user.favorites.me.useQuery(undefined, {
     refetchOnMount: true,
   });
+  const { data: favorites = [] } = favoritesQuery;
+
   const requestsQuery = trpc.user.requests.me.useQuery(undefined, {
     refetchOnMount: "always",
   });
   const { data: requests = { sent: [], received: [] } } = requestsQuery;
+
+  const recsState = toQueryState(recommendationsQuery);
+  const favsState = toQueryState(favoritesQuery);
+  const requestsState = toQueryState(requestsQuery);
   const utils = trpc.useContext();
 
   // Tutorial logic: Show tutorial if user is onboarded but hasn't completed tutorial
@@ -979,6 +994,21 @@ const Home: NextPage<any> = () => {
     );
   };
 
+  // A failed `user.me` used to leave `data` undefined behind this spinner
+  // forever, which was indistinguishable from the app being down and offered
+  // nothing to do about it (SCRUM-241).
+  if (userQuery.isError) {
+    return (
+      <QueryError
+        variant="page"
+        subject="your profile"
+        onRetry={() => {
+          void userQuery.refetch();
+        }}
+      />
+    );
+  }
+
   if (!user) {
     return <Spinner />;
   }
@@ -1150,6 +1180,9 @@ const Home: NextPage<any> = () => {
                     favs={enhancedFavs}
                     received={enhancedReceivedUsers}
                     sent={enhancedSentUsers}
+                    recsState={recsState}
+                    favsState={favsState}
+                    requestsState={requestsState}
                     onViewRouteClick={onViewRouteClick}
                     onUserSelect={handleUserSelect}
                     selectedUser={selectedUser}

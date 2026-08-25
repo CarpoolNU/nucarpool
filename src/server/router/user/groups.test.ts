@@ -216,6 +216,87 @@ const callerFor = (session: Session | null, db = buildGroupsDb()) => {
   return { caller: appRouter.createCaller(ctx), db };
 };
 
+/**
+ * `groups.me` and the states that are not failures (SCRUM-241).
+ *
+ * This query used to throw for two perfectly ordinary situations - NOT_FOUND
+ * with no CarpoolSearch row, BAD_REQUEST with no group - so the client could not
+ * tell "you are not in a group" from "the server is broken", and React Query
+ * retried each on the way to an error state. It also spread the result of a
+ * `findUnique` straight into its return value, so a membership pointing at a
+ * deleted group produced an object with members but no id.
+ */
+describe("user.groups.me — no group is not an error", () => {
+  it("returns the group for a member", async () => {
+    const { caller } = callerFor(sessionFor(DRIVER));
+
+    const group = await caller.user.groups.me();
+
+    expect(group).not.toBeNull();
+    expect(group?.id).toBe(GROUP);
+  });
+
+  it("returns null when the user is in no group", async () => {
+    const db = buildGroupsDb({
+      searches: [
+        {
+          id: "s-loner",
+          userId: OUTSIDER,
+          role: Role.RIDER,
+          carpoolId: null,
+          seatsAvail: 0,
+          groupMessage: "",
+        },
+      ],
+    });
+    const { caller } = callerFor(sessionFor(OUTSIDER), db);
+
+    await expect(caller.user.groups.me()).resolves.toBeNull();
+  });
+
+  it("returns null when the user has no CarpoolSearch row at all", async () => {
+    // A VIEWER, or an onboarding that was never finished.
+    const db = buildGroupsDb({ searches: [] });
+    const { caller } = callerFor(sessionFor(OUTSIDER), db);
+
+    await expect(caller.user.groups.me()).resolves.toBeNull();
+  });
+
+  it("returns null, not a group-shaped object, when the group row is gone", async () => {
+    // carpoolId still points at GROUP, but no such group exists any more.
+    const db = buildGroupsDb({ groups: [] });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    const group = await caller.user.groups.me();
+
+    expect(group).toBeNull();
+    // The bug this replaces: `{ ...null, users: [...] }` is a truthy object with
+    // members and no id, so every `group?.id` check downstream passed and then
+    // read undefined.
+    expect(group).not.toEqual(
+      expect.objectContaining({ users: expect.anything() }),
+    );
+  });
+
+  it("does not look for members when there is no group to look in", async () => {
+    const db = buildGroupsDb({ groups: [] });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await caller.user.groups.me();
+
+    expect(db.carpoolSearch.findMany).not.toHaveBeenCalled();
+  });
+
+  it("still rejects an anonymous caller", async () => {
+    const { caller, db } = callerFor(null);
+
+    await expect(caller.user.groups.me()).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+    expect(db.carpoolSearch.findFirst).not.toHaveBeenCalled();
+  });
+});
+
 describe("user.groups.delete — the driver dissolves the group", () => {
   it("lets the group's driver delete it", async () => {
     const { caller, db } = callerFor(sessionFor(DRIVER));

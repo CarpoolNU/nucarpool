@@ -2,9 +2,12 @@ import React, { useState } from "react";
 import { EnhancedPublicUser, PublicUser, User } from "../../utils/types";
 import { SidebarContent } from "./SidebarContent";
 import CustomSelect from "./CustomSelect";
+import { QueryState } from "../../utils/queryState";
 interface RequestSidebarProps {
   received: EnhancedPublicUser[];
   sent: EnhancedPublicUser[];
+  /** Both tabs come from the one `requests.me` query, so one state covers them. */
+  requestsState: QueryState;
   viewRoute: (user: User, otherUser: PublicUser) => void;
   disabled: boolean;
   onUserSelect: (userId: string) => void;
@@ -48,6 +51,7 @@ const RequestSidebar = (props: RequestSidebarProps) => {
               : props.received
         }
         subType={curOption}
+        loadState={props.requestsState}
         disabled={props.disabled}
         onViewRouteClick={props.viewRoute}
         onCardClick={handleCardClick}

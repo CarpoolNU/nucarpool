@@ -158,19 +158,14 @@ export const groupsRouter = router({
       where: { userId },
     });
 
-    // throws TRPCError if no user with ID exists
-    if (!carpoolSearch) {
-      throw new TRPCError({
-        code: "NOT_FOUND",
-        message: `No carpool search found for user ${userId}.`,
-      });
-    }
-
-    if (!carpoolSearch.carpoolId) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "User does not have a carpool group",
-      });
+    // Not being in a group is an ordinary state, not a failure, and so is not
+    // having a CarpoolSearch row yet - a VIEWER or a half-finished onboarding
+    // has neither. This used to throw BAD_REQUEST and NOT_FOUND respectively,
+    // which the client could not tell apart from the server being broken, and
+    // which React Query then retried three times on the way to an error state
+    // (SCRUM-241).
+    if (!carpoolSearch?.carpoolId) {
+      return null;
     }
 
     const group = await ctx.prisma.carpoolGroup.findUnique({
@@ -178,6 +173,14 @@ export const groupsRouter = router({
         id: carpoolSearch.carpoolId,
       },
     });
+
+    // The membership points at a group row that is gone. Returning early rather
+    // than falling through: the code below spread this value, so a null group
+    // produced `{ users: [...] }` with no id and no message - an object shaped
+    // enough like a group to pass type checks and then misbehave.
+    if (!group) {
+      return null;
+    }
 
     // get all CarpoolSearches that reference this group
     const memberCarpoolSearches = await ctx.prisma.carpoolSearch.findMany({
