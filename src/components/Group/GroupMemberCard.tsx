@@ -1,164 +1,207 @@
 import { Role } from "@prisma/client";
 import { PublicUser } from "../../utils/types";
-import { useContext } from "react";
+import { useContext, useState } from "react";
 import { UserContext } from "../../utils/userContext";
 import Spinner from "../Spinner";
-import _ from "lodash";
-import { trpc } from "../../utils/trpc";
-import { toast } from "react-toastify";
-import { TRPCClientError } from "@trpc/client";
-import { useToasts } from "react-toast-notifications";
+import { useGroupMembership } from "./useGroupMembership";
+
+/**
+ * The group member list and its rows, once (SCRUM-252).
+ *
+ * This replaces four components: `GroupMembers` / `GroupMemberCard` here and
+ * `MobileGroupMembers` / `MobileMemberCard` in `GroupPage.tsx`. All the mutation
+ * wiring moved to `useGroupMembership`; what is left is presentation.
+ *
+ * The destructive-action confirmation comes from the mobile card. The desktop
+ * list had none - "Delete Group" dissolved an entire carpool on a single click
+ * with no undo - so this is a deliberate behaviour change on desktop rather than
+ * a port of what was there.
+ */
 
 interface GroupMembersProps {
   users: PublicUser[];
-  onClose: () => void;
+  /**
+   * Called when the caller is no longer in the group. The desktop modal passes
+   * its close handler; the mobile page passes nothing.
+   */
+  onLeftGroup?: () => void;
 }
-export const GroupMembers = (props: GroupMembersProps) => {
+
+export const GroupMembers = ({ users, onLeftGroup }: GroupMembersProps) => {
   const curUser = useContext(UserContext);
-  const driver = props.users.find((user) => user.role === Role.DRIVER);
-  const riders = props.users.filter(
+  const driver = users.find((user) => user.role === Role.DRIVER);
+  const otherRiders = users.filter(
     (user) => user.id !== driver?.id && user.id !== curUser?.id,
   );
-  const utils = trpc.useContext();
-  const { addToast } = useToasts();
-
-  const { mutate: deleteGroup } = trpc.user.groups.delete.useMutation({
-    onError: (error: any) => {
-      toast.error(`Something went wrong: ${error.message}`);
-    },
-    onSuccess() {
-      utils.user.me.invalidate();
-      props.onClose();
-      addToast("Group has been successfully deleted");
-    },
-  });
-
-  const { mutate: editGroup } = trpc.user.groups.edit.useMutation({
-    onError: (error: any) => {
-      toast.error(`Something went wrong: ${error.message}`);
-    },
-    onSuccess() {
-      if (riders.length <= 1) {
-        props.onClose();
-      } else {
-        utils.user.groups.me.invalidate();
-      }
-      utils.user.me.invalidate();
-      addToast("Removed from group");
-    },
-  });
 
   if (!driver || !curUser) {
     return <Spinner />;
   }
 
-  const handleDelete = () => {
-    if (driver.carpoolId) {
-      deleteGroup({ groupId: driver.carpoolId });
-    } else {
-      throw new TRPCClientError("Driver id does not exist");
-    }
-  };
+  return (
+    <GroupMembersList
+      driver={driver}
+      curUser={curUser}
+      otherRiders={otherRiders}
+      onLeftGroup={onLeftGroup}
+    />
+  );
+};
 
-  const handleEdit = (id: string) => {
-    if (driver.carpoolId) {
-      editGroup({
-        driverId: driver.id,
-        riderId: id,
-        add: false,
-        groupId: driver.carpoolId,
-      });
-    } else {
-      throw new TRPCClientError("Driver id does not exist");
-    }
-  };
+/**
+ * Split from `GroupMembers` only so the `driver`/`curUser` null checks happen
+ * before `useGroupMembership` is called - a hook cannot sit behind an early
+ * return.
+ */
+const GroupMembersList = ({
+  driver,
+  curUser,
+  otherRiders,
+  onLeftGroup,
+}: {
+  driver: PublicUser;
+  curUser: PublicUser;
+  otherRiders: PublicUser[];
+  onLeftGroup?: () => void;
+}) => {
+  const { handleDeleteGroup, handleRemoveRider, isMutating } =
+    useGroupMembership({
+      driver,
+      currentUserId: curUser.id,
+      onLeftGroup,
+    });
 
-  const DriverGroupMembers = () => {
-    return (
-      <>
-        <GroupMemberCard
-          user={driver}
-          buttonText="Delete Group"
-          buttonFunc={handleDelete}
-        />
-        {riders.map((rider) => (
-          <GroupMemberCard
-            key={rider.id}
-            user={rider}
-            buttonText="Remove"
-            buttonFunc={handleEdit}
-          />
-        ))}
-      </>
-    );
-  };
+  const isDriver = curUser.role === Role.DRIVER;
 
-  const RiderGroupMembers = () => {
-    return (
-      <>
-        <GroupMemberCard user={driver} />
+  return (
+    <>
+      <GroupMemberCard
+        user={driver}
+        isCurrentUser={driver.id === curUser.id}
+        actionLabel={isDriver ? "Delete Group" : undefined}
+        onAction={isDriver ? handleDeleteGroup : undefined}
+        confirmPrompt="Delete this group for everyone?"
+        disabled={isMutating}
+      />
+
+      {!isDriver && (
         <GroupMemberCard
           user={curUser}
-          buttonText="Leave Group"
-          buttonFunc={handleEdit}
+          isCurrentUser
+          actionLabel="Leave Group"
+          onAction={() => handleRemoveRider(curUser.id)}
+          confirmPrompt="Leave this group?"
+          disabled={isMutating}
         />
-        {riders.map((rider) => (
-          <GroupMemberCard key={rider.id} user={rider} />
-        ))}
-      </>
-    );
-  };
+      )}
 
-  if (curUser.role === Role.DRIVER) {
-    return <DriverGroupMembers />;
-  } else {
-    return <RiderGroupMembers />;
-  }
+      {otherRiders.map((rider) => (
+        <GroupMemberCard
+          key={rider.id}
+          user={rider}
+          isCurrentUser={false}
+          actionLabel={isDriver ? "Remove" : undefined}
+          onAction={isDriver ? () => handleRemoveRider(rider.id) : undefined}
+          confirmPrompt={`Remove ${rider.preferredName} from the group?`}
+          disabled={isMutating}
+        />
+      ))}
+    </>
+  );
 };
 
 interface GroupMemberCardProps {
   user: PublicUser;
-  buttonText?: string;
-  buttonFunc?: (id: string) => void;
+  isCurrentUser: boolean;
+  actionLabel?: string;
+  onAction?: () => void;
+  confirmPrompt: string;
+  disabled?: boolean;
 }
-export const GroupMemberCard = (props: GroupMemberCardProps) => {
+
+export const GroupMemberCard = ({
+  user,
+  isCurrentUser,
+  actionLabel,
+  onAction,
+  confirmPrompt,
+  disabled = false,
+}: GroupMemberCardProps) => {
+  const [isConfirming, setIsConfirming] = useState(false);
+
   return (
-    <div className="flex items-center py-3">
+    <div className="flex items-center gap-3 px-2 py-3 sm:px-4">
       {/* Avatar */}
-      <div className="flex-shrink-0 mx-2">
-        <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
-          <span className="text-gray-600 font-medium text-lg">
-            {props.user.preferredName.charAt(0).toUpperCase()}
+      <div className="flex-shrink-0">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-200">
+          <span className="text-lg font-medium text-gray-600">
+            {user.preferredName.charAt(0).toUpperCase()}
           </span>
         </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 mx-2">
-        <div className="flex flex-row gap-2">
-          <h1 className="text-xl font-bold">{props.user.preferredName}</h1>
-          <p
-            className={`text-m ${
-              props.user.role === Role.DRIVER
-                ? "bg-blue-100 text-blue-800 rounded-md px-1"
-                : "bg-green-100 text-green-800 rounded-md px-1"
+      {/* Identity */}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <h3 className="truncate text-base font-semibold text-gray-900">
+            {user.preferredName}
+            {isCurrentUser && (
+              <span className="ml-1 text-sm font-normal text-gray-500">
+                (You)
+              </span>
+            )}
+          </h3>
+          <span
+            className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
+              user.role === Role.DRIVER
+                ? "bg-blue-100 text-blue-800"
+                : "bg-green-100 text-green-800"
             }`}
           >
-            {/* {"\u00A0| "} */}
-            {props.user.role === Role.DRIVER ? "Driver" : "Rider"}
-          </p>
+            {user.role === Role.DRIVER ? "Driver" : "Rider"}
+          </span>
         </div>
-        <p className="text-sm">{props.user.email}</p>
+        <p className="truncate text-sm text-gray-600">{user.email}</p>
       </div>
 
-      {/* Button */}
-      {props.buttonText && props.buttonFunc && (
-        <button
-          className="mx-2 h-full w-[150px] rounded-md bg-red-700 text-xs sm:text-sm md:text-base text-white"
-          onClick={() => props.buttonFunc && props.buttonFunc(props.user.id)}
-        >
-          {props.buttonText}
-        </button>
+      {/* Action */}
+      {actionLabel && onAction && (
+        <div className="flex-shrink-0">
+          {isConfirming ? (
+            <div className="flex flex-col items-end gap-1">
+              <p className="text-xs text-gray-600">{confirmPrompt}</p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => {
+                    onAction();
+                    setIsConfirming(false);
+                  }}
+                  className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                >
+                  Confirm
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsConfirming(false)}
+                  className="rounded-lg bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => setIsConfirming(true)}
+              className="rounded-lg bg-red-100 px-3 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-200 disabled:opacity-50"
+            >
+              {actionLabel}
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

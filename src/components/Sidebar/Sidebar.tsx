@@ -75,7 +75,6 @@ export const SidebarPage = (props: SidebarProps) => {
       <GroupPage
         onClose={() => props.collapseSidebar(true)}
         onViewGroupRoute={props.onViewGroupRoute || (() => {})}
-        isMobile={true}
       />
     );
   }
