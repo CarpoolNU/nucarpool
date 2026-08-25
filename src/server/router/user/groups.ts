@@ -407,13 +407,11 @@ export const groupsRouter = router({
       // linking the rider, and removing could detach the rider without ever
       // giving the seat back — an under-count with nothing to correct it.
       //
-      // The boundary stops before the read below on purpose. Removing the
-      // second-to-last member dissolves the group, and the read then finds
-      // nothing and throws; if that throw were inside the transaction it would
-      // roll back a dissolution that was correct and had already been asked
-      // for. Reads cannot leave partial state, so they gain nothing from being
-      // inside it.
-      await ctx.prisma.$transaction(async (tx) => {
+      // The boundary stops before the trailing read. Reads cannot leave partial
+      // state, so they gain nothing from being inside it, and keeping the read
+      // out means a group this procedure legitimately dissolved is never
+      // resurrected by a rollback (SCRUM-281).
+      const dissolved = await ctx.prisma.$transaction(async (tx) => {
         if (input.add) {
           // Reserve the seat before linking the rider: the compare-and-swap
           // both rejects a full driver and prevents two simultaneous accepts
@@ -439,7 +437,24 @@ export const groupsRouter = router({
           where: { carpoolId: input.groupId },
         });
 
-        if (remainingMembers.length === 1) {
+        // A carpool of one is not a carpool, so the group goes. Reported out of
+        // the transaction rather than re-derived after it, because a later read
+        // cannot tell "this procedure just dissolved it" from "it is missing for
+        // some other reason" — and it used to report both as an error
+        // (SCRUM-281).
+        const groupDissolved = remainingMembers.length === 1;
+
+        if (groupDissolved) {
+          // The last member is detached explicitly, the way `delete` above does
+          // it. Relying on the emulated `SetNull` of `relationMode = "prisma"`
+          // would leave the outcome depending on a referential action rather
+          // than on this procedure, and a membership pointing at a deleted
+          // group is exactly what `me` above has to guard against.
+          await tx.carpoolSearch.updateMany({
+            where: { carpoolId: input.groupId },
+            data: { carpoolId: null },
+          });
+
           await tx.carpoolGroup.delete({
             where: { id: input.groupId },
           });
@@ -462,12 +477,33 @@ export const groupsRouter = router({
 
           await releaseSeats(tx, driverSearch.id, driverSearch.seatsAvail, 1);
         }
+
+        return groupDissolved;
       });
+
+      // Dissolving the group is the requested outcome, not a failure. This used
+      // to fall through to the read below, which found nothing — because this
+      // procedure had just deleted it — and threw BAD_REQUEST "Group does not
+      // exist". Every caller routes a rejection to "Something went wrong", so
+      // leaving a two-person carpool reported failure after succeeding, and the
+      // `onSuccess` handlers never ran: no confirmation, the modal stayed open,
+      // and the React Query invalidations were skipped, leaving stale
+      // membership on screen (SCRUM-281).
+      //
+      // `null` for "there is no group any more" matches `me` above, which
+      // returns it for the same situation.
+      if (dissolved) {
+        return null;
+      }
 
       const group = await ctx.prisma.carpoolGroup.findUnique({
         where: { id: input.groupId },
       });
 
+      // Still reachable, but only as a race: an id that never existed fails the
+      // membership checks above long before this, so getting here means the
+      // group was removed by another request in between. That is a genuine bad
+      // request rather than this procedure reporting its own work as a failure.
       if (!group) {
         throw new TRPCError({
           code: "BAD_REQUEST",

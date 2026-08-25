@@ -1089,3 +1089,136 @@ describe("group mutations are atomic", () => {
     expect(db.seatsOf(DRIVER)).toBe(seatsBefore);
   });
 });
+
+/**
+ * Dissolving a group is a success, not an error (SCRUM-281).
+ *
+ * `edit` removes the group once a single member would be left, and then used to
+ * fall through to a read of that same group — finding nothing, because it had
+ * just deleted it, and throwing BAD_REQUEST "Group does not exist". Every caller
+ * turns a rejection into "Something went wrong", so leaving a two-person carpool
+ * reported failure after succeeding, and the `onSuccess` handlers never ran.
+ */
+describe("edit — dissolving the group when one member is left", () => {
+  const twoPersonGroup = () =>
+    buildGroupsDb({
+      searches: [
+        {
+          id: "s-driver",
+          userId: DRIVER,
+          role: Role.DRIVER,
+          carpoolId: GROUP,
+          seatsAvail: 2,
+          groupMessage: "",
+        },
+        {
+          id: "s-rider-1",
+          userId: RIDER_1,
+          role: Role.RIDER,
+          carpoolId: GROUP,
+          seatsAvail: 0,
+          groupMessage: "",
+        },
+      ],
+      requests: [[DRIVER, RIDER_1]],
+    });
+
+  it("resolves rather than throwing when the rider leaves", async () => {
+    const db = twoPersonGroup();
+    const { caller } = callerFor(sessionFor(RIDER_1), db);
+
+    await expect(
+      caller.user.groups.edit({
+        driverId: DRIVER,
+        riderId: RIDER_1,
+        groupId: GROUP,
+        add: false,
+      }),
+    ).resolves.toBeNull();
+
+    expect(db.groupIds()).toEqual([]);
+  });
+
+  it("resolves rather than throwing when the driver removes the last rider", async () => {
+    const db = twoPersonGroup();
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await expect(
+      caller.user.groups.edit({
+        driverId: DRIVER,
+        riderId: RIDER_1,
+        groupId: GROUP,
+        add: false,
+      }),
+    ).resolves.toBeNull();
+  });
+
+  it("leaves nobody pointing at the group it deleted", async () => {
+    // A membership referencing a deleted group is precisely what `me` has to
+    // guard against, so dissolving detaches the last member explicitly rather
+    // than leaving it to an emulated referential action.
+    const db = twoPersonGroup();
+    const { caller } = callerFor(sessionFor(RIDER_1), db);
+
+    await caller.user.groups.edit({
+      driverId: DRIVER,
+      riderId: RIDER_1,
+      groupId: GROUP,
+      add: false,
+    });
+
+    expect(db.carpoolIdOf(RIDER_1)).toBeNull();
+    expect(db.carpoolIdOf(DRIVER)).toBeNull();
+  });
+
+  it("still credits the driver's seat", async () => {
+    // The seat accounting of SCRUM-229 must survive the early return.
+    const db = twoPersonGroup();
+    const { caller } = callerFor(sessionFor(RIDER_1), db);
+
+    await caller.user.groups.edit({
+      driverId: DRIVER,
+      riderId: RIDER_1,
+      groupId: GROUP,
+      add: false,
+    });
+
+    expect(db.seatsOf(DRIVER)).toBe(3);
+  });
+
+  it("keeps the group and returns it when two members remain", async () => {
+    // The default group has three members, so removing one leaves two: no
+    // dissolution, and the caller still gets the group back.
+    const db = buildGroupsDb();
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    const result = await caller.user.groups.edit({
+      driverId: DRIVER,
+      riderId: RIDER_1,
+      groupId: GROUP,
+      add: false,
+    });
+
+    expect(result).not.toBeNull();
+    expect(result).toMatchObject({ id: GROUP });
+    expect(db.groupIds()).toEqual([GROUP]);
+    expect(db.carpoolIdOf(DRIVER)).toBe(GROUP);
+  });
+
+  it("still rejects a groupId that never existed", async () => {
+    // Rejected by the membership check, not by the BAD_REQUEST below it — which
+    // is why removing that error's only *reachable* trigger (this procedure
+    // deleting the group itself) costs no real validation.
+    const db = buildGroupsDb();
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await expect(
+      caller.user.groups.edit({
+        driverId: DRIVER,
+        riderId: RIDER_1,
+        groupId: "no-such-group",
+        add: false,
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+});
