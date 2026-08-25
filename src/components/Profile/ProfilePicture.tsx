@@ -178,8 +178,8 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
             <Image
               src={croppedImageUrl}
               alt="Cropped Image"
-              layout="fill"
-              objectFit="cover"
+              fill
+              className="object-cover"
             />
           </div>
         ) : isProfileImageLoading ? (
@@ -189,8 +189,8 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
             <Image
               src={profileImageUrl}
               alt="Profile Picture"
-              objectFit="cover"
-              layout="fill"
+              fill
+              className="object-cover"
             />
           </div>
         ) : (

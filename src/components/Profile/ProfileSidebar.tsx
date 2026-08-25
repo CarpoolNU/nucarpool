@@ -32,7 +32,7 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
             onClick={() => setOption("user")}
           >
             <div className="relative w-8 h-8 mb-1">
-              <Image src={user} alt="user" layout="fill" objectFit="contain" />
+              <Image src={user} alt="user" fill className="object-contain" />
             </div>
             <span>Profile</span>
           </button>
@@ -42,7 +42,7 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
             onClick={() => setOption("carpool")}
           >
             <div className="relative w-8 h-8 mb-1">
-              <Image src={car} alt="car" layout="fill" objectFit="contain" />
+              <Image src={car} alt="car" fill className="object-contain" />
             </div>
             <span>Carpool</span>
           </button>
@@ -55,8 +55,8 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
               <Image
                 src={checkbox}
                 alt="checkbox"
-                layout="fill"
-                objectFit="contain"
+                fill
+                className="object-contain"
               />
             </div>
             <span>Account</span>
