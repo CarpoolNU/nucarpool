@@ -6,6 +6,7 @@ import "react-toastify/dist/ReactToastify.css";
 import { SessionProvider } from "next-auth/react";
 import Head from "next/head";
 import { trpc } from "../utils/trpc";
+import { ComplianceGate } from "../components/ComplianceGate";
 
 export function MyApp({
   Component,
@@ -19,6 +20,9 @@ export function MyApp({
       </Head>
       <SessionProvider session={session} refetchOnWindowFocus={false}>
         <Component {...pageProps} />
+        {/* One gate for the whole app, so a signed-in user who has not accepted
+            the terms is shown them on whichever page they land on (SCRUM-240). */}
+        <ComplianceGate />
         <ToastContainer />
       </SessionProvider>
     </>

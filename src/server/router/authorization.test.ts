@@ -91,6 +91,7 @@ const inputlessProtectedProcedures: Array<{
 }> = [
   { path: "user.me", invoke: (c) => c.user.me() },
   { path: "user.completeTutorial", invoke: (c) => c.user.completeTutorial() },
+  { path: "user.acceptTerms", invoke: (c) => c.user.acceptTerms() },
   { path: "user.favorites.me", invoke: (c) => c.user.favorites.me() },
   { path: "user.requests.me", invoke: (c) => c.user.requests.me() },
   { path: "user.groups.me", invoke: (c) => c.user.groups.me() },
