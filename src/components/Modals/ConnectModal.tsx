@@ -138,7 +138,6 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                           alt={`${props.otherUser.preferredName}'s Profile Image`}
                           width={112}
                           height={112}
-                          layout="fixed"
                           className="rounded-full"
                         />
                       ) : (
