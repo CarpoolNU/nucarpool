@@ -56,6 +56,12 @@ const SendBar = ({ onSendMessage }: SendBarProps) => {
       <div className="mx-10 flex items-center overflow-hidden rounded-lg border bg-gray-100">
         <div
           contentEditable="true"
+          // The visible "Type a message..." hint is a CSS `:empty:before`
+          // pseudo-element, which assistive tech is not required to announce, so
+          // the name has to be stated explicitly (SCRUM-254).
+          role="textbox"
+          aria-multiline="true"
+          aria-label="Message"
           className="placeholder w-full flex-1 resize-none border-0 bg-gray-100 p-2 text-lg focus:outline-none"
           ref={messageInputRef}
           style={{
@@ -72,13 +78,17 @@ const SendBar = ({ onSendMessage }: SendBarProps) => {
         ></div>
         <div className="h-10 w-px bg-gray-300" />
         <button
+          type="button"
           onClick={handleSend}
           // Only ever disabled for the two states that are new here. An empty
           // box leaves the button live and the click a no-op, exactly as before.
           disabled={isTooLong || isSending}
           className={`p-2 px-4 pt-3 ${isTooLong || isSending ? "opacity-40" : ""}`}
+          aria-label="Send message"
         >
-          <Image src={sendIcon} alt="Send" width={26} height={26} />
+          {/* Decorative: the button carries the name, so the image must not
+              contribute a second one. */}
+          <Image src={sendIcon} alt="" width={26} height={26} />
         </button>
       </div>
       {messageContent.length > 0 && (

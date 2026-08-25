@@ -5,13 +5,11 @@ import mapboxgl, {
   NavigationControl,
 } from "mapbox-gl";
 import { PublicUser } from "../types";
-import { User } from "../types";
 import { Dispatch, SetStateAction } from "react";
 import { setPointClickHandler, createPointClickHandler } from "./handlers";
 
 const addMapEvents = (
   map: Map,
-  user: User,
   setPopupUser: Dispatch<SetStateAction<PublicUser[] | null>>,
 ) => {
   map.addControl(new NavigationControl(), "bottom-right");
@@ -69,12 +67,11 @@ const addMapEvents = (
     map.getCanvas().style.cursor = "";
   });
 
-  document.getElementById("fly")?.addEventListener("click", () => {
-    map.flyTo({
-      center: [user.companyCoordLng, user.companyCoordLat],
-      essential: true,
-    });
-  });
+  // The recentre control used to be wired here with
+  // `document.getElementById("fly").addEventListener(...)`. That reached outside
+  // React's lifecycle: the listener was never removed, and it bound only if the
+  // button happened to already be in the DOM when the map finished loading. The
+  // button now owns its own onClick (SCRUM-254).
 };
 
 export default addMapEvents;

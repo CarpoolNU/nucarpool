@@ -59,15 +59,28 @@ const MobileNav = styled.div`
   border-top: 1px solid #d1d1d1;
 `;
 
-const MobileNavItem = styled.div<{ active: boolean }>`
+// A real <button>, not a div: this is the entire mobile navigation, and as a
+// div it was unreachable by keyboard (SCRUM-254). Tailwind's preflight already
+// makes buttons inherit font and drop their border, but this is styled-
+// components, so the resets are stated here.
+const MobileNavItem = styled.button<{ active: boolean }>`
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: 8px 0;
   width: 25%;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
   border-bottom: ${(props) =>
     props.active ? "4px solid #000" : "4px solid transparent"};
   cursor: pointer;
+
+  &:focus-visible {
+    outline: 2px solid #c8102e;
+    outline-offset: -2px;
+  }
 `;
 
 export const Logo = styled.h1`
@@ -450,14 +463,23 @@ const Header = (props: HeaderProps) => {
         {navItems.map((item) => (
           <MobileNavItem
             key={item.id}
+            type="button"
             active={currentActiveTab === item.id}
+            aria-current={currentActiveTab === item.id ? "page" : undefined}
             onClick={() => {
               handleMobileNavClick(item.id);
             }}
             data-testid={item.testId}
           >
-            <div style={{ fontSize: "24px" }}>{item.icon}</div>
-            <div style={{ position: "relative" }}>
+            {/* Spans, not divs: a <button> may not contain flow content. They
+                are flex items here, so they lay out exactly as before. */}
+            <span
+              style={{ fontSize: "24px", display: "flex" }}
+              aria-hidden="true"
+            >
+              {item.icon}
+            </span>
+            <span style={{ position: "relative", display: "block" }}>
               {item.badge && (
                 <span
                   style={{
@@ -483,7 +505,7 @@ const Header = (props: HeaderProps) => {
               <span style={{ fontSize: "12px", fontWeight: "500" }}>
                 {item.label}
               </span>
-            </div>
+            </span>
           </MobileNavItem>
         ))}
       </MobileNav>
