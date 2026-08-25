@@ -1,4 +1,4 @@
-import { useToasts } from "react-toast-notifications";
+import { toast } from "react-toastify";
 import {
   User,
   EnhancedPublicUser,
@@ -13,7 +13,7 @@ import { UserContext } from "../../utils/userContext";
 import { Role } from "@prisma/client";
 import { trackEvent } from "../../utils/mixpanel";
 import useIsMobile from "../../utils/useIsMobile";
-import React from 'react';
+import React from "react";
 
 interface ConnectCardProps {
   otherUser: EnhancedPublicUser;
@@ -27,33 +27,29 @@ interface ConnectCardProps {
 export const ConnectCard = (props: ConnectCardProps): React.JSX.Element => {
   const user = useContext(UserContext);
   const [showModal, setShowModal] = useState(false);
-  const { addToast } = useToasts();
   const isMobile = useIsMobile();
 
   const handleExistingReceivedRequest = () => {
-    addToast(
+    toast.info(
       "You already have an incoming carpool request from " +
         props.otherUser.preferredName +
         ". Navigate to the received requests tab to connect with them!",
-      { appearance: "info" },
     );
   };
 
   const handleExistingSentRequest = () => {
-    addToast(
+    toast.info(
       "You already have an outgoing carpool request to " +
         props.otherUser.preferredName +
         ". Please wait for them to respond to your request!",
-      { appearance: "info" },
     );
   };
 
   const handleNoSeatAvailability = () => {
-    addToast(
+    toast.info(
       "You do not have any seats available in your car to connect with " +
         props.otherUser.preferredName +
         ".",
-      { appearance: "info" },
     );
   };
 

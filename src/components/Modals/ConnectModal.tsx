@@ -1,6 +1,5 @@
 import { Dialog } from "@headlessui/react";
 import React, { useState } from "react";
-import { useToasts } from "react-toast-notifications";
 import { EnhancedPublicUser, User } from "../../utils/types";
 import { toast } from "react-toastify";
 import { trpc } from "../../utils/trpc";
@@ -25,7 +24,6 @@ interface ConnectModalProps {
 }
 
 const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
-  const { addToast } = useToasts();
   const [isOpen, setIsOpen] = useState(true);
   const [requestSent, setRequestSent] = useState(false);
   const [customMessage, setCustomMessage] = useState("");
@@ -80,10 +78,9 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
     // toast, and an email for a request that was never created.
     onSuccess: (request, variables) => {
       setRequestSent(true);
-      addToast(
+      toast.success(
         "A request to carpool has been sent to " +
           props.otherUser.preferredName,
-        { appearance: "success" },
       );
       // The id comes from the row the mutation just created, so the server can
       // check the caller is party to it (SCRUM-270). The preview is taken from

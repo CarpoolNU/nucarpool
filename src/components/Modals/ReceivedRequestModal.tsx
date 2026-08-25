@@ -1,12 +1,11 @@
 import { Dialog } from "@headlessui/react";
 import { useState } from "react";
-import { useToasts } from "react-toast-notifications";
 import { EnhancedPublicUser, User } from "../../utils/types";
 import { Request, Role } from "@prisma/client";
 import { trpc } from "../../utils/trpc";
 import { toast } from "react-toastify";
 import { trackRequestResponse } from "../../utils/mixpanel";
-import React from 'react';
+import React from "react";
 
 interface ReceivedModalProps {
   user: User;
@@ -16,7 +15,6 @@ interface ReceivedModalProps {
 }
 
 const ReceivedRequestModal = (props: ReceivedModalProps): React.JSX.Element => {
-  const { addToast } = useToasts();
   const [isOpen, setIsOpen] = useState(true);
   const utils = trpc.useUtils();
 
@@ -66,17 +64,22 @@ const ReceivedRequestModal = (props: ReceivedModalProps): React.JSX.Element => {
   const handleRejectClick = () => {
     handleDelete();
     onClose();
-    addToast(
+    toast.success(
       props.otherUser.preferredName +
         "'s request to carpool with you has been deleted.",
-      { appearance: "success" },
     );
   };
 
+  // These three used to call addToast with no options at all. react-toast-
+  // notifications defaults no appearance, and its toast element indexes its
+  // style table by that value unguarded — so every one of these threw instead
+  // of telling the user why acceptance was refused (SCRUM-275). They are the
+  // same "you cannot do this" class as ConnectCard's messages, so they get the
+  // same `info` treatment.
   const validateRequestAcceptance = () => {
     if (props.user.role == "DRIVER") {
       if (props.user.seatAvail === 0) {
-        addToast(
+        toast.info(
           "You do not have any space in your car to accept " +
             props.otherUser.preferredName +
             ".",
@@ -84,7 +87,7 @@ const ReceivedRequestModal = (props: ReceivedModalProps): React.JSX.Element => {
         return false;
       }
       if (props.otherUser.carpoolId) {
-        addToast(
+        toast.info(
           props.otherUser.preferredName +
             " is already in an existing carpool group. Ask them to leave that group before attempting to join yours.",
         );
@@ -93,7 +96,7 @@ const ReceivedRequestModal = (props: ReceivedModalProps): React.JSX.Element => {
       return true;
     } else {
       if (props.user.carpoolId) {
-        addToast(
+        toast.info(
           "You cannot join " +
             props.otherUser.preferredName +
             "'s group until leaving your current carpool group.",
@@ -135,10 +138,9 @@ const ReceivedRequestModal = (props: ReceivedModalProps): React.JSX.Element => {
       initiateGroup();
       handleDelete();
       onClose();
-      addToast(
+      toast.success(
         props.otherUser.preferredName +
           "'s request to carpool with you has been accepted. If you're a driver, do make sure you add information on the group page for your riders!",
-        { appearance: "success" },
       );
     }
   };
