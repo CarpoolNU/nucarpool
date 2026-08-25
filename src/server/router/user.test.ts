@@ -287,7 +287,6 @@ const editInput = (overrides: Record<string, unknown> = {}) =>
     coopStartDate: null,
     coopEndDate: null,
     bio: "",
-    licenseSigned: true,
     ...SHARED_ADDRESS,
     startCoordLng: -71.1,
     startCoordLat: 42.31,
@@ -295,6 +294,82 @@ const editInput = (overrides: Record<string, unknown> = {}) =>
     companyCoordLat: 42.36,
     ...overrides,
   }) as any;
+
+/**
+ * Terms acceptance is recorded by `user.acceptTerms` and by nothing else
+ * (SCRUM-240). It used to be set to `true` by every profile save, which made
+ * `licenseSigned` a record of "this user saved a profile" rather than of consent
+ * to a liability disclaimer written on behalf of the university.
+ */
+describe("user.acceptTerms", () => {
+  const acceptCallerFor = (session: Session | null, prisma: unknown) =>
+    appRouter.createCaller({
+      req: undefined,
+      res: undefined,
+      session,
+      prisma,
+      sesClient: { send: jest.fn() },
+    } as unknown as Context);
+
+  it("records the acceptance against the caller, and writes nothing else", async () => {
+    const update = jest.fn(async ({ where }: any) => ({
+      id: where.id,
+      licenseSigned: true,
+    }));
+
+    await acceptCallerFor(sessionFor(SESSION_USER), {
+      user: { update },
+    }).user.acceptTerms();
+
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledWith({
+      where: { id: SESSION_USER },
+      data: { licenseSigned: true },
+    });
+  });
+
+  it("cannot be used to record an acceptance for somebody else", async () => {
+    // There is no input, so the only id available is the session's. Worth
+    // pinning: a `userId` parameter here would let any caller sign the terms on
+    // another user's behalf.
+    const update = jest.fn(async ({ where }: any) => ({ id: where.id }));
+
+    await acceptCallerFor(sessionFor(OTHER_USER), {
+      user: { update },
+    }).user.acceptTerms();
+
+    expect(update).toHaveBeenCalledWith({
+      where: { id: OTHER_USER },
+      data: { licenseSigned: true },
+    });
+  });
+
+  it("rejects an unauthenticated caller", async () => {
+    const update = jest.fn();
+
+    await expect(
+      acceptCallerFor(null, { user: { update } }).user.acceptTerms(),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+    expect(update).not.toHaveBeenCalled();
+  });
+});
+
+describe("user.edit — terms acceptance is not a profile field (SCRUM-240)", () => {
+  it("never writes licenseSigned, even when a client sends it", async () => {
+    const db = buildEditDb();
+    const caller = editCallerFor(SESSION_USER, db);
+
+    // An older client would still send this; Zod strips it and the resolver no
+    // longer reads it, so a stale bundle cannot flip the flag.
+    await caller.user.edit(editInput({ licenseSigned: true }));
+
+    expect(db.prisma.user.update).toHaveBeenCalled();
+    for (const call of db.prisma.user.update.mock.calls) {
+      expect((call[0] as any).data).not.toHaveProperty("licenseSigned");
+    }
+  });
+});
 
 describe("user.edit — Location ownership", () => {
   it("stores the coordinates the client submitted", async () => {

@@ -125,7 +125,6 @@ export const userRouter = router({
         coopStartDate: z.date().nullable(),
         coopEndDate: z.date().nullable(),
         bio: z.string().max(PROFILE_TEXT_MAX_LENGTH),
-        licenseSigned: z.boolean(),
         startStreet: z.string(),
         startCity: z.string(),
         startState: z.string(),
@@ -157,7 +156,11 @@ export const userRouter = router({
           pronouns: input.pronouns,
           isOnboarded: input.isOnboarded,
           bio: input.bio,
-          licenseSigned: input.licenseSigned,
+          // `licenseSigned` is deliberately absent. Saving a profile is not
+          // accepting the terms, and this procedure used to set it to true on
+          // every save - so the field recorded "this user saved a profile"
+          // rather than "this user agreed" (SCRUM-240). Only `acceptTerms`
+          // writes it now.
         },
       });
 
@@ -288,6 +291,37 @@ export const userRouter = router({
         });
       }
     }),
+
+  /**
+   * Records that the caller accepted the terms shown by `ComplianceModal`.
+   *
+   * This is the only writer of `licenseSigned`. Before SCRUM-240 nothing wrote
+   * it on acceptance at all: the "I Agree" button fired a Mixpanel event and
+   * closed the dialog, and the flag was set as a side effect of `user.edit`.
+   *
+   * Note on reading the column: it is trustworthy as evidence of acceptance only
+   * for values written here. Rows that already had it set may have got it from a
+   * profile save - see "Terms acceptance" in `src/server/db/README.md`.
+   */
+  acceptTerms: protectedRouter.mutation(async ({ ctx }) => {
+    const userId = ctx.session.user?.id;
+
+    if (!userId) {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "User not authenticated",
+      });
+    }
+
+    const updatedUser = await ctx.prisma.user.update({
+      where: { id: userId },
+      data: {
+        licenseSigned: true,
+      },
+    });
+
+    return updatedUser;
+  }),
 
   completeTutorial: protectedRouter.mutation(async ({ ctx }) => {
     const userId = ctx.session.user?.id;

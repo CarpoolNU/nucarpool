@@ -69,6 +69,23 @@ The values live in [`textLimits.ts`](../../utils/textLimits.ts) so the form, the
 
 **`group.message` is not yet bounded, and it can overflow today.** `GroupPage` serialises the whole driver-preferences form into it as `GROUP_DETAILS_V1:{…json…}`, which costs ~87 characters of prefix and JSON structure before any content. A 90-character note plus two of the fixed preference options already exceeds 191, and the save fails with no error shown — `updateMessage` has no `onError`, and the success toast fires from the click handler regardless. The column was widened to `TEXT` by `20241119202706_add_text_type` and then narrowed back to `VARCHAR(191)` by `20251114054152_add_location_table`, because `CarpoolGroup.message` in `schema.prisma` is a plain `String`. Restoring `@db.Text` is the fix, and it needs a migration and a PlanetScale deploy request.
 
+## Terms acceptance
+
+`user.license_signed` records that a user accepted the liability disclaimer in [`CompliancePortal.tsx`](../../components/CompliancePortal.tsx). Those terms are written on behalf of Northeastern University and disclaim responsibility for rides, safety and data, so what this column means matters.
+
+**It is trustworthy only for values written by `user.acceptTerms`.** Until SCRUM-240 nothing wrote it on acceptance at all: the "I Agree" button fired a Mixpanel event and closed the dialog, and the flag was set instead as a hardcoded side effect of every `user.edit` call. The modal was also rendered on the onboarding page alone, while [`index.tsx`](../../pages/index.tsx)'s `getServerSideProps` redirects to `/profile/setup` only when `isOnboarded` is false — so an already-onboarded user with no consent recorded never saw the terms, and their next profile save silently set the flag to `true`.
+
+Since SCRUM-240: `user.acceptTerms` is the only writer, `user.edit` does not touch the column, and [`ComplianceGate`](../../components/ComplianceGate.tsx) is mounted once in `_app` so the terms appear on whichever page a user without consent lands on.
+
+**Pre-existing rows were deliberately left as they are.** Forcing re-consent would put a blocking dialog in front of every active user, and the decision was that the disruption is not worth it. The consequence, which anyone relying on this column needs to know:
+
+| Cohort                           | What `license_signed = true` means                                              |
+| -------------------------------- | ------------------------------------------------------------------------------- |
+| Consent recorded after SCRUM-240 | The user clicked "I Agree" and the write succeeded                              |
+| Rows set before SCRUM-240        | Either acceptance during onboarding **or** any profile save — indistinguishable |
+
+There is no stored signal separating them, because the column carries no timestamp. Adding a timestamp and a terms version — which would also make re-consent possible when the terms are updated, something the terms text explicitly anticipates — needs new columns and is tracked separately. Do not treat a `true` predating that work as evidence for a specific user.
+
 ## Changing the schema
 
 After editing `schema.prisma`:

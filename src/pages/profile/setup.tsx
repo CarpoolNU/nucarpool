@@ -27,7 +27,6 @@ import {
   trackProfileCompletion,
 } from "../../utils/mixpanel";
 import { useUploadFile } from "../../utils/profile/useUploadFile";
-import { ComplianceModal } from "../../components/CompliancePortal";
 import { useAddressSelection } from "../../utils/useAddressSelection";
 import {
   updateUser,
@@ -288,7 +287,6 @@ const Setup: NextPage = () => {
 
   return (
     <div className="relative h-full w-full overflow-hidden">
-      {!user?.licenseSigned && <ComplianceModal />}
       <div className="absolute inset-0 bg-floaty" />
       <h1 className={titleClass}>CarpoolNU</h1>
 

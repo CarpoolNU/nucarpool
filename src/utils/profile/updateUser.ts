@@ -47,7 +47,6 @@ export const updateUser = async ({
     bio: userInfo.bio,
     coopStartDate: userInfo.coopStartDate!,
     coopEndDate: userInfo.coopEndDate!,
-    licenseSigned: true,
     startStreet: userInfo.startStreet,
     startCity: userInfo.startCity,
     startState: userInfo.startState,
