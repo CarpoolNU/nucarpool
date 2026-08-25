@@ -66,6 +66,16 @@ import {
   PRESIGNED_URL_CACHE_TIME_MS,
   PRESIGNED_URL_STALE_TIME_MS,
 } from "./useProfileImage";
+import { serverEnv } from "./env/server";
+
+/**
+ * The bucket is configuration now, not a literal (SCRUM-282), and
+ * `jest.setup.env.js` supplies a placeholder for it like any other required
+ * variable. Asserting against the configured value rather than "carpoolnubucket"
+ * is also the stronger assertion: it pins that the commands are built from
+ * configuration, which a hardcoded string could not tell you.
+ */
+const BUCKET = serverEnv.S3_BUCKET_NAME;
 
 const USER_ID = "user-with-a-picture";
 const SIGNED = "https://carpoolnubucket.s3.us-east-2.amazonaws.com/x?sig=abc";
@@ -96,11 +106,11 @@ describe("getPresignedImageUrl", () => {
     await expect(getPresignedImageUrl(USER_ID)).resolves.toBe(SIGNED);
 
     expect(HeadObjectCommand).toHaveBeenCalledWith({
-      Bucket: "carpoolnubucket",
+      Bucket: BUCKET,
       Key: `profile-pictures/${DEPLOY_ENV}/${USER_ID}`,
     });
     expect(GetObjectCommand).toHaveBeenCalledWith({
-      Bucket: "carpoolnubucket",
+      Bucket: BUCKET,
       Key: `profile-pictures/${DEPLOY_ENV}/${USER_ID}`,
     });
     expect(errorSpy).not.toHaveBeenCalled();

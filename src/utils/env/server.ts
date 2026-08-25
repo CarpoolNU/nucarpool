@@ -1,5 +1,6 @@
 import { envsafe, str, url, makeValidator, invalidEnvError } from "envsafe";
 import { browserEnv } from "./browser";
+import { DEFAULT_S3_BUCKET_NAME, DEFAULT_S3_REGION } from "./s3Config";
 
 if (typeof window !== "undefined") {
   throw new Error(
@@ -25,6 +26,22 @@ export const serverEnv = {
     }),
     AWS_REGION: str({
       input: process.env.REGION_AWS,
+    }),
+    // Profile-picture storage (SCRUM-282). Both default to the values that were
+    // previously hardcoded, so a deployment that sets neither keeps using the
+    // same bucket and no stored object moves.
+    //
+    // `S3_REGION` is deliberately separate from `AWS_REGION` above rather than
+    // reusing it: that one is also SES's region, and nothing guarantees the two
+    // services live in the same place. Pointing S3 at whatever SES happens to
+    // use would be a silent behaviour change.
+    S3_BUCKET_NAME: str({
+      input: process.env.S3_BUCKET_NAME,
+      default: DEFAULT_S3_BUCKET_NAME,
+    }),
+    S3_REGION: str({
+      input: process.env.S3_REGION,
+      default: DEFAULT_S3_REGION,
     }),
     AZURE_CLIENT_ID: str({
       input: process.env.AZURE_CLIENT_ID,
