@@ -235,43 +235,55 @@ export const requestsRouter = router({
         });
       }
 
-      let request = await ctx.prisma.request.create({
-        data: {
-          message: "",
-          fromUser: {
-            connect: { id: userId },
-          },
-          toUser: {
-            connect: { id: input.toId },
-          },
-        },
-      });
-      let conversation = await ctx.prisma.conversation.findUnique({
-        where: { requestId: request.id },
-      });
-
-      if (!conversation) {
-        conversation = await ctx.prisma.conversation.create({
+      // A request, its conversation, the link between them and the first
+      // message are one unit. These used to be four independent awaits, which
+      // could leave a request with no conversation, or a conversation never
+      // linked back to its request — and `relationMode = "prisma"` rejects
+      // neither, so the half-built thread persisted (SCRUM-233).
+      //
+      // The link is stored twice, in both directions: `Conversation.requestId`
+      // and `Request.conversationId`. Nothing in the schema keeps those two in
+      // agreement, which is why writing a conversation still takes two
+      // statements rather than one nested create.
+      //
+      // What this protects on the read side: `user.requests.me` above includes
+      // `conversation.messages` through the request, so a thread that exists on
+      // one side of the link only is invisible from the other.
+      const request = await ctx.prisma.$transaction(async (tx) => {
+        const created = await tx.request.create({
           data: {
-            requestId: request.id,
+            message: "",
+            fromUser: {
+              connect: { id: userId },
+            },
+            toUser: {
+              connect: { id: input.toId },
+            },
           },
         });
 
-        // Update the request with the conversation ID. Reassigned rather than
-        // discarded so the value returned below carries the conversation.
-        request = await ctx.prisma.request.update({
-          where: { id: request.id },
+        // The conversation and its first message go in together. No lookup
+        // first: the request was created a statement ago with a fresh cuid, so
+        // nothing could reference it and the old
+        // `conversation.findUnique({ where: { requestId } })` could only ever
+        // return null — a check whose false branch was unreachable.
+        const conversation = await tx.conversation.create({
+          data: {
+            requestId: created.id,
+            messages: {
+              create: {
+                content: input.message,
+                userId: userId,
+              },
+            },
+          },
+        });
+
+        // Returned rather than discarded so the value carries the conversation.
+        return await tx.request.update({
+          where: { id: created.id },
           data: { conversationId: conversation.id },
         });
-      }
-
-      //  Create the initial message in the conversation
-      await ctx.prisma.message.create({
-        data: {
-          conversationId: conversation.id,
-          content: input.message,
-          userId: userId,
-        },
       });
 
       // Returned so the caller has an id to announce (SCRUM-270). This used to

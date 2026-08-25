@@ -149,96 +149,107 @@ export const userRouter = router({
         });
       }
 
-      await ctx.prisma.user.update({
-        where: { id },
-        data: {
-          preferredName: input.preferredName,
-          pronouns: input.pronouns,
-          isOnboarded: input.isOnboarded,
-          bio: input.bio,
-          // `licenseSigned` is deliberately absent. Saving a profile is not
-          // accepting the terms, and this procedure used to set it to true on
-          // every save - so the field recorded "this user saved a profile"
-          // rather than "this user agreed" (SCRUM-240). Only `acceptTerms`
-          // writes it now.
-        },
-      });
-
-      // CarpoolSearch - find or create
-      const existingSearch = await ctx.prisma.carpoolSearch.findFirst({
-        where: { userId: id },
-      });
-
-      // Home and company Locations belong to this CarpoolSearch and nobody
-      // else, so the coordinates just submitted are always what gets stored
-      // (SCRUM-232). This used to match an existing row on address text alone
-      // and reuse whatever coordinates that row already had.
-      const { homeLocationId, companyLocationId } = await resolveOwnedLocations(
-        ctx.prisma,
-        {
-          carpoolSearchId: existingSearch?.id ?? null,
-          currentHomeLocationId: existingSearch?.homeLocationId ?? null,
-          currentCompanyLocationId: existingSearch?.companyLocationId ?? null,
-          home: {
-            street: input.startStreet,
-            city: input.startCity,
-            state: input.startState,
-            streetAddress: input.startAddress,
-            coordLng: input.startCoordLng,
-            coordLat: input.startCoordLat,
-          },
-          company: {
-            street: input.companyStreet,
-            city: input.companyCity,
-            state: input.companyState,
-            streetAddress: input.companyAddress,
-            coordLng: input.companyCoordLng,
-            coordLat: input.companyCoordLat,
-          },
-        },
-      );
-
-      const carpoolSearchData = {
-        role: input.role,
-        status: input.status,
-        seatsAvail: input.seatAvail,
-        companyName: input.companyName,
-        daysWorking: input.daysWorking,
-        startTime: startTimeDate,
-        endTime: endTimeDate,
-        startDate: input.coopStartDate,
-        endDate: input.coopEndDate,
-        homeLocationId,
-        companyLocationId,
-      };
-
-      if (existingSearch) {
-        await ctx.prisma.carpoolSearch.update({
-          where: { id: existingSearch.id },
-          data: carpoolSearchData,
-        });
-      } else {
-        await ctx.prisma.carpoolSearch.create({
+      // One profile save touches `user`, two `Location` rows and a
+      // `CarpoolSearch`. These used to be four independent awaits, so a failure
+      // part-way through committed the earlier writes and abandoned the rest —
+      // profile fields saved against stale carpool data, or Location rows
+      // written for a CarpoolSearch that was never created. `relationMode =
+      // "prisma"` means the database rejects none of that, and there is no
+      // reconciliation job, so the inconsistency was permanent (SCRUM-233).
+      //
+      // What this protects on the read side: `user.me` above spreads
+      // `carpoolSearches[0]` and both its Locations onto one flat object, so it
+      // assumes the search and the rows it points at agree.
+      const updatedUser = await ctx.prisma.$transaction(async (tx) => {
+        await tx.user.update({
+          where: { id },
           data: {
-            userId: id,
-            carpoolId: null,
-            groupMessage: null,
-            ...carpoolSearchData,
+            preferredName: input.preferredName,
+            pronouns: input.pronouns,
+            isOnboarded: input.isOnboarded,
+            bio: input.bio,
+            // `licenseSigned` is deliberately absent. Saving a profile is not
+            // accepting the terms, and this procedure used to set it to true on
+            // every save - so the field recorded "this user saved a profile"
+            // rather than "this user agreed" (SCRUM-240). Only `acceptTerms`
+            // writes it now.
           },
         });
-      }
 
-      // return the updated user with CarpoolSearch data
-      const updatedUser = await ctx.prisma.user.findUnique({
-        where: { id },
-        include: {
-          carpoolSearches: {
-            include: {
-              homeLocation: true,
-              companyLocation: true,
+        // CarpoolSearch - find or create
+        const existingSearch = await tx.carpoolSearch.findFirst({
+          where: { userId: id },
+        });
+
+        // Home and company Locations belong to this CarpoolSearch and nobody
+        // else, so the coordinates just submitted are always what gets stored
+        // (SCRUM-232). This used to match an existing row on address text alone
+        // and reuse whatever coordinates that row already had.
+        const { homeLocationId, companyLocationId } =
+          await resolveOwnedLocations(tx, {
+            carpoolSearchId: existingSearch?.id ?? null,
+            currentHomeLocationId: existingSearch?.homeLocationId ?? null,
+            currentCompanyLocationId: existingSearch?.companyLocationId ?? null,
+            home: {
+              street: input.startStreet,
+              city: input.startCity,
+              state: input.startState,
+              streetAddress: input.startAddress,
+              coordLng: input.startCoordLng,
+              coordLat: input.startCoordLat,
+            },
+            company: {
+              street: input.companyStreet,
+              city: input.companyCity,
+              state: input.companyState,
+              streetAddress: input.companyAddress,
+              coordLng: input.companyCoordLng,
+              coordLat: input.companyCoordLat,
+            },
+          });
+
+        const carpoolSearchData = {
+          role: input.role,
+          status: input.status,
+          seatsAvail: input.seatAvail,
+          companyName: input.companyName,
+          daysWorking: input.daysWorking,
+          startTime: startTimeDate,
+          endTime: endTimeDate,
+          startDate: input.coopStartDate,
+          endDate: input.coopEndDate,
+          homeLocationId,
+          companyLocationId,
+        };
+
+        if (existingSearch) {
+          await tx.carpoolSearch.update({
+            where: { id: existingSearch.id },
+            data: carpoolSearchData,
+          });
+        } else {
+          await tx.carpoolSearch.create({
+            data: {
+              userId: id,
+              carpoolId: null,
+              groupMessage: null,
+              ...carpoolSearchData,
+            },
+          });
+        }
+
+        // return the updated user with CarpoolSearch data
+        return await tx.user.findUnique({
+          where: { id },
+          include: {
+            carpoolSearches: {
+              include: {
+                homeLocation: true,
+                companyLocation: true,
+              },
             },
           },
-        },
+        });
       });
 
       return updatedUser;

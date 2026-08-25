@@ -130,27 +130,37 @@ export const messageRouter = router({
       // first message on a request with no conversation row was created,
       // linked, and then silently discarded with a success response
       // (SCRUM-230). The message is now written on both paths.
-      let conversation = await ctx.prisma.conversation.findUnique({
-        where: { requestId: input.requestId },
-      });
-
-      if (!conversation) {
-        conversation = await ctx.prisma.conversation.create({
-          data: { requestId: input.requestId },
+      //
+      // All three writes commit together. Repairing the missing conversation
+      // takes two statements — the link is stored on both `Conversation` and
+      // `Request` — so untransactioned this could link a conversation and then
+      // fail to write the message the user had already typed, or create the
+      // conversation without linking it back (SCRUM-233). Pusher stays outside
+      // the transaction below: it is a side effect that cannot be rolled back,
+      // and it must not run until the message is durable.
+      const newMessage = await ctx.prisma.$transaction(async (tx) => {
+        let conversation = await tx.conversation.findUnique({
+          where: { requestId: input.requestId },
         });
 
-        await ctx.prisma.request.update({
-          where: { id: input.requestId },
-          data: { conversationId: conversation.id },
-        });
-      }
+        if (!conversation) {
+          conversation = await tx.conversation.create({
+            data: { requestId: input.requestId },
+          });
 
-      const newMessage = await ctx.prisma.message.create({
-        data: {
-          conversationId: conversation.id,
-          content: input.content,
-          userId: userId,
-        },
+          await tx.request.update({
+            where: { id: input.requestId },
+            data: { conversationId: conversation.id },
+          });
+        }
+
+        return await tx.message.create({
+          data: {
+            conversationId: conversation.id,
+            content: input.content,
+            userId: userId,
+          },
+        });
       });
 
       // Notify whichever party did not send this message. The old code always

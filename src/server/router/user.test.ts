@@ -4,6 +4,7 @@ import type { Session } from "next-auth";
 import { appRouter } from "./index";
 import type { Context } from "./context";
 import { PROFILE_TEXT_MAX_LENGTH } from "../../utils/textLimits";
+import { cloneState, withTransaction } from "./transactionMock";
 
 /**
  * Contract tests for `user.getPresignedDownloadUrl` (SCRUM-242).
@@ -177,7 +178,7 @@ const buildEditDb = (
   const searches = seedSearches.map((row) => ({ ...row }));
   let created = 0;
 
-  const prisma = {
+  const delegates = {
     user: {
       update: jest.fn(async ({ where }: any) => ({ id: where.id })),
       findUnique: jest.fn(async ({ where }: any) => ({
@@ -236,6 +237,26 @@ const buildEditDb = (
       }),
     },
   };
+
+  // `user.edit` commits the user row, both Locations and the CarpoolSearch as
+  // one transaction (SCRUM-233), so the mock rolls back on a throw. `created`
+  // is restored too, otherwise generated ids would keep advancing across a
+  // rolled-back attempt and the next one would not reuse them.
+  const prisma = withTransaction(
+    delegates,
+    () => ({
+      locations: cloneState(locations),
+      searches: cloneState(searches),
+      created,
+    }),
+    (before) => {
+      locations.clear();
+      for (const [id, row] of before.locations) locations.set(id, row);
+      searches.length = 0;
+      searches.push(...before.searches);
+      created = before.created;
+    },
+  );
 
   return {
     prisma,
@@ -509,5 +530,93 @@ describe("user.edit — profile text is bounded by its columns (SCRUM-231)", () 
     await expect(
       caller.user.edit(editInput({ companyAddress: "a".repeat(500) })),
     ).resolves.toBeDefined();
+  });
+});
+
+/**
+ * Atomicity of `user.edit` (SCRUM-233).
+ *
+ * One profile save writes the user row, two `Location` rows and a
+ * `CarpoolSearch`. These were four independent awaits, so a failure part-way
+ * through committed the earlier ones — profile fields saved against stale
+ * carpool data, or rewritten coordinates pointing at a search that was never
+ * updated. `relationMode = "prisma"` rejects none of it.
+ */
+describe("user.edit is atomic", () => {
+  const existingProfile = () =>
+    buildEditDb(
+      [
+        {
+          id: "loc-home",
+          street: "Old St",
+          city: "Boston",
+          state: "Massachusetts",
+          streetAddress: "Old St, Boston, Massachusetts",
+          coordLng: -71.9,
+          coordLat: 42.9,
+        },
+        {
+          id: "loc-company",
+          street: "Old Company St",
+          city: "Boston",
+          state: "Massachusetts",
+          streetAddress: "Old Company St, Boston, Massachusetts",
+          coordLng: -71.8,
+          coordLat: 42.8,
+        },
+      ],
+      [
+        {
+          id: "search-mine",
+          userId: SESSION_USER,
+          homeLocationId: "loc-home",
+          companyLocationId: "loc-company",
+        },
+      ],
+    );
+
+  it("does not rewrite the Locations when the CarpoolSearch write fails", async () => {
+    const db = existingProfile();
+
+    // The two Location rows are rewritten in place before the search is
+    // updated, so failing the last write is what used to leave a user's pins
+    // moved to an address their profile never adopted.
+    db.prisma.carpoolSearch.update.mockImplementationOnce(async () => {
+      throw new Error("connection lost");
+    });
+
+    await expect(
+      editCallerFor(SESSION_USER, db).user.edit(editInput()),
+    ).rejects.toThrow("connection lost");
+
+    expect(db.locationById("loc-home")).toMatchObject({
+      street: "Old St",
+      coordLng: -71.9,
+      coordLat: 42.9,
+    });
+    expect(db.locationById("loc-company")).toMatchObject({
+      street: "Old Company St",
+      coordLng: -71.8,
+      coordLat: 42.8,
+    });
+  });
+
+  it("creates no Location rows when the CarpoolSearch write fails for a new profile", async () => {
+    // With no existing search, both Locations are *created* rather than
+    // updated. Rolling back has to remove them, or every failed first save
+    // would leave a pair of rows nothing points at.
+    const db = buildEditDb();
+
+    db.prisma.carpoolSearch.create.mockImplementationOnce(async () => {
+      throw new Error("connection lost");
+    });
+
+    await expect(
+      editCallerFor(SESSION_USER, db).user.edit(editInput()),
+    ).rejects.toThrow("connection lost");
+
+    expect(db.searchFor(SESSION_USER)).toBeUndefined();
+    expect(db.locationById("loc-created-1")).toBeUndefined();
+    expect(db.locationById("loc-created-2")).toBeUndefined();
   });
 });
