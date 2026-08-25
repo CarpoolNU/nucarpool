@@ -68,15 +68,28 @@ export const useGroupMembership = ({
       },
       // `variables` carries the riderId that was just removed, which is how we
       // know whether the caller left or merely removed somebody else.
-      onSuccess: (_data, variables) => {
+      //
+      // `null` data means the server dissolved the group, because one member
+      // cannot carpool alone (SCRUM-281). That leaves the caller without a
+      // group whichever side of the removal they were on — so a driver who
+      // removes their last rider now gets the modal dismissed too, which the
+      // riderId comparison alone would miss.
+      onSuccess: (data, variables) => {
         utils.user.me.invalidate();
         utils.user.groups.me.invalidate();
+
+        const callerLeft = variables.riderId === currentUserId;
+        const groupDissolved = data === null;
+
         toast.success(
-          variables.riderId === currentUserId
+          callerLeft
             ? "You have left the group"
-            : "Removed from group",
+            : groupDissolved
+              ? "Removed from group — with nobody left, the group was disbanded"
+              : "Removed from group",
         );
-        if (variables.riderId === currentUserId) {
+
+        if (callerLeft || groupDissolved) {
           onLeftGroup?.();
         }
       },
