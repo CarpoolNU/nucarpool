@@ -141,6 +141,7 @@ model User {
   isOnboarded      Boolean         @default(false) @map("is_onboarded")
   tutorialCompleted Boolean        @default(false) @map("tutorial_completed")
   licenseSigned    Boolean         @default(false) @map("license_signed")
+  driftProbe       String          @default("") @map("drift_probe")
   favoritedBy      User[]          @relation("Favorites")
   favorites        User[]          @relation("Favorites")
   sentRequests     Request[]       @relation("sentRequests")
