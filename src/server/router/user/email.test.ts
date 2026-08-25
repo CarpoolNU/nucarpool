@@ -1,7 +1,26 @@
 import { Permission } from "@prisma/client";
 import type { Session } from "next-auth";
-import { appRouter } from "../index";
 import type { Context } from "../context";
+
+/**
+ * `NEXT_PUBLIC_ENV` is validated by envsafe at import time now (SCRUM-247), so
+ * these tests mock the env module instead of assigning to `process.env`
+ * mid-run — the variable is read once when the module loads, and a later
+ * assignment would never be seen. The getter keeps `deployEnv` swappable
+ * per-test, which is what the staging cases below need.
+ */
+let deployEnv = "production";
+
+jest.mock("../../../utils/env/browser", () => ({
+  browserEnv: {
+    get NEXT_PUBLIC_ENV() {
+      return deployEnv;
+    },
+  },
+}));
+
+// `jest.mock` is hoisted above imports, so the router below picks up the mock.
+import { appRouter } from "../index";
 
 /**
  * Authorization tests for `user.emails` (SCRUM-225).
@@ -23,16 +42,11 @@ import type { Context } from "../context";
 
 /**
  * These procedures branch on NEXT_PUBLIC_ENV (staging restricts recipients to
- * gmail.com), and the test harness supplies its own placeholder for it. Pin it
- * per-test so the suite asserts the behaviour it means to, whatever the
- * placeholder happens to be.
+ * gmail.com). Reset to production before each test so a staging case cannot
+ * leak into the ones after it.
  */
-const ORIGINAL_ENV = process.env.NEXT_PUBLIC_ENV;
 beforeEach(() => {
-  process.env.NEXT_PUBLIC_ENV = "production";
-});
-afterAll(() => {
-  process.env.NEXT_PUBLIC_ENV = ORIGINAL_ENV;
+  deployEnv = "production";
 });
 
 const ALICE = "user-alice";
@@ -689,7 +703,7 @@ describe("user.emails.sendAcceptanceNotification — participants only", () => {
 
 describe("user.emails — staging still restricts recipients", () => {
   it("refuses a non-gmail recipient in staging without contacting SES", async () => {
-    process.env.NEXT_PUBLIC_ENV = "staging";
+    deployEnv = "staging";
     const { caller, db } = callerFor(sessionFor(ALICE));
 
     await expect(
@@ -703,7 +717,7 @@ describe("user.emails — staging still restricts recipients", () => {
   });
 
   it("allows a gmail recipient in staging", async () => {
-    process.env.NEXT_PUBLIC_ENV = "staging";
+    deployEnv = "staging";
     const db = buildEmailDb({
       users: [
         defaultUsers[0]!,

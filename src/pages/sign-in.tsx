@@ -4,6 +4,7 @@ import React from "react";
 import Head from "next/head";
 import Header from "../components/Header";
 import { trackEvent } from "../utils/mixpanel";
+import { browserEnv } from "../utils/env/browser";
 
 export async function getServerSideProps(context: GetServerSidePropsContext) {
   const session = await getSession(context);
@@ -65,7 +66,10 @@ const SignIn: NextPage = () => {
               Sign in with Northeastern!
             </div>
           </button>
-          {process.env.NEXT_PUBLIC_ENV === "staging" && (
+          {/* Staging only, matching the provider list in [...nextauth].ts.
+              Both now read the same validated value (SCRUM-247), so the button
+              and the provider behind it cannot disagree. */}
+          {browserEnv.NEXT_PUBLIC_ENV === "staging" && (
             <button onClick={handleOnGoogleSignInClick}>
               <div className="flex w-64 cursor-pointer items-center justify-center rounded bg-blue-500 px-4 py-3 text-center text-sm font-bold text-white shadow hover:bg-blue-700">
                 Sign in via Google!

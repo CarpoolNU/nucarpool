@@ -56,6 +56,13 @@ const PLACEHOLDER_OVERRIDES = {
   // well-formed URL is used anyway so the placeholder does not depend on that
   // laziness and stays obviously a connection string to anyone reading a log.
   DATABASE_URL: "mysql://ci:ci@127.0.0.1:3306/ci",
+
+  // Constrained to an allow-list rather than any non-empty string
+  // (SCRUM-247), so the generic placeholder would fail envsafe and take the
+  // build job down with it. `production` is the value the deployed app uses,
+  // which also keeps the CI build closest to the real one — and because
+  // `next build` sets NODE_ENV=production, the devDefault does not apply here.
+  NEXT_PUBLIC_ENV: "production",
 };
 
 const DEFAULT_PLACEHOLDER = "ci-placeholder-not-a-real-secret";

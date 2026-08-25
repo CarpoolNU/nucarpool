@@ -108,6 +108,7 @@ Four things that commonly trip people up:
 - **`MYSQL_*` are read only by Docker Compose**, to provision the container. The app reads `DATABASE_URL`, so the user, password, port, and database name inside it must match the container's.
 - **`NEXT_PUBLIC_*` variables are inlined into the client bundle** at build time and are therefore public. Everything else is server-only.
 - **`GOOGLE_*` are required even locally.** The Google sign-in button only appears when `NEXT_PUBLIC_ENV=staging`, but the variables are validated in every environment.
+- **`NEXT_PUBLIC_ENV` must be one of `production`, `staging`, or `development`** — anything else fails validation (SCRUM-247). It selects the auth providers and is written into every S3 profile-picture key (`profile-pictures/{env}/{userId}`), so changing it orphans existing uploads. Leaving it unset locally is fine: it defaults to `development`. A production build has no such default and fails without it.
 
 Validation runs at import time in [`src/utils/env/browser.ts`](src/utils/env/browser.ts) and [`src/utils/env/server.ts`](src/utils/env/server.ts), which is why a missing variable stops the app from starting rather than failing later.
 

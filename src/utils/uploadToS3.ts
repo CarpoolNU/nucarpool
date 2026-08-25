@@ -21,7 +21,7 @@ export async function generatePresignedUrl(
   fileName: string,
   contentType: string,
 ) {
-  const build = process.env.NEXT_PUBLIC_ENV;
+  const build = browserEnv.NEXT_PUBLIC_ENV;
   const command = new PutObjectCommand({
     Bucket: "carpoolnubucket",
     Key: `profile-pictures/${build}/${fileName}`,
@@ -73,7 +73,7 @@ function isObjectNotFound(error: unknown): boolean {
  * its fallback icon instead of a broken image.
  */
 export async function getPresignedImageUrl(fileName: string) {
-  const build = process.env.NEXT_PUBLIC_ENV;
+  const build = browserEnv.NEXT_PUBLIC_ENV;
   const key = `profile-pictures/${build}/${fileName}`;
   const expiry = PRESIGNED_DOWNLOAD_EXPIRY_SECONDS;
 
