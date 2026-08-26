@@ -15,24 +15,39 @@ import type { Context } from "./context";
  * that belongs on real-database tests (SCRUM-263).
  */
 
+/** What a `MIN`/`MAX` aggregate answers for an empty table. */
+const NO_DATES = { _min: { dateCreated: null }, _max: { dateCreated: null } };
+
 /** Only the delegate methods the procedures under test actually reach for. */
 const buildPrismaMock = () => ({
   user: {
     findUnique: jest.fn(),
     findMany: jest.fn().mockResolvedValue([]),
     update: jest.fn(),
+    aggregate: jest.fn().mockResolvedValue(NO_DATES),
   },
   carpoolSearch: {
     findFirst: jest.fn().mockResolvedValue(null),
     findMany: jest.fn().mockResolvedValue([]),
   },
-  carpoolGroup: { findMany: jest.fn().mockResolvedValue([]) },
-  conversation: { findMany: jest.fn().mockResolvedValue([]) },
-  message: {
+  carpoolGroup: {
+    findMany: jest.fn().mockResolvedValue([]),
+    count: jest.fn().mockResolvedValue(0),
+    aggregate: jest.fn().mockResolvedValue(NO_DATES),
+  },
+  conversation: {
     findMany: jest.fn().mockResolvedValue([]),
     count: jest.fn().mockResolvedValue(0),
   },
-  request: { findMany: jest.fn().mockResolvedValue([]) },
+  message: {
+    findMany: jest.fn().mockResolvedValue([]),
+    count: jest.fn().mockResolvedValue(0),
+    groupBy: jest.fn().mockResolvedValue([]),
+  },
+  request: {
+    findMany: jest.fn().mockResolvedValue([]),
+    aggregate: jest.fn().mockResolvedValue(NO_DATES),
+  },
 });
 
 type PrismaMock = ReturnType<typeof buildPrismaMock>;
@@ -101,7 +116,7 @@ const inputlessProtectedProcedures: Array<{
   },
 ];
 
-/** The admin-gated procedures, all of which take no input except the mutation. */
+/** The admin-gated procedures. */
 const adminProcedures: Array<{
   path: string;
   invoke: (
@@ -109,13 +124,19 @@ const adminProcedures: Array<{
   ) => Promise<unknown>;
 }> = [
   { path: "getAllUsers", invoke: (c) => c.user.admin.getAllUsers() },
-  { path: "getCarpoolGroups", invoke: (c) => c.user.admin.getCarpoolGroups() },
+  { path: "getDateRange", invoke: (c) => c.user.admin.getDateRange() },
   {
-    path: "getConversationsMessageCount",
-    invoke: (c) => c.user.admin.getConversationsMessageCount(),
+    path: "getDashboardStats",
+    invoke: (c) => c.user.admin.getDashboardStats(),
   },
-  { path: "getMessages", invoke: (c) => c.user.admin.getMessages() },
-  { path: "getRequests", invoke: (c) => c.user.admin.getRequests() },
+  {
+    path: "getDashboardSeries",
+    invoke: (c) =>
+      c.user.admin.getDashboardSeries({
+        start: new Date("2024-01-01"),
+        end: new Date("2024-02-01"),
+      }),
+  },
   {
     path: "updateUserPermission",
     invoke: (c) =>
@@ -239,9 +260,19 @@ describe("adminRouter", () => {
       const { caller, prisma } = callerFor(sessionFor(permission));
 
       await expect(caller.user.admin.getAllUsers()).resolves.toEqual([]);
-      await expect(caller.user.admin.getCarpoolGroups()).resolves.toEqual([]);
-      await expect(caller.user.admin.getMessages()).resolves.toEqual([]);
-      await expect(caller.user.admin.getRequests()).resolves.toEqual([]);
+      await expect(caller.user.admin.getDateRange()).resolves.toEqual({
+        minDate: null,
+        maxDate: null,
+      });
+      await expect(
+        caller.user.admin.getDashboardStats(),
+      ).resolves.toMatchObject({ groups: { groupCount: 0 } });
+      await expect(
+        caller.user.admin.getDashboardSeries({
+          start: new Date("2024-01-01"),
+          end: new Date("2024-01-08"),
+        }),
+      ).resolves.toMatchObject({ activeUserCount: [0, null] });
       expect(prisma.user.findMany).toHaveBeenCalled();
     },
   );
@@ -269,6 +300,14 @@ describe("admin.updateUserPermission manager gate", () => {
   it("stops an ADMIN who cleared the admin gate from changing permissions", async () => {
     const { caller, prisma } = callerFor(sessionFor(Permission.ADMIN));
 
+    await expectTrpcError(
+      () =>
+        caller.user.admin.updateUserPermission({
+          userId: "someone-else",
+          permission: Permission.MANAGER,
+        }),
+      "FORBIDDEN",
+    );
     await expect(
       caller.user.admin.updateUserPermission({
         userId: "someone-else",
@@ -283,6 +322,14 @@ describe("admin.updateUserPermission manager gate", () => {
       sessionFor(Permission.MANAGER, "manager-1"),
     );
 
+    await expectTrpcError(
+      () =>
+        caller.user.admin.updateUserPermission({
+          userId: "manager-1",
+          permission: Permission.USER,
+        }),
+      "FORBIDDEN",
+    );
     await expect(
       caller.user.admin.updateUserPermission({
         userId: "manager-1",

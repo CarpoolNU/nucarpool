@@ -1,179 +1,107 @@
 import React, { useEffect, useState } from "react";
 import Spinner from "../Spinner";
 import { trpc } from "../../utils/trpc";
-import {
-  TempUser,
-  TempGroup,
-  TempConversation,
-  TempMessage,
-  TempRequest,
-} from "../../utils/types";
 import BarChartUserCounts from "./BarChartUserCounts";
 import LineChartCount from "./LineChartCount";
 import BarChartDaysFrequency from "./BarChartDaysFrequency";
 import QuickStats from "./QuickStats";
-import {
-  buildLineChartData,
-  countRole,
-  filterDataForLineChart,
-  generateWeekLabels,
-  getDaysFrequency,
-  getMinMaxDates,
-} from "../../utils/adminDataUtils";
 import { format, startOfWeek } from "date-fns";
 import { ConfigProvider, Slider } from "antd";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
 
+/**
+ * The admin dashboard.
+ *
+ * Every number here is aggregated by `user.admin` on the server (SCRUM-246).
+ * This component used to download the user, group, request, conversation and
+ * message tables and reduce them in the browser; it now receives finished
+ * counts, so moving the slider narrows the query rather than re-filtering a
+ * dataset that was already transferred in full.
+ */
 function AdminData() {
-  const [loading, setLoading] = useState<boolean>(true);
-  const [sliderRange, setSliderRange] = useState<number[]>([0, 0]);
-  const [minDate, setMinDate] = useState<number>(0);
-  const [maxDate, setMaxDate] = useState<number>(0);
+  // What the slider currently shows, updated continuously while dragging.
+  const [sliderRange, setSliderRange] = useState<number[] | null>(null);
+  // What the series query asks for, updated only when a drag finishes, so one
+  // drag costs one request instead of one per pixel.
+  const [queryRange, setQueryRange] = useState<number[] | null>(null);
 
-  const { data: users = [] } =
-    trpc.user.admin.getAllUsers.useQuery<TempUser[]>();
-  const { data: groups = [] } =
-    trpc.user.admin.getCarpoolGroups.useQuery<TempGroup[]>();
-  const { data: conversations } =
-    trpc.user.admin.getConversationsMessageCount.useQuery<TempConversation[]>();
-  const { data: messages = [] } =
-    trpc.user.admin.getMessages.useQuery<TempMessage[]>();
-  const { data: requests = [] } =
-    trpc.user.admin.getRequests.useQuery<TempRequest[]>();
+  const { data: dateRange } = trpc.user.admin.getDateRange.useQuery();
+  const { data: stats } = trpc.user.admin.getDashboardStats.useQuery();
+  const { data: series } = trpc.user.admin.getDashboardSeries.useQuery(
+    {
+      start: new Date(queryRange?.[0] ?? 0),
+      end: new Date(queryRange?.[1] ?? 0),
+    },
+    { enabled: queryRange !== null },
+  );
 
   useEffect(() => {
-    if (users && groups && messages && requests && conversations) {
-      const { minDate, maxDate } = getMinMaxDates(users, groups, requests);
-      setMinDate(minDate);
-      setMaxDate(maxDate);
-      setSliderRange([
-        startOfWeek(minDate).getTime(),
-        startOfWeek(maxDate).getTime(),
-      ]);
-      setLoading(false);
+    if (!dateRange?.minDate || !dateRange?.maxDate) {
+      return;
     }
-  }, [users, groups, messages, requests, conversations]);
+    const bounds = [
+      startOfWeek(dateRange.minDate).getTime(),
+      startOfWeek(dateRange.maxDate).getTime(),
+    ];
+    setSliderRange(bounds);
+    setQueryRange(bounds);
+  }, [dateRange]);
 
-  const activeUsers = users.filter((user) => user.status === "ACTIVE");
+  const hasData = !!dateRange?.minDate && !!dateRange?.maxDate;
 
-  const drivers = activeUsers.filter((user) => user.role === "DRIVER");
+  if (!dateRange || !stats || (hasData && (!sliderRange || !series))) {
+    return <Spinner />;
+  }
 
-  const riders = activeUsers.filter((user) => user.role === "RIDER");
-
-  // day frequency chart data
-  const { riderDayCount, driverDayCount } = getDaysFrequency(drivers, riders);
-
-  // line chart data
+  const [rangeStart, rangeEnd] = sliderRange ?? [0, 0];
   const {
-    filteredActiveUsers,
-    filteredInactiveUsers,
-    filteredGroups,
-    filteredRequests,
-    filteredDriverRequests,
-    filteredRiderRequests,
-  } = filterDataForLineChart(users, groups, requests, sliderRange);
+    weekLabels = [],
+    activeUserCount = [],
+    inactiveUserCount = [],
+    groupCounts = [],
+    requestCount = [],
+    driverRequestCount = [],
+    riderRequestCount = [],
+  } = series ?? {};
 
-  const allDates = [
-    ...users.map((user) => user.dateCreated),
-    ...filteredGroups.map((group) => group.dateCreated),
-    ...filteredRequests.map((request) => request.dateCreated),
-  ];
-
-  const weekLabels = generateWeekLabels(allDates);
-
+  const { riderDayCount, driverDayCount } = stats.daysFrequency;
+  const { totalConversationCount, totalWithMsgCount, avgConvWithMsg, avgMsg } =
+    stats.conversations;
   const {
-    activeUserCount,
-    inactiveUserCount,
-    groupCounts,
-    requestCount,
-    driverRequestCount,
-    riderRequestCount,
-  } = buildLineChartData(
-    filteredActiveUsers,
-    filteredInactiveUsers,
-    filteredGroups,
-    filteredRequests,
-    filteredDriverRequests,
-    filteredRiderRequests,
-    weekLabels,
-  );
-  const formatter = (value: any) => format(new Date(value), "MMM dd, yyyy");
-  const onSliderChange = (value: number[]) => {
-    setSliderRange(value);
-  };
+    groupCount,
+    driversInGroup,
+    ridersInGroup,
+    totalDrivers,
+    totalRiders,
+  } = stats.groups;
+  const {
+    totalAO,
+    totalANO,
+    totalIO,
+    totalINO,
+    driverAO,
+    driverANO,
+    driverIO,
+    driverINO,
+    riderAO,
+    riderANO,
+    riderIO,
+    riderINO,
+    viewerAO,
+    viewerANO,
+    viewerIO,
+    viewerINO,
+  } = stats.userCounts;
 
-  // Quick Stats data
-  const totalCountWithMsg = 0;
-  const totalCount = 0;
-  const totalConversationCount = conversations ? conversations.length : 0;
-
-  const conversationsWithMessage = conversations?.filter(
-    (conversation) => conversation._count.messages > 1,
-  );
-  const avgConvWithMsg = conversationsWithMessage
-    ? conversationsWithMessage.reduce(
-        (acc, curr) => acc + curr._count.messages,
-        totalCountWithMsg,
-      ) / conversationsWithMessage.length
-    : 0;
-  const avgMsg = conversations
-    ? conversations.reduce(
-        (acc, curr) => acc + curr._count.messages,
-        totalCount,
-      ) / conversations.length
-    : 0;
-  const totalWithMsgCount = conversationsWithMessage
-    ? conversationsWithMessage.length
-    : 0;
-
-  const groupCount = groups.filter((group) => group._count.carpoolSearches > 1).length;
-  const ridersInGroup = activeUsers.filter(
-    (user) => user.role === "RIDER" && user.carpoolId && user.carpoolId !== "",
-  );
-  const driversInGroup = activeUsers.filter(
-    (user) => user.role === "DRIVER" && user.carpoolId && user.carpoolId !== "",
-  );
-  const totalDrivers = activeUsers.filter(
-    (user) => user.role === "DRIVER",
-  ).length;
-  const totalRiders = activeUsers.length - totalDrivers;
-  const percentDriversInGroup =
-    Math.round((driversInGroup.length / totalDrivers) * 1000) / 10 + "%";
-  const percentRidersInGroup =
-    Math.round((ridersInGroup.length / totalRiders) * 1000) / 10 + "%";
+  const percent = (part: number, whole: number) =>
+    Math.round((part / whole) * 1000) / 10 + "%";
+  const percentDriversInGroup = percent(driversInGroup, totalDrivers);
+  const percentRidersInGroup = percent(ridersInGroup, totalRiders);
   const averageRidersPerGroup =
-    Math.round((ridersInGroup.length / groupCount) * 10) / 10;
-  const activeOnboardedUsers = activeUsers.filter((user) => user.isOnboarded);
-  const activeNotOnboardedUsers = activeUsers.filter(
-    (user) => !user.isOnboarded,
-  );
-  const inactiveOnboardedUsers = users.filter(
-    (user) => user.status !== "ACTIVE" && user.isOnboarded,
-  );
-  const inactiveNotOnboardedUsers = users.filter(
-    (user) => user.status !== "ACTIVE" && !user.isOnboarded,
-  );
+    Math.round((ridersInGroup / groupCount) * 10) / 10;
 
-  const totalAO = activeOnboardedUsers.length;
-  const totalANO = activeNotOnboardedUsers.length;
-  const totalIO = inactiveOnboardedUsers.length;
-  const totalINO = inactiveNotOnboardedUsers.length;
-
-  const driverAO = countRole(activeOnboardedUsers, "DRIVER");
-  const driverANO = countRole(activeNotOnboardedUsers, "DRIVER");
-  const driverIO = countRole(inactiveOnboardedUsers, "DRIVER");
-  const driverINO = countRole(inactiveNotOnboardedUsers, "DRIVER");
-
-  const riderAO = countRole(activeOnboardedUsers, "RIDER");
-  const riderANO = countRole(activeNotOnboardedUsers, "RIDER");
-  const riderIO = countRole(inactiveOnboardedUsers, "RIDER");
-  const riderINO = countRole(inactiveNotOnboardedUsers, "RIDER");
-
-  const viewerAO = totalAO - driverAO - riderAO;
-  const viewerANO = totalANO - driverANO - riderANO;
-  const viewerIO = totalIO - driverIO - riderIO;
-  const viewerINO = totalINO - driverINO - riderINO;
+  const formatter = (value: any) => format(new Date(value), "MMM dd, yyyy");
 
   // line chart
   const buildLineChartCSV = () => {
@@ -281,10 +209,6 @@ function AdminData() {
     saveAs(content, `all_data_${date}.zip`);
   };
 
-  if (loading) {
-    return <Spinner />;
-  }
-
   return (
     <div className=" my-4 h-full w-full overflow-y-auto">
       <div className=" flex h-full w-full flex-col  space-y-4  px-8">
@@ -343,20 +267,25 @@ function AdminData() {
           >
             <Slider
               range={{ draggableTrack: true }}
-              min={startOfWeek(minDate).getTime()}
-              max={startOfWeek(maxDate).getTime()}
-              value={sliderRange}
+              min={
+                dateRange.minDate ? startOfWeek(dateRange.minDate).getTime() : 0
+              }
+              max={
+                dateRange.maxDate ? startOfWeek(dateRange.maxDate).getTime() : 0
+              }
+              value={[rangeStart, rangeEnd]}
               tooltip={{ formatter }}
-              onChange={onSliderChange}
+              onChange={setSliderRange}
+              onChangeComplete={setQueryRange}
               step={7 * 24 * 60 * 60 * 1000}
             />
           </ConfigProvider>
           <div className="flex justify-between font-montserrat">
             <span>
-              {format(startOfWeek(new Date(sliderRange[0])), "MMM dd, yyyy")}
+              {format(startOfWeek(new Date(rangeStart)), "MMM dd, yyyy")}
             </span>
             <span>
-              {format(startOfWeek(new Date(sliderRange[1])), "MMM dd, yyyy")}
+              {format(startOfWeek(new Date(rangeEnd)), "MMM dd, yyyy")}
             </span>
           </div>
         </div>

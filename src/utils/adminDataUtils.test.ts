@@ -1,19 +1,23 @@
-import { Permission, Role, Status } from "@prisma/client";
-import { startOfWeek } from "date-fns";
+import { Role, Status } from "@prisma/client";
 import {
+  buildLineChartData,
   countCumulativeItemsPerWeek,
   countRole,
-  filterDataForLineChart,
-  filterItemsByDate,
   generateWeekLabels,
   getDaysFrequency,
-  getMinMaxDates,
+  summariseConversations,
+  summariseUsers,
 } from "./adminDataUtils";
-import type { TempGroup, TempRequest, TempUser } from "./types";
+import type { AdminUserRow } from "./types";
 
 /**
- * The admin dashboard's growth chart. The interesting behaviour is the weekly
- * bucketing and the deliberate `null` gaps that keep flat stretches off the line.
+ * The admin dashboard's aggregations. Since SCRUM-246 these run inside the
+ * `user.admin` router rather than in the browser, so the numbers asserted here
+ * are the ones that go over the wire — the client only formats them.
+ *
+ * The interesting behaviour is the weekly bucketing, the deliberate `null` gaps
+ * that keep flat stretches off the line, and the defaults applied to a user who
+ * has no `CarpoolSearch`.
  */
 
 // 2024-01-01 is a Monday, so these three Sundays are consecutive week starts.
@@ -24,30 +28,14 @@ const WEEK_2 = new Date(2024, 0, 21);
 const on = (year: number, month: number, dayOfMonth: number) =>
   new Date(year, month - 1, dayOfMonth);
 
-const user = (overrides: Partial<TempUser> = {}): TempUser => ({
-  id: "user-1",
-  email: "ada@northeastern.edu",
-  permission: Permission.USER,
+const user = (overrides: Partial<AdminUserRow> = {}): AdminUserRow => ({
   isOnboarded: true,
-  dateCreated: on(2024, 1, 8),
   role: Role.RIDER,
   status: Status.ACTIVE,
-  carpoolId: "",
   daysWorking: "0,1,1,1,1,1,0",
+  carpoolId: null,
   ...overrides,
 });
-
-const group = (dateCreated: Date, id = "group-1"): TempGroup => ({
-  id,
-  dateCreated,
-  _count: { carpoolSearches: 2 },
-});
-
-const carpoolRequest = (
-  dateCreated: Date,
-  role: Role = Role.RIDER,
-  id = "request-1",
-): TempRequest => ({ id, dateCreated, fromUser: { role } });
 
 describe("countCumulativeItemsPerWeek", () => {
   it("accumulates counts across the weeks and omits flat weeks with null", () => {
@@ -123,45 +111,6 @@ describe("countCumulativeItemsPerWeek", () => {
   });
 });
 
-describe("filterItemsByDate", () => {
-  const inRange = startOfWeek(on(2024, 1, 10)).getTime();
-  const before = startOfWeek(on(2023, 12, 10)).getTime();
-  const after = startOfWeek(on(2024, 3, 10)).getTime();
-
-  it("keeps items whose week falls inside the range", () => {
-    const items = [{ dateCreated: on(2024, 1, 10) }];
-
-    expect(filterItemsByDate(items, before, after)).toEqual(items);
-  });
-
-  it("drops items whose week falls outside the range", () => {
-    const items = [
-      { dateCreated: on(2023, 12, 10) },
-      { dateCreated: on(2024, 3, 10) },
-    ];
-
-    expect(filterItemsByDate(items, inRange, inRange)).toEqual([]);
-  });
-
-  it("includes items sitting exactly on either boundary week", () => {
-    const items = [
-      { dateCreated: on(2023, 12, 10) },
-      { dateCreated: on(2024, 3, 10) },
-    ];
-
-    expect(filterItemsByDate(items, before, after)).toHaveLength(2);
-  });
-
-  it("buckets by the start of the week, so any day in a boundary week counts", () => {
-    // 2024-01-10 is a Wednesday; its week starts on the 7th, which is the bound.
-    const items = [{ dateCreated: on(2024, 1, 10) }];
-
-    expect(
-      filterItemsByDate(items, WEEK_0.getTime(), WEEK_0.getTime()),
-    ).toEqual(items);
-  });
-});
-
 describe("generateWeekLabels", () => {
   it("returns no labels for no dates", () => {
     expect(generateWeekLabels([])).toEqual([]);
@@ -188,83 +137,37 @@ describe("generateWeekLabels", () => {
       WEEK_2,
     ]);
   });
+
+  it("spans the requested window, which is how the router derives the x-axis", () => {
+    // `getDashboardSeries` passes the slider's two ends straight in, so the
+    // labels follow the selection rather than the extent of the data.
+    expect(generateWeekLabels([on(2024, 1, 8), on(2024, 1, 15)])).toEqual([
+      WEEK_0,
+      WEEK_1,
+    ]);
+  });
 });
 
-describe("getMinMaxDates", () => {
-  it("spans the earliest and latest date across users, groups and requests", () => {
-    const result = getMinMaxDates(
-      [user({ dateCreated: on(2024, 2, 1) })],
-      [group(on(2024, 1, 1))],
-      [carpoolRequest(on(2024, 3, 1))],
+describe("buildLineChartData", () => {
+  it("keeps each series on its own key", () => {
+    const result = buildLineChartData(
+      [{ dateCreated: on(2024, 1, 8) }],
+      [{ dateCreated: on(2024, 1, 8) }, { dateCreated: on(2024, 1, 9) }],
+      [{ dateCreated: on(2024, 1, 15) }],
+      [{ dateCreated: on(2024, 1, 8) }, { dateCreated: on(2024, 1, 15) }],
+      [{ dateCreated: on(2024, 1, 8) }],
+      [{ dateCreated: on(2024, 1, 15) }],
+      [WEEK_0, WEEK_1],
     );
 
     expect(result).toEqual({
-      minDate: on(2024, 1, 1).getTime(),
-      maxDate: on(2024, 3, 1).getTime(),
+      activeUserCount: [1, null],
+      inactiveUserCount: [2, null],
+      groupCounts: [0, 1],
+      requestCount: [1, 2],
+      driverRequestCount: [1, null],
+      riderRequestCount: [0, 1],
     });
-  });
-
-  it("returns a zero range when there is nothing at all", () => {
-    // Math.min of an empty spread would be Infinity, so this guard matters.
-    expect(getMinMaxDates([], [], [])).toEqual({ minDate: 0, maxDate: 0 });
-  });
-
-  it("collapses to a single instant when only one item exists", () => {
-    const result = getMinMaxDates(
-      [user({ dateCreated: on(2024, 2, 1) })],
-      [],
-      [],
-    );
-
-    expect(result.minDate).toBe(result.maxDate);
-  });
-});
-
-describe("filterDataForLineChart", () => {
-  const range = [
-    startOfWeek(on(2024, 1, 1)).getTime(),
-    startOfWeek(on(2024, 3, 1)).getTime(),
-  ];
-
-  it("separates active from inactive users", () => {
-    const active = user({ id: "a", status: Status.ACTIVE });
-    const inactive = user({ id: "b", status: Status.INACTIVE });
-
-    const result = filterDataForLineChart([active, inactive], [], [], range);
-
-    expect(result.filteredActiveUsers).toEqual([active]);
-    expect(result.filteredInactiveUsers).toEqual([inactive]);
-  });
-
-  it("separates rider requests from driver requests while keeping the combined total", () => {
-    const riderRequest = carpoolRequest(on(2024, 1, 8), Role.RIDER, "r1");
-    const driverRequest = carpoolRequest(on(2024, 1, 9), Role.DRIVER, "r2");
-
-    const result = filterDataForLineChart(
-      [],
-      [],
-      [riderRequest, driverRequest],
-      range,
-    );
-
-    expect(result.filteredRiderRequests).toEqual([riderRequest]);
-    expect(result.filteredDriverRequests).toEqual([driverRequest]);
-    expect(result.filteredRequests).toHaveLength(2);
-  });
-
-  it("applies the slider range to every series", () => {
-    const outOfRange = user({ dateCreated: on(2030, 1, 1) });
-
-    const result = filterDataForLineChart(
-      [outOfRange],
-      [group(on(2030, 1, 1))],
-      [carpoolRequest(on(2030, 1, 1))],
-      range,
-    );
-
-    expect(result.filteredActiveUsers).toEqual([]);
-    expect(result.filteredGroups).toEqual([]);
-    expect(result.filteredRequests).toEqual([]);
   });
 });
 
@@ -299,9 +202,9 @@ describe("getDaysFrequency", () => {
 describe("countRole", () => {
   it("counts only users in the requested role", () => {
     const users = [
-      user({ id: "a", role: Role.RIDER }),
-      user({ id: "b", role: Role.DRIVER }),
-      user({ id: "c", role: Role.RIDER }),
+      user({ role: Role.RIDER }),
+      user({ role: Role.DRIVER }),
+      user({ role: Role.RIDER }),
     ];
 
     expect(countRole(users, Role.RIDER)).toBe(2);
@@ -311,5 +214,141 @@ describe("countRole", () => {
 
   it("counts nothing in an empty list", () => {
     expect(countRole([], Role.RIDER)).toBe(0);
+  });
+});
+
+describe("summariseUsers", () => {
+  it("splits the counts across the four onboarding quadrants", () => {
+    const { userCounts } = summariseUsers([
+      user({ role: Role.DRIVER, status: Status.ACTIVE, isOnboarded: true }),
+      user({ role: Role.RIDER, status: Status.ACTIVE, isOnboarded: true }),
+      user({ role: Role.VIEWER, status: Status.ACTIVE, isOnboarded: false }),
+      user({ role: Role.RIDER, status: Status.INACTIVE, isOnboarded: true }),
+      user({ role: Role.DRIVER, status: Status.INACTIVE, isOnboarded: false }),
+    ]);
+
+    expect(userCounts).toEqual({
+      totalAO: 2,
+      totalANO: 1,
+      totalIO: 1,
+      totalINO: 1,
+      driverAO: 1,
+      driverANO: 0,
+      driverIO: 0,
+      driverINO: 1,
+      riderAO: 1,
+      riderANO: 0,
+      riderIO: 1,
+      riderINO: 0,
+      viewerAO: 0,
+      viewerANO: 1,
+      viewerIO: 0,
+      viewerINO: 0,
+    });
+  });
+
+  it("derives the viewer counts as whatever is neither driver nor rider", () => {
+    const { userCounts } = summariseUsers([
+      user({ role: Role.VIEWER, status: Status.ACTIVE, isOnboarded: true }),
+      user({ role: Role.VIEWER, status: Status.ACTIVE, isOnboarded: true }),
+    ]);
+
+    expect(userCounts.viewerAO).toBe(2);
+    expect(userCounts.totalAO).toBe(2);
+  });
+
+  it("tallies the days-working frequency under the role that worked them", () => {
+    // The call site used to pass (drivers, riders) to a (riders, drivers)
+    // signature, so the two series were swapped in the chart (SCRUM-284).
+    const { daysFrequency } = summariseUsers([
+      user({ role: Role.RIDER, daysWorking: "1,0,0,0,0,0,0" }),
+      user({ role: Role.DRIVER, daysWorking: "0,0,0,0,0,0,1" }),
+    ]);
+
+    expect(daysFrequency.riderDayCount).toEqual([1, 0, 0, 0, 0, 0, 0]);
+    expect(daysFrequency.driverDayCount).toEqual([0, 0, 0, 0, 0, 0, 1]);
+  });
+
+  it("counts only active users towards the days-working frequency", () => {
+    const { daysFrequency } = summariseUsers([
+      user({
+        role: Role.RIDER,
+        status: Status.INACTIVE,
+        daysWorking: "1,1,1,1,1,1,1",
+      }),
+    ]);
+
+    expect(daysFrequency.riderDayCount).toEqual([0, 0, 0, 0, 0, 0, 0]);
+  });
+
+  it("treats an empty carpoolId as not being in a group, the same as null", () => {
+    const { membership } = summariseUsers([
+      user({ role: Role.DRIVER, carpoolId: "group-1" }),
+      user({ role: Role.DRIVER, carpoolId: "" }),
+      user({ role: Role.DRIVER, carpoolId: null }),
+      user({ role: Role.RIDER, carpoolId: "group-1" }),
+    ]);
+
+    expect(membership).toEqual({
+      driversInGroup: 1,
+      ridersInGroup: 1,
+      totalDrivers: 3,
+      totalRiders: 1,
+    });
+  });
+
+  it("counts every active non-driver as a rider, viewers included", () => {
+    // Long-standing dashboard definition: the percentage denominators are
+    // "active users who are not drivers", not "users whose role is RIDER".
+    const { membership } = summariseUsers([
+      user({ role: Role.DRIVER }),
+      user({ role: Role.RIDER }),
+      user({ role: Role.VIEWER }),
+      user({ role: Role.RIDER, status: Status.INACTIVE }),
+    ]);
+
+    expect(membership.totalDrivers).toBe(1);
+    expect(membership.totalRiders).toBe(2);
+  });
+
+  it("reports zeroes for an empty platform rather than throwing", () => {
+    const { userCounts, membership, daysFrequency } = summariseUsers([]);
+
+    expect(userCounts.totalAO).toBe(0);
+    expect(membership.totalDrivers).toBe(0);
+    expect(daysFrequency.riderDayCount).toEqual([0, 0, 0, 0, 0, 0, 0]);
+  });
+});
+
+describe("summariseConversations", () => {
+  it("averages messages over every conversation, including silent ones", () => {
+    // Four conversations exist; only three of them have any messages at all.
+    const stats = summariseConversations(4, [1, 3, 4]);
+
+    expect(stats.totalConversationCount).toBe(4);
+    expect(stats.avgMsg).toBe(2);
+  });
+
+  it("counts and averages only the conversations with more than one message", () => {
+    const stats = summariseConversations(4, [1, 3, 5]);
+
+    expect(stats.totalWithMsgCount).toBe(2);
+    expect(stats.avgConvWithMsg).toBe(4);
+  });
+
+  it("returns zero rather than NaN when there is nothing to average", () => {
+    expect(summariseConversations(0, [])).toEqual({
+      totalConversationCount: 0,
+      totalWithMsgCount: 0,
+      avgConvWithMsg: 0,
+      avgMsg: 0,
+    });
+  });
+
+  it("returns zero for the >1 average when every conversation has one message", () => {
+    const stats = summariseConversations(2, [1, 1]);
+
+    expect(stats.avgConvWithMsg).toBe(0);
+    expect(stats.avgMsg).toBe(1);
   });
 });
