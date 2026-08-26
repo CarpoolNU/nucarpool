@@ -16,12 +16,40 @@ import {
   generatePresignedUrl,
   getPresignedImageUrl,
 } from "../../utils/uploadToS3";
+import {
+  MAX_PROFILE_IMAGE_BYTES,
+  PROFILE_IMAGE_CONTENT_TYPES,
+} from "../../utils/profileImage";
 import { adminDataRouter } from "./user/admin";
 import { resolveOwnedLocations } from "../db/locationOwnership";
 
-const getPresignedDownloadUrlInput = z.object({
-  userId: z.string().optional(),
-});
+/**
+ * Access rule for `getPresignedDownloadUrl`, decided under SCRUM-243:
+ * **any signed-in user may read any user's profile picture.**
+ *
+ * This is deliberate, not an oversight. Avatars render in recommendations, on
+ * the map, on group cards and throughout messaging, so a viewer has no prior
+ * relationship with most of the people whose pictures they legitimately see;
+ * scoping this to existing relationships would break those surfaces. A profile
+ * picture is the one field a user uploads specifically to be seen by strangers
+ * on the platform, which is what separates it from the precise home coordinates
+ * in the sibling ticket.
+ *
+ * What *is* constrained is the shape of the id, because it is interpolated
+ * straight into an S3 key. Ids are cuids, so refusing anything outside
+ * `[A-Za-z0-9_-]` costs nothing and stops the parameter being used to name a key
+ * outside the `profile-pictures/{env}/` prefix.
+ */
+const getPresignedDownloadUrlInput = z
+  .object({
+    userId: z
+      .string()
+      .min(1)
+      .max(191)
+      .regex(/^[A-Za-z0-9_-]+$/)
+      .optional(),
+  })
+  .strict();
 
 // user router to get information about or edit users
 export const userRouter = router({
@@ -255,29 +283,60 @@ export const userRouter = router({
       return updatedUser;
     }),
 
+  /**
+   * Signs an upload URL for the caller's *own* profile picture (SCRUM-243).
+   *
+   * The key is always derived from the session, never from input, so this cannot
+   * be pointed at another user's object. What input controls is the type and the
+   * size, and both are bounded here and then bound into the signature — see
+   * `generatePresignedUrl` for why the second half is load-bearing.
+   *
+   * Throws rather than resolving `undefined` when there is no session user: a
+   * missing URL was previously indistinguishable from a successful call, and
+   * React Query reports a query that resolves `undefined` as a failure anyway.
+   */
   getPresignedUrl: protectedRouter
     .input(
-      z.object({
-        contentType: z.string(),
-      }),
+      z
+        .object({
+          contentType: z.enum(PROFILE_IMAGE_CONTENT_TYPES),
+          // The declared length is what gets signed, so an oversize file cannot
+          // be smuggled past this by understating it: S3 rejects a body whose
+          // length disagrees with the signature.
+          contentLength: z
+            .number()
+            .int()
+            .positive()
+            .max(MAX_PROFILE_IMAGE_BYTES),
+        })
+        .strict(),
     )
-    .query(async ({ ctx, input }): Promise<{ url: string } | undefined> => {
-      const { contentType } = input;
+    .query(async ({ ctx, input }): Promise<{ url: string }> => {
       const fileName: string | undefined = ctx.session.user?.id;
-      if (fileName) {
-        try {
-          const url: string = await generatePresignedUrl(fileName, contentType);
-          return { url };
-        } catch (error) {
-          throw new TRPCError({
-            code: "INTERNAL_SERVER_ERROR",
-            message: "Failed to generate a pre-signed URL",
-          });
-        }
+      if (!fileName) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "User not authenticated",
+        });
+      }
+
+      try {
+        const url: string = await generatePresignedUrl(
+          fileName,
+          input.contentType,
+          input.contentLength,
+        );
+        return { url };
+      } catch (error) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to generate a pre-signed URL",
+        });
       }
     }),
   /**
-   * Always resolves an object, never `undefined` (SCRUM-242).
+   * Resolves `{ url: null }` for a user with no picture, never `undefined`
+   * (SCRUM-242).
    *
    * React Query treats a query function that resolves `undefined` as a
    * failure ("... data is undefined"), and a query in the error state
@@ -285,13 +344,21 @@ export const userRouter = router({
    * procedure used to return `undefined` for a user with no profile picture,
    * so those users - the majority - were never cacheable and paid an S3
    * HeadObject on every avatar mount. `{ url: null }` is a cacheable success.
+   *
+   * "No picture" is the only thing `{ url: null }` means (SCRUM-243). A session
+   * carrying no user is not a picture-state, so it throws instead of borrowing
+   * the same answer - that ambiguity was the point of the criterion, and it does
+   * not touch the caching behaviour above, which is about successful lookups.
    */
   getPresignedDownloadUrl: protectedRouter
     .input(getPresignedDownloadUrlInput)
     .query(async ({ ctx, input }): Promise<{ url: string | null }> => {
       const userId: string | undefined = input.userId ?? ctx.session.user?.id;
       if (!userId) {
-        return { url: null };
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "User not authenticated",
+        });
       }
       try {
         return { url: await getPresignedImageUrl(userId) };
