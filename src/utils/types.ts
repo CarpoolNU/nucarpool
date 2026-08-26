@@ -5,44 +5,56 @@ import type { AppRouter } from "../server/router";
 import { inferRouterOutputs } from "@trpc/server";
 
 type RouterOutput = inferRouterOutputs<AppRouter>;
-export type TempUser = {
+/**
+ * Admin dashboard shapes (SCRUM-246).
+ *
+ * The dashboard no longer downloads tables and reduces them in the browser; the
+ * router returns finished aggregates instead. These describe that contract.
+ */
+
+/** Everything `UserManagement` needs to list users and change a permission. */
+export type AdminUser = {
   id: string;
   email: string;
   permission: Permission;
+};
+
+/** The narrow per-user projection `summariseUsers` reduces, one row per user. */
+export type AdminUserRow = {
   isOnboarded: boolean;
-  dateCreated: Date;
   role: Role;
   status: Status;
-  carpoolId: string;
   daysWorking: string;
+  carpoolId: string | null;
 };
-export type TempGroup = {
-  id: string;
-  dateCreated: Date;
-  _count: {
-    carpoolSearches: number;
-  };
+
+/** Active/Inactive x Onboarded/Not, split by role. */
+export type AdminUserCounts = {
+  totalAO: number;
+  totalANO: number;
+  totalIO: number;
+  totalINO: number;
+  driverAO: number;
+  driverANO: number;
+  driverIO: number;
+  driverINO: number;
+  riderAO: number;
+  riderANO: number;
+  riderIO: number;
+  riderINO: number;
+  viewerAO: number;
+  viewerANO: number;
+  viewerIO: number;
+  viewerINO: number;
 };
-export type TempRequest = {
-  id: string;
-  dateCreated: Date;
-  fromUser: {
-    role: Role;
-  };
+
+export type ConversationStats = {
+  totalConversationCount: number;
+  totalWithMsgCount: number;
+  avgConvWithMsg: number;
+  avgMsg: number;
 };
-export type TempConversation = {
-  id: string;
-  dateCreated: Date;
-  _count: {
-    messages: number;
-  };
-};
-export type TempMessage = {
-  conversationId: string;
-  dateCreated: Date;
-  content: string;
-  User: PublicUser;
-};
+
 export type OnboardingFormInputs = {
   role: Role;
   status: Status;

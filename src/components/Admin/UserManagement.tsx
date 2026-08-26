@@ -5,17 +5,19 @@ import Spinner from "../Spinner";
 import { toast } from "react-toastify";
 import { ConfigProvider, Select } from "antd";
 import { Note } from "../../styles/profile";
-import { TempUser } from "../../utils/types";
+import { AdminUser } from "../../utils/types";
 
 type UserManagementProps = {
   permission: Permission;
 };
 const UserManagement = ({ permission }: UserManagementProps) => {
   const [loading, setLoading] = useState<boolean>(true);
-  const [selectedUser, setSelectedUser] = React.useState<TempUser | null>(null);
+  const [selectedUser, setSelectedUser] = React.useState<AdminUser | null>(
+    null,
+  );
   const [selectedPermission, setSelectedPermission] =
     React.useState<Permission | null>(null);
-  const { data: users } = trpc.user.admin.getAllUsers.useQuery<TempUser[]>();
+  const { data: users } = trpc.user.admin.getAllUsers.useQuery<AdminUser[]>();
   const utils = trpc.useUtils();
 
   const updateUserPermission = trpc.user.admin.updateUserPermission.useMutation(

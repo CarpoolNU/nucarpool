@@ -392,12 +392,15 @@ describe("user.messages.getMessages — removed rather than scoped", () => {
     expect(paths).not.toContain("user.messages.getMessages");
   });
 
-  it("left the admin procedure of the same name alone", async () => {
-    // `user.admin.getMessages` is a different, adminRouter-gated procedure that
-    // AdminData.tsx does use; removing the messages one must not touch it.
+  it("no longer has an admin counterpart either", async () => {
+    // `user.admin.getMessages` was a separate, adminRouter-gated procedure that
+    // SCRUM-222 deliberately left alone. SCRUM-246 then removed it too, for a
+    // different reason: it selected `content`, so it shipped the text of every
+    // private message to an admin's browser, and AdminData.tsx never read the
+    // result. No procedure in the router selects a message body now.
     const paths = Object.keys((appRouter as any)._def.procedures);
 
-    expect(paths).toContain("user.admin.getMessages");
+    expect(paths).not.toContain("user.admin.getMessages");
   });
 });
 
