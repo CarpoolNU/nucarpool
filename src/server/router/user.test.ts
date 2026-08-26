@@ -4,6 +4,7 @@ import type { Session } from "next-auth";
 import { appRouter } from "./index";
 import type { Context } from "./context";
 import { PROFILE_TEXT_MAX_LENGTH } from "../../utils/textLimits";
+import { MAX_PROFILE_IMAGE_BYTES } from "../../utils/profileImage";
 import { cloneState, withTransaction } from "./transactionMock";
 
 /**
@@ -27,11 +28,13 @@ import { cloneState, withTransaction } from "./transactionMock";
  */
 
 const mockGetPresignedImageUrl = jest.fn();
+const mockGeneratePresignedUrl = jest.fn();
 
 jest.mock("../../utils/uploadToS3", () => ({
   getPresignedImageUrl: (...args: unknown[]) =>
     mockGetPresignedImageUrl(...args),
-  generatePresignedUrl: jest.fn(),
+  generatePresignedUrl: (...args: unknown[]) =>
+    mockGeneratePresignedUrl(...args),
 }));
 
 const SESSION_USER = "session-user";
@@ -100,18 +103,56 @@ describe("user.getPresignedDownloadUrl", () => {
     expect(mockGetPresignedImageUrl).toHaveBeenCalledWith(SESSION_USER);
   });
 
-  it("resolves { url: null } rather than undefined when there is no user id at all", async () => {
-    // A session with no `user` is the only way to reach this branch. It should
-    // still hand React Query something cacheable instead of an error.
+  it('refuses a session with no user rather than calling it "no picture"', async () => {
+    // A session with no `user` is the only way to reach this branch. It used to
+    // answer `{ url: null }`, which is the same thing this procedure says about
+    // a user who simply has not uploaded anything - so a broken session was
+    // indistinguishable from an empty avatar (SCRUM-243).
+    //
+    // This does not weaken SCRUM-242: `{ url: null }` is still the answer for
+    // every *successful* lookup that finds no object, which is the case that
+    // had to stay cacheable.
     const caller = callerFor({
       expires: "2099-01-01T00:00:00.000Z",
     } as unknown as Session);
 
-    await expect(caller.user.getPresignedDownloadUrl({})).resolves.toEqual({
-      url: null,
-    });
+    await expect(caller.user.getPresignedDownloadUrl({})).rejects.toMatchObject(
+      { code: "UNAUTHORIZED" },
+    );
 
     expect(mockGetPresignedImageUrl).not.toHaveBeenCalled();
+  });
+
+  it("still resolves { url: null } for a real user with no picture", async () => {
+    // The positive control for the test above: the cacheable shape SCRUM-242
+    // introduced has to survive the change that made a broken session throw.
+    mockGetPresignedImageUrl.mockResolvedValueOnce(null);
+
+    await expect(
+      callerFor(sessionFor(SESSION_USER)).user.getPresignedDownloadUrl({}),
+    ).resolves.toEqual({ url: null });
+  });
+
+  it("refuses a userId that could name a key outside the prefix", async () => {
+    // The id is interpolated into `profile-pictures/{env}/{id}`. Real ids are
+    // cuids, so nothing legitimate contains a slash or a dot.
+    const caller = callerFor(sessionFor(SESSION_USER));
+
+    for (const userId of ["../../secrets", "a/b", "a.b", "", "  "]) {
+      await expect(
+        caller.user.getPresignedDownloadUrl({ userId }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    }
+
+    expect(mockGetPresignedImageUrl).not.toHaveBeenCalled();
+  });
+
+  it("rejects unknown input keys", async () => {
+    const caller = callerFor(sessionFor(SESSION_USER));
+
+    await expect(
+      caller.user.getPresignedDownloadUrl({ key: "anything" } as never),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 
   it("rejects an unauthenticated caller", async () => {
@@ -130,6 +171,178 @@ describe("user.getPresignedDownloadUrl", () => {
 
     const rejection = caller.user.getPresignedDownloadUrl({
       userId: OTHER_USER,
+    });
+
+    await expect(rejection).rejects.toBeInstanceOf(TRPCError);
+    await expect(rejection).rejects.toMatchObject({
+      code: "INTERNAL_SERVER_ERROR",
+    });
+  });
+});
+
+/**
+ * Upload constraints for `user.getPresignedUrl` (SCRUM-243).
+ *
+ * This procedure hands out a URL that writes to `profile-pictures/{env}/{id}`.
+ * It used to accept `contentType: z.string()` with no size bound at all, so a
+ * crafted call could obtain a URL that stored `text/html` of any length at the
+ * caller's key - content later served back from an amazonaws.com origin.
+ *
+ * The key is derived from the session and never from input, which is why there
+ * is no "upload to someone else's key" case to test: there is no parameter that
+ * could express it. What is tested is the type and size boundary, and that
+ * nothing gets signed when the boundary rejects.
+ *
+ * That the bounds are then *enforced by S3* rather than merely passed to it is a
+ * separate property, pinned against the real signer in
+ * `src/utils/uploadToS3.signature.test.ts`.
+ */
+describe("user.getPresignedUrl", () => {
+  const SIGNED_PUT = "https://bucket.s3.us-east-2.amazonaws.com/put?sig=abc";
+
+  it("signs an upload for the caller's own key", async () => {
+    mockGeneratePresignedUrl.mockResolvedValueOnce(SIGNED_PUT);
+    const caller = callerFor(sessionFor(SESSION_USER));
+
+    await expect(
+      caller.user.getPresignedUrl({
+        contentType: "image/jpeg",
+        contentLength: 2048,
+      }),
+    ).resolves.toEqual({ url: SIGNED_PUT });
+
+    expect(mockGeneratePresignedUrl).toHaveBeenCalledWith(
+      SESSION_USER,
+      "image/jpeg",
+      2048,
+    );
+  });
+
+  it.each(["image/jpeg", "image/png", "image/webp"] as const)(
+    "accepts %s",
+    async (contentType) => {
+      mockGeneratePresignedUrl.mockResolvedValueOnce(SIGNED_PUT);
+
+      await expect(
+        callerFor(sessionFor(SESSION_USER)).user.getPresignedUrl({
+          contentType,
+          contentLength: 2048,
+        }),
+      ).resolves.toEqual({ url: SIGNED_PUT });
+    },
+  );
+
+  it.each([
+    "text/html",
+    "application/javascript",
+    "image/svg+xml",
+    "application/octet-stream",
+    "",
+  ])("refuses %s without signing anything", async (contentType) => {
+    // svg is in this list on purpose: it is an image type, and it can carry
+    // script, so it is the one that would slip past a looser `image/*` check.
+    const caller = callerFor(sessionFor(SESSION_USER));
+
+    await expect(
+      caller.user.getPresignedUrl({
+        contentType: contentType as never,
+        contentLength: 2048,
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    expect(mockGeneratePresignedUrl).not.toHaveBeenCalled();
+  });
+
+  it("refuses an upload over the size cap without signing anything", async () => {
+    const caller = callerFor(sessionFor(SESSION_USER));
+
+    await expect(
+      caller.user.getPresignedUrl({
+        contentType: "image/jpeg",
+        contentLength: MAX_PROFILE_IMAGE_BYTES + 1,
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    expect(mockGeneratePresignedUrl).not.toHaveBeenCalled();
+  });
+
+  it("signs an upload of exactly the cap", async () => {
+    // The positive control: the bound has to be the documented limit, not one
+    // byte under it.
+    mockGeneratePresignedUrl.mockResolvedValueOnce(SIGNED_PUT);
+
+    await expect(
+      callerFor(sessionFor(SESSION_USER)).user.getPresignedUrl({
+        contentType: "image/jpeg",
+        contentLength: MAX_PROFILE_IMAGE_BYTES,
+      }),
+    ).resolves.toEqual({ url: SIGNED_PUT });
+  });
+
+  it.each([0, -1, 1.5])(
+    "refuses a contentLength of %p",
+    async (contentLength) => {
+      const caller = callerFor(sessionFor(SESSION_USER));
+
+      await expect(
+        caller.user.getPresignedUrl({
+          contentType: "image/jpeg",
+          contentLength,
+        }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+      expect(mockGeneratePresignedUrl).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects unknown input keys, so a key cannot be smuggled in", async () => {
+    const caller = callerFor(sessionFor(SESSION_USER));
+
+    await expect(
+      caller.user.getPresignedUrl({
+        contentType: "image/jpeg",
+        contentLength: 2048,
+        userId: OTHER_USER,
+      } as never),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    expect(mockGeneratePresignedUrl).not.toHaveBeenCalled();
+  });
+
+  it("throws rather than resolving undefined when the session has no user", async () => {
+    // It used to fall off the end of the resolver here and resolve `undefined`,
+    // which React Query reports as a failed query and the UI cannot explain.
+    const caller = callerFor({
+      expires: "2099-01-01T00:00:00.000Z",
+    } as unknown as Session);
+
+    await expect(
+      caller.user.getPresignedUrl({
+        contentType: "image/jpeg",
+        contentLength: 2048,
+      }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+    expect(mockGeneratePresignedUrl).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unauthenticated caller", async () => {
+    await expect(
+      callerFor(null).user.getPresignedUrl({
+        contentType: "image/jpeg",
+        contentLength: 2048,
+      }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+    expect(mockGeneratePresignedUrl).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a signing failure as INTERNAL_SERVER_ERROR", async () => {
+    mockGeneratePresignedUrl.mockRejectedValueOnce(new Error("s3 exploded"));
+
+    const rejection = callerFor(sessionFor(SESSION_USER)).user.getPresignedUrl({
+      contentType: "image/jpeg",
+      contentLength: 2048,
     });
 
     await expect(rejection).rejects.toBeInstanceOf(TRPCError);
