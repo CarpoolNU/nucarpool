@@ -1,4 +1,4 @@
-import { Permission, Role } from "@prisma/client";
+import { Permission, RequestStatus, Role } from "@prisma/client";
 import { Status } from "@prisma/client";
 import { Feature } from "geojson";
 import type { AppRouter } from "../server/router";
@@ -167,6 +167,12 @@ export type PublicUser = {
 export type Request = {
   id: string;
   message: string;
+  /**
+   * PENDING until the request is accepted, ACCEPTED afterwards (SCRUM-228).
+   * Declining deletes the row, so there is no third state. An ACCEPTED request
+   * is kept because the pair's conversation hangs off it.
+   */
+  status: RequestStatus;
   fromUserId: string;
   toUserId: string;
   fromUser: PublicUser | null;

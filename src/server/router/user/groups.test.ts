@@ -1,4 +1,4 @@
-import { Permission, Role } from "@prisma/client";
+import { Permission, Role, RequestStatus } from "@prisma/client";
 import type { Session } from "next-auth";
 import { appRouter } from "../index";
 import { MAX_SEATS_AVAILABLE } from "../../../utils/carpoolSeats";
@@ -171,13 +171,30 @@ const buildGroupsDb = (opts?: {
     }),
   };
 
+  // Seeded pairs start pending; `markRequestAccepted` moves them (SCRUM-228).
+  const requestStatus = new Map<string, RequestStatus>(
+    requests.map(([a, b]) => [`${a}|${b}`, RequestStatus.PENDING]),
+  );
+
+  const matchesPair = (clauses: any[], a: string, b: string) =>
+    clauses.some((c) => c.fromUserId === a && c.toUserId === b);
+
   const request = {
     findFirst: jest.fn(async ({ where }: any) => {
       const clauses: any[] = where?.OR ?? [where ?? {}];
-      const hit = requests.some(([a, b]) =>
-        clauses.some((c) => c.fromUserId === a && c.toUserId === b),
-      );
+      const hit = requests.some(([a, b]) => matchesPair(clauses, a, b));
       return hit ? { id: "request-1" } : null;
+    }),
+    updateMany: jest.fn(async ({ where, data }: any) => {
+      const clauses: any[] = where?.OR ?? [where ?? {}];
+      let count = 0;
+      for (const [a, b] of requests) {
+        if (matchesPair(clauses, a, b)) {
+          requestStatus.set(`${a}|${b}`, data.status);
+          count += 1;
+        }
+      }
+      return { count };
     }),
   };
 
@@ -190,6 +207,7 @@ const buildGroupsDb = (opts?: {
       searches: cloneState(searches),
       groups: cloneState(groups),
       requests: cloneState(requests),
+      requestStatus: cloneState(requestStatus),
     }),
     (before) => {
       searches.length = 0;
@@ -198,6 +216,9 @@ const buildGroupsDb = (opts?: {
       for (const [id, row] of before.groups) groups.set(id, row);
       requests.length = 0;
       requests.push(...before.requests);
+      requestStatus.clear();
+      for (const [key, value] of before.requestStatus)
+        requestStatus.set(key, value);
     },
   );
 
@@ -211,8 +232,12 @@ const buildGroupsDb = (opts?: {
     messageOf: (id: string) => groups.get(id)?.message,
     carpoolIdOf: (userId: string) =>
       searches.find((r) => r.userId === userId)?.carpoolId,
+    /** Status of the seeded request between two users, in the seeded order. */
+    requestStatusOf: (from: string, to: string) =>
+      requestStatus.get(`${from}|${to}`),
     carpoolGroup,
     carpoolSearch,
+    request,
   };
 };
 
@@ -612,6 +637,131 @@ describe("user.groups.create — only the two people involved", () => {
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
 
     expect(db.groupIds()).toEqual([]);
+  });
+});
+
+/**
+ * Accepting a request resolves it (SCRUM-228).
+ *
+ * Building the group used to leave the `Request` untouched, so it stayed pending
+ * in both users' Requests tab forever and the duplicate guard in
+ * `requests.create` blocked the pair from ever requesting each other again. The
+ * resolution happens inside the same transaction as the membership write, which
+ * is the only way group state and request state cannot disagree.
+ */
+describe("accepting a request resolves it", () => {
+  it("marks the request accepted when a group is created", async () => {
+    const db = buildGroupsDb({
+      searches: [
+        {
+          id: "s-driver",
+          userId: DRIVER,
+          role: Role.DRIVER,
+          carpoolId: null,
+          seatsAvail: 3,
+          groupMessage: "",
+        },
+        {
+          id: "s-rider-1",
+          userId: RIDER_1,
+          role: Role.RIDER,
+          carpoolId: null,
+          seatsAvail: 0,
+          groupMessage: "",
+        },
+      ],
+      groups: [],
+      requests: [[DRIVER, RIDER_1]],
+    });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    expect(db.requestStatusOf(DRIVER, RIDER_1)).toBe(RequestStatus.PENDING);
+
+    await caller.user.groups.create({ driverId: DRIVER, riderId: RIDER_1 });
+
+    expect(db.requestStatusOf(DRIVER, RIDER_1)).toBe(RequestStatus.ACCEPTED);
+  });
+
+  it("marks the request accepted when a rider joins an existing group", async () => {
+    const db = buildGroupsDb({ requests: [[DRIVER, OUTSIDER]] });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await caller.user.groups.edit({
+      driverId: DRIVER,
+      riderId: OUTSIDER,
+      groupId: GROUP,
+      add: true,
+    });
+
+    expect(db.requestStatusOf(DRIVER, OUTSIDER)).toBe(RequestStatus.ACCEPTED);
+  });
+
+  it("resolves a request sent in either direction", async () => {
+    // The rider asked the driver; accepting still resolves that row.
+    const db = buildGroupsDb({ requests: [[OUTSIDER, DRIVER]] });
+    const { caller } = callerFor(sessionFor(OUTSIDER), db);
+
+    await caller.user.groups.edit({
+      driverId: DRIVER,
+      riderId: OUTSIDER,
+      groupId: GROUP,
+      add: true,
+    });
+
+    expect(db.requestStatusOf(OUTSIDER, DRIVER)).toBe(RequestStatus.ACCEPTED);
+  });
+
+  it("leaves the request pending when the join fails", async () => {
+    // A driver with no seats. The membership does not happen, so neither does
+    // the acceptance — that is the point of doing both in one transaction.
+    const db = buildGroupsDb({
+      searches: [
+        {
+          id: "s-driver",
+          userId: DRIVER,
+          role: Role.DRIVER,
+          carpoolId: GROUP,
+          seatsAvail: 0,
+          groupMessage: "",
+        },
+        {
+          id: "s-outsider",
+          userId: OUTSIDER,
+          role: Role.RIDER,
+          carpoolId: null,
+          seatsAvail: 0,
+          groupMessage: "",
+        },
+      ],
+      requests: [[DRIVER, OUTSIDER]],
+    });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await expect(
+      caller.user.groups.edit({
+        driverId: DRIVER,
+        riderId: OUTSIDER,
+        groupId: GROUP,
+        add: true,
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    expect(db.requestStatusOf(DRIVER, OUTSIDER)).toBe(RequestStatus.PENDING);
+    expect(db.carpoolIdOf(OUTSIDER)).toBeNull();
+  });
+
+  it("leaves the request pending when removing a member, not accepting one", async () => {
+    const db = buildGroupsDb({ requests: [[DRIVER, RIDER_1]] });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await caller.user.groups.edit({
+      driverId: DRIVER,
+      riderId: RIDER_1,
+      groupId: GROUP,
+      add: false,
+    });
+
+    expect(db.requestStatusOf(DRIVER, RIDER_1)).toBe(RequestStatus.PENDING);
   });
 });
 

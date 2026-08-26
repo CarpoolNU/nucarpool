@@ -34,6 +34,17 @@ enum Status {
   INACTIVE
 }
 
+// Whether a carpool request is still awaiting an answer (SCRUM-228).
+//
+// Accepting a request used to leave the row untouched, so it stayed pending
+// forever and the duplicate guard in `requests.create` blocked that pair from
+// ever requesting each other again. There is no DECLINED member: declining
+// deletes the row, which is the pre-existing behaviour.
+enum RequestStatus {
+  PENDING
+  ACCEPTED
+}
+
 // Represents an Account--need this for NextAuth.
 model Account {
   id                String  @id @default(cuid()) // primary key
@@ -74,6 +85,7 @@ model Session {
 model Request {
   id             String        @id @default(cuid()) // primary key
   message        String        @db.VarChar(255)
+  status         RequestStatus @default(PENDING)
   fromUserId     String // foreign key
   toUserId       String // foreign key
   fromUser       User          @relation("sentRequests", fields: [fromUserId], references: [id])

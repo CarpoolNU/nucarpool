@@ -2,7 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { router, protectedRouter } from "../createRouter";
 import _ from "lodash";
-import { Role, CarpoolGroup, User } from "@prisma/client";
+import { Role, CarpoolGroup, RequestStatus, User } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import { convertCarpoolSearchToPublicWithExactHome } from "../../../utils/publicUser";
 import { NO_SEATS_MESSAGE, clampSeats } from "../../../utils/carpoolSeats";
@@ -31,8 +31,9 @@ import { NO_SEATS_MESSAGE, clampSeats } from "../../../utils/carpoolSeats";
  *
  * Adding requires a `Request` between the two users because that request *is*
  * the invitation; without it a rider could self-join any stranger's group.
- * Requests survive acceptance today (SCRUM-228); if that is ever fixed to
- * delete them, this check has to move ahead of the deletion.
+ * Requests are resolved rather than deleted on acceptance (SCRUM-228), so the
+ * row this check depends on is still there afterwards — which is also what lets
+ * `markRequestAccepted` run inside the same transaction as the membership.
  */
 
 /** Just the Prisma surface these helpers touch, so they are easy to test. */
@@ -100,6 +101,34 @@ const requireRequestBetween = async (
       "A carpool request between these users is required before they can share a group.",
     );
   }
+};
+
+/**
+ * Resolves the request that led to this membership (SCRUM-228).
+ *
+ * Accepting used to build the group and leave the `Request` untouched, so it
+ * stayed pending forever in both users' Requests tab and the duplicate guard in
+ * `requests.create` blocked the pair from ever requesting each other again.
+ *
+ * Called inside the same transaction as the membership write, so group state
+ * and request state cannot disagree: either both land or neither does.
+ * `updateMany` over the pair rather than an id captured earlier, so the write is
+ * idempotent and does not depend on a read taken before the transaction opened.
+ */
+const markRequestAccepted = async (
+  prisma: PrismaClientLike,
+  driverId: string,
+  riderId: string,
+) => {
+  await prisma.request.updateMany({
+    where: {
+      OR: [
+        { fromUserId: driverId, toUserId: riderId },
+        { fromUserId: riderId, toUserId: driverId },
+      ],
+    },
+    data: { status: RequestStatus.ACCEPTED },
+  });
 };
 
 /**
@@ -273,6 +302,8 @@ export const groupsRouter = router({
           data: { carpoolId: group.id },
         });
 
+        await markRequestAccepted(tx, input.driverId, input.riderId);
+
         return group;
       });
     }),
@@ -424,6 +455,8 @@ export const groupsRouter = router({
             where: { userId: input.riderId },
             data: { carpoolId: input.groupId },
           });
+
+          await markRequestAccepted(tx, input.driverId, input.riderId);
         } else {
           // when removing rider, clear carpoolId for the rider
           await tx.carpoolSearch.updateMany({

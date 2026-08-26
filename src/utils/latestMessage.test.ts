@@ -2,6 +2,7 @@ import {
   getCardSortingData,
   getLatestMessageForRequest,
 } from "./latestMessage";
+import { RequestStatus } from "@prisma/client";
 import type { Message, Request } from "./types";
 
 /**
@@ -26,6 +27,7 @@ const message = (overrides: Partial<Message> = {}): Message => ({
 const request = (overrides: Partial<Request> = {}): Request => ({
   id: "request-1",
   message: "Would you like to carpool?",
+  status: RequestStatus.PENDING,
   fromUserId: SENDER,
   toUserId: RECEIVER,
   fromUser: null,
