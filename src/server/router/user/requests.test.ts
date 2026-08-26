@@ -1,4 +1,4 @@
-import { Permission } from "@prisma/client";
+import { Permission, RequestStatus } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
 import type { Session } from "next-auth";
 import { appRouter } from "../index";
@@ -35,6 +35,7 @@ const USER_C = "user-c";
 type RequestRow = {
   id: string;
   message: string;
+  status: RequestStatus;
   fromUserId: string;
   toUserId: string;
   conversationId: string | null;
@@ -44,12 +45,15 @@ const requestRow = (
   id: string,
   fromUserId: string,
   toUserId: string,
+  overrides: Partial<RequestRow> = {},
 ): RequestRow => ({
   id,
   message: "",
+  status: RequestStatus.PENDING,
   fromUserId,
   toUserId,
   conversationId: null,
+  ...overrides,
 });
 
 /**
@@ -57,7 +61,11 @@ const requestRow = (
  * procedures actually issue are supported; anything else throws loudly rather
  * than quietly returning undefined.
  */
-const buildRequestsDb = (seed: RequestRow[] = []) => {
+const buildRequestsDb = (
+  seed: RequestRow[] = [],
+  /** userId -> carpoolId, for the "already carpooling together" guard. */
+  groupMembership: Record<string, string | null> = {},
+) => {
   const requests = new Map<string, RequestRow>(
     seed.map((row) => [row.id, { ...row }]),
   );
@@ -81,10 +89,24 @@ const buildRequestsDb = (seed: RequestRow[] = []) => {
     );
   });
 
+  const findFirst = jest.fn(async (args: any) => {
+    const matches = await findMany(args);
+    return matches[0] ? { ...matches[0] } : null;
+  });
+
+  const carpoolSearchFindMany = jest.fn(async ({ where }: any) => {
+    const ids: string[] = where?.userId?.in ?? [];
+    return ids.map((userId) => ({
+      userId,
+      carpoolId: groupMembership[userId] ?? null,
+    }));
+  });
+
   const create = jest.fn(async ({ data }: any) => {
     const row: RequestRow = {
       id: `request-${++created}`,
       message: data.message,
+      status: RequestStatus.PENDING,
       fromUserId: data.fromUser.connect.id,
       toUserId: data.toUser.connect.id,
       conversationId: null,
@@ -158,7 +180,15 @@ const buildRequestsDb = (seed: RequestRow[] = []) => {
   // so the mock rolls back on a throw rather than merely passing through.
   const prisma = withTransaction(
     {
-      request: { findMany, create, findUnique, update, delete: destroy },
+      request: {
+        findMany,
+        findFirst,
+        create,
+        findUnique,
+        update,
+        delete: destroy,
+      },
+      carpoolSearch: { findMany: carpoolSearchFindMany },
       conversation: {
         findUnique: conversationFindUnique,
         create: conversationCreate,
@@ -341,6 +371,159 @@ describe("user.requests.create — the duplicate guard still holds", () => {
       expect.objectContaining({ id: "other-pair", fromUserId: USER_B }),
       expect.objectContaining({ fromUserId: USER_A, toUserId: USER_C }),
     ]);
+  });
+});
+
+/**
+ * Reopening an accepted request (SCRUM-228).
+ *
+ * Accepting used to leave the row pending forever, and the duplicate guard above
+ * refuses any existing request between a pair in either direction — so once two
+ * people had carpooled together, they could never request each other again. The
+ * guard now only counts PENDING rows, and an ACCEPTED one is reopened in place
+ * rather than joined by a second row: `extendPublicUser` resolves a user's
+ * request with `.find()`, so two rows would make the conversation the UI shows
+ * arbitrary.
+ */
+describe("user.requests.create — an accepted request is reopened, not duplicated", () => {
+  const accepted = (id: string, from: string, to: string) =>
+    requestRow(id, from, to, {
+      status: RequestStatus.ACCEPTED,
+      conversationId: `conversation-${id}`,
+    });
+
+  it("lets a pair who previously carpooled request each other again", async () => {
+    const db = buildRequestsDb([accepted("old", USER_A, USER_B)]);
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await expect(
+      caller.user.requests.create({ toId: USER_B, message: "round two" }),
+    ).resolves.toMatchObject({ status: RequestStatus.PENDING });
+  });
+
+  it("reuses the existing row rather than adding a second one", async () => {
+    const db = buildRequestsDb([accepted("old", USER_A, USER_B)]);
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await caller.user.requests.create({ toId: USER_B, message: "round two" });
+
+    expect(db.rows()).toHaveLength(1);
+    expect(db.rows()[0].id).toBe("old");
+    expect(db.create).not.toHaveBeenCalled();
+  });
+
+  it("rewrites the direction, because whoever asks now is the sender now", async () => {
+    // The first request went A -> B. B is the one asking this time.
+    const db = buildRequestsDb([accepted("old", USER_A, USER_B)]);
+    const { caller } = callerFor(sessionFor(USER_B), db);
+
+    await caller.user.requests.create({ toId: USER_A, message: "your turn" });
+
+    expect(db.rows()[0]).toMatchObject({
+      fromUserId: USER_B,
+      toUserId: USER_A,
+      status: RequestStatus.PENDING,
+    });
+  });
+
+  it("keeps the pair's conversation, appending the new message to it", async () => {
+    const db = buildRequestsDb([accepted("old", USER_A, USER_B)]);
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await caller.user.requests.create({ toId: USER_B, message: "round two" });
+
+    // The conversation hangs off the request id, which has not changed.
+    expect(db.rows()[0].conversationId).toBe("conversation-old");
+    expect(db.messages()).toEqual([
+      {
+        conversationId: "conversation-old",
+        content: "round two",
+        userId: USER_A,
+      },
+    ]);
+  });
+
+  it("adds nothing to the thread when the new request carries no message", async () => {
+    // A bare request is a real flow, but an empty row in an existing thread is
+    // just noise — unlike a first request, where it is the only message there is.
+    const db = buildRequestsDb([accepted("old", USER_A, USER_B)]);
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await caller.user.requests.create({ toId: USER_B, message: "" });
+
+    expect(db.messages()).toEqual([]);
+    expect(db.rows()[0].status).toBe(RequestStatus.PENDING);
+  });
+
+  it("still refuses while the existing request is pending", async () => {
+    // The reopen path must not weaken the guard it sits behind.
+    const db = buildRequestsDb([requestRow("live", USER_A, USER_B)]);
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await expect(
+      caller.user.requests.create({ toId: USER_B, message: "again" }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+});
+
+/**
+ * A request is how you ask to share a carpool, so it makes no sense between two
+ * people already sharing one — and it would be a second, contradictable record
+ * of a relationship the group already holds (SCRUM-228).
+ */
+describe("user.requests.create — not while already carpooling together", () => {
+  it("refuses when both users are in the same group", async () => {
+    const db = buildRequestsDb([], {
+      [USER_A]: "group-1",
+      [USER_B]: "group-1",
+    });
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await expect(
+      caller.user.requests.create({ toId: USER_B, message: "hello" }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+
+    expect(db.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses to reopen an accepted request between current group members", async () => {
+    const db = buildRequestsDb(
+      [
+        requestRow("old", USER_A, USER_B, {
+          status: RequestStatus.ACCEPTED,
+          conversationId: "conversation-old",
+        }),
+      ],
+      { [USER_A]: "group-1", [USER_B]: "group-1" },
+    );
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await expect(
+      caller.user.requests.create({ toId: USER_B, message: "hello" }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+
+    expect(db.rows()[0].status).toBe(RequestStatus.ACCEPTED);
+  });
+
+  it("allows a request between users in different groups", async () => {
+    const db = buildRequestsDb([], {
+      [USER_A]: "group-1",
+      [USER_B]: "group-2",
+    });
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await expect(
+      caller.user.requests.create({ toId: USER_B, message: "hello" }),
+    ).resolves.toBeDefined();
+  });
+
+  it("allows a request when neither user is in a group", async () => {
+    const db = buildRequestsDb([], { [USER_A]: null, [USER_B]: null });
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await expect(
+      caller.user.requests.create({ toId: USER_B, message: "hello" }),
+    ).resolves.toBeDefined();
   });
 });
 

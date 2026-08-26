@@ -1,4 +1,5 @@
 import React from "react";
+import { RequestStatus } from "@prisma/client";
 import { EnhancedPublicUser } from "../../utils/types";
 import { AiOutlineUser } from "react-icons/ai";
 import Image from "next/image";
@@ -20,8 +21,16 @@ const MessageHeader = ({
   onClose,
   groupId,
 }: MessageHeaderProps) => {
-  const hasIncomingRequest = !!selectedUser.incomingRequest;
-  const hasOutgoingRequest = !!selectedUser.outgoingRequest;
+  // Only a request still awaiting an answer offers Accept, Reject or Withdraw
+  // (SCRUM-228). An accepted request stays attached to the user so the pair keep
+  // their conversation, but it is no longer something to respond to. This used
+  // to be a plain presence check, which is why an accepted request kept showing
+  // its Accept button; the group comparison below was standing in for the status
+  // the row did not carry.
+  const hasIncomingRequest =
+    selectedUser.incomingRequest?.status === RequestStatus.PENDING;
+  const hasOutgoingRequest =
+    selectedUser.outgoingRequest?.status === RequestStatus.PENDING;
 
   const ismobile = useIsMobile();
 

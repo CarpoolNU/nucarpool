@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedRouter, router } from "../createRouter";
 
+import { RequestStatus } from "@prisma/client";
 import { convertCarpoolSearchToPublicWithExactHome } from "../../../utils/publicUser";
 import { MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
 
@@ -213,7 +214,26 @@ export const requestsRouter = router({
         });
       }
 
-      const existingRequests = await ctx.prisma.request.findMany({
+      // Two people already carpooling together have nothing to request of each
+      // other, and a request between them would be a second way to describe a
+      // relationship the group already records (SCRUM-228).
+      const searches = await ctx.prisma.carpoolSearch.findMany({
+        where: { userId: { in: [userId, input.toId] } },
+        select: { userId: true, carpoolId: true },
+      });
+      const callerGroup = searches.find((s) => s.userId === userId)?.carpoolId;
+      const targetGroup = searches.find(
+        (s) => s.userId === input.toId,
+      )?.carpoolId;
+
+      if (callerGroup && callerGroup === targetGroup) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "You are already in a carpool group with this user.",
+        });
+      }
+
+      const existingRequest = await ctx.prisma.request.findFirst({
         where: {
           OR: [
             {
@@ -228,10 +248,51 @@ export const requestsRouter = router({
         },
       });
 
-      if (existingRequests.length != 0) {
+      // Still awaiting an answer, in either direction — the original guard.
+      if (existingRequest?.status === RequestStatus.PENDING) {
         throw new TRPCError({
           code: "CONFLICT",
           message: `Existing request between '${input.toId} and ${userId}'`,
+        });
+      }
+
+      // An accepted request the pair have since left behind. Reopening it,
+      // rather than adding a second row, is what lets two people who once
+      // carpooled together do so again (SCRUM-228). It also keeps the pair to
+      // one Request row for good: `extendPublicUser` picks the request for a
+      // user with `.find()`, so a second row would make which conversation the
+      // UI shows arbitrary.
+      //
+      // The direction is rewritten because whoever is asking now is the sender
+      // now, regardless of who asked the first time. The conversation is not
+      // touched: it hangs off the request id, which does not change, so the
+      // pair keep the thread they already had.
+      if (existingRequest) {
+        return await ctx.prisma.$transaction(async (tx) => {
+          const reopened = await tx.request.update({
+            where: { id: existingRequest.id },
+            data: {
+              status: RequestStatus.PENDING,
+              fromUserId: userId,
+              toUserId: input.toId,
+            },
+          });
+
+          // An empty message is a real flow — ConnectModal's Send button never
+          // required text — but on a conversation that already exists, an empty
+          // row would just be noise in the thread. On a first request it is
+          // still written, because the conversation needs a first message.
+          if (input.message && reopened.conversationId) {
+            await tx.message.create({
+              data: {
+                conversationId: reopened.conversationId,
+                content: input.message,
+                userId,
+              },
+            });
+          }
+
+          return reopened;
         });
       }
 

@@ -117,6 +117,15 @@ export const createRequestHandlers = (
     }
   };
 
+  /**
+   * `request` is unused, and deliberately so (SCRUM-228).
+   *
+   * Resolving the request is not the client's job: `groups.create` and
+   * `groups.edit` mark it accepted inside the same transaction that writes the
+   * membership, so the two cannot disagree. Doing it here as a second mutation
+   * would reintroduce exactly that gap. The parameter stays for symmetry with
+   * `handleRejectRequest`, which does need the id.
+   */
   const handleAcceptRequest = async (
     user: User,
     otherUser: EnhancedPublicUser,
