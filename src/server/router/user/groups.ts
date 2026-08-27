@@ -405,6 +405,11 @@ export const groupsRouter = router({
   edit: protectedRouter
     .input(
       z.object({
+        // Meaningful on the `add` path only, where it is checked against the
+        // group and against a request between the two users. The remove path
+        // deliberately ignores it and derives the driver from the group's own
+        // membership instead - it used to credit a seat to this id unchecked
+        // (SCRUM-290).
         driverId: z.string(),
         riderId: z.string(),
         groupId: z.string(),
@@ -500,6 +505,13 @@ export const groupsRouter = router({
       // out means a group this procedure legitimately dissolved is never
       // resurrected by a rollback (SCRUM-281).
       const dissolved = await ctx.prisma.$transaction(async (tx) => {
+        // The driver to credit on the remove path, resolved before anything
+        // below moves memberships. It has to be captured this early: clearing
+        // the departing member and dissolving the group both erase the very
+        // `carpoolId` rows the driver is derived from, so reading it after the
+        // fact would find nobody (SCRUM-290).
+        let groupDriver: { id: string; seatsAvail: number } | null = null;
+
         if (input.add) {
           // Reserve the seat before linking the rider: the compare-and-swap
           // both rejects a full driver and prevents two simultaneous accepts
@@ -515,6 +527,18 @@ export const groupsRouter = router({
 
           await markRequestAccepted(tx, input.driverId, input.riderId);
         } else {
+          // The seat goes back to the group's own driver, found through the
+          // group rather than taken from client input. `driverId` is not
+          // validated on this path - the checks above constrain `callerId` and
+          // `riderId` and nothing else - so crediting `input.driverId` wrote to
+          // whatever row the caller named: a stranger got a seat and the real
+          // driver stayed permanently under-counted. `delete` above already
+          // derives the driver this way (SCRUM-290).
+          groupDriver = await tx.carpoolSearch.findFirst({
+            where: { carpoolId: input.groupId, role: Role.DRIVER },
+            select: { id: true, seatsAvail: true },
+          });
+
           // when removing rider, clear carpoolId for the rider
           await tx.carpoolSearch.updateMany({
             where: { userId: input.riderId },
@@ -550,22 +574,16 @@ export const groupsRouter = router({
           });
         }
 
-        // Adding already took its seat above. Removing gives one back, to the
-        // driver named on the request, clamped to the shared maximum.
-        if (!input.add) {
-          const driverSearch = await tx.carpoolSearch.findFirst({
-            where: { userId: input.driverId },
-            select: { id: true, seatsAvail: true },
-          });
-
-          if (!driverSearch) {
-            throw new TRPCError({
-              code: "NOT_FOUND",
-              message: "Driver not found",
-            });
-          }
-
-          await releaseSeats(tx, driverSearch.id, driverSearch.seatsAvail, 1);
+        // Adding already took its seat above. Removing gives one back to the
+        // group's driver, clamped to the shared maximum.
+        //
+        // A group with no DRIVER member has nobody to credit, so the credit is
+        // skipped rather than failed. That state is the SCRUM-289 failure -
+        // now guarded against, but older rows can still be in it - and leaving
+        // one at a time is the only way its riders can get out. Throwing here
+        // would take that away and trap them.
+        if (!input.add && groupDriver) {
+          await releaseSeats(tx, groupDriver.id, groupDriver.seatsAvail, 1);
         }
 
         return groupDissolved;
