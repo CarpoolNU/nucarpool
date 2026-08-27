@@ -65,8 +65,9 @@ const updateStartLocation = (
           id: userId,
           role: role,
         }),
-        label: customLabel || (userData?.preferredName || userData?.name || "Start"),
-      }
+        label:
+          customLabel || userData?.preferredName || userData?.name || "Start",
+      },
     };
 
     // Create source if it doesn't exist
@@ -74,42 +75,48 @@ const updateStartLocation = (
     if (source) {
       // If source exists, update its data
       source.setData(feature);
-      
+
       if (!map.getLayer(layerId)) {
-        map.addLayer({
-          id: layerId,
-          type: "symbol",
-          source: sourceId,
-          layout: {
-            "icon-image": imageId,
-            "icon-allow-overlap": true,
-            "icon-size": 0.33,
+        map.addLayer(
+          {
+            id: layerId,
+            type: "symbol",
+            source: sourceId,
+            layout: {
+              "icon-image": imageId,
+              "icon-allow-overlap": true,
+              "icon-size": 0.33,
+            },
           },
-        }, "waterway-label");
+          "waterway-label",
+        );
       }
-      
+
       if (customLabel && !map.getLayer(textLayerId)) {
-        map.addLayer({
-          id: textLayerId,
-          type: "symbol",
-          source: sourceId,
-          layout: {
-            "text-field": ["get", "label"],
-            "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
-            "text-size": 14,
-            "text-offset": [0, 1.8],
-            "text-anchor": "top",
-            "text-allow-overlap": true,
-            "text-ignore-placement": true,
+        map.addLayer(
+          {
+            id: textLayerId,
+            type: "symbol",
+            source: sourceId,
+            layout: {
+              "text-field": ["get", "label"],
+              "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
+              "text-size": 14,
+              "text-offset": [0, 1.8],
+              "text-anchor": "top",
+              "text-allow-overlap": true,
+              "text-ignore-placement": true,
+            },
+            paint: {
+              "text-color": "#000000",
+              "text-halo-color": "#ffffff",
+              "text-halo-width": 2.5,
+              "text-halo-blur": 0.5,
+            },
+            minzoom: 0,
           },
-          paint: {
-            "text-color": "#000000",
-            "text-halo-color": "#ffffff",
-            "text-halo-width": 2.5,
-            "text-halo-blur": 0.5,
-          },
-          minzoom: 0,
-        }, "waterway-label");
+          "waterway-label",
+        );
       }
     } else {
       // Create the source and layer if they don't exist
@@ -118,39 +125,45 @@ const updateStartLocation = (
         data: feature,
       });
 
-      map.addLayer({
-        id: layerId,
-        type: "symbol",
-        source: sourceId,
-        layout: {
-          "icon-image": imageId,
-          "icon-allow-overlap": true,
-          "icon-size": 0.33,
-        },
-      }, "waterway-label");
-      
-      if (customLabel) {
-        map.addLayer({
-          id: textLayerId,
+      map.addLayer(
+        {
+          id: layerId,
           type: "symbol",
           source: sourceId,
           layout: {
-            "text-field": ["get", "label"],
-            "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
-            "text-size": 14,
-            "text-offset": [0, 1.8],
-            "text-anchor": "top",
-            "text-allow-overlap": true,
-            "text-ignore-placement": true,
+            "icon-image": imageId,
+            "icon-allow-overlap": true,
+            "icon-size": 0.33,
           },
-          paint: {
-            "text-color": "#000000",
-            "text-halo-color": "#ffffff",
-            "text-halo-width": 2.5,
-            "text-halo-blur": 0.5,
+        },
+        "waterway-label",
+      );
+
+      if (customLabel) {
+        map.addLayer(
+          {
+            id: textLayerId,
+            type: "symbol",
+            source: sourceId,
+            layout: {
+              "text-field": ["get", "label"],
+              "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
+              "text-size": 14,
+              "text-offset": [0, 1.8],
+              "text-anchor": "top",
+              "text-allow-overlap": true,
+              "text-ignore-placement": true,
+            },
+            paint: {
+              "text-color": "#000000",
+              "text-halo-color": "#ffffff",
+              "text-halo-width": 2.5,
+              "text-halo-blur": 0.5,
+            },
+            minzoom: 0,
           },
-          minzoom: 0,
-        }, "waterway-label");
+          "waterway-label",
+        );
       }
     }
   });
