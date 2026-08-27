@@ -12,6 +12,7 @@
     "start": "next start",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings=0",
     "check:env": "node scripts/check-env-contract.js",
+    "check:format": "prettier --check .",
     "check:routes": "node scripts/check-page-routes.js",
     "db:start": "docker-compose -f docker-compose.yml up -d",
     "db:stop": "docker-compose -f docker-compose.yml down",

@@ -36,10 +36,7 @@ export const LOCAL_HOSTNAMES: ReadonlySet<string> = new Set([
 const OVERRIDE_ENABLED_VALUES: ReadonlySet<string> = new Set(["1", "true"]);
 
 export type SeedBlockReason =
-  | "missing-url"
-  | "unparseable-url"
-  | "empty-hostname"
-  | "remote-host";
+  "missing-url" | "unparseable-url" | "empty-hostname" | "remote-host";
 
 export type AllowedSeedTarget = {
   allowed: true;
