@@ -4,52 +4,69 @@ import { trpc } from "./trpc";
 import { toast } from "react-toastify";
 
 interface RequestHandlers {
+  /**
+   * Resolves `true` only when the request was actually accepted (SCRUM-293).
+   *
+   * The caller sends the acceptance email and closes the conversation, and both
+   * are things that must not happen for an accept that was refused - the
+   * notification endpoint is deliberately not rate limited, so a spurious call
+   * is a real email to a real person.
+   */
   handleAcceptRequest: (
     user: User,
     otherUser: EnhancedPublicUser,
     request: Request,
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   handleRejectRequest: (
     user: User,
     otherUser: EnhancedPublicUser,
     request: Request,
   ) => Promise<void>;
+  /**
+   * True while any of the three mutations is in flight, so the buttons that
+   * trigger them can be disabled. Matches `useGroupMembership`'s flag of the
+   * same name (SCRUM-293).
+   */
+  isMutating: boolean;
 }
 
 // Function to create the handlers
 export const createRequestHandlers = (
   utils: ReturnType<typeof trpc.useContext>,
 ): RequestHandlers => {
-  const deleteRequest = trpc.user.requests.delete.useMutation({
-    onError: (error: any) => {
-      toast.error(`Something went wrong: ${error.message}`);
-    },
-    onSuccess: () => {
-      utils.user.requests.me.invalidate();
-      utils.user.recommendations.me.invalidate();
-    },
-  });
+  const { mutateAsync: deleteRequestAsync, isLoading: isDeleting } =
+    trpc.user.requests.delete.useMutation({
+      onError: (error: any) => {
+        toast.error(`Something went wrong: ${error.message}`);
+      },
+      onSuccess: () => {
+        utils.user.requests.me.invalidate();
+        utils.user.recommendations.me.invalidate();
+      },
+    });
 
   // Neither of these reports its own failure. `handleAcceptRequest` below
   // catches it instead, because the interesting failures here are the server's
   // membership refusals, and "Something went wrong: ..." framed a rule the user
   // can act on as if the app had broken (SCRUM-291).
-  const mutateGroup = trpc.user.groups.edit.useMutation({
-    onSuccess: () => {
-      utils.user.requests.me.invalidate();
-      utils.user.me.invalidate();
-    },
-  });
+  const { mutateAsync: editGroupAsync, isLoading: isEditingGroup } =
+    trpc.user.groups.edit.useMutation({
+      onSuccess: () => {
+        utils.user.requests.me.invalidate();
+        utils.user.me.invalidate();
+      },
+    });
 
-  const createGroup = trpc.user.groups.create.useMutation({
-    onSuccess: () => {
-      utils.user.requests.me.invalidate();
-      utils.user.me.invalidate();
-    },
-  });
+  const { mutateAsync: createGroupAsync, isLoading: isCreatingGroup } =
+    trpc.user.groups.create.useMutation({
+      onSuccess: () => {
+        utils.user.requests.me.invalidate();
+        utils.user.me.invalidate();
+      },
+    });
 
   const handleDelete = async (requestId: string) => {
-    await deleteRequest.mutateAsync({
+    await deleteRequestAsync({
       invitationId: requestId,
     });
   };
@@ -96,28 +113,28 @@ export const createRequestHandlers = (
   const initiateGroup = async (user: User, otherUser: EnhancedPublicUser) => {
     if (user.role === Role.DRIVER) {
       if (user.carpoolId) {
-        await mutateGroup.mutateAsync({
+        await editGroupAsync({
           driverId: user.id,
           riderId: otherUser.id,
           add: true,
           groupId: user.carpoolId,
         });
       } else {
-        await createGroup.mutateAsync({
+        await createGroupAsync({
           driverId: user.id,
           riderId: otherUser.id,
         });
       }
     } else {
       if (otherUser.carpoolId) {
-        await mutateGroup.mutateAsync({
+        await editGroupAsync({
           driverId: otherUser.id,
           riderId: user.id,
           add: true,
           groupId: otherUser.carpoolId,
         });
       } else {
-        await createGroup.mutateAsync({
+        await createGroupAsync({
           driverId: otherUser.id,
           riderId: user.id,
         });
@@ -140,7 +157,7 @@ export const createRequestHandlers = (
     request: Request,
   ) => {
     if (!validateRequestAcceptance(user, otherUser)) {
-      return;
+      return false;
     }
 
     try {
@@ -155,12 +172,14 @@ export const createRequestHandlers = (
           ? error.message
           : "That request could not be accepted. Please try again.",
       );
-      return;
+      return false;
     }
 
     toast.success(
       `${otherUser.preferredName}'s request to carpool with you has been accepted.`,
     );
+
+    return true;
   };
 
   const handleRejectRequest = async (
@@ -168,7 +187,15 @@ export const createRequestHandlers = (
     otherUser: EnhancedPublicUser,
     request: Request,
   ) => {
-    await handleDelete(request.id);
+    try {
+      await handleDelete(request.id);
+    } catch {
+      // `deleteRequest` already raised the toast. Swallowed here so a failed
+      // delete does not also claim success below, and does not escape as an
+      // unhandled rejection (SCRUM-293).
+      return;
+    }
+
     toast.success(
       `${otherUser.preferredName}'s request to carpool with you has been deleted.`,
     );
@@ -177,5 +204,6 @@ export const createRequestHandlers = (
   return {
     handleAcceptRequest,
     handleRejectRequest,
+    isMutating: isDeleting || isEditingGroup || isCreatingGroup,
   };
 };

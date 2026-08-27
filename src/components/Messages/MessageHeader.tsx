@@ -6,12 +6,20 @@ import Image from "next/image";
 import useProfileImage from "../../utils/useProfileImage";
 import useIsMobile from "../../utils/useIsMobile";
 
+/**
+ * How a button in flight looks. The same `opacity-40` `SendBar` already uses, so
+ * the two in-flight states in the messaging UI read the same (SCRUM-293).
+ */
+const DISABLED_CLASS = "cursor-not-allowed opacity-40 hover:bg-inherit";
+
 interface MessageHeaderProps {
   selectedUser: EnhancedPublicUser;
   onAccept: () => void;
   onReject: () => void;
   onClose: (userId: string) => void;
   groupId: string | null;
+  /** True while a request mutation is in flight (SCRUM-293). */
+  isMutating?: boolean;
 }
 
 const MessageHeader = ({
@@ -20,6 +28,7 @@ const MessageHeader = ({
   onReject,
   onClose,
   groupId,
+  isMutating = false,
 }: MessageHeaderProps) => {
   // Only a request still awaiting an answer offers Accept, Reject or Withdraw
   // (SCRUM-228). An accepted request stays attached to the user so the pair keep
@@ -105,13 +114,19 @@ const MessageHeader = ({
             <>
               <button
                 onClick={onReject}
-                className="mr-10 rounded-lg border-2 border-black bg-white py-2 text-center text-lg font-medium  text-black hover:bg-gray-100 sm:px-8 md:px-12 lg:px-20"
+                disabled={isMutating}
+                className={`mr-10 rounded-lg border-2 border-black bg-white py-2 text-center text-lg font-medium  text-black hover:bg-gray-100 sm:px-8 md:px-12 lg:px-20 ${
+                  isMutating ? DISABLED_CLASS : ""
+                }`}
               >
                 Reject
               </button>
               <button
                 onClick={onAccept}
-                className=" mr-10 rounded-lg border-2 border-northeastern-red bg-northeastern-red py-2 text-center text-lg font-medium  text-white hover:bg-red-700 sm:px-8 md:px-12 lg:px-20"
+                disabled={isMutating}
+                className={` mr-10 rounded-lg border-2 border-northeastern-red bg-northeastern-red py-2 text-center text-lg font-medium  text-white hover:bg-red-700 sm:px-8 md:px-12 lg:px-20 ${
+                  isMutating ? DISABLED_CLASS : ""
+                }`}
               >
                 Accept
               </button>
@@ -122,7 +137,10 @@ const MessageHeader = ({
           (!groupId || selectedUser.carpoolId !== groupId) && (
             <button
               onClick={onReject}
-              className=" mr-10 rounded-lg border-2 border-black bg-white py-2 text-center text-lg font-medium text-black hover:bg-gray-100 md:px-12 lg:px-20"
+              disabled={isMutating}
+              className={` mr-10 rounded-lg border-2 border-black bg-white py-2 text-center text-lg font-medium text-black hover:bg-gray-100 md:px-12 lg:px-20 ${
+                isMutating ? DISABLED_CLASS : ""
+              }`}
             >
               Withdraw Request
             </button>
@@ -130,7 +148,10 @@ const MessageHeader = ({
         {groupId && selectedUser.carpoolId === groupId && (
           <button
             onClick={onReject}
-            className=" mr-10 rounded-lg border-2 border-black bg-white py-2 text-center text-lg font-medium text-black hover:bg-gray-100 md:px-12 lg:px-20"
+            disabled={isMutating}
+            className={` mr-10 rounded-lg border-2 border-black bg-white py-2 text-center text-lg font-medium text-black hover:bg-gray-100 md:px-12 lg:px-20 ${
+              isMutating ? DISABLED_CLASS : ""
+            }`}
           >
             Leave Conversation
           </button>
