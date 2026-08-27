@@ -133,7 +133,7 @@ if targets_staging && has 'password +(create|delete)'; then
   ask "creating or deleting a staging branch credential."
 fi
 if has 'deploy-request +create'; then
-  ask "opening a deploy request. Deploying it stays human-only."
+  deny "opening a deploy request is human-only here. PlanetScale gates queueing a deploy behind the same 'create_deploy_request' access as opening one, so an identity able to open a deploy request can also ship it to production. Hand the schema change to a human."
 fi
 if has 'branch +create'; then
   ask "creating a PlanetScale branch (data branching from production is enabled on this database)."

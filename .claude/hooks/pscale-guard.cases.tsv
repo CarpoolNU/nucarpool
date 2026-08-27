@@ -23,7 +23,7 @@ deny	@P@ webhook create nucarpool --url https://x.example.com
 deny	@P@ service-token create --org devashishsood18
 ask	@P@ sql nucarpool staging --role writer --query "INSERT INTO x VALUES (1)"
 ask	@P@ sql nucarpool staging --role admin --force --query "DELETE FROM user WHERE id=1"
-ask	@P@ deploy-request create nucarpool
+deny	@P@ deploy-request create nucarpool
 ask	@P@ branch create nucarpool scrum-300
 ask	@P@ password create nucarpool staging --role writer
 pass	@P@ sql nucarpool main --format json --query "SELECT 1"

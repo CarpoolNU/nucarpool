@@ -47,16 +47,28 @@ Safe Migrations on production is server-side enforcement: direct DDL against
 `main` is rejected and must go through a deploy request. It does **not** block
 row writes — `UPDATE` and `DELETE` are unaffected by it.
 
-### Deploy requests are human-controlled
+### Deploy requests are entirely human-controlled
 
-An agent may **open** a deploy request. An agent may never approve it, ship it,
-roll it back, force a cutover, or unblock the queue. The human does that.
+**Agents do not touch deploy requests at all — not even to open one.** Opening,
+approving, shipping, reverting, forcing a cutover and unblocking the queue are
+all human actions.
 
-`require_approval_for_deploy` on this database was `false` as of 2026-08-27,
-which means PlanetScale itself does not require a reviewer; 24 of the first 25
-deploy requests reached production with `approved=false`. Until that setting is
-turned on, the human gate is convention plus the local guard, not a server-side
-control.
+This is stricter than it may look, and the reason is structural. PlanetScale
+gates _queueing a deploy_ behind the **same** service-token access as _opening_
+a deploy request — `create_deploy_request`. There is no separate deploy-only
+permission. So any identity that can open a deploy request can also ship it to
+production, and "may create but may not deploy" cannot be expressed in the
+credential model. The only way to make production deployment impossible for the
+agent is to withhold `create_deploy_request` entirely.
+
+`require_approval_for_deploy` **cannot be enabled in this organization and must
+not be relied on as a control.** Do not propose it as the remaining gate. It was
+`false` as of 2026-08-27, and 24 of the first 25 deploy requests reached
+production with `approved=false`. The compensating control is the withheld
+permission above, plus the local guard.
+
+A schema change therefore reaches production like this: the agent validates it
+on `staging`, then hands off. A human opens and ships the deploy request.
 
 ### Branch creation
 
@@ -68,33 +80,51 @@ branch, and prefer `staging` for schema work.
 
 ### Identity expectations
 
-- The agent should authenticate as a **dedicated restricted service token**, not
-  a developer's personal OAuth session. A personal session inherits that
-  person's full production capability.
-- The token must **not** hold `connect_production_branch` (it can mint
-  production write credentials) or `approve_deploy_request`.
-- Production read queries require `connect_production_read_only_branch` plus
-  `delete_production_read_only_branch_password`.
-- Never pass a PlanetScale token inline as a command-line flag; use the
-  `PLANETSCALE_API_TOKEN` environment variable. An inline token swaps the
+- **The agent authenticates as the dedicated restricted service token
+  `claude-code-nucarpool`, never as a developer's personal OAuth session.** A
+  personal session inherits that person's full production capability — on this
+  database that has meant creating production admin credentials and shipping
+  unapproved deploy requests. Using it for agent work erases every boundary
+  below.
+- Set `PLANETSCALE_API_TOKEN` to the token secret in the environment where the
+  agent runs. Never pass a token inline as a command-line flag: that swaps the
   agent's identity and leaks the secret into the transcript.
-- MCP: prefer `https://mcp.pscale.dev/mcp/planetscale-insights-only`, which does
-  not ship query-execution tools at all. If the full endpoint is used, it must
-  be authenticated with the restricted token, never with a full-access OAuth
-  grant.
+- The token's granted accesses are, in full:
+  - Organization: `read_organization`
+  - Database: `read_database`, `read_branch`, `read_deploy_request`,
+    `read_comment`, `read_backups`, `connect_production_read_only_branch`,
+    `delete_production_read_only_branch_password`, `connect_branch`,
+    `delete_branch_password`
+- The token must **never** hold `connect_production_branch` (it mints production
+  write credentials), `create_deploy_request` (it also ships them — see above),
+  `approve_deploy_request`, any `write_*` or `delete_*` on the database, or any
+  service-token management access.
+- MCP uses the **full** endpoint authenticated with that same restricted token.
+  Production write is impossible there because the token cannot connect to
+  production for writing, which is a credential boundary rather than a tool
+  boundary. Staging writes still go through the CLI, where the guard can see
+  which branch is being targeted; the MCP write-query tool stays denied because
+  a permission rule cannot inspect its branch argument.
 
 ### Enforcement: what is real versus what is written down
 
 Treat this section as the source of truth about how much protection exists.
 
-**Credential-enforced** — holds regardless of what any agent decides to do:
+**Credential-enforced** — holds regardless of what any agent decides to do, and
+survives a disabled hook, an edited settings file, or a different agent:
 
 - Safe Migrations on production blocks direct DDL there.
-- A token without `connect_production_branch` cannot obtain a production write
-  credential.
-- A token without `approve_deploy_request` cannot approve a deploy request, and
-  PlanetScale separately forbids a token from approving a deploy request that
-  the same token created.
+- The token has no `connect_production_branch`, so it cannot obtain a production
+  write credential and cannot open a writable connection to production. This is
+  what makes production `INSERT` / `UPDATE` / `DELETE` and DDL impossible rather
+  than merely forbidden.
+- The token has no `create_deploy_request`, so it can neither open nor ship a
+  deploy request. With `require_approval_for_deploy` unavailable, this withheld
+  permission — not an approval setting — is what keeps production deployment
+  human-only.
+- The token has no `approve_deploy_request`.
+- The token has no write, delete, restore or VSchema access, so it cannot drop a
+  branch, delete a backup, or alter database settings.
 
 **Harness-enforced** — Claude Code only; another agent or a plain shell is
 unaffected:
@@ -109,11 +139,17 @@ unaffected:
 
 **Policy-only** — this file; an instruction, not a control:
 
-- "`test` is read-only." No credential can distinguish `staging` from `test`.
+- **"`test` is read-only."** `connect_branch` is a single access covering every
+  non-production branch, so the credential model cannot separate `staging` from
+  `test`. The distinction is enforced only by the local guard, which denies a
+  write role whose target is not unambiguously `staging`. Outside Claude Code,
+  the token can write to `test`.
 - "Staging writes only on an approved ticket."
-- "Production deploy requests are human-controlled", until
-  `require_approval_for_deploy` is enabled.
 - Everything else in this document.
+
+Note what is **no longer** policy-only: production deployment. It moved to the
+credential tier when `create_deploy_request` was withheld, which is how this
+setup compensates for `require_approval_for_deploy` being unavailable.
 
 ### Migration files are not applied to PlanetScale
 

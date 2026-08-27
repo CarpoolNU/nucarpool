@@ -119,7 +119,6 @@
 
       "Bash(pscale sql:*)",
       "Bash(pscale branch create:*)",
-      "Bash(pscale deploy-request create:*)",
       "Bash(pscale password create nucarpool staging:*)",
       "Bash(pscale api:*)",
       "mcp__planetscale__planetscale_execute_read_query"
@@ -203,6 +202,7 @@
       "Bash(pscale password create nucarpool main:*)",
       "Bash(pscale password delete:*)",
       "Bash(pscale password update:*)",
+      "Bash(pscale deploy-request create:*)",
       "Bash(pscale deploy-request deploy:*)",
       "Bash(pscale deploy-request review:*)",
       "Bash(pscale deploy-request apply:*)",
