@@ -28,7 +28,7 @@ const MessagePanel = ({
   const [hasCalculatedRoute, setHasCalculatedRoute] = useState(false);
 
   // Create request handlers
-  const { handleAcceptRequest, handleRejectRequest } =
+  const { handleAcceptRequest, handleRejectRequest, isMutating } =
     createRequestHandlers(utils);
 
   const sendMessage = trpc.user.messages.sendMessage.useMutation({
@@ -116,7 +116,17 @@ const MessagePanel = ({
 
     trackRequestResponse("accept", user.role);
 
-    await handleAcceptRequest(user, selectedUser, request);
+    const accepted = await handleAcceptRequest(user, selectedUser, request);
+
+    // Both of these used to run whatever happened, so a refused accept still
+    // emailed the other person to say they had been accepted and still closed
+    // the conversation. That matters most on a double-click: the second call is
+    // now a clean rejection server-side (SCRUM-291), but the notification
+    // endpoint is deliberately not rate limited, so without this the duplicate
+    // email would be sent anyway (SCRUM-293).
+    if (!accepted) {
+      return;
+    }
 
     // Both parties and the template are resolved server-side from the request
     // (SCRUM-225).
@@ -162,6 +172,7 @@ const MessagePanel = ({
           onReject={handleReject}
           onClose={onCloseConversation}
           groupId={user!.carpoolId}
+          isMutating={isMutating}
         />
 
         {/* Tab Strip */}

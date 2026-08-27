@@ -2091,3 +2091,107 @@ describe("user.groups.create — legal states only (SCRUM-291)", () => {
     expect(db.seatsOf(DRIVER)).toBe(2);
   });
 });
+
+/**
+ * The double-click, replayed against the server (SCRUM-293).
+ *
+ * The Accept button had no in-flight guard, so two clicks fired two independent
+ * mutations. Before SCRUM-291 the second one succeeded: it built a second group,
+ * took a second seat for the same rider, and left the first group as an orphan
+ * nothing could reach.
+ *
+ * SCRUM-293 disables the button while the first call is running, which cannot be
+ * asserted here - there are no component tests in this suite. What *can* be
+ * asserted, and is the half that matters if a click still slips through, is that
+ * the second call is now a clean rejection: no second group, no second seat, no
+ * membership moved. These replay the exact sequence rather than the states
+ * SCRUM-291's own tests set up directly.
+ */
+describe("a double-clicked Accept is refused the second time (SCRUM-293)", () => {
+  it("creates one group and takes one seat, not two", async () => {
+    const db = buildGroupsDb({
+      searches: [
+        {
+          id: "s-driver",
+          userId: DRIVER,
+          role: Role.DRIVER,
+          carpoolId: null,
+          seatsAvail: 3,
+          groupMessage: "",
+        },
+        {
+          id: "s-rider-1",
+          userId: RIDER_1,
+          role: Role.RIDER,
+          carpoolId: null,
+          seatsAvail: 0,
+          groupMessage: "",
+        },
+      ],
+      groups: [],
+      requests: [[DRIVER, RIDER_1]],
+    });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    // Click one.
+    const group = await caller.user.groups.create({
+      driverId: DRIVER,
+      riderId: RIDER_1,
+    });
+
+    // Click two, before the first response has been rendered.
+    await expect(
+      caller.user.groups.create({ driverId: DRIVER, riderId: RIDER_1 }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+
+    expect(db.groupIds()).toEqual([group.id]);
+    expect(db.seatsOf(DRIVER)).toBe(2);
+    expect(db.carpoolIdOf(RIDER_1)).toBe(group.id);
+  });
+
+  it("admits the rider once when the driver already has a group", async () => {
+    // The other branch of `initiateGroup`: a driver with a group adds to it
+    // rather than creating one.
+    const db = buildGroupsDb({
+      searches: [
+        {
+          id: "s-driver",
+          userId: DRIVER,
+          role: Role.DRIVER,
+          carpoolId: GROUP,
+          seatsAvail: 3,
+          groupMessage: "",
+        },
+        {
+          id: "s-rider-1",
+          userId: RIDER_1,
+          role: Role.RIDER,
+          carpoolId: null,
+          seatsAvail: 0,
+          groupMessage: "",
+        },
+      ],
+      requests: [[DRIVER, RIDER_1]],
+    });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await caller.user.groups.edit({
+      driverId: DRIVER,
+      riderId: RIDER_1,
+      groupId: GROUP,
+      add: true,
+    });
+
+    await expect(
+      caller.user.groups.edit({
+        driverId: DRIVER,
+        riderId: RIDER_1,
+        groupId: GROUP,
+        add: true,
+      }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+
+    expect(db.seatsOf(DRIVER)).toBe(2);
+    expect(db.carpoolIdOf(RIDER_1)).toBe(GROUP);
+  });
+});
