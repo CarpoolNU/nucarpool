@@ -183,6 +183,10 @@ model Location {
   dateCreated            DateTime        @default(now())
   dateModified           DateTime        @default(now()) @updatedAt
 
+  // The candidate bounding box ranges on coord_lat and then narrows on
+  // coord_lng, so latitude leads (SCRUM-245). There was no index on either
+  // column before; the only ones on this table were implicit.
+  @@index([coordLat, coordLng])
   @@map(name: "location")
 }
 
@@ -213,6 +217,10 @@ model CarpoolSearch {
   @@index([companyLocationId])
   @@index([homeLocationId])
   @@index([carpoolId])
+  // The matching query filters status and role together (SCRUM-245). Neither is
+  // selective alone -- two and three values -- but the pair is the whole
+  // non-relational predicate, so this is the index that covers it.
+  @@index([status, role])
   @@map("carpool_search")
 }
 
