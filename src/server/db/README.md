@@ -53,21 +53,35 @@ MySQL runs in strict mode, so a value wider than its column makes the write **th
 
 An unannotated `String` on MySQL is `VARCHAR(191)`, which is why so many of these are 191 rather than something chosen.
 
-| Column                                                  | Width          | Bounded by                                   | Limit                     |
-| ------------------------------------------------------- | -------------- | -------------------------------------------- | ------------------------- |
-| `message.content`                                       | `VARCHAR(255)` | `messages.sendMessage`, `requests.create`    | `MESSAGE_MAX_LENGTH`      |
-| `user.bio`                                              | `VARCHAR(191)` | `user.edit`, `onboardSchema`                 | `PROFILE_TEXT_MAX_LENGTH` |
-| `user.preferred_name`                                   | `VARCHAR(191)` | `user.edit`, `onboardSchema`                 | `PROFILE_TEXT_MAX_LENGTH` |
-| `user.pronouns`                                         | `VARCHAR(191)` | `user.edit`, `onboardSchema`                 | `PROFILE_TEXT_MAX_LENGTH` |
-| `carpool_search.company_name`                           | `VARCHAR(191)` | `user.edit`, `onboardSchema`                 | `PROFILE_TEXT_MAX_LENGTH` |
-| `carpool_search.group_message`                          | `TEXT`         | —                                            | —                         |
-| `group.message`                                         | `VARCHAR(191)` | — **see below**                              | —                         |
-| `request.message`                                       | `VARCHAR(255)` | never written; `requests.create` stores `""` | —                         |
-| `location.street`, `.street_address`, `.city`, `.state` | `VARCHAR(191)` | — parsed from a Mapbox feature, not typed    | —                         |
+| Column                                                  | Width          | Bounded by                                           | Limit                     |
+| ------------------------------------------------------- | -------------- | ---------------------------------------------------- | ------------------------- |
+| `message.content`                                       | `VARCHAR(255)` | `messages.sendMessage`, `requests.create`            | `MESSAGE_MAX_LENGTH`      |
+| `user.bio`                                              | `VARCHAR(191)` | `user.edit`, `onboardSchema`                         | `PROFILE_TEXT_MAX_LENGTH` |
+| `user.preferred_name`                                   | `VARCHAR(191)` | `user.edit`, `onboardSchema`                         | `PROFILE_TEXT_MAX_LENGTH` |
+| `user.pronouns`                                         | `VARCHAR(191)` | `user.edit`, `onboardSchema`                         | `PROFILE_TEXT_MAX_LENGTH` |
+| `carpool_search.company_name`                           | `VARCHAR(191)` | `user.edit`, `onboardSchema`                         | `PROFILE_TEXT_MAX_LENGTH` |
+| `carpool_search.group_notes`                            | `VARCHAR(90)`  | `groups.updatePreferences`, the `GroupPage` textarea | `GROUP_NOTES_MAX_LENGTH`  |
+| `carpool_search.group_music_preference`                 | `VARCHAR(40)`  | `groups.updatePreferences`                           | `GROUP_OPTION_MAX_LENGTH` |
+| `carpool_search.group_conversation_style`               | `VARCHAR(40)`  | `groups.updatePreferences`                           | `GROUP_OPTION_MAX_LENGTH` |
+| `carpool_search.group_message`                          | `TEXT`         | legacy, read-only — **see below**                    | —                         |
+| `group.message`                                         | `VARCHAR(191)` | never written with content — **see below**           | —                         |
+| `request.message`                                       | `VARCHAR(255)` | never written; `requests.create` stores `""`         | —                         |
+| `location.street`, `.street_address`, `.city`, `.state` | `VARCHAR(191)` | — parsed from a Mapbox feature, not typed            | —                         |
 
 The values live in [`textLimits.ts`](../../utils/textLimits.ts) so the form, the tRPC input and the column cannot drift apart. Add a `.max()` there and reference it; do not write the number inline.
 
-**`group.message` is not yet bounded, and it can overflow today.** `GroupPage` serialises the whole driver-preferences form into it as `GROUP_DETAILS_V1:{…json…}`, which costs ~87 characters of prefix and JSON structure before any content. A 90-character note plus two of the fixed preference options already exceeds 191, and the save fails with no error shown — `updateMessage` has no `onError`, and the success toast fires from the click handler regardless. The column was widened to `TEXT` by `20241119202706_add_text_type` and then narrowed back to `VARCHAR(191)` by `20251114054152_add_location_table`, because `CarpoolGroup.message` in `schema.prisma` is a plain `String`. Restoring `@db.Text` is the fix, and it needs a migration and a PlanetScale deploy request.
+### The two group-message columns are legacy
+
+Group ride preferences used to be one `GROUP_DETAILS_V1:{…json…}` blob, written into `group.message` _and_ mirrored into `carpool_search.group_message`. SCRUM-253 replaced that with the three real columns above, owned by the driver's own `CarpoolSearch`.
+
+**Neither column needs widening, and neither should be.** An earlier version of this section said `group.message` could overflow and that restoring `@db.Text` was the fix — a migration and a PlanetScale deploy request for a column that is now written empty. That advice pointed the opposite way to the plan of record:
+
+- **`group.message`** — [`groups.create`](../router/user/groups.ts) writes `""` and nothing reads it. There is no path that puts content in it, so its width is irrelevant.
+- **`carpool_search.group_message`** — read-only, and only as a fallback. [`resolveGroupDetails`](../../components/Group/groupDetails.ts) treats all three `group_*` columns being null as "never saved" and parses the old blob out of this column instead, so a row that has not been backfilled still renders. Nothing writes it.
+
+Both are dropped by **SCRUM-287**, once SCRUM-253 is deployed everywhere and [`scripts/backfill-group-preferences.ts`](../../../scripts/backfill-group-preferences.ts) has run. Until then they stay so that a schema deploy landing before the matching build cannot break the old code.
+
+Lengths on the live path are enforced where every other one is: Zod on [`groups.updatePreferences`](../router/user/groups.ts), against the same constants the textarea uses. A failed save is now reported — [`useGroupDetails`](../../components/Group/useGroupDetails.ts) awaits `mutateAsync` and raises an error toast, replacing an `await mutate(...)` that resolved immediately and let the success toast fire regardless.
 
 ## Terms acceptance
 
@@ -215,9 +229,13 @@ deletes production rows and should be reached for on purpose. Confirm
 - Two users at the same company now hold two rows rather than one. List queries
   such as `geoJsonUserList` therefore read more `location` rows than they used
   to. The correctness win is worth it, but it is relevant to SCRUM-176.
-- These writes are still **not transactional**. A failure between the location
-  write and the `CarpoolSearch` write leaves the two inconsistent, same as
-  before this change. Tracked as SCRUM-233.
+- These writes **are** transactional, since SCRUM-233. `resolveOwnedLocations`
+  is called with the transaction client inside `ctx.prisma.$transaction` in
+  [`user.edit`](../router/user.ts), so a failure part-way through rolls back the
+  `user` row, both `location` rows and the `CarpoolSearch` together. Before
+  that they were four independent awaits and a mid-sequence failure left them
+  inconsistent permanently — `relationMode = "prisma"` means the database
+  rejects none of it and there is no reconciliation job.
 - Nothing in the database enforces the invariant. Giving `Location` an owning
   `carpoolSearchId` would, at the cost of a schema change, a PlanetScale deploy
   request and a backfill.

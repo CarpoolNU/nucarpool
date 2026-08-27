@@ -71,7 +71,7 @@ Tests are co-located as `*.test.ts` next to the module they cover, with one exce
 
 ## Data-model gotchas
 
-- A user's carpool details are **not** on `User`. `User` holds identity/profile. Role, company, schedule, seats, status, and group membership live on `CarpoolSearch`, which points at two `Location` rows (home and company).
+- A user's carpool details are **not** on `User`. `User` holds identity/profile. Role, company, schedule, seats, status, group membership and the driver's group ride preferences live on `CarpoolSearch`, which points at two `Location` rows (home and company).
 - The API returns a **flattened** shape: `user.me` ([`src/server/router/user.ts`](src/server/router/user.ts)) spreads `carpoolSearches[0]` and both locations onto the user object, and `convertCarpoolSearchToPublic` ([`src/utils/publicUser.ts`](src/utils/publicUser.ts)) builds the same flat `PublicUser` from a `CarpoolSearch` with its relations. `convertToPublic` in that file does no merging — it takes an already-merged user and strips sensitive fields. Flat in the frontend does not mean flat in storage.
 - Field names change across that boundary: `seatsAvail` → `seatAvail`, `startDate`/`endDate` → `coopStartDate`/`coopEndDate`.
 - The merged shapes are hand-maintained types in [`src/utils/types.ts`](src/utils/types.ts) (`User`, `PublicUser`, `MapUser`, `EnhancedPublicUser`) — not inferred from Prisma. **Adding a field means updating `schema.prisma`, the merge site, the converters, and the type.**
