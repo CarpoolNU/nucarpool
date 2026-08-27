@@ -58,7 +58,6 @@ export const favoritesRouter = router({
           select: {
             id: true,
             name: true,
-            email: true,
             image: true,
             bio: true,
             preferredName: true,

@@ -264,13 +264,19 @@ export const buildCandidateWhere = ({
   return where;
 };
 
-/** Exactly the columns both endpoints need, and no more. */
+/**
+ * Exactly the columns both endpoints need, and no more.
+ *
+ * `email` is deliberately absent (SCRUM-292). Both endpoints hand these rows to
+ * `convertCarpoolSearchToPublic`, which does not disclose it, so selecting it
+ * would only read a column to throw away - and leave the next person to wire it
+ * back into a response.
+ */
 export const candidateInclude = {
   user: {
     select: {
       id: true,
       name: true,
-      email: true,
       image: true,
       bio: true,
       preferredName: true,
