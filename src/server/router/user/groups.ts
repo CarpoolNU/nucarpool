@@ -6,6 +6,10 @@ import { Role, CarpoolGroup, RequestStatus, User } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import { convertCarpoolSearchToPublicWithExactHome } from "../../../utils/publicUser";
 import { NO_SEATS_MESSAGE, clampSeats } from "../../../utils/carpoolSeats";
+import {
+  GROUP_NOTES_MAX_LENGTH,
+  GROUP_OPTION_MAX_LENGTH,
+} from "../../../utils/textLimits";
 
 /**
  * Carpool group authorization (SCRUM-220).
@@ -24,7 +28,7 @@ import { NO_SEATS_MESSAGE, clampSeats } from "../../../utils/carpoolSeats";
  * | `edit` (add a rider)    | the group's driver, or the rider adding themselves       | same accept flow; a rider joins the driver's group     |
  * | `edit` (remove a rider) | the driver removes anyone; a rider removes only themselves | "Remove" is driver-only; riders get "Leave Group"    |
  * | `delete`                | the group's driver                                       | "Delete Group" renders only when `role === DRIVER`     |
- * | `updateMessage`         | the group's driver                                       | `handleMessageSubmit` is gated on `role === "DRIVER"`  |
+ * | `updatePreferences`     | any user, on their own search only                       | the form renders only for a DRIVER, but the write is self-scoped |
  *
  * "The group's driver" means a `CarpoolSearch` whose `carpoolId` is the group
  * and whose `role` is DRIVER — `CarpoolGroup` itself stores no owner.
@@ -233,8 +237,24 @@ export const groupsRouter = router({
       },
     });
 
+    // Preferences belong to the driver's own search and are read through the
+    // group rather than copied into it (SCRUM-253). `group.message` used to hold
+    // a second copy that could disagree with this one; it is no longer written,
+    // and `groupMessage` rides along only so a row that has not been backfilled
+    // yet still resolves. Riders see the driver's values, which is what the two
+    // separate reads were approximating before.
+    const driverSearch = memberCarpoolSearches.find(
+      (search) => search.role === Role.DRIVER,
+    );
+
     const updatedGroup = {
       ...group,
+      preferences: {
+        groupNotes: driverSearch?.groupNotes ?? null,
+        groupMusicPreference: driverSearch?.groupMusicPreference ?? null,
+        groupConversationStyle: driverSearch?.groupConversationStyle ?? null,
+        groupMessage: driverSearch?.groupMessage ?? null,
+      },
       // Group members are counterparts: they have agreed to carpool together and
       // the group route is drawn from their home coordinates, so these keep full
       // precision (SCRUM-226).
@@ -284,9 +304,14 @@ export const groupsRouter = router({
       return await ctx.prisma.$transaction(async (tx) => {
         await reserveSeat(tx, input.driverId);
 
+        // `message` is written empty and never read (SCRUM-253). It used to be
+        // seeded from the driver's `groupMessage`, which made the group a second
+        // home for the same preferences; they are read through the driver's own
+        // search now. The column stays until a follow-up drops it, so that a
+        // schema deploy landing before this build cannot break the old code.
         const group = await tx.carpoolGroup.create({
           data: {
-            message: driverSearch.groupMessage || "",
+            message: "",
           },
         });
 
@@ -557,68 +582,64 @@ export const groupsRouter = router({
 
       return updatedGroup;
     }),
-  updateMessage: protectedRouter
+  /**
+   * The driver's group ride preferences (SCRUM-253).
+   *
+   * Replaces `updateMessage` and `updateUserMessage`, which wrote the same
+   * GROUP_DETAILS_V1: blob to `group.message` and `carpool_search.group_message`
+   * as two separate, non-transactional mutations. They could disagree, and
+   * `group.message` is VARCHAR(191) while the blob is unbounded, so the group
+   * copy could fail outright while the driver was told the save succeeded.
+   *
+   * There is only one row to write now, and it is the caller's own. That is a
+   * stronger authorization property than the old pair had, not a weaker one:
+   * `updateMessage` let a driver write a row shared with riders and needed
+   * `requireGroupDriver` to police it, whereas this cannot touch anybody else's
+   * data. Riders read the driver's values through `groups.me`.
+   *
+   * All three fields are always written, including as empty strings, because
+   * `resolveGroupDetails` treats all-null as "never saved" and falls back to the
+   * legacy column. A partial write would leave a cleared field looking
+   * un-migrated and resurrect the old blob.
+   *
+   * Lengths are validated here rather than truncated silently, which is what
+   * `normalizeDetails` used to do on the way in.
+   */
+  updatePreferences: protectedRouter
     .input(
       z.object({
-        groupId: z.string(),
-        message: z.string(),
+        notes: z.string().max(GROUP_NOTES_MAX_LENGTH),
+        musicPreference: z.string().max(GROUP_OPTION_MAX_LENGTH),
+        conversationStyle: z.string().max(GROUP_OPTION_MAX_LENGTH),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      // The group message is the driver's; riders only read it.
       const callerId = requireCallerId(ctx.session.user?.id);
-      await requireGroupDriver(ctx.prisma, callerId, input.groupId);
 
-      const updatedGroup = await ctx.prisma.carpoolGroup.update({
-        where: { id: input.groupId },
-        data: {
-          message: input.message,
-        },
-      });
-      return updatedGroup;
-    }),
-  updateUserMessage: protectedRouter
-    .input(
-      z.object({
-        message: z.string(),
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
-      const userId = ctx.session.user?.id;
-
-      if (!userId) {
-        throw new TRPCError({
-          code: "UNAUTHORIZED",
-          message: "User not authenticated",
-        });
-      }
-
-      // update groupMessage in CarpoolSearch
-      const updatedSearch = await ctx.prisma.carpoolSearch.findFirst({
-        where: { userId },
+      const search = await ctx.prisma.carpoolSearch.findFirst({
+        where: { userId: callerId },
+        select: { id: true },
       });
 
-      if (updatedSearch) {
-        await ctx.prisma.carpoolSearch.update({
-          where: { id: updatedSearch.id },
-          data: {
-            groupMessage: input.message,
-          },
-        });
-      }
-
-      // return user for backward compatibility
-      const user = await ctx.prisma.user.findUnique({
-        where: { id: userId },
-      });
-
-      if (!user) {
+      if (!search) {
         throw new TRPCError({
           code: "NOT_FOUND",
-          message: "User not found",
+          message: "No carpool search found for this user.",
         });
       }
 
-      return user;
+      return await ctx.prisma.carpoolSearch.update({
+        where: { id: search.id },
+        data: {
+          groupNotes: input.notes,
+          groupMusicPreference: input.musicPreference,
+          groupConversationStyle: input.conversationStyle,
+        },
+        select: {
+          groupNotes: true,
+          groupMusicPreference: true,
+          groupConversationStyle: true,
+        },
+      });
     }),
 });

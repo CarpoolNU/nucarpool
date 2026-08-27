@@ -1,15 +1,22 @@
 /**
- * The driver's group preferences, and the encoding used to squeeze them into a
- * single free-text column.
+ * The driver's group preferences.
  *
  * Extracted from `GroupPage.tsx` (SCRUM-252), where four components each held
  * their own copy of the parse/serialise/state wiring. Pure functions live here
  * so they can be unit tested; the React wiring is in `useGroupDetails.ts`.
  *
- * The encoding itself is not a good design - it is a JSON blob in a column that
- * is meant for prose, mirrored into a second column on another table. That is
- * SCRUM-253, not this module's problem to fix.
+ * These are real columns on the driver's `CarpoolSearch` now (SCRUM-253).
+ * Everything below about `GROUP_DETAILS_V1:` is a **read path for rows that
+ * have not been backfilled yet** and nothing writes that encoding any more.
+ * Once `scripts/backfill-group-preferences.ts` has run in every environment and
+ * `carpool_search.group_message` is dropped, the legacy half of this module goes
+ * with it.
  */
+
+import {
+  GROUP_NOTES_MAX_LENGTH,
+  GROUP_OPTION_MAX_LENGTH,
+} from "../../utils/textLimits";
 
 export type GroupDetails = {
   notes: string;
@@ -18,17 +25,19 @@ export type GroupDetails = {
 };
 
 /**
- * Marks a value as the JSON encoding rather than a legacy plain-text message.
- * Bumping the version means teaching `parseGroupDetails` the old shape too -
- * rows are never migrated.
+ * Marks a legacy value as the JSON encoding rather than a plain-text message.
+ * Read-only: no code writes this prefix any more (SCRUM-253).
  */
 export const GROUP_DETAILS_PREFIX = "GROUP_DETAILS_V1:";
 
-/** What the note textarea accepts, and what `normalizeDetails` truncates to. */
-export const NOTES_MAX_LENGTH = 90;
+/**
+ * Re-exported under the name the form already uses. The values live in
+ * `textLimits.ts` so the Zod input on the server and the textarea here cannot
+ * drift from the column widths (SCRUM-253).
+ */
+export const NOTES_MAX_LENGTH = GROUP_NOTES_MAX_LENGTH;
 
-/** Ceiling for the two fixed-choice fields. Every real option is far shorter. */
-const OPTION_MAX_LENGTH = 40;
+const OPTION_MAX_LENGTH = GROUP_OPTION_MAX_LENGTH;
 
 export const DEFAULT_GROUP_DETAILS: GroupDetails = {
   notes: "",
@@ -55,12 +64,36 @@ export const conversationStyleOptions = [
   "Depends on mood",
 ];
 
+/**
+ * Clamps stored values to the column widths. **Read path only.**
+ *
+ * This used to run on the way *in* as well, which is the silent truncation
+ * SCRUM-253 is about: whatever the user had typed was sliced to fit with no
+ * indication. Writes use `trimDetails` and let the Zod input reject an
+ * over-length value, so the user hears about it.
+ *
+ * Clamping on read still matters, because a corrupt legacy blob surfaces as raw
+ * note text that can be far longer than the column now allows.
+ */
 export const normalizeDetails = (details: GroupDetails): GroupDetails => ({
   notes: details.notes.slice(0, NOTES_MAX_LENGTH).trim(),
   musicPreference: details.musicPreference.slice(0, OPTION_MAX_LENGTH).trim(),
   conversationStyle: details.conversationStyle
     .slice(0, OPTION_MAX_LENGTH)
     .trim(),
+});
+
+/**
+ * Tidies a value for saving without shortening it. **Write path.**
+ *
+ * Deliberately does not clamp: the textarea already bounds what can be typed, so
+ * an over-length value reaching here is a bug, and the server rejecting it with
+ * a visible error beats this function hiding it (SCRUM-253, AC 5).
+ */
+export const trimDetails = (details: GroupDetails): GroupDetails => ({
+  notes: details.notes.trim(),
+  musicPreference: details.musicPreference.trim(),
+  conversationStyle: details.conversationStyle.trim(),
 });
 
 export const hasAnyDetail = (details: GroupDetails): boolean =>
@@ -86,27 +119,64 @@ export const parseGroupDetails = (message?: string | null): GroupDetails => {
         conversationStyle: parsed.conversationStyle ?? "",
       });
     } catch {
-      // Deliberately unchanged from the pre-refactor behaviour: a corrupt blob
-      // surfaces raw in the note field, prefix included. Not normalized either,
-      // so it can read back longer than NOTES_MAX_LENGTH until the next save
-      // truncates it. Ugly, but a refactor is not the place to change what the
-      // user sees.
-      return { ...DEFAULT_GROUP_DETAILS, notes: message };
+      // A corrupt blob still surfaces raw in the note field, prefix included -
+      // better visible than discarded. It *is* clamped now, unlike before
+      // SCRUM-253: the form has to hold a value the column can accept, or the
+      // driver would be unable to save at all until they trimmed text they
+      // never wrote.
+      return normalizeDetails({ ...DEFAULT_GROUP_DETAILS, notes: message });
     }
   }
 
-  // A message written before the JSON encoding existed is all note.
-  return { ...DEFAULT_GROUP_DETAILS, notes: message };
+  // A message written before the JSON encoding existed is all note. Clamped for
+  // the same reason as the corrupt branch above: `group_message` was TEXT, so a
+  // legacy value can be longer than `group_notes` accepts.
+  return normalizeDetails({ ...DEFAULT_GROUP_DETAILS, notes: message });
 };
 
-export const serializeGroupDetails = (details: GroupDetails): string => {
-  const normalized = normalizeDetails(details);
+/** The three stored columns, as they arrive from the API. */
+export type StoredGroupPreferences = {
+  groupNotes?: string | null;
+  groupMusicPreference?: string | null;
+  groupConversationStyle?: string | null;
+  /** The pre-SCRUM-253 column, read only when the three above are all null. */
+  groupMessage?: string | null;
+};
 
-  // An all-empty form stores "" rather than an encoded empty object, so
-  // `parseGroupDetails` short-circuits and the preview shows its empty state.
-  if (!hasAnyDetail(normalized)) {
-    return "";
+/**
+ * The single read path every screen uses (SCRUM-253).
+ *
+ * `NoGroupSection` used to read `user.groupMessage` while `GroupSection` read
+ * `group.message`, so a driver could see different preferences depending on
+ * whether they had a group yet. Both now resolve through this.
+ *
+ * **All three columns null means "never saved", not "empty."** That distinction
+ * is what makes the fallback safe: without it, a driver who deliberately cleared
+ * the form would have the legacy blob resurrected on the next read, because
+ * cleared and un-migrated would look identical. A save always writes all three,
+ * so an intentionally blank form stores "" and stops the fallback for good.
+ */
+export const resolveGroupDetails = (
+  stored: StoredGroupPreferences | null | undefined,
+): GroupDetails => {
+  if (!stored) {
+    return DEFAULT_GROUP_DETAILS;
   }
 
-  return `${GROUP_DETAILS_PREFIX}${JSON.stringify(normalized)}`;
+  // `!= null` deliberately, covering undefined as well: a field the caller did
+  // not select must count as "not saved", not as an empty saved value.
+  const migrated =
+    stored.groupNotes != null ||
+    stored.groupMusicPreference != null ||
+    stored.groupConversationStyle != null;
+
+  if (migrated) {
+    return normalizeDetails({
+      notes: stored.groupNotes ?? "",
+      musicPreference: stored.groupMusicPreference ?? "",
+      conversationStyle: stored.groupConversationStyle ?? "",
+    });
+  }
+
+  return parseGroupDetails(stored.groupMessage);
 };

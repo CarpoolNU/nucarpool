@@ -35,3 +35,23 @@ export const MESSAGE_MAX_LENGTH = 255;
  * that is what the layout wants. This is the length past which a save fails.
  */
 export const PROFILE_TEXT_MAX_LENGTH = 191;
+
+/**
+ * `carpool_search.group_notes` — `VARCHAR(90)`.
+ *
+ * The driver's free-text note on their group ride preferences. 90 is what the
+ * textarea has always allowed and what the column is now sized to (SCRUM-253);
+ * before that the value went into a shared JSON blob and was silently sliced to
+ * this length on the way in, whatever the user had typed.
+ */
+export const GROUP_NOTES_MAX_LENGTH = 90;
+
+/**
+ * `carpool_search.group_music_preference` and
+ * `carpool_search.group_conversation_style` — both `VARCHAR(40)`.
+ *
+ * These are fixed-choice fields; every option the UI offers is far shorter. The
+ * width exists so a value that is not one of the options still cannot overflow
+ * the column.
+ */
+export const GROUP_OPTION_MAX_LENGTH = 40;

@@ -223,6 +223,15 @@ export type User = {
   coopStartDate: Date | null;
   coopEndDate: Date | null;
   carpoolId: string | null;
+  /**
+   * Group ride preferences (SCRUM-253). Real columns; null in all three means
+   * the row predates the migration, which is what makes `resolveGroupDetails`
+   * fall back to `groupMessage`.
+   */
+  groupNotes: string | null;
+  groupMusicPreference: string | null;
+  groupConversationStyle: string | null;
+  /** Legacy GROUP_DETAILS_V1: blob. Read-only; nothing writes it. */
   groupMessage: string | null;
   // Fields merged from Location (homeLocation)
   startCoordLng: number;

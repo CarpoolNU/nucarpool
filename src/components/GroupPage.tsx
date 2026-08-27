@@ -294,7 +294,9 @@ const NoGroupSection = ({
 }) => {
   const { data: user } = trpc.user.me.useQuery();
   const { details, setDetails, save, isSaving } = useGroupDetails({
-    message: user?.groupMessage,
+    // Same resolver as the has-group branch below, so a driver sees identical
+    // preferences before and after forming a group (SCRUM-253).
+    stored: user,
     // Gated on the query having resolved, not just on the role: the old code
     // guarded with `if (user?.id && role === "DRIVER")`, and without it a click
     // landing before the fetch would serialise the still-empty form and save
@@ -343,8 +345,9 @@ const GroupSection = ({
   const isDriver = curUser.role === Role.DRIVER;
 
   const { details, setDetails, save, isSaving } = useGroupDetails({
-    message: group?.message,
-    groupId: group?.id,
+    // The driver's own values, read through the group (SCRUM-253). This used to
+    // read `group.message`, a second copy that could disagree with the driver's.
+    stored: group?.preferences,
     // As above, mirroring the old `if (group?.id && role === "DRIVER")` guard.
     canEdit: Boolean(group?.id) && isDriver,
   });
