@@ -131,6 +131,12 @@ const buildGroupsDb = (opts?: {
         .filter((r) => matches(r, where))
         .map((r) => ({ ...r, user: { id: r.userId } })),
     ),
+    // `edit` counts a group's members before letting its driver leave
+    // (SCRUM-289).
+    count: jest.fn(
+      async ({ where }: any) =>
+        searches.filter((r) => matches(r, where)).length,
+    ),
     update: jest.fn(async ({ where, data }: any) => {
       const row = searches.find((r) => r.id === where.id);
       if (!row) throw new Error(`No carpoolSearch ${where.id}`);
@@ -1495,5 +1501,170 @@ describe("edit — dissolving the group when one member is left", () => {
         add: false,
       }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+});
+
+/**
+ * A driver cannot walk out of a group and leave it unmanageable (SCRUM-289).
+ *
+ * `edit`'s dissolution rule only fires at one remaining member, so a driver
+ * leaving a group of three or more leaves the group alive with no DRIVER in it.
+ * From there `requireGroupDriver` throws FORBIDDEN for every remaining member:
+ * nobody can remove anybody, and nobody can dissolve it. The riders can still
+ * leave one at a time, so it is not a trap forever - but only if a rider
+ * happens to act, and the driver who caused it cannot fix it.
+ *
+ * Two members is the boundary and stays allowed: the group dissolves on the way
+ * out, so nobody is stranded.
+ */
+describe("user.groups.edit — a driver cannot strand the group (SCRUM-289)", () => {
+  it("refuses to let the driver leave a group of three", async () => {
+    // Default fixture: DRIVER + RIDER_1 + RIDER_2 all in GROUP.
+    const { caller, db } = callerFor(sessionFor(DRIVER));
+
+    await expect(
+      caller.user.groups.edit({
+        driverId: DRIVER,
+        riderId: DRIVER,
+        groupId: GROUP,
+        add: false,
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    // Everyone is still in the group, and it still has its driver.
+    expect(db.carpoolIdOf(DRIVER)).toBe(GROUP);
+    expect(db.carpoolIdOf(RIDER_1)).toBe(GROUP);
+    expect(db.carpoolIdOf(RIDER_2)).toBe(GROUP);
+  });
+
+  it("lets the driver leave a group of two, which dissolves it", async () => {
+    const { caller, db } = callerFor(
+      sessionFor(DRIVER),
+      buildGroupsDb({
+        searches: [
+          {
+            id: "s-driver",
+            userId: DRIVER,
+            role: Role.DRIVER,
+            carpoolId: GROUP,
+            seatsAvail: 1,
+            groupMessage: "",
+          },
+          {
+            id: "s-rider-1",
+            userId: RIDER_1,
+            role: Role.RIDER,
+            carpoolId: GROUP,
+            seatsAvail: 0,
+            groupMessage: "",
+          },
+        ],
+      }),
+    );
+
+    await caller.user.groups.edit({
+      driverId: DRIVER,
+      riderId: DRIVER,
+      groupId: GROUP,
+      add: false,
+    });
+
+    // Nobody is stranded: the group is gone and both memberships are clear.
+    expect(db.carpoolIdOf(DRIVER)).toBeNull();
+    expect(db.carpoolIdOf(RIDER_1)).toBeNull();
+    expect(db.groupIds()).toEqual([]);
+  });
+
+  it("still lets the driver remove a rider from a group of three", async () => {
+    // The guard is about the driver leaving, not about the driver managing.
+    const { caller, db } = callerFor(sessionFor(DRIVER));
+
+    await caller.user.groups.edit({
+      driverId: DRIVER,
+      riderId: RIDER_2,
+      groupId: GROUP,
+      add: false,
+    });
+
+    expect(db.carpoolIdOf(RIDER_2)).toBeNull();
+    expect(db.carpoolIdOf(DRIVER)).toBe(GROUP);
+  });
+
+  it("still lets a rider leave a group of three", async () => {
+    const { caller, db } = callerFor(sessionFor(RIDER_1));
+
+    await caller.user.groups.edit({
+      driverId: DRIVER,
+      riderId: RIDER_1,
+      groupId: GROUP,
+      add: false,
+    });
+
+    expect(db.carpoolIdOf(RIDER_1)).toBeNull();
+    expect(db.carpoolIdOf(DRIVER)).toBe(GROUP);
+  });
+});
+
+/**
+ * `groups.me` says whether the group has a driver (SCRUM-289).
+ *
+ * Preferences are read through the driver's own search, so a driverless group
+ * produced four nulls - exactly what a driver who had saved nothing produces.
+ * The two need telling apart: one is an ordinary empty state, the other is a
+ * group nobody can manage.
+ */
+describe("user.groups.me — a driverless group is reported, not silently blank", () => {
+  const driverlessDb = () =>
+    buildGroupsDb({
+      searches: [
+        // The SCRUM-289 shape: the driver switched to RIDER and stayed in.
+        {
+          id: "s-driver",
+          userId: DRIVER,
+          role: Role.RIDER,
+          carpoolId: GROUP,
+          seatsAvail: 0,
+          groupMessage: "",
+          groupNotes: "Meet at the garage",
+        },
+        {
+          id: "s-rider-1",
+          userId: RIDER_1,
+          role: Role.RIDER,
+          carpoolId: GROUP,
+          seatsAvail: 0,
+          groupMessage: "",
+        },
+      ],
+    });
+
+  it("reports hasDriver false when no member is a DRIVER", async () => {
+    const { caller } = callerFor(sessionFor(RIDER_1), driverlessDb());
+
+    const group = await caller.user.groups.me();
+
+    expect(group?.hasDriver).toBe(false);
+  });
+
+  it("reports hasDriver true for a healthy group", async () => {
+    const { caller } = callerFor(sessionFor(RIDER_1));
+
+    const group = await caller.user.groups.me();
+
+    expect(group?.hasDriver).toBe(true);
+  });
+
+  it("still returns the group and its members when there is no driver", async () => {
+    // Reporting the problem must not hide the group: the riders still need to
+    // see each other so they can leave.
+    const { caller } = callerFor(sessionFor(RIDER_1), driverlessDb());
+
+    const group = await caller.user.groups.me();
+
+    expect(group?.id).toBe(GROUP);
+    expect(group?.users).toHaveLength(2);
+    // Preferences stay null - there is no driver to read them from. The flag
+    // above is what makes that legible rather than ambiguous.
+    expect(group?.preferences.groupNotes).toBeNull();
   });
 });

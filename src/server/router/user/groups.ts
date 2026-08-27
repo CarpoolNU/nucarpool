@@ -247,8 +247,18 @@ export const groupsRouter = router({
       (search) => search.role === Role.DRIVER,
     );
 
+    // A group with no DRIVER member is not an ordinary state - it is the
+    // SCRUM-289 failure, which `user.edit` and `edit` now both refuse to
+    // create. Rows that predate those guards can still be in it, and until
+    // this flag existed they were indistinguishable from a driver who had
+    // simply saved no preferences: both produced four nulls. Saying so
+    // explicitly is what lets the group page explain itself rather than
+    // quietly showing blank notes (SCRUM-289).
+    const hasDriver = driverSearch !== undefined;
+
     const updatedGroup = {
       ...group,
+      hasDriver,
       preferences: {
         groupNotes: driverSearch?.groupNotes ?? null,
         groupMusicPreference: driverSearch?.groupMusicPreference ?? null,
@@ -455,6 +465,28 @@ export const groupsRouter = router({
             code: "NOT_FOUND",
             message: "That user is not a member of this carpool group.",
           });
+        }
+
+        // A driver leaving a group of three or more strands the rest. The
+        // group survives - dissolution below only triggers at one remaining
+        // member - but has no DRIVER, and `requireGroupDriver` then refuses
+        // every management action, so the riders cannot remove each other or
+        // dissolve it. At two members the group dissolves on the way out, so
+        // leaving is harmless there and stays allowed (SCRUM-289).
+        if (
+          callerMembership.role === Role.DRIVER &&
+          input.riderId === callerId
+        ) {
+          const memberCount = await ctx.prisma.carpoolSearch.count({
+            where: { carpoolId: input.groupId },
+          });
+
+          if (memberCount > 2) {
+            throw forbidden(
+              "Remove the other riders before leaving, or dissolve the " +
+                "group instead.",
+            );
+          }
         }
       }
 
