@@ -32,10 +32,10 @@ const RequestSidebar = (props: RequestSidebarProps) => {
   return (
     <div className="z-10 flex h-full flex-shrink-0 flex-col bg-white text-left">
       <div className="flex-row px-7 pb-4 pt-7">
-        <div className="flex items-center justify-between ">
-          <div className="text-2xl font-semibold ">Requests</div>
+        <div className="flex items-center justify-between">
+          <div className="text-2xl font-semibold">Requests</div>
           <CustomSelect
-            className="!w-2/5 "
+            className="!w-2/5"
             value={curOption}
             onChange={setCurOption}
             options={options}

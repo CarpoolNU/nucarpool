@@ -210,8 +210,8 @@ function AdminData() {
   };
 
   return (
-    <div className=" my-4 h-full w-full overflow-y-auto">
-      <div className=" flex h-full w-full flex-col  space-y-4  px-8">
+    <div className="my-4 h-full w-full overflow-y-auto">
+      <div className="flex h-full w-full flex-col space-y-4 px-8">
         <button
           onClick={handleDownloadData}
           className="self-start rounded bg-northeastern-red px-4 py-2 font-bold text-white hover:bg-red-700"

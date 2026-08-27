@@ -63,11 +63,11 @@ const ControlledTimePicker = (props: ControlledTimePickerProps) => {
               },
             }}
           >
-            <div className={"flex flex-col "}>
+            <div className={"flex flex-col"}>
               <TimePickerWrapper
                 ref={ref}
                 needConfirm={false}
-                className="form-input w-full  rounded-lg border border-black "
+                className="form-input w-full rounded-lg border border-black"
                 format="h:mm A"
                 suffixIcon={customSuffixIcon()}
                 status={fieldState.error ? "error" : undefined}

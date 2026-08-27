@@ -26,8 +26,8 @@ const CustomSelect = <T extends string>({
   return (
     <div className={"relative z-20 w-full " + className}>
       <Listbox value={value} onChange={onChange}>
-        <div className="relative ">
-          <Listbox.Button className="relative w-full cursor-default rounded-lg border border-black bg-white py-2 pl-3 pr-8 text-left focus:outline-none ">
+        <div className="relative">
+          <Listbox.Button className="relative w-full cursor-default rounded-lg border border-black bg-white py-2 pl-3 pr-8 text-left focus:outline-none">
             {title ? (
               <span className="block truncate">{title}</span>
             ) : (

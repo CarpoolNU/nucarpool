@@ -60,7 +60,7 @@ function QuickStats({
   ];
 
   return (
-    <div className="relative flex  w-full flex-col justify-evenly space-y-4">
+    <div className="relative flex w-full flex-col justify-evenly space-y-4">
       <DisplayBox data={conversationData} title="Conversations" />
       <DisplayBox data={groupData} title="Group" />
     </div>

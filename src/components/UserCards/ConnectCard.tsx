@@ -99,7 +99,7 @@ export const ConnectCard = (props: ConnectCardProps): React.JSX.Element => {
           <button
             onClick={() => handleConnect(props.otherUser)}
             disabled={user?.role === "VIEWER" || user?.status === "INACTIVE"}
-            className="w-full rounded-md bg-northeastern-red p-3 text-center text-white font-semibold hover:bg-red-700 disabled:bg-gray-300"
+            className="w-full rounded-md bg-northeastern-red p-3 text-center font-semibold text-white hover:bg-red-700 disabled:bg-gray-300"
           >
             Connect!
           </button>

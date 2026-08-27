@@ -130,13 +130,13 @@ const ExploreSidebar = (props: ExploreSidebarProps) => {
                 onClick={() => setFiltersOpen(true)}
                 aria-label="Open filters"
               >
-                <FaFilter className="text-xl " aria-hidden="true" />
+                <FaFilter className="text-xl" aria-hidden="true" />
               </button>
             </div>
           )}
       </div>
 
-      <div className="relative h-full w-full ">
+      <div className="relative h-full w-full">
         {filtersOpen ? (
           <Filters
             setFilters={props.setFilters}

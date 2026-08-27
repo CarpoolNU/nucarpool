@@ -26,19 +26,19 @@ const StepFour = ({
   watch,
 }: StepFourProps) => {
   return (
-    <div className="flex flex-col items-center  justify-center bg-white px-4">
+    <div className="flex flex-col items-center justify-center bg-white px-4">
       <div className="mb-4 text-center font-montserrat text-3xl font-bold">
         <span>Who is&nbsp;</span>
         <span className="text-northeastern-red">carpooling?</span>
       </div>
       {/* Pfp Section*/}
 
-      <div className=" mb-2 w-full ">
+      <div className="mb-2 w-full">
         <ProfilePicture onFileSelected={onFileSelect} />
       </div>
 
       {/* About Me*/}
-      <div className="flex w-full flex-row  space-x-6">
+      <div className="flex w-full flex-row space-x-6">
         {/* Preferred Name field  */}
 
         <div className="flex w-3/5 flex-col">
