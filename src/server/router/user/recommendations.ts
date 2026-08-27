@@ -81,7 +81,14 @@ export const recommendationsRouter = router({
         filters: input.filters,
         sort: input.sort,
         excludedUserIds,
-        favoriteUserIds: favorites.map((f) => f.id),
+        // Only read when the filter is on, and only included then: the
+        // `favorites` include above is `input.filters.favorites`, and Prisma
+        // omits the key entirely rather than returning [] for a false include,
+        // so mapping it unconditionally threw on every default page load
+        // (SCRUM-288).
+        favoriteUserIds: input.filters.favorites
+          ? favorites.map((f) => f.id)
+          : [],
       });
 
       return sortedSearches
