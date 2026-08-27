@@ -3,14 +3,13 @@ import { z } from "zod";
 import { protectedRouter, router } from "./createRouter";
 import { Feature, FeatureCollection } from "geojson";
 import { serverEnv } from "../../utils/env/server";
-import { Role, Status, CarpoolSearch, Location } from "@prisma/client";
+import { Role } from "@prisma/client";
 import { DirectionsResponse } from "../../utils/types";
 import {
   convertCarpoolSearchToPublic,
   roundCoord,
 } from "../../utils/publicUser";
-import _ from "lodash";
-import { calculateScore, Recommendation } from "../../utils/recommendation";
+import { fetchRankedCandidates } from "../db/candidateSearch";
 import { parseMapboxFeature } from "../../utils/map/parseAddress";
 import {
   MAPBOX_DIRECTIONS_MAX_POINTS,
@@ -20,6 +19,12 @@ import {
   buildDirectionsUrl,
   buildGeocodingSearchUrl,
 } from "../../utils/map/mapboxUrls";
+
+/**
+ * Points the map returns for a matchable user. A VIEWER is not matchable and
+ * gets the whole ranked set, which is pre-existing behaviour.
+ */
+const MAP_RESULT_LIMIT = 150;
 
 // router for interacting with the Mapbox API
 export const mapboxRouter = router({
@@ -161,60 +166,22 @@ export const mapboxRouter = router({
         );
       }
 
-      // construct Query with Filters
-      let carpoolSearchQuery: any = {
-        userId: { notIn: excludedUserIds },
-        status: Status.ACTIVE,
-        user: {
-          isOnboarded: true,
-        },
-      };
-
-      // Favorites filter
-      if (input.favorites) {
-        carpoolSearchQuery.userId = {
-          ...carpoolSearchQuery.userId,
-          in: favorites.map((f) => f.id),
-        };
-      }
-
-      const carpoolSearches = await ctx.prisma.carpoolSearch.findMany({
-        where: carpoolSearchQuery,
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              image: true,
-              bio: true,
-              preferredName: true,
-              pronouns: true,
-              isOnboarded: true,
-            },
-          },
-          homeLocation: true,
-          companyLocation: true,
-        },
+      // Bounded candidate query plus scoring, shared with
+      // `user.recommendations.me` (SCRUM-245). The two used to hold separate
+      // copies of this, each reading every ACTIVE row.
+      const sortedSearches = await fetchRankedCandidates({
+        prisma: ctx.prisma,
+        currentUserSearch,
+        filters: input,
+        sort: "distance",
+        excludedUserIds,
+        favoriteUserIds: favorites.map((f) => f.id),
       });
 
-      const filtered: Recommendation[] = _.compact(
-        carpoolSearches.map(
-          calculateScore(currentUserSearch, input, "distance"),
-        ),
-      );
-      filtered.sort(
-        (a: Recommendation, b: Recommendation) => a.score - b.score,
-      );
-      const sortedSearches = _.compact(
-        filtered.map((rec) =>
-          carpoolSearches.find((search) => search.user.id === rec.id),
-        ),
-      );
       const finalSearches =
         currentUserSearch.role === Role.VIEWER
           ? sortedSearches
-          : sortedSearches.slice(0, 150);
+          : sortedSearches.slice(0, MAP_RESULT_LIMIT);
 
       const finalPublicUsers = finalSearches.map(convertCarpoolSearchToPublic);
 

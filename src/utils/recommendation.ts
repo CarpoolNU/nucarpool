@@ -43,8 +43,14 @@ export type FInputs = {
   daysWorking: string;
 };
 
-/** Miles covered by one degree of latitude: 2 * pi * R / 360, with R = 3958.8 mi. */
-const MILES_PER_DEGREE_LATITUDE = 69.09;
+/**
+ * Miles covered by one degree of latitude: 2 * pi * R / 360, with R = 3958.8 mi.
+ *
+ * Exported because the SQL bounding box in `candidateSearch.ts` has to derive
+ * its window from the same constant this metric uses, or the box could exclude
+ * a point the scorer would have kept (SCRUM-245).
+ */
+export const MILES_PER_DEGREE_LATITUDE = 69.09;
 
 /**
  * Straight-line miles between two coordinates.
@@ -59,7 +65,7 @@ const MILES_PER_DEGREE_LATITUDE = 69.09;
  * Equirectangular with a cosine correction is within a fraction of a percent of
  * haversine at commute range, for one cosine.
  */
-const milesBetween = (
+export const milesBetween = (
   lat1: number,
   lng1: number,
   lat2: number,
