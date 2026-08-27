@@ -7,10 +7,10 @@ type UnsavedModalProps = {
 function UnsavedModal({ onClose, onSave, onContinue }: UnsavedModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 font-montserrat">
-      <div className="relative flex w-1/3 flex-col justify-center rounded-lg bg-white px-6 py-16   text-center shadow-lg">
+      <div className="relative flex w-1/3 flex-col justify-center rounded-lg bg-white px-6 py-16 text-center shadow-lg">
         <button
           onClick={onClose}
-          className="absolute right-4 top-2 text-3xl  font-bold text-gray-600 hover:text-gray-900"
+          className="absolute right-4 top-2 text-3xl font-bold text-gray-600 hover:text-gray-900"
         >
           ×
         </button>
@@ -28,7 +28,7 @@ function UnsavedModal({ onClose, onSave, onContinue }: UnsavedModalProps) {
           <button
             autoFocus
             onClick={onSave}
-            className="rounded bg-northeastern-red px-4  py-2 font-bold text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-black"
+            className="rounded bg-northeastern-red px-4 py-2 font-bold text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-black"
           >
             Save and Continue
           </button>

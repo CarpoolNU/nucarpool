@@ -174,7 +174,7 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
 
       <div className="mt-2 flex items-center">
         {croppedImageUrl ? (
-          <div className="relative h-40 w-40 overflow-hidden rounded-full flex-shrink-0">
+          <div className="relative h-40 w-40 flex-shrink-0 overflow-hidden rounded-full">
             <Image
               src={croppedImageUrl}
               alt="Cropped Image"
@@ -183,9 +183,9 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
             />
           </div>
         ) : isProfileImageLoading ? (
-          <div className="h-40 w-40 rounded-full bg-gray-400 flex-shrink-0" />
+          <div className="h-40 w-40 flex-shrink-0 rounded-full bg-gray-400" />
         ) : profileImageUrl && !imageLoadError ? (
-          <div className="relative h-40 w-40 items-center justify-center overflow-hidden rounded-full flex-shrink-0">
+          <div className="relative h-40 w-40 flex-shrink-0 items-center justify-center overflow-hidden rounded-full">
             <Image
               src={profileImageUrl}
               alt="Profile Picture"
@@ -194,7 +194,7 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
             />
           </div>
         ) : (
-          <div className="flex items-center justify-center h-40 w-40 rounded-full bg-gray-400 overflow-hidden flex-shrink-0">
+          <div className="flex h-40 w-40 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-400">
             <AiOutlineUser className="h-28 w-28 text-white" />
           </div>
         )}

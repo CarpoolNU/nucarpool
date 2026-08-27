@@ -215,9 +215,9 @@ function LineChartCount({
   };
 
   return (
-    <div className=" w-full">
+    <div className="w-full">
       {weekLabels.length > 0 ? (
-        <div className="relative min-h-[600px]  w-full">
+        <div className="relative min-h-[600px] w-full">
           <Line data={lineData} options={lineOptions} />
         </div>
       ) : (

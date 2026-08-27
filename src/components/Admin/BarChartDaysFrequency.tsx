@@ -100,7 +100,7 @@ function BarChartDaysFrequency({
   };
 
   return (
-    <div className=" flex h-[500px] w-full  flex-col">
+    <div className="flex h-[500px] w-full flex-col">
       <Bar data={barData} options={barOptions} />
       <span className="w-full text-center font-lato text-sm text-gray-400">
         All bars currently only include active users aside from

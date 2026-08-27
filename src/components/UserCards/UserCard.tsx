@@ -108,7 +108,7 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
       className={classNames(
         "align-center relative flex flex-col rounded-xl bg-stone-100 text-left shadow-md",
         "border-l-[13px] border-l-busy-red font-montserrat",
-        isMobile ? "mx-1 my-2 px-3 py-3 gap-1" : "m-3.5 px-4 py-4 gap-2",
+        isMobile ? "mx-1 my-2 gap-1 px-3 py-3" : "m-3.5 gap-2 px-4 py-4",
         props.classname,
       )}
       onClick={props.onClick}
@@ -116,22 +116,22 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
       <div className={"-ml-2 mb-1 flex flex-row items-center"}>
         {/* Profile Image */}
         {isProfileImageLoading ? (
-          <div className="h-14 w-14  rounded-full bg-gray-200" />
+          <div className="h-14 w-14 rounded-full bg-gray-200" />
         ) : profileImageUrl && !imageLoadError ? (
           <Image
             src={profileImageUrl}
             alt={`${props.otherUser.preferredName}'s Profile Image`}
             width={56}
             height={56}
-            className="h-14 w-14  rounded-full object-cover"
+            className="h-14 w-14 rounded-full object-cover"
           />
         ) : (
-          <AiOutlineUser className="h-14 w-14  rounded-full bg-gray-200" />
+          <AiOutlineUser className="h-14 w-14 rounded-full bg-gray-200" />
         )}
 
         {/* Name and Pronouns */}
         <div className="flex flex-col items-start pl-3.5">
-          <div className="text-lg font-semibold ">
+          <div className="text-lg font-semibold">
             {user.role === "VIEWER" ? (
               <p>{`${props.otherUser.role.charAt(0)}${props.otherUser.role
                 .slice(1)
@@ -141,7 +141,7 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
             )}
           </div>
           <div className="flex flex-row items-start gap-4">
-            <p className="font-montserrat text-sm  italic">
+            <p className="font-montserrat text-sm italic">
               {props.otherUser.pronouns !== ""
                 ? "(" + `${props.otherUser.pronouns}` + ")"
                 : null}
@@ -150,7 +150,7 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
             {props.isUnread && (
               <div className="flex items-center">
                 <span className="mr-1 h-2 w-2 rounded-full bg-blue-300"></span>
-                <p className="text-sm italic ">New!</p>
+                <p className="text-sm italic">New!</p>
               </div>
             )}
           </div>
@@ -208,7 +208,7 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
       {/* Fifth row - Start and end times */}
       {!(isMobile && props.isMobileCondensedLayout) && (
         <div className="m-0 flex w-full justify-between align-middle">
-          <div className="flex text-sm ">
+          <div className="flex text-sm">
             <p className="pr-1">Job Start:</p>
             <p className="font-semibold">
               {formatScheduleTime(props.otherUser.startTime)}
@@ -226,7 +226,7 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
         props.otherUser.coopEndDate &&
         !(isMobile && props.isMobileCondensedLayout) && (
           <div className="m-0 flex w-full justify-between align-middle">
-            <div className="flex text-sm ">
+            <div className="flex text-sm">
               <p className="pr-1">From:</p>
               <p className="font-semibold">
                 {dayjs(props.otherUser.coopStartDate).format("MMMM")}

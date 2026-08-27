@@ -104,7 +104,7 @@ const MessageHeader = ({
           <AiOutlineUser className="h-20 w-20 rounded-full bg-gray-200" />
         )}
 
-        <span className="pl-10 pr-10 font-montserrat font-semibold sm:text-lg md:text-xl lg:text-2xl ">
+        <span className="pl-10 pr-10 font-montserrat font-semibold sm:text-lg md:text-xl lg:text-2xl">
           {selectedUser.preferredName}
         </span>
       </div>
@@ -115,7 +115,7 @@ const MessageHeader = ({
               <button
                 onClick={onReject}
                 disabled={isMutating}
-                className={`mr-10 rounded-lg border-2 border-black bg-white py-2 text-center text-lg font-medium  text-black hover:bg-gray-100 sm:px-8 md:px-12 lg:px-20 ${
+                className={`mr-10 rounded-lg border-2 border-black bg-white py-2 text-center text-lg font-medium text-black hover:bg-gray-100 sm:px-8 md:px-12 lg:px-20 ${
                   isMutating ? DISABLED_CLASS : ""
                 }`}
               >
@@ -124,7 +124,7 @@ const MessageHeader = ({
               <button
                 onClick={onAccept}
                 disabled={isMutating}
-                className={` mr-10 rounded-lg border-2 border-northeastern-red bg-northeastern-red py-2 text-center text-lg font-medium  text-white hover:bg-red-700 sm:px-8 md:px-12 lg:px-20 ${
+                className={`mr-10 rounded-lg border-2 border-northeastern-red bg-northeastern-red py-2 text-center text-lg font-medium text-white hover:bg-red-700 sm:px-8 md:px-12 lg:px-20 ${
                   isMutating ? DISABLED_CLASS : ""
                 }`}
               >
@@ -138,7 +138,7 @@ const MessageHeader = ({
             <button
               onClick={onReject}
               disabled={isMutating}
-              className={` mr-10 rounded-lg border-2 border-black bg-white py-2 text-center text-lg font-medium text-black hover:bg-gray-100 md:px-12 lg:px-20 ${
+              className={`mr-10 rounded-lg border-2 border-black bg-white py-2 text-center text-lg font-medium text-black hover:bg-gray-100 md:px-12 lg:px-20 ${
                 isMutating ? DISABLED_CLASS : ""
               }`}
             >
@@ -149,7 +149,7 @@ const MessageHeader = ({
           <button
             onClick={onReject}
             disabled={isMutating}
-            className={` mr-10 rounded-lg border-2 border-black bg-white py-2 text-center text-lg font-medium text-black hover:bg-gray-100 md:px-12 lg:px-20 ${
+            className={`mr-10 rounded-lg border-2 border-black bg-white py-2 text-center text-lg font-medium text-black hover:bg-gray-100 md:px-12 lg:px-20 ${
               isMutating ? DISABLED_CLASS : ""
             }`}
           >
@@ -159,7 +159,7 @@ const MessageHeader = ({
 
         <button
           onClick={handleClose}
-          className=" h-14 w-14 cursor-pointer items-center  justify-center text-3xl text-black"
+          className="h-14 w-14 cursor-pointer items-center justify-center text-3xl text-black"
           aria-label="Close"
         >
           &times;

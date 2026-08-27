@@ -980,7 +980,7 @@ const Home: NextPage<any> = () => {
 
     return (
       <div
-        className="absolute top-0 left-0 right-0 z-[9999] bg-yellow-100 text-black py-1 px-4 text-xs text-center"
+        className="absolute left-0 right-0 top-0 z-[9999] bg-yellow-100 px-4 py-1 text-center text-xs text-black"
         style={{
           width: "100%",
           position: "fixed",
@@ -1013,7 +1013,7 @@ const Home: NextPage<any> = () => {
   }
 
   const viewerBox = (
-    <div className="absolute left-0 top-0 z-10 m-2 flex min-w-[25rem] flex-col rounded-xl bg-white p-4 shadow-lg ">
+    <div className="absolute left-0 top-0 z-10 m-2 flex min-w-[25rem] flex-col rounded-xl bg-white p-4 shadow-lg">
       <h2 className="mb-4 text-xl">Search my route</h2>
       <div className="flex items-center space-x-4">
         <Image
@@ -1036,7 +1036,7 @@ const Home: NextPage<any> = () => {
 
       <div className="mt-4 flex items-center space-x-4">
         <Image
-          className="h-8 w-8 "
+          className="h-8 w-8"
           alt="end"
           src={BlueSquare}
           width={32}
@@ -1049,7 +1049,7 @@ const Home: NextPage<any> = () => {
           addressSetter={setCompanyAddressSelected}
           addressSuggestions={companyAddressSuggestions}
           addressUpdater={updateCompanyAddress}
-          className="flex-1 "
+          className="flex-1"
         />
       </div>
       <div className="flex items-center space-x-4">
@@ -1120,11 +1120,11 @@ const Home: NextPage<any> = () => {
               ref={sidebarRef}
               className={`${
                 isMobile
-                  ? `absolute left-0 z-20 w-full overflow-y-auto bg-white shadow-lg transition-all duration-300 rounded-t-3xl border-2 border-black ${
+                  ? `absolute left-0 z-20 w-full overflow-y-auto rounded-t-3xl border-2 border-black bg-white shadow-lg transition-all duration-300 ${
                       mobileSelectedUserID !== null
                         ? "bottom-12 h-[320px]"
                         : isSidebarCollapsed
-                          ? "bottom-12 h-0 opacity-0 pointer-events-none"
+                          ? "pointer-events-none bottom-12 h-0 opacity-0"
                           : "bottom-12 h-[calc(100%-8.5rem)]"
                     }`
                   : "relative w-[25rem]"
@@ -1204,7 +1204,7 @@ const Home: NextPage<any> = () => {
             <div className="relative flex-auto">
               {/* Message Panel */}
               {selectedUser && (
-                <div className=" pointer-events-none absolute inset-0 z-10 h-full w-full">
+                <div className="pointer-events-none absolute inset-0 z-10 h-full w-full">
                   <MessagePanel
                     selectedUser={selectedUser}
                     onMessageSent={handleMessageSent}
@@ -1218,7 +1218,7 @@ const Home: NextPage<any> = () => {
               <div
                 ref={mapContainerRef}
                 id="map"
-                className="pointer-events-auto relative  z-0 h-full w-full flex-auto"
+                className="pointer-events-auto relative z-0 h-full w-full flex-auto"
               >
                 {user.role === "VIEWER" && viewerBox}
                 {!isMobile && <MapLegend role={user.role} />}
@@ -1245,7 +1245,7 @@ const Home: NextPage<any> = () => {
                     setIsSidebarCollapsed(false);
                     setmobileSelectedUserID(null);
                   }}
-                  className="flex absolute bottom-16 left-1/2 -translate-x-1/2 transform z-30 items-center gap-1 rounded-full bg-white/90 px-4 py-2 shadow-md border border-gray-300 text-sm font-medium hover:bg-white transition-colors"
+                  className="absolute bottom-16 left-1/2 z-30 flex -translate-x-1/2 transform items-center gap-1 rounded-full border border-gray-300 bg-white/90 px-4 py-2 text-sm font-medium shadow-md transition-colors hover:bg-white"
                   aria-label="Group Details"
                 >
                   <svg

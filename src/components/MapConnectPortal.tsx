@@ -21,10 +21,10 @@ export const MapConnectPortal = (props: ConnectPortalProps) => {
       <div className="fixed inset-0">
         <div className="fixed inset-0 mt-20 flex items-start justify-end pt-4">
           <Dialog.Panel>
-            <div className="max-h-100vh relative mt-11 w-[26rem] ">
+            <div className="max-h-100vh relative mt-11 w-[26rem]">
               <div
                 tabIndex={0}
-                className="mr-3  max-h-[calc(100vh-8rem)] overflow-y-scroll  scrollbar  scrollbar-track-transparent scrollbar-thumb-northeastern-red scrollbar-track-rounded-full scrollbar-thumb-rounded-full"
+                className="mr-3 max-h-[calc(100vh-8rem)] overflow-y-scroll scrollbar scrollbar-track-transparent scrollbar-thumb-northeastern-red scrollbar-track-rounded-full scrollbar-thumb-rounded-full"
                 style={{
                   maskImage:
                     "linear-gradient(to bottom, transparent 0%, black 5%, black 95%, transparent 100%)",

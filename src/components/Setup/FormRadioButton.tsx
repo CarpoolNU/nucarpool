@@ -25,7 +25,7 @@ const RadioButton = React.forwardRef<
         className={`flex cursor-pointer items-center justify-center rounded-lg border border-black px-6 py-2 font-montserrat text-2xl transition ${
           currentlySelected === value
             ? "bg-northeastern-red text-white"
-            : "bg-white text-black "
+            : "bg-white text-black"
         } ${className}`}
       >
         <input

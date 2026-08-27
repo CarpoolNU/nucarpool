@@ -120,13 +120,13 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
       onClose={() => onClose("close")}
       className="relative z-50"
     >
-      <div className="fixed inset-0 font-montserrat  backdrop-blur-sm">
-        <div className="fixed inset-0 flex items-center justify-center ">
-          <Dialog.Panel className="absolute  flex  w-5/6 max-w-[700px] select-none flex-col content-center  justify-center gap-4 overflow-y-auto overflow-x-hidden rounded-2xl bg-white py-4  shadow-md  md:aspect-square ">
+      <div className="fixed inset-0 font-montserrat backdrop-blur-sm">
+        <div className="fixed inset-0 flex items-center justify-center">
+          <Dialog.Panel className="absolute flex w-5/6 max-w-[700px] select-none flex-col content-center justify-center gap-4 overflow-y-auto overflow-x-hidden rounded-2xl bg-white py-4 shadow-md md:aspect-square">
             {!requestSent ? (
               <>
-                <div className="relative  flex w-full">
-                  <div className="flex w-full flex-row gap-4  px-6 md:px-12">
+                <div className="relative flex w-full">
+                  <div className="flex w-full flex-row gap-4 px-6 md:px-12">
                     <div className="relative inline-block h-28 w-28">
                       {isProfileImageLoading ? (
                         <div className="h-28 w-28 rounded-full bg-gray-200" />
@@ -143,11 +143,11 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                       )}
                     </div>
                     <div className="flex w-full flex-col justify-center gap-2 pl-4">
-                      <div className="flex flex-row items-baseline justify-start gap-2 ">
-                        <div className="text-lg font-bold lg:text-xl ">
+                      <div className="flex flex-row items-baseline justify-start gap-2">
+                        <div className="text-lg font-bold lg:text-xl">
                           <p>{props.otherUser.preferredName}</p>
                         </div>
-                        <p className="font-montserrat  text-sm italic text-stone-400">
+                        <p className="font-montserrat text-sm italic text-stone-400">
                           {props.otherUser.pronouns !== "" && !isMobile
                             ? "(" + `${props.otherUser.pronouns}` + ")"
                             : null}
@@ -156,7 +156,7 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
 
                       {props.otherUser.coopStartDate &&
                         props.otherUser.coopEndDate && (
-                          <div className=" flex  justify-start align-middle">
+                          <div className="flex justify-start align-middle">
                             <div
                               className={`${isMobile ? "flex-col" : "flex"} text-base`}
                             >
@@ -166,7 +166,7 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                                   "MMMM",
                                 )}
                               </p>
-                              <p className="px-2  ">|</p>
+                              <p className="px-2">|</p>
                               <p className="pr-1">To:</p>
                               <p className="font-bold">
                                 {dayjs(props.otherUser.coopEndDate).format(
@@ -179,7 +179,7 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                     </div>
                   </div>
                 </div>
-                <div className="relative flex w-full flex-col justify-evenly   divide-y divide-[#EAEAEA] border-y border-[#EAEAEA] md:flex-row md:divide-x ">
+                <div className="relative flex w-full flex-col justify-evenly divide-y divide-[#EAEAEA] border-y border-[#EAEAEA] md:flex-row md:divide-x">
                   {props.otherUser.bio !== "" && (
                     <div className="flex flex-col gap-2 px-12 py-7 md:w-1/2">
                       <div className="mb-2 text-lg font-bold">About:</div>
@@ -191,7 +191,7 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                   {!isMobile && (
                     <div className="flex flex-col gap-3 py-7 pl-12 md:w-1/2">
                       {/*start location*/}
-                      <div className="flex  items-center">
+                      <div className="flex items-center">
                         <div className="flex w-8 items-center justify-center">
                           <Image
                             src={StartIcon}
@@ -200,7 +200,7 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                             alt="Start icon"
                           />
                         </div>
-                        <p className="ml-1.5  font-semibold">
+                        <p className="ml-1.5 font-semibold">
                           {props.otherUser.startAddress}
                         </p>
                       </div>
@@ -219,7 +219,7 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                           {props.otherUser.companyName}
                         </p>
                       </div>
-                      <div className="flex w-full items-center ">
+                      <div className="flex w-full items-center">
                         {daysOfWeek.map((day, index) => (
                           <StaticDayBox
                             className="!m-0.5 !h-7 !w-7 !text-base"
@@ -232,7 +232,7 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                       {/* Start and end times */}
 
                       <div className="flex w-full justify-between align-middle">
-                        <div className="flex  ">
+                        <div className="flex">
                           <p className="pr-1">Start:</p>
                           <p className="font-semibold">
                             {formatScheduleTime(props.otherUser.startTime)}
@@ -266,27 +266,27 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                     via email.
                   </p>
                   <textarea
-                    className="form-input mb-2 flex max-h-32 min-h-16 w-full rounded-lg  border border-stone-400 px-6   shadow-sm"
+                    className="form-input mb-2 flex max-h-32 min-h-16 w-full rounded-lg border border-stone-400 px-6 shadow-sm"
                     maxLength={MESSAGE_MAX_LENGTH}
                     defaultValue={customMessage}
                     placeholder={"Send a message"}
                     onChange={(e) => setCustomMessage(e.target.value)}
                   ></textarea>
-                  <div className=" mb-1 h-6 w-full text-sm text-stone-400">
-                    <div className="text-end ">
+                  <div className="mb-1 h-6 w-full text-sm text-stone-400">
+                    <div className="text-end">
                       {customMessage.length}/{MESSAGE_MAX_LENGTH}
                     </div>
                   </div>
-                  <div className="flex w-full  justify-center space-x-7">
+                  <div className="flex w-full justify-center space-x-7">
                     <div className="flex w-full justify-center gap-6 md:w-3/4">
                       <button
                         onClick={() => onClose("close")}
-                        className="w-full rounded-md border border-black p-1  hover:bg-stone-100 "
+                        className="w-full rounded-md border border-black p-1 hover:bg-stone-100"
                       >
                         Cancel
                       </button>
                       <button
-                        className="w-full rounded-md  bg-northeastern-red p-1 text-slate-50 hover:bg-red-700"
+                        className="w-full rounded-md bg-northeastern-red p-1 text-slate-50 hover:bg-red-700"
                         onClick={handleOnClick}
                       >
                         Send
@@ -296,7 +296,7 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                 </div>
               </>
             ) : (
-              <div className="flex flex-col justify-center  ">
+              <div className="flex flex-col justify-center">
                 <Dialog.Title className="mb-8 text-center text-2xl font-bold">
                   Your request has been sent!
                 </Dialog.Title>
@@ -310,17 +310,17 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                     View your requests on desktop!
                   </div>
                 )}
-                <div className="flex w-full  justify-center space-x-7">
-                  <div className="flex w-full  gap-6 md:w-3/4">
+                <div className="flex w-full justify-center space-x-7">
+                  <div className="flex w-full gap-6 md:w-3/4">
                     <button
                       onClick={() => onClose("closeAfterSend")}
-                      className="w-full rounded-md border border-black p-1  hover:bg-stone-100 "
+                      className="w-full rounded-md border border-black p-1 hover:bg-stone-100"
                     >
                       Close
                     </button>
                     {!isMobile && (
                       <button
-                        className="w-full rounded-md  bg-northeastern-red p-1 text-slate-50 hover:bg-red-700"
+                        className="w-full rounded-md bg-northeastern-red p-1 text-slate-50 hover:bg-red-700"
                         onClick={handleViewRequest}
                       >
                         View Request

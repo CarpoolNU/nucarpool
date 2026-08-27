@@ -299,7 +299,7 @@ const Setup: NextPage = () => {
 
       {step > 1 && (
         <div
-          className={`absolute left-1/2 ${isMobile ? "top-16" : "top-[calc(50%-250px-60px)]"} -translate-x-1/2 transform z-20`}
+          className={`absolute left-1/2 ${isMobile ? "top-16" : "top-[calc(50%-250px-60px)]"} z-20 -translate-x-1/2 transform`}
         >
           <ProgressBar step={step - 2} />
         </div>

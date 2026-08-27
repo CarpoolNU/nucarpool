@@ -188,7 +188,7 @@ const MessagePanel = ({
             Message
           </button>
           <button
-            className={` flex-1 py-3 text-center text-lg font-medium ${
+            className={`flex-1 py-3 text-center text-lg font-medium ${
               activeTab === "map"
                 ? "border-b-2 border-northeastern-red text-northeastern-red"
                 : ""

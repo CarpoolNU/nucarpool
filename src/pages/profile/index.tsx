@@ -291,13 +291,13 @@ const Index: NextPage = () => {
 
   if (isLoading || !user) {
     return (
-      <div className="fixed inset-0 z-50  flex items-center justify-center bg-white ">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-white">
         <Spinner />
       </div>
     );
   }
   return (
-    <div className="relative h-screen w-screen select-none ">
+    <div className="relative h-screen w-screen select-none">
       {showModal && (
         <UnsavedModal
           onClose={() => setShowModal(false)}
@@ -309,14 +309,14 @@ const Index: NextPage = () => {
       <Header profile={true} checkChanges={checkForChanges} />
 
       {isMobile && (
-        <div className="w-full border-b-2 border-busy-red bg-stone-100 z-10">
+        <div className="z-10 w-full border-b-2 border-busy-red bg-stone-100">
           <ProfileSidebar option={option} setOption={setOption} />
         </div>
       )}
 
       {isMobile ? (
-        <div className="absolute top-[6rem] bottom-16 left-0 right-0 overflow-y-auto">
-          <div className="px-8 pt-6 pb-24">
+        <div className="absolute bottom-16 left-0 right-0 top-[6rem] overflow-y-auto">
+          <div className="px-8 pb-24 pt-6">
             {option === "user" ? (
               <UserSection
                 watch={watch}
@@ -353,7 +353,7 @@ const Index: NextPage = () => {
           </div>
         </div>
       ) : (
-        <div className="relative h-[91.5%] w-full grid grid-cols-[250px_repeat(2,1fr)] overflow-hidden">
+        <div className="relative grid h-[91.5%] w-full grid-cols-[250px_repeat(2,1fr)] overflow-hidden">
           <div className="sticky top-0 col-start-1 col-end-2 h-full w-[250px] border-r-4 border-busy-red bg-stone-100 lg:w-[350px]">
             <ProfileSidebar option={option} setOption={setOption} />
           </div>

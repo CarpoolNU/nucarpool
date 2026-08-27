@@ -60,7 +60,7 @@ const UserSection = ({
       </div>
 
       {lockedToDriver && (
-        <Note className="!mt-0 !mb-2 max-w-xl">
+        <Note className="!mb-2 !mt-0 max-w-xl">
           You are the driver of a carpool group, so your role is locked to
           Driver. Leave or dissolve the group from the Group page to change it -
           switching now would leave your riders in a group with no driver.
@@ -107,7 +107,7 @@ const UserSection = ({
         {/* Reduced gap between radio buttons and seat availability */}
         {watch("role") == Role.DRIVER && (
           <div
-            className={`${isMobile ? "w-full mt-2" : "flex-1"} flex flex-col`}
+            className={`${isMobile ? "mt-2 w-full" : "flex-1"} flex flex-col`}
           >
             <EntryLabel
               required={true}
@@ -217,12 +217,9 @@ const UserSection = ({
           className={"!text-lg"}
         />
         <textarea
-          className={`form-input w-full resize-none rounded-md
-                       ${
-                         isViewer
-                           ? "border-gray-100 bg-gray-200 text-gray-400"
-                           : ""
-                       } border-black px-3 py-2`}
+          className={`form-input w-full resize-none rounded-md ${
+            isViewer ? "border-gray-100 bg-gray-200 text-gray-400" : ""
+          } border-black px-3 py-2`}
           maxLength={PROFILE_TEXT_MAX_LENGTH}
           disabled={isViewer}
           {...register("bio")}

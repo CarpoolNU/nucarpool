@@ -147,7 +147,7 @@ const CarpoolSection = ({
       <div className="py-8 font-montserrat">
         <button
           type="button"
-          className="w-full rounded-lg bg-northeastern-red py-3 text-lg text-white hover:bg-red-700 "
+          className="w-full rounded-lg bg-northeastern-red py-3 text-lg text-white hover:bg-red-700"
           onClick={onSubmit}
         >
           Save Changes
