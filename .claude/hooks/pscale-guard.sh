@@ -77,7 +77,9 @@ fi
 if has '(branch +(delete|promote)|database +(delete|update)|keyspace +(delete|update|resize)|backup +(delete|restore)|webhook +(create|update|delete|test)|service-token +(create|delete|add-access|delete-access))'; then
   deny "destructive or configuration-changing PlanetScale operation. Human-only."
 fi
-if has ' shell( |$)'; then
+# Anchored to the subcommand slot (optionally after global flags) so that prose
+# containing the word "shell" does not trip the guard.
+if has 'pscale( +--[a-z-]+([= ][^ ]+)?)* +shell( |$)'; then
   deny "'pscale shell' is interactive and does not default to the reader role. Use 'pscale sql ... --role reader'."
 fi
 # `pscale api` reaches the REST API directly, so the subcommand rules above do

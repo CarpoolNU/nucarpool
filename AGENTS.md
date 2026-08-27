@@ -86,9 +86,28 @@ branch, and prefer `staging` for schema work.
   database that has meant creating production admin credentials and shipping
   unapproved deploy requests. Using it for agent work erases every boundary
   below.
-- Set `PLANETSCALE_API_TOKEN` to the token secret in the environment where the
-  agent runs. Never pass a token inline as a command-line flag: that swaps the
-  agent's identity and leaks the secret into the transcript.
+- The CLI and MCP read the token from **different** variables. All four belong in
+  the shell profile of the environment the agent runs in, so that new shells and
+  the Claude Code process itself inherit them:
+
+  | Variable                       | Value                | Used by                                          |
+  | ------------------------------ | -------------------- | ------------------------------------------------ |
+  | `PLANETSCALE_SERVICE_TOKEN_ID` | the token **ID**     | `pscale` CLI                                     |
+  | `PLANETSCALE_SERVICE_TOKEN`    | the token **secret** | `pscale` CLI                                     |
+  | `PLANETSCALE_ORG`              | `devashishsood18`    | `pscale` CLI — a service token has no active org |
+  | `PLANETSCALE_API_TOKEN`        | the token **secret** | MCP `Authorization: Bearer`                      |
+
+- Never pass a token inline as a command-line flag. The CLI reads the variables
+  above natively, so flags are never necessary; passing one swaps the agent's
+  identity and writes the secret into the transcript. The guard denies it.
+- The MCP entry stores the literal string `${PLANETSCALE_API_TOKEN}` in its
+  Authorization header, never the resolved secret, so no credential is written
+  to `~/.claude.json`. If Claude Code warns `Missing environment variables:
+PLANETSCALE_API_TOKEN`, the variable has not reached the Claude Code process
+  and MCP may be falling back to a stored OAuth grant — fix that before trusting
+  any boundary below.
+- Under service-token auth PlanetScale blocks every `pscale service-token`
+  subcommand outright, so the agent identity cannot inspect or mint tokens.
 - The token's granted accesses are, in full:
   - Organization: `read_organization`
   - Database: `read_database`, `read_branch`, `read_deploy_request`,
