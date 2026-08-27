@@ -46,6 +46,17 @@ type PrismaClientLike = Pick<PrismaClient, "carpoolSearch" | "request">;
 const forbidden = (message: string) =>
   new TRPCError({ code: "FORBIDDEN", message });
 
+/**
+ * A group membership the requested change would contradict (SCRUM-291).
+ *
+ * `CONFLICT` rather than `BAD_REQUEST`: the input is well formed and the caller
+ * is allowed to ask, but the current state of the data says no. It is also in
+ * `NON_RETRYABLE_CODES`, so the client shows it instead of retrying into the
+ * same answer three times.
+ */
+const membershipConflict = (message: string) =>
+  new TRPCError({ code: "CONFLICT", message });
+
 const requireCallerId = (userId: string | undefined): string => {
   if (!userId) {
     throw new TRPCError({
@@ -293,17 +304,6 @@ export const groupsRouter = router({
       }
       await requireRequestBetween(ctx.prisma, input.driverId, input.riderId);
 
-      const driverSearch = await ctx.prisma.carpoolSearch.findFirst({
-        where: { userId: input.driverId },
-      });
-
-      if (!driverSearch) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Driver not found",
-        });
-      }
-
       // Seat, group and both memberships commit together (SCRUM-233).
       //
       // Reserving first is still right — the compare-and-swap is the step that
@@ -312,6 +312,66 @@ export const groupsRouter = router({
       // the decrement took a seat from the driver and created no group, with
       // nothing to give it back. Both halves of that trade are gone now.
       return await ctx.prisma.$transaction(async (tx) => {
+        // Two invariants that were only ever enforced in the client, read
+        // inside the transaction so two accepts racing for the same rider
+        // cannot both see "not in a group" and then both write one. Sequential
+        // rather than `Promise.all`: an interactive transaction is one
+        // connection, and Prisma does not promise parallel queries on it
+        // (SCRUM-291).
+        const driverSearch = await tx.carpoolSearch.findFirst({
+          where: { userId: input.driverId },
+          select: { role: true, carpoolId: true },
+        });
+
+        if (!driverSearch) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Driver not found",
+          });
+        }
+
+        const riderSearch = await tx.carpoolSearch.findFirst({
+          where: { userId: input.riderId },
+          select: { carpoolId: true },
+        });
+
+        if (!riderSearch) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Rider not found",
+          });
+        }
+
+        // Nothing checked the named driver's role, so two riders with a request
+        // between them could name one of themselves and create a group with no
+        // DRIVER in it - the SCRUM-289 state, which no member can manage or
+        // dissolve. `reserveSeat` below would not have caught it either:
+        // `user.edit` accepts `seatAvail` for any role and only the client
+        // zeroes it for a rider, so a rider can carry seats.
+        if (driverSearch.role !== Role.DRIVER) {
+          throw forbidden(
+            "Only a driver can be the driver of a carpool group.",
+          );
+        }
+
+        // Overwriting an existing membership left the old group behind holding
+        // one member, which nothing dissolves: the `remainingMembers` check
+        // runs in the mutation that removed someone, and that is a different
+        // group from this one. The old driver's seat was never returned either.
+        if (driverSearch.carpoolId) {
+          throw membershipConflict(
+            "You are already in a carpool group. Leave it before starting " +
+              "another.",
+          );
+        }
+
+        if (riderSearch.carpoolId) {
+          throw membershipConflict(
+            "That user is already in a carpool group. They need to leave it " +
+              "before joining yours.",
+          );
+        }
+
         await reserveSeat(tx, input.driverId);
 
         // `message` is written empty and never read (SCRUM-253). It used to be
@@ -513,6 +573,42 @@ export const groupsRouter = router({
         let groupDriver: { id: string; seatsAvail: number } | null = null;
 
         if (input.add) {
+          // One group per user, checked in here for the same reason as in
+          // `create`. Two cases, both of which used to succeed (SCRUM-291):
+          //
+          //   - Already in another group. The `updateMany` below moved them,
+          //     leaving the old group holding one member that nothing
+          //     dissolves and its driver a seat short for good.
+          //   - Already in *this* group. `markRequestAccepted` resolves the
+          //     request rather than deleting it (SCRUM-228), so the row
+          //     survives and `requireRequestBetween` keeps passing - a second
+          //     call ran `reserveSeat` again while the `updateMany` did
+          //     nothing, and the driver paid two seats for one rider.
+          const riderSearch = await tx.carpoolSearch.findFirst({
+            where: { userId: input.riderId },
+            select: { carpoolId: true },
+          });
+
+          if (!riderSearch) {
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Rider not found",
+            });
+          }
+
+          if (riderSearch.carpoolId === input.groupId) {
+            throw membershipConflict(
+              "That user is already in this carpool group.",
+            );
+          }
+
+          if (riderSearch.carpoolId) {
+            throw membershipConflict(
+              "That user is already in a carpool group. They need to leave " +
+                "it before joining yours.",
+            );
+          }
+
           // Reserve the seat before linking the rider: the compare-and-swap
           // both rejects a full driver and prevents two simultaneous accepts
           // from taking the same seat. Replaces a read-compare-then-decrement
