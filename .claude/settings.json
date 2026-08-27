@@ -45,7 +45,51 @@
 
       "Bash(yarn lint)",
       "Bash(yarn tsc)",
-      "Bash(yarn test:*)"
+      "Bash(yarn test:*)",
+
+      "Bash(pscale auth check:*)",
+      "Bash(pscale agent-guide:*)",
+      "Bash(pscale org list:*)",
+      "Bash(pscale database list:*)",
+      "Bash(pscale database show:*)",
+      "Bash(pscale branch list:*)",
+      "Bash(pscale branch show:*)",
+      "Bash(pscale branch schema:*)",
+      "Bash(pscale branch diff:*)",
+      "Bash(pscale keyspace list:*)",
+      "Bash(pscale keyspace show:*)",
+      "Bash(pscale deploy-request list:*)",
+      "Bash(pscale deploy-request show:*)",
+      "Bash(pscale deploy-request diff:*)",
+      "Bash(pscale deploy-request deployment:*)",
+      "Bash(pscale deploy-request operations:*)",
+      "Bash(pscale deploy-request queue:*)",
+      "Bash(pscale deploy-request reviews:*)",
+      "Bash(pscale insights:*)",
+      "Bash(pscale inspect:*)",
+      "Bash(pscale metrics:*)",
+      "Bash(pscale password list:*)",
+      "Bash(pscale backup list:*)",
+      "Bash(pscale backup show:*)",
+      "Bash(pscale webhook list:*)",
+      "Bash(pscale region list:*)",
+      "Bash(pscale size:*)",
+
+      "mcp__planetscale__planetscale_list_organizations",
+      "mcp__planetscale__planetscale_get_organization",
+      "mcp__planetscale__planetscale_list_databases",
+      "mcp__planetscale__planetscale_get_database",
+      "mcp__planetscale__planetscale_list_branches",
+      "mcp__planetscale__planetscale_get_branch",
+      "mcp__planetscale__planetscale_get_branch_schema",
+      "mcp__planetscale__planetscale_get_insights",
+      "mcp__planetscale__planetscale_list_schema_recommendations",
+      "mcp__planetscale__planetscale_list_query_error_patterns",
+      "mcp__planetscale__planetscale_list_query_error_executions",
+      "mcp__planetscale__planetscale_list_query_tags",
+      "mcp__planetscale__planetscale_get_query_tag",
+      "mcp__planetscale__planetscale_list_query_tag_summaries",
+      "mcp__planetscale__planetscale_search_documentation"
     ],
 
     "ask": [
@@ -71,7 +115,13 @@
       "mcp__atlassian__createConfluencePage",
       "mcp__atlassian__updateConfluencePage",
       "mcp__atlassian__createConfluenceFooterComment",
-      "mcp__atlassian__createConfluenceInlineComment"
+      "mcp__atlassian__createConfluenceInlineComment",
+
+      "Bash(pscale sql:*)",
+      "Bash(pscale branch create:*)",
+      "Bash(pscale password create nucarpool staging:*)",
+      "Bash(pscale api:*)",
+      "mcp__planetscale__planetscale_execute_read_query"
     ],
 
     "deny": [
@@ -145,7 +195,59 @@
       "Bash(prisma migrate reset:*)",
 
       "Bash(python scripts/emailtemplate.py:*)",
-      "Bash(python3 scripts/emailtemplate.py:*)"
+      "Bash(python3 scripts/emailtemplate.py:*)",
+
+      "Bash(pscale shell:*)",
+      "Bash(pscale connect:*)",
+      "Bash(pscale password create nucarpool main:*)",
+      "Bash(pscale password delete:*)",
+      "Bash(pscale password update:*)",
+      "Bash(pscale deploy-request create:*)",
+      "Bash(pscale deploy-request deploy:*)",
+      "Bash(pscale deploy-request review:*)",
+      "Bash(pscale deploy-request apply:*)",
+      "Bash(pscale deploy-request revert:*)",
+      "Bash(pscale deploy-request skip-revert:*)",
+      "Bash(pscale deploy-request force-cutover:*)",
+      "Bash(pscale deploy-request unblock:*)",
+      "Bash(pscale deploy-request throttler:*)",
+      "Bash(pscale branch safe-migrations:*)",
+      "Bash(pscale branch delete:*)",
+      "Bash(pscale branch promote:*)",
+      "Bash(pscale database delete:*)",
+      "Bash(pscale database update:*)",
+      "Bash(pscale database dump:*)",
+      "Bash(pscale database restore-dump:*)",
+      "Bash(pscale backup restore:*)",
+      "Bash(pscale backup delete:*)",
+      "Bash(pscale webhook:*)",
+      "Bash(pscale service-token:*)",
+      "Bash(pscale workflow:*)",
+      "Bash(pscale keyspace resize:*)",
+      "Bash(pscale keyspace update:*)",
+
+      "mcp__planetscale__planetscale_execute_write_query",
+      "mcp__planetscale__planetscale_update_payment_method",
+      "mcp__planetscale__planetscale_get_payment_method_setup",
+      "mcp__planetscale__planetscale_get_organization_billing_payment_method",
+      "mcp__planetscale__planetscale_list_invoices",
+      "mcp__planetscale__planetscale_get_invoice_line_items"
+    ]
+  },
+
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/pscale-guard.sh",
+            "timeout": 10,
+            "statusMessage": "Checking PlanetScale guardrails..."
+          }
+        ]
+      }
     ]
   }
 }
