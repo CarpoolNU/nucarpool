@@ -109,6 +109,11 @@ const buildGroupsDb = (opts?: {
     if (where.carpoolId !== undefined && row.carpoolId !== where.carpoolId)
       return false;
     if (where.id !== undefined && row.id !== where.id) return false;
+    // `edit` and `delete` both resolve a group's driver with `{ carpoolId,
+    // role: DRIVER }`. Without role matching that lookup returns whichever
+    // member happens to be first, which would make the SCRUM-290 tests pass
+    // against the unfixed code.
+    if (where.role !== undefined && row.role !== where.role) return false;
 
     const seats = where.seatsAvail;
     if (seats !== undefined) {
@@ -1666,5 +1671,181 @@ describe("user.groups.me — a driverless group is reported, not silently blank"
     // Preferences stay null - there is no driver to read them from. The flag
     // above is what makes that legible rather than ambiguous.
     expect(group?.preferences.groupNotes).toBeNull();
+  });
+});
+
+/**
+ * The seat credit on the remove path follows the group, not the client
+ * (SCRUM-290).
+ *
+ * `driverId` arrives from input and the remove path never checked it against
+ * anything: the authorization block constrains `callerId` and `riderId` only.
+ * So a rider leaving their own group could name any user at all and the seat
+ * credit landed on that stranger's `carpool_search` row, while the group's real
+ * driver was never credited and stayed under-counted for the rest of the
+ * group's life. That is the cross-tenant write shape SCRUM-220 and SCRUM-223
+ * were filed to remove, surviving in this one branch.
+ *
+ * Every pre-existing remove-path test passed the real `DRIVER`, which is why
+ * SCRUM-220 and SCRUM-229 both touched this function without catching it. These
+ * pass a foreign id on purpose.
+ */
+describe("user.groups.edit — the seat credit follows the group (SCRUM-290)", () => {
+  it("does not touch a foreign user's row when a rider names them", async () => {
+    // OUTSIDER is in no group and has no seats. Under the bug they gained one.
+    const { caller, db } = callerFor(sessionFor(RIDER_1));
+
+    await caller.user.groups.edit({
+      driverId: OUTSIDER,
+      riderId: RIDER_1,
+      groupId: GROUP,
+      add: false,
+    });
+
+    expect(db.seatsOf(OUTSIDER)).toBe(0);
+    expect(db.carpoolIdOf(OUTSIDER)).toBeNull();
+  });
+
+  it("credits the group's real driver regardless of the id supplied", async () => {
+    const { caller, db } = callerFor(sessionFor(RIDER_1));
+
+    await caller.user.groups.edit({
+      driverId: OUTSIDER,
+      riderId: RIDER_1,
+      groupId: GROUP,
+      add: false,
+    });
+
+    // The fixture driver starts at 2 seats and gets one back.
+    expect(db.seatsOf(DRIVER)).toBe(3);
+    expect(db.carpoolIdOf(RIDER_1)).toBeNull();
+  });
+
+  it("credits the real driver exactly once, not the named user as well", async () => {
+    const { caller, db } = callerFor(sessionFor(RIDER_1));
+
+    await caller.user.groups.edit({
+      driverId: RIDER_2,
+      riderId: RIDER_1,
+      groupId: GROUP,
+      add: false,
+    });
+
+    expect(db.seatsOf(DRIVER)).toBe(3);
+    // A fellow member is just as wrong a target as an outsider.
+    expect(db.seatsOf(RIDER_2)).toBe(0);
+  });
+
+  it("still credits the driver when they remove a rider themselves", async () => {
+    // The honest call, unchanged: the driver names themselves and is credited.
+    const { caller, db } = callerFor(sessionFor(DRIVER));
+
+    await caller.user.groups.edit({
+      driverId: DRIVER,
+      riderId: RIDER_1,
+      groupId: GROUP,
+      add: false,
+    });
+
+    expect(db.seatsOf(DRIVER)).toBe(3);
+  });
+
+  it("credits the driver when the removal dissolves the group", async () => {
+    // The driver is derived before the membership writes, so dissolution -
+    // which clears every carpoolId - must not cost them the seat.
+    const { caller, db } = callerFor(
+      sessionFor(RIDER_1),
+      buildGroupsDb({
+        searches: [
+          {
+            id: "s-driver",
+            userId: DRIVER,
+            role: Role.DRIVER,
+            carpoolId: GROUP,
+            seatsAvail: 1,
+            groupMessage: "",
+          },
+          {
+            id: "s-rider-1",
+            userId: RIDER_1,
+            role: Role.RIDER,
+            carpoolId: GROUP,
+            seatsAvail: 0,
+            groupMessage: "",
+          },
+          // The stranger named on the call, so the assertion below reads a real
+          // row rather than an absent one.
+          {
+            id: "s-outsider",
+            userId: OUTSIDER,
+            role: Role.RIDER,
+            carpoolId: null,
+            seatsAvail: 0,
+            groupMessage: "",
+          },
+        ],
+      }),
+    );
+
+    const result = await caller.user.groups.edit({
+      driverId: OUTSIDER,
+      riderId: RIDER_1,
+      groupId: GROUP,
+      add: false,
+    });
+
+    expect(result).toBeNull();
+    expect(db.seatsOf(DRIVER)).toBe(2);
+    expect(db.seatsOf(OUTSIDER)).toBe(0);
+    expect(db.groupIds()).toEqual([]);
+  });
+
+  it("lets a rider leave a driverless group instead of trapping them", async () => {
+    // A group already in the SCRUM-289 state has nobody to credit. Leaving one
+    // at a time is the only way out for its riders, so the missing driver must
+    // skip the credit rather than fail the removal.
+    const { caller, db } = callerFor(
+      sessionFor(RIDER_1),
+      buildGroupsDb({
+        searches: [
+          {
+            id: "s-driver",
+            userId: DRIVER,
+            role: Role.RIDER,
+            carpoolId: GROUP,
+            seatsAvail: 0,
+            groupMessage: "",
+          },
+          {
+            id: "s-rider-1",
+            userId: RIDER_1,
+            role: Role.RIDER,
+            carpoolId: GROUP,
+            seatsAvail: 0,
+            groupMessage: "",
+          },
+          {
+            id: "s-rider-2",
+            userId: RIDER_2,
+            role: Role.RIDER,
+            carpoolId: GROUP,
+            seatsAvail: 0,
+            groupMessage: "",
+          },
+        ],
+      }),
+    );
+
+    await caller.user.groups.edit({
+      driverId: DRIVER,
+      riderId: RIDER_1,
+      groupId: GROUP,
+      add: false,
+    });
+
+    expect(db.carpoolIdOf(RIDER_1)).toBeNull();
+    // Nobody was credited, because there was no driver to credit.
+    expect(db.seatsOf(DRIVER)).toBe(0);
+    expect(db.seatsOf(RIDER_2)).toBe(0);
   });
 });
