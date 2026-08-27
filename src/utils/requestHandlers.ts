@@ -30,10 +30,11 @@ export const createRequestHandlers = (
     },
   });
 
+  // Neither of these reports its own failure. `handleAcceptRequest` below
+  // catches it instead, because the interesting failures here are the server's
+  // membership refusals, and "Something went wrong: ..." framed a rule the user
+  // can act on as if the app had broken (SCRUM-291).
   const mutateGroup = trpc.user.groups.edit.useMutation({
-    onError: (error: any) => {
-      toast.error(`Something went wrong: ${error.message}`);
-    },
     onSuccess: () => {
       utils.user.requests.me.invalidate();
       utils.user.me.invalidate();
@@ -41,9 +42,6 @@ export const createRequestHandlers = (
   });
 
   const createGroup = trpc.user.groups.create.useMutation({
-    onError: (error: any) => {
-      toast.error(`Something went wrong: ${error.message}`);
-    },
     onSuccess: () => {
       utils.user.requests.me.invalidate();
       utils.user.me.invalidate();
@@ -56,6 +54,16 @@ export const createRequestHandlers = (
     });
   };
 
+  /**
+   * A fast pre-check, no longer the thing that enforces these rules.
+   *
+   * It reads `requests.me` data that can be stale - the whole of failure
+   * scenario A in SCRUM-291 is a driver whose cache predates the rider joining
+   * somebody else's group - so `groups.create` and `groups.edit` now establish
+   * the same invariants inside the transaction that reserves the seat. This
+   * stays because it is instant and can name the other user, which a server
+   * message cannot.
+   */
   const validateRequestAcceptance = (
     user: User,
     otherUser: EnhancedPublicUser,
@@ -131,12 +139,28 @@ export const createRequestHandlers = (
     otherUser: EnhancedPublicUser,
     request: Request,
   ) => {
-    if (validateRequestAcceptance(user, otherUser)) {
-      await initiateGroup(user, otherUser);
-      toast.success(
-        `${otherUser.preferredName}'s request to carpool with you has been accepted.`,
-      );
+    if (!validateRequestAcceptance(user, otherUser)) {
+      return;
     }
+
+    try {
+      await initiateGroup(user, otherUser);
+    } catch (error) {
+      // The server is the authority on whether this join is legal, so its
+      // refusal is shown as written rather than relabelled. Catching here also
+      // stops the success toast below from firing on a failed accept, and stops
+      // the rejection escaping as an unhandled one (SCRUM-291).
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "That request could not be accepted. Please try again.",
+      );
+      return;
+    }
+
+    toast.success(
+      `${otherUser.preferredName}'s request to carpool with you has been accepted.`,
+    );
   };
 
   const handleRejectRequest = async (

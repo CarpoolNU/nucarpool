@@ -1849,3 +1849,245 @@ describe("user.groups.edit — the seat credit follows the group (SCRUM-290)", (
     expect(db.seatsOf(RIDER_2)).toBe(0);
   });
 });
+
+/**
+ * One group per user, and a group's driver is a DRIVER (SCRUM-291).
+ *
+ * Both were enforced only by `validateRequestAcceptance` in the client, against
+ * `requests.me` data that can be stale. SCRUM-220's table established *who* may
+ * call these mutations; it never established which states are legal, so the
+ * server accepted all three of these:
+ *
+ *   - a rider already in another group being joined to a second one, which left
+ *     the first holding one member that nothing dissolves;
+ *   - the same rider being added twice, which ran `reserveSeat` twice while the
+ *     membership write did nothing, so the driver paid two seats for one rider;
+ *   - two riders naming one of themselves as driver, producing a group with no
+ *     DRIVER - the SCRUM-289 state.
+ *
+ * The checks live inside the seat-reservation transaction, so a refusal cannot
+ * leave a seat spent, and two concurrent accepts cannot both read "not in a
+ * group" before either writes.
+ */
+describe("user.groups.edit(add) — one group per rider (SCRUM-291)", () => {
+  it("refuses a rider who is already in another group, spending no seat", async () => {
+    const db = buildGroupsDb({
+      searches: [
+        {
+          id: "s-driver",
+          userId: DRIVER,
+          role: Role.DRIVER,
+          carpoolId: GROUP,
+          seatsAvail: 2,
+          groupMessage: "",
+        },
+        // Already carpooling with somebody else. Under the bug this join moved
+        // them, and OTHER_GROUP was left holding its driver alone.
+        {
+          id: "s-rider-1",
+          userId: RIDER_1,
+          role: Role.RIDER,
+          carpoolId: OTHER_GROUP,
+          seatsAvail: 0,
+          groupMessage: "",
+        },
+      ],
+      groups: [
+        { id: GROUP, message: "" },
+        { id: OTHER_GROUP, message: "" },
+      ],
+      requests: [[DRIVER, RIDER_1]],
+    });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await expect(
+      caller.user.groups.edit({
+        driverId: DRIVER,
+        riderId: RIDER_1,
+        groupId: GROUP,
+        add: true,
+      }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+
+    expect(db.carpoolIdOf(RIDER_1)).toBe(OTHER_GROUP);
+    expect(db.seatsOf(DRIVER)).toBe(2);
+  });
+
+  it("refuses a second add of the same rider, spending no second seat", async () => {
+    // `markRequestAccepted` resolves the request rather than deleting it
+    // (SCRUM-228), so `requireRequestBetween` keeps passing and this call used
+    // to succeed as a no-op that still cost a seat.
+    const db = buildGroupsDb({
+      searches: [
+        {
+          id: "s-driver",
+          userId: DRIVER,
+          role: Role.DRIVER,
+          carpoolId: GROUP,
+          seatsAvail: 2,
+          groupMessage: "",
+        },
+        {
+          id: "s-rider-1",
+          userId: RIDER_1,
+          role: Role.RIDER,
+          carpoolId: GROUP,
+          seatsAvail: 0,
+          groupMessage: "",
+        },
+      ],
+      requests: [[DRIVER, RIDER_1]],
+    });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await expect(
+      caller.user.groups.edit({
+        driverId: DRIVER,
+        riderId: RIDER_1,
+        groupId: GROUP,
+        add: true,
+      }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+
+    expect(db.seatsOf(DRIVER)).toBe(2);
+    expect(db.carpoolIdOf(RIDER_1)).toBe(GROUP);
+  });
+
+  it("still admits an ungrouped rider", async () => {
+    const db = buildGroupsDb({
+      searches: [
+        {
+          id: "s-driver",
+          userId: DRIVER,
+          role: Role.DRIVER,
+          carpoolId: GROUP,
+          seatsAvail: 2,
+          groupMessage: "",
+        },
+        {
+          id: "s-rider-1",
+          userId: RIDER_1,
+          role: Role.RIDER,
+          carpoolId: null,
+          seatsAvail: 0,
+          groupMessage: "",
+        },
+      ],
+      requests: [[DRIVER, RIDER_1]],
+    });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await caller.user.groups.edit({
+      driverId: DRIVER,
+      riderId: RIDER_1,
+      groupId: GROUP,
+      add: true,
+    });
+
+    expect(db.carpoolIdOf(RIDER_1)).toBe(GROUP);
+    expect(db.seatsOf(DRIVER)).toBe(1);
+  });
+});
+
+describe("user.groups.create — legal states only (SCRUM-291)", () => {
+  /** Two users with a request between them and no group yet. */
+  const pair = (opts: {
+    driverRole?: Role;
+    driverCarpoolId?: string | null;
+    riderCarpoolId?: string | null;
+    driverSeats?: number;
+  }) =>
+    buildGroupsDb({
+      searches: [
+        {
+          id: "s-driver",
+          userId: DRIVER,
+          role: opts.driverRole ?? Role.DRIVER,
+          carpoolId: opts.driverCarpoolId ?? null,
+          seatsAvail: opts.driverSeats ?? 3,
+          groupMessage: "",
+        },
+        {
+          id: "s-rider-1",
+          userId: RIDER_1,
+          role: Role.RIDER,
+          carpoolId: opts.riderCarpoolId ?? null,
+          seatsAvail: 0,
+          groupMessage: "",
+        },
+      ],
+      groups:
+        opts.driverCarpoolId || opts.riderCarpoolId
+          ? [{ id: OTHER_GROUP, message: "" }]
+          : [],
+      requests: [[DRIVER, RIDER_1]],
+    });
+
+  it("refuses a named driver whose role is RIDER", async () => {
+    // Two riders with a request between them could otherwise build a group with
+    // no DRIVER in it. `reserveSeat` was no obstacle: `user.edit` accepts
+    // seatAvail for any role, so a rider can carry seats.
+    const db = pair({ driverRole: Role.RIDER, driverSeats: 2 });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await expect(
+      caller.user.groups.create({ driverId: DRIVER, riderId: RIDER_1 }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(db.groupIds()).toEqual([]);
+    // The refusal must not cost the named driver a seat.
+    expect(db.seatsOf(DRIVER)).toBe(2);
+  });
+
+  it("refuses a named driver whose role is VIEWER", async () => {
+    const db = pair({ driverRole: Role.VIEWER, driverSeats: 2 });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await expect(
+      caller.user.groups.create({ driverId: DRIVER, riderId: RIDER_1 }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(db.groupIds()).toEqual([]);
+  });
+
+  it("refuses a driver who is already in a group", async () => {
+    const db = pair({ driverCarpoolId: OTHER_GROUP });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await expect(
+      caller.user.groups.create({ driverId: DRIVER, riderId: RIDER_1 }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+
+    expect(db.groupIds()).toEqual([OTHER_GROUP]);
+    expect(db.seatsOf(DRIVER)).toBe(3);
+  });
+
+  it("refuses a rider who is already in a group", async () => {
+    // Failure scenario A, from the create side: the rider's old group would
+    // have been left holding its driver alone.
+    const db = pair({ riderCarpoolId: OTHER_GROUP });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await expect(
+      caller.user.groups.create({ driverId: DRIVER, riderId: RIDER_1 }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+
+    expect(db.carpoolIdOf(RIDER_1)).toBe(OTHER_GROUP);
+    expect(db.groupIds()).toEqual([OTHER_GROUP]);
+    expect(db.seatsOf(DRIVER)).toBe(3);
+  });
+
+  it("still creates a group for two ungrouped users with a real driver", async () => {
+    const db = pair({});
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    const group = await caller.user.groups.create({
+      driverId: DRIVER,
+      riderId: RIDER_1,
+    });
+
+    expect(db.carpoolIdOf(DRIVER)).toBe(group.id);
+    expect(db.carpoolIdOf(RIDER_1)).toBe(group.id);
+    expect(db.seatsOf(DRIVER)).toBe(2);
+  });
+});
