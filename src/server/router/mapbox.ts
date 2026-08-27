@@ -175,7 +175,10 @@ export const mapboxRouter = router({
         filters: input,
         sort: "distance",
         excludedUserIds,
-        favoriteUserIds: favorites.map((f) => f.id),
+        // Guarded for the same reason as the `sentRequests` branch above: the
+        // `favorites` include is `input.favorites`, and Prisma omits the key
+        // rather than returning [] when an include is false (SCRUM-288).
+        favoriteUserIds: input.favorites ? favorites.map((f) => f.id) : [],
       });
 
       const finalSearches =
