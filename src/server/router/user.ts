@@ -100,6 +100,12 @@ export const userRouter = router({
       endTime: carpoolSearch?.endTime ?? null,
       coopStartDate: carpoolSearch?.startDate ?? null,
       coopEndDate: carpoolSearch?.endDate ?? null,
+      // Group ride preferences. Real columns since SCRUM-253; `groupMessage` is
+      // carried alongside only so a row that has not been backfilled yet still
+      // resolves through `resolveGroupDetails`.
+      groupNotes: carpoolSearch?.groupNotes ?? null,
+      groupMusicPreference: carpoolSearch?.groupMusicPreference ?? null,
+      groupConversationStyle: carpoolSearch?.groupConversationStyle ?? null,
       groupMessage: carpoolSearch?.groupMessage ?? null,
       carpoolId: carpoolSearch?.carpoolId ?? null,
       // Location data (homeLocation)

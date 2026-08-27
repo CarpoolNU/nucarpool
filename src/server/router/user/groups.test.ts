@@ -2,6 +2,10 @@ import { Permission, Role, RequestStatus } from "@prisma/client";
 import type { Session } from "next-auth";
 import { appRouter } from "../index";
 import { MAX_SEATS_AVAILABLE } from "../../../utils/carpoolSeats";
+import {
+  GROUP_NOTES_MAX_LENGTH,
+  GROUP_OPTION_MAX_LENGTH,
+} from "../../../utils/textLimits";
 import type { Context } from "../context";
 import { cloneState, withTransaction } from "../transactionMock";
 
@@ -12,7 +16,11 @@ import { cloneState, withTransaction } from "../transactionMock";
  * arrived straight from client input: any signed-in student could dissolve
  * someone else's group, evict its riders, insert users, or rewrite the driver's
  * message. These tests pin the rule set the UI already implied — driver-only
- * delete/evict/message, riders may leave, joining needs a request.
+ * delete/evict, riders may leave, joining needs a request.
+ *
+ * The driver's message is no longer among them: SCRUM-253 replaced the two
+ * message mutations with `updatePreferences`, which writes only the caller's own
+ * search, so there is no shared row left for a rider to hijack.
  *
  * Same `createCaller` + mocked-Prisma approach as `favorites.test.ts`,
  * `requests.test.ts` and `email.test.ts`. The mock applies writes to in-memory
@@ -34,6 +42,10 @@ type SearchRow = {
   carpoolId: string | null;
   seatsAvail: number;
   groupMessage: string;
+  /** The SCRUM-253 preference columns. Null until a save writes all three. */
+  groupNotes?: string | null;
+  groupMusicPreference?: string | null;
+  groupConversationStyle?: string | null;
 };
 
 type GroupRow = { id: string; message: string };
@@ -127,6 +139,12 @@ const buildGroupsDb = (opts?: {
       if (data.seatsAvail?.decrement)
         row.seatsAvail -= data.seatsAvail.decrement;
       if (data.groupMessage !== undefined) row.groupMessage = data.groupMessage;
+      // The SCRUM-253 preference columns.
+      if (data.groupNotes !== undefined) row.groupNotes = data.groupNotes;
+      if (data.groupMusicPreference !== undefined)
+        row.groupMusicPreference = data.groupMusicPreference;
+      if (data.groupConversationStyle !== undefined)
+        row.groupConversationStyle = data.groupConversationStyle;
       return { ...row };
     }),
     updateMany: jest.fn(async ({ where, data }: any) => {
@@ -230,6 +248,17 @@ const buildGroupsDb = (opts?: {
     seatsOfSearch: (searchId: string) =>
       searches.find((r) => r.id === searchId)?.seatsAvail,
     messageOf: (id: string) => groups.get(id)?.message,
+    /** The SCRUM-253 preference columns on a user's own search. */
+    preferencesOf: (userId: string) => {
+      const row = searches.find((r) => r.userId === userId);
+      return row
+        ? {
+            groupNotes: row.groupNotes ?? null,
+            groupMusicPreference: row.groupMusicPreference ?? null,
+            groupConversationStyle: row.groupConversationStyle ?? null,
+          }
+        : undefined;
+    },
     carpoolIdOf: (userId: string) =>
       searches.find((r) => r.userId === userId)?.carpoolId,
     /** Status of the seeded request between two users, in the seeded order. */
@@ -377,33 +406,125 @@ describe("user.groups.delete — the driver dissolves the group", () => {
   });
 });
 
-describe("user.groups.updateMessage — the message belongs to the driver", () => {
-  it("lets the driver rewrite it", async () => {
+describe("user.groups.updatePreferences — self-scoped, replacing the double write", () => {
+  const prefs = {
+    notes: "Meet by the side door",
+    musicPreference: "Podcasts",
+    conversationStyle: "Quiet",
+  };
+
+  it("writes all three columns on the caller's own search", async () => {
     const { caller, db } = callerFor(sessionFor(DRIVER));
 
-    await caller.user.groups.updateMessage({ groupId: GROUP, message: "new" });
+    await caller.user.groups.updatePreferences(prefs);
 
-    expect(db.messageOf(GROUP)).toBe("new");
+    expect(db.preferencesOf(DRIVER)).toEqual({
+      groupNotes: "Meet by the side door",
+      groupMusicPreference: "Podcasts",
+      groupConversationStyle: "Quiet",
+    });
   });
 
-  it("refuses a rider and leaves the message untouched", async () => {
+  /**
+   * The reason a blank field is stored as "" rather than left null:
+   * `resolveGroupDetails` reads all-null as "never saved" and falls back to the
+   * legacy blob, so a partial write would resurrect data the driver cleared.
+   */
+  it("stores blanks as empty strings, not nulls", async () => {
+    const { caller, db } = callerFor(sessionFor(DRIVER));
+
+    await caller.user.groups.updatePreferences({
+      notes: "",
+      musicPreference: "",
+      conversationStyle: "",
+    });
+
+    expect(db.preferencesOf(DRIVER)).toEqual({
+      groupNotes: "",
+      groupMusicPreference: "",
+      groupConversationStyle: "",
+    });
+  });
+
+  /**
+   * `updateMessage` wrote `group.message`, a row shared with riders, and needed
+   * `requireGroupDriver` to stop a rider rewriting it. This writes only the
+   * caller's own search, so there is no cross-user write left to police - a
+   * rider setting their own preferences simply has no effect on the group,
+   * because the group reads the driver's.
+   */
+  it("never touches the group row", async () => {
+    const { caller, db } = callerFor(sessionFor(DRIVER));
+
+    await caller.user.groups.updatePreferences(prefs);
+
+    expect(db.messageOf(GROUP)).toBe("original message");
+    expect(db.carpoolGroup.update).not.toHaveBeenCalled();
+  });
+
+  it("leaves another member's preferences alone when a rider saves", async () => {
     const { caller, db } = callerFor(sessionFor(RIDER_1));
 
-    await expect(
-      caller.user.groups.updateMessage({ groupId: GROUP, message: "hijacked" }),
-    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await caller.user.groups.updatePreferences(prefs);
 
-    expect(db.messageOf(GROUP)).toBe("original message");
+    expect(db.preferencesOf(RIDER_1)).toEqual({
+      groupNotes: "Meet by the side door",
+      groupMusicPreference: "Podcasts",
+      groupConversationStyle: "Quiet",
+    });
+    expect(db.preferencesOf(DRIVER)).toEqual({
+      groupNotes: null,
+      groupMusicPreference: null,
+      groupConversationStyle: null,
+    });
   });
 
-  it("refuses a stranger", async () => {
-    const { caller, db } = callerFor(sessionFor(OUTSIDER));
+  it("rejects a note longer than the column, rather than truncating it", async () => {
+    const { caller, db } = callerFor(sessionFor(DRIVER));
 
     await expect(
-      caller.user.groups.updateMessage({ groupId: GROUP, message: "hijacked" }),
-    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      caller.user.groups.updatePreferences({
+        ...prefs,
+        notes: "x".repeat(GROUP_NOTES_MAX_LENGTH + 1),
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
 
-    expect(db.messageOf(GROUP)).toBe("original message");
+    expect(db.preferencesOf(DRIVER)).toEqual({
+      groupNotes: null,
+      groupMusicPreference: null,
+      groupConversationStyle: null,
+    });
+  });
+
+  it("rejects an over-length option value", async () => {
+    const { caller } = callerFor(sessionFor(DRIVER));
+
+    await expect(
+      caller.user.groups.updatePreferences({
+        ...prefs,
+        musicPreference: "y".repeat(GROUP_OPTION_MAX_LENGTH + 1),
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("accepts a note exactly at the limit", async () => {
+    const { caller, db } = callerFor(sessionFor(DRIVER));
+    const atLimit = "x".repeat(GROUP_NOTES_MAX_LENGTH);
+
+    await caller.user.groups.updatePreferences({ ...prefs, notes: atLimit });
+
+    expect(db.preferencesOf(DRIVER)?.groupNotes).toBe(atLimit);
+  });
+
+  it("reports NOT_FOUND for a user with no carpool search", async () => {
+    const { caller } = callerFor(
+      sessionFor(OUTSIDER),
+      buildGroupsDb({ searches: [] }),
+    );
+
+    await expect(
+      caller.user.groups.updatePreferences(prefs),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 });
 
@@ -773,7 +894,11 @@ describe("user.groups — authentication gate", () => {
       caller.user.groups.delete({ groupId: GROUP }),
     ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     await expect(
-      caller.user.groups.updateMessage({ groupId: GROUP, message: "x" }),
+      caller.user.groups.updatePreferences({
+        notes: "x",
+        musicPreference: "",
+        conversationStyle: "",
+      }),
     ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     await expect(
       caller.user.groups.create({ driverId: DRIVER, riderId: RIDER_1 }),
