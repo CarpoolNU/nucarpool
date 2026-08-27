@@ -214,6 +214,29 @@ export const requestsRouter = router({
         });
       }
 
+      // A request is only useful if both people can be notified, and this is
+      // now the only place that is knowable: `email` has been removed from the
+      // payloads the client builds this call from, because they shipped every
+      // active user's address to every signed-in viewer (SCRUM-292).
+      // ConnectModal used to hold this check alone, which also meant a caller
+      // reaching the procedure directly skipped it entirely.
+      const contacts = await ctx.prisma.user.findMany({
+        where: { id: { in: [userId, input.toId] } },
+        select: { id: true, email: true },
+      });
+
+      const senderEmail = contacts.find((c) => c.id === userId)?.email;
+      const recipientEmail = contacts.find((c) => c.id === input.toId)?.email;
+
+      if (!senderEmail || !recipientEmail) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "A carpool request needs an email address for both people. " +
+            "Please check your profile.",
+        });
+      }
+
       // Two people already carpooling together have nothing to request of each
       // other, and a request between them would be a second way to describe a
       // relationship the group already records (SCRUM-228).

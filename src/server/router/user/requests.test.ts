@@ -65,6 +65,12 @@ const buildRequestsDb = (
   seed: RequestRow[] = [],
   /** userId -> carpoolId, for the "already carpooling together" guard. */
   groupMembership: Record<string, string | null> = {},
+  /**
+   * userId -> email, for the notifiability guard (SCRUM-292). Everyone has one
+   * unless a test says otherwise, because that is the ordinary case: the field
+   * comes from Azure AD at sign-in.
+   */
+  emails: Record<string, string | null> = {},
 ) => {
   const requests = new Map<string, RequestRow>(
     seed.map((row) => [row.id, { ...row }]),
@@ -176,6 +182,16 @@ const buildRequestsDb = (
     return { id: `message-${messages.length}`, ...data };
   });
 
+  // `create` reads both parties' addresses to check the request can be
+  // notified (SCRUM-292).
+  const userFindMany = jest.fn(async ({ where }: any) => {
+    const ids: string[] = where?.id?.in ?? [];
+    return ids.map((id) => ({
+      id,
+      email: id in emails ? emails[id] : `${id}@northeastern.edu`,
+    }));
+  });
+
   // `requests.create` commits its four writes as one transaction (SCRUM-233),
   // so the mock rolls back on a throw rather than merely passing through.
   const prisma = withTransaction(
@@ -189,6 +205,7 @@ const buildRequestsDb = (
         delete: destroy,
       },
       carpoolSearch: { findMany: carpoolSearchFindMany },
+      user: { findMany: userFindMany },
       conversation: {
         findUnique: conversationFindUnique,
         create: conversationCreate,
@@ -791,5 +808,66 @@ describe("user.requests.create is atomic", () => {
     await caller.user.requests.create({ toId: USER_B, message: "hello" });
 
     expect(db.prisma.conversation.findUnique).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * A request has to be notifiable (SCRUM-292).
+ *
+ * ConnectModal used to hold this check on its own, reading `otherUser.email`
+ * from the recommendation payload. That payload no longer carries the field -
+ * it was shipping every active user's Northeastern address to every signed-in
+ * viewer - and a client-only check was skipped entirely by anything calling the
+ * procedure directly. The rule lives here now.
+ */
+describe("user.requests.create — both people must be reachable (SCRUM-292)", () => {
+  it("refuses when the recipient has no email, writing nothing", async () => {
+    const { caller, db } = callerFor(
+      sessionFor(USER_A),
+      buildRequestsDb([], {}, { [USER_B]: null }),
+    );
+
+    await expect(
+      caller.user.requests.create({ toId: USER_B, message: "Hello" }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    expect(db.rows()).toEqual([]);
+  });
+
+  it("refuses when the caller has no email", async () => {
+    const { caller, db } = callerFor(
+      sessionFor(USER_A),
+      buildRequestsDb([], {}, { [USER_A]: null }),
+    );
+
+    await expect(
+      caller.user.requests.create({ toId: USER_B, message: "Hello" }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    expect(db.rows()).toEqual([]);
+  });
+
+  it("refuses when the recipient has no user row at all", async () => {
+    // `findMany` returns nothing for an id that does not exist, so a missing
+    // row and a missing address land in the same branch - which is right, since
+    // neither can be emailed.
+    const { caller, db } = callerFor(sessionFor(USER_A));
+    (db.prisma as any).user.findMany.mockResolvedValueOnce([
+      { id: USER_A, email: "a@northeastern.edu" },
+    ]);
+
+    await expect(
+      caller.user.requests.create({ toId: USER_B, message: "Hello" }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    expect(db.rows()).toEqual([]);
+  });
+
+  it("allows the request when both addresses are present", async () => {
+    const { caller, db } = callerFor(sessionFor(USER_A));
+
+    await caller.user.requests.create({ toId: USER_B, message: "Hello" });
+
+    expect(db.rows()).toHaveLength(1);
   });
 });

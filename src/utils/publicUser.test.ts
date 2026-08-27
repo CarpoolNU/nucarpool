@@ -78,7 +78,12 @@ const location = (overrides: Partial<Location> = {}): Location => ({
   ...overrides,
 });
 
-type SearchWithRelations = Parameters<typeof convertCarpoolSearchToPublic>[0];
+// Derived from the *wider* converter on purpose. A row that carries an email is
+// accepted by both, so the fixture can be handed to either - which is what lets
+// the tests below prove the coarsened one drops it rather than never having it.
+type SearchWithRelations = Parameters<
+  typeof convertCarpoolSearchToPublicWithExactHome
+>[0];
 
 const buildSearch = (
   overrides: Partial<CarpoolSearch> = {},
@@ -364,5 +369,80 @@ describe("roundCoord", () => {
 
   it("keeps roughly one metre of precision, enough to place a marker", () => {
     expect(roundCoord(42.360081234)).toBe(42.36008);
+  });
+});
+
+/**
+ * Who gets an email address (SCRUM-292).
+ *
+ * `PublicUser` carried `email` unconditionally, so the bulk list endpoints -
+ * the map, recommendations, favorites - shipped every active user's
+ * `@northeastern.edu` address to any signed-in viewer, on screens that never
+ * displayed it. One request returned up to 150 of them; a VIEWER got the whole
+ * ranked set. Only two consumers ever needed the field and both have a
+ * relationship with the user.
+ *
+ * This is the same split SCRUM-226 built for home coordinates, applied to the
+ * field that sat beside them in the struct and was missed at the time.
+ */
+describe("email disclosure (SCRUM-292)", () => {
+  it("omits the email address for a viewer with no relationship", () => {
+    // The fixture *does* carry an email, so this pins the converter dropping it
+    // rather than a row that never had one. That matters: a caller whose
+    // `include` still selects the column must not leak it through this path.
+    const search = buildSearch();
+    expect(search.user.email).toBe("ada@northeastern.edu");
+
+    const result = convertCarpoolSearchToPublic(search);
+
+    expect(result).not.toHaveProperty("email");
+  });
+
+  it("includes it for a counterpart", () => {
+    const result = convertCarpoolSearchToPublicWithExactHome(buildSearch());
+
+    expect(result.email).toBe("ada@northeastern.edu");
+  });
+
+  it("omits it from every record in a list, not just the first", () => {
+    // The exposure was a bulk one, so the absence has to hold per record.
+    const results = [
+      buildSearch({ userId: "user-1" }),
+      buildSearch({ userId: "user-2" }),
+      buildSearch({ userId: "user-3" }),
+    ].map(convertCarpoolSearchToPublic);
+
+    for (const result of results) {
+      expect(result).not.toHaveProperty("email");
+    }
+  });
+
+  it("serialises to JSON with no email key at all", () => {
+    // `not.toHaveProperty` would pass for a key set to undefined, which still
+    // says "there is an email field here" to anyone reading the response.
+    const serialised = JSON.parse(
+      JSON.stringify(convertCarpoolSearchToPublic(buildSearch())),
+    );
+
+    expect(Object.keys(serialised)).not.toContain("email");
+  });
+
+  it("still coarsens the home coordinate when it omits the email", () => {
+    // The two disclosures are governed by the same rule, so neither change
+    // should have loosened the other.
+    const result = convertCarpoolSearchToPublic(
+      buildSearch(
+        {},
+        {
+          homeLocation: location({
+            coordLng: -71.08874812,
+            coordLat: 42.33907341,
+          }),
+        },
+      ),
+    );
+
+    expect(result).not.toHaveProperty("email");
+    expect(result.startCoordLng).toBe(-71.09);
   });
 });

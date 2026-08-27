@@ -141,7 +141,18 @@ export type MapUser = {
 export type PublicUser = {
   id: string;
   name: string | null;
-  email: string | null;
+  /**
+   * Present only when the viewer already has a relationship with this user -
+   * the same carpool group, or a request between them (SCRUM-292).
+   *
+   * Optional rather than nullable-and-always-set on purpose: the bulk list
+   * endpoints shipped every active user's Northeastern address to any signed-in
+   * viewer, on screens that never displayed it, so `email` is now supplied by
+   * `convertCarpoolSearchToPublicWithExactHome` alone. Making it optional is
+   * what lets the type system tell the two payloads apart, rather than leaving
+   * the distinction to whoever remembers it.
+   */
+  email?: string | null;
   image: string | null;
   bio: string;
   preferredName: string;

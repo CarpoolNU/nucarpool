@@ -68,8 +68,12 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
     });
 
   const { mutate: createRequests } = trpc.user.requests.create.useMutation({
+    // Shown as written rather than behind "Something went wrong", because every
+    // way this procedure refuses is a rule the user can act on - already in a
+    // group with them, a request already open, a missing email address
+    // (SCRUM-292).
     onError: (error: any) => {
-      toast.error(`Something went wrong: ${error.message}`);
+      toast.error(error.message);
     },
     // Everything that tells either person the request exists now waits for the
     // write to land (SCRUM-234). Previously the email was sent first and the
@@ -94,15 +98,12 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
   });
 
   const handleOnClick = () => {
-    if (!props.user.email || !props.otherUser.email) {
-      // This used to be a silent no-op — the button did nothing at all, with
-      // no request, no email and no feedback (SCRUM-234).
-      toast.error(
-        `A carpool request needs an email address for both you and ${props.otherUser.preferredName}. Please check your profile.`,
-      );
-      return;
-    }
-
+    // The missing-email check that used to sit here has moved into
+    // `requests.create` (SCRUM-292). It read `otherUser.email`, which the map
+    // and recommendation payloads no longer carry, and being client-only it was
+    // skipped by anything calling the procedure directly. The `onError` handler
+    // above shows the server's refusal, so the button still answers rather than
+    // doing nothing silently (SCRUM-234).
     createRequests({
       toId: props.otherUser.id,
       message: customMessage,
