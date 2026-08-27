@@ -1,4 +1,4 @@
-import { Permission } from "@prisma/client";
+import { Permission, Role } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
 import type { Session } from "next-auth";
 import { appRouter } from "./index";
@@ -381,6 +381,9 @@ type SearchRow = {
   userId: string;
   homeLocationId: string;
   companyLocationId: string;
+  /** Only the group guard reads these (SCRUM-289). */
+  role?: Role;
+  carpoolId?: string | null;
 };
 
 const buildEditDb = (
@@ -831,5 +834,140 @@ describe("user.edit is atomic", () => {
     expect(db.searchFor(SESSION_USER)).toBeUndefined();
     expect(db.locationById("loc-created-1")).toBeUndefined();
     expect(db.locationById("loc-created-2")).toBeUndefined();
+  });
+});
+
+/**
+ * A driver in a carpool group cannot change role out of it (SCRUM-289).
+ *
+ * SCRUM-125 added this as a `toast.error` in the profile page; the profile
+ * redesign deleted the handler in December 2024 and nothing replaced it, so
+ * this went unguarded for over a year. It was never server-side even before
+ * that, so a direct call to the procedure always bypassed it.
+ *
+ * Why it matters more than a validation nicety: dropping a group's only DRIVER
+ * leaves a state nothing can recover from. `requireGroupDriver` throws
+ * FORBIDDEN for every member of a driverless group, so no member can remove
+ * another and no member can dissolve it, and `groups.me` reads the shared
+ * preferences through the driver's own search, so the riders' notes go blank.
+ *
+ * These tests exist so the next refactor of the profile page cannot silently
+ * take the guard with it: the invariant is asserted against the procedure, not
+ * against the form.
+ */
+describe("user.edit — a driver in a group cannot change role (SCRUM-289)", () => {
+  const GROUP = "group-1";
+
+  /**
+   * The two rows a seeded search owns. `resolveOwnedLocations` updates them in
+   * place, so they have to exist or the save fails for an unrelated reason.
+   */
+  const ownedLocations = (): LocationRow[] => [
+    {
+      id: "loc-home",
+      street: "Huntington Ave",
+      city: "Boston",
+      state: "Massachusetts",
+      streetAddress: "Huntington Ave, Boston, Massachusetts",
+      coordLng: -71.1,
+      coordLat: 42.31,
+    },
+    {
+      id: "loc-company",
+      street: "Congress St",
+      city: "Boston",
+      state: "Massachusetts",
+      streetAddress: "Congress St, Boston, Massachusetts",
+      coordLng: -71.05,
+      coordLat: 42.36,
+    },
+  ];
+
+  /** One existing search for the caller, in whatever role and group state. */
+  const callerWith = (role: Role, carpoolId: string | null) =>
+    buildEditDb(ownedLocations(), [
+      {
+        id: "search-mine",
+        userId: SESSION_USER,
+        homeLocationId: "loc-home",
+        companyLocationId: "loc-company",
+        role,
+        carpoolId,
+      },
+    ]);
+
+  /** A driver whose search is already attached to a group. */
+  const driverInGroup = () => callerWith(Role.DRIVER, GROUP);
+
+  it.each([Role.RIDER, Role.VIEWER])(
+    "refuses a switch to %s and writes nothing",
+    async (role) => {
+      const db = driverInGroup();
+
+      await expect(
+        editCallerFor(SESSION_USER, db).user.edit(editInput({ role })),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+      // The guard throws inside the transaction, after the `user.update`, so
+      // this also pins the rollback: a refused role change must not leave the
+      // profile fields half-saved.
+      expect(db.searchFor(SESSION_USER)).toMatchObject({
+        role: Role.DRIVER,
+        carpoolId: GROUP,
+      });
+      expect(db.prisma.user.update).toHaveBeenCalled();
+    },
+  );
+
+  it("allows a driver in a group to save other fields", async () => {
+    const db = driverInGroup();
+
+    await editCallerFor(SESSION_USER, db).user.edit(
+      editInput({ role: Role.DRIVER, bio: "Still driving" }),
+    );
+
+    expect(db.searchFor(SESSION_USER)).toMatchObject({
+      role: Role.DRIVER,
+      carpoolId: GROUP,
+    });
+  });
+
+  it("allows a driver with no group to become a rider", async () => {
+    // The guard is about the group, not about the role. Leaving a group is the
+    // documented way out, and afterwards this has to work.
+    const db = callerWith(Role.DRIVER, null);
+
+    await editCallerFor(SESSION_USER, db).user.edit(
+      editInput({ role: Role.RIDER, seatAvail: 0 }),
+    );
+
+    expect(db.searchFor(SESSION_USER)).toMatchObject({ role: Role.RIDER });
+  });
+
+  it("allows a rider in a group to save their profile", async () => {
+    // Only the driver is load-bearing for the group, so a rider is untouched
+    // by this guard.
+    const db = callerWith(Role.RIDER, GROUP);
+
+    await editCallerFor(SESSION_USER, db).user.edit(
+      editInput({ role: Role.RIDER, seatAvail: 0 }),
+    );
+
+    expect(db.searchFor(SESSION_USER)).toMatchObject({
+      role: Role.RIDER,
+      carpoolId: GROUP,
+    });
+  });
+
+  it("does not block a first-time save with no existing search", async () => {
+    // Onboarding: there is no CarpoolSearch yet, so there is no group to
+    // strand and the guard must not fire on the create path.
+    const db = buildEditDb();
+
+    await editCallerFor(SESSION_USER, db).user.edit(
+      editInput({ role: Role.RIDER, seatAvail: 0 }),
+    );
+
+    expect(db.searchFor(SESSION_USER)).toMatchObject({ role: Role.RIDER });
   });
 });

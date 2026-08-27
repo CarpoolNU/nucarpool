@@ -215,6 +215,31 @@ export const userRouter = router({
           where: { userId: id },
         });
 
+        // A driver who is in a group cannot change role out of it. Dropping a
+        // group's only DRIVER leaves a state nothing can get out of:
+        // `requireGroupDriver` then throws FORBIDDEN for every member, so
+        // nobody can remove anybody or dissolve the group, and the riders'
+        // shared preferences - read through the driver's own search - vanish.
+        //
+        // SCRUM-125 added this as a toast in the profile page and the profile
+        // redesign deleted it; it was never server-side at all, so a direct
+        // call always bypassed it. It lives here now because this is the only
+        // place the invariant cannot be routed around (SCRUM-289).
+        //
+        // Throwing inside the transaction rolls back the `user.update` above.
+        if (
+          existingSearch?.carpoolId &&
+          existingSearch.role === Role.DRIVER &&
+          input.role !== Role.DRIVER
+        ) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message:
+              "You are the driver of a carpool group. Leave or dissolve the " +
+              "group before changing your role.",
+          });
+        }
+
         // Home and company Locations belong to this CarpoolSearch and nobody
         // else, so the coordinates just submitted are always what gets stored
         // (SCRUM-232). This used to match an existing row on address text alone

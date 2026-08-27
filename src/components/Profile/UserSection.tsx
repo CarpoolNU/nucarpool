@@ -10,7 +10,7 @@ import {
   UseFormSetValue,
   UseFormWatch,
 } from "react-hook-form";
-import { OnboardingFormInputs } from "../../utils/types";
+import { OnboardingFormInputs, User } from "../../utils/types";
 import ProfilePicture from "./ProfilePicture";
 import useIsMobile from "../../utils/useIsMobile";
 import { signOut } from "next-auth/react";
@@ -24,6 +24,7 @@ interface UserSectionProps {
   onSubmit: ReturnType<UseFormHandleSubmit<OnboardingFormInputs>>;
 
   onFileSelect: (file: File | null) => void;
+  user?: User;
 }
 
 const UserSection = ({
@@ -33,9 +34,16 @@ const UserSection = ({
   onSubmit,
   setValue,
   onFileSelect,
+  user,
 }: UserSectionProps) => {
   const isMobile = useIsMobile();
   const isViewer = watch("role") === Role.VIEWER;
+
+  // A driver in a carpool group cannot change role until they leave it -
+  // dropping the group's only driver leaves it unmanageable for everyone in
+  // it. `user.edit` refuses this server-side; the form says so up front so
+  // the answer is not a failed save (SCRUM-125, restored by SCRUM-289).
+  const lockedToDriver = user?.role === Role.DRIVER && !!user?.carpoolId;
 
   const logout = () => {
     signOut();
@@ -51,6 +59,14 @@ const UserSection = ({
         I am a... <span className="text-northeastern-red">*</span>
       </div>
 
+      {lockedToDriver && (
+        <Note className="!mt-0 !mb-2 max-w-xl">
+          You are the driver of a carpool group, so your role is locked to
+          Driver. Leave or dissolve the group from the Group page to change it -
+          switching now would leave your riders in a group with no driver.
+        </Note>
+      )}
+
       {/* Fixed layout issues */}
       <div
         className={`${isMobile ? "flex-col" : "flex h-24 w-[700px]"} max-w-full items-end`}
@@ -64,6 +80,7 @@ const UserSection = ({
             role={Role.VIEWER}
             value={Role.VIEWER}
             currentlySelected={watch("role")}
+            disabled={lockedToDriver}
             {...register("role")}
           />
           <Radio
@@ -73,6 +90,7 @@ const UserSection = ({
             role={Role.RIDER}
             value={Role.RIDER}
             currentlySelected={watch("role")}
+            disabled={lockedToDriver}
             {...register("role")}
           />
           <Radio
