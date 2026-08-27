@@ -33,8 +33,15 @@ export const useUploadFile = (selectedFile: File | null) => {
       );
     }
 
+    // Also a failure, for the same reason as the check above: a file was
+    // selected and the caller asked for it to be uploaded, so returning quietly
+    // here would leave the caller reporting a success that never happened. The
+    // query is enabled at this point, so reaching this means it errored or has
+    // not resolved yet (SCRUM-285).
     if (!presignedData?.url) {
-      return;
+      throw new Error(
+        "Could not prepare the profile picture upload. Please try again.",
+      );
     }
 
     // Content-Type has to match what the server signed, and the browser sets

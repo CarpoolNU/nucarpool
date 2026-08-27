@@ -193,12 +193,17 @@ const Index: NextPage = () => {
       startCoordLng: startAddressHook.selectedAddress.center[0],
       startCoordLat: startAddressHook.selectedAddress.center[1],
       seatAvail: values.role === "RIDER" ? 0 : (values.seatAvail ?? 0),
-      startStreet: startAddressHook.selectedAddress.street || user?.startStreet || "",
+      startStreet:
+        startAddressHook.selectedAddress.street || user?.startStreet || "",
       startCity: startAddressHook.selectedAddress.city || user?.startCity || "",
-      startState: startAddressHook.selectedAddress.state || user?.startState || "",
-      companyStreet: companyAddressHook.selectedAddress.street || user?.companyStreet || "",
-      companyCity: companyAddressHook.selectedAddress.city || user?.companyCity || "",
-      companyState: companyAddressHook.selectedAddress.state || user?.companyState || "",
+      startState:
+        startAddressHook.selectedAddress.state || user?.startState || "",
+      companyStreet:
+        companyAddressHook.selectedAddress.street || user?.companyStreet || "",
+      companyCity:
+        companyAddressHook.selectedAddress.city || user?.companyCity || "",
+      companyState:
+        companyAddressHook.selectedAddress.state || user?.companyState || "",
       companyName: values.companyName ?? "",
       profilePicture: values.profilePicture ?? "",
       companyAddress: values.companyAddress ?? "",
@@ -212,11 +217,18 @@ const Index: NextPage = () => {
       coopStartDate: values.coopStartDate ?? null,
       coopEndDate: values.coopEndDate ?? null,
     };
+    // A failed upload used to stop at the console, so the save below could
+    // report success while the avatar silently stayed as it was. The failure is
+    // carried down to the save result instead of aborting here, because the
+    // profile fields still save correctly when only the picture fails
+    // (SCRUM-285).
+    let pictureUploadFailed = false;
     if (selectedFile) {
       try {
         await uploadFile();
       } catch (error) {
         console.error("File upload failed:", error);
+        pictureUploadFailed = true;
       }
     }
     const sessionName = session?.user?.name ?? "";
@@ -227,7 +239,13 @@ const Index: NextPage = () => {
         mutation: editUserMutation,
       });
       trackProfileCompletion(userInfo.role, userInfo.status);
-      toast.success("User profile updated successfully!");
+      if (pictureUploadFailed) {
+        toast.warning(
+          "Your profile was updated, but the new picture could not be uploaded. Your previous picture is unchanged - please try again.",
+        );
+      } else {
+        toast.success("User profile updated successfully!");
+      }
     } catch (error) {
       toast.error("Failed to update user profile. Please try again.");
     } finally {

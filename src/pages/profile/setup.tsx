@@ -172,11 +172,18 @@ const Setup: NextPage = () => {
       coopStartDate: values.coopStartDate ?? null,
       coopEndDate: values.coopEndDate ?? null,
     };
+    // Reported rather than swallowed, so the picture does not just fail to
+    // appear with no explanation. Onboarding continues either way - a missing
+    // picture is not worth blocking setup over, and it can be added later from
+    // the profile page (SCRUM-285).
     if (selectedFile) {
       try {
         await uploadFile();
       } catch (error) {
         console.error("File upload failed:", error);
+        toast.warning(
+          "Your profile picture could not be uploaded. You can add it later from your profile.",
+        );
       }
     }
     const sessionName = session?.user?.name ?? "";
