@@ -1,13 +1,19 @@
 import { GetServerSidePropsContext, NextPage } from "next";
-import { getSession, signIn } from "next-auth/react";
+import { signIn } from "next-auth/react";
+import { getServerSession } from "next-auth";
+import { authOptions } from "./api/auth/[...nextauth]";
 import React from "react";
 import Head from "next/head";
 import Header from "../components/Header";
 import { trackEvent } from "../utils/mixpanel";
 import { browserEnv } from "../utils/env/browser";
 
+// One direct session lookup, not a self-directed HTTP round trip to
+// `/api/auth/session` (SCRUM-299). `getSession` from `next-auth/react` is the
+// *client* helper and was being called here; `getServerSession` reads the cookie
+// and queries directly, as `server/router/context.ts` already did.
 export async function getServerSideProps(context: GetServerSidePropsContext) {
-  const session = await getSession(context);
+  const session = await getServerSession(context.req, context.res, authOptions);
 
   if (session?.user) {
     if (session.user.isOnboarded) {
