@@ -1,6 +1,8 @@
-import React from "react";
+import React, { useContext } from "react";
 import { RequestStatus } from "@prisma/client";
 import { EnhancedPublicUser } from "../../utils/types";
+import { UserContext } from "../../utils/userContext";
+import { roleMismatchExplanation } from "../../utils/roleCompatibility";
 import { AiOutlineUser } from "react-icons/ai";
 import Image from "next/image";
 import useProfileImage from "../../utils/useProfileImage";
@@ -40,6 +42,23 @@ const MessageHeader = ({
     selectedUser.incomingRequest?.status === RequestStatus.PENDING;
   const hasOutgoingRequest =
     selectedUser.outgoingRequest?.status === RequestStatus.PENDING;
+
+  // A pending request whose two parties can no longer carpool - either of them
+  // switched role after it was sent - is no longer hidden from the Requests tab
+  // (SCRUM-296), because hiding it never stopped it blocking new requests. It
+  // is still not acceptable, so Accept is replaced by the reason rather than
+  // left to fail on press. Reject and Withdraw stay: clearing the request is
+  // the way out, and it was the absence of any way to reach them that made this
+  // a dead end.
+  const user = useContext(UserContext);
+  const roleMismatch =
+    user && (hasIncomingRequest || hasOutgoingRequest)
+      ? roleMismatchExplanation(
+          user.role,
+          selectedUser.role,
+          selectedUser.preferredName,
+        )
+      : null;
 
   const ismobile = useIsMobile();
 
@@ -112,6 +131,11 @@ const MessageHeader = ({
         {hasIncomingRequest &&
           (!groupId || selectedUser.carpoolId !== groupId) && (
             <>
+              {roleMismatch && (
+                <p className="mr-10 max-w-sm font-montserrat text-sm text-gray-700">
+                  {roleMismatch}
+                </p>
+              )}
               <button
                 onClick={onReject}
                 disabled={isMutating}
@@ -121,29 +145,38 @@ const MessageHeader = ({
               >
                 Reject
               </button>
-              <button
-                onClick={onAccept}
-                disabled={isMutating}
-                className={`mr-10 rounded-lg border-2 border-northeastern-red bg-northeastern-red py-2 text-center text-lg font-medium text-white hover:bg-red-700 sm:px-8 md:px-12 lg:px-20 ${
-                  isMutating ? DISABLED_CLASS : ""
-                }`}
-              >
-                Accept
-              </button>
+              {!roleMismatch && (
+                <button
+                  onClick={onAccept}
+                  disabled={isMutating}
+                  className={`mr-10 rounded-lg border-2 border-northeastern-red bg-northeastern-red py-2 text-center text-lg font-medium text-white hover:bg-red-700 sm:px-8 md:px-12 lg:px-20 ${
+                    isMutating ? DISABLED_CLASS : ""
+                  }`}
+                >
+                  Accept
+                </button>
+              )}
             </>
           )}
         {hasOutgoingRequest &&
           !hasIncomingRequest &&
           (!groupId || selectedUser.carpoolId !== groupId) && (
-            <button
-              onClick={onReject}
-              disabled={isMutating}
-              className={`mr-10 rounded-lg border-2 border-black bg-white py-2 text-center text-lg font-medium text-black hover:bg-gray-100 md:px-12 lg:px-20 ${
-                isMutating ? DISABLED_CLASS : ""
-              }`}
-            >
-              Withdraw Request
-            </button>
+            <>
+              {roleMismatch && (
+                <p className="mr-10 max-w-sm font-montserrat text-sm text-gray-700">
+                  {roleMismatch}
+                </p>
+              )}
+              <button
+                onClick={onReject}
+                disabled={isMutating}
+                className={`mr-10 rounded-lg border-2 border-black bg-white py-2 text-center text-lg font-medium text-black hover:bg-gray-100 md:px-12 lg:px-20 ${
+                  isMutating ? DISABLED_CLASS : ""
+                }`}
+              >
+                Withdraw Request
+              </button>
+            </>
           )}
         {groupId && selectedUser.carpoolId === groupId && (
           <button

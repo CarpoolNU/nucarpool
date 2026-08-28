@@ -6,6 +6,7 @@ import {
   User,
 } from "../../utils/types";
 import { UserContext } from "../../utils/userContext";
+import { roleMismatchExplanation } from "../../utils/roleCompatibility";
 import { UserCard } from "./UserCard";
 import SentRequestModal from "../Modals/SentRequestModal";
 import { createPortal } from "react-dom";
@@ -23,6 +24,18 @@ interface SentCardProps {
 export const SentCard = (props: SentCardProps): React.JSX.Element => {
   const user = useContext(UserContext);
   const [showModal, setShowModal] = useState(false);
+
+  // The request stays in this list even when the pair can no longer carpool,
+  // so the card carries the reason (SCRUM-296). `user` is never a VIEWER here -
+  // the Requests tab renders the Viewer-mode copy instead of any cards - so
+  // this cannot show a name UserCard would otherwise withhold.
+  const roleMismatch = user
+    ? roleMismatchExplanation(
+        user.role,
+        props.otherUser.role,
+        props.otherUser.preferredName,
+      )
+    : null;
 
   return (
     <>
@@ -48,6 +61,7 @@ export const SentCard = (props: SentCardProps): React.JSX.Element => {
         <UserCard
           otherUser={props.otherUser}
           message={props.latestMessage?.content}
+          notice={roleMismatch ?? undefined}
           isUnread={props.isUnread}
           classname={
             props.selectedUser?.id === props.otherUser.id

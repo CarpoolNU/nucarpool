@@ -1,4 +1,4 @@
-import { Permission } from "@prisma/client";
+import { Permission, Role } from "@prisma/client";
 import type { Session } from "next-auth";
 import type { Context } from "../context";
 import {
@@ -551,5 +551,298 @@ describe("sendMessage is atomic", () => {
     ).rejects.toThrow("connection lost");
 
     expect(triggeredChannels()).toEqual([]);
+  });
+});
+
+/**
+ * `getUnreadMessageCount` counts the caller's own conversations, and nothing
+ * about the counterpart's role (SCRUM-296).
+ *
+ * It used to require the counterpart's role to differ from the caller's and not
+ * be VIEWER - the same predicate `user.requests.me` applied to the list - so
+ * once either party changed role the two disagreed in both directions at once:
+ * the thread was hidden from the Requests tab, and its unread messages were
+ * dropped from the header badge, which is how replies became invisible rather
+ * than merely unreachable.
+ *
+ * The double below understands the role predicate as well as the plain one, so
+ * a regression that reintroduces it changes these counts rather than being
+ * quietly ignored.
+ */
+type UnreadUser = { id: string; role: Role };
+type UnreadRequest = { fromUserId: string; toUserId: string };
+type UnreadMessage = {
+  conversationId: string;
+  userId: string;
+  isRead: boolean;
+};
+
+/** Matches `{ role: { not: X }, AND: { role: { not: "VIEWER" } } }` and friends. */
+const matchesRolePredicate = (role: Role, predicate: any): boolean => {
+  if (!predicate) return true;
+
+  if (predicate.role) {
+    if ("not" in predicate.role && role === predicate.role.not) return false;
+    if ("in" in predicate.role && !predicate.role.in.includes(role)) {
+      return false;
+    }
+  }
+
+  return matchesRolePredicate(role, predicate.AND);
+};
+
+const buildUnreadDb = (
+  users: UnreadUser[],
+  requests: UnreadRequest[],
+  messages: UnreadMessage[],
+) => {
+  const roleOf = (id: string) => users.find((u) => u.id === id)?.role;
+
+  /** One `some` clause of the request OR, against one request row. */
+  const requestMatches = (clause: any, request: UnreadRequest): boolean => {
+    if (clause.fromUserId && clause.fromUserId !== request.fromUserId) {
+      return false;
+    }
+    if (clause.toUserId && clause.toUserId !== request.toUserId) return false;
+
+    for (const [side, otherId] of [
+      ["toUser", request.toUserId],
+      ["fromUser", request.fromUserId],
+    ] as const) {
+      const nested = clause[side]?.carpoolSearches?.some;
+      if (!nested) continue;
+
+      const role = roleOf(otherId);
+      if (role === undefined || !matchesRolePredicate(role, nested)) {
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  const count = jest.fn(async ({ where }: any) => {
+    const clauses: any[] = where?.conversation?.request?.some?.OR ?? [];
+
+    return messages.filter((message) => {
+      if (where?.isRead !== undefined && message.isRead !== where.isRead) {
+        return false;
+      }
+      if (where?.userId?.not && message.userId === where.userId.not) {
+        return false;
+      }
+
+      // Every request in this suite carries the conversation of the same name,
+      // which is enough: `some` only has to find one matching request.
+      return requests.some(
+        (request) =>
+          `conversation-${request.fromUserId}-${request.toUserId}` ===
+            message.conversationId &&
+          clauses.some((clause) => requestMatches(clause, request)),
+      );
+    }).length;
+  });
+
+  // Provided even though the resolver no longer reads it, so that a regression
+  // reintroducing the role comparison fails on the count rather than crashing
+  // on an absent delegate.
+  const carpoolSearchFindFirst = jest.fn(async ({ where }: any) => {
+    const role = roleOf(where.userId);
+    return role === undefined ? null : { role };
+  });
+
+  return {
+    prisma: {
+      message: { count },
+      carpoolSearch: { findFirst: carpoolSearchFindFirst },
+    } as unknown as Context["prisma"],
+    count,
+    carpoolSearchFindFirst,
+  };
+};
+
+const unreadCallerFor = (
+  userId: string,
+  users: UnreadUser[],
+  requests: UnreadRequest[],
+  messages: UnreadMessage[],
+) => {
+  const db = buildUnreadDb(users, requests, messages);
+  const ctx = {
+    req: undefined,
+    res: undefined,
+    session: sessionFor(userId),
+    prisma: db.prisma,
+    sesClient: { send: jest.fn() },
+  } as unknown as Context;
+
+  return { caller: appRouter.createCaller(ctx), db };
+};
+
+const conversationOf = (from: string, to: string) =>
+  `conversation-${from}-${to}`;
+
+describe("getUnreadMessageCount - the badge and the Requests tab agree", () => {
+  const pair: UnreadRequest[] = [{ fromUserId: SENDER, toUserId: RECIPIENT }];
+  const unreadFromRecipient: UnreadMessage[] = [
+    {
+      conversationId: conversationOf(SENDER, RECIPIENT),
+      userId: RECIPIENT,
+      isRead: false,
+    },
+  ];
+
+  it("counts an unread reply from a counterpart who now shares the caller's role", async () => {
+    // The state SCRUM-296 describes: both riders, so the old predicate excluded
+    // the thread and the reply never reached the badge.
+    const { caller } = unreadCallerFor(
+      SENDER,
+      [
+        { id: SENDER, role: Role.RIDER },
+        { id: RECIPIENT, role: Role.RIDER },
+      ],
+      pair,
+      unreadFromRecipient,
+    );
+
+    await expect(caller.user.messages.getUnreadMessageCount()).resolves.toBe(1);
+  });
+
+  it("counts one from a counterpart who has switched to VIEWER", async () => {
+    const { caller } = unreadCallerFor(
+      SENDER,
+      [
+        { id: SENDER, role: Role.RIDER },
+        { id: RECIPIENT, role: Role.VIEWER },
+      ],
+      pair,
+      unreadFromRecipient,
+    );
+
+    await expect(caller.user.messages.getUnreadMessageCount()).resolves.toBe(1);
+  });
+
+  it("counts messages received as well as sent, in either direction", async () => {
+    const { caller } = unreadCallerFor(
+      RECIPIENT,
+      [
+        { id: SENDER, role: Role.DRIVER },
+        { id: RECIPIENT, role: Role.DRIVER },
+      ],
+      pair,
+      [
+        {
+          conversationId: conversationOf(SENDER, RECIPIENT),
+          userId: SENDER,
+          isRead: false,
+        },
+      ],
+    );
+
+    await expect(caller.user.messages.getUnreadMessageCount()).resolves.toBe(1);
+  });
+
+  it("still counts the ordinary compatible pair", async () => {
+    const { caller } = unreadCallerFor(
+      SENDER,
+      [
+        { id: SENDER, role: Role.RIDER },
+        { id: RECIPIENT, role: Role.DRIVER },
+      ],
+      pair,
+      unreadFromRecipient,
+    );
+
+    await expect(caller.user.messages.getUnreadMessageCount()).resolves.toBe(1);
+  });
+
+  it("never counts the caller's own messages, or ones already read", async () => {
+    const { caller } = unreadCallerFor(
+      SENDER,
+      [
+        { id: SENDER, role: Role.RIDER },
+        { id: RECIPIENT, role: Role.RIDER },
+      ],
+      pair,
+      [
+        {
+          conversationId: conversationOf(SENDER, RECIPIENT),
+          userId: SENDER,
+          isRead: false,
+        },
+        {
+          conversationId: conversationOf(SENDER, RECIPIENT),
+          userId: RECIPIENT,
+          isRead: true,
+        },
+      ],
+    );
+
+    await expect(caller.user.messages.getUnreadMessageCount()).resolves.toBe(0);
+  });
+
+  it("never counts a conversation the caller is not a party to", async () => {
+    // The scoping this query does carry, and the reason the role predicate was
+    // never what kept the count private.
+    const { caller } = unreadCallerFor(
+      OUTSIDER,
+      [
+        { id: SENDER, role: Role.RIDER },
+        { id: RECIPIENT, role: Role.DRIVER },
+        { id: OUTSIDER, role: Role.RIDER },
+      ],
+      pair,
+      unreadFromRecipient,
+    );
+
+    await expect(caller.user.messages.getUnreadMessageCount()).resolves.toBe(0);
+  });
+
+  it("asks the database nothing about anyone's role", async () => {
+    const { caller, db } = unreadCallerFor(
+      SENDER,
+      [
+        { id: SENDER, role: Role.RIDER },
+        { id: RECIPIENT, role: Role.RIDER },
+      ],
+      pair,
+      unreadFromRecipient,
+    );
+
+    await caller.user.messages.getUnreadMessageCount();
+
+    expect(db.count).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(db.count.mock.calls[0]?.[0])).not.toContain("role");
+  });
+
+  it("returns a count rather than NOT_FOUND for a caller with no CarpoolSearch", async () => {
+    // The caller's own search was read only for the role comparison, and its
+    // absence threw NOT_FOUND - which reached the header as a failed query
+    // rather than a number. Nothing about "how many unread messages are mine"
+    // depends on it.
+    const { caller } = unreadCallerFor(
+      SENDER,
+      [{ id: RECIPIENT, role: Role.RIDER }],
+      pair,
+      unreadFromRecipient,
+    );
+
+    await expect(caller.user.messages.getUnreadMessageCount()).resolves.toBe(1);
+  });
+
+  it("rejects an anonymous caller without counting anything", async () => {
+    const db = buildUnreadDb([], [], []);
+    const ctx = {
+      req: undefined,
+      res: undefined,
+      session: null,
+      prisma: db.prisma,
+      sesClient: { send: jest.fn() },
+    } as unknown as Context;
+
+    await expect(
+      appRouter.createCaller(ctx).user.messages.getUnreadMessageCount(),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    expect(db.count).not.toHaveBeenCalled();
   });
 });

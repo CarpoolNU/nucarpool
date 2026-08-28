@@ -19,18 +19,21 @@ export const messageRouter = router({
       });
     }
 
-    const carpoolSearch = await ctx.prisma.carpoolSearch.findFirst({
-      where: { userId },
-      select: { role: true },
-    });
-
-    if (!carpoolSearch) {
-      throw new TRPCError({
-        code: "NOT_FOUND",
-        message: "User carpool search not found",
-      });
-    }
-
+    // The badge counts unread messages in every conversation the caller is a
+    // party to, and nothing else (SCRUM-296).
+    //
+    // It used to require the counterpart's role to differ from the caller's and
+    // not be VIEWER, mirroring the filter `user.requests.me` applied to the
+    // list itself. Both are gone: the badge and the list have to agree, and a
+    // role change on either side is not a reason to stop delivering messages
+    // the two people are still exchanging. Counting them while the thread was
+    // hidden was the worse half of that - the header claimed unread mail the
+    // user could not reach - but suppressing them silently dropped replies.
+    //
+    // The caller's own `CarpoolSearch` was read only for that comparison, and
+    // its absence threw NOT_FOUND, which surfaced in the header as a failed
+    // query rather than a count. Neither is needed to answer "how many unread
+    // messages are mine".
     return ctx.prisma.message.count({
       where: {
         isRead: false,
@@ -40,30 +43,7 @@ export const messageRouter = router({
         conversation: {
           request: {
             some: {
-              OR: [
-                {
-                  fromUserId: userId,
-                  toUser: {
-                    carpoolSearches: {
-                      some: {
-                        role: { not: carpoolSearch.role },
-                        AND: { role: { not: "VIEWER" } },
-                      },
-                    },
-                  },
-                },
-                {
-                  toUserId: userId,
-                  fromUser: {
-                    carpoolSearches: {
-                      some: {
-                        role: { not: carpoolSearch.role },
-                        AND: { role: { not: "VIEWER" } },
-                      },
-                    },
-                  },
-                },
-              ],
+              OR: [{ fromUserId: userId }, { toUserId: userId }],
             },
           },
         },

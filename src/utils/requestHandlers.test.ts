@@ -467,3 +467,107 @@ describe("isMutating", () => {
     expect(handlers().isMutating).toBe(true);
   });
 });
+
+/**
+ * A pair who can no longer carpool (SCRUM-296).
+ *
+ * `user.requests.me` used to drop these requests, so this button never saw one:
+ * hiding it did not stop it blocking new requests, and left the sender no way to
+ * withdraw it. Now the request stays, which means the accept path has to answer
+ * for it - and it cannot go through, because the branches below treat "I am not
+ * a DRIVER" as "they are". Two riders would have named one of themselves as the
+ * driver; two drivers would have spent a seat filing another driver as a rider.
+ *
+ * `groups.create` and `groups.edit` refuse the same pairs server-side. This is
+ * the fast half, and the only one that can name whose role moved.
+ */
+describe("handleAcceptRequest - a pair who can no longer carpool", () => {
+  const incompatible: [string, Role, Role][] = [
+    ["two drivers", Role.DRIVER, Role.DRIVER],
+    ["two riders", Role.RIDER, Role.RIDER],
+    ["the counterpart has switched to VIEWER", Role.RIDER, Role.VIEWER],
+    ["the accepter is in VIEWER mode", Role.VIEWER, Role.RIDER],
+  ];
+
+  it.each(incompatible)(
+    "resolves false and writes nothing when %s",
+    async (_label, mine, theirs) => {
+      const { handleAcceptRequest } = handlers();
+
+      const accepted = await handleAcceptRequest(
+        user({ role: mine, carpoolId: null, seatAvail: 3 }),
+        otherUser({ role: theirs, carpoolId: null }),
+        request,
+      );
+
+      // False is what stops MessagePanel emailing the other person to say they
+      // were accepted into a group that was never created (SCRUM-294).
+      expect(accepted).toBe(false);
+      expectNothingWritten();
+      expect(mockToastSuccess).not.toHaveBeenCalled();
+    },
+  );
+
+  it("explains which roles are the problem, and names the other person", async () => {
+    const { handleAcceptRequest } = handlers();
+
+    await handleAcceptRequest(
+      user({ role: Role.RIDER, carpoolId: null }),
+      otherUser({ role: Role.RIDER, preferredName: "Robin" }),
+      request,
+    );
+
+    expect(mockToastError).toHaveBeenCalledTimes(1);
+    const [message] = mockToastError.mock.calls[0] as [string];
+    expect(message).toContain("Robin");
+    expect(message).toContain("both riders");
+  });
+
+  it("is checked before the seat and membership rules, which would misread it", async () => {
+    // Two drivers, the accepter with no seats. The seat message would be true
+    // but beside the point - filling the car would not make this pair a
+    // carpool - and for two riders the `else` branch reports a group conflict
+    // the other person does not have.
+    const { handleAcceptRequest } = handlers();
+
+    await handleAcceptRequest(
+      user({ role: Role.DRIVER, seatAvail: 0 }),
+      otherUser({ role: Role.DRIVER }),
+      request,
+    );
+
+    expect(mockToastError).toHaveBeenCalledTimes(1);
+    const [message] = mockToastError.mock.calls[0] as [string];
+    expect(message).toContain("both drivers");
+    expect(message).not.toContain("space in your car");
+  });
+
+  it("still accepts the compatible pair it was hiding these behind", async () => {
+    const { handleAcceptRequest } = handlers();
+
+    const accepted = await handleAcceptRequest(
+      user({ role: Role.DRIVER, seatAvail: 3, carpoolId: null }),
+      otherUser({ role: Role.RIDER, carpoolId: null }),
+      request,
+    );
+
+    expect(accepted).toBe(true);
+    expect(mockCreateGroup.mutateAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not stop either party clearing the request instead", async () => {
+    // The way out of the dead end, so it must not inherit the accept gate.
+    const { handleRejectRequest } = handlers();
+
+    await handleRejectRequest(
+      user({ role: Role.RIDER }),
+      otherUser({ role: Role.RIDER }),
+      request,
+    );
+
+    expect(mockDeleteRequest.variables).toEqual([
+      { invitationId: "request-1" },
+    ]);
+    expect(mockToastSuccess).toHaveBeenCalledTimes(1);
+  });
+});

@@ -26,6 +26,15 @@ interface UserCardProps {
   rightButton?: ButtonInfo;
   onViewRouteClick?: (user: User, otherUser: PublicUser) => void;
   message?: string;
+  /**
+   * A short explanation of why this card cannot be acted on (SCRUM-296).
+   *
+   * Only the Requests tab passes one: a request whose two parties can no longer
+   * carpool stays in the list now, so the card has to say why rather than
+   * disappear. Discovery cards never need it, because recommendations and
+   * favorites are still role-filtered.
+   */
+  notice?: string;
   isUnread?: boolean;
   classname?: string;
   onClick?: () => void;
@@ -248,6 +257,12 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
             <div className="font-semibold">{props.otherUser.seatAvail}</div>
           </div>
         )}
+
+      {props.notice && (
+        <div className="rounded-md bg-white p-2 text-sm italic text-gray-700">
+          {props.notice}
+        </div>
+      )}
 
       {/* 8th row - Buttons*/}
       {props.onViewRouteClick && props.rightButton && !isMobile ? (

@@ -1,4 +1,4 @@
-import { Permission, RequestStatus } from "@prisma/client";
+import { Permission, RequestStatus, Role, Status } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
 import type { Session } from "next-auth";
 import { appRouter } from "../index";
@@ -869,5 +869,266 @@ describe("user.requests.create — both people must be reachable (SCRUM-292)", (
     await caller.user.requests.create({ toId: USER_B, message: "Hello" });
 
     expect(db.rows()).toHaveLength(1);
+  });
+});
+
+/**
+ * `user.requests.me` no longer role-filters an existing request (SCRUM-296).
+ *
+ * The filter it used to apply - counterpart's role must differ from the
+ * caller's, and must not be VIEWER - is the recommendations predicate, and it
+ * disagreed with `create`'s duplicate guard above, which has no role condition.
+ * A role change on either side therefore removed the request from the Requests
+ * tab while every retry still failed with `CONFLICT`. `delete` needs the
+ * request id and nothing else surfaces one, so the pair were stuck until the
+ * other person switched back.
+ *
+ * Read alongside "the duplicate guard still holds" above: that pins what
+ * `create` does to a pending request whatever the two roles are, and these pin
+ * the list that now shows the same request.
+ */
+const searchRow = (
+  userId: string,
+  role: Role,
+  overrides: { status?: Status; carpoolId?: string | null } = {},
+) => ({
+  id: `search-${userId}`,
+  userId,
+  role,
+  status: overrides.status ?? Status.ACTIVE,
+  carpoolId: overrides.carpoolId ?? null,
+  seatsAvail: role === Role.DRIVER ? 3 : 0,
+  companyName: "Acme",
+  daysWorking: "1,1,1,1,1,0,0",
+  startTime: null,
+  endTime: null,
+  startDate: null,
+  endDate: null,
+  groupMessage: null,
+  homeLocationId: null,
+  companyLocationId: null,
+  user: {
+    id: userId,
+    name: userId,
+    email: `${userId}@northeastern.edu`,
+    image: null,
+    bio: "",
+    preferredName: userId,
+    pronouns: "",
+  },
+  homeLocation: null,
+  companyLocation: null,
+});
+
+/**
+ * A Prisma double for `me` alone. Separate from `buildRequestsDb` above on
+ * purpose: `me` reads a shape - a user with both request relations, plus one
+ * `CarpoolSearch` per party with its user and locations - that none of the
+ * mutations touch, and folding both into one double would leave neither
+ * readable.
+ */
+const buildRequestsMeDb = (
+  seed: RequestRow[],
+  roles: Record<string, Role>,
+  statuses: Record<string, Status> = {},
+) => {
+  const searchFor = (userId: string) =>
+    searchRow(userId, roles[userId] ?? Role.VIEWER, {
+      status: statuses[userId],
+    });
+
+  const userFindUnique = jest.fn(async ({ where }: any) => ({
+    id: where.id,
+    sentRequests: seed
+      .filter((row) => row.fromUserId === where.id)
+      .map((row) => ({ ...row, conversation: null })),
+    receivedRequests: seed
+      .filter((row) => row.toUserId === where.id)
+      .map((row) => ({ ...row, conversation: null })),
+  }));
+
+  const carpoolSearchFindFirst = jest.fn(async ({ where }: any) =>
+    searchFor(where.userId),
+  );
+
+  const carpoolSearchFindMany = jest.fn(async ({ where }: any) => {
+    const ids: string[] = where?.userId?.in ?? [];
+
+    // `me` asks for `status: { not: "INACTIVE" }`, and the resolver's remaining
+    // null check depends on that exclusion, so the double has to honour it.
+    return ids
+      .map(searchFor)
+      .filter((search) => search.status !== Status.INACTIVE);
+  });
+
+  return {
+    prisma: {
+      user: { findUnique: userFindUnique },
+      carpoolSearch: {
+        findFirst: carpoolSearchFindFirst,
+        findMany: carpoolSearchFindMany,
+      },
+    } as unknown as Context["prisma"],
+    carpoolSearchFindMany,
+  };
+};
+
+const meCallerFor = (
+  userId: string,
+  seed: RequestRow[],
+  roles: Record<string, Role>,
+  statuses: Record<string, Status> = {},
+) => {
+  const db = buildRequestsMeDb(seed, roles, statuses);
+  const ctx = {
+    req: undefined,
+    res: undefined,
+    session: sessionFor(userId),
+    prisma: db.prisma,
+    sesClient: { send: jest.fn() },
+  } as unknown as Context;
+
+  return { caller: appRouter.createCaller(ctx), db };
+};
+
+describe("user.requests.me - an existing request survives a role change", () => {
+  it("returns a sent request to a counterpart who now shares the caller's role", async () => {
+    // The ticket's scenario: rider A asked driver B, then B switched to Rider.
+    // Before this fix the request vanished from A's tab while `create` kept
+    // answering `CONFLICT - Existing request between ...`.
+    const { caller } = meCallerFor(
+      USER_A,
+      [requestRow("request-1", USER_A, USER_B)],
+      { [USER_A]: Role.RIDER, [USER_B]: Role.RIDER },
+    );
+
+    const result = await caller.user.requests.me();
+
+    expect(result.received).toEqual([]);
+    expect(result.sent).toEqual([
+      expect.objectContaining({
+        id: "request-1",
+        toUser: expect.objectContaining({ id: USER_B, role: Role.RIDER }),
+      }),
+    ]);
+  });
+
+  it("returns a received request from a counterpart who now shares the caller's role", async () => {
+    const { caller } = meCallerFor(
+      USER_B,
+      [requestRow("request-1", USER_A, USER_B)],
+      { [USER_A]: Role.RIDER, [USER_B]: Role.RIDER },
+    );
+
+    const result = await caller.user.requests.me();
+
+    expect(result.sent).toEqual([]);
+    expect(result.received).toEqual([
+      expect.objectContaining({
+        id: "request-1",
+        fromUser: expect.objectContaining({ id: USER_A, role: Role.RIDER }),
+      }),
+    ]);
+  });
+
+  it("keeps both directions when two drivers are left facing each other", async () => {
+    const { caller } = meCallerFor(
+      USER_A,
+      [
+        requestRow("request-1", USER_A, USER_B),
+        requestRow("request-2", USER_C, USER_A),
+      ],
+      { [USER_A]: Role.DRIVER, [USER_B]: Role.DRIVER, [USER_C]: Role.DRIVER },
+    );
+
+    const result = await caller.user.requests.me();
+
+    expect(result.sent.map((req) => req.id)).toEqual(["request-1"]);
+    expect(result.received.map((req) => req.id)).toEqual(["request-2"]);
+  });
+
+  it("returns a request whose counterpart has switched to VIEWER", async () => {
+    // Also filtered out before, and the same dead end: a VIEWER cannot answer
+    // the request, so leaving the sender no way to withdraw it stranded both.
+    const { caller } = meCallerFor(
+      USER_A,
+      [requestRow("request-1", USER_A, USER_B)],
+      { [USER_A]: Role.RIDER, [USER_B]: Role.VIEWER },
+    );
+
+    const result = await caller.user.requests.me();
+
+    expect(result.sent.map((req) => req.id)).toEqual(["request-1"]);
+  });
+
+  it("still returns the ordinary compatible pair", async () => {
+    // The regression guard for this change: unfiltering must not disturb the
+    // case that always worked.
+    const { caller } = meCallerFor(
+      USER_A,
+      [requestRow("request-1", USER_A, USER_B)],
+      { [USER_A]: Role.RIDER, [USER_B]: Role.DRIVER },
+    );
+
+    const result = await caller.user.requests.me();
+
+    expect(result.sent.map((req) => req.id)).toEqual(["request-1"]);
+  });
+
+  it("returns an accepted request as well, whatever the two roles are", async () => {
+    // Accepted requests stay attached to the pair so they keep their
+    // conversation (SCRUM-228); the role filter used to take those with it.
+    const { caller } = meCallerFor(
+      USER_A,
+      [
+        requestRow("request-1", USER_A, USER_B, {
+          status: RequestStatus.ACCEPTED,
+        }),
+      ],
+      { [USER_A]: Role.RIDER, [USER_B]: Role.RIDER },
+    );
+
+    const result = await caller.user.requests.me();
+
+    expect(result.sent).toEqual([
+      expect.objectContaining({
+        id: "request-1",
+        status: RequestStatus.ACCEPTED,
+      }),
+    ]);
+  });
+
+  it("still drops a request whose counterpart has no active search", async () => {
+    // The one filter that remains, and it is not about roles: an INACTIVE
+    // counterpart is absent from the `CarpoolSearch` query, so there is no
+    // `PublicUser` to build a card from. Pinned so that removing the role
+    // predicate is not read as removing this too.
+    const { caller } = meCallerFor(
+      USER_A,
+      [requestRow("request-1", USER_A, USER_B)],
+      { [USER_A]: Role.RIDER, [USER_B]: Role.DRIVER },
+      { [USER_B]: Status.INACTIVE },
+    );
+
+    const result = await caller.user.requests.me();
+
+    expect(result.sent).toEqual([]);
+  });
+
+  it("never asks the database to filter by role either", async () => {
+    // The predicate is gone from the resolver, so it must not reappear as a
+    // `where` clause: that is the form it took in `getUnreadMessageCount`, and
+    // both had to go for the list and the badge to agree.
+    const { caller, db } = meCallerFor(
+      USER_A,
+      [requestRow("request-1", USER_A, USER_B)],
+      { [USER_A]: Role.RIDER, [USER_B]: Role.RIDER },
+    );
+
+    await caller.user.requests.me();
+
+    for (const call of db.carpoolSearchFindMany.mock.calls) {
+      expect(JSON.stringify(call[0]?.where ?? {})).not.toContain("role");
+    }
   });
 });
