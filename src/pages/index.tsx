@@ -155,6 +155,25 @@ const Home: NextPage<any> = () => {
   });
   const { data: favorites = [] } = favoritesQuery;
 
+  // `"always"` rather than `true`, and kept deliberately (SCRUM-301).
+  //
+  // The global default is `refetchOnMount: false`, and this is the only query
+  // that opts out of it. It has to: it is the sole source of conversation
+  // history and of the per-card unread dot, and both change out of band - the
+  // other person replies over Pusher, or `markMessagesAsRead` fires from a
+  // thread the user had open. Returning to `/` from `/profile` is a client-side
+  // navigation, so without this the cached payload is served as-is and the
+  // Requests tab can show a stale "New!" for a message already read, or miss a
+  // reply entirely. `true` would still respect `staleTime`; `"always"` does not.
+  //
+  // The six explicit `utils.user.requests.me.invalidate()` call sites cover
+  // mutations this tab initiates. They cannot cover what happened while the
+  // user was on another page, which is what this is for.
+  //
+  // It also means the payload is re-fetched on every navigation to `/`, which
+  // is why the projection above it matters: the narrowing in
+  // `user.requests.me` (SCRUM-301) is what makes paying this on every mount
+  // reasonable.
   const requestsQuery = trpc.user.requests.me.useQuery(undefined, {
     refetchOnMount: "always",
   });

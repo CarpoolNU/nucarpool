@@ -970,6 +970,7 @@ const buildRequestsMeDb = (
       },
     } as unknown as Context["prisma"],
     carpoolSearchFindMany,
+    userFindUnique,
   };
 };
 
@@ -1129,6 +1130,104 @@ describe("user.requests.me - an existing request survives a role change", () => 
 
     for (const call of db.carpoolSearchFindMany.mock.calls) {
       expect(JSON.stringify(call[0]?.where ?? {})).not.toContain("role");
+    }
+  });
+});
+
+/**
+ * What `me` asks the database for (SCRUM-301).
+ *
+ * These assert on the Prisma arguments rather than on the result, because the
+ * result cannot catch this class of regression and neither can the compiler:
+ * `extendPublicUser` in `pages/index.tsx` casts request rows through `as any`,
+ * so a widened `include` type-checks and a narrowed one does too. The payload
+ * shape is only observable here.
+ *
+ * Three things are pinned:
+ *
+ *  1. No `User` on messages. It attached the author's whole row - `email`,
+ *     `bio`, `image` as `@db.MediumText` - to every message, and the author is
+ *     always one of the two people already in the payload, so a 60-message
+ *     thread carried the same two rows 60 times.
+ *  2. No `toUser`/`fromUser`. Both were fetched and then overwritten by the
+ *     `...req` spread, so they were read and discarded.
+ *  3. The six message columns that *are* read stay selected. Narrowing too far
+ *     is the opposite failure and just as invisible: dropping `isRead` or `id`
+ *     would silently break `markMessagesAsRead`.
+ */
+describe("user.requests.me - what it asks the database for (SCRUM-301)", () => {
+  const includeArg = async () => {
+    const { caller, db } = meCallerFor(
+      USER_A,
+      [requestRow("request-1", USER_A, USER_B)],
+      { [USER_A]: Role.RIDER, [USER_B]: Role.DRIVER },
+    );
+
+    await caller.user.requests.me();
+
+    expect(db.userFindUnique).toHaveBeenCalledTimes(1);
+    return db.userFindUnique.mock.calls[0]![0].include;
+  };
+
+  it("never joins the author row onto a message", async () => {
+    const include = await includeArg();
+
+    for (const side of ["sentRequests", "receivedRequests"] as const) {
+      const messages = include[side].include.conversation.include.messages;
+
+      expect(messages.include).toBeUndefined();
+      expect(messages.select).not.toHaveProperty("User");
+    }
+  });
+
+  it("never joins the counterpart, which the spread overwrites anyway", async () => {
+    const include = await includeArg();
+
+    expect(include.sentRequests.include).not.toHaveProperty("toUser");
+    expect(include.receivedRequests.include).not.toHaveProperty("fromUser");
+  });
+
+  it("selects exactly the message columns the UI reads", async () => {
+    // Named individually so a failure says which column moved. `isRead` and
+    // `id` drive `markMessagesAsRead`; `content`, `userId` and `dateCreated`
+    // drive the thread and the card previews; `conversationId` satisfies the
+    // declared `Message` type.
+    const include = await includeArg();
+
+    for (const side of ["sentRequests", "receivedRequests"] as const) {
+      const messages = include[side].include.conversation.include.messages;
+
+      expect(Object.keys(messages.select).sort()).toEqual([
+        "content",
+        "conversationId",
+        "dateCreated",
+        "id",
+        "isRead",
+        "userId",
+      ]);
+    }
+  });
+
+  it("still orders a thread oldest first, which the renderer depends on", async () => {
+    const include = await includeArg();
+
+    for (const side of ["sentRequests", "receivedRequests"] as const) {
+      const messages = include[side].include.conversation.include.messages;
+
+      expect(messages.orderBy).toEqual({ dateCreated: "asc" });
+    }
+  });
+
+  it("joins no user relation anywhere under the request includes", async () => {
+    // A catch-all over relation *names*, because that is what an `include`
+    // actually contains - a Prisma join names the relation, never the columns,
+    // so asserting on "email" or "image" here would pass against the very shape
+    // this replaces. `User`, `toUser` and `fromUser` are the three routes a full
+    // `user` row can re-enter this payload by; `user` covers a renamed one.
+    const include = await includeArg();
+
+    for (const relation of ["User", "toUser", "fromUser", "user"]) {
+      expect(JSON.stringify(include)).not.toContain(`"${relation}"`);
     }
   });
 });
