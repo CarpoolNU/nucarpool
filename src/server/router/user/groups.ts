@@ -332,7 +332,7 @@ export const groupsRouter = router({
 
         const riderSearch = await tx.carpoolSearch.findFirst({
           where: { userId: input.riderId },
-          select: { carpoolId: true },
+          select: { role: true, carpoolId: true },
         });
 
         if (!riderSearch) {
@@ -352,6 +352,23 @@ export const groupsRouter = router({
           throw forbidden(
             "Only a driver can be the driver of a carpool group.",
           );
+        }
+
+        // And symmetrically, the rider slot has to hold a RIDER (SCRUM-296).
+        // The check above closed the driver slot only, which left the mirror
+        // image open: two DRIVERs with a request between them, whichever of
+        // them accepts, name the other as the rider. That passes every check
+        // here - it spends one of the accepter's seats on somebody who is not
+        // riding with them, and leaves a group whose two members both believe
+        // they are driving.
+        //
+        // Reachable because `user.requests.me` no longer hides a request whose
+        // pair changed role, so the Accept button now appears for one. The
+        // client refuses it first (`roleMismatchExplanation`), for a message
+        // that can name whose role moved; this is the half that a stale cache
+        // or a direct call cannot get around.
+        if (riderSearch.role !== Role.RIDER) {
+          throw forbidden("Only a rider can join a carpool group as a rider.");
         }
 
         // Overwriting an existing membership left the old group behind holding
@@ -586,7 +603,7 @@ export const groupsRouter = router({
           //     nothing, and the driver paid two seats for one rider.
           const riderSearch = await tx.carpoolSearch.findFirst({
             where: { userId: input.riderId },
-            select: { carpoolId: true },
+            select: { role: true, carpoolId: true },
           });
 
           if (!riderSearch) {
@@ -594,6 +611,16 @@ export const groupsRouter = router({
               code: "NOT_FOUND",
               message: "Rider not found",
             });
+          }
+
+          // The rider slot has to hold a RIDER, for the same reason as in
+          // `create` (SCRUM-296). This is the path an accept takes when the
+          // driver already has a group, so leaving it out would close the
+          // first join and not the second.
+          if (riderSearch.role !== Role.RIDER) {
+            throw forbidden(
+              "Only a rider can join a carpool group as a rider.",
+            );
           }
 
           if (riderSearch.carpoolId === input.groupId) {

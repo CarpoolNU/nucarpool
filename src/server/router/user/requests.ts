@@ -158,19 +158,31 @@ export const requestsRouter = router({
       };
     });
 
-    const sentGoodRole = sent.filter(
-      (req) =>
-        req.toUser &&
-        req.toUser.role !== currentUserSearch.role &&
-        req.toUser.role !== "VIEWER",
-    );
-    const recGoodRole = received.filter(
-      (req) =>
-        req.fromUser &&
-        req.fromUser.role !== currentUserSearch.role &&
-        req.fromUser.role !== "VIEWER",
-    );
-    return { sent: sentGoodRole, received: recGoodRole };
+    // Role compatibility governs discovery, not a relationship that already
+    // exists (SCRUM-296).
+    //
+    // These two filters used to also drop any request whose counterpart's role
+    // matched the caller's, or was VIEWER - the predicate f9a5b1a introduced
+    // for recommendations, where it belongs. Applied to existing requests it
+    // disagreed with `create`'s duplicate guard below, which has no role
+    // condition: as soon as either party changed role, the request disappeared
+    // from the Requests tab while still answering every retry with
+    // `CONFLICT - Existing request between ...`. Nothing else surfaces the
+    // request id, and `delete` needs one, so there was no way to withdraw it
+    // and no way out but for the other person to switch back.
+    //
+    // Roles change legitimately between co-op cycles, so a pair who can no
+    // longer carpool is an ordinary state. `roleMismatchExplanation` is what
+    // the UI shows on those requests, and accepting one is refused by
+    // `groups.create`/`groups.edit` rather than by hiding it here.
+    //
+    // The null check that remains is not about roles: a counterpart whose
+    // search is INACTIVE is absent from the two queries above, so there is no
+    // `PublicUser` to build a card from.
+    return {
+      sent: sent.filter((req) => req.toUser !== null),
+      received: received.filter((req) => req.fromUser !== null),
+    };
   }),
 
   create: protectedRouter

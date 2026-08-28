@@ -2,6 +2,7 @@ import { User, EnhancedPublicUser } from "../utils/types";
 import { Request, Role } from "@prisma/client";
 import { trpc } from "./trpc";
 import { toast } from "react-toastify";
+import { roleMismatchExplanation } from "./roleCompatibility";
 
 interface RequestHandlers {
   /**
@@ -85,6 +86,26 @@ export const createRequestHandlers = (
     user: User,
     otherUser: EnhancedPublicUser,
   ): boolean => {
+    // A request whose two parties can no longer carpool now reaches this
+    // button: `requests.me` stopped hiding those, because hiding one did not
+    // stop it blocking new requests (SCRUM-296). It cannot be accepted - the
+    // group it would build has two drivers or no driver - and the branches
+    // below would misread it, because each treats "I am not a DRIVER" as
+    // "they are".
+    //
+    // Refused here so the message can name whose role moved and what would fix
+    // it. `groups.create` and `groups.edit` refuse it too; that is the half
+    // that holds when this cache is stale.
+    const mismatch = roleMismatchExplanation(
+      user.role,
+      otherUser.role,
+      otherUser.preferredName,
+    );
+    if (mismatch) {
+      toast.error(mismatch);
+      return false;
+    }
+
     if (user.role === "DRIVER") {
       if (user.seatAvail === 0) {
         toast.error(
