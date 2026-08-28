@@ -2,12 +2,75 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedRouter, router } from "../createRouter";
 
-import { RequestStatus } from "@prisma/client";
+import { Prisma, RequestStatus } from "@prisma/client";
 import { convertCarpoolSearchToPublicWithExactHome } from "../../../utils/publicUser";
 import { MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
 
+/**
+ * The message columns a conversation is actually read through (SCRUM-301).
+ *
+ * This was `include: { User: true }`, which attached the author's whole `User`
+ * row to every message - `email`, `bio`, `permission`, and `image`, a
+ * `@db.MediumText`. Nothing ever read it. Five fields are all any consumer
+ * touches - `id`, `content`, `userId`, `isRead` and `dateCreated`, between
+ * `latestMessage.ts`, `MessageContent` and `MessagePanel` - and the author is
+ * always one of the two people already present in the payload, so a 200-message
+ * thread carried the same two user rows 200 times.
+ *
+ * The live path already proved the join redundant. `messages.sendMessage`
+ * returns a bare `message.create` with no `include` and broadcasts that over
+ * Pusher, and `MessageContent` pushes it into the same array this query fills -
+ * so anything rendering `message.User` would already be blank for every
+ * message received in real time.
+ *
+ * `isRead` and `id` are load-bearing rather than cosmetic: `MessageContent`
+ * drives `markMessagesAsRead` off exactly those two. `conversationId` is the
+ * sixth field below and the one exception: nothing reads it off a fetched
+ * message, but `Message` in `utils/types.ts` declares it required, so it is kept
+ * for one string rather than letting the wire shape drift from the type.
+ *
+ * Deliberately no `take` - see the note on `me` below.
+ */
+const conversationMessages = {
+  orderBy: { dateCreated: "asc" },
+  select: {
+    id: true,
+    conversationId: true,
+    content: true,
+    userId: true,
+    isRead: true,
+    dateCreated: true,
+  },
+} satisfies Prisma.Conversation$messagesArgs;
+
 // use this router to manage invitations
 export const requestsRouter = router({
+  /**
+   * Every request either side of the caller, with each pair's conversation.
+   *
+   * **Why message history is still unbounded (SCRUM-301).** The ticket asked
+   * for a `take` per conversation *with the open thread loaded separately*, or
+   * an explicit decision that full history is required. This is that decision,
+   * and it is "not yet, and not here".
+   *
+   * A `take` alone would be silent truncation. This query feeds two different
+   * needs at once: the Requests tab, which wants only the newest message per
+   * card (`getLatestMessageForRequest`), and the open thread, which renders the
+   * whole history with date separators and no "load older" control. Bounding
+   * the shared payload would quietly remove scrollback from the one consumer
+   * that needs it, with nothing in the UI to say so and no way to ask for more.
+   *
+   * Splitting it properly means a second, paginated, participant-scoped
+   * procedure for the open thread - which is re-treading `messages.getMessages`,
+   * removed in SCRUM-222 precisely because it took a bare conversation id and
+   * returned anyone's thread. That is worth doing carefully rather than as a
+   * footnote to a projection change, so it is SCRUM-317 instead.
+   *
+   * What this change does instead is make each message cheap: the narrow
+   * `select` above removes a whole `User` row per message, which is where
+   * essentially all of the weight was. See
+   * `scripts/measure-requests-payload.ts` for the measurement.
+   */
   me: protectedRouter.query(async ({ ctx }) => {
     const userId = ctx.session.user?.id;
 
@@ -23,28 +86,12 @@ export const requestsRouter = router({
       include: {
         sentRequests: {
           include: {
-            toUser: true,
-            conversation: {
-              include: {
-                messages: {
-                  orderBy: { dateCreated: "asc" },
-                  include: { User: true },
-                },
-              },
-            },
+            conversation: { include: { messages: conversationMessages } },
           },
         },
         receivedRequests: {
           include: {
-            fromUser: true,
-            conversation: {
-              include: {
-                messages: {
-                  orderBy: { dateCreated: "asc" },
-                  include: { User: true },
-                },
-              },
-            },
+            conversation: { include: { messages: conversationMessages } },
           },
         },
       },
