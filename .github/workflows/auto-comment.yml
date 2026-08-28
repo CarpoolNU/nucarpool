@@ -4,6 +4,19 @@ on:
     paths:
       - "prisma/schema.prisma"
 
+# One run per PR, cancelling any superseded one (SCRUM-309). This fires on every
+# activity type, so a PR that keeps touching schema.prisma queues a run per push;
+# only the newest needs to finish. Cancelling also narrows the window in which
+# two runs could both pass the marker check below and post twice - the script is
+# idempotent, but serially rather than concurrently.
+#
+# No `permissions` block here on purpose: the job declares
+# `pull-requests: write` itself, and a top-level default would only obscure
+# where that scope is granted.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   run:
     runs-on: ubuntu-latest
