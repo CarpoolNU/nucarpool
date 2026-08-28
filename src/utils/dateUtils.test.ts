@@ -1,4 +1,8 @@
-import { formatDateToMonth, lastDayOfMonthUTC } from "./dateUtils";
+import {
+  formatDateToMonth,
+  isReversedCoopRange,
+  lastDayOfMonthUTC,
+} from "./dateUtils";
 
 /**
  * `coopStartDate`/`coopEndDate` are `@db.Date` columns, and Prisma stores the
@@ -54,5 +58,59 @@ describe("formatDateToMonth", () => {
 
   it("returns undefined when no date is set", () => {
     expect(formatDateToMonth(null)).toBeUndefined();
+  });
+});
+
+/**
+ * A reversed co-op range is stored without complaint and then removes the user
+ * from every full-overlap search (SCRUM-302).
+ */
+describe("isReversedCoopRange", () => {
+  it("accepts a forward range", () => {
+    expect(
+      isReversedCoopRange(
+        lastDayOfMonthUTC("2026-01"),
+        lastDayOfMonthUTC("2026-06"),
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects an end before the start", () => {
+    expect(
+      isReversedCoopRange(
+        lastDayOfMonthUTC("2027-01"),
+        lastDayOfMonthUTC("2026-01"),
+      ),
+    ).toBe(true);
+  });
+
+  it("accepts a single-month co-op", () => {
+    // Both pickers are month-granularity and `handleMonthChange` stores the
+    // last day of the month chosen, so one month means two identical dates.
+    // Rejecting equality would make a one-month co-op unsaveable.
+    const march = lastDayOfMonthUTC("2026-03");
+    expect(isReversedCoopRange(march, lastDayOfMonthUTC("2026-03"))).toBe(
+      false,
+    );
+    expect(isReversedCoopRange(march, march)).toBe(false);
+  });
+
+  it("rejects a same-month inversion by a single day", () => {
+    expect(
+      isReversedCoopRange(
+        new Date("2026-03-31T00:00:00.000Z"),
+        new Date("2026-03-30T00:00:00.000Z"),
+      ),
+    ).toBe(true);
+  });
+
+  it("says nothing about a range that is not fully set", () => {
+    // Whether both dates are required is `onboardSchema`'s question, and a
+    // VIEWER legitimately has neither.
+    const day = lastDayOfMonthUTC("2026-01");
+    expect(isReversedCoopRange(null, day)).toBe(false);
+    expect(isReversedCoopRange(day, null)).toBe(false);
+    expect(isReversedCoopRange(null, null)).toBe(false);
+    expect(isReversedCoopRange(undefined, undefined)).toBe(false);
   });
 });

@@ -35,6 +35,10 @@ import {
   useEditUserMutation,
 } from "../../utils/profile/updateUser";
 import useIsMobile from "../../utils/useIsMobile";
+import {
+  UNRESOLVED_ADDRESS_MESSAGE,
+  unresolvedAddressFields,
+} from "../../utils/coordinates";
 
 // One direct session lookup, not a self-directed HTTP round trip to
 // `/api/auth/session` (SCRUM-299). `getSession` from `next-auth/react` is the
@@ -150,7 +154,40 @@ const Setup: NextPage = () => {
     }
   }, [setValue, watch, role]);
 
+  /**
+   * Reports the address steps whose coordinates never resolved (SCRUM-302).
+   *
+   * The two `startAddress` / `companyAddress` form fields hold text, and that is
+   * all `onboardSchema` can see. The coordinates live in the address hooks, and
+   * `ControlledAddressCombobox` writes back to the form only when a suggestion
+   * is chosen - so text restored from a previous save can sit next to the
+   * `[0, 0]` the hook defaults to. Saving that put the pin in the Gulf of
+   * Guinea and made the row unmatchable.
+   *
+   * Returns true when it blocked, having set the field errors.
+   */
+  const blockOnUnresolvedAddresses = (role: Role): boolean => {
+    const unresolved = unresolvedAddressFields({
+      role,
+      home: startAddressHook.selectedAddress.center,
+      company: companyAddressHook.selectedAddress.center,
+    });
+
+    for (const field of unresolved) {
+      setError(field, { type: "manual", message: UNRESOLVED_ADDRESS_MESSAGE });
+    }
+
+    return unresolved.length > 0;
+  };
+
   const onSubmit = async (values: OnboardingFormInputs) => {
+    // Backstop for the step-2 check below, which is what a user actually hits.
+    // Reached only if the address is cleared after passing that step.
+    if (blockOnUnresolvedAddresses(values.role)) {
+      setStep(2);
+      return;
+    }
+
     setIsLoading(true);
     const userInfo = {
       ...values,
@@ -224,6 +261,9 @@ const Setup: NextPage = () => {
         "companyName",
       ]);
       if (!isValid) return;
+      // Typing an address is not the same as resolving one, and only the
+      // resolved point is usable for matching (SCRUM-302).
+      if (blockOnUnresolvedAddresses(role)) return;
     } else if (step === 3) {
       const valid = await trigger([
         "coopStartDate",

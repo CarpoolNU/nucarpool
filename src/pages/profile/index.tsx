@@ -24,6 +24,10 @@ import {
   updateUser,
   useEditUserMutation,
 } from "../../utils/profile/updateUser";
+import {
+  UNRESOLVED_ADDRESS_MESSAGE,
+  unresolvedAddressFields,
+} from "../../utils/coordinates";
 
 import ProfileSidebar from "../../components/Profile/ProfileSidebar";
 import UserSection from "../../components/Profile/UserSection";
@@ -110,6 +114,7 @@ const Index: NextPage = () => {
   const {
     register,
     setValue,
+    setError,
     formState: { errors },
     watch,
     handleSubmit,
@@ -190,7 +195,31 @@ const Index: NextPage = () => {
     setShowModal(false);
   };
 
-  const onSubmit = async (values: OnboardingFormInputs) => {
+  const onSubmit = async (values: OnboardingFormInputs): Promise<boolean> => {
+    // The address fields hold text and `onboardSchema` checks the text; the
+    // coordinates live outside the form, in the two address hooks, and the
+    // combobox only writes back to the form when a suggestion is chosen. So a
+    // non-empty address can sit next to the `[0, 0]` the hook defaults to -
+    // which used to be saved, putting the pin ~4000 miles out and dropping the
+    // row from every distance-filtered search (SCRUM-302). `user.edit` refuses
+    // it now; this names the field instead of surfacing a Zod error in a toast.
+    const unresolved = unresolvedAddressFields({
+      role: values.role,
+      home: startAddressHook.selectedAddress.center,
+      company: companyAddressHook.selectedAddress.center,
+    });
+    if (unresolved.length > 0) {
+      for (const field of unresolved) {
+        setError(field, {
+          type: "manual",
+          message: UNRESOLVED_ADDRESS_MESSAGE,
+        });
+      }
+      setOption("carpool");
+      toast.error("One or more fields are invalid, please fix and try again.");
+      return false;
+    }
+
     setIsLoading(true);
     const userInfo = {
       ...values,
@@ -257,12 +286,17 @@ const Index: NextPage = () => {
     } finally {
       setIsLoading(false);
     }
+    return true;
   };
+  // Leaving the page is conditional on the save having been attempted at all.
+  // The guard above returns without saving, and navigating away regardless would
+  // have discarded the field error it just set (SCRUM-302).
   const onSubmitWithContinue: SubmitHandler<OnboardingFormInputs> = async (
     values,
   ) => {
-    await onSubmit(values);
-    await onContinue();
+    if (await onSubmit(values)) {
+      await onContinue();
+    }
   };
   const handleSaveChanges = async () => {
     setShowModal(false);

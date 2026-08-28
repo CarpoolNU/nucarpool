@@ -130,6 +130,14 @@ const StepThree = ({
           </div>
         </div>
 
+        {/* The reason a range was rejected, not just a red label. Ordering is
+            the one date error whose message a user cannot infer (SCRUM-302). */}
+        {errors.coopEndDate?.message && (
+          <ErrorDisplay className="text-xs">
+            {errors.coopEndDate.message}
+          </ErrorDisplay>
+        )}
+
         {/* Note for Date Section */}
         <div className="w-full">
           <Note className={`py-1 ${isMobile ? "text-xs" : "text-sm"}`}>
