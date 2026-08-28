@@ -828,8 +828,9 @@ describe("calculateScore", () => {
  *  - `jest.config.js` pins `TZ` in the parent process, before the workers fork.
  *  - `test.yml` runs the whole suite twice, under `UTC` and `America/New_York`,
  *    via `NUCARPOOL_TEST_TZ`. That is the real multi-zone run.
- *  - `describes the zone it is running under` below fails loudly if a leg is
- *    misconfigured, so "ran twice under UTC" cannot masquerade as coverage.
+ *  - `runs under the zone that was requested of it` below fails if a requested
+ *    zone did not take effect, so a leg cannot measure UTC while claiming a
+ *    different zone. It cannot catch the variable going missing entirely.
  *  - `never reads a local-time accessor` closes the door structurally, in a
  *    single run: the host's zone cannot reach a result that never consults it.
  */
@@ -898,11 +899,16 @@ describe("minutesApart (SCRUM-297)", () => {
     }
   });
 
-  it("describes the zone it is running under, so a mis-set CI leg is visible", () => {
-    // `test.yml` runs the suite under two zones. If `NUCARPOOL_TEST_TZ` stopped
-    // reaching Jest, both legs would quietly become UTC and the multi-zone
-    // coverage would evaporate without any test failing - so assert the wiring
-    // itself, not just its consequences.
+  it("runs under the zone that was requested of it", () => {
+    // `test.yml` runs the suite under two zones, and this checks the request
+    // took effect: `NUCARPOOL_TEST_TZ` set but not reaching `Date` would
+    // otherwise leave the second leg measuring UTC while claiming otherwise.
+    //
+    // It cannot catch the variable going *missing* - requested and effective
+    // would both collapse to UTC and this would pass - so the second leg
+    // existing at all is guaranteed by `test.yml` and its review, not from
+    // here. `never reads a local-time accessor` above is the assertion that
+    // does not depend on either.
     const requested = process.env.NUCARPOOL_TEST_TZ || "UTC";
 
     expect(process.env.TZ).toBe(requested);
