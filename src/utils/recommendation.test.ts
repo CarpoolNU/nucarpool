@@ -1,5 +1,5 @@
 import { Role } from "@prisma/client";
-import { calculateScore } from "./recommendation";
+import { calculateScore, minutesApart } from "./recommendation";
 import type { FInputs } from "./recommendation";
 import {
   anyFilters,
@@ -797,5 +797,221 @@ describe("calculateScore", () => {
         scorer(driver({ id: "c", home: milesNorth(3) }))?.score,
       ).toBeCloseTo(0.1);
     });
+  });
+});
+
+/**
+ * `minutesApart` reads the stored clock and takes the short way round it
+ * (SCRUM-297).
+ *
+ * Two defects, both invisible to the suite as it stood:
+ *
+ *  1. `getHours()`/`getMinutes()` reinterpreted a `@db.Time(0)` value - which
+ *     Prisma returns as `1970-01-01T<time>Z` - in the *host's* zone. Amplify and
+ *     GitHub Actions run UTC, local development runs `America/New_York`, so the
+ *     matching results a developer saw were not the ones production computed.
+ *  2. The difference was linear on minute offsets, so a pair straddling
+ *     midnight was reported as the long way round: 23:30 and 00:30 came out as
+ *     1380 minutes rather than 60, past every cutoff the UI offers.
+ *
+ * The old comment claimed a shared timezone offset always cancels in the
+ * subtraction. It cancels only while both operands stay on the same side of a
+ * day boundary under the shift, which is precisely the case (1) makes
+ * host-dependent and (2) gets wrong.
+ *
+ * **How the timezone half is actually covered.** Not by looping over zones
+ * inside a test: assigning `process.env.TZ` once a Jest worker is running has no
+ * effect, because V8 caches the zone per isolate and the worker never
+ * invalidates it. Such a loop reads the pinned zone for every iteration and
+ * passes against any implementation, which is worse than no test. Instead:
+ *
+ *  - `jest.config.js` pins `TZ` in the parent process, before the workers fork.
+ *  - `test.yml` runs the whole suite twice, under `UTC` and `America/New_York`,
+ *    via `NUCARPOOL_TEST_TZ`. That is the real multi-zone run.
+ *  - `describes the zone it is running under` below fails loudly if a leg is
+ *    misconfigured, so "ran twice under UTC" cannot masquerade as coverage.
+ *  - `never reads a local-time accessor` closes the door structurally, in a
+ *    single run: the host's zone cannot reach a result that never consults it.
+ */
+describe("minutesApart (SCRUM-297)", () => {
+  /** A schedule time exactly as Prisma returns one for a `@db.Time(0)`. */
+  const stored = (clock: string) => new Date(`1970-01-01T${clock}:00Z`);
+
+  it("measures a pair straddling midnight as the short way round", () => {
+    // The ticket's failure scenario: 7:30pm and 8:30pm EDT, stored as 23:30
+    // and 00:30 UTC. Linear subtraction of minute offsets gives 1380.
+    expect(minutesApart(stored("23:30"), stored("00:30"))).toBe(60);
+    expect(minutesApart(stored("00:30"), stored("23:30"))).toBe(60);
+  });
+
+  it("measures the ordinary daytime pair the same as before", () => {
+    expect(minutesApart(stored("09:00"), stored("10:00"))).toBe(60);
+    expect(minutesApart(stored("09:50"), stored("10:00"))).toBe(10);
+    expect(minutesApart(stored("09:00"), stored("09:00"))).toBe(0);
+  });
+
+  it("never reports more than twelve hours, because a clock is circular", () => {
+    // 720 is the antipode; past it the short way starts shrinking again.
+    expect(minutesApart(stored("00:00"), stored("12:00"))).toBe(720);
+    expect(minutesApart(stored("00:00"), stored("13:00"))).toBe(660);
+    expect(minutesApart(stored("00:00"), stored("23:59"))).toBe(1);
+  });
+
+  it("reads the value that was stored, whatever the host would render it as", () => {
+    // 23:30 UTC is 19:30 in New York and 08:30 the next morning in Tokyo. Under
+    // the old accessors each zone produced a different pair of minute offsets;
+    // the stored reading is the only one that is the same everywhere.
+    expect(minutesApart(stored("23:30"), stored("00:30"))).toBe(60);
+    expect(minutesApart(stored("19:30"), stored("20:30"))).toBe(60);
+    expect(minutesApart(stored("08:30"), stored("09:30"))).toBe(60);
+  });
+
+  it("never reads a local-time accessor, so the host's zone cannot reach the result", () => {
+    // The structural guard, and the one that holds in a single run: these three
+    // methods are the only route from the host's zone into a `Date` reading, and
+    // the old implementation used two of them.
+    const localAccessors = [
+      "getHours",
+      "getMinutes",
+      "getTimezoneOffset",
+    ] as const;
+
+    const a = stored("23:30");
+    const b = stored("00:30");
+    const spies = localAccessors.map((name) =>
+      jest.spyOn(Date.prototype, name),
+    );
+
+    try {
+      minutesApart(a, b);
+
+      // Reported as an object so a failure names the offending accessor rather
+      // than just showing `1` where `0` was expected.
+      expect(
+        localAccessors.map((name, index) => ({
+          accessor: name,
+          calls: spies[index]!.mock.calls.length,
+        })),
+      ).toEqual(localAccessors.map((name) => ({ accessor: name, calls: 0 })));
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+  });
+
+  it("describes the zone it is running under, so a mis-set CI leg is visible", () => {
+    // `test.yml` runs the suite under two zones. If `NUCARPOOL_TEST_TZ` stopped
+    // reaching Jest, both legs would quietly become UTC and the multi-zone
+    // coverage would evaporate without any test failing - so assert the wiring
+    // itself, not just its consequences.
+    const requested = process.env.NUCARPOOL_TEST_TZ || "UTC";
+
+    expect(process.env.TZ).toBe(requested);
+    expect(Intl.DateTimeFormat().resolvedOptions().timeZone).toBe(requested);
+  });
+
+  it("agrees with the shortest distance round the clock, across the whole day", () => {
+    // An independent derivation of the same idea - the nearest of the
+    // candidate's three positions on the timeline - rather than a restatement
+    // of `min(d, 1440 - d)`. Swept over every half hour against every other.
+    const MINUTES_PER_DAY = 24 * 60;
+    const clocks = Array.from({ length: 48 }, (_, index) => {
+      const hour = String(Math.floor(index / 2)).padStart(2, "0");
+      return `${hour}:${index % 2 === 0 ? "00" : "30"}`;
+    });
+    const minutesOf = (clock: string) => {
+      const [hour, minute] = clock.split(":").map(Number);
+      return hour! * 60 + minute!;
+    };
+
+    for (const a of clocks) {
+      for (const b of clocks) {
+        const shortest = Math.min(
+          Math.abs(minutesOf(a) - minutesOf(b)),
+          Math.abs(minutesOf(a) - (minutesOf(b) + MINUTES_PER_DAY)),
+          Math.abs(minutesOf(a) - (minutesOf(b) - MINUTES_PER_DAY)),
+        );
+
+        expect({ a, b, minutes: minutesApart(stored(a), stored(b)) }).toEqual({
+          a,
+          b,
+          minutes: shortest,
+        });
+      }
+    }
+  });
+
+  it("is symmetric, and zero only for the same clock time", () => {
+    const clocks = ["00:00", "06:15", "12:00", "18:45", "23:59"];
+
+    for (const a of clocks) {
+      expect(minutesApart(stored(a), stored(a))).toBe(0);
+
+      for (const b of clocks) {
+        expect(minutesApart(stored(a), stored(b))).toBe(
+          minutesApart(stored(b), stored(a)),
+        );
+      }
+    }
+  });
+
+  it("ignores the date component, which a Time column does not carry", () => {
+    // `at()` builds its fixtures on 2024-01-01 and Prisma returns 1970-01-01;
+    // only the clock may matter, or the two would not be interchangeable.
+    expect(
+      minutesApart(new Date("2024-06-01T09:00:00Z"), stored("10:00")),
+    ).toBe(60);
+  });
+});
+
+describe("time filtering across midnight (SCRUM-297)", () => {
+  /**
+   * The evening pair from the ticket, expressed the way the scorer receives it.
+   * `at` builds UTC instants, so these are 23:30 and 00:30 stored - 7:30pm and
+   * 8:30pm in Boston.
+   */
+  const eveningRider = () =>
+    rider({ startTime: at(11, 30), endTime: at(23, 30) });
+  const eveningDriver = () =>
+    driver({ startTime: at(12, 30), endTime: at(0, 30) });
+
+  it("keeps a pair finishing 60 minutes apart either side of midnight", () => {
+    // The `endTime` filter admits up to 4 hours. Production computed 1380
+    // minutes for this pair and dropped it from both sets of results.
+    expect(isMatch(eveningRider(), eveningDriver(), { endTime: 1 })).toBe(true);
+    expect(isMatch(eveningRider(), eveningDriver(), { endTime: 4 })).toBe(true);
+  });
+
+  it("still applies the cutoff to such a pair rather than waving it through", () => {
+    // 60 minutes really is measured, not merely made small enough to pass: a
+    // cutoff below it still excludes.
+    expect(isMatch(eveningRider(), eveningDriver(), { endTime: 59 / 60 })).toBe(
+      false,
+    );
+  });
+
+  it("scores the midnight-straddling gap as 60 minutes, not a saturated one", () => {
+    // 60/80 of the end-time weight. Under the old arithmetic the component
+    // saturated at 1.0, so the pair was also ranked as badly as possible.
+    const current = rider({ startTime: at(9), endTime: at(23, 30) });
+    const candidate = driver({ startTime: at(9), endTime: at(0, 30) });
+
+    expect(score(current, candidate)).toBeCloseTo((60 / 80) * 0.1);
+  });
+
+  it("ranks the same pair on the time sort as any other 60 minute gap", () => {
+    const straddling = score(
+      rider({ startTime: at(23, 30), endTime: at(17) }),
+      driver({ startTime: at(0, 30), endTime: at(17) }),
+      {},
+      "time",
+    );
+    const daytime = score(
+      rider({ startTime: at(9, 0), endTime: at(17) }),
+      driver({ startTime: at(10, 0), endTime: at(17) }),
+      {},
+      "time",
+    );
+
+    expect(straddling).toBeCloseTo(daytime!);
   });
 });

@@ -26,3 +26,19 @@ jobs:
       # files. An empty run should now fail rather than pass silently. Broader
       # end-to-end coverage is still SCRUM-211.
       - run: yarn test
+      # The same suite again, in a zone that is not UTC (SCRUM-297).
+      #
+      # `jest.config.js` pins TZ so that a run is reproducible, which also means
+      # a single run can only ever prove one zone. `minutesApart` was wrong in
+      # exactly the gap between two of them - correct on a developer's
+      # `America/New_York` machine, wrong on this runner - so the property worth
+      # checking is that the suite gives the same answers in both.
+      #
+      # Two steps in one job rather than a build matrix: a matrix would rename
+      # this check to `test (UTC)` and `test (America/New_York)`, and whether
+      # branch protection requires the name `test` cannot currently be verified
+      # from this account. Renaming a required check is not worth the risk of
+      # silently un-gating it.
+      - run: yarn test
+        env:
+          NUCARPOOL_TEST_TZ: America/New_York

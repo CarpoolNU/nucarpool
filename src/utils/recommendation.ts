@@ -79,26 +79,47 @@ export const milesBetween = (
   return Math.sqrt(northSouth * northSouth + eastWest * eastWest);
 };
 
+/** The circumference of a clock, in minutes - see `minutesApart` below. */
+const MINUTES_PER_DAY = 24 * 60;
+
 /**
- * Minutes between two times of day (SCRUM-235).
+ * Minutes between two times of day (SCRUM-235, SCRUM-297).
  *
  * Both times are collapsed to a minute offset from midnight before subtracting.
- * The previous form — |Δhours| * 60 + |Δminutes| — took the absolute value of
+ * The original form — |Δhours| * 60 + |Δminutes| — took the absolute value of
  * each component separately, so a pair whose minutes ran backwards relative to
  * its hours was overstated: 9:50 against 10:00 read as 110 minutes rather than
- * 10. That inflated difference both filtered out compatible users and penalised
- * their score.
+ * 10 (SCRUM-235). That inflated difference both filtered out compatible users
+ * and penalised their score.
  *
- * Only the clock reading is used, so the caller's date is irrelevant — which
- * suits `startTime`/`endTime`, stored as `@db.Time(0)` with no date component.
- * The two readings are taken through the same accessor, so a shared timezone
- * offset cancels in the subtraction; the underlying storage ambiguity is
- * SCRUM-239 and is deliberately not addressed here.
+ * Two things about *how* the reading is taken were still wrong (SCRUM-297).
+ *
+ * **The accessors are UTC.** `startTime`/`endTime` are `@db.Time(0)` holding a
+ * UTC time of day — see "Schedule times" in `src/server/db/README.md` — and
+ * Prisma returns them as `1970-01-01T<time>Z`. `getHours()` reinterpreted that
+ * instant in the *host's* zone, which made the result depend on where the code
+ * ran: Amplify and GitHub Actions are UTC, local development is
+ * `America/New_York`. `getUTCHours()` reads the value that was actually stored,
+ * the same contract `formatScheduleTime` renders under.
+ *
+ * **The difference is circular.** A previous version of this comment claimed a
+ * shared timezone offset always cancels in the subtraction. It does not: the
+ * offset can carry one operand across a day boundary and not the other, and a
+ * linear subtraction then reports the long way round the clock. Two students
+ * finishing at 23:30 and 00:30 UTC are 60 minutes apart, but subtracting minute
+ * offsets gives 1380 — past every cutoff the UI offers, so each was dropped
+ * from the other's results. `min(d, 1440 - d)` takes the short way, which also
+ * caps the value at 720.
+ *
+ * `jest.config.js` pins `TZ` so this stays verifiable in CI.
  */
-const minutesApart = (a: Date, b: Date) => {
-  const minutesOfDay = (time: Date) => time.getHours() * 60 + time.getMinutes();
+export const minutesApart = (a: Date, b: Date): number => {
+  const minutesOfDay = (time: Date) =>
+    time.getUTCHours() * 60 + time.getUTCMinutes();
 
-  return Math.abs(minutesOfDay(a) - minutesOfDay(b));
+  const difference = Math.abs(minutesOfDay(a) - minutesOfDay(b));
+
+  return Math.min(difference, MINUTES_PER_DAY - difference);
 };
 
 interface CommonUser {
