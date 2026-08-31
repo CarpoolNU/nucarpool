@@ -61,6 +61,29 @@ export const messageRouter = router({
     // its absence threw NOT_FOUND, which surfaced in the header as a failed
     // query rather than a count. Neither is needed to answer "how many unread
     // messages are mine".
+    //
+    // **The nesting below is measured, not merely tolerated (SCRUM-306).** It
+    // compiles to two levels of `IN` subquery over `message` — the fastest
+    // growing table here — filtered on `isRead`, which carries no index, and
+    // that reads like a problem waiting to happen. It is not one: MySQL drives
+    // the whole plan from the caller's own `request` rows via
+    // `request_fromUserId_idx` / `request_toUserId_idx` and reaches `message` by
+    // primary key, so the cost scales with how much mail *this caller* has
+    // rather than with the size of the table.
+    //
+    // No index was added, and an index on `isRead` specifically cannot help: the
+    // final access is already `eq_ref` on `PRIMARY`, and a boolean has two
+    // distinct values, which is not selectivity. Nor can `(userId, isRead)` —
+    // `userId: { not: ... }` is a negation and no B-tree range-scans one. If
+    // this ever does need an index the shape is
+    // `message(conversationId, isRead, userId)`.
+    //
+    // Removing the role predicate in SCRUM-296 is what actually mattered: it
+    // deleted two `DEPENDENT SUBQUERY` blocks from the plan, which are
+    // re-evaluated per outer row rather than once. Before changing this query,
+    // re-run `scripts/measure-unread-count.ts` and read
+    // `src/server/db/README.md` — the numbers and the thresholds are recorded
+    // there rather than restated here.
     return ctx.prisma.message.count({
       where: {
         isRead: false,
