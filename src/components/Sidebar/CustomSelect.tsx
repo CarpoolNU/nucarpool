@@ -49,9 +49,9 @@ const CustomSelect = <T extends string>({
               {options.map((option) => (
                 <Listbox.Option
                   key={option.value}
-                  className={({ active }) =>
+                  className={({ focus }) =>
                     `relative cursor-default select-none py-2 pl-3 pr-8 ${
-                      active ? "bg-northeastern-red text-white" : "text-black"
+                      focus ? "bg-northeastern-red text-white" : "text-black"
                     }`
                   }
                   value={option.value}

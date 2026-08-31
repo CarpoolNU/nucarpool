@@ -26,7 +26,17 @@ const AddressCombobox = ({
     <div className={className}>
       <Combobox
         value={addressSelected}
-        onChange={(val: CarpoolFeature) => {
+        /**
+         * `null` is reachable since Headless UI v2 made the Combobox value
+         * nullable - v1 only ever handed back a suggestion. Ignored rather than
+         * forwarded, which keeps v1's behaviour: `addressSetter` owns a real
+         * address, and clearing the text box is already handled by the input's
+         * own `onChange` in the controlled variant of this component.
+         */
+        onChange={(val: CarpoolAddress | null) => {
+          if (!val) {
+            return;
+          }
           addressSetter(val);
         }}
         as="div"
@@ -54,9 +64,9 @@ const AddressCombobox = ({
               addressSuggestions.map((feat) => (
                 <Combobox.Option
                   key={feat.id}
-                  className={({ active }) =>
+                  className={({ focus }) =>
                     `cursor-default select-none border-black p-3 ${
-                      active ? "bg-blue-400 text-white" : "text-gray-900"
+                      focus ? "bg-blue-400 text-white" : "text-gray-900"
                     }`
                   }
                   value={feat}
