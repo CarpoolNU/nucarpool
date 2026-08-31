@@ -1,6 +1,5 @@
 /**
  * Measures rows read by the explore page's candidate query, before and after
- * SCRUM-245.
  *
  * The ticket asks for rows read per explore page load, measured both ways. That
  * cannot be done from the repository alone: a developer's local database holds a

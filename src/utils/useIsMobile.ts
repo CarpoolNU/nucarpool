@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { isMobileWidth } from "./breakpoints";
 
 /**
- * The single source of "is this a mobile viewport" (SCRUM-237). `Header` used to
+ * The single source of "is this a mobile viewport". `Header` used to
  * run its own `<= 768` check, which disagreed with this one and produced a
  * desktop layout wearing the mobile navigation between the two values.
  */

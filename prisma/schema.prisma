@@ -1,7 +1,7 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// SCRUM-286: this comment exists so the PR fixing the Auto Comment workflow
+// This comment exists so the PR fixing the Auto Comment workflow
 // matches its own `paths` filter and proves the reminder posts. It changes
 // no models or fields, so it needs no PlanetScale deploy request.
 
