@@ -13,6 +13,7 @@ import { UserContext } from "../../utils/userContext";
 import { Role } from "@prisma/client";
 import { trackEvent } from "../../utils/mixpanel";
 import useIsMobile from "../../utils/useIsMobile";
+import { counterpartLabel } from "../Sidebar/viewerAccess";
 import React from "react";
 
 interface ConnectCardProps {
@@ -81,17 +82,42 @@ export const ConnectCard = (props: ConnectCardProps): React.JSX.Element => {
     onPress: () => handleConnect(props.otherUser),
     color: "bg-northeastern-red",
   };
+
+  // This is a **discovery** card, so a VIEWER sees the other person's role in
+  // place of their name (SCRUM-316) — and the activation button's accessible
+  // name has to respect that, or Viewer mode withholds the name on screen while
+  // a screen reader reads it out (SCRUM-279).
+  const label = counterpartLabel({
+    viewerRole: user?.role ?? "",
+    isCounterpart: false,
+    preferredName: props.otherUser.preferredName,
+    role: props.otherUser.role,
+  });
+
+  // Tapping the card expands it on mobile, and does nothing on desktop. That
+  // used to be an `onClick` passed unconditionally with an `isMobile` check
+  // inside it, which now matters: `UserCard` renders its stretched activation
+  // button whenever `onClick` is present, so passing a no-op would put an empty
+  // button across every desktop card and swallow clicks meant for the card's
+  // own controls. Passing `undefined` renders no button at all.
+  //
+  // Restricting it also fixes the mobile half of SCRUM-279 here: tapping the
+  // favourite star used to bubble into this handler and expand the card.
+  const activation =
+    isMobile && props.handleMobileExpand
+      ? {
+          onClick: () => props.handleMobileExpand?.(props.otherUser.id),
+          onClickLabel: `Show ${label}'s full details`,
+        }
+      : {};
+
   return (
     <>
       <UserCard
         otherUser={props.otherUser}
         rightButton={connectButtonInfo}
         onViewRouteClick={props.onViewRouteClick}
-        onClick={() => {
-          if (isMobile) {
-            props.handleMobileExpand?.(props.otherUser.id);
-          }
-        }}
+        {...activation}
         isMobileCondensedLayout={isMobile && props.mobileSelectedUser !== null}
       />
       {props.mobileSelectedUser !== null && isMobile && (

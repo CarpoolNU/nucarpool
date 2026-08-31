@@ -1,4 +1,5 @@
 import {
+  counterpartLabel,
   disclosesCounterpartName,
   isRequestSubType,
   viewerModeHidesCards,
@@ -142,5 +143,96 @@ describe("the predicates together", () => {
       expect(viewerModeHidesCards(subType)).toBe(false);
       expect(disclosesCounterpartName("VIEWER", true)).toBe(true);
     }
+  });
+});
+
+/**
+ * `counterpartLabel` (SCRUM-279).
+ *
+ * The card gained a stretched activation `<button>` with no text content, so it
+ * needs an `aria-label`. That label is built from the other person's name — and
+ * a label built from `preferredName` directly would announce, to a screen
+ * reader, exactly the name Viewer mode withholds on screen.
+ *
+ * These tests exist because that failure is invisible to visual review: the card
+ * would look correct and read wrong. There are no component tests here
+ * (SCRUM-263 / SCRUM-264), so this is the only place the coupling is checked.
+ */
+describe("counterpartLabel", () => {
+  const jane = { preferredName: "Jane Doe", role: "DRIVER" };
+
+  it("gives the preferred name to a rider or driver", () => {
+    for (const viewerRole of ["RIDER", "DRIVER"]) {
+      expect(
+        counterpartLabel({ ...jane, viewerRole, isCounterpart: false }),
+      ).toBe("Jane Doe");
+    }
+  });
+
+  it("gives a VIEWER the role instead, on a discovery card", () => {
+    expect(
+      counterpartLabel({ ...jane, viewerRole: "VIEWER", isCounterpart: false }),
+    ).toBe("Driver");
+  });
+
+  it("gives a VIEWER the name on a request card", () => {
+    // A request is a relationship, not discovery (SCRUM-316).
+    expect(
+      counterpartLabel({ ...jane, viewerRole: "VIEWER", isCounterpart: true }),
+    ).toBe("Jane Doe");
+  });
+
+  it("never leaks a withheld name into the label", () => {
+    // The invariant this function exists for. Stated as "the name does not
+    // appear" rather than "the role does", because the failure mode is the
+    // label containing the name at all - in any position, in any wording.
+    const label = counterpartLabel({
+      viewerRole: "VIEWER",
+      isCounterpart: false,
+      preferredName: "Jane Doe",
+      role: "DRIVER",
+    });
+
+    expect(label).not.toContain("Jane");
+    expect(label).not.toContain("Doe");
+  });
+
+  it("agrees with disclosesCounterpartName for every combination", () => {
+    // The two must not drift: the visible heading and the accessible label read
+    // the same rule, and this is what keeps that true if either changes.
+    for (const viewerRole of ["VIEWER", "RIDER", "DRIVER"]) {
+      for (const isCounterpart of [true, false]) {
+        const label = counterpartLabel({ ...jane, viewerRole, isCounterpart });
+        const discloses = disclosesCounterpartName(viewerRole, isCounterpart);
+
+        expect(label === jane.preferredName).toBe(discloses);
+      }
+    }
+  });
+
+  it("sentence-cases the role rather than shouting the enum", () => {
+    // It stands in for a person's name and is read aloud, so "RIDER" is wrong
+    // in both registers.
+    expect(
+      counterpartLabel({
+        viewerRole: "VIEWER",
+        isCounterpart: false,
+        preferredName: "Jane",
+        role: "RIDER",
+      }),
+    ).toBe("Rider");
+  });
+
+  it("does not throw on an empty role", () => {
+    // `user` can be absent while the card mounts; callers pass "" for the
+    // viewer role in that window, and the card renders a Spinner anyway.
+    expect(
+      counterpartLabel({
+        viewerRole: "",
+        isCounterpart: false,
+        preferredName: "Jane",
+        role: "",
+      }),
+    ).toBe("Jane");
   });
 });
