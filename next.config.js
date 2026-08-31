@@ -41,11 +41,14 @@ const CSP_REPORT_PATH = "/api/csp-report";
  *   `__NEXT_DATA__` hydration payload. Removing it needs per-request nonces,
  *   which this app has no middleware to generate.
  * - `'unsafe-eval'` in script-src: mapbox-gl evaluates style expressions.
- * - `'unsafe-inline'` in style-src: styled-components, MUI/emotion, Ant Design
- *   and react-toastify all inject inline <style> tags at runtime. Toastify
- *   joined the list in v11, which injects its stylesheet at mount; `_app.tsx`
- *   also imports the same CSS from the bundle, so toasts survive this source
- *   being removed. The other three do not.
+ * - `'unsafe-inline'` in style-src: styled-components, MUI/emotion, Ant Design,
+ *   react-toastify and react-easy-crop all inject inline <style> tags at
+ *   runtime. Toastify joined the list in v11, which injects its stylesheet at
+ *   mount; `_app.tsx` also imports the same CSS from the bundle, so toasts
+ *   survive this source being removed. react-easy-crop has injected since
+ *   before v5 - which is why nothing imports its CSS - and is the easiest of
+ *   the five to remove, because it accepts both a `nonce` and a
+ *   `disableAutomaticStylesInjection` prop. The other three offer neither.
  * - fonts.googleapis.com / fonts.gstatic.com: Lato and Montserrat are loaded as
  *   remote stylesheets in src/pages/_document.tsx, not self-hosted.
  * - blob: in worker-src and img-src: mapbox-gl runs its renderer in a worker
