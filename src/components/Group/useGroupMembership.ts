@@ -48,7 +48,7 @@ export const useGroupMembership = ({
 }: UseGroupMembershipArgs) => {
   const utils = trpc.useUtils();
 
-  const { mutate: deleteGroup, isLoading: isDeleting } =
+  const { mutate: deleteGroup, isPending: isDeleting } =
     trpc.user.groups.delete.useMutation({
       onError: (error) => {
         toast.error(`Something went wrong: ${error.message}`);
@@ -61,7 +61,7 @@ export const useGroupMembership = ({
       },
     });
 
-  const { mutate: editGroup, isLoading: isEditing } =
+  const { mutate: editGroup, isPending: isEditing } =
     trpc.user.groups.edit.useMutation({
       onError: (error) => {
         toast.error(`Something went wrong: ${error.message}`);

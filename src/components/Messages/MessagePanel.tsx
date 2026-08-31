@@ -23,7 +23,7 @@ const MessagePanel = ({
   onViewRouteClick,
 }: MessagePanelProps) => {
   const [activeTab, setActiveTab] = useState<"message" | "map">("message");
-  const utils = trpc.useContext();
+  const utils = trpc.useUtils();
   const user = useContext(UserContext);
   const [hasCalculatedRoute, setHasCalculatedRoute] = useState(false);
 
