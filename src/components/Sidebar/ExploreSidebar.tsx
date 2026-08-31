@@ -6,7 +6,7 @@ import {
   User,
 } from "../../utils/types";
 import { SidebarContent } from "./SidebarContent";
-import Filters from "../Filters";
+import Filters from "./Filters";
 import { FaFilter } from "react-icons/fa6";
 import CustomSelect from "./CustomSelect";
 import { UserContext } from "../../utils/userContext";

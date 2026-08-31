@@ -8,7 +8,7 @@ import {
   summariseConversations,
   summariseUsers,
 } from "./adminDataUtils";
-import type { AdminUserRow } from "./types";
+import type { AdminUserRow } from "../utils/types";
 
 /**
  * The admin dashboard's aggregations. These run inside the `user.admin` router

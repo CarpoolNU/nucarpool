@@ -4,7 +4,7 @@ import { router, protectedRouter } from "../createRouter";
 import _ from "lodash";
 import { Role, CarpoolGroup, RequestStatus, User } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
-import { convertCarpoolSearchToPublicWithExactHome } from "../../../utils/publicUser";
+import { convertCarpoolSearchToPublicWithExactHome } from "../../publicUser";
 import { NO_SEATS_MESSAGE, clampSeats } from "../../../utils/carpoolSeats";
 import {
   GROUP_NOTES_MAX_LENGTH,

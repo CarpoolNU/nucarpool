@@ -1,8 +1,8 @@
 import Checkbox from "@mui/material/Checkbox";
 import { Controller, Control, FieldError, Merge } from "react-hook-form";
-import { OnboardingFormInputs } from "../../../utils/types";
-import DayBox from "../../Profile/DayBox";
-import StaticDayBox from "../../Sidebar/StaticDayBox";
+import { OnboardingFormInputs } from "../../utils/types";
+import DayBox from "../Profile/DayBox";
+import StaticDayBox from "../Sidebar/StaticDayBox";
 
 interface SelectDaysProps {
   control: Control<OnboardingFormInputs>;

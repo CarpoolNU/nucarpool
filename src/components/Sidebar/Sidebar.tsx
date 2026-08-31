@@ -1,6 +1,6 @@
 import ExploreSidebar from "./ExploreSidebar";
 import RequestSidebar from "./RequestSidebar";
-import { GroupPage } from "../GroupPage";
+import { GroupPage } from "../Group/GroupPage";
 import {
   EnhancedPublicUser,
   FiltersState,

@@ -9,7 +9,7 @@ import React, {
 import styled from "styled-components";
 import DropDownMenu from "./DropDownMenu";
 import { createPortal } from "react-dom";
-import { GroupPage } from "./GroupPage";
+import { GroupPage } from "./Group/GroupPage";
 import { trpc } from "../utils/trpc";
 import { UserContext } from "../utils/userContext";
 import { useRouter } from "next/router";

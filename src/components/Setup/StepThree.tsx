@@ -11,8 +11,8 @@ import { EntryLabel } from "../EntryLabel";
 import { DatePicker } from "antd";
 import dayjs, { Dayjs } from "dayjs";
 import useIsMobile from "../../utils/useIsMobile";
-import SelectDays from "../Shared/Schedule/SelectDays";
-import SelectTimeRange from "../Shared/Schedule/SelectTimeRange";
+import SelectDays from "../Schedule/SelectDays";
+import SelectTimeRange from "../Schedule/SelectTimeRange";
 
 interface StepThreeProps {
   errors: FieldErrors<OnboardingFormInputs>;

@@ -1,6 +1,10 @@
 import { addWeeks, differenceInWeeks, startOfWeek } from "date-fns";
 import { Role, Status } from "@prisma/client";
-import { AdminUserCounts, AdminUserRow, ConversationStats } from "./types";
+import {
+  AdminUserCounts,
+  AdminUserRow,
+  ConversationStats,
+} from "../utils/types";
 
 /**
  * Pure aggregation for the admin dashboard.

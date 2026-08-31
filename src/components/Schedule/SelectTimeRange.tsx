@@ -1,8 +1,8 @@
 import { Control, FieldError } from "react-hook-form";
-import { OnboardingFormInputs } from "../../../utils/types";
-import { EntryLabel } from "../../EntryLabel";
-import ControlledTimePicker from "../../Profile/ControlledTimePicker";
-import { Note } from "../../../styles/profile";
+import { OnboardingFormInputs } from "../../utils/types";
+import { EntryLabel } from "../EntryLabel";
+import ControlledTimePicker from "../Profile/ControlledTimePicker";
+import { Note } from "../../styles/profile";
 
 interface TimeRangePickerProps {
   control: Control<OnboardingFormInputs>;

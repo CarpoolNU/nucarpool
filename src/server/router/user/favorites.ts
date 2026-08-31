@@ -2,7 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { router, protectedRouter } from "../createRouter";
 import _ from "lodash";
-import { convertCarpoolSearchToPublic } from "../../../utils/publicUser";
+import { convertCarpoolSearchToPublic } from "../../publicUser";
 import { Status } from "@prisma/client";
 
 export const favoritesRouter = router({
