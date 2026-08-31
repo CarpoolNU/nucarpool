@@ -69,15 +69,16 @@ On Apple Silicon the container now runs natively rather than under x86 emulation
 
 Addresses are synthesised offline and deterministically, so seeding makes **no network calls and consumes no Mapbox quota**. Set `SEED_REVERSE_GEOCODE=1` to reverse geocode against Mapbox instead; results are cached per coordinate, and any failure falls back to a synthesised address.
 
-Three commands reach that script, not one:
+Two commands reach that script, not one:
 
-| Command              | How it seeds                                                                                          |
-| -------------------- | ----------------------------------------------------------------------------------------------------- |
-| `yarn seed`          | Directly                                                                                              |
-| `yarn build:preview` | Force-pushes the schema, then re-seeds                                                                |
-| `yarn db:schema`     | Only if `prisma migrate dev` resets the database — **Prisma then runs the seed script automatically** |
+| Command          | How it seeds                                                                                          |
+| ---------------- | ----------------------------------------------------------------------------------------------------- |
+| `yarn seed`      | Directly                                                                                              |
+| `yarn db:schema` | Only if `prisma migrate dev` resets the database — **Prisma then runs the seed script automatically** |
 
-The third is the surprising one, because it is part of normal setup. To apply migrations without seeding, run `npx prisma migrate dev --skip-seed`; appending the flag to `yarn db:schema` does not work, because yarn passes it to `prisma generate` instead.
+The second is the surprising one, because it is part of normal setup. To apply migrations without seeding, run `npx prisma migrate dev --skip-seed`; appending the flag to `yarn db:schema` does not work, because yarn passes it to `prisma generate` instead.
+
+There used to be a third, `yarn build:preview`, which force-pushed the schema and then re-seeded. It was deleted in SCRUM-249 — see [the db README](src/server/db/README.md#buildpreview-is-gone-and-why-it-had-to-be).
 
 Because the script writes to whatever `DATABASE_URL` points at, [`src/utils/seedGuard.ts`](src/utils/seedGuard.ts) checks the target host before the first delete and refuses anything that is not local:
 
@@ -96,7 +97,7 @@ If you genuinely need to seed a non-local database, opt in for that single comma
 SEED_ALLOW_REMOTE=1 yarn seed
 ```
 
-Think carefully before you do. Against staging or production this deletes every user, group, message, request, location and carpool search, and the app cannot undo it. `yarn build:preview` is deliberately **not** given the override, so it now fails the guard if it is ever pointed at a remote database.
+Think carefully before you do. Against staging or production this deletes every user, group, message, request, location and carpool search, and the app cannot undo it.
 
 ## Environment Variables
 
@@ -125,6 +126,31 @@ Validation runs at import time in [`src/utils/env/browser.ts`](src/utils/env/bro
 | `yarn db:start` / `yarn db:stop` | Start / stop the local MySQL container               |
 | `yarn db:schema`                 | Apply migrations and regenerate the Prisma client    |
 | `yarn seed`                      | **Wipes** the database, then inserts generated users |
+
+## Deployment
+
+**The app deploys on AWS Amplify Hosting.** [`amplify.yml`](amplify.yml) at the repository root is the build specification, and a file at that path **takes precedence over the build settings in the Amplify console** — so the repository is authoritative for how the app is built and what is deployed.
+
+Its build phase writes the container's environment into `.env.production` (so `envsafe` can read it) and then ends in:
+
+```
+yarn run build:${BUILD_ENV}
+```
+
+`BUILD_ENV` is set **per branch in the Amplify console**, which means the script that actually runs cannot be determined from the repository. It resolves to one of these three, all equivalent apart from `NODE_ENV`:
+
+| Script              | Command                                              |
+| ------------------- | ---------------------------------------------------- |
+| `build:main`        | `prisma generate && next build`                      |
+| `build:development` | `NODE_ENV=development prisma generate && next build` |
+| `build:production`  | `NODE_ENV=production prisma generate && next build`  |
+
+All three used a single `&` until SCRUM-304, which backgrounded `prisma generate` instead of sequencing it and discarded its exit code. Because the console selects the script by variable, **a `package.json` script is part of the deploy surface** — that is why `build:preview`, which force-pushed the schema and re-seeded, was deleted rather than merely documented (SCRUM-249).
+
+Two things are deliberately still true and worth knowing:
+
+- **Nothing applies migration files to a shared database.** No step runs `prisma migrate deploy`; schema promotion is a PlanetScale Deploy Request. See [the db README](src/server/db/README.md#what-migrations-are-for-here-and-what-they-are-not).
+- **`getBaseUrl` in [`src/utils/trpc.ts`](src/utils/trpc.ts) still branches on `VERCEL_URL`**, which is never set on Amplify, so the branch is dead. Removing it is tracked separately as **SCRUM-310**; it is left alone here to keep this change to `package.json` and the docs.
 
 ## Content Security Policy
 

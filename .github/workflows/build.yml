@@ -54,8 +54,9 @@ jobs:
       # never requires real credentials or a reachable database.
       - name: provide placeholder build environment
         run: node scripts/check-env-contract.js --github-env >> "$GITHUB_ENV"
-      # Never `yarn build:preview` - that script runs `prisma db push` and
-      # re-seeds the database.
+      # Bare `next build`. Deliberately not one of the `build:*` scripts: those
+      # are the deploy surface (amplify.yml selects one via BUILD_ENV) and run
+      # `prisma generate` themselves, which the explicit step above already did.
       - run: yarn build
       # SCRUM-269. Under the Pages Router a filename is a URL, so a co-located
       # `*.test.ts` is compiled and shipped as an endpoint. Nothing else here

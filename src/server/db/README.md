@@ -147,7 +147,17 @@ Two mechanisms exist, and they do different jobs. Conflating them is what caused
 | **Migration history** (`prisma/migrations/`) | `prisma migrate dev` locally; replayed in CI                                                    | local databases, CI databases, any newly provisioned database |
 | **Shared schema promotion**                  | `prisma db push` to PlanetScale staging, then a **PlanetScale Deploy Request** staging → `main` | PlanetScale staging and `main`                                |
 
-**Migration files are not applied to PlanetScale.** Nothing in the deploy pipeline runs `prisma migrate deploy` — the Amplify build runs `prisma generate` and `next build`, and PlanetScale Deploy Requests diff branch schemas without reading `prisma/migrations/` or `_prisma_migrations`. Migration history exists so that _anything built from the repository_ reproduces `schema.prisma`: a fresh clone, a CI database, a restore, a new branch.
+**Migration files are not applied to PlanetScale.** Nothing in the deploy pipeline runs `prisma migrate deploy` — the Amplify build runs [`amplify.yml`](../../../amplify.yml), whose build phase ends in `yarn run build:${BUILD_ENV}`, and PlanetScale Deploy Requests diff branch schemas without reading `prisma/migrations/` or `_prisma_migrations`. Migration history exists so that _anything built from the repository_ reproduces `schema.prisma`: a fresh clone, a CI database, a restore, a new branch.
+
+`BUILD_ENV` is set per branch in the Amplify console, so the script it names cannot be read off the repository. It resolves to one of the three that exist, each of which runs `prisma generate && next build`:
+
+```
+build:main         = prisma generate && next build
+build:development  = NODE_ENV=development prisma generate && next build
+build:production   = NODE_ENV=production prisma generate && next build
+```
+
+All three used a single `&` until SCRUM-304. That backgrounded `prisma generate` and started `next build` immediately, so the build could compile against whatever client `yarn install`'s postinstall happened to leave behind, and a failing `prisma generate` never reached the shell — only `next build`'s exit code did. A schema change that broke generation could therefore deploy green against a stale client, which is the SCRUM-227 failure mode arriving by a different route. `&&` is what all three meant.
 
 That separation is deliberate and was reviewed in SCRUM-271. Adopting `prisma migrate deploy` for shared environments would need every shared branch baselined with `prisma migrate resolve --applied` for all existing migrations, and would bypass the online-schema-change and safe-migration behaviour a Deploy Request provides. It is not planned. If it is ever revisited, it needs its own ticket and a baselining plan.
 
@@ -177,15 +187,19 @@ prisma migrate diff \
 
 The check proves migration history matches `schema.prisma`. It says nothing about what PlanetScale contains — that is still step 2, and still a human decision.
 
-### `build:preview` remains a hazard
+### `build:preview` is gone, and why it had to be
+
+The script was removed in SCRUM-249. It read:
 
 ```
 build:preview = prisma generate && echo "y" | prisma db push && next build && prisma db seed
 ```
 
-Nothing invokes this script; every reference to it in the repository is a warning. It is worth knowing why it is dangerous anyway: `prisma db push` is step 2 and **has no host guard**, unlike `yarn seed`, which [`seedGuard.ts`](../../utils/seedGuard.ts) restricts to a localhost allowlist. Pointed at a shared database it would force-alter the schema successfully, and only the _seed_ at step 4 would be refused. The guard fires after the schema damage, not before it.
+An earlier version of this section said "nothing invokes this script; every reference to it in the repository is a warning." That was true when the deploy configuration lived only in the Amplify console. It stopped being true once [`amplify.yml`](../../../amplify.yml) was committed, because the build phase ends in `yarn run build:${BUILD_ENV}` and `BUILD_ENV` is console-set — so `preview` was a reachable value, one console field away from running `prisma db push` and a re-seed against a deployed database.
 
-Removing the script is tracked in SCRUM-249.
+Why that was the worst of the three build variants: `prisma db push` is step 2 of the table above and **has no host guard**, unlike `yarn seed`, which [`seedGuard.ts`](../../utils/seedGuard.ts) restricts to a localhost allowlist. Pointed at a shared database it would force-alter the schema successfully, and only the _seed_ at step 4 would be refused. The guard fires after the schema damage, not before it.
+
+Deleting the script removes the reachable path entirely. The lesson generalises beyond this one entry: **a `package.json` script is part of the deploy surface whenever the build spec selects a script by variable.** The deny rules for `build:preview` in [`.claude/settings.json`](../../../.claude/settings.json) are deliberately left in place — they cost nothing now and would still fire if the script were ever reintroduced.
 
 ## Location ownership
 
