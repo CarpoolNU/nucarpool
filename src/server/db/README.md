@@ -128,6 +128,58 @@ Since SCRUM-240: `user.acceptTerms` is the only writer, `user.edit` does not tou
 
 There is no stored signal separating them, because the column carries no timestamp. Adding a timestamp and a terms version — which would also make re-consent possible when the terms are updated, something the terms text explicitly anticipates — needs new columns and is tracked separately. Do not treat a `true` predating that work as evidence for a specific user.
 
+## Indexes, and how to decide whether one is needed
+
+Most `@@index` entries in `schema.prisma` are there because `relationMode = "prisma"` requires one on every relation scalar field, not because a query was measured against them. Only two exist purely for query performance, and both came out of SCRUM-245:
+
+| Index                            | Serves                                                     |
+| -------------------------------- | ---------------------------------------------------------- |
+| `location(coord_lat, coord_lng)` | the explore page's bounding box                            |
+| `carpool_search(status, role)`   | the candidate filter's two most selective equality columns |
+
+That ratio is deliberate. **A generated query that looks alarming is not evidence, and a missing index is not a diagnosis** — an index costs write throughput on every insert forever, so it needs a measurement behind it. SCRUM-306 is the worked example of reaching the opposite conclusion, and it is worth reading before adding an index here.
+
+### The unread badge: the measurement, and why no index was added (SCRUM-306)
+
+[`getUnreadMessageCount`](../router/user/message.ts) compiles to nested `IN` subqueries over `message`, the fastest-growing table here, filtered on `isRead`, which carries no index. That description is accurate and it was filed as a performance concern. Measured, it is not one.
+
+**What the plan does.** `EXPLAIN` against the staging branch on 2026-08-31 returned five rows, and the access types are the whole answer:
+
+| Table                 | Access type   | Key                                              | Rows |
+| --------------------- | ------------- | ------------------------------------------------ | ---- |
+| `request` (`j1`)      | `index_merge` | `request_fromUserId_idx`, `request_toUserId_idx` | 2    |
+| `conversation` (`j0`) | `eq_ref`      | `PRIMARY`                                        | 1    |
+| `conversation` (`t1`) | `eq_ref`      | `PRIMARY`                                        | 1    |
+| `message` (`t0`)      | `ref`         | `message_conversationId_idx`                     | 2    |
+| `message`             | `eq_ref`      | `PRIMARY`                                        | 1    |
+
+Nothing scans. The query is driven from the caller's **own** `request` rows and reaches `message` by primary key, so **its cost scales with how much mail the caller has, not with how large `message` has grown** — which is the opposite of what the nesting suggests, and the reason the growth argument does not apply.
+
+**Why an index on `isRead` cannot help.** Two independent reasons, either sufficient:
+
+1. The final access to `message` is already `eq_ref` on `PRIMARY` — the tightest access type MySQL has, one row. A secondary index cannot improve on a primary-key lookup.
+2. `isRead` is a boolean. Two distinct values across the whole table is not selectivity, so the optimiser would decline the index even if the plan started there.
+
+The composite `message(userId, isRead)` is worse than useless: the predicate is `userId != ?`, a negation, and no B-tree index range-scans a negation. The optimiser agrees: `message_userId_idx` appears in that row's `possible_keys` and is rejected in favour of `PRIMARY`. **That index exists only because `relationMode = "prisma"` requires one on every relation scalar field** — no query filters messages by author equality — so do not read its presence as evidence that indexing `userId` would help, and do not drop it either.
+
+**Production, from PlanetScale Insights** (August 2026; Insights is readable where direct production queries return `403`):
+
+|                  | rows read per call | time per call | p50     | p99      | tables | `EXPLAIN` rows |
+| ---------------- | ------------------ | ------------- | ------- | -------- | ------ | -------------- |
+| before SCRUM-296 | 32.5               | 3.47 ms       | 3.07 ms | 13.23 ms | 5      | 13             |
+| after SCRUM-296  | 10.9               | 3.18 ms       | 2.52 ms | 11.27 ms | 3      | 5              |
+
+**SCRUM-296 already fixed the part that was real.** Removing the counterpart-role predicate — done for a correctness reason, not a performance one — deleted both `DEPENDENT SUBQUERY` blocks from the plan. That matters more than the row counts: a dependent subquery is re-evaluated once per candidate outer row rather than once, so it multiplies where the rest of the plan adds. The four `IN` levels the ticket described are now two, the `user` and `carpool_search` joins are gone, and the SQL text sent per call fell from 1776 to 896 bytes.
+
+The badge also runs about once per session rather than once per navigation: [`trpc.ts`](../../utils/trpc.ts) sets `refetchOnMount: false` and `refetchOnWindowFocus: false` globally, and the only other trigger is [`MessageContent`](../../components/Messages/MessageContent.tsx) invalidating it after marking a thread read.
+
+**When to revisit, and with which index.** Re-run [`scripts/measure-unread-count.ts`](../../../scripts/measure-unread-count.ts), which prints the plan, the generated SQL and a verdict. Act if either holds:
+
+- **anything scans** (`type: ALL` or `type: index` on `message`) — the plan changed, and then the column the scanning step filters on is the one to index;
+- **rows examined exceeds ~1000 per call** while the plan is still fully indexed — a caller with enough history that the per-message primary-key lookup starts to add up.
+
+In that second case the index to add is **`message(conversationId, isRead, userId)`**, not `isRead`. It covers the `t0` step and the final filter together, so the per-message primary-key lookup disappears entirely. It is not added today because at ~11 rows read per call it would cost write throughput on the busiest table in the schema to save nothing measurable.
+
 ## Changing the schema
 
 After editing `schema.prisma`:

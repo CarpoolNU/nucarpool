@@ -56,6 +56,15 @@ anything.
 | [`check-profile-coordinates.ts`](./check-profile-coordinates.ts) | Searches unmatchable via `(0, 0)` coordinates or reversed co-op dates | SCRUM-302 |
 | [`measure-candidate-rows.ts`](./measure-candidate-rows.ts)       | Rows read by the explore page's candidate query                       | SCRUM-245 |
 | [`measure-requests-payload.ts`](./measure-requests-payload.ts)   | Rows and payload bytes for `user.requests.me`                         | SCRUM-301 |
+| [`measure-unread-count.ts`](./measure-unread-count.ts)           | Query plan, generated SQL and timings for the unread badge            | SCRUM-306 |
+
+`measure-unread-count.ts` is the odd one out: its useful output is the
+`EXPLAIN` plan, not its timings. Access types describe the shape of the work
+rather than its current size, so the plan is worth reading against a local
+database while the timings are not. For production numbers, PlanetScale
+Insights is the authority and needs no script at all — that is where the
+figures in [the db README](../src/server/db/README.md#the-unread-badge-the-measurement-and-why-no-index-was-added-scrum-306)
+came from, because direct production reads return `403` (see below).
 
 The three `check-*` scripts exit `0` when clean and `1` when not, so they can
 gate a follow-up. **None of them has an `--apply`, and that is a decision
