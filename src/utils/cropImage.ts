@@ -1,6 +1,15 @@
+import type { Area } from "react-easy-crop";
+
+/**
+ * `Area` is react-easy-crop's own type for the crop rectangle, rather than a
+ * local shape or `any`. It is the contract this function shares with the
+ * library, so borrowing it means a future major that reshapes the crop data
+ * fails `tsc` here instead of at runtime - nothing tests this file, and the
+ * only symptom would be a silently wrong avatar.
+ */
 export default function getCroppedImg(
   imageSrc: string,
-  croppedAreaPixels: any,
+  croppedAreaPixels: Area,
 ) {
   return new Promise<{ file: File; url: string }>((resolve, reject) => {
     const image = new Image();
