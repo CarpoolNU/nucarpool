@@ -1,5 +1,5 @@
 import { Dispatch, SetStateAction, useEffect } from "react";
-import { toast } from "react-toastify";
+import { toast } from "react-toastify/unstyled";
 import { trpc } from "./trpc";
 import { CarpoolFeature } from "./types";
 import type { MapboxSearchType } from "./map/mapboxUrls";

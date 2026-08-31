@@ -1,13 +1,22 @@
 import "../styles/globals.css";
 import type { AppProps } from "next/app";
 import { Session } from "next-auth";
-import { ToastContainer } from "react-toastify";
 /**
- * Since v11 react-toastify injects this stylesheet into a `<style>` element at
- * mount, so the import is no longer required — but it is kept deliberately.
- * The injected tag needs `'unsafe-inline'` in the CSP's `style-src`; the
- * bundled import does not, so toasts stay styled if that ever tightens. Same
- * rules either way, and it is what already shipped.
+ * `react-toastify/unstyled`, not `react-toastify`. Identical API; the only
+ * difference is that it does not inject its stylesheet into a `<style>` element
+ * at mount, which is what kept react-toastify on the list of libraries forcing
+ * `'unsafe-inline'` in the CSP's `style-src`.
+ *
+ * **Every import of this library must use the same entry point.** The two are
+ * separate modules with separate state — `toast` from one does not reach a
+ * `ToastContainer` from the other, and the symptom is toasts silently never
+ * appearing, with nothing failing. An ESLint rule in `.eslintrc.json` bans the
+ * bare specifier so that mistake is a lint error rather than a bug report.
+ */
+import { ToastContainer } from "react-toastify/unstyled";
+/**
+ * Load-bearing, and now the *only* source of toast styling: `/unstyled` ships
+ * no CSS and injects none. Deleting this import leaves every toast unstyled.
  */
 import "react-toastify/dist/ReactToastify.css";
 import { SessionProvider } from "next-auth/react";

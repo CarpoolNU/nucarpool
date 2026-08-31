@@ -8,7 +8,7 @@ import {
   User,
 } from "../../utils/types";
 import { trpc } from "../../utils/trpc";
-import { toast } from "react-toastify";
+import { toast } from "react-toastify/unstyled";
 import React, { useContext } from "react";
 import { UserContext } from "../../utils/userContext";
 import Spinner from "../Spinner";

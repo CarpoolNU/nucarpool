@@ -6,7 +6,7 @@ import SendBar from "./SendBar";
 import { trpc } from "../../utils/trpc";
 import { createRequestHandlers } from "../../utils/requestHandlers";
 import { UserContext } from "../../utils/userContext";
-import { toast } from "react-toastify";
+import { toast } from "react-toastify/unstyled";
 import { trackRequestResponse } from "../../utils/mixpanel";
 
 interface MessagePanelProps {

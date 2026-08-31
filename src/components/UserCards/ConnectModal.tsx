@@ -1,7 +1,7 @@
 import { Dialog } from "@headlessui/react";
 import React, { useState } from "react";
 import { EnhancedPublicUser, User } from "../../utils/types";
-import { toast } from "react-toastify";
+import { toast } from "react-toastify/unstyled";
 import { trpc } from "../../utils/trpc";
 import Image from "next/image";
 import StartIcon from "../../../public/start.png";

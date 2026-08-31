@@ -1,4 +1,4 @@
-import { toast } from "react-toastify";
+import { toast } from "react-toastify/unstyled";
 import { NextRouter } from "next/router";
 import { trpc } from "../trpc";
 import { UserInfo } from "../types";
