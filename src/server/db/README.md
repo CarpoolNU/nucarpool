@@ -43,9 +43,35 @@ Render with [`formatScheduleTime`](../../utils/scheduleTime.ts), which converts 
 
 Boston is hardcoded because the product is Northeastern co-op students; a schedule has no meaning in the viewer's own zone.
 
+**An overnight shift is legal, and deliberately unvalidated (SCRUM-302).** These are two times of day, not a range, so nothing requires the second to come after the first: a night shift starting at 22:00 and finishing at 06:00 stores exactly that, and it is correct. [`minutesApart`](../../utils/recommendation.ts) measures the gap between two people's times the short way round the clock — `min(d, 1440 - d)` — so an overnight pair is scored properly rather than merely tolerated, and nothing in the scorer or in [`buildCandidateWhere`](./candidateSearch.ts) compares a user's own start against their own end. Contrast the co-op columns below, which **are** a range and are checked.
+
 **Co-op dates — `startDate` / `endDate` (`DateTime? @db.Date`)**
 
 A calendar day, taken by Prisma from the **UTC** date of whatever `Date` it is handed. Build these with [`lastDayOfMonthUTC`](../../utils/dateUtils.ts) rather than `new Date(year, month, 0)`: the local-time form stored the previous day for anyone at a positive UTC offset, because local midnight is the day before in UTC.
+
+**The range has to run forwards (SCRUM-302).** A reversed one was stored as submitted and then failed silently at match time: `dateOverlapFilter`'s full-overlap branch asks for `startDate <= theirs AND endDate >= theirs`, which no candidate can satisfy once the two are crossed, so the user disappeared from every full-overlap search with nothing to say why, and the partial-overlap negation behaved arbitrarily. `user.edit` and [`onboardSchema`](../../utils/profile/zodSchema.ts) both refuse `endDate < startDate` now, through the shared [`isReversedCoopRange`](../../utils/dateUtils.ts).
+
+**Equality is allowed**, and has to be: both pickers are month-granularity and `handleMonthChange` stores the _last day_ of the month chosen, so a one-month co-op is the same date twice.
+
+## Coordinates
+
+`location.coord_lat` and `coord_lng` are plain `Float` columns, so the database accepts any number at all — and out-of-range values do not fail downstream either, they merely stop meaning anything. `locationWithin` adds a degree delta to whatever centre it is given and `milesBetween` feeds the value through `Math.cos`, so a nonsense row is silently unmatchable rather than loud, and it is scanned for nothing by the `location_coord_lat_coord_lng_idx` bounding box added in SCRUM-245.
+
+Both are therefore bounded to WGS 84 at the boundary that writes them (SCRUM-302). The definitions live in [`utils/coordinates.ts`](../../utils/coordinates.ts), shared with `getDirections`, which has range-checked its own input since SCRUM-244.
+
+**`(0, 0)` needs a separate rule.** It is inside the valid range, but it is the sentinel [`useAddressSelection`](../../utils/useAddressSelection.ts) starts at and resets to when the address input is cleared, so it means "no address picked yet" rather than a point in the Gulf of Guinea ~4000 miles from Boston. `user.edit` refuses it for every role except `VIEWER` — a VIEWER has no `Location` at all, and `user.me` already reports `(0, 0)` for a row without one. Only the exact pair is refused: longitude 0 is Greenwich and latitude 0 is the equator, and a row at one and not the other is a real place.
+
+The forms check the same thing before saving, against the address hooks rather than the form fields. That distinction matters: `startAddress` and `companyAddress` hold address _text_, `ControlledAddressCombobox` writes back to the form only when a suggestion is chosen, and the coordinates never enter the form at all — so text left over from a previous save can sit next to `(0, 0)`.
+
+### Rows that predate the check
+
+[`scripts/check-profile-coordinates.ts`](../../../scripts/check-profile-coordinates.ts) reports them, along with reversed co-op ranges and searches pointing at a `Location` that no longer exists.
+
+```bash
+npx ts-node scripts/check-profile-coordinates.ts
+```
+
+It is read-only and has no `--apply`, deliberately: a lost coordinate cannot be re-derived without re-geocoding an address string that may itself be empty, and only the student knows which way round their own co-op runs. There is no correct value to write, so the remedy is to ask the affected users to re-save their profile — which the boundary now validates. A `VIEWER` at `(0, 0)` is not reported, since that is expected.
 
 ## Text lengths
 

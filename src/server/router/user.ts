@@ -22,6 +22,16 @@ import {
 } from "../../utils/profileImage";
 import { adminDataRouter } from "./user/admin";
 import { resolveOwnedLocations } from "../db/locationOwnership";
+import {
+  latitudeSchema,
+  longitudeSchema,
+  UNRESOLVED_ADDRESS_MESSAGE,
+  unresolvedAddressFields,
+} from "../../utils/coordinates";
+import {
+  COOP_DATE_ORDER_MESSAGE,
+  isReversedCoopRange,
+} from "../../utils/dateUtils";
 
 /**
  * Access rule for `getPresignedDownloadUrl`, decided under SCRUM-243:
@@ -134,38 +144,79 @@ export const userRouter = router({
 
   edit: protectedRouter
     .input(
-      z.object({
-        role: z.nativeEnum(Role),
-        status: z.nativeEnum(Status),
-        seatAvail: z.number().int().min(0).max(MAX_SEATS_AVAILABLE),
-        // `company_name`, `preferred_name`, `pronouns` and `bio` are all
-        // `VARCHAR(191)`, and every one of them was unbounded here (SCRUM-231).
-        // The forms cap the two name fields and the bio, but nothing capped
-        // `companyName` at all, so a pasted value over the width failed the
-        // whole profile save inside Prisma instead of at the boundary.
-        companyName: z.string().max(PROFILE_TEXT_MAX_LENGTH),
-        companyAddress: z.string(),
-        companyCoordLng: z.number(),
-        companyCoordLat: z.number(),
-        startAddress: z.string(),
-        startCoordLng: z.number(),
-        startCoordLat: z.number(),
-        preferredName: z.string().max(PROFILE_TEXT_MAX_LENGTH),
-        pronouns: z.string().max(PROFILE_TEXT_MAX_LENGTH),
-        isOnboarded: z.boolean(),
-        daysWorking: z.string(),
-        startTime: z.optional(z.string()),
-        endTime: z.optional(z.string()),
-        coopStartDate: z.date().nullable(),
-        coopEndDate: z.date().nullable(),
-        bio: z.string().max(PROFILE_TEXT_MAX_LENGTH),
-        startStreet: z.string(),
-        startCity: z.string(),
-        startState: z.string(),
-        companyStreet: z.string(),
-        companyCity: z.string(),
-        companyState: z.string(),
-      }),
+      z
+        .object({
+          role: z.nativeEnum(Role),
+          status: z.nativeEnum(Status),
+          seatAvail: z.number().int().min(0).max(MAX_SEATS_AVAILABLE),
+          // `company_name`, `preferred_name`, `pronouns` and `bio` are all
+          // `VARCHAR(191)`, and every one of them was unbounded here (SCRUM-231).
+          // The forms cap the two name fields and the bio, but nothing capped
+          // `companyName` at all, so a pasted value over the width failed the
+          // whole profile save inside Prisma instead of at the boundary.
+          companyName: z.string().max(PROFILE_TEXT_MAX_LENGTH),
+          companyAddress: z.string(),
+          // This is the boundary that writes coordinates to `location`, and it
+          // range-checked none of them (SCRUM-302). The columns are plain
+          // `Float`, so MySQL accepts any number, and `locationWithin` /
+          // `milesBetween` then produce arbitrary answers rather than failing -
+          // an out-of-range row is silently unmatchable and also skews the
+          // bounding-box query added in SCRUM-245. `getDirections` in
+          // `mapbox.ts` has enforced the same bounds since SCRUM-244; the two now
+          // share one definition.
+          companyCoordLng: longitudeSchema,
+          companyCoordLat: latitudeSchema,
+          startAddress: z.string(),
+          startCoordLng: longitudeSchema,
+          startCoordLat: latitudeSchema,
+          preferredName: z.string().max(PROFILE_TEXT_MAX_LENGTH),
+          pronouns: z.string().max(PROFILE_TEXT_MAX_LENGTH),
+          isOnboarded: z.boolean(),
+          daysWorking: z.string(),
+          startTime: z.optional(z.string()),
+          endTime: z.optional(z.string()),
+          coopStartDate: z.date().nullable(),
+          coopEndDate: z.date().nullable(),
+          bio: z.string().max(PROFILE_TEXT_MAX_LENGTH),
+          startStreet: z.string(),
+          startCity: z.string(),
+          startState: z.string(),
+          companyStreet: z.string(),
+          companyCity: z.string(),
+          companyState: z.string(),
+        })
+        // Two things `.max()` cannot express, both of which used to be stored
+        // as submitted and then fail silently at match time (SCRUM-302).
+        //
+        // They live on the input rather than in the resolver so a stale or
+        // hand-rolled client gets the same answer as the form, and so the paths
+        // below line up with the field names `onboardSchema` uses - the profile
+        // page routes a failed save to the right tab by reading them.
+        .superRefine((data, ctx) => {
+          if (isReversedCoopRange(data.coopStartDate, data.coopEndDate)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["coopEndDate"],
+              message: COOP_DATE_ORDER_MESSAGE,
+            });
+          }
+
+          // `(0, 0)` is in range but is the "no address picked yet" sentinel
+          // from `useAddressSelection`, not a place anyone lives. A VIEWER is
+          // exempt: they have no Locations, and `user.me` already reports
+          // `(0, 0)` for them.
+          for (const field of unresolvedAddressFields({
+            role: data.role,
+            home: [data.startCoordLng, data.startCoordLat],
+            company: [data.companyCoordLng, data.companyCoordLat],
+          })) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [field],
+              message: UNRESOLVED_ADDRESS_MESSAGE,
+            });
+          }
+        }),
     )
     .mutation(async ({ input, ctx }) => {
       const startTimeDate = input.startTime

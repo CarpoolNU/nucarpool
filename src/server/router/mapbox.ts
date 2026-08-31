@@ -19,6 +19,7 @@ import {
   buildDirectionsUrl,
   buildGeocodingSearchUrl,
 } from "../../utils/map/mapboxUrls";
+import { latitudeSchema, longitudeSchema } from "../../utils/coordinates";
 
 /**
  * Points the map returns for a matchable user. A VIEWER is not matchable and
@@ -219,14 +220,10 @@ export const mapboxRouter = router({
         // Array of tuples containing longitude and latitude. Bounded so a
         // single call cannot ask Mapbox for an arbitrarily long route, and
         // range-checked so nonsense coordinates are rejected here rather than
-        // forwarded (SCRUM-244).
+        // forwarded (SCRUM-244). The bounds moved to `utils/coordinates.ts` when
+        // `user.edit` needed the same ones (SCRUM-302).
         points: z
-          .array(
-            z.tuple([
-              z.number().min(-180).max(180),
-              z.number().min(-90).max(90),
-            ]),
-          )
+          .array(z.tuple([longitudeSchema, latitudeSchema]))
           .min(MAPBOX_DIRECTIONS_MIN_POINTS)
           .max(MAPBOX_DIRECTIONS_MAX_POINTS),
       }),

@@ -55,4 +55,40 @@ const formatDateToMonth = (date: Date | null): string | undefined => {
   return `${year}-${month}`;
 };
 
-export { handleMonthChange, formatDateToMonth, lastDayOfMonthUTC };
+/**
+ * Message for a co-op range whose end falls before its start. Shared so the
+ * form and `user.edit` say the same thing (SCRUM-302).
+ */
+export const COOP_DATE_ORDER_MESSAGE =
+  "End date cannot be before the start date";
+
+/**
+ * True when a co-op range runs backwards (SCRUM-302).
+ *
+ * A reversed range is accepted by every column involved and then fails silently
+ * at match time: `dateOverlapFilter`'s full-overlap branch asks for
+ * `startDate <= theirs AND endDate >= theirs`, which no candidate can satisfy
+ * once the two are crossed, so the user disappears from every full-overlap
+ * search with nothing to indicate why. The partial-overlap negation is likewise
+ * arbitrary.
+ *
+ * **Equal dates are legal.** Both pickers are month-granularity and
+ * `handleMonthChange` above stores the *last day* of the month chosen, so a
+ * one-month co-op stores the same date twice. Only a strict inversion is
+ * rejected.
+ *
+ * `null` on either side is not this function's problem — `onboardSchema`
+ * already requires both for a non-VIEWER, and a VIEWER legitimately has
+ * neither.
+ */
+const isReversedCoopRange = (
+  start: Date | null | undefined,
+  end: Date | null | undefined,
+): boolean => !!start && !!end && end.getTime() < start.getTime();
+
+export {
+  handleMonthChange,
+  formatDateToMonth,
+  lastDayOfMonthUTC,
+  isReversedCoopRange,
+};

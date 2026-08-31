@@ -1,5 +1,5 @@
 import useIsMobile from "../../utils/useIsMobile";
-import { Note, ProfileHeader } from "../../styles/profile";
+import { ErrorDisplay, Note, ProfileHeader } from "../../styles/profile";
 import { Role, Status } from "@prisma/client";
 import { EntryLabel } from "../EntryLabel";
 import { TextField } from "../TextField";
@@ -162,6 +162,14 @@ const AccountSection = ({
             />
           </div>
         </div>
+
+        {/* The reason a range was rejected, not just a red label. Ordering is
+            the one date error whose message a user cannot infer (SCRUM-302). */}
+        {errors.coopEndDate?.message && (
+          <ErrorDisplay className="pt-2">
+            {errors.coopEndDate.message}
+          </ErrorDisplay>
+        )}
 
         <Note className="py-2">
           Please indicate the start and the end dates of your co-op. If you

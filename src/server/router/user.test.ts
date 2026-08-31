@@ -750,6 +750,249 @@ describe("user.edit — profile text is bounded by its columns (SCRUM-231)", () 
 });
 
 /**
+ * `user.edit` is the boundary that writes coordinates and co-op dates to the
+ * database, and it range-checked neither (SCRUM-302).
+ *
+ * Nothing downstream catches either one. `coord_lat` / `coord_lng` are plain
+ * `Float`, `start_date` / `end_date` are independent `Date`, so the save
+ * succeeds and the row is then quietly excluded from the searches it should
+ * appear in - no error anywhere, at any layer.
+ *
+ * The assertions are all "and writes nothing": the value being refused matters
+ * less than the refusal happening before the transaction opens.
+ */
+describe("user.edit - coordinates are range-checked (SCRUM-302)", () => {
+  const coordinateFields = [
+    "startCoordLng",
+    "startCoordLat",
+    "companyCoordLng",
+    "companyCoordLat",
+  ] as const;
+
+  const outOfRange: Record<(typeof coordinateFields)[number], number[]> = {
+    startCoordLng: [-180.1, 180.1],
+    startCoordLat: [-90.1, 90.1],
+    companyCoordLng: [-180.1, 180.1],
+    companyCoordLat: [-90.1, 90.1],
+  };
+
+  it.each(coordinateFields)(
+    "rejects %s outside WGS 84, writing nothing",
+    async (field) => {
+      for (const value of outOfRange[field]) {
+        const db = buildEditDb();
+
+        await expect(
+          editCallerFor(SESSION_USER, db).user.edit(
+            editInput({ [field]: value }),
+          ),
+        ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+        expect(db.prisma.user.update).not.toHaveBeenCalled();
+        expect(db.prisma.location.create).not.toHaveBeenCalled();
+        expect(db.prisma.carpoolSearch.create).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it("rejects a latitude that is only valid as a longitude", async () => {
+    // What a swapped pair looks like. 100 passes a bare `z.number()` and passes
+    // a longitude check, so this is the case the two schemas have to separate.
+    const db = buildEditDb();
+
+    await expect(
+      editCallerFor(SESSION_USER, db).user.edit(
+        editInput({ startCoordLat: 100 }),
+      ),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("rejects NaN, which every comparison would otherwise pass", async () => {
+    const db = buildEditDb();
+
+    await expect(
+      editCallerFor(SESSION_USER, db).user.edit(
+        editInput({ companyCoordLat: NaN }),
+      ),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it.each([-180, 180])("accepts longitude %s", async (value) => {
+    // The positive control: the bound is inclusive, so the antimeridian is a
+    // place and not an error.
+    const db = buildEditDb();
+
+    await expect(
+      editCallerFor(SESSION_USER, db).user.edit(
+        editInput({ startCoordLng: value, companyCoordLng: value }),
+      ),
+    ).resolves.toBeDefined();
+  });
+
+  it.each([-90, 90])("accepts latitude %s", async (value) => {
+    const db = buildEditDb();
+
+    await expect(
+      editCallerFor(SESSION_USER, db).user.edit(
+        editInput({ startCoordLat: value, companyCoordLat: value }),
+      ),
+    ).resolves.toBeDefined();
+  });
+});
+
+describe("user.edit - unresolved coordinates are refused (SCRUM-302)", () => {
+  // `[0, 0]` is `useAddressSelection`'s "nothing picked yet" default, and it is
+  // inside the valid range. A profile saved before the address resolved put the
+  // pin ~4000 miles from Boston, so the row matched nobody.
+  const UNSET_HOME = { startCoordLng: 0, startCoordLat: 0 };
+  const UNSET_COMPANY = { companyCoordLng: 0, companyCoordLat: 0 };
+
+  it.each([Role.RIDER, Role.DRIVER])(
+    "refuses a %s whose home never resolved",
+    async (role) => {
+      const db = buildEditDb();
+
+      await expect(
+        editCallerFor(SESSION_USER, db).user.edit(
+          editInput({ role, seatAvail: 2, ...UNSET_HOME }),
+        ),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+      expect(db.prisma.location.create).not.toHaveBeenCalled();
+      expect(db.prisma.carpoolSearch.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it("refuses a company address that never resolved", async () => {
+    const db = buildEditDb();
+
+    await expect(
+      editCallerFor(SESSION_USER, db).user.edit(
+        editInput({ ...UNSET_COMPANY }),
+      ),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("lets a VIEWER save with no resolved address", async () => {
+    // A VIEWER has no address to resolve and `user.me` already reports (0, 0)
+    // for a row with no Location, so refusing this would make their profile
+    // unsaveable rather than fixing anything.
+    const db = buildEditDb();
+
+    await expect(
+      editCallerFor(SESSION_USER, db).user.edit(
+        editInput({
+          role: Role.VIEWER,
+          seatAvail: 0,
+          ...UNSET_HOME,
+          ...UNSET_COMPANY,
+          startAddress: "",
+          companyAddress: "",
+        }),
+      ),
+    ).resolves.toBeDefined();
+
+    expect(db.homeOf(SESSION_USER)).toMatchObject({ coordLng: 0, coordLat: 0 });
+  });
+
+  it("accepts a point on one axis, which is a real place", async () => {
+    // Greenwich, and the equator. Only the exact pair is the sentinel; treating
+    // either component alone as unresolved would refuse legitimate saves.
+    const db = buildEditDb();
+
+    await expect(
+      editCallerFor(SESSION_USER, db).user.edit(
+        editInput({
+          startCoordLng: 0,
+          startCoordLat: 51.48,
+          companyCoordLng: -78.45,
+          companyCoordLat: 0,
+        }),
+      ),
+    ).resolves.toBeDefined();
+  });
+});
+
+describe("user.edit - co-op dates must run forwards (SCRUM-302)", () => {
+  const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
+
+  it("refuses a reversed range, writing nothing", async () => {
+    // Stored as submitted, this makes `dateOverlapFilter`'s full-overlap branch
+    // unsatisfiable for every candidate, so the user vanishes from those
+    // searches with no indication why.
+    const db = buildEditDb();
+
+    await expect(
+      editCallerFor(SESSION_USER, db).user.edit(
+        editInput({
+          coopStartDate: day("2027-01-31"),
+          coopEndDate: day("2026-01-31"),
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    expect(db.prisma.user.update).not.toHaveBeenCalled();
+    expect(db.prisma.carpoolSearch.create).not.toHaveBeenCalled();
+  });
+
+  it("accepts a forward range", async () => {
+    const db = buildEditDb();
+
+    await expect(
+      editCallerFor(SESSION_USER, db).user.edit(
+        editInput({
+          coopStartDate: day("2026-01-31"),
+          coopEndDate: day("2026-06-30"),
+        }),
+      ),
+    ).resolves.toBeDefined();
+  });
+
+  it("accepts a single-month co-op", async () => {
+    // Both pickers store the last day of the month chosen, so one month means
+    // two identical dates. Requiring a strict increase would break that.
+    const db = buildEditDb();
+
+    await expect(
+      editCallerFor(SESSION_USER, db).user.edit(
+        editInput({
+          coopStartDate: day("2026-03-31"),
+          coopEndDate: day("2026-03-31"),
+        }),
+      ),
+    ).resolves.toBeDefined();
+  });
+
+  it("still accepts a range that is not fully set", async () => {
+    // Whether both are required is `onboardSchema`'s question. A VIEWER has
+    // neither, and half-set combinations have always been storable here.
+    const db = buildEditDb();
+
+    await expect(
+      editCallerFor(SESSION_USER, db).user.edit(
+        editInput({ coopStartDate: day("2026-01-31"), coopEndDate: null }),
+      ),
+    ).resolves.toBeDefined();
+  });
+
+  it("accepts an overnight shift", async () => {
+    // Deliberately not checked: startTime/endTime are times of day rather than
+    // a range, and `minutesApart` measures them round the clock. A night shift
+    // finishing before it started is legal - see `src/server/db/README.md`.
+    const db = buildEditDb();
+
+    await expect(
+      editCallerFor(SESSION_USER, db).user.edit(
+        editInput({
+          startTime: "1970-01-01T22:00:00.000Z",
+          endTime: "1970-01-01T06:00:00.000Z",
+        }),
+      ),
+    ).resolves.toBeDefined();
+  });
+});
+
+/**
  * Atomicity of `user.edit` (SCRUM-233).
  *
  * One profile save writes the user row, two `Location` rows and a

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { Role, Status } from "@prisma/client";
 import { MAX_SEATS_AVAILABLE } from "../carpoolSeats";
 import { PROFILE_TEXT_MAX_LENGTH } from "../textLimits";
+import { COOP_DATE_ORDER_MESSAGE, isReversedCoopRange } from "../dateUtils";
 
 const custom = z.ZodIssueCode.custom;
 const tooLong = `Cannot be longer than ${PROFILE_TEXT_MAX_LENGTH} characters`;
@@ -90,6 +91,25 @@ export const onboardSchema = z
           path: ["endTime"],
           message: "Cannot be empty",
         });
+    }
+
+    // Ordering, checked for every role rather than inside the non-VIEWER block
+    // above: a reversed range is wrong whoever stored it, and the block above is
+    // about which fields are *required*. `user.edit` refuses the same thing, so
+    // this exists to name the field instead of failing the save (SCRUM-302).
+    //
+    // Deliberately absent: any equivalent check on `startTime` / `endTime`.
+    // Those are times of day, not a range, and finishing before you started is
+    // exactly how a night shift reads. `minutesApart` already measures them
+    // round the clock and takes the short way, so an overnight pair is scored
+    // correctly rather than tolerated - see the note in
+    // `src/server/db/README.md`.
+    if (isReversedCoopRange(data.coopStartDate, data.coopEndDate)) {
+      ctx.addIssue({
+        code: custom,
+        path: ["coopEndDate"],
+        message: COOP_DATE_ORDER_MESSAGE,
+      });
     }
   });
 export const profileDefaultValues = {
