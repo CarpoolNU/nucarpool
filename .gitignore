@@ -31,6 +31,10 @@ yarn-error.log*
 # local env files
 .env*.local
 .env
+# Written by the Amplify build spec from the container's environment, so it
+# holds real credentials whenever that build is run. `.env*.local` above does
+# not cover it and `.env` matches only the exact name.
+.env.production
 
 # vercel
 .vercel
