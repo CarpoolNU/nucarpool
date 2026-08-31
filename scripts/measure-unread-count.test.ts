@@ -17,7 +17,7 @@ import {
  *
  * `summarisePlan` and `indexVerdict` carry the weight. Everything the script
  * concludes comes from those two, so they are tested against the plans the
- * database actually returned — before SCRUM-296 and after — rather than against
+ * database actually returned rather than against
  * invented ones.
  */
 
@@ -78,8 +78,7 @@ const CURRENT_PLAN: ExplainRow[] = [
 ];
 
 /**
- * The plan for the same query *before* SCRUM-296 removed the role predicate,
- * captured the same way. The two `DEPENDENT SUBQUERY` blocks are the difference
+ * The two `DEPENDENT SUBQUERY` blocks are the difference
  * that mattered, and the reason the ticket's third criterion was worth acting on.
  */
 const LEGACY_PLAN: ExplainRow[] = [
