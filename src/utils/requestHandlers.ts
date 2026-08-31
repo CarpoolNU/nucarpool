@@ -1,7 +1,7 @@
 import { User, EnhancedPublicUser } from "../utils/types";
 import { Request, Role } from "@prisma/client";
 import { trpc } from "./trpc";
-import { toast } from "react-toastify";
+import { toast } from "react-toastify/unstyled";
 import { roleMismatchExplanation } from "./roleCompatibility";
 
 interface RequestHandlers {

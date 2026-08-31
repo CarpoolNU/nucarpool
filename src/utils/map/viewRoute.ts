@@ -8,7 +8,7 @@ import {
 } from "../types";
 import { trpc } from "../trpc";
 import { SetStateAction, useEffect } from "react";
-import { toast } from "react-toastify";
+import { toast } from "react-toastify/unstyled";
 import polyline from "@mapbox/polyline";
 import { GeoJSON, LineString } from "geojson";
 import { StaticImageData } from "next/image";

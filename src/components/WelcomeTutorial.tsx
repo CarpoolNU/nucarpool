@@ -1,7 +1,7 @@
 import React, { useEffect, useCallback, useState } from "react";
 import { useSession } from "next-auth/react";
 import { trpc } from "../utils/trpc";
-import { toast } from "react-toastify";
+import { toast } from "react-toastify/unstyled";
 import { useRouter } from "next/router";
 
 import { driver } from "driver.js";

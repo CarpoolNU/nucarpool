@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { toast } from "react-toastify";
+import { toast } from "react-toastify/unstyled";
 import { trpc } from "../../utils/trpc";
 import { PublicUser } from "../../utils/types";
 

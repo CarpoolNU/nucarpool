@@ -1,3 +1,16 @@
 {
-  "extends": "next/core-web-vitals"
+  "extends": "next/core-web-vitals",
+  "rules": {
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "react-toastify",
+            "message": "Import from \"react-toastify/unstyled\" instead. The two entry points are separate modules with separate state, so a `toast` from one never reaches a `ToastContainer` from the other - the toast simply never appears, and nothing fails. `/unstyled` also avoids injecting a <style> tag, which is why src/pages/_app.tsx imports the CSS instead."
+          }
+        ]
+      }
+    ]
+  }
 }

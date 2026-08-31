@@ -2,7 +2,7 @@ import { Permission } from "@prisma/client";
 import { trpc } from "../../utils/trpc";
 import React, { useEffect, useState } from "react";
 import Spinner from "../Spinner";
-import { toast } from "react-toastify";
+import { toast } from "react-toastify/unstyled";
 import { ConfigProvider, Select } from "antd";
 import { Note } from "../../styles/profile";
 import { AdminUser } from "../../utils/types";

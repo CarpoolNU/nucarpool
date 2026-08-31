@@ -107,7 +107,13 @@ jest.mock("./trpc", () => ({
 const mockToastError = jest.fn();
 const mockToastSuccess = jest.fn();
 
-jest.mock("react-toastify", () => ({
+/**
+ * `react-toastify/unstyled`, matching what the module under test imports.
+ * `jest.mock` keys on the specifier, so mocking `"react-toastify"` here would
+ * intercept nothing and let the real toast run - which is how these 11 tests
+ * failed when the imports moved.
+ */
+jest.mock("react-toastify/unstyled", () => ({
   toast: {
     error: (...args: unknown[]) => mockToastError(...args),
     success: (...args: unknown[]) => mockToastSuccess(...args),
