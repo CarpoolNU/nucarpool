@@ -126,8 +126,26 @@ Validation runs at import time in [`src/utils/env/browser.ts`](src/utils/env/bro
 | `yarn db:start` / `yarn db:stop` | Start / stop the local MySQL container               |
 | `yarn db:schema`                 | Apply migrations and regenerate the Prisma client    |
 | `yarn seed`                      | **Wipes** the database, then inserts generated users |
+| `yarn check:format`              | Prettier, check only — run before pushing            |
 
-## Deployment
+## Formatting and line endings
+
+`yarn check:format` runs `prettier --check .` and is a CI job, so a badly formatted file fails the build. A husky pre-commit hook runs `pretty-quick --staged`, which formats what you staged — but only what you staged, so a commit made with `--no-verify` can still fail the check.
+
+**Line endings are normalised to LF by [`.gitattributes`](.gitattributes)**, on every platform and whatever your `core.autocrlf` is set to. This matters because Prettier's `endOfLine` default is `lf`: without normalisation, a Windows checkout with `core.autocrlf=true` gets CRLF everywhere and `yarn check:format` fails on the entire repository — while CI passes, because the GitHub runner checks out LF (SCRUM-315).
+
+**If you cloned before `.gitattributes` was added,** apply it to your existing working tree once:
+
+```bash
+git add --renormalize .
+git status          # expect no changes; commit them if there are any
+```
+
+That rewrites nothing unless your clone actually holds CRLF. To confirm where you stand:
+
+```bash
+git ls-files --eol | grep -v 'i/lf'   # expect only binaries, shown as -text
+```
 
 **The app deploys on AWS Amplify Hosting.** [`amplify.yml`](amplify.yml) at the repository root is the build specification, and a file at that path **takes precedence over the build settings in the Amplify console** — so the repository is authoritative for how the app is built and what is deployed.
 

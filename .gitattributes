@@ -1,0 +1,46 @@
+# Line endings (SCRUM-315).
+#
+# Without this file, Git's `core.autocrlf=true` — the default on a Windows
+# install — rewrites every text file to CRLF on checkout. Prettier's `endOfLine`
+# default is `lf`, so `yarn check:format` then reports the entire repository as
+# badly formatted: 229 files on the checkout that prompted this. The CI job
+# passes regardless, because the GitHub runner checks out LF, which makes the
+# check useless exactly where it is meant to be used — before pushing.
+#
+# `text=auto eol=lf` normalises to LF in the index *and* in the working tree, on
+# every platform, whatever the developer's `core.autocrlf` says. Setting
+# Prettier's `endOfLine: "auto"` instead would silence the check rather than make
+# the tree consistent, and would leave the shell scripts below still broken.
+#
+# The repository was already entirely LF when this landed — 283 text files at
+# `i/lf w/lf`, zero CRLF in index or working tree — so this changes no content.
+# It stops the tree from *becoming* inconsistent.
+*                   text=auto eol=lf
+
+# Executable scripts, where a CRLF is not a formatting opinion but a bug: the
+# shebang line becomes `#!/bin/sh\r` and the kernel reports "no such file or
+# directory" for an interpreter that is plainly there. Covered by the rule above,
+# and stated explicitly because this is the case that fails loudest.
+*.sh                text eol=lf
+.husky/pre-commit   text eol=lf
+
+# Binaries. `text=auto` already detects these by content, so this is a belt to
+# that braces — but an explicit marker means a new image can never be mangled by
+# a heuristic having an off day, and `-diff` keeps `git diff` from printing a
+# screenful of bytes.
+*.png               binary
+*.jpg               binary
+*.jpeg              binary
+*.gif               binary
+*.ico               binary
+*.webp              binary
+*.woff              binary
+*.woff2             binary
+*.ttf               binary
+*.eot               binary
+*.pdf               binary
+*.zip               binary
+
+# Generated, and reviewed as a whole or not at all. Still LF-normalised text —
+# this only collapses it in diffs and in GitHub's language statistics.
+yarn.lock           linguist-generated=true -diff
