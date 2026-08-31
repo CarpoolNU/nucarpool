@@ -10,14 +10,14 @@ the finish line.
 
 ## Where truth lives — read, don't restate
 
-| Source                                                                                                | Authority                                                                  |
-| ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| [`CLAUDE.md`](../../../CLAUDE.md)                                                                     | Permanent project rules, safety boundaries, commands, architecture gotchas |
-| [`.claude/settings.json`](../../settings.json)                                                        | Tool permissions (allow / ask / deny) — the only permission authority      |
-| Jira issue                                                                                            | Live requirements and acceptance criteria                                  |
-| Repository + READMEs                                                                                  | How the code actually works today                                          |
-| Confluence (space `CNCS`)                                                                             | Deeper architecture, infra, deployment, process, product history           |
-| [`docs/development/AI_DEVELOPMENT_WORKFLOW.md`](../../../docs/development/AI_DEVELOPMENT_WORKFLOW.md) | The human-facing explanation of this system                                |
+| Source                                                                        | Authority                                                                  |
+| ----------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| [`CLAUDE.md`](../../../CLAUDE.md)                                             | Permanent project rules, safety boundaries, commands, architecture gotchas |
+| [`.claude/settings.json`](../../settings.json)                                | Tool permissions (allow / ask / deny) — the only permission authority      |
+| Jira issue                                                                    | Live requirements and acceptance criteria                                  |
+| Repository + READMEs                                                          | How the code actually works today                                          |
+| Confluence (space `CNCS`)                                                     | Deeper architecture, infra, deployment, process, product history           |
+| [`docs/AI_DEVELOPMENT_WORKFLOW.md`](../../../docs/AI_DEVELOPMENT_WORKFLOW.md) | The human-facing explanation of this system                                |
 
 Do not copy the tech stack, data model, environment variables, or permission lists into your
 reasoning output — consult them where they live.

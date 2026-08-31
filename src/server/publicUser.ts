@@ -1,5 +1,5 @@
 import { Location, CarpoolSearch } from "@prisma/client";
-import { PublicUser } from "./types";
+import { PublicUser } from "../utils/types";
 
 /**
  * Decimal places kept on a home coordinate that leaves the server for someone

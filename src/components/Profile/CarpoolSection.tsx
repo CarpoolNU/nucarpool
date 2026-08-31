@@ -15,8 +15,8 @@ import { OnboardingFormInputs, User } from "../../utils/types";
 import ControlledAddressCombobox from "./ControlledAddressCombobox";
 import { PROFILE_TEXT_MAX_LENGTH } from "../../utils/textLimits";
 import { useAddressSelection } from "../../utils/useAddressSelection";
-import SelectDays from "../Shared/Schedule/SelectDays";
-import SelectTimeRange from "../Shared/Schedule/SelectTimeRange";
+import SelectDays from "../Schedule/SelectDays";
+import SelectTimeRange from "../Schedule/SelectTimeRange";
 interface CarpoolSectionProps {
   register: UseFormRegister<OnboardingFormInputs>;
   errors: FieldErrors<OnboardingFormInputs>;

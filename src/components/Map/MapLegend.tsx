@@ -1,7 +1,7 @@
-import RedSquare from "../../public/driver-dest.png";
-import BlueSquare from "../../public/user-dest.png";
-import UserDriver from "../../public/user-dest-driver.png";
-import OrangeSquare from "../../public/rider-dest.png";
+import RedSquare from "../../../public/driver-dest.png";
+import BlueSquare from "../../../public/user-dest.png";
+import UserDriver from "../../../public/user-dest-driver.png";
+import OrangeSquare from "../../../public/rider-dest.png";
 import Image from "next/image";
 interface MapLegendProps {
   role: string;

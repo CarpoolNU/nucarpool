@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { router, protectedRouter } from "../createRouter";
-import { generateEmailParams } from "../../../utils/email";
+import { generateEmailParams } from "../../emailParams";
 import { browserEnv } from "../../../utils/env/browser";
 import { SendTemplatedEmailCommand } from "@aws-sdk/client-ses";
 import type { PrismaClient } from "@prisma/client";

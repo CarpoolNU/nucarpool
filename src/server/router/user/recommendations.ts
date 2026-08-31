@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { protectedRouter, router } from "../createRouter";
-import { convertCarpoolSearchToPublic } from "../../../utils/publicUser";
+import { convertCarpoolSearchToPublic } from "../../publicUser";
 import { fetchRankedCandidates } from "../../db/candidateSearch";
 import { z } from "zod";
 

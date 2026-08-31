@@ -1,21 +1,21 @@
 import { Dialog } from "@headlessui/react";
 import { useContext, useState } from "react";
-import { GroupMembers } from "./Group/GroupMemberCard";
-import { trpc } from "../utils/trpc";
-import { UserContext } from "../utils/userContext";
+import { GroupMembers } from "./GroupMemberCard";
+import { trpc } from "../../utils/trpc";
+import { UserContext } from "../../utils/userContext";
 import { Role } from "@prisma/client";
-import Spinner from "./Spinner";
-import { PublicUser, User } from "../utils/types";
-import useIsMobile from "../utils/useIsMobile";
+import Spinner from "../Spinner";
+import { PublicUser, User } from "../../utils/types";
+import useIsMobile from "../../utils/useIsMobile";
 import {
   GroupDetails,
   NOTES_MAX_LENGTH,
   conversationStyleOptions,
   hasAnyDetail,
   musicPreferenceOptions,
-} from "./Group/groupDetails";
-import { useGroupDetails } from "./Group/useGroupDetails";
-import { QueryError } from "./QueryError";
+} from "./groupDetails";
+import { useGroupDetails } from "./useGroupDetails";
+import { QueryError } from "../QueryError";
 
 /**
  * The "My Group" screen.

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { protectedRouter, router } from "../createRouter";
 
 import { Prisma, RequestStatus } from "@prisma/client";
-import { convertCarpoolSearchToPublicWithExactHome } from "../../../utils/publicUser";
+import { convertCarpoolSearchToPublicWithExactHome } from "../../publicUser";
 import { MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
 
 /**

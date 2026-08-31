@@ -8,7 +8,7 @@ import {
 import { UserCard } from "./UserCard";
 import { useContext, useState } from "react";
 import { createPortal } from "react-dom";
-import ConnectModal from "../Modals/ConnectModal";
+import ConnectModal from "./ConnectModal";
 import { UserContext } from "../../utils/userContext";
 import { Role } from "@prisma/client";
 import { trackEvent } from "../../utils/mixpanel";

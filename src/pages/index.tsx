@@ -37,11 +37,11 @@ import {
   clearDirections,
   clearMarkers,
 } from "../utils/map/viewRoute";
-import { MapConnectPortal } from "../components/MapConnectPortal";
+import { MapConnectPortal } from "../components/Map/MapConnectPortal";
 import useSearch from "../utils/search";
 import AddressCombobox from "../components/Map/AddressCombobox";
 import updateUserLocation from "../utils/map/updateUserLocation";
-import { MapLegend } from "../components/MapLegend";
+import { MapLegend } from "../components/Map/MapLegend";
 import Image from "next/image";
 import BlueSquare from "../../public/user-dest.png";
 import BlueCircle from "../../public/blue-circle.png";

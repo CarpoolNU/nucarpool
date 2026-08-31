@@ -1,9 +1,9 @@
-import { generateEmailParams } from "./email";
+import { generateEmailParams } from "./emailParams";
 import type {
   AcceptanceEmailSchema,
   MessageEmailSchema,
   RequestEmailSchema,
-} from "./email";
+} from "./emailParams";
 
 /**
  * `generateEmailParams` picks the SES template and decides who is copied. Getting

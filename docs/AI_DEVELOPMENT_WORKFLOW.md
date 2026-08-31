@@ -56,26 +56,26 @@ Three ideas carry the design:
 1. **CLAUDE.md is instructions; MCP is data.** The repo says _how to behave_; the Atlassian
    MCP server _retrieves_ Jira and Confluence content on demand.
 2. **Permissions are enforced by the harness, not by Claude's goodwill.**
-   [`.claude/settings.json`](../../.claude/settings.json) is checked in, so guardrails are
+   [`.claude/settings.json`](../.claude/settings.json) is checked in, so guardrails are
    identical for everyone.
 3. **The boundary is the merge, not the PR.** Claude owns delivery through a review-ready
    PR — including fixing its own CI failures. Review and merge are human acts.
 
 ## 3. Repository configuration files
 
-| File                                                                               | Role                                                                                                    | In git |
-| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------ |
-| [`CLAUDE.md`](../../CLAUDE.md)                                                     | Durable project instructions: commands, architecture gotchas, safety, git policy. Loaded every session. | yes    |
-| [`.claude/settings.json`](../../.claude/settings.json)                             | Permission model: allowed / prompted / forbidden tools. **Source of truth.**                            | yes    |
-| `.claude/settings.local.json`                                                      | Your machine-local overrides. Personal, gitignored — never commit it.                                   | no     |
-| [`.claude/skills/jira-ticket/SKILL.md`](../../.claude/skills/jira-ticket/SKILL.md) | The repeatable procedure for executing a ticket — see [§10](#10-standard-engineering-lifecycle).        | yes    |
-| [`.mcp.json`](../../.mcp.json)                                                     | Declares the Atlassian MCP server. URL only — no credentials.                                           | yes    |
-| [`README.md`](../../README.md)                                                     | Human setup: stack, environment variables, commands.                                                    | yes    |
-| [`.github/workflows/`](../../.github/workflows/)                                   | CI — see [§14](#14-ci-behavior).                                                                        | yes    |
-| [`.github/dependabot.yml`](../../.github/dependabot.yml)                           | Dependency update automation — see [§14](#14-ci-behavior).                                              | yes    |
+| File                                                                            | Role                                                                                                    | In git |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------ |
+| [`CLAUDE.md`](../CLAUDE.md)                                                     | Durable project instructions: commands, architecture gotchas, safety, git policy. Loaded every session. | yes    |
+| [`.claude/settings.json`](../.claude/settings.json)                             | Permission model: allowed / prompted / forbidden tools. **Source of truth.**                            | yes    |
+| `.claude/settings.local.json`                                                   | Your machine-local overrides. Personal, gitignored — never commit it.                                   | no     |
+| [`.claude/skills/jira-ticket/SKILL.md`](../.claude/skills/jira-ticket/SKILL.md) | The repeatable procedure for executing a ticket — see [§10](#10-standard-engineering-lifecycle).        | yes    |
+| [`.mcp.json`](../.mcp.json)                                                     | Declares the Atlassian MCP server. URL only — no credentials.                                           | yes    |
+| [`README.md`](../README.md)                                                     | Human setup: stack, environment variables, commands.                                                    | yes    |
+| [`.github/workflows/`](../.github/workflows/)                                   | CI — see [§14](#14-ci-behavior).                                                                        | yes    |
+| [`.github/dependabot.yml`](../.github/dependabot.yml)                           | Dependency update automation — see [§14](#14-ci-behavior).                                              | yes    |
 
-Layer-specific docs: [`src/server/router/README.md`](../../src/server/router/README.md)
-(tRPC routers, context, auth) and [`src/server/db/README.md`](../../src/server/db/README.md)
+Layer-specific docs: [`src/server/router/README.md`](../src/server/router/README.md)
+(tRPC routers, context, auth) and [`src/server/db/README.md`](../src/server/db/README.md)
 (Prisma, schema, migrations). Read the relevant one before editing that layer.
 
 ## 4. First-time setup
@@ -89,7 +89,7 @@ yarn db:start         # local MySQL 8.0 in Docker
 yarn dev              # http://localhost:3000
 ```
 
-You also need a `.env`. [`.env.example`](../../.env.example) is the authoritative list of
+You also need a `.env`. [`.env.example`](../.env.example) is the authoritative list of
 every variable and its shape. Get real values from a teammate or the team's Confluence space — never from a commit,
 and never paste them into a Claude session. AWS keys use **suffixed** names
 (`ACCESS_KEY_ID_AWS`, not `AWS_ACCESS_KEY_ID`); standard names fail validation at import time.
@@ -114,7 +114,7 @@ In-session: `/mcp` (MCP status and login), `/permissions` (active rules), `/help
 **What MCP is:** the Model Context Protocol gives an AI assistant typed tools for an external
 system. Instead of guessing about a ticket, Claude calls a tool that returns the real one.
 
-**How it's configured:** [`.mcp.json`](../../.mcp.json) declares one server, `atlassian`,
+**How it's configured:** [`.mcp.json`](../.mcp.json) declares one server, `atlassian`,
 pointed at Atlassian's hosted remote MCP endpoint over HTTP.
 
 **No credentials live in the repo.** Auth is per-developer OAuth:
@@ -242,7 +242,7 @@ editing a PR prompts you. Merging is blocked outright.
 ## 10. Standard engineering lifecycle
 
 > **This lifecycle is executable.** The step-by-step procedure lives in the
-> [`jira-ticket` Skill](../../.claude/skills/jira-ticket/SKILL.md), which Claude Code invokes
+> [`jira-ticket` Skill](../.claude/skills/jira-ticket/SKILL.md), which Claude Code invokes
 > when you ask it to work on a ticket. This section explains the shape
 > and the reasoning; the Skill is what actually runs. Keeping them separate is deliberate —
 > three layers, three jobs: **CLAUDE.md** holds permanent rules, **`.claude/settings.json`**
@@ -390,7 +390,7 @@ Do not file speculation, trivia, or anything the active ticket already covers.
 
 ## 12. Permission and safety model
 
-[`.claude/settings.json`](../../.claude/settings.json) sorts tool calls into three buckets.
+[`.claude/settings.json`](../.claude/settings.json) sorts tool calls into three buckets.
 **That file is the source of truth** — this explains the concept, not the list, so the list can
 change without this document going stale.
 
@@ -430,20 +430,20 @@ enforcement by GitHub. See [§17](#17-known-limitations-and-teamadmin-responsibi
 
 ## 14. CI behavior
 
-Current workflows in [`.github/workflows/`](../../.github/workflows/). The seven checks all run
-on the Node version in [`.nvmrc`](../../.nvmrc) (22); `auto-comment.yml` is not a check and runs
+Current workflows in [`.github/workflows/`](../.github/workflows/). The seven checks all run
+on the Node version in [`.nvmrc`](../.nvmrc) (22); `auto-comment.yml` is not a check and runs
 no Node of its own:
 
-| Workflow                                                       | Trigger                            | Runs                                                                                                            |
-| -------------------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| [`lint.yml`](../../.github/workflows/lint.yml)                 | PR + push to `main`                | `yarn lint` (ESLint, `--max-warnings=0`)                                                                        |
-| [`tsc.yml`](../../.github/workflows/tsc.yml)                   | PR + push to `main`                | `yarn tsc`                                                                                                      |
-| [`test.yml`](../../.github/workflows/test.yml)                 | PR + push to `main`                | `yarn test` (Jest)                                                                                              |
-| [`build.yml`](../../.github/workflows/build.yml)               | PR + push to `main`                | `prisma generate`, then `yarn build` against placeholder env values                                             |
-| [`env-contract.yml`](../../.github/workflows/env-contract.yml) | PR + push to `main`                | `node scripts/check-env-contract.js`                                                                            |
-| [`schema.yml`](../../.github/workflows/schema.yml)             | PR + push to `main`                | `prisma validate`, then `prisma migrate diff --from-migrations` against a throwaway MySQL 8.0 service container |
-| [`format.yml`](../../.github/workflows/format.yml)             | PR + push to `main`                | `yarn check:format` (`prettier --check .`)                                                                      |
-| [`auto-comment.yml`](../../.github/workflows/auto-comment.yml) | PR touching `prisma/schema.prisma` | comments a reminder to open a PlanetScale deploy request before merging                                         |
+| Workflow                                                    | Trigger                            | Runs                                                                                                            |
+| ----------------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| [`lint.yml`](../.github/workflows/lint.yml)                 | PR + push to `main`                | `yarn lint` (ESLint, `--max-warnings=0`)                                                                        |
+| [`tsc.yml`](../.github/workflows/tsc.yml)                   | PR + push to `main`                | `yarn tsc`                                                                                                      |
+| [`test.yml`](../.github/workflows/test.yml)                 | PR + push to `main`                | `yarn test` (Jest)                                                                                              |
+| [`build.yml`](../.github/workflows/build.yml)               | PR + push to `main`                | `prisma generate`, then `yarn build` against placeholder env values                                             |
+| [`env-contract.yml`](../.github/workflows/env-contract.yml) | PR + push to `main`                | `node scripts/check-env-contract.js`                                                                            |
+| [`schema.yml`](../.github/workflows/schema.yml)             | PR + push to `main`                | `prisma validate`, then `prisma migrate diff --from-migrations` against a throwaway MySQL 8.0 service container |
+| [`format.yml`](../.github/workflows/format.yml)             | PR + push to `main`                | `yarn check:format` (`prettier --check .`)                                                                      |
+| [`auto-comment.yml`](../.github/workflows/auto-comment.yml) | PR touching `prisma/schema.prisma` | comments a reminder to open a PlanetScale deploy request before merging                                         |
 
 - All seven checks share one trigger policy: **every pull request, plus pushes to `main`.** They
   deliberately do not run on pushes to other branches — while a PR is open that would run
@@ -458,7 +458,7 @@ no Node of its own:
   itself. Nothing queries the database during a build.
 - `env-contract.yml` exists because those placeholders always satisfy envsafe — a build alone
   can never notice that a newly required variable was left out of `.env.example`. The check
-  derives the required names from [`src/utils/env/`](../../src/utils/env/) and fails when the
+  derives the required names from [`src/utils/env/`](../src/utils/env/) and fails when the
   template does not document them. Run it locally with `yarn check:env`.
 - `--max-warnings=0` on lint is load-bearing: several rules that matter here, notably
   `react-hooks/exhaustive-deps`, are warnings rather than errors and would otherwise never
@@ -468,7 +468,7 @@ no Node of its own:
   `PublicUser` converters, validation, and the routers' authorization and ownership checks.
   Test files are co-located as `*.test.ts` beside the module they cover, except that a test
   file must never go under `src/pages/`, where a filename is also a route.
-  [`jest.setup.env.js`](../../jest.setup.env.js) supplies placeholder values by reusing the
+  [`jest.setup.env.js`](../jest.setup.env.js) supplies placeholder values by reusing the
   `--github-env` mode of `scripts/check-env-contract.js`, the same source `build.yml` uses, so
   suites that import `serverEnv` — directly or through `appRouter` — load without a `.env`.
   Everything runs on mocks: no component, browser or real-database tests exist. Component
@@ -484,9 +484,9 @@ are read-only and need no approval.
 
 ### Dependency updates
 
-[`.github/dependabot.yml`](../../.github/dependabot.yml) configures Dependabot for the `npm`
+[`.github/dependabot.yml`](../.github/dependabot.yml) configures Dependabot for the `npm`
 ecosystem (`package.json` and `yarn.lock`) and for the actions pinned in
-[`.github/workflows/`](../../.github/workflows/). Both run weekly, Monday morning Eastern.
+[`.github/workflows/`](../.github/workflows/). Both run weekly, Monday morning Eastern.
 
 - Packages that have to move together are **grouped** into one pull request: `@aws-sdk/*`,
   `prisma` with `@prisma/client`, `@trpc/*`, `react` with `react-dom` and their types,
@@ -511,7 +511,7 @@ ecosystem (`package.json` and `yarn.lock`) and for the actions pinned in
   `prisma db push` alters a schema with no host guard of any kind. Use `yarn build` to test
   a build, and confirm `DATABASE_URL` targets local Docker MySQL before any schema or seed
   command. Both are denied in settings for a reason.
-  [`src/utils/seedGuard.ts`](../../src/utils/seedGuard.ts) additionally refuses to seed any
+  [`src/utils/seedGuard.ts`](../src/utils/seedGuard.ts) additionally refuses to seed any
   host outside a local allowlist, so a misdirected `DATABASE_URL` fails loudly instead of
   wiping a shared database. Treat that guard as a backstop, not as permission to run seed
   commands — the deny rules still apply.
@@ -531,10 +531,10 @@ ecosystem (`package.json` and `yarn.lock`) and for the actions pinned in
 | `/mcp` shows Atlassian failed or disconnected  | Token expired — re-authenticate via `/mcp`. If the browser never opens, complete the flow manually and return to the session.                                                                   |
 | Claude can't see a Jira issue that exists      | MCP access mirrors your Atlassian account. Confirm you're on the right account and can open it in a browser. Also confirm the key — this project is `SCRUM`; the site hosts other projects too. |
 | Claude doesn't know the project rules          | You started outside the repo root. Relaunch from the root so `CLAUDE.md`, `.claude/settings.json`, and `.mcp.json` load. Verify with `/permissions`.                                            |
-| A tool call is refused with no prompt          | It matched a `deny` pattern. Intentional — check [`.claude/settings.json`](../../.claude/settings.json); don't route around it.                                                                 |
+| A tool call is refused with no prompt          | It matched a `deny` pattern. Intentional — check [`.claude/settings.json`](../.claude/settings.json); don't route around it.                                                                    |
 | `yarn tsc` — "is that even a script?"          | There's no `tsc` npm script; Yarn resolves `node_modules/.bin/tsc`. The command is correct.                                                                                                     |
 | `gh` fails with an auth error                  | `gh auth status`, then `gh auth login`. Run it yourself — it's interactive.                                                                                                                     |
-| App fails at startup on env vars               | `envsafe` validates at import time, so a missing value stops startup. Check names against [`README.md`](../../README.md); suffixed AWS keys are the usual culprit.                              |
+| App fails at startup on env vars               | `envsafe` validates at import time, so a missing value stops startup. Check names against [`README.md`](../README.md); suffixed AWS keys are the usual culprit.                                 |
 | `yarn db:schema` prompts to reset the database | It runs `prisma migrate dev`, which may offer a reset on drift. Confirm your target database before agreeing.                                                                                   |
 
 ## 17. Known limitations and team/admin responsibilities
@@ -550,7 +550,7 @@ ecosystem (`package.json` and `yarn.lock`) and for the actions pinned in
   treat the repository-side rules above as the protection you can actually rely on.
 - Whether CI checks are _required_ before merge; who can merge; whether review is mandatory.
 - PlanetScale deploy-request permissions.
-- **Dependabot alerts and security updates.** [`.github/dependabot.yml`](../../.github/dependabot.yml)
+- **Dependabot alerts and security updates.** [`.github/dependabot.yml`](../.github/dependabot.yml)
   turns on scheduled _version_ updates by itself, but the vulnerability-driven _security_
   updates are a repository setting, under Settings → Code security. Until an admin enables
   them, the repository gets routine scheduled upgrades and no alert-triggered patches.
@@ -598,5 +598,5 @@ line. Claude never merges and never sets Done.**
 ---
 
 _Maintenance: keep this conceptual. When permissions change, update
-[`.claude/settings.json`](../../.claude/settings.json) and leave §12's explanation alone unless
+[`.claude/settings.json`](../.claude/settings.json) and leave §12's explanation alone unless
 the concept itself changed._

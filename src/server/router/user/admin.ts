@@ -8,7 +8,7 @@ import {
   generateWeekLabels,
   summariseConversations,
   summariseUsers,
-} from "../../../utils/adminDataUtils";
+} from "../../adminDataUtils";
 import { AdminUserRow } from "../../../utils/types";
 
 /**

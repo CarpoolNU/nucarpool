@@ -2,10 +2,10 @@ import React, { ReactNode, useState } from "react";
 import { FaMinus, FaPlus } from "react-icons/fa6";
 import { FaTimes } from "react-icons/fa";
 import Checkbox from "@mui/material/Checkbox";
-import { FiltersState } from "../utils/types";
-import { formatDateToMonth, lastDayOfMonthUTC } from "../utils/dateUtils";
-import { TextField } from "./TextField";
-import StaticDayBox from "./Sidebar/StaticDayBox";
+import { FiltersState } from "../../utils/types";
+import { formatDateToMonth, lastDayOfMonthUTC } from "../../utils/dateUtils";
+import { TextField } from "../TextField";
+import StaticDayBox from "./StaticDayBox";
 
 interface FilterSectionProps {
   title: string;

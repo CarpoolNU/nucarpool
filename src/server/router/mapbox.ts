@@ -5,10 +5,7 @@ import { Feature, FeatureCollection } from "geojson";
 import { serverEnv } from "../../utils/env/server";
 import { Role } from "@prisma/client";
 import { DirectionsResponse } from "../../utils/types";
-import {
-  convertCarpoolSearchToPublic,
-  roundCoord,
-} from "../../utils/publicUser";
+import { convertCarpoolSearchToPublic, roundCoord } from "../publicUser";
 import { fetchRankedCandidates } from "../db/candidateSearch";
 import { parseMapboxFeature } from "../../utils/map/parseAddress";
 import {
