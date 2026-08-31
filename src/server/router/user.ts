@@ -132,13 +132,6 @@ export const userRouter = router({
       companyCity: carpoolSearch?.companyLocation?.city ?? "",
       companyState: carpoolSearch?.companyLocation?.state ?? "",
       companyAddress: carpoolSearch?.companyLocation?.streetAddress ?? "",
-      // POI fields (empty defaults for now)
-      companyPOIAddress: "",
-      companyPOICoordLng: 0,
-      companyPOICoordLat: 0,
-      startPOILocation: "",
-      startPOICoordLng: 0,
-      startPOICoordLat: 0,
     };
   }),
 

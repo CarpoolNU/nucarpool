@@ -69,7 +69,6 @@ const Index: NextPage = () => {
   const router = useRouter();
   const [option, setOption] = useState<"user" | "carpool" | "account">("user");
   const [isLoading, setIsLoading] = useState(false);
-  const [initialLoad, setInitialLoad] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const { uploadFile } = useUploadFile(selectedFile);
@@ -146,7 +145,8 @@ const Index: NextPage = () => {
         coopEndDate: user.coopEndDate!,
         bio: user.bio,
       });
-      // remove setInitialLoad(false) so it reloads every time
+      // Deliberately re-runs on every `user` change rather than only the first:
+      // a save refetches, and the form must show what was stored.
     }
   }, [reset, user]);
   const role = watch("role");

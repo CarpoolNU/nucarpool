@@ -1,46 +1,5 @@
 import { Location, CarpoolSearch } from "@prisma/client";
-import { PublicUser, User } from "./types";
-
-/**
- * Converts the given ``User`` to a ``PublicUser``, as to hide sensitive data.
- *
- * Like `convertCarpoolSearchToPublic`, this discloses no email address: it is
- * not relationship-scoped, so it has to assume the viewer is a stranger
- * (SCRUM-292). `publicUser.test.ts` pins the two to the same key set, which is
- * what keeps "a PublicUser built for no particular viewer" meaning one thing.
- *
- * @param user a rider or driver (merged User type from API).
- * @returns non-sensitive information about a user.
- */
-export const convertToPublic = (user: User): PublicUser => {
-  return {
-    id: user.id,
-    name: user.name,
-    image: user.image,
-    bio: user.bio,
-    preferredName: user.preferredName,
-    pronouns: user.pronouns,
-    role: user.role,
-    status: user.status,
-    seatAvail: user.seatAvail,
-    companyName: user.companyName,
-    daysWorking: user.daysWorking,
-    startTime: user.startTime,
-    endTime: user.endTime,
-    coopEndDate: user.coopEndDate,
-    coopStartDate: user.coopStartDate,
-    startAddress:
-      user.startCity && user.startState
-        ? `${user.startCity}, ${user.startState}`
-        : user.startAddress || "Exact Location Unavailable",
-    startCoordLng: user.startCoordLng,
-    startCoordLat: user.startCoordLat,
-    companyAddress: user.companyAddress,
-    companyCoordLng: user.companyCoordLng,
-    companyCoordLat: user.companyCoordLat,
-    carpoolId: user.carpoolId,
-  };
-};
+import { PublicUser } from "./types";
 
 /**
  * Decimal places kept on a home coordinate that leaves the server for someone

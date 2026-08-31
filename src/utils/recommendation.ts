@@ -357,37 +357,14 @@ export const calculateScore = (
   };
 };
 
-export type GenerateUserInput = {
-  role: Role;
-  seatAvail?: number;
-  companyCoordLng: number;
-  companyCoordLat: number;
-  startCoordLng: number;
-  startCoordLat: number;
-  daysWorking: string; // Format: S,M,T,W,R,F,S
-  startTime: string;
-  endTime: string;
-  carpoolId?: string;
-  coopStartDate: Date | null;
-  coopEndDate: Date | null;
-  companyAddress?: string;
-  startAddress?: string;
-  companyStreet?: string;
-  companyCity?: string;
-  companyState?: string;
-  startStreet?: string;
-  startCity?: string;
-  startState?: string;
-};
-
 /**
  * Creates a full user object from a user id.
  *
  * Only the id is needed: since the migration that moved role, schedule, seats
  * and coordinates off `User` and onto `CarpoolSearch`, everything else on the
  * user row is either derived from the id or hardcoded. The parameter used to be
- * typed `GenerateUserInput & { id: string }`, which forced every caller into a
- * cast to supply fields this function never read.
+ * typed with a wide `GenerateUserInput` shape, which forced every caller into a
+ * cast to supply fields this function never read; that type is gone (SCRUM-250).
  *
  * @param userInfo an object carrying the id to build the user around
  * @returns an upsert argument for the user row
