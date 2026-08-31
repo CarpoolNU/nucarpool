@@ -17,6 +17,7 @@ import { UserContext } from "../../utils/userContext";
 import useIsMobile from "../../utils/useIsMobile";
 import { QueryState } from "../../utils/queryState";
 import { QueryError } from "../QueryError";
+import { viewerModeHidesCards } from "./viewerAccess";
 
 interface SidebarContentProps {
   subType: string;
@@ -39,10 +40,15 @@ interface SidebarContentProps {
 const emptyMessages = {
   recommendations: `We're unable to find any recommendations for you right now.
   We recommend reviewing your profile to make sure all information you've entered is accurate!`,
-  disabledReq:
-    "You are currently in Viewer mode, switch to Rider or Driver in profile to view Requests.",
   disabledRec:
     "You are currently in Viewer mode, to get recommendations select Driver or Rider in profile.",
+  /**
+   * A VIEWER with no requests at all. The non-Viewer copy below points at the
+   * recommendations sidebar, which is the one place Viewer mode genuinely does
+   * block, so it would be misdirection here (SCRUM-316).
+   */
+  viewerNoRequests: `You have no incoming or outgoing requests.
+  Viewer mode does not show recommendations, so switch to Rider or Driver in your profile to find people to carpool with.`,
   favorites: `You have no users currently favorited.
   Click the star icon on the upper-right side of a user's card to add them to your favorites!`,
   sent: "You have no current outgoing requests. Send requests to other users through the recommendations sidebar!",
@@ -77,11 +83,11 @@ const emptyMessage = (card: string, disabled: boolean): string => {
     case "favorites":
       return emptyMessages.favorites;
     case "sent":
-      return disabled ? emptyMessages.disabledReq : emptyMessages.sent;
+      return disabled ? emptyMessages.viewerNoRequests : emptyMessages.sent;
     case "received":
-      return disabled ? emptyMessages.disabledReq : emptyMessages.received;
+      return disabled ? emptyMessages.viewerNoRequests : emptyMessages.received;
     case "all":
-      return disabled ? emptyMessages.disabledReq : emptyMessages.all;
+      return disabled ? emptyMessages.viewerNoRequests : emptyMessages.all;
     default:
       return "";
   }
@@ -238,8 +244,14 @@ export const SidebarContent = (props: SidebarContentProps) => {
       >
         {/* Order matters. Viewer mode comes first because it is a role, not a
             load result - a VIEWER has no use for a retry on a list they cannot
-            act on. Then failure, then loading, and only then "nothing here". */}
-        {props.disabled && props.subType !== "favorites" ? (
+            act on. Then failure, then loading, and only then "nothing here".
+
+            `viewerModeHidesCards` is what this used to test inline as
+            `subType !== "favorites"`, which swept up the three Requests tabs
+            and left a VIEWER unable to reach - or withdraw - a request they had
+            already sent (SCRUM-316). Requests now fall through to the card
+            list; only recommendations are replaced by copy. */}
+        {props.disabled && viewerModeHidesCards(props.subType) ? (
           <div className="m-4 text-center text-lg font-light">
             {emptyMessage(props.subType, props.disabled)}
           </div>
