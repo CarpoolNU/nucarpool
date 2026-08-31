@@ -67,9 +67,15 @@ updates:
         patterns:
           - "prisma"
           - "@prisma/client"
+      # `@tanstack/react-query` is in this group despite the different scope:
+      # `@trpc/react-query` peer-depends on it, and the two majors are released
+      # in lockstep — v11 requires react-query v5, v10 requires v4. Left out,
+      # Dependabot proposed tRPC 10 -> 11 against a pinned react-query 4 (#64),
+      # which cannot compile and cannot be fixed on that branch.
       trpc:
         patterns:
           - "@trpc/*"
+          - "@tanstack/react-query"
       react:
         patterns:
           - "react"
