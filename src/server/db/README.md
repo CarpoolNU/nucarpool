@@ -107,6 +107,8 @@ Group ride preferences used to be one `GROUP_DETAILS_V1:{…json…}` blob, writ
 
 Both are dropped by **SCRUM-287**, once SCRUM-253 is deployed everywhere and [`scripts/backfill-group-preferences.ts`](../../../scripts/backfill-group-preferences.ts) has run. Until then they stay so that a schema deploy landing before the matching build cannot break the old code.
 
+**As of 2026-08-31 the backfill is not finished, so SCRUM-287 is not yet safe.** Staging still holds 3 rows whose preferences exist only in `group_message`, and production is unknown — read access to the PlanetScale `main` branch was not available. The run-state table in [`scripts/README.md`](../../../scripts/README.md#run-state-record) is where that answer lives; check it, and the dry run, before dropping either column. While those rows exist, `resolveGroupDetails`'s fallback is the only thing keeping their content readable (SCRUM-307).
+
 Lengths on the live path are enforced where every other one is: Zod on [`groups.updatePreferences`](../router/user/groups.ts), against the same constants the textarea uses. A failed save is now reported — [`useGroupDetails`](../../components/Group/useGroupDetails.ts) awaits `mutateAsync` and raises an error toast, replacing an `await mutate(...)` that resolved immediately and let the success toast fire regardless.
 
 ## Terms acceptance
@@ -263,6 +265,11 @@ immediately before deleting it, and refuses to run when the candidate count
 exceeds `--max` (default 500). It is deliberately **not** a `yarn` script: it
 deletes production rows and should be reached for on purpose. Confirm
 `DATABASE_URL` points where you intend first.
+
+Staging reported zero orphans on 2026-08-31; production is unknown. Both the
+record and the query that answers it without running the script live in
+[`scripts/README.md`](../../../scripts/README.md#run-state-record) — update it
+when you run this.
 
 ### Consequences to know about
 
