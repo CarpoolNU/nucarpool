@@ -908,10 +908,33 @@ describe("minutesApart", () => {
     // existing at all is guaranteed by `test.yml` and its review, not from
     // here. `never reads a local-time accessor` above is the assertion that
     // does not depend on either.
+    //
+    // Compared by **offset**, not by zone name. Many IANA zones are aliases and
+    // ICU reports the canonical name rather than the one asked for, so
+    // `Asia/Kolkata` resolves to `Asia/Calcutta` and a name comparison fails on
+    // a zone that was in fact applied correctly. The offset is what the code
+    // under test is actually sensitive to.
     const requested = process.env.NUCARPOOL_TEST_TZ || "UTC";
 
     expect(process.env.TZ).toBe(requested);
-    expect(Intl.DateTimeFormat().resolvedOptions().timeZone).toBe(requested);
+
+    const offsetOf = (timeZone: string) => {
+      // A fixed instant, so this does not drift with the date the suite runs on.
+      const instant = new Date("2026-01-15T12:00:00.000Z");
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone,
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }).formatToParts(instant);
+      const at = (type: string) =>
+        Number(parts.find((part) => part.type === type)?.value);
+      return at("hour") * 60 + at("minute");
+    };
+
+    expect(offsetOf(Intl.DateTimeFormat().resolvedOptions().timeZone)).toBe(
+      offsetOf(requested),
+    );
   });
 
   it("agrees with the shortest distance round the clock, across the whole day", () => {
