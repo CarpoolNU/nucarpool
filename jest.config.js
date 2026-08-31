@@ -28,7 +28,49 @@
 process.env.TZ = process.env.NUCARPOOL_TEST_TZ || "UTC";
 
 module.exports = {
-  preset: "ts-jest",
+  /**
+   * Replaces the `ts-jest` preset so that `node_modules` is transformed too.
+   *
+   * The preset's own `transform` covers `^.+\.tsx?$` only, and Jest excludes
+   * `node_modules` from transformation by default. An ESM-only dependency
+   * therefore reaches `jest-runtime` as raw `import` syntax and throws
+   * "Cannot use import statement outside a module" - which fails the whole
+   * *suite* at load time rather than failing an assertion, so every test in it
+   * stops running. On the superjson 2 bump that removed about 415 tests from the
+   * run, including every tRPC authorization suite, while `Tests: 757 passed`
+   * appeared in the summary with no failures listed.
+   *
+   * Node is not the problem: Node 22 supports `require()` of an ES module, so
+   * `ts-node`, the seed script and `next build` all load these packages fine.
+   * Jest is the exception because it resolves modules through its own registry.
+   *
+   * `transformIgnorePatterns: []` transforms **all** of `node_modules` rather
+   * than an allow-list of known ESM-only packages. That is the point: an
+   * allow-list has to be edited every time a dependency goes ESM-only, and
+   * forgetting looks exactly like the bug above - tests quietly not running.
+   * Transforming everything cannot be forgotten. It costs about three seconds
+   * on a cold Jest cache and nothing on a warm one; a package that TypeScript
+   * cannot parse would fail loudly, which is the failure mode we want.
+   *
+   * The extension pattern covers `.mjs` deliberately - an ESM-only package may
+   * publish its entry point as `.mjs`, and missing it reproduces the original
+   * error. `.cjs` is already CommonJS and passes through harmlessly.
+   */
+  transform: {
+    "^.+\\.[cm]?[tj]sx?$": [
+      "ts-jest",
+      {
+        // `allowJs` so plain JavaScript in `node_modules` is compiled at all;
+        // `module: commonjs` is what actually rewrites `import` to `require`.
+        tsconfig: {
+          allowJs: true,
+          module: "commonjs",
+          esModuleInterop: true,
+        },
+      },
+    ],
+  },
+  transformIgnorePatterns: [],
 
   // All imported modules in your tests should be mocked automatically
   // automock: false,
