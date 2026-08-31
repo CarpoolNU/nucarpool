@@ -473,7 +473,12 @@ no Node of its own:
   suites that import `serverEnv` — directly or through `appRouter` — load without a `.env`.
   Everything runs on mocks: no component, browser or real-database tests exist. Component
   tests would first need `jest-environment-jsdom` and a React testing library, since Jest
-  uses `ts-jest` with the default `node` environment.
+  runs `ts-jest` in the default `node` environment.
+- `jest.config.js` configures that transform explicitly instead of using the `ts-jest`
+  preset, and transforms `node_modules` as well. An ESM-only dependency otherwise reaches
+  Jest as raw `import` syntax and the whole suite fails to load, so its tests silently stop
+  running rather than failing. The comment there explains why the allow-list alternative was
+  rejected.
 - Whether these checks are _required_ before merge is a branch-protection setting, not
   something CI enforces.
 - A husky pre-commit hook runs `npx pretty-quick --staged` locally.
