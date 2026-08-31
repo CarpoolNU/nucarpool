@@ -35,7 +35,7 @@
     "@aws-sdk/s3-request-presigner": "^3.1116.0",
     "@emotion/react": "11.14.0",
     "@emotion/styled": "11.14.1",
-    "@headlessui/react": "^1.6.5",
+    "@headlessui/react": "^2.2.10",
     "@hookform/resolvers": "5.9.1",
     "@mapbox/polyline": "^1.2.0",
     "@mui/icons-material": "5.18.0",

@@ -29,7 +29,18 @@ const ControlledAddressCombobox = (props: ControlledAddressComboboxProps) => {
           className={`relative w-full ${props.className}`}
           as="div"
           value={props.addressSelected}
-          onChange={(val: CarpoolFeature) => {
+          /**
+           * `null` is reachable since Headless UI v2 made the Combobox value
+           * nullable - v1 only ever handed back a suggestion. Guarded rather
+           * than forwarded: `val.place_name` below would throw, and ignoring it
+           * keeps v1's behaviour. Clearing the text box is a separate path,
+           * handled by the input's own `onChange`, which writes a blank address
+           * and blanks the form field.
+           */
+          onChange={(val: CarpoolAddress | null) => {
+            if (!val) {
+              return;
+            }
             props.addressSetter(val);
             fieldProps.onChange(val.place_name);
           }}
@@ -81,9 +92,9 @@ const ControlledAddressCombobox = (props: ControlledAddressComboboxProps) => {
                 props.addressSuggestions.map((feat) => (
                   <Combobox.Option
                     key={feat.id}
-                    className={({ active }) =>
-                      `] cursor-default select-none border-black p-3 ${
-                        active ? "bg-blue-400 text-white" : "text-gray-900"
+                    className={({ focus }) =>
+                      `cursor-default select-none border-black p-3 ${
+                        focus ? "bg-blue-400 text-white" : "text-gray-900"
                       }`
                     }
                     value={feat}
