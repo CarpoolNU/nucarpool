@@ -1,6 +1,6 @@
 import React, { useState, useCallback, ReactNode } from "react";
 import Image from "next/image";
-import Cropper, { Point } from "react-easy-crop";
+import Cropper, { Area, Point } from "react-easy-crop";
 import { AiOutlineUser } from "react-icons/ai";
 import getCroppedImg from "../../utils/cropImage";
 import useProfileImage from "../../utils/useProfileImage";
@@ -15,9 +15,14 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
   const [zoom, setZoom] = useState(1);
   const [minZoom, setMinZoom] = useState(1);
 
-  const [croppedArea, setCroppedArea] = useState();
-
-  const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null);
+  // The crop rectangle react-easy-crop reports, in pixels, and the only thing
+  // `handleCrop` needs. Typed with the library's own `Area` rather than `any`,
+  // because this is the value a future major could reshape without anything
+  // here noticing: no test covers the cropper.
+  //
+  // `onCropComplete`'s first argument - the same rectangle as percentages - was
+  // also being stored, in state nothing ever read. Dropped rather than typed.
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
   const [showModal, setShowModal] = useState<boolean>(false);
 
   const {
@@ -27,8 +32,7 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
   } = useProfileImage();
 
   const onCropComplete = useCallback(
-    (croppedAreaPercentage: any, croppedAreaPixels: any) => {
-      setCroppedArea(croppedAreaPercentage);
+    (_croppedAreaPercentage: Area, croppedAreaPixels: Area) => {
       setCroppedAreaPixels(croppedAreaPixels);
     },
     [],
@@ -39,7 +43,6 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
     setCrop({ x: 0, y: 0 });
     setZoom(1);
     setMinZoom(1);
-    setCroppedArea(undefined);
     setCroppedAreaPixels(null);
     setShowModal(false);
   };
