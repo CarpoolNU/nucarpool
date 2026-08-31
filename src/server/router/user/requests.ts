@@ -29,10 +29,21 @@ import { MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
  * message, but `Message` in `utils/types.ts` declares it required, so it is kept
  * for one string rather than letting the wire shape drift from the type.
  *
- * Deliberately no `take` - see the note on `me` below.
+ * **Bounded to one message (SCRUM-317).** This used to return the whole history
+ * of every conversation, because the open thread read it too and bounding it
+ * would have been silent truncation. The thread now loads from
+ * `user.messages.conversation`, which is paginated and participant-scoped, so
+ * this can return what the card list actually needs: the newest message per
+ * conversation, for the preview text and the unread dot.
+ *
+ * `desc` + `take: 1` rather than `asc`, so the one row kept is the newest.
+ * `getLatestMessageForRequest` still sorts what it is given and takes `[0]`, so
+ * it is correct either way - but it can only pick the newest message if the
+ * newest message is the one present.
  */
 const conversationMessages = {
-  orderBy: { dateCreated: "asc" },
+  orderBy: { dateCreated: "desc" },
+  take: 1,
   select: {
     id: true,
     conversationId: true,
@@ -46,30 +57,25 @@ const conversationMessages = {
 // use this router to manage invitations
 export const requestsRouter = router({
   /**
-   * Every request either side of the caller, with each pair's conversation.
+   * Every request either side of the caller, with the newest message of each
+   * pair's conversation.
    *
-   * **Why message history is still unbounded (SCRUM-301).** The ticket asked
-   * for a `take` per conversation *with the open thread loaded separately*, or
-   * an explicit decision that full history is required. This is that decision,
-   * and it is "not yet, and not here".
+   * **Message history is now bounded (SCRUM-317).** It was not, and the reason
+   * is worth keeping: one query fed two consumers with different needs — the
+   * Requests tab, which wants only the newest message per card
+   * (`getLatestMessageForRequest`), and the open thread, which renders the whole
+   * history. A `take` while both read this would have silently removed
+   * scrollback from the one consumer that needed it.
    *
-   * A `take` alone would be silent truncation. This query feeds two different
-   * needs at once: the Requests tab, which wants only the newest message per
-   * card (`getLatestMessageForRequest`), and the open thread, which renders the
-   * whole history with date separators and no "load older" control. Bounding
-   * the shared payload would quietly remove scrollback from the one consumer
-   * that needs it, with nothing in the UI to say so and no way to ask for more.
+   * The thread now reads `user.messages.conversation` instead, which is
+   * paginated and — unlike `messages.getMessages`, removed in SCRUM-222 for
+   * taking a bare conversation id — authorizes against the request row. With
+   * the two consumers separated, this one can return the single row the cards
+   * use, which is what `take: 1` above does.
    *
-   * Splitting it properly means a second, paginated, participant-scoped
-   * procedure for the open thread - which is re-treading `messages.getMessages`,
-   * removed in SCRUM-222 precisely because it took a bare conversation id and
-   * returned anyone's thread. That is worth doing carefully rather than as a
-   * footnote to a projection change, so it is SCRUM-317 instead.
-   *
-   * What this change does instead is make each message cheap: the narrow
-   * `select` above removes a whole `User` row per message, which is where
-   * essentially all of the weight was. See
-   * `scripts/measure-requests-payload.ts` for the measurement.
+   * SCRUM-301 had already made each message cheap, dropping a whole `User` row
+   * per message. That was the larger factor by far; this removes what was left
+   * of the linear growth. `scripts/measure-requests-payload.ts` measures both.
    */
   me: protectedRouter.query(async ({ ctx }) => {
     const userId = ctx.session.user?.id;

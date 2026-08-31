@@ -63,6 +63,23 @@ const MessagePanel = ({
       throw new Error("No request for the selected conversation");
     }
 
+    // Since SCRUM-317 this is the **newest message only**, not the thread:
+    // `user.requests.me` is bounded to one message per conversation, and the
+    // full history lives behind `user.messages.conversation`, which this
+    // component does not query.
+    //
+    // The heuristic survives that, because of what it is for: "do not email
+    // them if they have just messaged me". If the newest message is theirs, the
+    // check below still sees it and suppresses the email exactly as before. If
+    // the newest message is mine, then they have not just messaged me — I am
+    // the one talking — and emailing is the right call anyway.
+    //
+    // The residual case is a burst: they message, I reply, I send again 20
+    // seconds later. The newest message is mine, so this asks for a
+    // notification. Harmless, and deliberately not worth another query: as the
+    // comment below says, the server applies its own cooldown and is
+    // authoritative. The cost of being wrong here is one pointless call, never
+    // a duplicate email.
     const converstationMessages = request.conversation?.messages;
 
     // If the last message from the recipient is less than 5 mins old, don't send email notification
