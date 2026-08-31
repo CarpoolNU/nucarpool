@@ -265,6 +265,34 @@ describe("the CSP allows what the app actually loads", () => {
     // Uploads are previewed from a data URL before they are sent.
     expect(imgSrc).toContain("data:");
   });
+
+  it("permits the profile-picture bucket as a connect target, not just an image source", async () => {
+    // `useUploadFile` PUTs the file straight to a presigned S3 URL with
+    // `fetch`, which `connect-src` governs. The bucket was in `img-src` only,
+    // so enforcement would have blocked every profile-picture upload while the
+    // report-only header kept it invisible (SCRUM-305).
+    const connectSrc = (await cspDirectives()).get("connect-src")!;
+
+    expect(connectSrc).toContain("amazonaws.com");
+  });
+
+  it("permits every host the app fetches from, in connect-src", async () => {
+    // The companion to "permits every image host in the CSP as well" below.
+    // That one catches a missing *image* host; this one catches a missing
+    // *fetch* target, which is how the S3 gap above survived.
+    const connectSrc = (await cspDirectives()).get("connect-src")!;
+
+    for (const host of [
+      "'self'", // tRPC, and the CSP collector itself
+      "amazonaws.com", // profile-picture upload
+      "https://*.mapbox.com", // tiles, geocoding, directions, telemetry
+      "https://*.mixpanel.com", // analytics
+      "https://*.pusher.com", // realtime, HTTP fallback
+      "wss://*.pusher.com", // realtime, websocket
+    ]) {
+      expect(connectSrc).toContain(host);
+    }
+  });
 });
 
 describe("remote image hosts", () => {

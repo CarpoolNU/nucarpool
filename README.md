@@ -190,6 +190,12 @@ Violations post to `/api/csp-report`, which logs one line per violation prefixed
 
 Enforcing is then a one-line change: rename the header from `Content-Security-Policy-Report-Only` to `Content-Security-Policy`. Exactly one test fails when you do — the one that pins report-only — and updating it is part of that change.
 
+**One gap was found and closed before that exercise, by reading the code rather than waiting for a report (SCRUM-305).** `useUploadFile` PUTs the profile picture straight to a presigned S3 URL with `fetch`, so the bucket is a `connect-src` target as well as an `img-src` one — and it was listed only as an image source. Enforcing the policy as it stood would have blocked every profile-picture upload, one of the four flows the gate exists to check. `connect-src` now names the bucket, and `next.config.test.ts` pins every fetch target the same way it already pinned every image host.
+
+The same audit found nothing else: the S3 upload is the **only** `fetch` to an external origin anywhere in browser-reachable code, everything else being same-origin tRPC. Mapbox, Pusher, Mixpanel and the Google font hosts were already covered, and the Azure AD sign-in redirect is a top-level navigation, which no directive here governs. That does not replace exercising a deployed environment — inline styles, extension noise and anything loaded by a dependency at runtime only show up in a real browser — but it removes the one failure the code could predict.
+
+**Residual weakness, which enforcement does not fix.** `script-src` keeps `'unsafe-inline'` and `'unsafe-eval'`: the Pages Router inlines the `__NEXT_DATA__` hydration payload, and mapbox-gl evaluates style expressions. An enforced policy carrying both still permits an injected inline script, so this buys protection against unexpected _origins_ rather than against XSS. Closing it needs per-request nonces and middleware to generate them — tracked separately.
+
 Two caveats worth knowing before relying on the reports. The rate limit is 100 reports per minute **per server instance**, so a serverless deployment's real ceiling scales with concurrency and reports beyond it are dropped (the count of drops is logged when the window rolls over, so loss is never silent). And Safari and Firefox only implement the deprecated `report-uri`, so the newer `report-to` path is effectively Chrome and Edge; the policy sends both.
 
 ## Documentation

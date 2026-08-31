@@ -51,6 +51,16 @@ const CSP_REPORT_PATH = "/api/csp-report";
  *   NEXT_PUBLIC_PUSHER_CLUSTER, so the subdomain is not fixed at build time.
  * - `*.mapbox.com` covers both api.mapbox.com (tiles, geocoding, directions)
  *   and events.mapbox.com (mapbox-gl telemetry).
+ * - the S3 host in connect-src: `useUploadFile` PUTs the profile picture
+ *   straight to a presigned URL with `fetch`, so the bucket is a connect target
+ *   as well as an image source. It was in `img-src` only, which would have
+ *   blocked every upload the moment the policy was enforced (SCRUM-305).
+ *
+ * Audited against the client bundle for SCRUM-305: the only `fetch` to an
+ * external origin anywhere in browser-reachable code is that S3 upload;
+ * everything else is same-origin tRPC. Mapbox, Pusher, Mixpanel and the Google
+ * font hosts were already covered, and the Azure AD sign-in redirect is a
+ * top-level navigation, which no directive here governs.
  */
 const contentSecurityPolicy = [
   "default-src 'self'",
@@ -58,7 +68,7 @@ const contentSecurityPolicy = [
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' data: https://fonts.gstatic.com",
   `img-src 'self' data: blob: https://lh3.googleusercontent.com https://${s3Host} https://*.mapbox.com`,
-  "connect-src 'self' https://*.mapbox.com https://*.mixpanel.com https://*.pusher.com wss://*.pusher.com",
+  `connect-src 'self' https://${s3Host} https://*.mapbox.com https://*.mixpanel.com https://*.pusher.com wss://*.pusher.com`,
   "worker-src 'self' blob:",
   "child-src 'self' blob:",
   "frame-ancestors 'none'",
