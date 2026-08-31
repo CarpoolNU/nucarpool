@@ -1,10 +1,11 @@
 import { TRPCError } from "@trpc/server";
 import { protectedRouter, router } from "../createRouter";
-import _ from "lodash";
 import { convertCarpoolSearchToPublic } from "../../../utils/publicUser";
-import { Status, CarpoolSearch, Location, User } from "@prisma/client";
-import { calculateScore, Recommendation } from "../../../utils/recommendation";
+import { fetchRankedCandidates } from "../../db/candidateSearch";
 import { z } from "zod";
+
+/** Recommendations shown in the explore sidebar. */
+const RECOMMENDATION_LIMIT = 50;
 
 // use this router to manage invitations
 export const recommendationsRouter = router({
@@ -30,24 +31,16 @@ export const recommendationsRouter = router({
     )
     .query(async ({ input, ctx }) => {
       const userId = ctx.session.user?.id;
-      
+
       if (!userId) {
         throw new TRPCError({
           code: "UNAUTHORIZED",
           message: "User not authenticated.",
         });
       }
-      
+
       // Get current user's CarpoolSearch for comparison
-      const currentUserSearch: (CarpoolSearch & {
-        user: User & {
-          favorites: User[];
-          sentRequests: any[];
-          receivedRequests: any[];
-        };
-        homeLocation: Location | null;
-        companyLocation: Location | null;
-      }) | null = await ctx.prisma.carpoolSearch.findFirst({
+      const currentUserSearch = await ctx.prisma.carpoolSearch.findFirst({
         where: { userId },
         include: {
           user: {
@@ -55,13 +48,13 @@ export const recommendationsRouter = router({
               favorites: input.filters.favorites,
               sentRequests: !input.filters.messaged,
               receivedRequests: !input.filters.messaged,
-            }
+            },
           },
           homeLocation: true,
           companyLocation: true,
         },
       });
-      
+
       if (!currentUserSearch) {
         throw new TRPCError({
           code: "NOT_FOUND",
@@ -69,72 +62,37 @@ export const recommendationsRouter = router({
         });
       }
 
-      const { favorites, sentRequests, receivedRequests } = currentUserSearch.user;
+      const { favorites, sentRequests, receivedRequests } =
+        currentUserSearch.user;
 
-      let excludedUserIds: string[] = [userId];
+      const excludedUserIds: string[] = [userId];
       if (!input.filters.messaged) {
         excludedUserIds.push(
           ...sentRequests.map((r) => r.toUserId),
-          ...receivedRequests.map((r) => r.fromUserId)
+          ...receivedRequests.map((r) => r.fromUserId),
         );
       }
 
-      // build CarpoolSearch query
-      let carpoolSearchQuery: any = {
-        userId: { notIn: excludedUserIds },
-        status: Status.ACTIVE,
-        user: {
-          isOnboarded: true,
-        }
-      };
-
-      // favorites filter
-      if (input.filters.favorites) {
-        carpoolSearchQuery.userId = {
-          ...carpoolSearchQuery.userId,
-          in: favorites.map((f: User) => f.id)
-        };
-      }
-
-      // query CarpoolSearches with all necessary relations
-      const carpoolSearches = await ctx.prisma.carpoolSearch.findMany({
-        where: carpoolSearchQuery,
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              image: true,
-              bio: true,
-              preferredName: true,
-              pronouns: true,
-              isOnboarded: true,
-            }
-          },
-          homeLocation: true,
-          companyLocation: true,
-        },
+      // Bounded candidate query plus scoring, shared with
+      // `mapbox.geoJsonUserList` (SCRUM-245).
+      const sortedSearches = await fetchRankedCandidates({
+        prisma: ctx.prisma,
+        currentUserSearch,
+        filters: input.filters,
+        sort: input.sort,
+        excludedUserIds,
+        // Only read when the filter is on, and only included then: the
+        // `favorites` include above is `input.filters.favorites`, and Prisma
+        // omits the key entirely rather than returning [] for a false include,
+        // so mapping it unconditionally threw on every default page load
+        // (SCRUM-288).
+        favoriteUserIds: input.filters.favorites
+          ? favorites.map((f) => f.id)
+          : [],
       });
 
-      // calculate scores
-      const recs: Recommendation[] = _.compact(
-        carpoolSearches.map(calculateScore(currentUserSearch, input.filters, input.sort))
-      );
-      
-      // sort by score
-      recs.sort((a: Recommendation, b: Recommendation) => a.score - b.score);
-      
-      // map back to full CarpoolSearch objects
-      const sortedSearches = recs.map((rec) =>
-        carpoolSearches.find((search) => search.user.id === rec.id)
-      );
-      
-      const finalSearches = sortedSearches.slice(0, 50);
-
-      // convert to public format
-      return Promise.all(
-        finalSearches.map((search) => convertCarpoolSearchToPublic(search!))
-      );
+      return sortedSearches
+        .slice(0, RECOMMENDATION_LIMIT)
+        .map(convertCarpoolSearchToPublic);
     }),
 });

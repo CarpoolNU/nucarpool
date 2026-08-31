@@ -1,20 +1,24 @@
 import { addWeeks, differenceInWeeks, startOfWeek } from "date-fns";
-import { TempGroup, TempRequest, TempUser } from "./types";
-import _ from "lodash";
+import { Role, Status } from "@prisma/client";
+import { AdminUserCounts, AdminUserRow, ConversationStats } from "./types";
+
+/**
+ * Pure aggregation for the admin dashboard.
+ *
+ * Since SCRUM-246 these run on the server, inside `user.admin.getDashboardStats`
+ * and `getDashboardSeries`, rather than in the browser: the dashboard used to
+ * download whole tables and reduce them client-side. They stay here, free of
+ * Prisma and of React, so they remain unit-testable — see `adminDataUtils.test.ts`.
+ *
+ * Week bucketing uses `startOfWeek`, which is timezone-sensitive. Running on the
+ * server means the buckets follow the server's timezone rather than each admin's,
+ * so the chart is now the same for every viewer instead of shifting per browser.
+ */
 
 interface ItemWithDate {
   dateCreated: Date;
 }
-export const filterItemsByDate = (
-  items: ItemWithDate[],
-  startTimestamp: number,
-  endTimestamp: number,
-) => {
-  return items.filter((item) => {
-    const itemTimestamp = startOfWeek(item.dateCreated).getTime();
-    return itemTimestamp >= startTimestamp && itemTimestamp <= endTimestamp;
-  });
-};
+
 export const countCumulativeItemsPerWeek = (
   items: ItemWithDate[],
   weekLabels: Date[],
@@ -73,123 +77,34 @@ export function generateWeekLabels(allDates: Date[]): Date[] {
   return weekLabels;
 }
 
-export function getMinMaxDates(
-  users: TempUser[],
-  groups: TempGroup[],
-  requests: TempRequest[],
-): { minDate: number; maxDate: number } {
-  const allTimestamps = [
-    ...users.map((user) => user.dateCreated.getTime()),
-    ...groups.map((group) => group.dateCreated.getTime()),
-    ...requests.map((request) => request.dateCreated.getTime()),
-  ];
-
-  if (!allTimestamps.length) return { minDate: 0, maxDate: 0 };
-
-  const minTimestamp = Math.min(...allTimestamps);
-  const maxTimestamp = Math.max(...allTimestamps);
-
-  return { minDate: minTimestamp, maxDate: maxTimestamp };
-}
-
-export function filterDataForLineChart(
-  users: TempUser[],
-  groups: TempGroup[],
-  requests: TempRequest[],
-  sliderRange: number[],
-) {
-  const activeUsers = users.filter((user) => user.status === "ACTIVE");
-  const inactiveUsers = _.differenceBy(users, activeUsers);
-  const riderRequests = requests.filter(
-    (request) => request.fromUser.role === "RIDER",
-  );
-  const driverRequests = requests.filter(
-    (request) => request.fromUser.role === "DRIVER",
-  );
-
-  const filteredActiveUsers = filterItemsByDate(
-    activeUsers,
-    sliderRange[0],
-    sliderRange[1],
-  );
-  const filteredInactiveUsers = filterItemsByDate(
-    inactiveUsers,
-    sliderRange[0],
-    sliderRange[1],
-  );
-  const filteredGroups = filterItemsByDate(
-    groups,
-    sliderRange[0],
-    sliderRange[1],
-  );
-  const filteredRequests = filterItemsByDate(
-    requests,
-    sliderRange[0],
-    sliderRange[1],
-  );
-  const filteredDriverRequests = filterItemsByDate(
-    driverRequests,
-    sliderRange[0],
-    sliderRange[1],
-  );
-  const filteredRiderRequests = filterItemsByDate(
-    riderRequests,
-    sliderRange[0],
-    sliderRange[1],
-  );
-
-  return {
-    filteredActiveUsers,
-    filteredInactiveUsers,
-    filteredGroups,
-    filteredRequests,
-    filteredDriverRequests,
-    filteredRiderRequests,
-  };
-}
-
 export function buildLineChartData(
-  filteredActiveUsers: ItemWithDate[],
-  filteredInactiveUsers: ItemWithDate[],
-  filteredGroups: ItemWithDate[],
-  filteredRequests: ItemWithDate[],
-  filteredDriverRequests: ItemWithDate[],
-  filteredRiderRequests: ItemWithDate[],
+  activeUsers: ItemWithDate[],
+  inactiveUsers: ItemWithDate[],
+  groups: ItemWithDate[],
+  requests: ItemWithDate[],
+  driverRequests: ItemWithDate[],
+  riderRequests: ItemWithDate[],
   weekLabels: Date[],
 ) {
-  const activeUserCount = countCumulativeItemsPerWeek(
-    filteredActiveUsers,
-    weekLabels,
-  );
-  const inactiveUserCount = countCumulativeItemsPerWeek(
-    filteredInactiveUsers,
-    weekLabels,
-  );
-  const groupCounts = countCumulativeItemsPerWeek(filteredGroups, weekLabels);
-  const requestCount = countCumulativeItemsPerWeek(
-    filteredRequests,
-    weekLabels,
-  );
-  const driverRequestCount = countCumulativeItemsPerWeek(
-    filteredDriverRequests,
-    weekLabels,
-  );
-  const riderRequestCount = countCumulativeItemsPerWeek(
-    filteredRiderRequests,
-    weekLabels,
-  );
-
   return {
-    activeUserCount,
-    inactiveUserCount,
-    groupCounts,
-    requestCount,
-    driverRequestCount,
-    riderRequestCount,
+    activeUserCount: countCumulativeItemsPerWeek(activeUsers, weekLabels),
+    inactiveUserCount: countCumulativeItemsPerWeek(inactiveUsers, weekLabels),
+    groupCounts: countCumulativeItemsPerWeek(groups, weekLabels),
+    requestCount: countCumulativeItemsPerWeek(requests, weekLabels),
+    driverRequestCount: countCumulativeItemsPerWeek(driverRequests, weekLabels),
+    riderRequestCount: countCumulativeItemsPerWeek(riderRequests, weekLabels),
   };
 }
 
-export function getDaysFrequency(riders: TempUser[], drivers: TempUser[]) {
+/**
+ * `daysWorking` is a seven-character comma-separated bitmask, so this one cannot
+ * be pushed into SQL without a raw query — it is aggregated in Node instead, over
+ * a projection that selects only `role` and `daysWorking`.
+ */
+export function getDaysFrequency(
+  riders: { daysWorking: string }[],
+  drivers: { daysWorking: string }[],
+) {
   const riderDayCount = [0, 0, 0, 0, 0, 0, 0];
   const driverDayCount = [0, 0, 0, 0, 0, 0, 0];
 
@@ -213,6 +128,103 @@ export function getDaysFrequency(riders: TempUser[], drivers: TempUser[]) {
   };
 }
 
-export function countRole(arr: TempUser[], role: string) {
+export function countRole(arr: { role: Role }[], role: Role) {
   return arr.filter((u) => u.role === role).length;
+}
+
+/** The four "onboarding" quadrants the user-counts bar chart is built from. */
+const quadrants = (rows: AdminUserRow[]) => ({
+  AO: rows.filter((u) => u.status === Status.ACTIVE && u.isOnboarded),
+  ANO: rows.filter((u) => u.status === Status.ACTIVE && !u.isOnboarded),
+  IO: rows.filter((u) => u.status !== Status.ACTIVE && u.isOnboarded),
+  INO: rows.filter((u) => u.status !== Status.ACTIVE && !u.isOnboarded),
+});
+
+/**
+ * Reduces one narrow row per user into the ~25 numbers the dashboard renders.
+ *
+ * A user with no `CarpoolSearch` arrives here as `VIEWER`/`INACTIVE`, matching the
+ * defaults the flattening in `user.me` applies. Only the first search is read, in
+ * line with the one-search-per-user assumption the rest of the codebase makes.
+ */
+export function summariseUsers(rows: AdminUserRow[]) {
+  const { AO, ANO, IO, INO } = quadrants(rows);
+
+  const totalAO = AO.length;
+  const totalANO = ANO.length;
+  const totalIO = IO.length;
+  const totalINO = INO.length;
+
+  const driverAO = countRole(AO, Role.DRIVER);
+  const driverANO = countRole(ANO, Role.DRIVER);
+  const driverIO = countRole(IO, Role.DRIVER);
+  const driverINO = countRole(INO, Role.DRIVER);
+
+  const riderAO = countRole(AO, Role.RIDER);
+  const riderANO = countRole(ANO, Role.RIDER);
+  const riderIO = countRole(IO, Role.RIDER);
+  const riderINO = countRole(INO, Role.RIDER);
+
+  const userCounts: AdminUserCounts = {
+    totalAO,
+    totalANO,
+    totalIO,
+    totalINO,
+    driverAO,
+    driverANO,
+    driverIO,
+    driverINO,
+    riderAO,
+    riderANO,
+    riderIO,
+    riderINO,
+    viewerAO: totalAO - driverAO - riderAO,
+    viewerANO: totalANO - driverANO - riderANO,
+    viewerIO: totalIO - driverIO - riderIO,
+    viewerINO: totalINO - driverINO - riderINO,
+  };
+
+  const activeUsers = [...AO, ...ANO];
+  const drivers = activeUsers.filter((u) => u.role === Role.DRIVER);
+  const riders = activeUsers.filter((u) => u.role === Role.RIDER);
+  const inGroup = (u: AdminUserRow) => !!u.carpoolId && u.carpoolId !== "";
+
+  return {
+    userCounts,
+    // Previously `getDaysFrequency(drivers, riders)` against a `(riders, drivers)`
+    // signature, which swapped the two series in the chart (SCRUM-284).
+    daysFrequency: getDaysFrequency(riders, drivers),
+    membership: {
+      driversInGroup: drivers.filter(inGroup).length,
+      ridersInGroup: riders.filter(inGroup).length,
+      totalDrivers: drivers.length,
+      // Mirrors the dashboard's long-standing definition: every active user who
+      // is not a driver, so VIEWERs are counted here too.
+      totalRiders: activeUsers.length - drivers.length,
+    },
+  };
+}
+
+/**
+ * `messageCountsPerConversation` comes from a `message.groupBy` on the database,
+ * so no message row — and no message body — ever leaves MySQL. Conversations with
+ * no messages are absent from it, which is why the totals are passed separately.
+ */
+export function summariseConversations(
+  totalConversationCount: number,
+  messageCountsPerConversation: number[],
+): ConversationStats {
+  const sum = (counts: number[]) => counts.reduce((acc, n) => acc + n, 0);
+  const withMoreThanOne = messageCountsPerConversation.filter((n) => n > 1);
+
+  return {
+    totalConversationCount,
+    totalWithMsgCount: withMoreThanOne.length,
+    avgConvWithMsg: withMoreThanOne.length
+      ? sum(withMoreThanOne) / withMoreThanOne.length
+      : 0,
+    avgMsg: totalConversationCount
+      ? sum(messageCountsPerConversation) / totalConversationCount
+      : 0,
+  };
 }

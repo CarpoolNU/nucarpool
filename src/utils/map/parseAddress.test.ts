@@ -76,29 +76,114 @@ describe("parseMapboxFeature", () => {
     expect(result.city).toBe("Mission Hill");
   });
 
-  it("takes whichever city-ish context entry comes first, not the most specific one (SCRUM-265)", () => {
-    // The comments describe neighborhood and locality as fallbacks for place, but
-    // the loop stops at the first match in array order. Mapbox orders context from
-    // smallest to largest scope, so a neighborhood entry wins over the real city.
-    const neighborhoodFirst = parseMapboxFeature(
-      feature({
-        context: [
-          { id: "neighborhood.1", text: "Fenway" },
-          { id: "place.2", text: "Boston" },
-        ],
-      }),
-    );
-    const placeFirst = parseMapboxFeature(
-      feature({
-        context: [
-          { id: "place.2", text: "Boston" },
-          { id: "neighborhood.1", text: "Fenway" },
-        ],
-      }),
-    );
+  describe("choosing the city by scope rather than by array position (SCRUM-265)", () => {
+    // Mapbox orders context from smallest scope to largest - neighborhood,
+    // postcode, place, district, region, country - so the first city-ish entry
+    // is the least appropriate one. place is the city; locality and neighborhood
+    // are only fallbacks for a result that has no place entry.
 
-    expect(neighborhoodFirst.city).toBe("Fenway");
-    expect(placeFirst.city).toBe("Boston");
+    it("prefers place over neighborhood whichever order they arrive in", () => {
+      const neighborhoodFirst = parseMapboxFeature(
+        feature({
+          context: [
+            { id: "neighborhood.1", text: "Fenway" },
+            { id: "place.2", text: "Boston" },
+          ],
+        }),
+      );
+      const placeFirst = parseMapboxFeature(
+        feature({
+          context: [
+            { id: "place.2", text: "Boston" },
+            { id: "neighborhood.1", text: "Fenway" },
+          ],
+        }),
+      );
+
+      expect(neighborhoodFirst.city).toBe("Boston");
+      expect(placeFirst.city).toBe("Boston");
+    });
+
+    it("prefers place over locality whichever order they arrive in", () => {
+      const localityFirst = parseMapboxFeature(
+        feature({
+          context: [
+            { id: "locality.1", text: "Mission Hill" },
+            { id: "place.2", text: "Boston" },
+          ],
+        }),
+      );
+      const placeFirst = parseMapboxFeature(
+        feature({
+          context: [
+            { id: "place.2", text: "Boston" },
+            { id: "locality.1", text: "Mission Hill" },
+          ],
+        }),
+      );
+
+      expect(localityFirst.city).toBe("Boston");
+      expect(placeFirst.city).toBe("Boston");
+    });
+
+    it("prefers locality over neighborhood when there is no place entry", () => {
+      const result = parseMapboxFeature(
+        feature({
+          context: [
+            { id: "neighborhood.1", text: "Fenway" },
+            { id: "locality.2", text: "Mission Hill" },
+          ],
+        }),
+      );
+
+      expect(result.city).toBe("Mission Hill");
+    });
+
+    it("reads the city from a Boston address in Mapbox's documented context order", () => {
+      // The shape a real /geocoding/v5 result takes for an address that sits in
+      // a named neighborhood: smallest scope first, with the city several
+      // entries down the array.
+      const result = parseMapboxFeature(
+        feature({
+          text: "Huntington Ave",
+          place_name:
+            "360 Huntington Ave, Boston, Massachusetts 02115, United States",
+          context: [
+            { id: "neighborhood.16467356", text: "Fenway" },
+            { id: "postcode.10276438", text: "02115" },
+            { id: "place.15278104", text: "Boston" },
+            { id: "district.11085484", text: "Suffolk County" },
+            { id: "region.4341", text: "Massachusetts" },
+            { id: "country.8940", text: "United States" },
+          ],
+        }),
+      );
+
+      expect(result).toMatchObject({
+        city: "Boston",
+        state: "Massachusetts",
+      });
+    });
+
+    it("reads the state regardless of which city-ish entry precedes it", () => {
+      // The old chain used `else if`, so matching one field on a context entry
+      // skipped the remaining checks for that entry. Each field is now read
+      // independently.
+      const result = parseMapboxFeature(
+        feature({
+          context: [
+            { id: "place.2", text: "Boston" },
+            { id: "region.3", text: "Massachusetts" },
+            { id: "neighborhood.1", text: "Fenway" },
+          ],
+        }),
+      );
+
+      expect(result).toMatchObject({
+        city: "Boston",
+        state: "Massachusetts",
+      });
+    });
   });
 
   it("parses city and state out of place_name when there is no context at all", () => {

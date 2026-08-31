@@ -2,10 +2,75 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedRouter, router } from "../createRouter";
 
-import { convertCarpoolSearchToPublic } from "../../../utils/publicUser";
+import { Prisma, RequestStatus } from "@prisma/client";
+import { convertCarpoolSearchToPublicWithExactHome } from "../../../utils/publicUser";
+import { MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
+
+/**
+ * The message columns a conversation is actually read through (SCRUM-301).
+ *
+ * This was `include: { User: true }`, which attached the author's whole `User`
+ * row to every message - `email`, `bio`, `permission`, and `image`, a
+ * `@db.MediumText`. Nothing ever read it. Five fields are all any consumer
+ * touches - `id`, `content`, `userId`, `isRead` and `dateCreated`, between
+ * `latestMessage.ts`, `MessageContent` and `MessagePanel` - and the author is
+ * always one of the two people already present in the payload, so a 200-message
+ * thread carried the same two user rows 200 times.
+ *
+ * The live path already proved the join redundant. `messages.sendMessage`
+ * returns a bare `message.create` with no `include` and broadcasts that over
+ * Pusher, and `MessageContent` pushes it into the same array this query fills -
+ * so anything rendering `message.User` would already be blank for every
+ * message received in real time.
+ *
+ * `isRead` and `id` are load-bearing rather than cosmetic: `MessageContent`
+ * drives `markMessagesAsRead` off exactly those two. `conversationId` is the
+ * sixth field below and the one exception: nothing reads it off a fetched
+ * message, but `Message` in `utils/types.ts` declares it required, so it is kept
+ * for one string rather than letting the wire shape drift from the type.
+ *
+ * Deliberately no `take` - see the note on `me` below.
+ */
+const conversationMessages = {
+  orderBy: { dateCreated: "asc" },
+  select: {
+    id: true,
+    conversationId: true,
+    content: true,
+    userId: true,
+    isRead: true,
+    dateCreated: true,
+  },
+} satisfies Prisma.Conversation$messagesArgs;
 
 // use this router to manage invitations
 export const requestsRouter = router({
+  /**
+   * Every request either side of the caller, with each pair's conversation.
+   *
+   * **Why message history is still unbounded (SCRUM-301).** The ticket asked
+   * for a `take` per conversation *with the open thread loaded separately*, or
+   * an explicit decision that full history is required. This is that decision,
+   * and it is "not yet, and not here".
+   *
+   * A `take` alone would be silent truncation. This query feeds two different
+   * needs at once: the Requests tab, which wants only the newest message per
+   * card (`getLatestMessageForRequest`), and the open thread, which renders the
+   * whole history with date separators and no "load older" control. Bounding
+   * the shared payload would quietly remove scrollback from the one consumer
+   * that needs it, with nothing in the UI to say so and no way to ask for more.
+   *
+   * Splitting it properly means a second, paginated, participant-scoped
+   * procedure for the open thread - which is re-treading `messages.getMessages`,
+   * removed in SCRUM-222 precisely because it took a bare conversation id and
+   * returned anyone's thread. That is worth doing carefully rather than as a
+   * footnote to a projection change, so it is SCRUM-317 instead.
+   *
+   * What this change does instead is make each message cheap: the narrow
+   * `select` above removes a whole `User` row per message, which is where
+   * essentially all of the weight was. See
+   * `scripts/measure-requests-payload.ts` for the measurement.
+   */
   me: protectedRouter.query(async ({ ctx }) => {
     const userId = ctx.session.user?.id;
 
@@ -21,28 +86,12 @@ export const requestsRouter = router({
       include: {
         sentRequests: {
           include: {
-            toUser: true,
-            conversation: {
-              include: {
-                messages: {
-                  orderBy: { dateCreated: "asc" },
-                  include: { User: true },
-                },
-              },
-            },
+            conversation: { include: { messages: conversationMessages } },
           },
         },
         receivedRequests: {
           include: {
-            fromUser: true,
-            conversation: {
-              include: {
-                messages: {
-                  orderBy: { dateCreated: "asc" },
-                  include: { User: true },
-                },
-              },
-            },
+            conversation: { include: { messages: conversationMessages } },
           },
         },
       },
@@ -136,9 +185,9 @@ export const requestsRouter = router({
       );
       return {
         ...req,
-        fromUser: convertCarpoolSearchToPublic(currentUserSearch),
+        fromUser: convertCarpoolSearchToPublicWithExactHome(currentUserSearch),
         toUser: toUserSearch
-          ? convertCarpoolSearchToPublic(toUserSearch)
+          ? convertCarpoolSearchToPublicWithExactHome(toUserSearch)
           : null,
       };
     });
@@ -150,25 +199,37 @@ export const requestsRouter = router({
       return {
         ...req,
         fromUser: fromUserSearch
-          ? convertCarpoolSearchToPublic(fromUserSearch)
+          ? convertCarpoolSearchToPublicWithExactHome(fromUserSearch)
           : null,
-        toUser: convertCarpoolSearchToPublic(currentUserSearch),
+        toUser: convertCarpoolSearchToPublicWithExactHome(currentUserSearch),
       };
     });
 
-    const sentGoodRole = sent.filter(
-      (req) =>
-        req.toUser &&
-        req.toUser.role !== currentUserSearch.role &&
-        req.toUser.role !== "VIEWER",
-    );
-    const recGoodRole = received.filter(
-      (req) =>
-        req.fromUser &&
-        req.fromUser.role !== currentUserSearch.role &&
-        req.fromUser.role !== "VIEWER",
-    );
-    return { sent: sentGoodRole, received: recGoodRole };
+    // Role compatibility governs discovery, not a relationship that already
+    // exists (SCRUM-296).
+    //
+    // These two filters used to also drop any request whose counterpart's role
+    // matched the caller's, or was VIEWER - the predicate f9a5b1a introduced
+    // for recommendations, where it belongs. Applied to existing requests it
+    // disagreed with `create`'s duplicate guard below, which has no role
+    // condition: as soon as either party changed role, the request disappeared
+    // from the Requests tab while still answering every retry with
+    // `CONFLICT - Existing request between ...`. Nothing else surfaces the
+    // request id, and `delete` needs one, so there was no way to withdraw it
+    // and no way out but for the other person to switch back.
+    //
+    // Roles change legitimately between co-op cycles, so a pair who can no
+    // longer carpool is an ordinary state. `roleMismatchExplanation` is what
+    // the UI shows on those requests, and accepting one is refused by
+    // `groups.create`/`groups.edit` rather than by hiding it here.
+    //
+    // The null check that remains is not about roles: a counterpart whose
+    // search is INACTIVE is absent from the two queries above, so there is no
+    // `PublicUser` to build a card from.
+    return {
+      sent: sent.filter((req) => req.toUser !== null),
+      received: received.filter((req) => req.fromUser !== null),
+    };
   }),
 
   create: protectedRouter
@@ -182,7 +243,12 @@ export const requestsRouter = router({
           // session and cannot be influenced by the client; `.strict()` makes a
           // re-added `fromId` a BAD_REQUEST rather than a silently ignored field.
           toId: z.string(),
-          message: z.string(),
+          // This becomes the conversation's first `Message`, so it is bound by
+          // `message.content`'s `VARCHAR(255)` like any other (SCRUM-231).
+          // Deliberately not `.min(1)`: ConnectModal's textarea starts empty
+          // and its Send button never required text, so sending a bare request
+          // is an existing flow rather than an oversight to close here.
+          message: z.string().trim().max(MESSAGE_MAX_LENGTH),
         })
         .strict(),
     )
@@ -194,7 +260,62 @@ export const requestsRouter = router({
           message: "User not authenticated",
         });
       }
-      const existingRequests = await ctx.prisma.request.findMany({
+      // A request to yourself is not something the UI can produce — ConnectModal
+      // opens from someone else's card — but `toId` is client input on a
+      // mutation any signed-in caller can reach (SCRUM-278). The duplicate
+      // guard below cannot catch it: for a self-request both halves of its OR
+      // are the same pair, so the first one always passes and the row is
+      // created, along with a Conversation and an initial Message.
+      if (input.toId === userId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Cannot send a carpool request to yourself.",
+        });
+      }
+
+      // A request is only useful if both people can be notified, and this is
+      // now the only place that is knowable: `email` has been removed from the
+      // payloads the client builds this call from, because they shipped every
+      // active user's address to every signed-in viewer (SCRUM-292).
+      // ConnectModal used to hold this check alone, which also meant a caller
+      // reaching the procedure directly skipped it entirely.
+      const contacts = await ctx.prisma.user.findMany({
+        where: { id: { in: [userId, input.toId] } },
+        select: { id: true, email: true },
+      });
+
+      const senderEmail = contacts.find((c) => c.id === userId)?.email;
+      const recipientEmail = contacts.find((c) => c.id === input.toId)?.email;
+
+      if (!senderEmail || !recipientEmail) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "A carpool request needs an email address for both people. " +
+            "Please check your profile.",
+        });
+      }
+
+      // Two people already carpooling together have nothing to request of each
+      // other, and a request between them would be a second way to describe a
+      // relationship the group already records (SCRUM-228).
+      const searches = await ctx.prisma.carpoolSearch.findMany({
+        where: { userId: { in: [userId, input.toId] } },
+        select: { userId: true, carpoolId: true },
+      });
+      const callerGroup = searches.find((s) => s.userId === userId)?.carpoolId;
+      const targetGroup = searches.find(
+        (s) => s.userId === input.toId,
+      )?.carpoolId;
+
+      if (callerGroup && callerGroup === targetGroup) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "You are already in a carpool group with this user.",
+        });
+      }
+
+      const existingRequest = await ctx.prisma.request.findFirst({
         where: {
           OR: [
             {
@@ -209,50 +330,109 @@ export const requestsRouter = router({
         },
       });
 
-      if (existingRequests.length != 0) {
+      // Still awaiting an answer, in either direction — the original guard.
+      if (existingRequest?.status === RequestStatus.PENDING) {
         throw new TRPCError({
           code: "CONFLICT",
           message: `Existing request between '${input.toId} and ${userId}'`,
         });
       }
 
-      const request = await ctx.prisma.request.create({
-        data: {
-          message: "",
-          fromUser: {
-            connect: { id: userId },
-          },
-          toUser: {
-            connect: { id: input.toId },
-          },
-        },
-      });
-      let conversation = await ctx.prisma.conversation.findUnique({
-        where: { requestId: request.id },
-      });
+      // An accepted request the pair have since left behind. Reopening it,
+      // rather than adding a second row, is what lets two people who once
+      // carpooled together do so again (SCRUM-228). It also keeps the pair to
+      // one Request row for good: `extendPublicUser` picks the request for a
+      // user with `.find()`, so a second row would make which conversation the
+      // UI shows arbitrary.
+      //
+      // The direction is rewritten because whoever is asking now is the sender
+      // now, regardless of who asked the first time. The conversation is not
+      // touched: it hangs off the request id, which does not change, so the
+      // pair keep the thread they already had.
+      if (existingRequest) {
+        return await ctx.prisma.$transaction(async (tx) => {
+          const reopened = await tx.request.update({
+            where: { id: existingRequest.id },
+            data: {
+              status: RequestStatus.PENDING,
+              fromUserId: userId,
+              toUserId: input.toId,
+            },
+          });
 
-      if (!conversation) {
-        conversation = await ctx.prisma.conversation.create({
-          data: {
-            requestId: request.id,
-          },
-        });
+          // An empty message is a real flow — ConnectModal's Send button never
+          // required text — but on a conversation that already exists, an empty
+          // row would just be noise in the thread. On a first request it is
+          // still written, because the conversation needs a first message.
+          if (input.message && reopened.conversationId) {
+            await tx.message.create({
+              data: {
+                conversationId: reopened.conversationId,
+                content: input.message,
+                userId,
+              },
+            });
+          }
 
-        // Update the request with the conversation ID
-        await ctx.prisma.request.update({
-          where: { id: request.id },
-          data: { conversationId: conversation.id },
+          return reopened;
         });
       }
 
-      //  Create the initial message in the conversation
-      await ctx.prisma.message.create({
-        data: {
-          conversationId: conversation.id,
-          content: input.message,
-          userId: userId,
-        },
+      // A request, its conversation, the link between them and the first
+      // message are one unit. These used to be four independent awaits, which
+      // could leave a request with no conversation, or a conversation never
+      // linked back to its request — and `relationMode = "prisma"` rejects
+      // neither, so the half-built thread persisted (SCRUM-233).
+      //
+      // The link is stored twice, in both directions: `Conversation.requestId`
+      // and `Request.conversationId`. Nothing in the schema keeps those two in
+      // agreement, which is why writing a conversation still takes two
+      // statements rather than one nested create.
+      //
+      // What this protects on the read side: `user.requests.me` above includes
+      // `conversation.messages` through the request, so a thread that exists on
+      // one side of the link only is invisible from the other.
+      const request = await ctx.prisma.$transaction(async (tx) => {
+        const created = await tx.request.create({
+          data: {
+            message: "",
+            fromUser: {
+              connect: { id: userId },
+            },
+            toUser: {
+              connect: { id: input.toId },
+            },
+          },
+        });
+
+        // The conversation and its first message go in together. No lookup
+        // first: the request was created a statement ago with a fresh cuid, so
+        // nothing could reference it and the old
+        // `conversation.findUnique({ where: { requestId } })` could only ever
+        // return null — a check whose false branch was unreachable.
+        const conversation = await tx.conversation.create({
+          data: {
+            requestId: created.id,
+            messages: {
+              create: {
+                content: input.message,
+                userId: userId,
+              },
+            },
+          },
+        });
+
+        // Returned rather than discarded so the value carries the conversation.
+        return await tx.request.update({
+          where: { id: created.id },
+          data: { conversationId: conversation.id },
+        });
       });
+
+      // Returned so the caller has an id to announce (SCRUM-270). This used to
+      // return nothing, which is why ConnectModal had to notify by `toId` and
+      // the email procedure had to accept a bare user id.
+      return request;
     }),
 
   delete: protectedRouter

@@ -1,3 +1,8 @@
+const {
+  MOBILE_BREAKPOINT_PX,
+  DESKTOP_SCREEN_NAME,
+} = require("./src/utils/breakpoints");
+
 /** @type {import('tailwindcss').Config} */
 /**
  * TODO: add theme to follow the branding rules of Northeastern
@@ -49,9 +54,22 @@ module.exports = {
           "radial-gradient(ellipse 70% 100% at 110% -10% , #C8102E, #FFA9A9, white )",
       },
     },
+    // NOTE: this overrides Tailwind's default screens rather than extending
+    // them, so `sm` here is 576px and not the stock 640px.
+    // Keep these ascending. Tailwind emits the media queries in the order they
+    // are declared, so a larger screen listed before a smaller one loses the
+    // cascade wherever both set the same property. `breakpoints.test.ts` asserts
+    // the ordering.
     screens: {
       sm: "576px",
       // => @media (min-width: 576px) { ... }
+
+      // The mobile/desktop boundary the JavaScript uses, shared with
+      // `useIsMobile` from one definition so the CSS and the layout logic cannot
+      // drift apart (SCRUM-237). Named for the side it turns on, since screens
+      // are min-width: `desktop:` applies at this width and above.
+      [DESKTOP_SCREEN_NAME]: `${MOBILE_BREAKPOINT_PX}px`,
+      // => @media (min-width: 640px) { ... }
 
       // ipad 14 size
       md: "834px",

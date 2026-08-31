@@ -6,6 +6,7 @@ import { EntryLabel } from "../EntryLabel";
 import ControlledAddressCombobox from "../Profile/ControlledAddressCombobox";
 import { TextField } from "../TextField";
 import { useAddressSelection } from "../../utils/useAddressSelection";
+import { PROFILE_TEXT_MAX_LENGTH } from "../../utils/textLimits";
 
 interface StepTwoProps {
   register: UseFormRegister<OnboardingFormInputs>;
@@ -22,12 +23,12 @@ const StepTwo = ({
   companyAddressHook,
 }: StepTwoProps) => {
   return (
-    <div className="flex flex-col items-center  justify-center bg-white px-4">
+    <div className="flex flex-col items-center justify-center bg-white px-4">
       <div className="mb-8 text-center font-montserrat text-3xl font-bold">
         <span>Where are you&nbsp;</span>
         <span className="text-northeastern-red">carpooling?</span>
       </div>
-      <div className="space-y-2 text-start ">
+      <div className="space-y-2 text-start">
         {/* Home Address */}
         <EntryLabel
           required={true}
@@ -68,6 +69,9 @@ const StepTwo = ({
           id="companyName"
           error={errors.companyName}
           type="text"
+          // `company_name` is `VARCHAR(191)` and this field had no cap at all,
+          // so a pasted value failed the save inside Prisma (SCRUM-231).
+          charLimit={PROFILE_TEXT_MAX_LENGTH}
           {...register("companyName")}
         />
 

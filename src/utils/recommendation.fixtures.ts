@@ -20,24 +20,54 @@ export type SearchFixture = CarpoolSearch & {
 
 export type Coord = { lat: number; lng: number };
 
-/** Mirrors the `coordToMile` conversion factor inside recommendation.ts. */
-const MILES_PER_COORD_UNIT = 88;
+/** Mirrors `MILES_PER_DEGREE_LATITUDE` inside recommendation.ts. */
+const MILES_PER_DEGREE_LATITUDE = 69.09;
 
 export const ORIGIN: Coord = { lat: 0, lng: 0 };
 
-/** A coordinate exactly `miles` north of `ORIGIN` under that conversion. */
+/** Boston, for tests that care about the latitude correction on longitude. */
+export const BOSTON: Coord = { lat: 42.34, lng: -71.09 };
+
+/** A coordinate exactly `miles` north of `ORIGIN`. */
 export const milesNorth = (miles: number): Coord => ({
-  lat: miles / MILES_PER_COORD_UNIT,
+  lat: miles / MILES_PER_DEGREE_LATITUDE,
   lng: 0,
 });
 
+/** A coordinate exactly `miles` due north of `from`. */
+export const milesNorthOf = (from: Coord, miles: number): Coord => ({
+  lat: from.lat + miles / MILES_PER_DEGREE_LATITUDE,
+  lng: from.lng,
+});
+
 /**
- * Local-time constructor, because the scoring code reads `Date#getHours` and
- * `Date#getMinutes`. Building the date in local time makes the fixture mean the
- * same thing in every timezone a developer or CI runner might use.
+ * A coordinate exactly `miles` due east of `from`.
+ *
+ * A degree of longitude narrows with latitude, so the conversion needs the
+ * cosine that `milesNorthOf` does not.
+ */
+export const milesEastOf = (from: Coord, miles: number): Coord => ({
+  lat: from.lat,
+  lng:
+    from.lng +
+    miles / (MILES_PER_DEGREE_LATITUDE * Math.cos((from.lat * Math.PI) / 180)),
+});
+
+/**
+ * A schedule time, built as the UTC instant the scorer reads (SCRUM-297).
+ *
+ * This used to be a local-time constructor, chosen to match `minutesApart`'s
+ * `Date#getHours`. Both sides have moved to UTC, because that is what a
+ * `@db.Time(0)` column stores and what Prisma hands back - so `at(9)` now
+ * *is* a nine-o'clock schedule time rather than one only after the host's
+ * offset has been cancelled out. The value no longer depends on the runner's
+ * zone at all, which is what lets `test.yml` run the whole suite under a second
+ * zone and expect identical answers.
+ *
+ * The date is arbitrary and unread; only the clock component matters.
  */
 export const at = (hour: number, minute = 0): Date =>
-  new Date(2024, 0, 1, hour, minute, 0, 0);
+  new Date(Date.UTC(2024, 0, 1, hour, minute, 0, 0));
 
 export const day = (year: number, month: number, dayOfMonth: number): Date =>
   new Date(year, month - 1, dayOfMonth);
@@ -116,6 +146,9 @@ export const buildSearch = (options: SearchOptions = {}): SearchFixture => {
     status,
     carpoolId,
     groupMessage: null,
+    groupNotes: null,
+    groupMusicPreference: null,
+    groupConversationStyle: null,
     dateCreated: EPOCH,
     dateModified: EPOCH,
     user: { id },

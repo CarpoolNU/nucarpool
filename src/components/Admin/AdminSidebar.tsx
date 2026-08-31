@@ -7,7 +7,7 @@ const AdminSidebar = ({ option, setOption }: AdminSidebarProps) => {
   const baseButton = "px-4 py-2 text-northeastern-red font-montserrat text-xl ";
   const selectedButton = " font-bold underline underline-offset-8 ";
   return (
-    <div className="h-full w-full  ">
+    <div className="h-full w-full">
       <div className="mt-6 flex flex-col items-start gap-4">
         <button
           className={baseButton + (option === "management" && selectedButton)}

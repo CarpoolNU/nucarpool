@@ -5,13 +5,11 @@ import mapboxgl, {
   NavigationControl,
 } from "mapbox-gl";
 import { PublicUser } from "../types";
-import { User } from "../types";
 import { Dispatch, SetStateAction } from "react";
 import { setPointClickHandler, createPointClickHandler } from "./handlers";
 
 const addMapEvents = (
   map: Map,
-  user: User,
   setPopupUser: Dispatch<SetStateAction<PublicUser[] | null>>,
 ) => {
   map.addControl(new NavigationControl(), "bottom-right");
@@ -26,7 +24,10 @@ const addMapEvents = (
     const clusterId = features[0]!.properties!.cluster_id;
     const source = map.getSource("company-locations") as GeoJSONSource;
     source.getClusterExpansionZoom(clusterId, (err, zoom) => {
-      if (err) return;
+      // mapbox-gl v3 types this callback as Callback<number>, so `zoom` is
+      // `number | null | undefined` - easeTo takes `number | undefined`, and a
+      // cluster with no expansion zoom is nothing to ease to.
+      if (err || zoom == null) return;
       if (features[0]!.geometry.type === "Point") {
         map.easeTo({
           center: [
@@ -40,12 +41,15 @@ const addMapEvents = (
   });
 
   map.on("click", (e) => {
-    const allPointLayers = map.getStyle().layers
-      .filter(layer => layer.type === 'symbol')
-      .map(layer => layer.id);
-    
-    const pointFeatures = map.queryRenderedFeatures(e.point, { layers: allPointLayers });
-    
+    const allPointLayers = map
+      .getStyle()
+      .layers.filter((layer) => layer.type === "symbol")
+      .map((layer) => layer.id);
+
+    const pointFeatures = map.queryRenderedFeatures(e.point, {
+      layers: allPointLayers,
+    });
+
     if (pointFeatures.length > 0 && handlePointClick) {
       handlePointClick(e as MapLayerMouseEvent);
     }
@@ -63,12 +67,11 @@ const addMapEvents = (
     map.getCanvas().style.cursor = "";
   });
 
-  document.getElementById("fly")?.addEventListener("click", () => {
-    map.flyTo({
-      center: [user.companyCoordLng, user.companyCoordLat],
-      essential: true,
-    });
-  });
+  // The recentre control used to be wired here with
+  // `document.getElementById("fly").addEventListener(...)`. That reached outside
+  // React's lifecycle: the listener was never removed, and it bound only if the
+  // button happened to already be in the DOM when the map finished loading. The
+  // button now owns its own onClick (SCRUM-254).
 };
 
 export default addMapEvents;

@@ -4,13 +4,56 @@ on:
     paths:
       - "prisma/schema.prisma"
 
+# One run per PR, cancelling any superseded one (SCRUM-309). This fires on every
+# activity type, so a PR that keeps touching schema.prisma queues a run per push;
+# only the newest needs to finish. Cancelling also narrows the window in which
+# two runs could both pass the marker check below and post twice - the script is
+# idempotent, but serially rather than concurrently.
+#
+# No `permissions` block here on purpose: the job declares
+# `pull-requests: write` itself, and a top-level default would only obscure
+# where that scope is granted.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   run:
     runs-on: ubuntu-latest
+    # The repository default for GITHUB_TOKEN is read-only, so the comment POST
+    # is rejected without this. A workflow-level block overrides that default.
+    # Every scope not listed here becomes `none`, which is fine: nothing is
+    # checked out and nothing else is called.
+    permissions:
+      pull-requests: write
     steps:
-      - uses: wow-actions/auto-comment@v1
+      - uses: actions/github-script@v9.0.0
         with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          pullRequestOpened: |
-            👋 @{{ author }}
-            Looks like your PR might contain changes to the schema.prisma file. Please open a deploy request on PlanetScale before merging. 
+          script: |
+            // Posted at most once per PR. `paths` is evaluated per event, so a
+            // PR that adds schema.prisma in a later push first matches on
+            // `synchronize` rather than `opened` -- this has to fire on any
+            // activity type, and therefore has to be idempotent.
+            const marker = '<!-- planetscale-deploy-request-reminder -->';
+
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              { ...context.repo, issue_number: context.issue.number }
+            );
+
+            if (comments.some((comment) => comment.body?.includes(marker))) {
+              core.info('Reminder already present on this PR; nothing to do.');
+              return;
+            }
+
+            await github.rest.issues.createComment({
+              ...context.repo,
+              issue_number: context.issue.number,
+              body: [
+                marker,
+                `👋 @${context.payload.pull_request.user.login}`,
+                'Looks like your PR might contain changes to the schema.prisma file. Please open a deploy request on PlanetScale before merging.',
+              ].join('\n'),
+            });
+
+            core.info('Posted the PlanetScale deploy-request reminder.');

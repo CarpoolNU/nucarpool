@@ -40,9 +40,9 @@ const StepThree = ({
         <span className="text-northeastern-red">carpooling?</span>
       </div>
 
-      <div className="flex flex-col items-start space-y-2 w-full">
+      <div className="flex w-full flex-col items-start space-y-2">
         {/* Days of the Week */}
-        <div className="flex flex-col space-y-1 w-full">
+        <div className="flex w-full flex-col space-y-1">
           <EntryLabel
             required={true}
             error={
@@ -55,7 +55,7 @@ const StepThree = ({
             }
             label="Days of the Week"
           />
-          <div className="flex flex-row items-center justify-center w-full">
+          <div className="flex w-full flex-row items-center justify-center">
             <SelectDays
               control={control}
               disabled={false}
@@ -91,7 +91,7 @@ const StepThree = ({
         {/* Date Section */}
         <div className={`flex w-full gap-4 ${isMobile ? "mt-1" : "mt-2"}`}>
           {/* Start Date */}
-          <div className="flex flex-col w-1/2">
+          <div className="flex w-1/2 flex-col">
             <EntryLabel
               required={true}
               error={errors.coopStartDate}
@@ -106,12 +106,12 @@ const StepThree = ({
               }
               format="YYYY-MM"
               inputReadOnly={true}
-              className={`${isMobile ? "h-10 text-base" : "h-12 text-lg"} w-full border rounded-md p-2`}
+              className={`${isMobile ? "h-10 text-base" : "h-12 text-lg"} w-full rounded-md border p-2`}
             />
           </div>
 
           {/* End Date */}
-          <div className="flex flex-grow-0 flex-col w-1/2">
+          <div className="flex w-1/2 flex-grow-0 flex-col">
             <EntryLabel
               required={true}
               error={errors.coopEndDate}
@@ -125,10 +125,18 @@ const StepThree = ({
               }
               format="YYYY-MM"
               inputReadOnly={true}
-              className={`${isMobile ? "h-10 text-base" : "h-12 text-lg"} w-full border rounded-md p-2`}
+              className={`${isMobile ? "h-10 text-base" : "h-12 text-lg"} w-full rounded-md border p-2`}
             />
           </div>
         </div>
+
+        {/* The reason a range was rejected, not just a red label. Ordering is
+            the one date error whose message a user cannot infer (SCRUM-302). */}
+        {errors.coopEndDate?.message && (
+          <ErrorDisplay className="text-xs">
+            {errors.coopEndDate.message}
+          </ErrorDisplay>
+        )}
 
         {/* Note for Date Section */}
         <div className="w-full">

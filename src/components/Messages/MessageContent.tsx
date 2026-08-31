@@ -135,8 +135,15 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
     }
   }, [user, allMessages, markMessagesAsRead]);
 
-  // Group messages by date
-  const messagesByDate = [];
+  // Group messages by date.
+  // Annotated rather than inferred: `currentDate` is only ever assigned inside
+  // the forEach callback below, and TypeScript's control-flow analysis does not
+  // track that, so the evolving-array type came out as `{ date: null }` and
+  // every use of `date` was silently typed `never` (SCRUM-254).
+  const messagesByDate: {
+    date: Date | null;
+    messages: typeof allMessages;
+  }[] = [];
   let currentDate: Date | null = null;
   let currentMessages: typeof allMessages = [];
 
@@ -178,7 +185,9 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
   return (
     <div className="flex h-full flex-1 flex-col overflow-y-auto overflow-x-hidden bg-white p-4">
       {messagesByDate.map(({ date, messages }, dateIndex) => (
-        <div key={date}>
+        // React keys must be strings or numbers; `date` is a Date (and typed
+        // nullable), so it was being coerced on every render (SCRUM-254).
+        <div key={date ? date.toISOString() : `group-${dateIndex}`}>
           <div className="text-md my-2 text-center text-gray-500">
             {date ? format(date, "EEEE, MMMM d, yyyy") : ""}
           </div>
@@ -205,15 +214,11 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
                   {messageTime}
                 </span>
                 <div
-                  className={`max-w-[50%] rounded-lg px-4 py-2 text-base
-                    sm:max-w-[50%] sm:text-sm
-                    md:max-w-[50%] md:text-base
-                    lg:max-w-[50%] lg:text-xl
-                    ${
-                      isFromCurrentUser
-                        ? "bg-northeastern-red text-white"
-                        : "bg-gray-200 text-black"
-                    }`}
+                  className={`max-w-[50%] rounded-lg px-4 py-2 text-base sm:max-w-[50%] sm:text-sm md:max-w-[50%] md:text-base lg:max-w-[50%] lg:text-xl ${
+                    isFromCurrentUser
+                      ? "bg-northeastern-red text-white"
+                      : "bg-gray-200 text-black"
+                  }`}
                 >
                   {message.content}
                 </div>

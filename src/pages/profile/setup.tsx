@@ -4,7 +4,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { GetServerSidePropsContext, NextPage } from "next";
 import { useRouter } from "next/router";
 import { toast } from "react-toastify";
-import { getSession, useSession } from "next-auth/react";
+import { useSession } from "next-auth/react";
+import { getServerSession } from "next-auth";
+import { authOptions } from "../api/auth/[...nextauth]";
 import { trpc } from "../../utils/trpc";
 import { CarpoolAddress, OnboardingFormInputs } from "../../utils/types";
 import {
@@ -27,16 +29,23 @@ import {
   trackProfileCompletion,
 } from "../../utils/mixpanel";
 import { useUploadFile } from "../../utils/profile/useUploadFile";
-import { ComplianceModal } from "../../components/CompliancePortal";
 import { useAddressSelection } from "../../utils/useAddressSelection";
 import {
   updateUser,
   useEditUserMutation,
 } from "../../utils/profile/updateUser";
 import useIsMobile from "../../utils/useIsMobile";
+import {
+  UNRESOLVED_ADDRESS_MESSAGE,
+  unresolvedAddressFields,
+} from "../../utils/coordinates";
 
+// One direct session lookup, not a self-directed HTTP round trip to
+// `/api/auth/session` (SCRUM-299). `getSession` from `next-auth/react` is the
+// *client* helper and was being called here; `getServerSession` reads the cookie
+// and queries directly, as `server/router/context.ts` already did.
 export async function getServerSideProps(context: GetServerSidePropsContext) {
-  const session = await getSession(context);
+  const session = await getServerSession(context.req, context.res, authOptions);
   if (!session?.user) {
     return {
       redirect: {
@@ -145,7 +154,40 @@ const Setup: NextPage = () => {
     }
   }, [setValue, watch, role]);
 
+  /**
+   * Reports the address steps whose coordinates never resolved (SCRUM-302).
+   *
+   * The two `startAddress` / `companyAddress` form fields hold text, and that is
+   * all `onboardSchema` can see. The coordinates live in the address hooks, and
+   * `ControlledAddressCombobox` writes back to the form only when a suggestion
+   * is chosen - so text restored from a previous save can sit next to the
+   * `[0, 0]` the hook defaults to. Saving that put the pin in the Gulf of
+   * Guinea and made the row unmatchable.
+   *
+   * Returns true when it blocked, having set the field errors.
+   */
+  const blockOnUnresolvedAddresses = (role: Role): boolean => {
+    const unresolved = unresolvedAddressFields({
+      role,
+      home: startAddressHook.selectedAddress.center,
+      company: companyAddressHook.selectedAddress.center,
+    });
+
+    for (const field of unresolved) {
+      setError(field, { type: "manual", message: UNRESOLVED_ADDRESS_MESSAGE });
+    }
+
+    return unresolved.length > 0;
+  };
+
   const onSubmit = async (values: OnboardingFormInputs) => {
+    // Backstop for the step-2 check below, which is what a user actually hits.
+    // Reached only if the address is cleared after passing that step.
+    if (blockOnUnresolvedAddresses(values.role)) {
+      setStep(2);
+      return;
+    }
+
     setIsLoading(true);
     const userInfo = {
       ...values,
@@ -173,12 +215,18 @@ const Setup: NextPage = () => {
       coopStartDate: values.coopStartDate ?? null,
       coopEndDate: values.coopEndDate ?? null,
     };
-    console.log(userInfo);
+    // Reported rather than swallowed, so the picture does not just fail to
+    // appear with no explanation. Onboarding continues either way - a missing
+    // picture is not worth blocking setup over, and it can be added later from
+    // the profile page (SCRUM-285).
     if (selectedFile) {
       try {
         await uploadFile();
       } catch (error) {
         console.error("File upload failed:", error);
+        toast.warning(
+          "Your profile picture could not be uploaded. You can add it later from your profile.",
+        );
       }
     }
     const sessionName = session?.user?.name ?? "";
@@ -213,6 +261,9 @@ const Setup: NextPage = () => {
         "companyName",
       ]);
       if (!isValid) return;
+      // Typing an address is not the same as resolving one, and only the
+      // resolved point is usable for matching (SCRUM-302).
+      if (blockOnUnresolvedAddresses(role)) return;
     } else if (step === 3) {
       const valid = await trigger([
         "coopStartDate",
@@ -289,13 +340,12 @@ const Setup: NextPage = () => {
 
   return (
     <div className="relative h-full w-full overflow-hidden">
-      {!user?.licenseSigned && <ComplianceModal />}
       <div className="absolute inset-0 bg-floaty" />
       <h1 className={titleClass}>CarpoolNU</h1>
 
       {step > 1 && (
         <div
-          className={`absolute left-1/2 ${isMobile ? "top-16" : "top-[calc(50%-250px-60px)]"} -translate-x-1/2 transform z-20`}
+          className={`absolute left-1/2 ${isMobile ? "top-16" : "top-[calc(50%-250px-60px)]"} z-20 -translate-x-1/2 transform`}
         >
           <ProgressBar step={step - 2} />
         </div>

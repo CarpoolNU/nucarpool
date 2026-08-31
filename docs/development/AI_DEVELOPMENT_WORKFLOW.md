@@ -80,7 +80,7 @@ Layer-specific docs: [`src/server/router/README.md`](../../src/server/router/REA
 
 ## 4. First-time setup
 
-Prerequisites: Node 20 (CI uses 20), Docker, Yarn Classic 1.x, git.
+Prerequisites: Node 22 (pinned in `.nvmrc`, which CI and `engines.node` both follow), Docker, Yarn Classic 1.x, git.
 
 ```bash
 git clone <repo-url> && cd nucarpool
@@ -430,19 +430,21 @@ enforcement by GitHub. See [§17](#17-known-limitations-and-teamadmin-responsibi
 
 ## 14. CI behavior
 
-Current workflows in [`.github/workflows/`](../../.github/workflows/). The five checks all run
-on Node 20; `auto-comment.yml` is not a check and runs no Node of its own:
+Current workflows in [`.github/workflows/`](../../.github/workflows/). The six checks all run
+on the Node version in [`.nvmrc`](../../.nvmrc) (22); `auto-comment.yml` is not a check and runs
+no Node of its own:
 
-| Workflow                                                       | Trigger                            | Runs                                                                    |
-| -------------------------------------------------------------- | ---------------------------------- | ----------------------------------------------------------------------- |
-| [`lint.yml`](../../.github/workflows/lint.yml)                 | PR + push to `main`                | `yarn lint` (ESLint, `--max-warnings=0`)                                |
-| [`tsc.yml`](../../.github/workflows/tsc.yml)                   | PR + push to `main`                | `yarn tsc`                                                              |
-| [`test.yml`](../../.github/workflows/test.yml)                 | PR + push to `main`                | `yarn test` (Jest)                                                      |
-| [`build.yml`](../../.github/workflows/build.yml)               | PR + push to `main`                | `prisma generate`, then `yarn build` against placeholder env values     |
-| [`env-contract.yml`](../../.github/workflows/env-contract.yml) | PR + push to `main`                | `node scripts/check-env-contract.js`                                    |
-| [`auto-comment.yml`](../../.github/workflows/auto-comment.yml) | PR touching `prisma/schema.prisma` | comments a reminder to open a PlanetScale deploy request before merging |
+| Workflow                                                       | Trigger                            | Runs                                                                                                            |
+| -------------------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| [`lint.yml`](../../.github/workflows/lint.yml)                 | PR + push to `main`                | `yarn lint` (ESLint, `--max-warnings=0`)                                                                        |
+| [`tsc.yml`](../../.github/workflows/tsc.yml)                   | PR + push to `main`                | `yarn tsc`                                                                                                      |
+| [`test.yml`](../../.github/workflows/test.yml)                 | PR + push to `main`                | `yarn test` (Jest)                                                                                              |
+| [`build.yml`](../../.github/workflows/build.yml)               | PR + push to `main`                | `prisma generate`, then `yarn build` against placeholder env values                                             |
+| [`env-contract.yml`](../../.github/workflows/env-contract.yml) | PR + push to `main`                | `node scripts/check-env-contract.js`                                                                            |
+| [`schema.yml`](../../.github/workflows/schema.yml)             | PR + push to `main`                | `prisma validate`, then `prisma migrate diff --from-migrations` against a throwaway MySQL 8.0 service container |
+| [`auto-comment.yml`](../../.github/workflows/auto-comment.yml) | PR touching `prisma/schema.prisma` | comments a reminder to open a PlanetScale deploy request before merging                                         |
 
-- All five checks share one trigger policy: **every pull request, plus pushes to `main`.** They
+- All six checks share one trigger policy: **every pull request, plus pushes to `main`.** They
   deliberately do not run on pushes to other branches — while a PR is open that would run
   everything twice, once for the push and once for the `pull_request` event. The practical
   consequence is that pushing a branch with no PR yet gets you no CI feedback.

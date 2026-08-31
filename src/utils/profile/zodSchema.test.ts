@@ -1,5 +1,7 @@
 import { Role, Status } from "@prisma/client";
 import { onboardSchema, profileDefaultValues } from "./zodSchema";
+import { COOP_DATE_ORDER_MESSAGE } from "../dateUtils";
+import { PROFILE_TEXT_MAX_LENGTH } from "../textLimits";
 
 /**
  * `onboardSchema` is the gate that decides whether a profile is complete enough to
@@ -168,5 +170,118 @@ describe("profileDefaultValues", () => {
 
   it("provides one entry per day of the week", () => {
     expect(profileDefaultValues.daysWorking).toHaveLength(7);
+  });
+});
+
+describe("onboardSchema — text bounded by its column (SCRUM-231)", () => {
+  // `companyName`, `preferredName`, `pronouns` and `bio` are all `VARCHAR(191)`.
+  // The inputs cap typing and pasting; this catches anything set another way,
+  // and turns an over-length value into a field error instead of a failed save.
+  const fields = ["companyName", "preferredName", "pronouns", "bio"] as const;
+
+  it.each(fields)("rejects an over-length %s", (field) => {
+    expect(
+      issuePaths({
+        ...completeRider,
+        [field]: "a".repeat(PROFILE_TEXT_MAX_LENGTH + 1),
+      }),
+    ).toContain(field);
+  });
+
+  it.each(fields)("accepts %s at exactly the column width", (field) => {
+    expect(
+      issuePaths({
+        ...completeRider,
+        [field]: "a".repeat(PROFILE_TEXT_MAX_LENGTH),
+      }),
+    ).not.toContain(field);
+  });
+});
+
+/**
+ * A reversed co-op range was accepted here and stored as submitted, which made
+ * the user invisible to every full-overlap search with nothing on the form to
+ * say so (SCRUM-302).
+ */
+describe("onboardSchema — co-op date ordering (SCRUM-302)", () => {
+  const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
+
+  const withRange = (start: string, end: string) => ({
+    ...completeRider,
+    coopStartDate: day(start),
+    coopEndDate: day(end),
+  });
+
+  it("accepts a forward range", () => {
+    expect(
+      onboardSchema.safeParse(withRange("2026-01-31", "2026-06-30")).success,
+    ).toBe(true);
+  });
+
+  it("accepts a single-month co-op", () => {
+    // Both pickers store the last day of the month chosen, so one month is two
+    // identical dates. Requiring a strict increase would break that.
+    expect(
+      onboardSchema.safeParse(withRange("2026-03-31", "2026-03-31")).success,
+    ).toBe(true);
+  });
+
+  it("reports a reversed range against the end date", () => {
+    expect(issuePaths(withRange("2027-01-31", "2026-01-31"))).toContain(
+      "coopEndDate",
+    );
+  });
+
+  it("explains why, rather than only marking the field", () => {
+    const result = onboardSchema.safeParse(
+      withRange("2027-01-31", "2026-01-31"),
+    );
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.map((issue) => issue.message)).toContain(
+        COOP_DATE_ORDER_MESSAGE,
+      );
+    }
+  });
+
+  it("checks the ordering for a VIEWER too", () => {
+    // The role decides which fields are *required*; a backwards range is wrong
+    // whoever stored it.
+    expect(
+      issuePaths({
+        ...completeRider,
+        role: Role.VIEWER,
+        coopStartDate: day("2027-01-31"),
+        coopEndDate: day("2026-01-31"),
+      }),
+    ).toContain("coopEndDate");
+  });
+
+  it("does not complain about ordering when a date is missing", () => {
+    // The absence is already reported as "Cannot be empty"; adding an ordering
+    // issue on the same field would show the wrong reason.
+    const result = onboardSchema.safeParse({
+      ...completeRider,
+      coopEndDate: null,
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.map((issue) => issue.message)).not.toContain(
+        COOP_DATE_ORDER_MESSAGE,
+      );
+    }
+  });
+
+  it("leaves an overnight shift alone (SCRUM-302)", () => {
+    // Deliberate: startTime/endTime are times of day, not a range, and
+    // `minutesApart` measures them round the clock. A night shift finishing
+    // before it started is legal.
+    expect(
+      onboardSchema.safeParse({
+        ...completeRider,
+        startTime: new Date(2024, 0, 1, 22, 0),
+        endTime: new Date(2024, 0, 1, 6, 0),
+      }).success,
+    ).toBe(true);
   });
 });

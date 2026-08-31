@@ -18,7 +18,7 @@ NUCarpool is a web app that helps Northeastern University students find carpool 
 
 ## Getting Started
 
-Requires Node 20, Yarn 1.x, and Docker.
+Requires Node 22 (the version in `.nvmrc`), Yarn 1.x, and Docker.
 
 ```bash
 git clone git@github.com:CarpoolNU/nucarpool.git
@@ -108,6 +108,7 @@ Four things that commonly trip people up:
 - **`MYSQL_*` are read only by Docker Compose**, to provision the container. The app reads `DATABASE_URL`, so the user, password, port, and database name inside it must match the container's.
 - **`NEXT_PUBLIC_*` variables are inlined into the client bundle** at build time and are therefore public. Everything else is server-only.
 - **`GOOGLE_*` are required even locally.** The Google sign-in button only appears when `NEXT_PUBLIC_ENV=staging`, but the variables are validated in every environment.
+- **`NEXT_PUBLIC_ENV` must be one of `production`, `staging`, or `development`** — anything else fails validation (SCRUM-247). It selects the auth providers and is written into every S3 profile-picture key (`profile-pictures/{env}/{userId}`), so changing it orphans existing uploads. Leaving it unset locally is fine: it defaults to `development`. A production build has no such default and fails without it.
 
 Validation runs at import time in [`src/utils/env/browser.ts`](src/utils/env/browser.ts) and [`src/utils/env/server.ts`](src/utils/env/server.ts), which is why a missing variable stops the app from starting rather than failing later.
 
@@ -124,6 +125,28 @@ Validation runs at import time in [`src/utils/env/browser.ts`](src/utils/env/bro
 | `yarn db:start` / `yarn db:stop` | Start / stop the local MySQL container               |
 | `yarn db:schema`                 | Apply migrations and regenerate the Prisma client    |
 | `yarn seed`                      | **Wipes** the database, then inserts generated users |
+
+## Content Security Policy
+
+The app sends security headers on every route from [`next.config.js`](next.config.js), pinned by [`next.config.test.ts`](next.config.test.ts). Five of them enforce immediately. The sixth, the Content Security Policy, is deliberately still **report-only**: it has never been exercised in a browser against the map, chat and profile-picture upload, so enforcing it blind could break Mapbox's workers or a third-party origin in production.
+
+Violations post to `/api/csp-report`, which logs one line per violation prefixed `[csp-report]`. Reading them:
+
+```
+[csp-report] {"documentUri":"https://…/","blockedUri":"https://…","effectiveDirective":"connect-src", …}
+```
+
+`effectiveDirective` is the directive that would have blocked the load, and `blockedUri` is what it would have blocked — together they say which line of the policy is too narrow. `sample` appears for inline script and style violations only.
+
+**What "clean enough to enforce" means.** Not zero reports — browser extensions inject scripts and styles into any page and generate violations the app cannot fix or prevent. The bar is that every violation traceable to the app's own code is resolved, having exercised all of sign-in, the map, chat, and a profile-picture upload on a deployed environment:
+
+- No violation whose `blockedUri` is a first-party path or an origin the app deliberately calls (`*.mapbox.com`, `*.pusher.com`, `*.mixpanel.com`, the S3 bucket, Google Fonts).
+- No `worker-src` or `child-src` violation — those mean the map is broken, not merely reported.
+- Remaining violations attributable to extensions, typically with a `blockedUri` of `chrome-extension:`, `moz-extension:` or `data:`.
+
+Enforcing is then a one-line change: rename the header from `Content-Security-Policy-Report-Only` to `Content-Security-Policy`. Exactly one test fails when you do — the one that pins report-only — and updating it is part of that change.
+
+Two caveats worth knowing before relying on the reports. The rate limit is 100 reports per minute **per server instance**, so a serverless deployment's real ceiling scales with concurrency and reports beyond it are dropped (the count of drops is logged when the window rolls over, so loss is never silent). And Safari and Firefox only implement the deprecated `report-uri`, so the newer `report-to` path is effectively Chrome and Edge; the policy sends both.
 
 ## Documentation
 

@@ -1,0 +1,52 @@
+name: Format
+
+# Trigger policy, shared by lint / tsc / test / build / env-contract / schema
+# (SCRUM-248):
+#   pull_request     - gates every PR before it can merge into main
+#   push to main     - catches anything that reaches main by another route
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# `GITHUB_TOKEN` is scoped in the file rather than left to a repository setting
+# (SCRUM-309). Every scope not listed becomes `none`, and `contents: read` is all
+# `actions/checkout` needs - nothing here writes to the repository, comments, or
+# calls the API. `auto-comment.yml` is the one workflow that needs more, and
+# declares it on its own job.
+permissions:
+  contents: read
+
+# One run per ref, and a superseded run is cancelled (SCRUM-309).
+#
+# `github.ref` is `refs/pull/N/merge` for a `pull_request` and `refs/heads/main`
+# for a push, so two pushes to an open PR share a group and the older run is
+# cancelled. A push to `main` is keyed on its own SHA, which is unique per merge:
+# grouping those by ref would leave each merge run queued behind the previous
+# one, and a merge run should never be cancelled or delayed by the next merge.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  format:
+    name: format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: install node
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: yarn
+      # Needed for Prettier itself and for prettier-plugin-tailwindcss, which
+      # `.prettierrc.json` registers and which sorts Tailwind classes
+      # (SCRUM-308). Without the install the plugin is missing and Prettier
+      # exits non-zero on the config rather than on the formatting.
+      - run: yarn install --frozen-lockfile
+      # `prettier --check .` rather than a glob: Prettier respects .gitignore,
+      # so build output and the local database directory are already excluded,
+      # and this way markdown and JSON are covered too. The pre-commit hook
+      # formats whatever is staged, so a narrower check here would leave a gap
+      # in exactly the files it had already touched (SCRUM-314).
+      - run: yarn check:format

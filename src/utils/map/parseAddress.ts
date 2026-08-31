@@ -11,24 +11,34 @@ export function parseMapboxFeature(feature: any): CarpoolFeature {
 
   // extract city and state from context array
   if (feature.context) {
+    // Mapbox orders context from smallest scope to largest, so position in the
+    // array says nothing about which entry is the city. Collect each candidate
+    // and choose by scope afterwards, otherwise a neighborhood entry - which
+    // Mapbox lists first - wins over the place entry that holds the real city.
+    let place = "";
+    let locality = "";
+    let neighborhood = "";
+
     for (const context of feature.context) {
       // look for place (city)
-      if (context.id.startsWith("place") && !city) {
-        city = context.text;
+      if (context.id.startsWith("place") && !place) {
+        place = context.text;
       }
-      // look for region (state)
-      else if (context.id.startsWith("region") && !state) {
+      // look for locality (fallback for city, larger than a neighborhood)
+      if (context.id.startsWith("locality") && !locality) {
+        locality = context.text;
+      }
+      // look for neighborhood (last-resort fallback for city)
+      if (context.id.startsWith("neighborhood") && !neighborhood) {
+        neighborhood = context.text;
+      }
+      // look for region (state), independently of whatever matched above
+      if (context.id.startsWith("region") && !state) {
         state = context.text;
       }
-      // check for neighborhood as fallback for city
-      else if (context.id.startsWith("neighborhood") && !city) {
-        city = context.text;
-      }
-      // check for locality as another fallback for city
-      else if (context.id.startsWith("locality") && !city) {
-        city = context.text;
-      }
     }
+
+    city = place || locality || neighborhood;
   }
 
   // extract building number if present in street
@@ -73,13 +83,16 @@ export function parseMapboxFeature(feature: any): CarpoolFeature {
   };
 }
 
-
-function parseAddressFromPlaceName(placeName: string): { street: string; city: string; state: string } {
+function parseAddressFromPlaceName(placeName: string): {
+  street: string;
+  city: string;
+  state: string;
+} {
   let street = "";
   let city = "";
   let state = "";
 
-  const parts = placeName.split(",").map(part => part.trim());
+  const parts = placeName.split(",").map((part) => part.trim());
 
   // Parse street from first part
   if (parts.length > 0) {

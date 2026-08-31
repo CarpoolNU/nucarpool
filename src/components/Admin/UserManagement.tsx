@@ -5,17 +5,19 @@ import Spinner from "../Spinner";
 import { toast } from "react-toastify";
 import { ConfigProvider, Select } from "antd";
 import { Note } from "../../styles/profile";
-import { TempUser } from "../../utils/types";
+import { AdminUser } from "../../utils/types";
 
 type UserManagementProps = {
   permission: Permission;
 };
 const UserManagement = ({ permission }: UserManagementProps) => {
   const [loading, setLoading] = useState<boolean>(true);
-  const [selectedUser, setSelectedUser] = React.useState<TempUser | null>(null);
+  const [selectedUser, setSelectedUser] = React.useState<AdminUser | null>(
+    null,
+  );
   const [selectedPermission, setSelectedPermission] =
     React.useState<Permission | null>(null);
-  const { data: users } = trpc.user.admin.getAllUsers.useQuery<TempUser[]>();
+  const { data: users } = trpc.user.admin.getAllUsers.useQuery<AdminUser[]>();
   const utils = trpc.useUtils();
 
   const updateUserPermission = trpc.user.admin.updateUserPermission.useMutation(
@@ -78,8 +80,8 @@ const UserManagement = ({ permission }: UserManagementProps) => {
     <div className="relative h-full w-full">
       {loading && <Spinner />}
       {!loading && users && (
-        <div className="m-auto p-20 ">
-          <div className="flex flex-col gap-10 p-10 ">
+        <div className="m-auto p-20">
+          <div className="flex flex-col gap-10 p-10">
             <h1 className="text-center font-montserrat text-3xl font-bold text-black">
               Permissions Management
             </h1>
@@ -141,7 +143,7 @@ const UserManagement = ({ permission }: UserManagementProps) => {
             </div>
             {permission === "MANAGER" && (
               <button
-                className="text-bold w-full justify-center rounded-2xl bg-northeastern-red py-2 font-lato text-white hover:bg-busy-red "
+                className="text-bold w-full justify-center rounded-2xl bg-northeastern-red py-2 font-lato text-white hover:bg-busy-red"
                 onClick={updatePermission}
               >
                 Update Permission

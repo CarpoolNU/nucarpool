@@ -31,8 +31,8 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
             className={`${baseButton} ${option === "user" ? selectedButton : ""}`}
             onClick={() => setOption("user")}
           >
-            <div className="relative w-8 h-8 mb-1">
-              <Image src={user} alt="user" layout="fill" objectFit="contain" />
+            <div className="relative mb-1 h-8 w-8">
+              <Image src={user} alt="user" fill className="object-contain" />
             </div>
             <span>Profile</span>
           </button>
@@ -41,8 +41,8 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
             className={`${baseButton} ${option === "carpool" ? selectedButton : ""}`}
             onClick={() => setOption("carpool")}
           >
-            <div className="relative w-8 h-8 mb-1">
-              <Image src={car} alt="car" layout="fill" objectFit="contain" />
+            <div className="relative mb-1 h-8 w-8">
+              <Image src={car} alt="car" fill className="object-contain" />
             </div>
             <span>Carpool</span>
           </button>
@@ -51,12 +51,12 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
             className={`${baseButton} ${option === "account" ? selectedButton : ""}`}
             onClick={() => setOption("account")}
           >
-            <div className="relative w-8 h-8 mb-1">
+            <div className="relative mb-1 h-8 w-8">
               <Image
                 src={checkbox}
                 alt="checkbox"
-                layout="fill"
-                objectFit="contain"
+                fill
+                className="object-contain"
               />
             </div>
             <span>Account</span>
@@ -67,23 +67,22 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
   }
 
   return (
-    <div className="my-10 h-full w-full  ">
-      <div className="mt-6 flex  w-full flex-col items-start  justify-center gap-6   lg:text-start">
+    <div className="my-10 h-full w-full">
+      <div className="mt-6 flex w-full flex-col items-start justify-center gap-6 lg:text-start">
         <button
           className={baseButton + (option === "user" && selectedButton)}
           onClick={() => setOption("user")}
         >
           {option === "user" && (
-            <div className=" absolute h-full w-3  rounded-r-xl bg-northeastern-red "></div>
+            <div className="absolute h-full w-3 rounded-r-xl bg-northeastern-red"></div>
           )}
           <div
-            className={`relative ml-4 w-12 lg:ml-12  ${
+            className={`relative ml-4 w-12 lg:ml-12 ${
               option === "user" &&
-              " after:absolute after:inset-0 after:bg-northeastern-red after:mix-blend-screen "
-            }
-             `}
+              "after:absolute after:inset-0 after:bg-northeastern-red after:mix-blend-screen"
+            } `}
           >
-            <div className="relative flex justify-center  ">
+            <div className="relative flex justify-center">
               <Image src={user} alt="user" />
             </div>
           </div>
@@ -94,16 +93,15 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
           onClick={() => setOption("carpool")}
         >
           {option === "carpool" && (
-            <div className=" absolute left-0 h-full  w-3 rounded-r-xl bg-northeastern-red"></div>
+            <div className="absolute left-0 h-full w-3 rounded-r-xl bg-northeastern-red"></div>
           )}
           <div
-            className={`relative ml-4 w-12 lg:ml-12  ${
+            className={`relative ml-4 w-12 lg:ml-12 ${
               option === "carpool" &&
-              " after:absolute after:inset-0 after:bg-northeastern-red after:mix-blend-screen "
-            }
-             `}
+              "after:absolute after:inset-0 after:bg-northeastern-red after:mix-blend-screen"
+            } `}
           >
-            <div className="relative flex justify-center  ">
+            <div className="relative flex justify-center">
               <Image src={car} alt="car" />
             </div>
           </div>
@@ -115,16 +113,15 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
           onClick={() => setOption("account")}
         >
           {option === "account" && (
-            <div className=" absolute left-0 h-full  w-3 rounded-r-xl bg-northeastern-red"></div>
+            <div className="absolute left-0 h-full w-3 rounded-r-xl bg-northeastern-red"></div>
           )}
           <div
-            className={`relative ml-4 w-12 lg:ml-12  ${
+            className={`relative ml-4 w-12 lg:ml-12 ${
               option === "account" &&
-              " after:absolute after:inset-0 after:bg-northeastern-red after:mix-blend-screen "
-            }
-             `}
+              "after:absolute after:inset-0 after:bg-northeastern-red after:mix-blend-screen"
+            } `}
           >
-            <div className="relative flex justify-center  ">
+            <div className="relative flex justify-center">
               <Image src={checkbox} alt="checkbox" />
             </div>
           </div>

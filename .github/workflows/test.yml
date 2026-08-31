@@ -10,19 +10,54 @@ on:
   push:
     branches: [main]
 
+# `GITHUB_TOKEN` is scoped in the file rather than left to a repository setting
+# (SCRUM-309). Every scope not listed becomes `none`, and `contents: read` is all
+# `actions/checkout` needs - nothing here writes to the repository, comments, or
+# calls the API. `auto-comment.yml` is the one workflow that needs more, and
+# declares it on its own job.
+permissions:
+  contents: read
+
+# One run per ref, and a superseded run is cancelled (SCRUM-309).
+#
+# `github.ref` is `refs/pull/N/merge` for a `pull_request` and `refs/heads/main`
+# for a push, so two pushes to an open PR share a group and the older run is
+# cancelled. A push to `main` is keyed on its own SHA, which is unique per merge:
+# grouping those by ref would leave each merge run queued behind the previous
+# one, and a merge run should never be cancelled or delayed by the next merge.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
     name: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
-      - name: install node v20
+      - name: install node
         uses: actions/setup-node@v7.0.0
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: yarn
       - run: yarn install --frozen-lockfile
       # --passWithNoTests was dropped with SCRUM-212, which added the first test
       # files. An empty run should now fail rather than pass silently. Broader
       # end-to-end coverage is still SCRUM-211.
       - run: yarn test
+      # The same suite again, in a zone that is not UTC (SCRUM-297).
+      #
+      # `jest.config.js` pins TZ so that a run is reproducible, which also means
+      # a single run can only ever prove one zone. `minutesApart` was wrong in
+      # exactly the gap between two of them - correct on a developer's
+      # `America/New_York` machine, wrong on this runner - so the property worth
+      # checking is that the suite gives the same answers in both.
+      #
+      # Two steps in one job rather than a build matrix: a matrix would rename
+      # this check to `test (UTC)` and `test (America/New_York)`, and whether
+      # branch protection requires the name `test` cannot currently be verified
+      # from this account. Renaming a required check is not worth the risk of
+      # silently un-gating it.
+      - run: yarn test
+        env:
+          NUCARPOOL_TEST_TZ: America/New_York

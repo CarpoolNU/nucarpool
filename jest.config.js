@@ -3,6 +3,30 @@
  * https://jestjs.io/docs/configuration
  */
 
+/*
+ * Every test run reads the same clock (SCRUM-297).
+ *
+ * Without this, `Date`'s local accessors and constructors resolve against
+ * whatever zone the machine is in - UTC on Amplify and GitHub Actions,
+ * `America/New_York` on a developer's laptop - so a timezone-sensitive test
+ * could pass in one place and fail in the other, or worse pass in both while
+ * asserting different things. `minutesApart` in `src/utils/recommendation.ts`
+ * was exactly that: the defect it now guards against was invisible locally and
+ * live in production.
+ *
+ * Set here rather than in `setupFiles`, and rather than from inside a test,
+ * because **assigning `process.env.TZ` once the worker is running has no
+ * effect**: V8 caches the zone per isolate and Jest's worker does not
+ * invalidate it, so a loop over zones inside a test silently reads the first
+ * one for all of them. It has to be in the parent process, before the workers
+ * are forked, which is what this is.
+ *
+ * `NUCARPOOL_TEST_TZ` is the deliberate escape hatch, and the only way to
+ * exercise a second zone for real - `test.yml` uses it to run the suite twice.
+ * The default is UTC, matching how schedule times are stored and how CI runs.
+ */
+process.env.TZ = process.env.NUCARPOOL_TEST_TZ || "UTC";
+
 module.exports = {
   preset: "ts-jest",
 

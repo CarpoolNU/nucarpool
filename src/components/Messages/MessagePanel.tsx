@@ -28,7 +28,7 @@ const MessagePanel = ({
   const [hasCalculatedRoute, setHasCalculatedRoute] = useState(false);
 
   // Create request handlers
-  const { handleAcceptRequest, handleRejectRequest } =
+  const { handleAcceptRequest, handleRejectRequest, isMutating } =
     createRequestHandlers(utils);
 
   const sendMessage = trpc.user.messages.sendMessage.useMutation({
@@ -52,11 +52,16 @@ const MessagePanel = ({
       },
     });
 
-  const handleSendMessage = (content: string) => {
+  const handleSendMessage = async (content: string) => {
     const request =
       selectedUser.incomingRequest || selectedUser.outgoingRequest;
     const requestId = request?.id;
-    if (!requestId) return;
+    if (!requestId) {
+      // Used to be a bare `return`, which let `SendBar` clear the box for a
+      // message that was never sent anywhere (SCRUM-231).
+      toast.error("This conversation is no longer available.");
+      throw new Error("No request for the selected conversation");
+    }
 
     const converstationMessages = request.conversation?.messages;
 
@@ -82,16 +87,15 @@ const MessagePanel = ({
     // The notification body is read from the stored message (SCRUM-225), so it
     // has to be sent once the write has landed rather than alongside it. The
     // server applies its own cooldown; this check only avoids a pointless call.
-    sendMessage.mutate(
-      { requestId, content },
-      {
-        onSuccess: () => {
-          if (notifyByEmail) {
-            sendMessageNotification({ requestId });
-          }
-        },
-      },
-    );
+    // `mutateAsync` rather than `mutate` so `SendBar` finds out whether the
+    // write landed and can leave the text in the box if it did not
+    // (SCRUM-231). The rejection is caught there; the toast still comes from
+    // `onError` above.
+    await sendMessage.mutateAsync({ requestId, content });
+
+    if (notifyByEmail) {
+      sendMessageNotification({ requestId });
+    }
   };
 
   const { mutate: sendAcceptanceNotification } =
@@ -112,7 +116,17 @@ const MessagePanel = ({
 
     trackRequestResponse("accept", user.role);
 
-    await handleAcceptRequest(user, selectedUser, request);
+    const accepted = await handleAcceptRequest(user, selectedUser, request);
+
+    // Both of these used to run whatever happened, so a refused accept still
+    // emailed the other person to say they had been accepted and still closed
+    // the conversation. That matters most on a double-click: the second call is
+    // now a clean rejection server-side (SCRUM-291), but the notification
+    // endpoint is deliberately not rate limited, so without this the duplicate
+    // email would be sent anyway (SCRUM-293).
+    if (!accepted) {
+      return;
+    }
 
     // Both parties and the template are resolved server-side from the request
     // (SCRUM-225).
@@ -158,6 +172,7 @@ const MessagePanel = ({
           onReject={handleReject}
           onClose={onCloseConversation}
           groupId={user!.carpoolId}
+          isMutating={isMutating}
         />
 
         {/* Tab Strip */}
@@ -173,7 +188,7 @@ const MessagePanel = ({
             Message
           </button>
           <button
-            className={` flex-1 py-3 text-center text-lg font-medium ${
+            className={`flex-1 py-3 text-center text-lg font-medium ${
               activeTab === "map"
                 ? "border-b-2 border-northeastern-red text-northeastern-red"
                 : ""

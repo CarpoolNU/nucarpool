@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import type { PrismaOrTransaction } from "./client";
 
 /**
  * Location ownership (SCRUM-232).
@@ -20,8 +20,12 @@ import type { PrismaClient } from "@prisma/client";
  * The rule below replaces that. Rewriting a row the caller exclusively owns is
  * safe precisely because nobody else can be looking at it.
  *
- * See src/server/db/README.md for the model, and SCRUM-233 for the fact that
- * these writes are still not wrapped in a transaction.
+ * See src/server/db/README.md for the model.
+ *
+ * These helpers take `PrismaOrTransaction` rather than `PrismaClient` because
+ * `user.edit` now calls them inside `prisma.$transaction`, and a transaction
+ * client is not assignable to the full client (SCRUM-233). They must therefore
+ * never call `$transaction` themselves.
  */
 
 /** Every column of `Location` a profile save is responsible for. */
@@ -52,7 +56,7 @@ type ResolveArgs = {
  * comes back as a single reference. That case is disambiguated by the caller.
  */
 const isExclusivelyOwnedBy = async (
-  prisma: PrismaClient,
+  prisma: PrismaOrTransaction,
   locationId: string | null,
   carpoolSearchId: string | null,
 ): Promise<boolean> => {
@@ -84,7 +88,7 @@ const isExclusivelyOwnedBy = async (
  * row, where home keeps it and company gets a new one.
  */
 export const resolveOwnedLocations = async (
-  prisma: PrismaClient,
+  prisma: PrismaOrTransaction,
   {
     carpoolSearchId,
     currentHomeLocationId,

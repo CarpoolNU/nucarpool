@@ -1,6 +1,10 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
+// SCRUM-286: this comment exists so the PR fixing the Auto Comment workflow
+// matches its own `paths` filter and proves the reminder posts. It changes
+// no models or fields, so it needs no PlanetScale deploy request.
+
 // Specify the DB type and the connection string AKA DB_URL
 datasource db {
   provider     = "mysql"
@@ -32,6 +36,17 @@ enum Permission {
 enum Status {
   ACTIVE
   INACTIVE
+}
+
+// Whether a carpool request is still awaiting an answer (SCRUM-228).
+//
+// Accepting a request used to leave the row untouched, so it stayed pending
+// forever and the duplicate guard in `requests.create` blocked that pair from
+// ever requesting each other again. There is no DECLINED member: declining
+// deletes the row, which is the pre-existing behaviour.
+enum RequestStatus {
+  PENDING
+  ACCEPTED
 }
 
 // Represents an Account--need this for NextAuth.
@@ -74,6 +89,7 @@ model Session {
 model Request {
   id             String        @id @default(cuid()) // primary key
   message        String        @db.VarChar(255)
+  status         RequestStatus @default(PENDING)
   fromUserId     String // foreign key
   toUserId       String // foreign key
   fromUser       User          @relation("sentRequests", fields: [fromUserId], references: [id])
@@ -127,28 +143,28 @@ model CarpoolGroup {
 
 // Represents a User--need this for NextAuth and the data it stores.
 model User {
-  id               String          @id @default(cuid()) // primary key
-  name             String?
-  email            String?         @unique
-  emailVerified    DateTime?       @map(name: "email_verified")
-  image            String?         @db.MediumText
-  bio              String          @default("")
-  preferredName    String          @default("")
-  pronouns         String          @default("")
-  accounts         Account[] // can have multiple accounts
-  sessions         Session[] // can have multiple settings
-  permission       Permission      @default(USER)
-  isOnboarded      Boolean         @default(false) @map("is_onboarded")
-  tutorialCompleted Boolean        @default(false) @map("tutorial_completed")
-  licenseSigned    Boolean         @default(false) @map("license_signed")
-  favoritedBy      User[]          @relation("Favorites")
-  favorites        User[]          @relation("Favorites")
-  sentRequests     Request[]       @relation("sentRequests")
-  receivedRequests Request[]       @relation("receivedRequests")
-  message          Message[]
-  dateCreated      DateTime        @default(now())
-  dateModified     DateTime        @default(now()) @updatedAt
-  carpoolSearches  CarpoolSearch[]
+  id                String          @id @default(cuid()) // primary key
+  name              String?
+  email             String?         @unique
+  emailVerified     DateTime?       @map(name: "email_verified")
+  image             String?         @db.MediumText
+  bio               String          @default("")
+  preferredName     String          @default("")
+  pronouns          String          @default("")
+  accounts          Account[] // can have multiple accounts
+  sessions          Session[] // can have multiple settings
+  permission        Permission      @default(USER)
+  isOnboarded       Boolean         @default(false) @map("is_onboarded")
+  tutorialCompleted Boolean         @default(false) @map("tutorial_completed")
+  licenseSigned     Boolean         @default(false) @map("license_signed")
+  favoritedBy       User[]          @relation("Favorites")
+  favorites         User[]          @relation("Favorites")
+  sentRequests      Request[]       @relation("sentRequests")
+  receivedRequests  Request[]       @relation("receivedRequests")
+  message           Message[]
+  dateCreated       DateTime        @default(now())
+  dateModified      DateTime        @default(now()) @updatedAt
+  carpoolSearches   CarpoolSearch[]
 
   @@map(name: "user")
 }
@@ -167,36 +183,61 @@ model Location {
   dateCreated            DateTime        @default(now())
   dateModified           DateTime        @default(now()) @updatedAt
 
+  // The candidate bounding box ranges on coord_lat and then narrows on
+  // coord_lng, so latitude leads (SCRUM-245). There was no index on either
+  // column before; the only ones on this table were implicit.
+  @@index([coordLat, coordLng])
   @@map(name: "location")
 }
 
 model CarpoolSearch {
-  id                String        @id @default(cuid())
-  userId            String
-  role              Role          @default(VIEWER)
-  companyName       String        @default("") @map("company_name")
-  companyLocationId String
-  homeLocationId    String
-  startTime         DateTime?     @map("start_time") @db.Time(0)
-  endTime           DateTime?     @map("end_time") @db.Time(0)
-  startDate         DateTime?     @map("start_date") @db.Date
-  endDate           DateTime?     @map("end_date") @db.Date
-  daysWorking       String        @default("") @map("days_working")
-  seatsAvail        Int           @default(0) @map("seats_avail")
-  status            Status        @default(ACTIVE)
-  carpoolId         String?
-  groupMessage      String?       @map("group_message") @db.Text
-  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  companyLocation   Location      @relation("companyLocation", fields: [companyLocationId], references: [id])
-  homeLocation      Location      @relation("homeLocation", fields: [homeLocationId], references: [id])
-  carpool           CarpoolGroup? @relation(fields: [carpoolId], references: [id])
-  dateCreated       DateTime      @default(now()) @map("date_created")
-  dateModified      DateTime      @default(now()) @updatedAt @map("date_modified")
+  id                     String        @id @default(cuid())
+  userId                 String
+  role                   Role          @default(VIEWER)
+  companyName            String        @default("") @map("company_name")
+  companyLocationId      String
+  homeLocationId         String
+  startTime              DateTime?     @map("start_time") @db.Time(0)
+  endTime                DateTime?     @map("end_time") @db.Time(0)
+  startDate              DateTime?     @map("start_date") @db.Date
+  endDate                DateTime?     @map("end_date") @db.Date
+  daysWorking            String        @default("") @map("days_working")
+  seatsAvail             Int           @default(0) @map("seats_avail")
+  status                 Status        @default(ACTIVE)
+  carpoolId              String?
+  // Retained only so an un-backfilled row can still be read (SCRUM-253). The
+  // three columns below own these values now; this one is no longer written.
+  groupMessage           String?       @map("group_message") @db.Text
+  // The driver's group ride preferences, previously a GROUP_DETAILS_V1: JSON
+  // blob mirrored into `group.message` (SCRUM-253). Real columns, one owner:
+  // the driver's own search. `groups.me` reads them through the group's driver,
+  // so a driver sees the same values before and after having a group.
+  //
+  // Nullable, and null means "never saved" rather than "empty" -- all three
+  // being null is what tells a read to fall back to `groupMessage`. A save
+  // always writes all three, so an intentionally blank form stores "" and is
+  // not mistaken for un-migrated data.
+  //
+  // Widths match the limits the form and the Zod input enforce, so the database
+  // is a backstop rather than the thing that silently truncates.
+  groupNotes             String?       @map("group_notes") @db.VarChar(90)
+  groupMusicPreference   String?       @map("group_music_preference") @db.VarChar(40)
+  groupConversationStyle String?       @map("group_conversation_style") @db.VarChar(40)
+  user                   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyLocation        Location      @relation("companyLocation", fields: [companyLocationId], references: [id])
+  homeLocation           Location      @relation("homeLocation", fields: [homeLocationId], references: [id])
+  carpool                CarpoolGroup? @relation(fields: [carpoolId], references: [id])
+  dateCreated            DateTime      @default(now()) @map("date_created")
+  dateModified           DateTime      @default(now()) @updatedAt @map("date_modified")
 
   @@index([userId])
   @@index([companyLocationId])
   @@index([homeLocationId])
   @@index([carpoolId])
+  // The matching query filters status and role together (SCRUM-245). Neither is
+  // selective alone -- two and three values -- but the pair is the whole
+  // non-relational predicate, so this is the index that covers it.
+  @@index([status, role])
   @@map("carpool_search")
 }
 

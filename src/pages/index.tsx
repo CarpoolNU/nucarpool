@@ -3,18 +3,21 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import type { GetServerSidePropsContext, NextPage } from "next";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RiFocus3Line } from "react-icons/ri";
-import { ToastProvider } from "react-toast-notifications";
 import addMapEvents from "../utils/map/addMapEvents";
 import Head from "next/head";
 import { trpc } from "../utils/trpc";
 import { browserEnv } from "../utils/env/browser";
 import Header, { HeaderOptions } from "../components/Header";
-import { getSession, useSession } from "next-auth/react";
+import { useSession } from "next-auth/react";
+import { getServerSession } from "next-auth";
+import { authOptions } from "./api/auth/[...nextauth]";
 import Spinner from "../components/Spinner";
 import WelcomeTutorial from "../components/WelcomeTutorial";
 import { UserContext } from "../utils/userContext";
 import _, { debounce } from "lodash";
 import { SidebarPage } from "../components/Sidebar/Sidebar";
+import { QueryError } from "../components/QueryError";
+import { toQueryState } from "../utils/queryState";
 import type {
   PublicUser,
   EnhancedPublicUser,
@@ -53,8 +56,12 @@ import clearRiderStartMarkers from "../utils/map/clearRiderStartMarkers";
 
 mapboxgl.accessToken = browserEnv.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
 
+// One direct session lookup, not a self-directed HTTP round trip to
+// `/api/auth/session` (SCRUM-299). `getSession` from `next-auth/react` is the
+// *client* helper and was being called here; `getServerSession` reads the cookie
+// and queries directly, as `server/router/context.ts` already did.
 export async function getServerSideProps(context: GetServerSidePropsContext) {
-  const session = await getSession(context);
+  const session = await getServerSession(context.req, context.res, authOptions);
 
   if (!session?.user) {
     return {
@@ -128,21 +135,53 @@ const Home: NextPage<any> = () => {
   const { data: geoJsonUsers } =
     trpc.mapbox.geoJsonUserList.useQuery(debouncedFilters);
 
-  const { data: user = null } = trpc.user.me.useQuery();
-  const { data: recommendations = [] } = trpc.user.recommendations.me.useQuery(
+  // Held as whole query objects rather than destructured to `data` alone: the
+  // error and loading states are what tell an empty list apart from a failed one
+  // (SCRUM-241).
+  const userQuery = trpc.user.me.useQuery();
+  const { data: user = null } = userQuery;
+
+  const recommendationsQuery = trpc.user.recommendations.me.useQuery(
     {
       sort: sort,
       filters: debouncedFilters,
     },
     { refetchOnMount: true },
   );
-  const { data: favorites = [] } = trpc.user.favorites.me.useQuery(undefined, {
+  const { data: recommendations = [] } = recommendationsQuery;
+
+  const favoritesQuery = trpc.user.favorites.me.useQuery(undefined, {
     refetchOnMount: true,
   });
+  const { data: favorites = [] } = favoritesQuery;
+
+  // `"always"` rather than `true`, and kept deliberately (SCRUM-301).
+  //
+  // The global default is `refetchOnMount: false`, and this is the only query
+  // that opts out of it. It has to: it is the sole source of conversation
+  // history and of the per-card unread dot, and both change out of band - the
+  // other person replies over Pusher, or `markMessagesAsRead` fires from a
+  // thread the user had open. Returning to `/` from `/profile` is a client-side
+  // navigation, so without this the cached payload is served as-is and the
+  // Requests tab can show a stale "New!" for a message already read, or miss a
+  // reply entirely. `true` would still respect `staleTime`; `"always"` does not.
+  //
+  // The six explicit `utils.user.requests.me.invalidate()` call sites cover
+  // mutations this tab initiates. They cannot cover what happened while the
+  // user was on another page, which is what this is for.
+  //
+  // It also means the payload is re-fetched on every navigation to `/`, which
+  // is why the projection above it matters: the narrowing in
+  // `user.requests.me` (SCRUM-301) is what makes paying this on every mount
+  // reasonable.
   const requestsQuery = trpc.user.requests.me.useQuery(undefined, {
     refetchOnMount: "always",
   });
   const { data: requests = { sent: [], received: [] } } = requestsQuery;
+
+  const recsState = toQueryState(recommendationsQuery);
+  const favsState = toQueryState(favoritesQuery);
+  const requestsState = toQueryState(requestsQuery);
   const utils = trpc.useContext();
 
   // Tutorial logic: Show tutorial if user is onboarded but hasn't completed tutorial
@@ -575,8 +614,6 @@ const Home: NextPage<any> = () => {
       // end route at driver destination
       waypoints.push([driver.companyCoordLng, driver.companyCoordLat]);
 
-      console.log("Optimized route waypoints:", waypoints);
-
       // set points for the directions query
       setPoints(waypoints);
 
@@ -787,7 +824,7 @@ const Home: NextPage<any> = () => {
       newMap.on("load", () => {
         newMap.setMaxZoom(13);
         setMapState(newMap);
-        addMapEvents(newMap, user, setPopupUsers);
+        addMapEvents(newMap, setPopupUsers);
 
         // Initial setting of user and company locations
         if (user.role !== "VIEWER") {
@@ -968,7 +1005,7 @@ const Home: NextPage<any> = () => {
 
     return (
       <div
-        className="absolute top-0 left-0 right-0 z-[9999] bg-yellow-100 text-black py-1 px-4 text-xs text-center"
+        className="absolute left-0 right-0 top-0 z-[9999] bg-yellow-100 px-4 py-1 text-center text-xs text-black"
         style={{
           width: "100%",
           position: "fixed",
@@ -981,12 +1018,27 @@ const Home: NextPage<any> = () => {
     );
   };
 
+  // A failed `user.me` used to leave `data` undefined behind this spinner
+  // forever, which was indistinguishable from the app being down and offered
+  // nothing to do about it (SCRUM-241).
+  if (userQuery.isError) {
+    return (
+      <QueryError
+        variant="page"
+        subject="your profile"
+        onRetry={() => {
+          void userQuery.refetch();
+        }}
+      />
+    );
+  }
+
   if (!user) {
     return <Spinner />;
   }
 
   const viewerBox = (
-    <div className="absolute left-0 top-0 z-10 m-2 flex min-w-[25rem] flex-col rounded-xl bg-white p-4 shadow-lg ">
+    <div className="absolute left-0 top-0 z-10 m-2 flex min-w-[25rem] flex-col rounded-xl bg-white p-4 shadow-lg">
       <h2 className="mb-4 text-xl">Search my route</h2>
       <div className="flex items-center space-x-4">
         <Image
@@ -1009,7 +1061,7 @@ const Home: NextPage<any> = () => {
 
       <div className="mt-4 flex items-center space-x-4">
         <Image
-          className="h-8 w-8 "
+          className="h-8 w-8"
           alt="end"
           src={BlueSquare}
           width={32}
@@ -1022,7 +1074,7 @@ const Home: NextPage<any> = () => {
           addressSetter={setCompanyAddressSelected}
           addressSuggestions={companyAddressSuggestions}
           addressUpdater={updateCompanyAddress}
-          className="flex-1 "
+          className="flex-1"
         />
       </div>
       <div className="flex items-center space-x-4">
@@ -1042,212 +1094,215 @@ const Home: NextPage<any> = () => {
   return (
     <>
       <UserContext.Provider value={user}>
-        <ToastProvider
-          placement="top-right"
-          autoDismiss={true}
-          newestOnTop={true}
-        >
-          <Head>
-            <title>CarpoolNU</title>
-            <meta
-              name="viewport"
-              content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+        <Head>
+          <title>CarpoolNU</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+        </Head>
+
+        {/* Always render the banner outside of other containers */}
+        <MobileBanner />
+
+        {/* Tutorial overlay for first-time users */}
+        {showTutorial && (
+          <WelcomeTutorial onComplete={handleTutorialComplete} />
+        )}
+
+        <div className="m-0 h-full max-h-screen w-full">
+          {!isMobile && (
+            <Header
+              data={{
+                sidebarValue: sidebarType,
+                setSidebar: setSidebarType,
+                disabled: user.status === "INACTIVE" && user.role !== "VIEWER",
+              }}
+              onViewGroupRoute={onViewGroupRoute}
             />
-          </Head>
-
-          {/* Always render the banner outside of other containers */}
-          <MobileBanner />
-
-          {/* Tutorial overlay for first-time users */}
-          {showTutorial && (
-            <WelcomeTutorial onComplete={handleTutorialComplete} />
           )}
-
-          <div className="m-0 h-full max-h-screen w-full">
-            {!isMobile && (
-              <Header
-                data={{
-                  sidebarValue: sidebarType,
-                  setSidebar: setSidebarType,
-                  disabled:
-                    user.status === "INACTIVE" && user.role !== "VIEWER",
-                }}
-                onViewGroupRoute={onViewGroupRoute}
-              />
-            )}
-            <div
-              className={`flex h-[91.5%] overflow-hidden ${isMobile ? "mt-5" : ""}`}
-            >
-              {isMobile &&
-                (sidebarType === "explore" || sidebarType === "requests") &&
-                mobileSelectedUserID === null && (
-                  <div
-                    onClick={handleSidebarToggle}
-                    className={`absolute left-1/2 z-30 -translate-x-1/2 transform cursor-pointer transition-all duration-300 ${
-                      isSidebarCollapsed
-                        ? "bottom-16"
-                        : "bottom-[calc(100%-6rem)]"
-                    }`}
-                    style={{ padding: "12px 0" }}
-                  >
-                    <div className="h-2 w-20 rounded-full bg-gray-500 shadow-sm transition-colors hover:bg-gray-600"></div>
-                  </div>
-                )}
-              <div
-                ref={sidebarRef}
-                className={`${
-                  isMobile
-                    ? `absolute left-0 z-20 w-full overflow-y-auto bg-white shadow-lg transition-all duration-300 rounded-t-3xl border-2 border-black ${
-                        mobileSelectedUserID !== null
-                          ? "bottom-12 h-[320px]"
-                          : isSidebarCollapsed
-                            ? "bottom-12 h-0 opacity-0 pointer-events-none"
-                            : "bottom-12 h-[calc(100%-8.5rem)]"
-                      }`
-                    : "relative w-[25rem]"
-                }`}
-              >
-                {isMobile && mobileSelectedUserID !== null && (
-                  <div className="flex-shrink-0 border-b border-gray-200 bg-gray-50 px-3 py-2">
-                    <button
-                      onClick={() => handleMobileSidebarExpand()}
-                      className="flex items-center text-northeastern-red"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className="mr-1"
-                      >
-                        <polyline points="15 18 9 12 15 6"></polyline>
-                      </svg>
-                      <span className="font-medium">Back</span>
-                    </button>
-                  </div>
-                )}
-
-                {mapState && (
-                  <SidebarPage
-                    setSort={setSort}
-                    sort={sort}
-                    setFilters={setFilters}
-                    filters={filters}
-                    defaultFilters={defaultFilters}
-                    sidebarType={sidebarType}
-                    role={user.role}
-                    map={mapState}
-                    recs={enhancedRecs}
-                    favs={enhancedFavs}
-                    received={enhancedReceivedUsers}
-                    sent={enhancedSentUsers}
-                    onViewRouteClick={onViewRouteClick}
-                    onUserSelect={handleUserSelect}
-                    selectedUser={selectedUser}
-                    mobileSelectedUser={mobileSelectedUserID}
-                    handleMobileExpand={handleMobileSidebarExpand}
-                    onViewGroupRoute={onViewGroupRoute}
-                    collapseSidebar={(collapsed) =>
-                      setIsSidebarCollapsed(collapsed)
-                    }
-                  />
-                )}
-              </div>
-
-              {!isMobile && (
+          <div
+            className={`flex h-[91.5%] overflow-hidden ${isMobile ? "mt-5" : ""}`}
+          >
+            {isMobile &&
+              (sidebarType === "explore" || sidebarType === "requests") &&
+              mobileSelectedUserID === null && (
                 <button
-                  className="absolute bottom-[150px] right-[8px] z-10 flex h-8 w-8 items-center justify-center rounded-md border-2 border-solid border-gray-300 bg-white shadow-sm hover:bg-gray-200"
-                  id="fly"
+                  type="button"
+                  onClick={handleSidebarToggle}
+                  aria-expanded={!isSidebarCollapsed}
+                  aria-label={
+                    isSidebarCollapsed ? "Show the list" : "Hide the list"
+                  }
+                  className={`absolute left-1/2 z-30 -translate-x-1/2 transform cursor-pointer transition-all duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-northeastern-red ${
+                    isSidebarCollapsed
+                      ? "bottom-16"
+                      : "bottom-[calc(100%-6rem)]"
+                  }`}
+                  style={{ padding: "12px 0" }}
                 >
-                  <RiFocus3Line />
+                  <span className="block h-2 w-20 rounded-full bg-gray-500 shadow-sm transition-colors hover:bg-gray-600"></span>
                 </button>
               )}
-              <div className="relative flex-auto">
-                {/* Message Panel */}
-                {selectedUser && (
-                  <div className=" pointer-events-none absolute inset-0 z-10 h-full w-full">
-                    <MessagePanel
-                      selectedUser={selectedUser}
-                      onMessageSent={handleMessageSent}
-                      onViewRouteClick={onViewRouteClick}
-                      onCloseConversation={handleUserSelect}
-                    />
-                  </div>
-                )}
-
-                {/* Map Container */}
-                <div
-                  ref={mapContainerRef}
-                  id="map"
-                  className="pointer-events-auto relative  z-0 h-full w-full flex-auto"
-                >
-                  {user.role === "VIEWER" && viewerBox}
-                  {!isMobile && <MapLegend role={user.role} />}
-                  {!isMobile && (
-                    <MapConnectPortal
-                      otherUsers={popupUsers}
-                      extendUser={extendPublicUser}
-                      onViewRouteClick={onViewRouteClick}
-                      onViewRequest={handleUserSelect}
-                      onClose={() => {
-                        setPopupUsers(null);
-                      }}
-                    />
-                  )}
-                  {user.status === "INACTIVE" && user.role !== "VIEWER" && (
-                    <InactiveBlocker />
-                  )}
-                </div>
-                {/* Mobile: show reopen button when sidebar collapsed and user is on My Group page, to bring back My Group */}
-                {isMobile &&
-                  isSidebarCollapsed &&
-                  sidebarType === "mygroup" && (
-                    <button
-                      onClick={() => {
-                        setSidebarType("mygroup");
-                        setIsSidebarCollapsed(false);
-                        setmobileSelectedUserID(null);
-                      }}
-                      className="flex absolute bottom-16 left-1/2 -translate-x-1/2 transform z-30 items-center gap-1 rounded-full bg-white/90 px-4 py-2 shadow-md border border-gray-300 text-sm font-medium hover:bg-white transition-colors"
-                      aria-label="Group Details"
+            <div
+              ref={sidebarRef}
+              className={`${
+                isMobile
+                  ? `absolute left-0 z-20 w-full overflow-y-auto rounded-t-3xl border-2 border-black bg-white shadow-lg transition-all duration-300 ${
+                      mobileSelectedUserID !== null
+                        ? "bottom-12 h-[320px]"
+                        : isSidebarCollapsed
+                          ? "pointer-events-none bottom-12 h-0 opacity-0"
+                          : "bottom-12 h-[calc(100%-8.5rem)]"
+                    }`
+                  : "relative w-[25rem]"
+              }`}
+            >
+              {isMobile && mobileSelectedUserID !== null && (
+                <div className="flex-shrink-0 border-b border-gray-200 bg-gray-50 px-3 py-2">
+                  <button
+                    onClick={() => handleMobileSidebarExpand()}
+                    className="flex items-center text-northeastern-red"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="mr-1"
+                      aria-hidden="true"
                     >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <polyline points="15 18 9 12 15 6"></polyline>
-                      </svg>
-                      <span>Group Details</span>
-                    </button>
-                  )}
-                {isMobile && (
-                  <Header
-                    data={{
-                      sidebarValue: sidebarType,
-                      setSidebar: setSidebarType,
-                      disabled:
-                        user.status === "INACTIVE" && user.role !== "VIEWER",
+                      <polyline points="15 18 9 12 15 6"></polyline>
+                    </svg>
+                    <span className="font-medium">Back</span>
+                  </button>
+                </div>
+              )}
+
+              {mapState && (
+                <SidebarPage
+                  setSort={setSort}
+                  sort={sort}
+                  setFilters={setFilters}
+                  filters={filters}
+                  defaultFilters={defaultFilters}
+                  sidebarType={sidebarType}
+                  role={user.role}
+                  map={mapState}
+                  recs={enhancedRecs}
+                  favs={enhancedFavs}
+                  received={enhancedReceivedUsers}
+                  sent={enhancedSentUsers}
+                  recsState={recsState}
+                  favsState={favsState}
+                  requestsState={requestsState}
+                  onViewRouteClick={onViewRouteClick}
+                  onUserSelect={handleUserSelect}
+                  selectedUser={selectedUser}
+                  mobileSelectedUser={mobileSelectedUserID}
+                  handleMobileExpand={handleMobileSidebarExpand}
+                  onViewGroupRoute={onViewGroupRoute}
+                  collapseSidebar={(collapsed) =>
+                    setIsSidebarCollapsed(collapsed)
+                  }
+                />
+              )}
+            </div>
+
+            {!isMobile && (
+              <button
+                type="button"
+                className="absolute bottom-[150px] right-[8px] z-10 flex h-8 w-8 items-center justify-center rounded-md border-2 border-solid border-gray-300 bg-white shadow-sm hover:bg-gray-200"
+                aria-label="Recentre the map on your workplace"
+                onClick={() =>
+                  mapState?.flyTo({
+                    center: [user.companyCoordLng, user.companyCoordLat],
+                    essential: true,
+                  })
+                }
+              >
+                <RiFocus3Line aria-hidden="true" />
+              </button>
+            )}
+            <div className="relative flex-auto">
+              {/* Message Panel */}
+              {selectedUser && (
+                <div className="pointer-events-none absolute inset-0 z-10 h-full w-full">
+                  <MessagePanel
+                    selectedUser={selectedUser}
+                    onMessageSent={handleMessageSent}
+                    onViewRouteClick={onViewRouteClick}
+                    onCloseConversation={handleUserSelect}
+                  />
+                </div>
+              )}
+
+              {/* Map Container */}
+              <div
+                ref={mapContainerRef}
+                id="map"
+                className="pointer-events-auto relative z-0 h-full w-full flex-auto"
+              >
+                {user.role === "VIEWER" && viewerBox}
+                {!isMobile && <MapLegend role={user.role} />}
+                {!isMobile && (
+                  <MapConnectPortal
+                    otherUsers={popupUsers}
+                    extendUser={extendPublicUser}
+                    onViewRouteClick={onViewRouteClick}
+                    onViewRequest={handleUserSelect}
+                    onClose={() => {
+                      setPopupUsers(null);
                     }}
-                    isMobile={true}
-                    onViewGroupRoute={onViewGroupRoute}
                   />
                 )}
+                {user.status === "INACTIVE" && user.role !== "VIEWER" && (
+                  <InactiveBlocker />
+                )}
               </div>
+              {/* Mobile: show reopen button when sidebar collapsed and user is on My Group page, to bring back My Group */}
+              {isMobile && isSidebarCollapsed && sidebarType === "mygroup" && (
+                <button
+                  onClick={() => {
+                    setSidebarType("mygroup");
+                    setIsSidebarCollapsed(false);
+                    setmobileSelectedUserID(null);
+                  }}
+                  className="absolute bottom-16 left-1/2 z-30 flex -translate-x-1/2 transform items-center gap-1 rounded-full border border-gray-300 bg-white/90 px-4 py-2 text-sm font-medium shadow-md transition-colors hover:bg-white"
+                  aria-label="Group Details"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                  </svg>
+                  <span>Group Details</span>
+                </button>
+              )}
+              {isMobile && (
+                <Header
+                  data={{
+                    sidebarValue: sidebarType,
+                    setSidebar: setSidebarType,
+                    disabled:
+                      user.status === "INACTIVE" && user.role !== "VIEWER",
+                  }}
+                  onViewGroupRoute={onViewGroupRoute}
+                />
+              )}
             </div>
           </div>
-        </ToastProvider>
+        </div>
       </UserContext.Provider>
     </>
   );

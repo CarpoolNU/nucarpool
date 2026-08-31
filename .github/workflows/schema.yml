@@ -1,0 +1,115 @@
+name: Schema
+
+# Trigger policy, shared by lint / tsc / test / build / env-contract / schema (SCRUM-248):
+#   pull_request     - gates every PR before it can merge into main
+#   push to main     - catches anything that reaches main by another route
+# Deliberately not `on: [push]`: while a PR is open that runs every check twice,
+# once for the branch push and once for the pull_request event.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# `GITHUB_TOKEN` is scoped in the file rather than left to a repository setting
+# (SCRUM-309). Every scope not listed becomes `none`, and `contents: read` is all
+# `actions/checkout` needs - nothing here writes to the repository, comments, or
+# calls the API. `auto-comment.yml` is the one workflow that needs more, and
+# declares it on its own job.
+permissions:
+  contents: read
+
+# One run per ref, and a superseded run is cancelled (SCRUM-309).
+#
+# `github.ref` is `refs/pull/N/merge` for a `pull_request` and `refs/heads/main`
+# for a push, so two pushes to an open PR share a group and the older run is
+# cancelled. A push to `main` is keyed on its own SHA, which is unique per merge:
+# grouping those by ref would leave each merge run queued behind the previous
+# one, and a merge run should never be cancelled or delayed by the next merge.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# SCRUM-271. Nothing in CI read `prisma/migrations/` before this job, so a schema
+# change merged without a migration was invisible to every check - which is how
+# SCRUM-227 went unnoticed for five months. `tutorialCompleted` sat in
+# schema.prisma with no migration creating `tutorial_completed`, so any database
+# built from migration history alone failed every `User` query with P2022: no
+# sign-in, no account creation.
+#
+# This job replays the committed migration history into a throwaway database and
+# fails if the result differs from schema.prisma in either direction.
+#
+# Deliberately its own workflow rather than a step in `build`: it needs a MySQL
+# service container the build does not, and a drift failure should read as drift
+# rather than as a broken build. Same reasoning as `env-contract`.
+#
+# No `paths:` filter. Drift can appear from a change to schema.prisma, a change
+# to prisma/migrations/, or neither (a bad rebase), so the check runs every time.
+jobs:
+  schema:
+    name: schema
+    runs-on: ubuntu-latest
+
+    # Throwaway shadow database. `prisma migrate diff --from-migrations` needs a
+    # real MySQL to replay the migrations into, and it WIPES whatever it is
+    # pointed at - which is why this is a service container that dies with the
+    # job, and never a developer's database or a shared one. 8.0 matches the
+    # major version PlanetScale serves and the local docker-compose container
+    # (SCRUM-255).
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: shadow
+          MYSQL_DATABASE: shadow
+        ports:
+          - 3306:3306
+        # Without a health check the job races container startup and reports
+        # P1001 instead of a real result.
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pshadow"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    env:
+      # 127.0.0.1 rather than localhost: on the runner `localhost` can resolve to
+      # ::1 while the service publishes on IPv4 only.
+      SHADOW_DATABASE_URL: mysql://root:shadow@127.0.0.1:3306/shadow
+      # `prisma validate` resolves env("DATABASE_URL") from the datasource block
+      # and exits 1 if it is unset, even though it never opens a connection. The
+      # value only has to parse. `migrate diff` below does not read it at all.
+      DATABASE_URL: mysql://root:shadow@127.0.0.1:3306/shadow
+
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: install node
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: yarn
+      - run: yarn install --frozen-lockfile
+      - name: validate the schema
+        run: yarn prisma validate
+      # --exit-code turns the diff into a gate: 0 no difference, 1 error,
+      # 2 differences found. It fails closed - an unreachable or missing shadow
+      # database exits 1, not 0, so a broken service container cannot produce a
+      # false green.
+      #
+      # One direction is enough: the diff describes what would have to change to
+      # turn the migration-history schema into schema.prisma, so a column that
+      # migrations create but the schema does not declare shows up here as a DROP.
+      #
+      # `yarn --silent` matters here: without it Yarn echoes the fully expanded
+      # command line before running it, which would print the shadow connection
+      # string - password included - into the job log. The password below is a
+      # throwaway defined in this file, so nothing real leaks either way, but the
+      # command should not teach a pattern that leaks when someone copies it and
+      # substitutes a real URL.
+      - name: assert migration history reproduces schema.prisma
+        run: |
+          yarn --silent prisma migrate diff \
+            --from-migrations ./prisma/migrations \
+            --to-schema-datamodel ./prisma/schema.prisma \
+            --shadow-database-url "$SHADOW_DATABASE_URL" \
+            --exit-code

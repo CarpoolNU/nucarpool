@@ -10,6 +10,25 @@ on:
   push:
     branches: [main]
 
+# `GITHUB_TOKEN` is scoped in the file rather than left to a repository setting
+# (SCRUM-309). Every scope not listed becomes `none`, and `contents: read` is all
+# `actions/checkout` needs - nothing here writes to the repository, comments, or
+# calls the API. `auto-comment.yml` is the one workflow that needs more, and
+# declares it on its own job.
+permissions:
+  contents: read
+
+# One run per ref, and a superseded run is cancelled (SCRUM-309).
+#
+# `github.ref` is `refs/pull/N/merge` for a `pull_request` and `refs/heads/main`
+# for a push, so two pushes to an open PR share a group and the older run is
+# cancelled. A push to `main` is keyed on its own SHA, which is unique per merge:
+# grouping those by ref would leave each merge run queued behind the previous
+# one, and a merge run should never be cancelled or delayed by the next merge.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # The build job satisfies envsafe with placeholder values, which means a build
 # alone can never notice that a newly required variable was left out of
 # .env.example. This job is that missing check, kept separate so the two
@@ -20,10 +39,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
-      - name: install node v20
+      - name: install node
         uses: actions/setup-node@v7.0.0
         with:
-          node-version: 20
+          node-version-file: .nvmrc
       # Intentionally no `yarn install`: the check is dependency-free, so this
       # job stays fast and keeps reporting even when installation is broken.
       - name: check .env.example against the app's env contract

@@ -20,6 +20,7 @@ import {
   releasePusherClient,
 } from "../utils/pusherClient";
 import { PublicUser } from "../utils/types";
+import useIsMobile from "../utils/useIsMobile";
 import {
   HiOutlineMap,
   HiOutlineChatAlt2,
@@ -59,15 +60,28 @@ const MobileNav = styled.div`
   border-top: 1px solid #d1d1d1;
 `;
 
-const MobileNavItem = styled.div<{ active: boolean }>`
+// A real <button>, not a div: this is the entire mobile navigation, and as a
+// div it was unreachable by keyboard (SCRUM-254). Tailwind's preflight already
+// makes buttons inherit font and drop their border, but this is styled-
+// components, so the resets are stated here.
+const MobileNavItem = styled.button<{ active: boolean }>`
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: 8px 0;
   width: 25%;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
   border-bottom: ${(props) =>
     props.active ? "4px solid #000" : "4px solid transparent"};
   cursor: pointer;
+
+  &:focus-visible {
+    outline: 2px solid #c8102e;
+    outline-offset: -2px;
+  }
 `;
 
 export const Logo = styled.h1`
@@ -120,7 +134,6 @@ interface HeaderProps {
   signIn?: boolean;
   profile?: boolean;
   checkChanges?: () => void;
-  isMobile?: boolean;
   onViewGroupRoute?: (driver: PublicUser, riders: PublicUser[]) => void;
 }
 
@@ -138,31 +151,16 @@ const Header = (props: HeaderProps) => {
     useState(0);
   const [displayGroup, setDisplayGroup] = useState<boolean>(false);
 
-  // Check if we're explicitly passed isMobile or detect it ourselves
-  const [internalIsMobile, setInternalIsMobile] = useState(false);
-  const isMobile =
-    props.isMobile !== undefined ? props.isMobile : internalIsMobile;
+  // One shared definition, rather than a private `<= 768` check plus an optional
+  // prop that let a caller disagree with it. `index.tsx` passed `isMobile={true}`
+  // for its mobile instance and nothing for its desktop instance, so the desktop
+  // header measured 768 while the page around it measured 640 - and every
+  // viewport in between rendered the desktop layout with the mobile bottom
+  // navigation and no usable header (SCRUM-237).
+  const isMobile = useIsMobile();
 
   // Track if user is coming from profile page
   const isComingFromProfile = useRef(false);
-
-  // Only run our own detection if isMobile isn't passed as a prop
-  useEffect(() => {
-    if (props.isMobile !== undefined) return;
-
-    const checkIfMobile = () => {
-      setInternalIsMobile(window.innerWidth <= 768);
-    };
-
-    // Initial check
-    checkIfMobile();
-
-    // Add event listener for window resize
-    window.addEventListener("resize", checkIfMobile);
-
-    // Cleanup
-    return () => window.removeEventListener("resize", checkIfMobile);
-  }, [props.isMobile]);
 
   // `props.data` is an object literal rebuilt by `Home` on every render — every
   // filter change, query settle, map event and hover — so depending on it made
@@ -337,7 +335,7 @@ const Header = (props: HeaderProps) => {
   }) => {
     if (isLoading) {
       return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-white ">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-white">
           <Spinner />
         </div>
       );
@@ -450,14 +448,23 @@ const Header = (props: HeaderProps) => {
         {navItems.map((item) => (
           <MobileNavItem
             key={item.id}
+            type="button"
             active={currentActiveTab === item.id}
+            aria-current={currentActiveTab === item.id ? "page" : undefined}
             onClick={() => {
               handleMobileNavClick(item.id);
             }}
             data-testid={item.testId}
           >
-            <div style={{ fontSize: "24px" }}>{item.icon}</div>
-            <div style={{ position: "relative" }}>
+            {/* Spans, not divs: a <button> may not contain flow content. They
+                are flex items here, so they lay out exactly as before. */}
+            <span
+              style={{ fontSize: "24px", display: "flex" }}
+              aria-hidden="true"
+            >
+              {item.icon}
+            </span>
+            <span style={{ position: "relative", display: "block" }}>
               {item.badge && (
                 <span
                   style={{
@@ -483,7 +490,7 @@ const Header = (props: HeaderProps) => {
               <span style={{ fontSize: "12px", fontWeight: "500" }}>
                 {item.label}
               </span>
-            </div>
+            </span>
           </MobileNavItem>
         ))}
       </MobileNav>

@@ -1,0 +1,66 @@
+deny	mysql -h aws.connect.@HOST@ -u abc -pXYZ nucarpool
+deny	mysql --host=aws.connect.@HOST@ -u abc nucarpool
+deny	@CURL@ https://api.planetscale.com/v1/deploy-requests/1/deploy
+pass	printf 'direct mysql connections to @HOST@ are blocked' > notes.md
+pass	grep -rn "@HOST@" .env.example
+deny	@P@ database list @TOK@ pscale_tkn_abc
+deny	@P@ sql nucarpool main --org devashishsood18 --role admin --query "UPDATE user SET name=1"
+deny	@P@ sql nucarpool main --format json --role=writer --query "INSERT INTO x VALUES (1)"
+deny	@P@ sql nucarpool main --query "UPDATE user SET x=1"
+deny	@P@ sql nucarpool main --query "SELECT 1; DROP TABLE user"
+deny	@P@ password create nucarpool main --role admin
+deny	@P@ deploy-request deploy nucarpool 27
+deny	@P@ deploy-request review nucarpool 27 --approve
+deny	@P@ deploy-request revert nucarpool 27
+deny	@P@ branch safe-migrations disable nucarpool main
+deny	@P@ shell nucarpool main
+deny	@P@ connect nucarpool main
+deny	@P@ sql nucarpool main --role reader --force --query "DELETE FROM user"
+deny	@P@ sql nucarpool test --role admin --query "INSERT INTO x VALUES(1)"
+deny	@P@ branch delete nucarpool staging
+deny	@P@ sql nucarpool main --role readwriter --query "SELECT 1"
+deny	@P@ webhook create nucarpool --url https://x.example.com
+deny	@P@ service-token create --org devashishsood18
+ask	@P@ sql nucarpool staging --role writer --query "INSERT INTO x VALUES (1)"
+ask	@P@ sql nucarpool staging --role admin --force --query "DELETE FROM user WHERE id=1"
+deny	@P@ deploy-request create nucarpool
+ask	@P@ branch create nucarpool scrum-300
+ask	@P@ password create nucarpool staging --role writer
+pass	@P@ sql nucarpool main --format json --query "SELECT 1"
+pass	@P@ sql nucarpool main --role reader --query "SHOW TABLES"
+pass	@P@ sql nucarpool main --role reader --query "DESCRIBE user"
+pass	@P@ branch schema nucarpool main --format json
+pass	@P@ insights recommendations nucarpool --format json
+pass	@P@ insights queries nucarpool main --format json
+pass	@P@ branch list nucarpool --format json
+pass	@P@ branch show nucarpool main --format json
+pass	@P@ deploy-request list nucarpool --format json
+pass	@P@ password list nucarpool main --format json
+pass	@P@ backup list nucarpool main --format json
+pass	@P@ auth check --format json
+pass	git status
+pass	yarn tsc
+deny	@P@ service-token add-access abc create_branch
+pass	@P@ service-token list --org devashishsood18 --format json
+deny	@P@ api organizations/devashishsood18/databases/nucarpool/deploy-requests/26/deploy -X POST
+deny	@P@ api organizations/devashishsood18/databases/nucarpool/branches/main/passwords -X POST
+deny	@P@ api organizations/x/databases/y/deploy-requests/26/approve
+pass	@P@ api organizations/devashishsood18/service-tokens --format json
+pass	@P@ api user --format json
+deny	@P@ sql nucarpool main --role  admin --query "UPDATE user SET x=1"
+deny	@P@ sql nucarpool main --role=ADMIN --query "UPDATE user SET x=1"
+deny	@P@ sql nucarpool main -q "UPDATE user SET x=1"
+deny	/opt/homebrew/bin/@P@ sql nucarpool main --role admin --query "UPDATE u SET x=1"
+deny	PSCALE_ORG=devashishsood18 @P@ sql nucarpool main --role admin --query "UPDATE u SET x=1"
+deny	cd /tmp && @P@ sql nucarpool main --role admin --query "UPDATE u SET x=1"
+deny	@P@ sql nucarpool main --keyspace nucarpool/-80 --role admin --query "UPDATE u SET x=1"
+deny	@P@ sql "nucarpool" "main" --role admin --query "UPDATE u SET x=1"
+deny	@P@ sql "nucarpool" "main" --query "UPDATE u SET x=1"
+deny	@P@ sql 'nucarpool' 'main' --force --query 'DELETE FROM u'
+deny	@P@ password create 'nucarpool' 'main' --role admin
+deny	@P@ password create nucarpool main --role reader
+deny	@P@ sql nucarpool main@primary --role admin --query "UPDATE u SET x=1"
+deny	@P@  deploy-request   deploy  nucarpool 26
+pass	@P@ sql nucarpool main --role reader --query "EXPLAIN SELECT * FROM user"
+pass	@P@ sql 'nucarpool' 'main' --role reader --query 'SELECT 1'
+pass	@P@ sql "nucarpool" "main" --query "SHOW TABLES"

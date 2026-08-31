@@ -4,7 +4,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { GetServerSidePropsContext, NextPage } from "next";
 import { useRouter } from "next/router";
 import { toast } from "react-toastify";
-import { getSession, useSession } from "next-auth/react";
+import { useSession } from "next-auth/react";
+import { getServerSession } from "next-auth";
+import { authOptions } from "../api/auth/[...nextauth]";
 import { trpc } from "../../utils/trpc";
 import { OnboardingFormInputs } from "../../utils/types";
 import {
@@ -22,6 +24,10 @@ import {
   updateUser,
   useEditUserMutation,
 } from "../../utils/profile/updateUser";
+import {
+  UNRESOLVED_ADDRESS_MESSAGE,
+  unresolvedAddressFields,
+} from "../../utils/coordinates";
 
 import ProfileSidebar from "../../components/Profile/ProfileSidebar";
 import UserSection from "../../components/Profile/UserSection";
@@ -31,8 +37,12 @@ import AccountSection from "../../components/Profile/AccountSection";
 import UnsavedModal from "../../components/Profile/UnsavedModal";
 import useIsMobile from "../../utils/useIsMobile";
 
+// One direct session lookup, not a self-directed HTTP round trip to
+// `/api/auth/session` (SCRUM-299). `getSession` from `next-auth/react` is the
+// *client* helper and was being called here; `getServerSession` reads the cookie
+// and queries directly, as `server/router/context.ts` already did.
 export async function getServerSideProps(context: GetServerSidePropsContext) {
-  const session = await getSession(context);
+  const session = await getServerSession(context.req, context.res, authOptions);
 
   if (!session?.user) {
     return {
@@ -104,6 +114,7 @@ const Index: NextPage = () => {
   const {
     register,
     setValue,
+    setError,
     formState: { errors },
     watch,
     handleSubmit,
@@ -184,7 +195,31 @@ const Index: NextPage = () => {
     setShowModal(false);
   };
 
-  const onSubmit = async (values: OnboardingFormInputs) => {
+  const onSubmit = async (values: OnboardingFormInputs): Promise<boolean> => {
+    // The address fields hold text and `onboardSchema` checks the text; the
+    // coordinates live outside the form, in the two address hooks, and the
+    // combobox only writes back to the form when a suggestion is chosen. So a
+    // non-empty address can sit next to the `[0, 0]` the hook defaults to -
+    // which used to be saved, putting the pin ~4000 miles out and dropping the
+    // row from every distance-filtered search (SCRUM-302). `user.edit` refuses
+    // it now; this names the field instead of surfacing a Zod error in a toast.
+    const unresolved = unresolvedAddressFields({
+      role: values.role,
+      home: startAddressHook.selectedAddress.center,
+      company: companyAddressHook.selectedAddress.center,
+    });
+    if (unresolved.length > 0) {
+      for (const field of unresolved) {
+        setError(field, {
+          type: "manual",
+          message: UNRESOLVED_ADDRESS_MESSAGE,
+        });
+      }
+      setOption("carpool");
+      toast.error("One or more fields are invalid, please fix and try again.");
+      return false;
+    }
+
     setIsLoading(true);
     const userInfo = {
       ...values,
@@ -193,12 +228,17 @@ const Index: NextPage = () => {
       startCoordLng: startAddressHook.selectedAddress.center[0],
       startCoordLat: startAddressHook.selectedAddress.center[1],
       seatAvail: values.role === "RIDER" ? 0 : (values.seatAvail ?? 0),
-      startStreet: startAddressHook.selectedAddress.street || user?.startStreet || "",
+      startStreet:
+        startAddressHook.selectedAddress.street || user?.startStreet || "",
       startCity: startAddressHook.selectedAddress.city || user?.startCity || "",
-      startState: startAddressHook.selectedAddress.state || user?.startState || "",
-      companyStreet: companyAddressHook.selectedAddress.street || user?.companyStreet || "",
-      companyCity: companyAddressHook.selectedAddress.city || user?.companyCity || "",
-      companyState: companyAddressHook.selectedAddress.state || user?.companyState || "",
+      startState:
+        startAddressHook.selectedAddress.state || user?.startState || "",
+      companyStreet:
+        companyAddressHook.selectedAddress.street || user?.companyStreet || "",
+      companyCity:
+        companyAddressHook.selectedAddress.city || user?.companyCity || "",
+      companyState:
+        companyAddressHook.selectedAddress.state || user?.companyState || "",
       companyName: values.companyName ?? "",
       profilePicture: values.profilePicture ?? "",
       companyAddress: values.companyAddress ?? "",
@@ -212,11 +252,18 @@ const Index: NextPage = () => {
       coopStartDate: values.coopStartDate ?? null,
       coopEndDate: values.coopEndDate ?? null,
     };
+    // A failed upload used to stop at the console, so the save below could
+    // report success while the avatar silently stayed as it was. The failure is
+    // carried down to the save result instead of aborting here, because the
+    // profile fields still save correctly when only the picture fails
+    // (SCRUM-285).
+    let pictureUploadFailed = false;
     if (selectedFile) {
       try {
         await uploadFile();
       } catch (error) {
         console.error("File upload failed:", error);
+        pictureUploadFailed = true;
       }
     }
     const sessionName = session?.user?.name ?? "";
@@ -227,18 +274,29 @@ const Index: NextPage = () => {
         mutation: editUserMutation,
       });
       trackProfileCompletion(userInfo.role, userInfo.status);
-      toast.success("User profile updated successfully!");
+      if (pictureUploadFailed) {
+        toast.warning(
+          "Your profile was updated, but the new picture could not be uploaded. Your previous picture is unchanged - please try again.",
+        );
+      } else {
+        toast.success("User profile updated successfully!");
+      }
     } catch (error) {
       toast.error("Failed to update user profile. Please try again.");
     } finally {
       setIsLoading(false);
     }
+    return true;
   };
+  // Leaving the page is conditional on the save having been attempted at all.
+  // The guard above returns without saving, and navigating away regardless would
+  // have discarded the field error it just set (SCRUM-302).
   const onSubmitWithContinue: SubmitHandler<OnboardingFormInputs> = async (
     values,
   ) => {
-    await onSubmit(values);
-    await onContinue();
+    if (await onSubmit(values)) {
+      await onContinue();
+    }
   };
   const handleSaveChanges = async () => {
     setShowModal(false);
@@ -273,13 +331,13 @@ const Index: NextPage = () => {
 
   if (isLoading || !user) {
     return (
-      <div className="fixed inset-0 z-50  flex items-center justify-center bg-white ">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-white">
         <Spinner />
       </div>
     );
   }
   return (
-    <div className="relative h-screen w-screen select-none ">
+    <div className="relative h-screen w-screen select-none">
       {showModal && (
         <UnsavedModal
           onClose={() => setShowModal(false)}
@@ -291,14 +349,14 @@ const Index: NextPage = () => {
       <Header profile={true} checkChanges={checkForChanges} />
 
       {isMobile && (
-        <div className="w-full border-b-2 border-busy-red bg-stone-100 z-10">
+        <div className="z-10 w-full border-b-2 border-busy-red bg-stone-100">
           <ProfileSidebar option={option} setOption={setOption} />
         </div>
       )}
 
       {isMobile ? (
-        <div className="absolute top-[6rem] bottom-16 left-0 right-0 overflow-y-auto">
-          <div className="px-8 pt-6 pb-24">
+        <div className="absolute bottom-16 left-0 right-0 top-[6rem] overflow-y-auto">
+          <div className="px-8 pb-24 pt-6">
             {option === "user" ? (
               <UserSection
                 watch={watch}
@@ -307,6 +365,7 @@ const Index: NextPage = () => {
                 register={register}
                 onSubmit={handleSubmit(onSubmit, onError)}
                 setValue={setValue}
+                user={user}
               />
             ) : option === "carpool" ? (
               <CarpoolSection
@@ -334,7 +393,7 @@ const Index: NextPage = () => {
           </div>
         </div>
       ) : (
-        <div className="relative h-[91.5%] w-full grid grid-cols-[250px_repeat(2,1fr)] overflow-hidden">
+        <div className="relative grid h-[91.5%] w-full grid-cols-[250px_repeat(2,1fr)] overflow-hidden">
           <div className="sticky top-0 col-start-1 col-end-2 h-full w-[250px] border-r-4 border-busy-red bg-stone-100 lg:w-[350px]">
             <ProfileSidebar option={option} setOption={setOption} />
           </div>
@@ -349,6 +408,7 @@ const Index: NextPage = () => {
                   register={register}
                   onSubmit={handleSubmit(onSubmit, onError)}
                   setValue={setValue}
+                  user={user}
                 />
               ) : option === "carpool" ? (
                 <CarpoolSection

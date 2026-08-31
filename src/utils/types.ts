@@ -1,48 +1,60 @@
-import { Permission, Role } from "@prisma/client";
+import { Permission, RequestStatus, Role } from "@prisma/client";
 import { Status } from "@prisma/client";
 import { Feature } from "geojson";
 import type { AppRouter } from "../server/router";
 import { inferRouterOutputs } from "@trpc/server";
 
 type RouterOutput = inferRouterOutputs<AppRouter>;
-export type TempUser = {
+/**
+ * Admin dashboard shapes (SCRUM-246).
+ *
+ * The dashboard no longer downloads tables and reduces them in the browser; the
+ * router returns finished aggregates instead. These describe that contract.
+ */
+
+/** Everything `UserManagement` needs to list users and change a permission. */
+export type AdminUser = {
   id: string;
   email: string;
   permission: Permission;
+};
+
+/** The narrow per-user projection `summariseUsers` reduces, one row per user. */
+export type AdminUserRow = {
   isOnboarded: boolean;
-  dateCreated: Date;
   role: Role;
   status: Status;
-  carpoolId: string;
   daysWorking: string;
+  carpoolId: string | null;
 };
-export type TempGroup = {
-  id: string;
-  dateCreated: Date;
-  _count: {
-    carpoolSearches: number;
-  };
+
+/** Active/Inactive x Onboarded/Not, split by role. */
+export type AdminUserCounts = {
+  totalAO: number;
+  totalANO: number;
+  totalIO: number;
+  totalINO: number;
+  driverAO: number;
+  driverANO: number;
+  driverIO: number;
+  driverINO: number;
+  riderAO: number;
+  riderANO: number;
+  riderIO: number;
+  riderINO: number;
+  viewerAO: number;
+  viewerANO: number;
+  viewerIO: number;
+  viewerINO: number;
 };
-export type TempRequest = {
-  id: string;
-  dateCreated: Date;
-  fromUser: {
-    role: Role;
-  };
+
+export type ConversationStats = {
+  totalConversationCount: number;
+  totalWithMsgCount: number;
+  avgConvWithMsg: number;
+  avgMsg: number;
 };
-export type TempConversation = {
-  id: string;
-  dateCreated: Date;
-  _count: {
-    messages: number;
-  };
-};
-export type TempMessage = {
-  conversationId: string;
-  dateCreated: Date;
-  content: string;
-  User: PublicUser;
-};
+
 export type OnboardingFormInputs = {
   role: Role;
   status: Status;
@@ -129,7 +141,18 @@ export type MapUser = {
 export type PublicUser = {
   id: string;
   name: string | null;
-  email: string | null;
+  /**
+   * Present only when the viewer already has a relationship with this user -
+   * the same carpool group, or a request between them (SCRUM-292).
+   *
+   * Optional rather than nullable-and-always-set on purpose: the bulk list
+   * endpoints shipped every active user's Northeastern address to any signed-in
+   * viewer, on screens that never displayed it, so `email` is now supplied by
+   * `convertCarpoolSearchToPublicWithExactHome` alone. Making it optional is
+   * what lets the type system tell the two payloads apart, rather than leaving
+   * the distinction to whoever remembers it.
+   */
+  email?: string | null;
   image: string | null;
   bio: string;
   preferredName: string;
@@ -155,6 +178,12 @@ export type PublicUser = {
 export type Request = {
   id: string;
   message: string;
+  /**
+   * PENDING until the request is accepted, ACCEPTED afterwards (SCRUM-228).
+   * Declining deletes the row, so there is no third state. An ACCEPTED request
+   * is kept because the pair's conversation hangs off it.
+   */
+  status: RequestStatus;
   fromUserId: string;
   toUserId: string;
   fromUser: PublicUser | null;
@@ -205,6 +234,15 @@ export type User = {
   coopStartDate: Date | null;
   coopEndDate: Date | null;
   carpoolId: string | null;
+  /**
+   * Group ride preferences (SCRUM-253). Real columns; null in all three means
+   * the row predates the migration, which is what makes `resolveGroupDetails`
+   * fall back to `groupMessage`.
+   */
+  groupNotes: string | null;
+  groupMusicPreference: string | null;
+  groupConversationStyle: string | null;
+  /** Legacy GROUP_DETAILS_V1: blob. Read-only; nothing writes it. */
   groupMessage: string | null;
   // Fields merged from Location (homeLocation)
   startCoordLng: number;

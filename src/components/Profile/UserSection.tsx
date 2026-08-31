@@ -10,10 +10,11 @@ import {
   UseFormSetValue,
   UseFormWatch,
 } from "react-hook-form";
-import { OnboardingFormInputs } from "../../utils/types";
+import { OnboardingFormInputs, User } from "../../utils/types";
 import ProfilePicture from "./ProfilePicture";
 import useIsMobile from "../../utils/useIsMobile";
 import { signOut } from "next-auth/react";
+import { PROFILE_TEXT_MAX_LENGTH } from "../../utils/textLimits";
 
 interface UserSectionProps {
   register: UseFormRegister<OnboardingFormInputs>;
@@ -23,6 +24,7 @@ interface UserSectionProps {
   onSubmit: ReturnType<UseFormHandleSubmit<OnboardingFormInputs>>;
 
   onFileSelect: (file: File | null) => void;
+  user?: User;
 }
 
 const UserSection = ({
@@ -32,9 +34,16 @@ const UserSection = ({
   onSubmit,
   setValue,
   onFileSelect,
+  user,
 }: UserSectionProps) => {
   const isMobile = useIsMobile();
   const isViewer = watch("role") === Role.VIEWER;
+
+  // A driver in a carpool group cannot change role until they leave it -
+  // dropping the group's only driver leaves it unmanageable for everyone in
+  // it. `user.edit` refuses this server-side; the form says so up front so
+  // the answer is not a failed save (SCRUM-125, restored by SCRUM-289).
+  const lockedToDriver = user?.role === Role.DRIVER && !!user?.carpoolId;
 
   const logout = () => {
     signOut();
@@ -50,6 +59,14 @@ const UserSection = ({
         I am a... <span className="text-northeastern-red">*</span>
       </div>
 
+      {lockedToDriver && (
+        <Note className="!mb-2 !mt-0 max-w-xl">
+          You are the driver of a carpool group, so your role is locked to
+          Driver. Leave or dissolve the group from the Group page to change it -
+          switching now would leave your riders in a group with no driver.
+        </Note>
+      )}
+
       {/* Fixed layout issues */}
       <div
         className={`${isMobile ? "flex-col" : "flex h-24 w-[700px]"} max-w-full items-end`}
@@ -63,6 +80,7 @@ const UserSection = ({
             role={Role.VIEWER}
             value={Role.VIEWER}
             currentlySelected={watch("role")}
+            disabled={lockedToDriver}
             {...register("role")}
           />
           <Radio
@@ -72,6 +90,7 @@ const UserSection = ({
             role={Role.RIDER}
             value={Role.RIDER}
             currentlySelected={watch("role")}
+            disabled={lockedToDriver}
             {...register("role")}
           />
           <Radio
@@ -88,7 +107,7 @@ const UserSection = ({
         {/* Reduced gap between radio buttons and seat availability */}
         {watch("role") == Role.DRIVER && (
           <div
-            className={`${isMobile ? "w-full mt-2" : "flex-1"} flex flex-col`}
+            className={`${isMobile ? "mt-2 w-full" : "flex-1"} flex flex-col`}
           >
             <EntryLabel
               required={true}
@@ -198,13 +217,10 @@ const UserSection = ({
           className={"!text-lg"}
         />
         <textarea
-          className={`form-input w-full resize-none rounded-md
-                       ${
-                         isViewer
-                           ? "border-gray-100 bg-gray-200 text-gray-400"
-                           : ""
-                       } border-black px-3 py-2`}
-          maxLength={188}
+          className={`form-input w-full resize-none rounded-md ${
+            isViewer ? "border-gray-100 bg-gray-200 text-gray-400" : ""
+          } border-black px-3 py-2`}
+          maxLength={PROFILE_TEXT_MAX_LENGTH}
           disabled={isViewer}
           {...register("bio")}
         />

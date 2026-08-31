@@ -1,8 +1,11 @@
 import { z } from "zod";
 import { Role, Status } from "@prisma/client";
 import { MAX_SEATS_AVAILABLE } from "../carpoolSeats";
+import { PROFILE_TEXT_MAX_LENGTH } from "../textLimits";
+import { COOP_DATE_ORDER_MESSAGE, isReversedCoopRange } from "../dateUtils";
 
 const custom = z.ZodIssueCode.custom;
+const tooLong = `Cannot be longer than ${PROFILE_TEXT_MAX_LENGTH} characters`;
 export const onboardSchema = z
   .object({
     role: z.nativeEnum(Role),
@@ -13,13 +16,17 @@ export const onboardSchema = z
       .nonnegative()
       .max(MAX_SEATS_AVAILABLE)
       .optional(),
-    companyName: z.string().optional(),
+    // The four `VARCHAR(191)` profile columns are bounded here as well as in
+    // `user.edit`, so an over-length value shows up as a field error on the
+    // form rather than as a failed save (SCRUM-231). `maxLength` on the inputs
+    // stops typing and pasting; this also catches anything set programmatically.
+    companyName: z.string().max(PROFILE_TEXT_MAX_LENGTH, tooLong).optional(),
     companyAddress: z.string().optional(),
     startAddress: z.string().optional(),
-    preferredName: z.string().optional(),
-    pronouns: z.string().optional(),
+    preferredName: z.string().max(PROFILE_TEXT_MAX_LENGTH, tooLong).optional(),
+    pronouns: z.string().max(PROFILE_TEXT_MAX_LENGTH, tooLong).optional(),
     daysWorking: z.array(z.boolean()).optional(),
-    bio: z.string().optional(),
+    bio: z.string().max(PROFILE_TEXT_MAX_LENGTH, tooLong).optional(),
     startTime: z.date().nullable().optional(),
     endTime: z.date().nullable().optional(),
     coopStartDate: z.date().nullable().optional(),
@@ -84,6 +91,25 @@ export const onboardSchema = z
           path: ["endTime"],
           message: "Cannot be empty",
         });
+    }
+
+    // Ordering, checked for every role rather than inside the non-VIEWER block
+    // above: a reversed range is wrong whoever stored it, and the block above is
+    // about which fields are *required*. `user.edit` refuses the same thing, so
+    // this exists to name the field instead of failing the save (SCRUM-302).
+    //
+    // Deliberately absent: any equivalent check on `startTime` / `endTime`.
+    // Those are times of day, not a range, and finishing before you started is
+    // exactly how a night shift reads. `minutesApart` already measures them
+    // round the clock and takes the short way, so an overnight pair is scored
+    // correctly rather than tolerated - see the note in
+    // `src/server/db/README.md`.
+    if (isReversedCoopRange(data.coopStartDate, data.coopEndDate)) {
+      ctx.addIssue({
+        code: custom,
+        path: ["coopEndDate"],
+        message: COOP_DATE_ORDER_MESSAGE,
+      });
     }
   });
 export const profileDefaultValues = {

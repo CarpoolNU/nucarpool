@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE `request` ADD COLUMN `status` ENUM('PENDING', 'ACCEPTED') NOT NULL DEFAULT 'PENDING';

@@ -9,6 +9,7 @@ import { Note } from "../../styles/profile";
 import { EntryLabel } from "../EntryLabel";
 import { TextField } from "../TextField";
 import ProfilePicture from "../Profile/ProfilePicture";
+import { PROFILE_TEXT_MAX_LENGTH } from "../../utils/textLimits";
 
 interface StepFourProps {
   errors: FieldErrors<OnboardingFormInputs>;
@@ -25,19 +26,19 @@ const StepFour = ({
   watch,
 }: StepFourProps) => {
   return (
-    <div className="flex flex-col items-center  justify-center bg-white px-4">
+    <div className="flex flex-col items-center justify-center bg-white px-4">
       <div className="mb-4 text-center font-montserrat text-3xl font-bold">
         <span>Who is&nbsp;</span>
         <span className="text-northeastern-red">carpooling?</span>
       </div>
       {/* Pfp Section*/}
 
-      <div className=" mb-2 w-full ">
+      <div className="mb-2 w-full">
         <ProfilePicture onFileSelected={onFileSelect} />
       </div>
 
       {/* About Me*/}
-      <div className="flex w-full flex-row  space-x-6">
+      <div className="flex w-full flex-row space-x-6">
         {/* Preferred Name field  */}
 
         <div className="flex w-3/5 flex-col">
@@ -86,7 +87,7 @@ const StepFour = ({
         <EntryLabel error={errors.bio} label="About Me" />
         <textarea
           className="form-input w-full resize-none rounded-md border-black px-3 py-2"
-          maxLength={188}
+          maxLength={PROFILE_TEXT_MAX_LENGTH}
           disabled={false}
           {...register("bio")}
         />

@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedRouter, router } from "./createRouter";
 import { MAX_SEATS_AVAILABLE } from "../../utils/carpoolSeats";
+import { PROFILE_TEXT_MAX_LENGTH } from "../../utils/textLimits";
 import { Role } from "@prisma/client";
 import { Status } from "@prisma/client";
 import _ from "lodash";
@@ -15,12 +16,50 @@ import {
   generatePresignedUrl,
   getPresignedImageUrl,
 } from "../../utils/uploadToS3";
+import {
+  MAX_PROFILE_IMAGE_BYTES,
+  PROFILE_IMAGE_CONTENT_TYPES,
+} from "../../utils/profileImage";
 import { adminDataRouter } from "./user/admin";
 import { resolveOwnedLocations } from "../db/locationOwnership";
+import {
+  latitudeSchema,
+  longitudeSchema,
+  UNRESOLVED_ADDRESS_MESSAGE,
+  unresolvedAddressFields,
+} from "../../utils/coordinates";
+import {
+  COOP_DATE_ORDER_MESSAGE,
+  isReversedCoopRange,
+} from "../../utils/dateUtils";
 
-const getPresignedDownloadUrlInput = z.object({
-  userId: z.string().optional(),
-});
+/**
+ * Access rule for `getPresignedDownloadUrl`, decided under SCRUM-243:
+ * **any signed-in user may read any user's profile picture.**
+ *
+ * This is deliberate, not an oversight. Avatars render in recommendations, on
+ * the map, on group cards and throughout messaging, so a viewer has no prior
+ * relationship with most of the people whose pictures they legitimately see;
+ * scoping this to existing relationships would break those surfaces. A profile
+ * picture is the one field a user uploads specifically to be seen by strangers
+ * on the platform, which is what separates it from the precise home coordinates
+ * in the sibling ticket.
+ *
+ * What *is* constrained is the shape of the id, because it is interpolated
+ * straight into an S3 key. Ids are cuids, so refusing anything outside
+ * `[A-Za-z0-9_-]` costs nothing and stops the parameter being used to name a key
+ * outside the `profile-pictures/{env}/` prefix.
+ */
+const getPresignedDownloadUrlInput = z
+  .object({
+    userId: z
+      .string()
+      .min(1)
+      .max(191)
+      .regex(/^[A-Za-z0-9_-]+$/)
+      .optional(),
+  })
+  .strict();
 
 // user router to get information about or edit users
 export const userRouter = router({
@@ -71,6 +110,12 @@ export const userRouter = router({
       endTime: carpoolSearch?.endTime ?? null,
       coopStartDate: carpoolSearch?.startDate ?? null,
       coopEndDate: carpoolSearch?.endDate ?? null,
+      // Group ride preferences. Real columns since SCRUM-253; `groupMessage` is
+      // carried alongside only so a row that has not been backfilled yet still
+      // resolves through `resolveGroupDetails`.
+      groupNotes: carpoolSearch?.groupNotes ?? null,
+      groupMusicPreference: carpoolSearch?.groupMusicPreference ?? null,
+      groupConversationStyle: carpoolSearch?.groupConversationStyle ?? null,
       groupMessage: carpoolSearch?.groupMessage ?? null,
       carpoolId: carpoolSearch?.carpoolId ?? null,
       // Location data (homeLocation)
@@ -99,34 +144,79 @@ export const userRouter = router({
 
   edit: protectedRouter
     .input(
-      z.object({
-        role: z.nativeEnum(Role),
-        status: z.nativeEnum(Status),
-        seatAvail: z.number().int().min(0).max(MAX_SEATS_AVAILABLE),
-        companyName: z.string(),
-        companyAddress: z.string(),
-        companyCoordLng: z.number(),
-        companyCoordLat: z.number(),
-        startAddress: z.string(),
-        startCoordLng: z.number(),
-        startCoordLat: z.number(),
-        preferredName: z.string(),
-        pronouns: z.string(),
-        isOnboarded: z.boolean(),
-        daysWorking: z.string(),
-        startTime: z.optional(z.string()),
-        endTime: z.optional(z.string()),
-        coopStartDate: z.date().nullable(),
-        coopEndDate: z.date().nullable(),
-        bio: z.string(),
-        licenseSigned: z.boolean(),
-        startStreet: z.string(),
-        startCity: z.string(),
-        startState: z.string(),
-        companyStreet: z.string(),
-        companyCity: z.string(),
-        companyState: z.string(),
-      }),
+      z
+        .object({
+          role: z.nativeEnum(Role),
+          status: z.nativeEnum(Status),
+          seatAvail: z.number().int().min(0).max(MAX_SEATS_AVAILABLE),
+          // `company_name`, `preferred_name`, `pronouns` and `bio` are all
+          // `VARCHAR(191)`, and every one of them was unbounded here (SCRUM-231).
+          // The forms cap the two name fields and the bio, but nothing capped
+          // `companyName` at all, so a pasted value over the width failed the
+          // whole profile save inside Prisma instead of at the boundary.
+          companyName: z.string().max(PROFILE_TEXT_MAX_LENGTH),
+          companyAddress: z.string(),
+          // This is the boundary that writes coordinates to `location`, and it
+          // range-checked none of them (SCRUM-302). The columns are plain
+          // `Float`, so MySQL accepts any number, and `locationWithin` /
+          // `milesBetween` then produce arbitrary answers rather than failing -
+          // an out-of-range row is silently unmatchable and also skews the
+          // bounding-box query added in SCRUM-245. `getDirections` in
+          // `mapbox.ts` has enforced the same bounds since SCRUM-244; the two now
+          // share one definition.
+          companyCoordLng: longitudeSchema,
+          companyCoordLat: latitudeSchema,
+          startAddress: z.string(),
+          startCoordLng: longitudeSchema,
+          startCoordLat: latitudeSchema,
+          preferredName: z.string().max(PROFILE_TEXT_MAX_LENGTH),
+          pronouns: z.string().max(PROFILE_TEXT_MAX_LENGTH),
+          isOnboarded: z.boolean(),
+          daysWorking: z.string(),
+          startTime: z.optional(z.string()),
+          endTime: z.optional(z.string()),
+          coopStartDate: z.date().nullable(),
+          coopEndDate: z.date().nullable(),
+          bio: z.string().max(PROFILE_TEXT_MAX_LENGTH),
+          startStreet: z.string(),
+          startCity: z.string(),
+          startState: z.string(),
+          companyStreet: z.string(),
+          companyCity: z.string(),
+          companyState: z.string(),
+        })
+        // Two things `.max()` cannot express, both of which used to be stored
+        // as submitted and then fail silently at match time (SCRUM-302).
+        //
+        // They live on the input rather than in the resolver so a stale or
+        // hand-rolled client gets the same answer as the form, and so the paths
+        // below line up with the field names `onboardSchema` uses - the profile
+        // page routes a failed save to the right tab by reading them.
+        .superRefine((data, ctx) => {
+          if (isReversedCoopRange(data.coopStartDate, data.coopEndDate)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["coopEndDate"],
+              message: COOP_DATE_ORDER_MESSAGE,
+            });
+          }
+
+          // `(0, 0)` is in range but is the "no address picked yet" sentinel
+          // from `useAddressSelection`, not a place anyone lives. A VIEWER is
+          // exempt: they have no Locations, and `user.me` already reports
+          // `(0, 0)` for them.
+          for (const field of unresolvedAddressFields({
+            role: data.role,
+            home: [data.startCoordLng, data.startCoordLat],
+            company: [data.companyCoordLng, data.companyCoordLat],
+          })) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [field],
+              message: UNRESOLVED_ADDRESS_MESSAGE,
+            });
+          }
+        }),
     )
     .mutation(async ({ input, ctx }) => {
       const startTimeDate = input.startTime
@@ -144,120 +234,191 @@ export const userRouter = router({
         });
       }
 
-      await ctx.prisma.user.update({
-        where: { id },
-        data: {
-          preferredName: input.preferredName,
-          pronouns: input.pronouns,
-          isOnboarded: input.isOnboarded,
-          bio: input.bio,
-          licenseSigned: input.licenseSigned,
-        },
-      });
-
-      // CarpoolSearch - find or create
-      const existingSearch = await ctx.prisma.carpoolSearch.findFirst({
-        where: { userId: id },
-      });
-
-      // Home and company Locations belong to this CarpoolSearch and nobody
-      // else, so the coordinates just submitted are always what gets stored
-      // (SCRUM-232). This used to match an existing row on address text alone
-      // and reuse whatever coordinates that row already had.
-      const { homeLocationId, companyLocationId } = await resolveOwnedLocations(
-        ctx.prisma,
-        {
-          carpoolSearchId: existingSearch?.id ?? null,
-          currentHomeLocationId: existingSearch?.homeLocationId ?? null,
-          currentCompanyLocationId: existingSearch?.companyLocationId ?? null,
-          home: {
-            street: input.startStreet,
-            city: input.startCity,
-            state: input.startState,
-            streetAddress: input.startAddress,
-            coordLng: input.startCoordLng,
-            coordLat: input.startCoordLat,
-          },
-          company: {
-            street: input.companyStreet,
-            city: input.companyCity,
-            state: input.companyState,
-            streetAddress: input.companyAddress,
-            coordLng: input.companyCoordLng,
-            coordLat: input.companyCoordLat,
-          },
-        },
-      );
-
-      const carpoolSearchData = {
-        role: input.role,
-        status: input.status,
-        seatsAvail: input.seatAvail,
-        companyName: input.companyName,
-        daysWorking: input.daysWorking,
-        startTime: startTimeDate,
-        endTime: endTimeDate,
-        startDate: input.coopStartDate,
-        endDate: input.coopEndDate,
-        homeLocationId,
-        companyLocationId,
-      };
-
-      if (existingSearch) {
-        await ctx.prisma.carpoolSearch.update({
-          where: { id: existingSearch.id },
-          data: carpoolSearchData,
-        });
-      } else {
-        await ctx.prisma.carpoolSearch.create({
+      // One profile save touches `user`, two `Location` rows and a
+      // `CarpoolSearch`. These used to be four independent awaits, so a failure
+      // part-way through committed the earlier writes and abandoned the rest —
+      // profile fields saved against stale carpool data, or Location rows
+      // written for a CarpoolSearch that was never created. `relationMode =
+      // "prisma"` means the database rejects none of that, and there is no
+      // reconciliation job, so the inconsistency was permanent (SCRUM-233).
+      //
+      // What this protects on the read side: `user.me` above spreads
+      // `carpoolSearches[0]` and both its Locations onto one flat object, so it
+      // assumes the search and the rows it points at agree.
+      const updatedUser = await ctx.prisma.$transaction(async (tx) => {
+        await tx.user.update({
+          where: { id },
           data: {
-            userId: id,
-            carpoolId: null,
-            groupMessage: null,
-            ...carpoolSearchData,
+            preferredName: input.preferredName,
+            pronouns: input.pronouns,
+            isOnboarded: input.isOnboarded,
+            bio: input.bio,
+            // `licenseSigned` is deliberately absent. Saving a profile is not
+            // accepting the terms, and this procedure used to set it to true on
+            // every save - so the field recorded "this user saved a profile"
+            // rather than "this user agreed" (SCRUM-240). Only `acceptTerms`
+            // writes it now.
           },
         });
-      }
 
-      // return the updated user with CarpoolSearch data
-      const updatedUser = await ctx.prisma.user.findUnique({
-        where: { id },
-        include: {
-          carpoolSearches: {
-            include: {
-              homeLocation: true,
-              companyLocation: true,
+        // CarpoolSearch - find or create
+        const existingSearch = await tx.carpoolSearch.findFirst({
+          where: { userId: id },
+        });
+
+        // A driver who is in a group cannot change role out of it. Dropping a
+        // group's only DRIVER leaves a state nothing can get out of:
+        // `requireGroupDriver` then throws FORBIDDEN for every member, so
+        // nobody can remove anybody or dissolve the group, and the riders'
+        // shared preferences - read through the driver's own search - vanish.
+        //
+        // SCRUM-125 added this as a toast in the profile page and the profile
+        // redesign deleted it; it was never server-side at all, so a direct
+        // call always bypassed it. It lives here now because this is the only
+        // place the invariant cannot be routed around (SCRUM-289).
+        //
+        // Throwing inside the transaction rolls back the `user.update` above.
+        if (
+          existingSearch?.carpoolId &&
+          existingSearch.role === Role.DRIVER &&
+          input.role !== Role.DRIVER
+        ) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message:
+              "You are the driver of a carpool group. Leave or dissolve the " +
+              "group before changing your role.",
+          });
+        }
+
+        // Home and company Locations belong to this CarpoolSearch and nobody
+        // else, so the coordinates just submitted are always what gets stored
+        // (SCRUM-232). This used to match an existing row on address text alone
+        // and reuse whatever coordinates that row already had.
+        const { homeLocationId, companyLocationId } =
+          await resolveOwnedLocations(tx, {
+            carpoolSearchId: existingSearch?.id ?? null,
+            currentHomeLocationId: existingSearch?.homeLocationId ?? null,
+            currentCompanyLocationId: existingSearch?.companyLocationId ?? null,
+            home: {
+              street: input.startStreet,
+              city: input.startCity,
+              state: input.startState,
+              streetAddress: input.startAddress,
+              coordLng: input.startCoordLng,
+              coordLat: input.startCoordLat,
+            },
+            company: {
+              street: input.companyStreet,
+              city: input.companyCity,
+              state: input.companyState,
+              streetAddress: input.companyAddress,
+              coordLng: input.companyCoordLng,
+              coordLat: input.companyCoordLat,
+            },
+          });
+
+        const carpoolSearchData = {
+          role: input.role,
+          status: input.status,
+          seatsAvail: input.seatAvail,
+          companyName: input.companyName,
+          daysWorking: input.daysWorking,
+          startTime: startTimeDate,
+          endTime: endTimeDate,
+          startDate: input.coopStartDate,
+          endDate: input.coopEndDate,
+          homeLocationId,
+          companyLocationId,
+        };
+
+        if (existingSearch) {
+          await tx.carpoolSearch.update({
+            where: { id: existingSearch.id },
+            data: carpoolSearchData,
+          });
+        } else {
+          await tx.carpoolSearch.create({
+            data: {
+              userId: id,
+              carpoolId: null,
+              groupMessage: null,
+              ...carpoolSearchData,
+            },
+          });
+        }
+
+        // return the updated user with CarpoolSearch data
+        return await tx.user.findUnique({
+          where: { id },
+          include: {
+            carpoolSearches: {
+              include: {
+                homeLocation: true,
+                companyLocation: true,
+              },
             },
           },
-        },
+        });
       });
 
       return updatedUser;
     }),
 
+  /**
+   * Signs an upload URL for the caller's *own* profile picture (SCRUM-243).
+   *
+   * The key is always derived from the session, never from input, so this cannot
+   * be pointed at another user's object. What input controls is the type and the
+   * size, and both are bounded here and then bound into the signature — see
+   * `generatePresignedUrl` for why the second half is load-bearing.
+   *
+   * Throws rather than resolving `undefined` when there is no session user: a
+   * missing URL was previously indistinguishable from a successful call, and
+   * React Query reports a query that resolves `undefined` as a failure anyway.
+   */
   getPresignedUrl: protectedRouter
     .input(
-      z.object({
-        contentType: z.string(),
-      }),
+      z
+        .object({
+          contentType: z.enum(PROFILE_IMAGE_CONTENT_TYPES),
+          // The declared length is what gets signed, so an oversize file cannot
+          // be smuggled past this by understating it: S3 rejects a body whose
+          // length disagrees with the signature.
+          contentLength: z
+            .number()
+            .int()
+            .positive()
+            .max(MAX_PROFILE_IMAGE_BYTES),
+        })
+        .strict(),
     )
-    .query(async ({ ctx, input }): Promise<{ url: string } | undefined> => {
-      const { contentType } = input;
+    .query(async ({ ctx, input }): Promise<{ url: string }> => {
       const fileName: string | undefined = ctx.session.user?.id;
-      if (fileName) {
-        try {
-          const url: string = await generatePresignedUrl(fileName, contentType);
-          return { url };
-        } catch (error) {
-          throw new TRPCError({
-            code: "INTERNAL_SERVER_ERROR",
-            message: "Failed to generate a pre-signed URL",
-          });
-        }
+      if (!fileName) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "User not authenticated",
+        });
+      }
+
+      try {
+        const url: string = await generatePresignedUrl(
+          fileName,
+          input.contentType,
+          input.contentLength,
+        );
+        return { url };
+      } catch (error) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to generate a pre-signed URL",
+        });
       }
     }),
   /**
-   * Always resolves an object, never `undefined` (SCRUM-242).
+   * Resolves `{ url: null }` for a user with no picture, never `undefined`
+   * (SCRUM-242).
    *
    * React Query treats a query function that resolves `undefined` as a
    * failure ("... data is undefined"), and a query in the error state
@@ -265,13 +426,21 @@ export const userRouter = router({
    * procedure used to return `undefined` for a user with no profile picture,
    * so those users - the majority - were never cacheable and paid an S3
    * HeadObject on every avatar mount. `{ url: null }` is a cacheable success.
+   *
+   * "No picture" is the only thing `{ url: null }` means (SCRUM-243). A session
+   * carrying no user is not a picture-state, so it throws instead of borrowing
+   * the same answer - that ambiguity was the point of the criterion, and it does
+   * not touch the caching behaviour above, which is about successful lookups.
    */
   getPresignedDownloadUrl: protectedRouter
     .input(getPresignedDownloadUrlInput)
     .query(async ({ ctx, input }): Promise<{ url: string | null }> => {
       const userId: string | undefined = input.userId ?? ctx.session.user?.id;
       if (!userId) {
-        return { url: null };
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "User not authenticated",
+        });
       }
       try {
         return { url: await getPresignedImageUrl(userId) };
@@ -282,6 +451,37 @@ export const userRouter = router({
         });
       }
     }),
+
+  /**
+   * Records that the caller accepted the terms shown by `ComplianceModal`.
+   *
+   * This is the only writer of `licenseSigned`. Before SCRUM-240 nothing wrote
+   * it on acceptance at all: the "I Agree" button fired a Mixpanel event and
+   * closed the dialog, and the flag was set as a side effect of `user.edit`.
+   *
+   * Note on reading the column: it is trustworthy as evidence of acceptance only
+   * for values written here. Rows that already had it set may have got it from a
+   * profile save - see "Terms acceptance" in `src/server/db/README.md`.
+   */
+  acceptTerms: protectedRouter.mutation(async ({ ctx }) => {
+    const userId = ctx.session.user?.id;
+
+    if (!userId) {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "User not authenticated",
+      });
+    }
+
+    const updatedUser = await ctx.prisma.user.update({
+      where: { id: userId },
+      data: {
+        licenseSigned: true,
+      },
+    });
+
+    return updatedUser;
+  }),
 
   completeTutorial: protectedRouter.mutation(async ({ ctx }) => {
     const userId = ctx.session.user?.id;

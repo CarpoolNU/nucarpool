@@ -3,6 +3,7 @@ import { FaMinus, FaPlus } from "react-icons/fa6";
 import { FaTimes } from "react-icons/fa";
 import Checkbox from "@mui/material/Checkbox";
 import { FiltersState } from "../utils/types";
+import { formatDateToMonth, lastDayOfMonthUTC } from "../utils/dateUtils";
 import { TextField } from "./TextField";
 import StaticDayBox from "./Sidebar/StaticDayBox";
 
@@ -18,15 +19,23 @@ const FilterSection = ({
   toggleOpen,
   children,
 }: FilterSectionProps) => (
-  <div className="px-3 ">
+  <div className="px-3">
     <div className="flex flex-shrink flex-col border-b border-gray-200 py-4">
-      <div
-        className="flex cursor-pointer items-center justify-between"
-        onClick={toggleOpen}
-      >
-        <h3 className="text-lg font-semibold">{title}</h3>
-        {isOpen ? <FaMinus /> : <FaPlus />}
-      </div>
+      <h3 className="text-lg font-semibold">
+        <button
+          type="button"
+          className="flex w-full cursor-pointer items-center justify-between text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-northeastern-red"
+          onClick={toggleOpen}
+          aria-expanded={isOpen}
+        >
+          {title}
+          {isOpen ? (
+            <FaMinus aria-hidden="true" />
+          ) : (
+            <FaPlus aria-hidden="true" />
+          )}
+        </button>
+      </h3>
       {isOpen && <div className="mt-3">{children}</div>}
     </div>
   </div>
@@ -67,25 +76,23 @@ const Filters = ({
     setStartTimeOpen(false);
     setTermDatesOpen(false);
   };
+  // Third copy of this pair, now shared with the onboarding form so the term
+  // dates a filter compares against are built the same way the stored co-op
+  // dates are (SCRUM-239).
   const handleMonthChange =
     (field: keyof FiltersState) =>
     (event: React.ChangeEvent<HTMLInputElement>) => {
-      const [year, month] = event.target.value.split("-").map(Number);
-      const lastDay = new Date(year, month, 0);
+      const lastDay = lastDayOfMonthUTC(event.target.value);
+
+      if (!lastDay) {
+        return;
+      }
+
       setFilters((prev) => ({
         ...prev,
         [field]: lastDay,
       }));
     };
-
-  const formatDateToMonth = (date: Date | null) => {
-    if (!date) {
-      return undefined;
-    }
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    return `${year}-${month}`;
-  };
   const handleRangeChange = (
     field: keyof FiltersState,
     event: React.ChangeEvent<HTMLInputElement>,
@@ -128,9 +135,9 @@ const Filters = ({
   )}`;
 
   return (
-    <div className="relative mx-1 h-full select-none overflow-y-auto bg-white px-1 pb-20 scrollbar-thin  scrollbar-track-stone-100 scrollbar-thumb-busy-red scrollbar-track-rounded-full scrollbar-thumb-rounded-full">
+    <div className="relative mx-1 h-full select-none overflow-y-auto bg-white px-1 pb-20 scrollbar-thin scrollbar-track-stone-100 scrollbar-thumb-busy-red scrollbar-track-rounded-full scrollbar-thumb-rounded-full">
       <div className="sticky top-0 z-10 border-b border-gray-200 bg-white px-4 pb-5 pt-2">
-        <div className="flex w-full  items-center justify-between">
+        <div className="flex w-full items-center justify-between">
           <button
             className="flex-1 self-end bg-transparent text-start font-semibold text-northeastern-red hover:text-busy-red"
             onClick={resetFilters}
@@ -140,8 +147,17 @@ const Filters = ({
           <h2 className="flex-1 self-end text-center text-xl font-semibold">
             Filters
           </h2>
-          <button className="flex-1  pt-1 " onClick={onClose}>
-            <FaTimes size={20} className="justify-self-end" />
+          <button
+            type="button"
+            className="flex-1 pt-1"
+            onClick={onClose}
+            aria-label="Close filters"
+          >
+            <FaTimes
+              size={20}
+              className="justify-self-end"
+              aria-hidden="true"
+            />
           </button>
         </div>
       </div>
@@ -241,7 +257,7 @@ const Filters = ({
         <div className="mt-3">
           <div className="text-md flex justify-between gap-2 font-semibold">
             <button
-              className={`grow rounded-full px-4 py-2  ${
+              className={`grow rounded-full px-4 py-2 ${
                 filters.days === 0
                   ? "border-2 border-black bg-northeastern-red text-white"
                   : "border-2 border-gray-300 bg-white text-black"
@@ -289,8 +305,8 @@ const Filters = ({
 
           {filters.days === 1 || filters.days === 2 ? (
             <>
-              <div className="mx-4 flex flex-col  gap-2">
-                <div className="mt-4 flex justify-between ">
+              <div className="mx-4 flex flex-col gap-2">
+                <div className="mt-4 flex justify-between">
                   {daysOfWeek.map((day, index) => (
                     <Checkbox
                       key={day + index.toString()}
@@ -315,7 +331,7 @@ const Filters = ({
               </div>
               {filters.days === 2 && (
                 <div className="mx-4 mt-2 flex flex-col items-center justify-center">
-                  <label className="mb-2 ">Minimum shared carpool days</label>
+                  <label className="mb-2">Minimum shared carpool days</label>
                   <input
                     type="number"
                     min="1"
@@ -340,10 +356,10 @@ const Filters = ({
                         }));
                       }
                     }}
-                    className="flex h-10 w-14  rounded-full  border-2 border-gray-300 p-2 text-center focus:border-transparent focus:ring-2 focus:ring-northeastern-red "
+                    className="flex h-10 w-14 rounded-full border-2 border-gray-300 p-2 text-center focus:border-transparent focus:ring-2 focus:ring-northeastern-red"
                   />
                   <p
-                    className="w-full  pt-2 text-xs"
+                    className="w-full pt-2 text-xs"
                     style={{ color: "#BCA7A7" }}
                   >
                     (?) Flex days shows any users sharing at least this number
@@ -426,7 +442,7 @@ const Filters = ({
             <button
               className={`grow rounded-full border-2 px-4 py-2 ${
                 filters.dateOverlap === 0
-                  ? " border-black bg-northeastern-red text-white"
+                  ? "border-black bg-northeastern-red text-white"
                   : "border-gray-300 bg-white text-black"
               }`}
               onClick={() =>
@@ -441,7 +457,7 @@ const Filters = ({
             <button
               className={`rounded-full border-2 px-4 py-2 ${
                 filters.dateOverlap === 1
-                  ? " border-black bg-northeastern-red text-white"
+                  ? "border-black bg-northeastern-red text-white"
                   : "border-gray-300 bg-white text-black"
               }`}
               onClick={() =>
@@ -456,8 +472,8 @@ const Filters = ({
             <button
               className={`rounded-full border-2 px-4 py-2 ${
                 filters.dateOverlap === 2
-                  ? " border-black bg-northeastern-red text-white"
-                  : "border-gray-300 bg-white  text-black"
+                  ? "border-black bg-northeastern-red text-white"
+                  : "border-gray-300 bg-white text-black"
               }`}
               onClick={() =>
                 setFilters((prev) => ({
@@ -517,7 +533,7 @@ const Filters = ({
         isOpen={checkedOpen}
         toggleOpen={() => setCheckedOpen(!checkedOpen)}
       >
-        <div className="mt-3 ">
+        <div className="mt-3">
           <label className="flex cursor-pointer items-center">
             <Checkbox
               checked={filters.favorites}

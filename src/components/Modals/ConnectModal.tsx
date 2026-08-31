@@ -1,6 +1,5 @@
 import { Dialog } from "@headlessui/react";
 import React, { useState } from "react";
-import { useToasts } from "react-toast-notifications";
 import { EnhancedPublicUser, User } from "../../utils/types";
 import { toast } from "react-toastify";
 import { trpc } from "../../utils/trpc";
@@ -9,11 +8,13 @@ import StartIcon from "../../../public/start.png";
 import EndIcon from "../../../public/end.png";
 import StaticDayBox from "../Sidebar/StaticDayBox";
 import dayjs from "dayjs";
-import utc from "dayjs/plugin/utc";
-import timezone from "dayjs/plugin/timezone";
+import { formatScheduleTime } from "../../utils/scheduleTime";
 import useProfileImage from "../../utils/useProfileImage";
 import { AiOutlineUser } from "react-icons/ai";
 import useIsMobile from "../../utils/useIsMobile";
+// 250 was hardcoded here and nowhere else, five short of the column it is
+// written to. The limit now comes from one place (SCRUM-231).
+import { MESSAGE_MAX_LENGTH } from "../../utils/textLimits";
 
 interface ConnectModalProps {
   user: User;
@@ -23,7 +24,6 @@ interface ConnectModalProps {
 }
 
 const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
-  const { addToast } = useToasts();
   const [isOpen, setIsOpen] = useState(true);
   const [requestSent, setRequestSent] = useState(false);
   const [customMessage, setCustomMessage] = useState("");
@@ -53,7 +53,7 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
 
   // Declared before the request mutation so that mutation's onSuccess can call
   // it. Names, addresses and the driver/rider template are resolved
-  // server-side from `toId` (SCRUM-225).
+  // server-side from the request the id refers to (SCRUM-225, SCRUM-270).
   const { mutate: sendConnectEmail } =
     trpc.user.emails.sendRequestNotification.useMutation({
       // By the time this runs the request already exists, so a failure here is
@@ -68,40 +68,42 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
     });
 
   const { mutate: createRequests } = trpc.user.requests.create.useMutation({
+    // Shown as written rather than behind "Something went wrong", because every
+    // way this procedure refuses is a rule the user can act on - already in a
+    // group with them, a request already open, a missing email address
+    // (SCRUM-292).
     onError: (error: any) => {
-      toast.error(`Something went wrong: ${error.message}`);
+      toast.error(error.message);
     },
     // Everything that tells either person the request exists now waits for the
     // write to land (SCRUM-234). Previously the email was sent first and the
     // success toast fired on click, so a CONFLICT — routine, since accepting
     // never clears a request (SCRUM-228) — produced a success toast, an error
     // toast, and an email for a request that was never created.
-    onSuccess: (_data, variables) => {
+    onSuccess: (request, variables) => {
       setRequestSent(true);
-      addToast(
+      toast.success(
         "A request to carpool has been sent to " +
           props.otherUser.preferredName,
-        { appearance: "success" },
       );
-      // Taken from the mutation variables rather than component state, so the
-      // preview is exactly the text that was submitted.
+      // The id comes from the row the mutation just created, so the server can
+      // check the caller is party to it (SCRUM-270). The preview is taken from
+      // the mutation variables rather than component state, so it is exactly
+      // the text that was submitted.
       sendConnectEmail({
-        toId: variables.toId,
+        requestId: request.id,
         messagePreview: variables.message,
       });
     },
   });
 
   const handleOnClick = () => {
-    if (!props.user.email || !props.otherUser.email) {
-      // This used to be a silent no-op — the button did nothing at all, with
-      // no request, no email and no feedback (SCRUM-234).
-      toast.error(
-        `A carpool request needs an email address for both you and ${props.otherUser.preferredName}. Please check your profile.`,
-      );
-      return;
-    }
-
+    // The missing-email check that used to sit here has moved into
+    // `requests.create` (SCRUM-292). It read `otherUser.email`, which the map
+    // and recommendation payloads no longer carry, and being client-only it was
+    // skipped by anything calling the procedure directly. The `onError` handler
+    // above shows the server's refusal, so the button still answers rather than
+    // doing nothing silently (SCRUM-234).
     createRequests({
       toId: props.otherUser.id,
       message: customMessage,
@@ -112,35 +114,19 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
     .split(",")
     .map((day) => day === "1");
 
-  dayjs.extend(utc);
-  dayjs.extend(timezone);
-
-  const est = "America/New_York";
-
-  const formatTime = (time: Date | null, starttime?: Date | null) => {
-    let timeInEST = dayjs.tz(time, est);
-    const hour = starttime ? dayjs.tz(starttime, est).hour() : timeInEST.hour();
-
-    if (hour >= 1 && hour < 5) {
-      timeInEST = dayjs.tz(time, "UTC");
-    }
-
-    return timeInEST.format("h:mm A");
-  };
-
   return (
     <Dialog
       open={isOpen}
       onClose={() => onClose("close")}
       className="relative z-50"
     >
-      <div className="fixed inset-0 font-montserrat  backdrop-blur-sm">
-        <div className="fixed inset-0 flex items-center justify-center ">
-          <Dialog.Panel className="absolute  flex  w-5/6 max-w-[700px] select-none flex-col content-center  justify-center gap-4 overflow-y-auto overflow-x-hidden rounded-2xl bg-white py-4  shadow-md  md:aspect-square ">
+      <div className="fixed inset-0 font-montserrat backdrop-blur-sm">
+        <div className="fixed inset-0 flex items-center justify-center">
+          <Dialog.Panel className="absolute flex w-5/6 max-w-[700px] select-none flex-col content-center justify-center gap-4 overflow-y-auto overflow-x-hidden rounded-2xl bg-white py-4 shadow-md md:aspect-square">
             {!requestSent ? (
               <>
-                <div className="relative  flex w-full">
-                  <div className="flex w-full flex-row gap-4  px-6 md:px-12">
+                <div className="relative flex w-full">
+                  <div className="flex w-full flex-row gap-4 px-6 md:px-12">
                     <div className="relative inline-block h-28 w-28">
                       {isProfileImageLoading ? (
                         <div className="h-28 w-28 rounded-full bg-gray-200" />
@@ -150,7 +136,6 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                           alt={`${props.otherUser.preferredName}'s Profile Image`}
                           width={112}
                           height={112}
-                          layout="fixed"
                           className="rounded-full"
                         />
                       ) : (
@@ -158,11 +143,11 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                       )}
                     </div>
                     <div className="flex w-full flex-col justify-center gap-2 pl-4">
-                      <div className="flex flex-row items-baseline justify-start gap-2 ">
-                        <div className="text-lg font-bold lg:text-xl ">
+                      <div className="flex flex-row items-baseline justify-start gap-2">
+                        <div className="text-lg font-bold lg:text-xl">
                           <p>{props.otherUser.preferredName}</p>
                         </div>
-                        <p className="font-montserrat  text-sm italic text-stone-400">
+                        <p className="font-montserrat text-sm italic text-stone-400">
                           {props.otherUser.pronouns !== "" && !isMobile
                             ? "(" + `${props.otherUser.pronouns}` + ")"
                             : null}
@@ -171,7 +156,7 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
 
                       {props.otherUser.coopStartDate &&
                         props.otherUser.coopEndDate && (
-                          <div className=" flex  justify-start align-middle">
+                          <div className="flex justify-start align-middle">
                             <div
                               className={`${isMobile ? "flex-col" : "flex"} text-base`}
                             >
@@ -181,7 +166,7 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                                   "MMMM",
                                 )}
                               </p>
-                              <p className="px-2  ">|</p>
+                              <p className="px-2">|</p>
                               <p className="pr-1">To:</p>
                               <p className="font-bold">
                                 {dayjs(props.otherUser.coopEndDate).format(
@@ -194,7 +179,7 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                     </div>
                   </div>
                 </div>
-                <div className="relative flex w-full flex-col justify-evenly   divide-y divide-[#EAEAEA] border-y border-[#EAEAEA] md:flex-row md:divide-x ">
+                <div className="relative flex w-full flex-col justify-evenly divide-y divide-[#EAEAEA] border-y border-[#EAEAEA] md:flex-row md:divide-x">
                   {props.otherUser.bio !== "" && (
                     <div className="flex flex-col gap-2 px-12 py-7 md:w-1/2">
                       <div className="mb-2 text-lg font-bold">About:</div>
@@ -206,7 +191,7 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                   {!isMobile && (
                     <div className="flex flex-col gap-3 py-7 pl-12 md:w-1/2">
                       {/*start location*/}
-                      <div className="flex  items-center">
+                      <div className="flex items-center">
                         <div className="flex w-8 items-center justify-center">
                           <Image
                             src={StartIcon}
@@ -215,7 +200,7 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                             alt="Start icon"
                           />
                         </div>
-                        <p className="ml-1.5  font-semibold">
+                        <p className="ml-1.5 font-semibold">
                           {props.otherUser.startAddress}
                         </p>
                       </div>
@@ -234,7 +219,7 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                           {props.otherUser.companyName}
                         </p>
                       </div>
-                      <div className="flex w-full items-center ">
+                      <div className="flex w-full items-center">
                         {daysOfWeek.map((day, index) => (
                           <StaticDayBox
                             className="!m-0.5 !h-7 !w-7 !text-base"
@@ -247,18 +232,15 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                       {/* Start and end times */}
 
                       <div className="flex w-full justify-between align-middle">
-                        <div className="flex  ">
+                        <div className="flex">
                           <p className="pr-1">Start:</p>
                           <p className="font-semibold">
-                            {formatTime(props.otherUser.startTime)}
+                            {formatScheduleTime(props.otherUser.startTime)}
                           </p>
                           <p className="px-2 font-semibold">|</p>
                           <p className="pr-1">End:</p>
                           <p className="font-semibold">
-                            {formatTime(
-                              props.otherUser.endTime,
-                              props.otherUser.startTime,
-                            )}
+                            {formatScheduleTime(props.otherUser.endTime)}
                           </p>
                         </div>
                       </div>
@@ -284,25 +266,27 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                     via email.
                   </p>
                   <textarea
-                    className="form-input mb-2 flex max-h-32 min-h-16 w-full rounded-lg  border border-stone-400 px-6   shadow-sm"
-                    maxLength={250}
+                    className="form-input mb-2 flex max-h-32 min-h-16 w-full rounded-lg border border-stone-400 px-6 shadow-sm"
+                    maxLength={MESSAGE_MAX_LENGTH}
                     defaultValue={customMessage}
                     placeholder={"Send a message"}
                     onChange={(e) => setCustomMessage(e.target.value)}
                   ></textarea>
-                  <div className=" mb-1 h-6 w-full text-sm text-stone-400">
-                    <div className="text-end ">{customMessage.length}/250</div>
+                  <div className="mb-1 h-6 w-full text-sm text-stone-400">
+                    <div className="text-end">
+                      {customMessage.length}/{MESSAGE_MAX_LENGTH}
+                    </div>
                   </div>
-                  <div className="flex w-full  justify-center space-x-7">
+                  <div className="flex w-full justify-center space-x-7">
                     <div className="flex w-full justify-center gap-6 md:w-3/4">
                       <button
                         onClick={() => onClose("close")}
-                        className="w-full rounded-md border border-black p-1  hover:bg-stone-100 "
+                        className="w-full rounded-md border border-black p-1 hover:bg-stone-100"
                       >
                         Cancel
                       </button>
                       <button
-                        className="w-full rounded-md  bg-northeastern-red p-1 text-slate-50 hover:bg-red-700"
+                        className="w-full rounded-md bg-northeastern-red p-1 text-slate-50 hover:bg-red-700"
                         onClick={handleOnClick}
                       >
                         Send
@@ -312,7 +296,7 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                 </div>
               </>
             ) : (
-              <div className="flex flex-col justify-center  ">
+              <div className="flex flex-col justify-center">
                 <Dialog.Title className="mb-8 text-center text-2xl font-bold">
                   Your request has been sent!
                 </Dialog.Title>
@@ -326,17 +310,17 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                     View your requests on desktop!
                   </div>
                 )}
-                <div className="flex w-full  justify-center space-x-7">
-                  <div className="flex w-full  gap-6 md:w-3/4">
+                <div className="flex w-full justify-center space-x-7">
+                  <div className="flex w-full gap-6 md:w-3/4">
                     <button
                       onClick={() => onClose("closeAfterSend")}
-                      className="w-full rounded-md border border-black p-1  hover:bg-stone-100 "
+                      className="w-full rounded-md border border-black p-1 hover:bg-stone-100"
                     >
                       Close
                     </button>
                     {!isMobile && (
                       <button
-                        className="w-full rounded-md  bg-northeastern-red p-1 text-slate-50 hover:bg-red-700"
+                        className="w-full rounded-md bg-northeastern-red p-1 text-slate-50 hover:bg-red-700"
                         onClick={handleViewRequest}
                       >
                         View Request

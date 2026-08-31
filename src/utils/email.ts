@@ -1,5 +1,27 @@
 import { SendTemplatedEmailCommandInput } from "@aws-sdk/client-ses";
 
+/**
+ * Template selection (SCRUM-268).
+ *
+ * All four request/acceptance templates in `scripts/emailtemplate.py` are
+ * written in the second person and addressed to `{{preferredName}}`, which is
+ * the *recipient*. Their wording only makes sense for one role:
+ *
+ *   DriverRequestTemplate     "...has sent a request to join your Carpool group"
+ *   DriverAcceptanceTemplate  "...accepted your request for them to join your group"
+ *                             -> the recipient owns the group, so drives
+ *
+ *   RiderRequestTemplate      "...sent a request for you to join their Carpool group"
+ *   RiderAcceptanceTemplate   "...accepted your request to join their Carpool group"
+ *                             -> the recipient is joining, so rides
+ *
+ * So the flag that picks between them is a fact about the **recipient**, and
+ * `recipientIsDriver` is named to say so. It used to be called `isDriver`, and
+ * the acceptance flow supplied the *sender's* role instead. The two roles in a
+ * carpool pair are complementary, so the selector was always inverted and
+ * every acceptance email was worded for the other party.
+ */
+
 export interface BaseEmailSchema {
   senderName: string;
   senderEmail: string;
@@ -9,7 +31,8 @@ export interface BaseEmailSchema {
 
 export interface RequestEmailSchema extends BaseEmailSchema {
   messagePreview: string;
-  isDriver: boolean;
+  /** Does the *recipient* drive? See the note at the top of this file. */
+  recipientIsDriver: boolean;
 }
 
 export interface MessageEmailSchema extends BaseEmailSchema {
@@ -17,7 +40,8 @@ export interface MessageEmailSchema extends BaseEmailSchema {
 }
 
 export interface AcceptanceEmailSchema extends BaseEmailSchema {
-  isDriver: boolean;
+  /** Does the *recipient* drive? See the note at the top of this file. */
+  recipientIsDriver: boolean;
 }
 
 export function generateEmailParams(
@@ -31,7 +55,7 @@ export function generateEmailParams(
   switch (type) {
     case "request":
       const requestSchema = schema as RequestEmailSchema;
-      templateName = requestSchema.isDriver
+      templateName = requestSchema.recipientIsDriver
         ? "DriverRequestTemplate"
         : "RiderRequestTemplate";
       templateData = {
@@ -51,7 +75,7 @@ export function generateEmailParams(
       break;
     case "acceptance":
       const acceptanceSchema = schema as AcceptanceEmailSchema;
-      templateName = acceptanceSchema.isDriver
+      templateName = acceptanceSchema.recipientIsDriver
         ? "DriverAcceptanceTemplate"
         : "RiderAcceptanceTemplate";
       templateData = {

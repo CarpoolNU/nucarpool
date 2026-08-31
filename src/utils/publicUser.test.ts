@@ -2,6 +2,7 @@ import { Permission, Role, Status } from "@prisma/client";
 import type { CarpoolSearch, Location } from "@prisma/client";
 import {
   convertCarpoolSearchToPublic,
+  convertCarpoolSearchToPublicWithExactHome,
   convertToPublic,
   roundCoord,
 } from "./publicUser";
@@ -40,6 +41,9 @@ const buildUser = (overrides: Partial<User> = {}): User => ({
   coopEndDate: new Date(2024, 5, 1),
   carpoolId: "group-1",
   groupMessage: "See you at 8:45",
+  groupNotes: "Prefer the Green Line stop",
+  groupMusicPreference: "Podcasts",
+  groupConversationStyle: "Light chat",
   startCoordLng: -71.1,
   startCoordLat: 42.39,
   startStreet: "Highland Ave",
@@ -74,7 +78,12 @@ const location = (overrides: Partial<Location> = {}): Location => ({
   ...overrides,
 });
 
-type SearchWithRelations = Parameters<typeof convertCarpoolSearchToPublic>[0];
+// Derived from the *wider* converter on purpose. A row that carries an email is
+// accepted by both, so the fixture can be handed to either - which is what lets
+// the tests below prove the coarsened one drops it rather than never having it.
+type SearchWithRelations = Parameters<
+  typeof convertCarpoolSearchToPublicWithExactHome
+>[0];
 
 const buildSearch = (
   overrides: Partial<CarpoolSearch> = {},
@@ -97,6 +106,9 @@ const buildSearch = (
   status: Status.ACTIVE,
   carpoolId: "group-1",
   groupMessage: "See you at 8:45",
+  groupNotes: "Prefer the Green Line stop",
+  groupMusicPreference: "Podcasts",
+  groupConversationStyle: "Light chat",
   dateCreated: EPOCH,
   dateModified: EPOCH,
   ...overrides,
@@ -129,6 +141,11 @@ const SENSITIVE_FIELDS = [
   "licenseSigned",
   "isOnboarded",
   "groupMessage",
+  // Group ride preferences are for group members, delivered by `groups.me`
+  // (SCRUM-253). They must not ride along on a map or recommendation result.
+  "groupNotes",
+  "groupMusicPreference",
+  "groupConversationStyle",
   "startStreet",
   "startPOICoordLat",
   "startPOICoordLng",
@@ -261,6 +278,85 @@ describe("convertCarpoolSearchToPublic", () => {
   });
 });
 
+describe("home coordinate precision (SCRUM-226)", () => {
+  /**
+   * `startAddress` is deliberately coarsened to "City, State", but the raw home
+   * coordinate used to ride along beside it in bulk responses, where it could
+   * just be reverse-geocoded. The rule is now: neighbourhood precision by
+   * default, full precision only for a counterpart.
+   */
+  const preciseHome = location({
+    coordLng: -71.08874812,
+    coordLat: 42.33907341,
+  });
+
+  it("coarsens the home coordinate for a viewer with no relationship", () => {
+    const result = convertCarpoolSearchToPublic(
+      buildSearch({}, { homeLocation: preciseHome }),
+    );
+
+    expect(result.startCoordLng).toBe(-71.09);
+    expect(result.startCoordLat).toBe(42.34);
+  });
+
+  it("keeps the home coordinate exact for a counterpart", () => {
+    const result = convertCarpoolSearchToPublicWithExactHome(
+      buildSearch({}, { homeLocation: preciseHome }),
+    );
+
+    expect(result.startCoordLng).toBe(-71.08874812);
+    expect(result.startCoordLat).toBe(42.33907341);
+  });
+
+  it("gives two users on different streets in one neighbourhood the same published point", () => {
+    // The point of coarsening: a published coordinate should describe an area,
+    // not a household, so nearby users become indistinguishable.
+    const a = convertCarpoolSearchToPublic(
+      buildSearch(
+        {},
+        { homeLocation: location({ coordLng: -71.0887, coordLat: 42.339 }) },
+      ),
+    );
+    const b = convertCarpoolSearchToPublic(
+      buildSearch(
+        {},
+        { homeLocation: location({ coordLng: -71.0912, coordLat: 42.3402 }) },
+      ),
+    );
+
+    expect([a.startCoordLng, a.startCoordLat]).toEqual([
+      b.startCoordLng,
+      b.startCoordLat,
+    ]);
+  });
+
+  it("leaves the company coordinate exact, because a workplace is not a home", () => {
+    const result = convertCarpoolSearchToPublic(
+      buildSearch(
+        {},
+        {
+          companyLocation: location({
+            coordLng: -71.05123456,
+            coordLat: 42.35123456,
+          }),
+        },
+      ),
+    );
+
+    expect(result.companyCoordLng).toBe(-71.05123456);
+    expect(result.companyCoordLat).toBe(42.35123456);
+  });
+
+  it("reports zero rather than inventing a point when the home Location is missing", () => {
+    const result = convertCarpoolSearchToPublic(
+      buildSearch({}, { homeLocation: null }),
+    );
+
+    expect(result.startCoordLng).toBe(0);
+    expect(result.startCoordLat).toBe(0);
+  });
+});
+
 describe("roundCoord", () => {
   it.each([
     { input: 42.123456789, expected: 42.12346 },
@@ -273,5 +369,80 @@ describe("roundCoord", () => {
 
   it("keeps roughly one metre of precision, enough to place a marker", () => {
     expect(roundCoord(42.360081234)).toBe(42.36008);
+  });
+});
+
+/**
+ * Who gets an email address (SCRUM-292).
+ *
+ * `PublicUser` carried `email` unconditionally, so the bulk list endpoints -
+ * the map, recommendations, favorites - shipped every active user's
+ * `@northeastern.edu` address to any signed-in viewer, on screens that never
+ * displayed it. One request returned up to 150 of them; a VIEWER got the whole
+ * ranked set. Only two consumers ever needed the field and both have a
+ * relationship with the user.
+ *
+ * This is the same split SCRUM-226 built for home coordinates, applied to the
+ * field that sat beside them in the struct and was missed at the time.
+ */
+describe("email disclosure (SCRUM-292)", () => {
+  it("omits the email address for a viewer with no relationship", () => {
+    // The fixture *does* carry an email, so this pins the converter dropping it
+    // rather than a row that never had one. That matters: a caller whose
+    // `include` still selects the column must not leak it through this path.
+    const search = buildSearch();
+    expect(search.user.email).toBe("ada@northeastern.edu");
+
+    const result = convertCarpoolSearchToPublic(search);
+
+    expect(result).not.toHaveProperty("email");
+  });
+
+  it("includes it for a counterpart", () => {
+    const result = convertCarpoolSearchToPublicWithExactHome(buildSearch());
+
+    expect(result.email).toBe("ada@northeastern.edu");
+  });
+
+  it("omits it from every record in a list, not just the first", () => {
+    // The exposure was a bulk one, so the absence has to hold per record.
+    const results = [
+      buildSearch({ userId: "user-1" }),
+      buildSearch({ userId: "user-2" }),
+      buildSearch({ userId: "user-3" }),
+    ].map(convertCarpoolSearchToPublic);
+
+    for (const result of results) {
+      expect(result).not.toHaveProperty("email");
+    }
+  });
+
+  it("serialises to JSON with no email key at all", () => {
+    // `not.toHaveProperty` would pass for a key set to undefined, which still
+    // says "there is an email field here" to anyone reading the response.
+    const serialised = JSON.parse(
+      JSON.stringify(convertCarpoolSearchToPublic(buildSearch())),
+    );
+
+    expect(Object.keys(serialised)).not.toContain("email");
+  });
+
+  it("still coarsens the home coordinate when it omits the email", () => {
+    // The two disclosures are governed by the same rule, so neither change
+    // should have loosened the other.
+    const result = convertCarpoolSearchToPublic(
+      buildSearch(
+        {},
+        {
+          homeLocation: location({
+            coordLng: -71.08874812,
+            coordLat: 42.33907341,
+          }),
+        },
+      ),
+    );
+
+    expect(result).not.toHaveProperty("email");
+    expect(result.startCoordLng).toBe(-71.09);
   });
 });

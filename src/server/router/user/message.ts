@@ -7,6 +7,7 @@ import {
   conversationChannel,
   notificationChannel,
 } from "../../../utils/pusherChannels";
+import { MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
 
 export const messageRouter = router({
   getUnreadMessageCount: protectedRouter.query(async ({ ctx }) => {
@@ -18,18 +19,21 @@ export const messageRouter = router({
       });
     }
 
-    const carpoolSearch = await ctx.prisma.carpoolSearch.findFirst({
-      where: { userId },
-      select: { role: true },
-    });
-
-    if (!carpoolSearch) {
-      throw new TRPCError({
-        code: "NOT_FOUND",
-        message: "User carpool search not found",
-      });
-    }
-
+    // The badge counts unread messages in every conversation the caller is a
+    // party to, and nothing else (SCRUM-296).
+    //
+    // It used to require the counterpart's role to differ from the caller's and
+    // not be VIEWER, mirroring the filter `user.requests.me` applied to the
+    // list itself. Both are gone: the badge and the list have to agree, and a
+    // role change on either side is not a reason to stop delivering messages
+    // the two people are still exchanging. Counting them while the thread was
+    // hidden was the worse half of that - the header claimed unread mail the
+    // user could not reach - but suppressing them silently dropped replies.
+    //
+    // The caller's own `CarpoolSearch` was read only for that comparison, and
+    // its absence threw NOT_FOUND, which surfaced in the header as a failed
+    // query rather than a count. Neither is needed to answer "how many unread
+    // messages are mine".
     return ctx.prisma.message.count({
       where: {
         isRead: false,
@@ -39,30 +43,7 @@ export const messageRouter = router({
         conversation: {
           request: {
             some: {
-              OR: [
-                {
-                  fromUserId: userId,
-                  toUser: {
-                    carpoolSearches: {
-                      some: {
-                        role: { not: carpoolSearch.role },
-                        AND: { role: { not: "VIEWER" } },
-                      },
-                    },
-                  },
-                },
-                {
-                  toUserId: userId,
-                  fromUser: {
-                    carpoolSearches: {
-                      some: {
-                        role: { not: carpoolSearch.role },
-                        AND: { role: { not: "VIEWER" } },
-                      },
-                    },
-                  },
-                },
-              ],
+              OR: [{ fromUserId: userId }, { toUserId: userId }],
             },
           },
         },
@@ -84,7 +65,12 @@ export const messageRouter = router({
     .input(
       z.object({
         requestId: z.string(),
-        content: z.string(),
+        // Bounded because `message.content` is `VARCHAR(255)` (SCRUM-231). An
+        // unbounded input reached the database and threw there, after the send
+        // bar had already cleared the user's text. Trimmed before the length
+        // checks so whitespace neither passes `.min(1)` nor consumes the cap,
+        // and so the stored value matches what `SendBar` sends.
+        content: z.string().trim().min(1).max(MESSAGE_MAX_LENGTH),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -124,27 +110,37 @@ export const messageRouter = router({
       // first message on a request with no conversation row was created,
       // linked, and then silently discarded with a success response
       // (SCRUM-230). The message is now written on both paths.
-      let conversation = await ctx.prisma.conversation.findUnique({
-        where: { requestId: input.requestId },
-      });
-
-      if (!conversation) {
-        conversation = await ctx.prisma.conversation.create({
-          data: { requestId: input.requestId },
+      //
+      // All three writes commit together. Repairing the missing conversation
+      // takes two statements — the link is stored on both `Conversation` and
+      // `Request` — so untransactioned this could link a conversation and then
+      // fail to write the message the user had already typed, or create the
+      // conversation without linking it back (SCRUM-233). Pusher stays outside
+      // the transaction below: it is a side effect that cannot be rolled back,
+      // and it must not run until the message is durable.
+      const newMessage = await ctx.prisma.$transaction(async (tx) => {
+        let conversation = await tx.conversation.findUnique({
+          where: { requestId: input.requestId },
         });
 
-        await ctx.prisma.request.update({
-          where: { id: input.requestId },
-          data: { conversationId: conversation.id },
-        });
-      }
+        if (!conversation) {
+          conversation = await tx.conversation.create({
+            data: { requestId: input.requestId },
+          });
 
-      const newMessage = await ctx.prisma.message.create({
-        data: {
-          conversationId: conversation.id,
-          content: input.content,
-          userId: userId,
-        },
+          await tx.request.update({
+            where: { id: input.requestId },
+            data: { conversationId: conversation.id },
+          });
+        }
+
+        return await tx.message.create({
+          data: {
+            conversationId: conversation.id,
+            content: input.content,
+            userId: userId,
+          },
+        });
       });
 
       // Notify whichever party did not send this message. The old code always

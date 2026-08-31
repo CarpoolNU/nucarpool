@@ -13,6 +13,7 @@ import {
 } from "react-hook-form";
 import { OnboardingFormInputs, User } from "../../utils/types";
 import ControlledAddressCombobox from "./ControlledAddressCombobox";
+import { PROFILE_TEXT_MAX_LENGTH } from "../../utils/textLimits";
 import { useAddressSelection } from "../../utils/useAddressSelection";
 import SelectDays from "../Shared/Schedule/SelectDays";
 import SelectTimeRange from "../Shared/Schedule/SelectTimeRange";
@@ -42,9 +43,7 @@ const CarpoolSection = ({
 
   return (
     <div className="flex flex-col space-y-4">
-      <ProfileHeader className={"!text-4xl"}>
-        Carpool Details
-      </ProfileHeader>
+      <ProfileHeader className={"!text-4xl"}>Carpool Details</ProfileHeader>
 
       <EntryLabel
         label="Commuting Schedule"
@@ -119,6 +118,8 @@ const CarpoolSection = ({
         id="companyName"
         error={errors.companyName}
         type="text"
+        // Matches `company_name`'s `VARCHAR(191)` (SCRUM-231).
+        charLimit={PROFILE_TEXT_MAX_LENGTH}
         {...register("companyName")}
       />
       <EntryLabel
@@ -130,23 +131,23 @@ const CarpoolSection = ({
       <Note className={"mb-2"}>
         Note: Select the autocomplete results, even if you typed the address out
       </Note>
-        <ControlledAddressCombobox
-          isDisabled={isViewer}
-          control={control}
-          name={"companyAddress"}
-          addressSelected={companyAddressHook.selectedAddress}
-          addressSetter={companyAddressHook.setSelectedAddress}
-          addressSuggestions={companyAddressHook.suggestions}
-          error={errors.companyAddress}
-          addressUpdater={companyAddressHook.updateAddress}
-        />
+      <ControlledAddressCombobox
+        isDisabled={isViewer}
+        control={control}
+        name={"companyAddress"}
+        addressSelected={companyAddressHook.selectedAddress}
+        addressSetter={companyAddressHook.setSelectedAddress}
+        addressSuggestions={companyAddressHook.suggestions}
+        error={errors.companyAddress}
+        addressUpdater={companyAddressHook.updateAddress}
+      />
       {errors.companyAddress && (
         <ErrorDisplay>{errors.companyAddress.message}</ErrorDisplay>
       )}
       <div className="py-8 font-montserrat">
         <button
           type="button"
-          className="w-full rounded-lg bg-northeastern-red py-3 text-lg text-white hover:bg-red-700 "
+          className="w-full rounded-lg bg-northeastern-red py-3 text-lg text-white hover:bg-red-700"
           onClick={onSubmit}
         >
           Save Changes

@@ -1,17 +1,47 @@
 import { useState } from "react";
 import { Dialog } from "@headlessui/react";
-import { trackEvent } from "../utils/mixpanel"; // Import the trackEvent function
+import { trackEvent } from "../utils/mixpanel";
+import { trpc } from "../utils/trpc";
 
+/**
+ * The terms a user has to accept before using the app.
+ *
+ * "I Agree" now records the acceptance and this dialog stays up until that write
+ * succeeds (SCRUM-240). It previously fired a Mixpanel event, closed itself, and
+ * persisted nothing - the flag that gates this dialog was set instead by any
+ * profile save, so it was not evidence that anybody had read this text.
+ *
+ * There is no local open state on purpose. `ComplianceGate` mounts this only
+ * while the server says consent is missing, so the dialog can only disappear
+ * once the recorded value has actually come back changed. A local flag would
+ * close on click and hide a failed write.
+ */
 export const ComplianceModal = () => {
-  const [isOpen, setIsOpen] = useState<boolean>(true);
+  const utils = trpc.useUtils();
+  const [failed, setFailed] = useState(false);
 
-  const handleAgreeClick = () => {
-    trackEvent("Compliance Agreement Accepted"); // Track the event
-    setIsOpen(false);
+  const { mutateAsync: acceptTerms, isLoading } =
+    trpc.user.acceptTerms.useMutation({
+      onSuccess: () => utils.user.me.invalidate(),
+    });
+
+  const handleAgreeClick = async () => {
+    if (isLoading) {
+      return;
+    }
+    setFailed(false);
+    try {
+      await acceptTerms();
+      // Tracked after the write, so the event means an acceptance was stored
+      // rather than a button was clicked.
+      trackEvent("Compliance Agreement Accepted");
+    } catch {
+      setFailed(true);
+    }
   };
 
   return (
-    <Dialog open={isOpen} onClose={() => {}}>
+    <Dialog open={true} onClose={() => {}}>
       <div className="fixed inset-0 z-50 backdrop-blur-sm" aria-hidden="true">
         <div className="fixed inset-0 flex items-center justify-center p-4">
           <Dialog.Panel className="flex h-4/6 w-5/6 flex-col content-center justify-center gap-4 rounded-md bg-white p-9 shadow-md sm:h-4/6 sm:w-4/6 md:h-3/6 md:w-3/6">
@@ -76,11 +106,21 @@ export const ComplianceModal = () => {
                 acknowledgment of those updates.
               </p>
             </div>
+            {failed && (
+              <p
+                role="alert"
+                className="text-center text-sm text-northeastern-red"
+              >
+                We could not record your agreement. Please try again.
+              </p>
+            )}
             <button
-              className="w-25 rounded-md border-2 border-red-700 bg-red-700 p-1 text-slate-50 "
-              onClick={handleAgreeClick} // Use the event handler
+              type="button"
+              className="w-25 rounded-md border-2 border-red-700 bg-red-700 p-1 text-slate-50 disabled:opacity-50"
+              onClick={handleAgreeClick}
+              disabled={isLoading}
             >
-              I Agree
+              {isLoading ? "Saving..." : "I Agree"}
             </button>
           </Dialog.Panel>
         </div>
