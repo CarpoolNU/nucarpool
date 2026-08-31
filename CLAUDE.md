@@ -227,6 +227,7 @@ merge manually through GitHub.
 
 ## References
 
-- [`README.md`](README.md) — setup and the full environment variable list
+- [`README.md`](README.md) — setup, the full environment variable list, deployment
 - [`src/server/router/README.md`](src/server/router/README.md) — routers, context, writing procedures
 - [`src/server/db/README.md`](src/server/db/README.md) — Prisma client, schema notes, migration workflow
+- [`scripts/README.md`](scripts/README.md) — the ops scripts, which of them write, and **the record of what has been run in which environment** (SCRUM-307). Read it before running anything in `scripts/`, and update its table after you do. Production state is currently unknown for every script.
