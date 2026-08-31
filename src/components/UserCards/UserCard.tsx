@@ -20,6 +20,7 @@ import { trackViewRoute } from "../../utils/mixpanel";
 import useProfileImage from "../../utils/useProfileImage";
 import { AiOutlineUser } from "react-icons/ai";
 import useIsMobile from "../../utils/useIsMobile";
+import { disclosesCounterpartName } from "../Sidebar/viewerAccess";
 
 interface UserCardProps {
   otherUser: EnhancedPublicUser;
@@ -35,6 +36,15 @@ interface UserCardProps {
    * favorites are still role-filtered.
    */
   notice?: string;
+  /**
+   * True when the reader is party to a request with this user (SCRUM-316).
+   *
+   * Only the two Requests-tab cards pass it. It governs one thing: whether a
+   * VIEWER sees the counterpart's name or their role in its place. See
+   * `disclosesCounterpartName` for why a relationship lifts that rule and
+   * discovery does not.
+   */
+  isCounterpart?: boolean;
   isUnread?: boolean;
   classname?: string;
   onClick?: () => void;
@@ -141,12 +151,15 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
         {/* Name and Pronouns */}
         <div className="flex flex-col items-start pl-3.5">
           <div className="text-lg font-semibold">
-            {user.role === "VIEWER" ? (
+            {disclosesCounterpartName(
+              user.role,
+              props.isCounterpart ?? false,
+            ) ? (
+              <p>{props.otherUser.preferredName}</p>
+            ) : (
               <p>{`${props.otherUser.role.charAt(0)}${props.otherUser.role
                 .slice(1)
                 .toLowerCase()}`}</p>
-            ) : (
-              <p>{props.otherUser.preferredName}</p>
             )}
           </div>
           <div className="flex flex-row items-start gap-4">

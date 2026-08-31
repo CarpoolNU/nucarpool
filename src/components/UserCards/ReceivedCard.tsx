@@ -18,9 +18,13 @@ export const ReceivedCard = (props: ReceivedCardProps): React.JSX.Element => {
   const user = useContext(UserContext);
 
   // The request stays in this list even when the pair can no longer carpool,
-  // so the card carries the reason (SCRUM-296). `user` is never a VIEWER here -
-  // the Requests tab renders the Viewer-mode copy instead of any cards - so
-  // this cannot show a name UserCard would otherwise withhold.
+  // so the card carries the reason (SCRUM-296).
+  //
+  // `user` **can** be a VIEWER here, as of SCRUM-316: the Requests tab used to
+  // render Viewer-mode copy in place of every card, which left a VIEWER unable
+  // to withdraw a request they had sent. `isCounterpart` below is what lets the
+  // name still show - withholding it would be pointless when the notice names
+  // them anyway, and would make several requests indistinguishable.
   const roleMismatch = user
     ? roleMismatchExplanation(
         user.role,
@@ -34,9 +38,7 @@ export const ReceivedCard = (props: ReceivedCardProps): React.JSX.Element => {
       {/* Not a <button>: UserCard embeds a MUI <Rating>, and a button may not
           contain other interactive controls. A roled, focusable region gives
           keyboard users the same activation without that nesting (SCRUM-254).
-          No aria-label - the card's own text supplies the accessible name, so
-          this cannot leak a name that UserCard deliberately hides from
-          VIEWER-role users. */}
+          No aria-label - the card's own text supplies the accessible name. */}
       <div
         role="button"
         tabIndex={0}
@@ -52,6 +54,7 @@ export const ReceivedCard = (props: ReceivedCardProps): React.JSX.Element => {
       >
         <UserCard
           otherUser={props.otherUser}
+          isCounterpart
           message={props.latestMessage?.content}
           notice={roleMismatch ?? undefined}
           isUnread={props.isUnread}
