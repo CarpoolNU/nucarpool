@@ -1,5 +1,5 @@
 /**
- * Measures what `user.messages.getUnreadMessageCount` actually costs (SCRUM-306).
+ * Measures what `user.messages.getUnreadMessageCount` actually costs.
  *
  * The ticket was filed on the shape of the generated SQL: four levels of nested
  * `IN` subqueries, the outermost a self-reference to `message` — the
@@ -233,7 +233,7 @@ export const indexVerdict = (input: {
  * Kept as literal SQL rather than generated from the Prisma call, because the
  * point is to inspect the plan and `EXPLAIN` needs a statement. It mirrors the
  * shape Prisma emits for `message.count({ where: { isRead, userId: { not },
- * conversation: { request: { some: { OR } } } } })` as of SCRUM-296 — verify it
+ * conversation: { request: { some: { OR } } } } })` — verify it
  * still matches by comparing against the generated SQL this script logs above
  * it, which comes from the real Prisma call.
  */
@@ -420,7 +420,7 @@ const main = async () => {
       "Rows above are the optimiser's estimates, not counted reads. PlanetScale\n" +
         "bills examined rows and reports them per query pattern under Insights,\n" +
         "which is the authority for production and does not need this script --\n" +
-        "see the SCRUM-306 section of src/server/db/README.md.",
+        "see the unread-badge section of src/server/db/README.md.",
     );
   } finally {
     await prisma.$disconnect();

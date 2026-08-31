@@ -6,7 +6,7 @@ import {
 } from "./locationOwnership";
 
 /**
- * Tests for Location ownership (SCRUM-232).
+ * Tests for Location ownership.
  *
  * The bug these pin: `user.edit` matched an existing Location on street, city,
  * state and streetAddress and reused it as-is, so the coordinates the client
@@ -21,7 +21,7 @@ import {
  * rather than passing against a mock that answers everything.
  *
  * It is a stand-in for a database, not a substitute for one. Real
- * multi-user behaviour is SCRUM-263.
+ * multi-user behaviour needs a real database.
  */
 
 type LocationRow = { id: string } & LocationFields;

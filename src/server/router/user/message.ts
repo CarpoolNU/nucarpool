@@ -9,7 +9,7 @@ import {
 import { MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
 
 /**
- * Messages per page in the open thread (SCRUM-317).
+ * Messages per page in the open thread.
  *
  * Bigger than a screenful on purpose: the first page should almost always be
  * the whole of what a reader wants, so "load older" is the exception rather
@@ -20,7 +20,7 @@ export const CONVERSATION_PAGE_SIZE = 30;
 
 /**
  * The message columns the thread renders, matching the projection
- * `user.requests.me` uses (SCRUM-301).
+ * `user.requests.me` uses.
  *
  * Deliberately no author relation. The author is always one of the two people
  * already in the payload, and `sendMessage` broadcasts a bare `message.create`
@@ -47,7 +47,7 @@ export const messageRouter = router({
     }
 
     // The badge counts unread messages in every conversation the caller is a
-    // party to, and nothing else (SCRUM-296).
+    // party to, and nothing else.
     //
     // It used to require the counterpart's role to differ from the caller's and
     // not be VIEWER, mirroring the filter `user.requests.me` applied to the
@@ -62,7 +62,7 @@ export const messageRouter = router({
     // query rather than a count. Neither is needed to answer "how many unread
     // messages are mine".
     //
-    // **The nesting below is measured, not merely tolerated (SCRUM-306).** It
+    // **The nesting below is measured, not merely tolerated.** It
     // compiles to two levels of `IN` subquery over `message` — the fastest
     // growing table here — filtered on `isRead`, which carries no index, and
     // that reads like a problem waiting to happen. It is not one: MySQL drives
@@ -78,7 +78,7 @@ export const messageRouter = router({
     // this ever does need an index the shape is
     // `message(conversationId, isRead, userId)`.
     //
-    // Removing the role predicate in SCRUM-296 is what actually mattered: it
+    // Removing the counterpart-role predicate is what actually mattered: it
     // deleted two `DEPENDENT SUBQUERY` blocks from the plan, which are
     // re-evaluated per outer row rather than once. Before changing this query,
     // re-run `scripts/measure-unread-count.ts` and read
@@ -101,7 +101,7 @@ export const messageRouter = router({
     });
   }),
 
-  // `getMessages` used to sit here (SCRUM-222). It took a bare conversation id
+  // `getMessages` used to sit here. It took a bare conversation id
   // and returned every message in it — including each author's name and profile
   // image — after reading the session user and then never using it, so any
   // signed-in caller could read any conversation. It is removed rather than
@@ -111,14 +111,13 @@ export const messageRouter = router({
   // risk. Conversations reach the UI through `user.requests.me`, which is
   // already scoped to the caller's own requests.
   //
-  // `conversation` below is its deliberate replacement (SCRUM-317), and differs
+  // `conversation` below is its deliberate replacement, and differs
   // in the way that mattered: it is keyed on a **request id**, not a
   // conversation id, so authorization is derived from the row rather than
   // trusted from the input. It is the same shape as `sendMessage`'s check.
 
   /**
-   * One conversation's messages, newest page first, for the open thread
-   * (SCRUM-317).
+   * One conversation's messages, newest page first, for the open thread.
    *
    * **Why this exists.** `user.requests.me` used to return the complete history
    * of every conversation the caller was party to, on every mount, because one
@@ -130,7 +129,7 @@ export const messageRouter = router({
    *
    * **Why it is keyed on `requestId`.** The procedure this replaces took a bare
    * `conversationId` and returned whatever it named, which let any signed-in
-   * caller read any thread (SCRUM-222). A request id is no more secret, so the
+   * caller read any thread. A request id is no more secret, so the
    * id is not the protection — the lookup is. The request row carries
    * `fromUserId` and `toUserId`, so participation is checked against stored
    * data before a single message is read. Nothing here trusts the caller.
@@ -222,7 +221,7 @@ export const messageRouter = router({
     .input(
       z.object({
         requestId: z.string(),
-        // Bounded because `message.content` is `VARCHAR(255)` (SCRUM-231). An
+        // Bounded because `message.content` is `VARCHAR(255)`. An
         // unbounded input reached the database and threw there, after the send
         // bar had already cleared the user's text. Trimmed before the length
         // checks so whitespace neither passes `.min(1)` nor consumes the cap,
@@ -251,8 +250,8 @@ export const messageRouter = router({
         });
       }
 
-      // Only the two people on the request may write to its conversation
-      // (SCRUM-222). Without this, any signed-in user who obtained a request id
+      // Only the two people on the request may write to its conversation.
+      // Without this, any signed-in user who obtained a request id
       // could inject a message into a stranger's thread — attributed to them in
       // the UI, broadcast on the conversation channel, and delivered by email.
       if (request.fromUserId !== userId && request.toUserId !== userId) {
@@ -265,14 +264,14 @@ export const messageRouter = router({
       // Find or create the conversation. This used to be two exclusive
       // branches where only the "already exists" one wrote the message, so a
       // first message on a request with no conversation row was created,
-      // linked, and then silently discarded with a success response
-      // (SCRUM-230). The message is now written on both paths.
+      // linked, and then silently discarded with a success response.
+      // The message is now written on both paths.
       //
       // All three writes commit together. Repairing the missing conversation
       // takes two statements — the link is stored on both `Conversation` and
       // `Request` — so untransactioned this could link a conversation and then
       // fail to write the message the user had already typed, or create the
-      // conversation without linking it back (SCRUM-233). Pusher stays outside
+      // conversation without linking it back. Pusher stays outside
       // the transaction below: it is a side effect that cannot be rolled back,
       // and it must not run until the message is durable.
       const newMessage = await ctx.prisma.$transaction(async (tx) => {
@@ -303,7 +302,7 @@ export const messageRouter = router({
       // Notify whichever party did not send this message. The old code always
       // addressed `request.toUserId`, so a reply from the request's recipient
       // was delivered to their own notification channel and the original
-      // sender was never told (SCRUM-230). The participant check above makes
+      // sender was never told. The participant check above makes
       // this total: the caller is one of the two, so the other one is the
       // recipient.
       const recipientId =

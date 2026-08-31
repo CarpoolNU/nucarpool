@@ -3,7 +3,7 @@ import type { Session } from "next-auth";
 import type { Context } from "../context";
 
 /**
- * `NEXT_PUBLIC_ENV` is validated by envsafe at import time now (SCRUM-247), so
+ * `NEXT_PUBLIC_ENV` is validated by envsafe at import time now, so
  * these tests mock the env module instead of assigning to `process.env`
  * mid-run — the variable is read once when the module loads, and a later
  * assignment would never be seen. The getter keeps `deployEnv` swappable
@@ -23,7 +23,7 @@ jest.mock("../../../utils/env/browser", () => ({
 import { appRouter } from "../index";
 
 /**
- * Authorization tests for `user.emails` (SCRUM-225).
+ * Authorization tests for `user.emails`.
  *
  * The four procedures used to take sender name, sender address, recipient name,
  * recipient address and the body straight from client input, making them an
@@ -290,7 +290,7 @@ describe("user.emails.sendRequestNotification — participants only, addresses f
 
   it("picks the rider template when the recipient rides", async () => {
     // The mirror of the case above. Without it the assertion is satisfied by
-    // a hard-coded template, which is close to the SCRUM-268 defect.
+    // a hard-coded template, which is close to the original defect.
     const db = buildEmailDb({
       request: {
         id: REQUEST_ID,
@@ -349,7 +349,7 @@ describe("user.emails.sendRequestNotification — participants only, addresses f
   });
 
   it("refuses a caller who is not part of the request", async () => {
-    // The reported hole (SCRUM-270): this used to take a bare `toId`, and
+    // The reported hole: this used to take a bare `toId`, and
     // every PublicUser the map and recommendations return carries a user id,
     // so any signed-in student could mail any other registered user.
     const { caller, db } = callerFor(sessionFor(MALLORY));
@@ -653,7 +653,7 @@ describe("user.emails.sendAcceptanceNotification — participants only", () => {
   });
 
   /**
-   * SCRUM-268. Both acceptance templates address the recipient in the second
+   * Both acceptance templates address the recipient in the second
    * person, so the choice between them is a fact about the recipient:
    *
    *   DriverAcceptanceTemplate  "...accepted your request for them to join your group"

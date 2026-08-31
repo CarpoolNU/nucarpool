@@ -1,5 +1,5 @@
 /**
- * Tests for `getPresignedImageUrl` (SCRUM-242).
+ * Tests for `getPresignedImageUrl`.
  *
  * This helper is the entire server-side cost of rendering an avatar. Signing a
  * URL is a local HMAC and makes no network call, so the `HeadObject` it issues
@@ -38,8 +38,8 @@ jest.mock("@aws-sdk/s3-request-presigner", () => ({
 }));
 
 /**
- * `NEXT_PUBLIC_ENV` is now validated against an allow-list at import time
- * (SCRUM-247), so this suite mocks the env module rather than assigning to
+ * `NEXT_PUBLIC_ENV` is now validated against an allow-list at import time,
+ * so this suite mocks the env module rather than assigning to
  * `process.env` mid-run: envsafe reads the variable once, when the module first
  * loads, and a later assignment would not be seen. It also means the value has
  * to be a real one — the previous `"test-env"` is not a deployment.
@@ -69,7 +69,7 @@ import {
 import { serverEnv } from "./env/server";
 
 /**
- * The bucket is configuration now, not a literal (SCRUM-282), and
+ * The bucket is configuration now, not a literal, and
  * `jest.setup.env.js` supplies a placeholder for it like any other required
  * variable. Asserting against the configured value rather than "carpoolnubucket"
  * is also the stronger assertion: it pins that the commands are built from

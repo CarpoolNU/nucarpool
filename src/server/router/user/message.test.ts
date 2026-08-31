@@ -9,7 +9,7 @@ import { MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
 import { cloneState, withTransaction } from "../transactionMock";
 
 /**
- * Correctness tests for `user.messages.sendMessage` (SCRUM-230).
+ * Correctness tests for `user.messages.sendMessage`.
  *
  * Two defects sat in ~50 lines:
  *
@@ -101,7 +101,7 @@ const buildMessageDb = (opts?: {
   };
 
   // `sendMessage` repairs a missing conversation and writes the message as one
-  // transaction (SCRUM-233). `conversation` and `linkedConversationId` are
+  // transaction. `conversation` and `linkedConversationId` are
   // rebound rather than mutated, so restoring them is a plain assignment here
   // rather than an in-place edit through a shared reference.
   const prisma = withTransaction(
@@ -329,7 +329,7 @@ describe("sendMessage — guards", () => {
   });
 });
 
-describe("sendMessage — only participants may write (SCRUM-222)", () => {
+describe("sendMessage — only participants may write", () => {
   it("refuses a third party with FORBIDDEN, writing nothing and broadcasting nothing", async () => {
     // The defect: any signed-in user holding a request id could inject a
     // message into a stranger's thread. It would be attributed to them in the
@@ -394,17 +394,18 @@ describe("user.messages.getMessages — removed rather than scoped", () => {
 
   it("no longer has an admin counterpart either", async () => {
     // `user.admin.getMessages` was a separate, adminRouter-gated procedure that
-    // SCRUM-222 deliberately left alone. SCRUM-246 then removed it too, for a
-    // different reason: it selected `content`, so it shipped the text of every
-    // private message to an admin's browser, and AdminData.tsx never read the
-    // result. No procedure in the router selects a message body now.
+    // the message authorization work deliberately left alone. It was removed
+    // later too, for a different reason: it selected `content`, so it shipped
+    // the text of every private message to an admin's browser, and
+    // AdminData.tsx never read the result. No procedure in the router selects a
+    // message body now.
     const paths = Object.keys((appRouter as any)._def.procedures);
 
     expect(paths).not.toContain("user.admin.getMessages");
   });
 });
 
-describe("sendMessage — broadcasts only on private channels (SCRUM-224)", () => {
+describe("sendMessage — broadcasts only on private channels", () => {
   it("uses the private- prefix on every channel it triggers", async () => {
     // Without the prefix Pusher treats the channel as public and never calls
     // the auth endpoint, so the subscription check silently stops applying.
@@ -422,7 +423,7 @@ describe("sendMessage — broadcasts only on private channels (SCRUM-224)", () =
   });
 });
 
-describe("sendMessage — content is bounded by its column (SCRUM-231)", () => {
+describe("sendMessage — content is bounded by its column", () => {
   // `message.content` is `VARCHAR(255)` and MySQL runs in strict mode, so an
   // oversized value threw at the database rather than truncating. The input had
   // neither `.max()` nor `.min(1)`, and `SendBar` had no cap at all, so the
@@ -500,7 +501,7 @@ describe("sendMessage — content is bounded by its column (SCRUM-231)", () => {
 });
 
 /**
- * Atomicity of `sendMessage` (SCRUM-233).
+ * Atomicity of `sendMessage`.
  *
  * Repairing a missing conversation takes two writes, because the link lives on
  * both `Conversation.requestId` and `Request.conversationId`. Untransactioned,
@@ -510,7 +511,7 @@ describe("sendMessage — content is bounded by its column (SCRUM-231)", () => {
 describe("sendMessage is atomic", () => {
   it("leaves no conversation behind when writing the message fails", async () => {
     // No conversation yet, so this exercises the repair path added by
-    // SCRUM-230 — the one that writes twice before the message.
+    // the one that writes twice before the message.
     const db = buildMessageDb({ conversation: null });
     const { caller } = callerFor(sessionFor(SENDER), db);
 
@@ -556,7 +557,7 @@ describe("sendMessage is atomic", () => {
 
 /**
  * `getUnreadMessageCount` counts the caller's own conversations, and nothing
- * about the counterpart's role (SCRUM-296).
+ * about the counterpart's role.
  *
  * It used to require the counterpart's role to differ from the caller's and not
  * be VIEWER - the same predicate `user.requests.me` applied to the list - so
@@ -693,8 +694,8 @@ describe("getUnreadMessageCount - the badge and the Requests tab agree", () => {
   ];
 
   it("counts an unread reply from a counterpart who now shares the caller's role", async () => {
-    // The state SCRUM-296 describes: both riders, so the old predicate excluded
-    // the thread and the reply never reached the badge.
+    // Both riders, so the old predicate excluded the thread and the reply never
+    // reached the badge.
     const { caller } = unreadCallerFor(
       SENDER,
       [

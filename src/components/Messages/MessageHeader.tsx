@@ -10,7 +10,7 @@ import useIsMobile from "../../utils/useIsMobile";
 
 /**
  * How a button in flight looks. The same `opacity-40` `SendBar` already uses, so
- * the two in-flight states in the messaging UI read the same (SCRUM-293).
+ * the two in-flight states in the messaging UI read the same.
  */
 const DISABLED_CLASS = "cursor-not-allowed opacity-40 hover:bg-inherit";
 
@@ -20,7 +20,7 @@ interface MessageHeaderProps {
   onReject: () => void;
   onClose: (userId: string) => void;
   groupId: string | null;
-  /** True while a request mutation is in flight (SCRUM-293). */
+  /** True while a request mutation is in flight. */
   isMutating?: boolean;
 }
 
@@ -32,8 +32,8 @@ const MessageHeader = ({
   groupId,
   isMutating = false,
 }: MessageHeaderProps) => {
-  // Only a request still awaiting an answer offers Accept, Reject or Withdraw
-  // (SCRUM-228). An accepted request stays attached to the user so the pair keep
+  // Only a request still awaiting an answer offers Accept, Reject or Withdraw.
+  // An accepted request stays attached to the user so the pair keep
   // their conversation, but it is no longer something to respond to. This used
   // to be a plain presence check, which is why an accepted request kept showing
   // its Accept button; the group comparison below was standing in for the status
@@ -44,8 +44,8 @@ const MessageHeader = ({
     selectedUser.outgoingRequest?.status === RequestStatus.PENDING;
 
   // A pending request whose two parties can no longer carpool - either of them
-  // switched role after it was sent - is no longer hidden from the Requests tab
-  // (SCRUM-296), because hiding it never stopped it blocking new requests. It
+  // switched role after it was sent - is no longer hidden from the Requests tab,
+  // because hiding it never stopped it blocking new requests. It
   // is still not acceptable, so Accept is replaced by the reason rather than
   // left to fail on press. Reject and Withdraw stay: clearing the request is
   // the way out, and it was the absence of any way to reach them that made this

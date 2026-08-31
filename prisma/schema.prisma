@@ -38,7 +38,7 @@ enum Status {
   INACTIVE
 }
 
-// Whether a carpool request is still awaiting an answer (SCRUM-228).
+// Whether a carpool request is still awaiting an answer.
 //
 // Accepting a request used to leave the row untouched, so it stayed pending
 // forever and the duplicate guard in `requests.create` blocked that pair from
@@ -184,7 +184,7 @@ model Location {
   dateModified           DateTime        @default(now()) @updatedAt
 
   // The candidate bounding box ranges on coord_lat and then narrows on
-  // coord_lng, so latitude leads (SCRUM-245). There was no index on either
+  // coord_lng, so latitude leads. There was no index on either
   // column before; the only ones on this table were implicit.
   @@index([coordLat, coordLng])
   @@map(name: "location")
@@ -205,11 +205,11 @@ model CarpoolSearch {
   seatsAvail             Int           @default(0) @map("seats_avail")
   status                 Status        @default(ACTIVE)
   carpoolId              String?
-  // Retained only so an un-backfilled row can still be read (SCRUM-253). The
+  // Retained only so an un-backfilled row can still be read. The
   // three columns below own these values now; this one is no longer written.
   groupMessage           String?       @map("group_message") @db.Text
   // The driver's group ride preferences, previously a GROUP_DETAILS_V1: JSON
-  // blob mirrored into `group.message` (SCRUM-253). Real columns, one owner:
+  // blob mirrored into `group.message`. Real columns, one owner:
   // the driver's own search. `groups.me` reads them through the group's driver,
   // so a driver sees the same values before and after having a group.
   //
@@ -234,7 +234,7 @@ model CarpoolSearch {
   @@index([companyLocationId])
   @@index([homeLocationId])
   @@index([carpoolId])
-  // The matching query filters status and role together (SCRUM-245). Neither is
+  // The matching query filters status and role together. Neither is
   // selective alone -- two and three values -- but the pair is the whole
   // non-relational predicate, so this is the index that covers it.
   @@index([status, role])

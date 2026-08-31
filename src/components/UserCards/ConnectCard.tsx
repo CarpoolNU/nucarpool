@@ -84,9 +84,9 @@ export const ConnectCard = (props: ConnectCardProps): React.JSX.Element => {
   };
 
   // This is a **discovery** card, so a VIEWER sees the other person's role in
-  // place of their name (SCRUM-316) — and the activation button's accessible
+  // place of their name — and the activation button's accessible
   // name has to respect that, or Viewer mode withholds the name on screen while
-  // a screen reader reads it out (SCRUM-279).
+  // a screen reader reads it out.
   const label = counterpartLabel({
     viewerRole: user?.role ?? "",
     isCounterpart: false,
@@ -101,8 +101,8 @@ export const ConnectCard = (props: ConnectCardProps): React.JSX.Element => {
   // button across every desktop card and swallow clicks meant for the card's
   // own controls. Passing `undefined` renders no button at all.
   //
-  // Restricting it also fixes the mobile half of SCRUM-279 here: tapping the
-  // favourite star used to bubble into this handler and expand the card.
+  // Restricting it also fixes a mobile bug: tapping the favourite star used to
+  // bubble into this handler and expand the card.
   const activation =
     isMobile && props.handleMobileExpand
       ? {

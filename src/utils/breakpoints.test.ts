@@ -11,7 +11,7 @@ const tailwindConfig = require("../../tailwind.config.js");
 const screens: Record<string, string> = tailwindConfig.theme.screens;
 
 /**
- * SCRUM-237: the app used to decide "is mobile" twice, at 640 in `useIsMobile`
+ * The app used to decide "is mobile" twice, at 640 in `useIsMobile`
  * and at 768 inside `Header`, so every viewport between them got the desktop
  * layout and the mobile bottom navigation at once. These tests guard the two
  * things that would bring that back: the constant drifting from the Tailwind

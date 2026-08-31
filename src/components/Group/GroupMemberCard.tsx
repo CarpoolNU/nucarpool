@@ -6,7 +6,7 @@ import Spinner from "../Spinner";
 import { useGroupMembership } from "./useGroupMembership";
 
 /**
- * The group member list and its rows, once (SCRUM-252).
+ * The group member list and its rows, once.
  *
  * This replaces four components: `GroupMembers` / `GroupMemberCard` here and
  * `MobileGroupMembers` / `MobileMemberCard` in `GroupPage.tsx`. All the mutation

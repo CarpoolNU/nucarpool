@@ -1,4 +1,4 @@
-# Dependabot configuration (SCRUM-181).
+# Dependabot configuration.
 # Reference: https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference
 #
 # Version updates begin automatically once this file is on the default branch.
@@ -32,7 +32,7 @@ updates:
     # Version ceilings, applied before grouping — a package listed here is
     # filtered out of its group's pull request rather than pinning the group.
     #
-    # Prisma is held at v4 (SCRUM-266). Without a ceiling the `prisma` group
+    # Prisma is held at v4. Without a ceiling the `prisma` group
     # proposes 4.x -> 7.x in one pull request: three majors, and a migration
     # project rather than a dependency bump. The group is kept below so the two
     # packages still move together whenever the pin is lifted.

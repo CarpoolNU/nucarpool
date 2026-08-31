@@ -13,7 +13,7 @@ import { saveAs } from "file-saver";
 /**
  * The admin dashboard.
  *
- * Every number here is aggregated by `user.admin` on the server (SCRUM-246).
+ * Every number here is aggregated by `user.admin` on the server.
  * This component used to download the user, group, request, conversation and
  * message tables and reduce them in the browser; it now receives finished
  * counts, so moving the slider narrows the query rather than re-filtering a

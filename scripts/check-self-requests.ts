@@ -1,5 +1,5 @@
 /**
- * Report `Request` rows whose two ends are the same user (SCRUM-278).
+ * Report `Request` rows whose two ends are the same user.
  *
  * `user.requests.create` used to accept `toId === ctx.session.user.id`. The
  * duplicate guard could not catch it — for a self-request both halves of its

@@ -6,7 +6,7 @@ import { MESSAGE_MAX_LENGTH } from "../../utils/textLimits";
 interface SendBarProps {
   /**
    * Resolves once the message is stored and rejects if it is not, so this bar
-   * can keep the text on failure (SCRUM-231).
+   * can keep the text on failure.
    */
   onSendMessage: (content: string) => Promise<void>;
 }
@@ -19,7 +19,7 @@ const SendBar = ({ onSendMessage }: SendBarProps) => {
   // Measured on the raw text rather than the trimmed text so the counter and
   // the block agree with each other. `message.content` is `VARCHAR(255)` and
   // this box used to have no cap at all, so anything longer was accepted here,
-  // accepted by the server, and then rejected by MySQL (SCRUM-231).
+  // accepted by the server, and then rejected by MySQL.
   const isTooLong = messageContent.length > MESSAGE_MAX_LENGTH;
 
   const handleSend = async () => {
@@ -58,7 +58,7 @@ const SendBar = ({ onSendMessage }: SendBarProps) => {
           contentEditable="true"
           // The visible "Type a message..." hint is a CSS `:empty:before`
           // pseudo-element, which assistive tech is not required to announce, so
-          // the name has to be stated explicitly (SCRUM-254).
+          // the name has to be stated explicitly.
           role="textbox"
           aria-multiline="true"
           aria-label="Message"

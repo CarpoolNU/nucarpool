@@ -20,8 +20,8 @@ const details = (overrides: Partial<GroupDetails> = {}): GroupDetails => ({
 /**
  * Builds a legacy `GROUP_DETAILS_V1:` value.
  *
- * This used to be `serializeGroupDetails` in the module itself. Since SCRUM-253
- * nothing in production writes the encoding - the values live in real columns -
+ * This used to be `serializeGroupDetails` in the module itself. Nothing in
+ * production writes the encoding any more - the values live in real columns -
  * so the encoder belongs here, where it exists only to manufacture the un-
  * backfilled rows the read path still has to cope with.
  */
@@ -97,7 +97,7 @@ describe("parseGroupDetails — the un-backfilled read path", () => {
   });
 
   it("clamps a corrupt blob to the column width so the driver can still save", () => {
-    // Before SCRUM-253 this came back at full length, which would now exceed
+    // This used to come back at full length, which would now exceed
     // `group_notes` and make every save fail on text the user never wrote.
     const corrupt = `${GROUP_DETAILS_PREFIX}{${"x".repeat(400)}`;
 

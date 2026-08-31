@@ -4,7 +4,7 @@ const { resolveS3Config } = require("./src/utils/env/s3Config");
 
 /**
  * The profile-picture bucket, resolved once and used for both the CSP `img-src`
- * entry and the `images.remotePatterns` host below (SCRUM-282). Those were two
+ * entry and the `images.remotePatterns` host below. Those were two
  * separate copies of the same literal, and an image host the CSP did not permit
  * would have been a report-only violation nobody noticed until enforcement.
  *
@@ -15,7 +15,7 @@ const { resolveS3Config } = require("./src/utils/env/s3Config");
 const { host: s3Host } = resolveS3Config();
 
 /**
- * Where the browser sends CSP violation reports (SCRUM-283).
+ * Where the browser sends CSP violation reports.
  *
  * A relative path on purpose. Both `report-uri` and `Reporting-Endpoints`
  * resolve their value against the document, so this reaches the app's own
@@ -26,7 +26,7 @@ const { host: s3Host } = resolveS3Config();
 const CSP_REPORT_PATH = "/api/csp-report";
 
 /**
- * Content Security Policy (SCRUM-257).
+ * Content Security Policy.
  *
  * Sent as `Content-Security-Policy-Report-Only` on purpose: violations are
  * reported to the browser console without anything being blocked, so the policy
@@ -54,9 +54,9 @@ const CSP_REPORT_PATH = "/api/csp-report";
  * - the S3 host in connect-src: `useUploadFile` PUTs the profile picture
  *   straight to a presigned URL with `fetch`, so the bucket is a connect target
  *   as well as an image source. It was in `img-src` only, which would have
- *   blocked every upload the moment the policy was enforced (SCRUM-305).
+ *   blocked every upload the moment the policy was enforced.
  *
- * Audited against the client bundle for SCRUM-305: the only `fetch` to an
+ * Audited against the client bundle: the only `fetch` to an
  * external origin anywhere in browser-reachable code is that S3 upload;
  * everything else is same-origin tRPC. Mapbox, Pusher, Mixpanel and the Google
  * font hosts were already covered, and the Azure AD sign-in redirect is a
@@ -75,8 +75,8 @@ const contentSecurityPolicy = [
   "base-uri 'self'",
   "form-action 'self'",
   "object-src 'none'",
-  // Both reporting forms, because browsers split on which they implement
-  // (SCRUM-283). `report-to` is the current standard and pairs with the
+  // Both reporting forms, because browsers split on which they implement.
+  // `report-to` is the current standard and pairs with the
   // `Reporting-Endpoints` header below; `report-uri` is deprecated but is still
   // the only one Safari and Firefox support. They do not double-report: a
   // browser that understands `report-to` ignores `report-uri` when both are
@@ -100,9 +100,9 @@ const securityHeaders = [
     key: "Permissions-Policy",
     value: "camera=(), microphone=(), geolocation=()",
   },
-  // Defines the `csp-endpoint` group that `report-to` above refers to
-  // (SCRUM-283). Without this header that directive names nothing and is
-  // silently inert, which is the failure mode SCRUM-283 was filed about.
+  // Defines the `csp-endpoint` group that `report-to` above refers to.
+  // Without this header that directive names nothing and is
+  // silently inert.
   {
     key: "Reporting-Endpoints",
     value: `csp-endpoint="${CSP_REPORT_PATH}"`,

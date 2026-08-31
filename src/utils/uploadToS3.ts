@@ -23,7 +23,7 @@ export const PRESIGNED_UPLOAD_EXPIRY_SECONDS = 3600;
 
 /**
  * The headers the upload signature has to cover, and the reason this argument
- * exists at all (SCRUM-243).
+ * exists at all.
  *
  * `S3RequestPresigner.prepareRequest` unconditionally runs
  * `unsignableHeaders.add("content-type")`, so passing `ContentType` to
@@ -83,7 +83,7 @@ export const PRESIGNED_DOWNLOAD_EXPIRY_SECONDS = 3600;
 
 /**
  * A 404 from HeadObject is the normal answer for every user who has never
- * uploaded a picture, so it is not logged (SCRUM-242) - it used to produce a
+ * uploaded a picture, so it is not logged - it used to produce a
  * console.error per avatar per page view.
  *
  * Deliberately narrow: a 403 can also mean "key absent" when the caller lacks

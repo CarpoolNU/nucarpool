@@ -1,14 +1,14 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 
 /**
- * HTTP contract of the CSP report collector (SCRUM-283).
+ * HTTP contract of the CSP report collector.
  *
  * `cspReport.test.ts` covers the parsing and rate limiting. This covers the
  * edge: that the endpoint answers a browser the way a browser expects, that a
  * body it cannot use is still answered rather than erroring, and that an
  * unrecognized request never gets its own content echoed into the log.
  *
- * Deliberately NOT co-located with the handler it covers (SCRUM-269). Under
+ * Deliberately NOT co-located with the handler it covers. Under
  * src/pages/ a filename is also a route — Next's default `pageExtensions`
  * includes `.ts` — so a co-located `csp-report.test.ts` would ship as the
  * endpoint `/api/csp-report.test`. Same reason and same placement as

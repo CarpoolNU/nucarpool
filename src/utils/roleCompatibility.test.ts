@@ -6,8 +6,7 @@ import {
 
 /**
  * The predicate that used to be spread across `requests.me`,
- * `getUnreadMessageCount` and the recommendation scorer, now in one place
- * (SCRUM-296).
+ * `getUnreadMessageCount` and the recommendation scorer, now in one place.
  *
  * What matters here is that it agrees with discovery about which pairs are
  * possible - `recommendation.ts` drops RIDER/RIDER, DRIVER/DRIVER and any

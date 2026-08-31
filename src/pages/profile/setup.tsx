@@ -41,7 +41,7 @@ import {
 } from "../../utils/coordinates";
 
 // One direct session lookup, not a self-directed HTTP round trip to
-// `/api/auth/session` (SCRUM-299). `getSession` from `next-auth/react` is the
+// `/api/auth/session`. `getSession` from `next-auth/react` is the
 // *client* helper and was being called here; `getServerSession` reads the cookie
 // and queries directly, as `server/router/context.ts` already did.
 export async function getServerSideProps(context: GetServerSidePropsContext) {
@@ -155,7 +155,7 @@ const Setup: NextPage = () => {
   }, [setValue, watch, role]);
 
   /**
-   * Reports the address steps whose coordinates never resolved (SCRUM-302).
+   * Reports the address steps whose coordinates never resolved.
    *
    * The two `startAddress` / `companyAddress` form fields hold text, and that is
    * all `onboardSchema` can see. The coordinates live in the address hooks, and
@@ -218,7 +218,7 @@ const Setup: NextPage = () => {
     // Reported rather than swallowed, so the picture does not just fail to
     // appear with no explanation. Onboarding continues either way - a missing
     // picture is not worth blocking setup over, and it can be added later from
-    // the profile page (SCRUM-285).
+    // the profile page.
     if (selectedFile) {
       try {
         await uploadFile();
@@ -262,7 +262,7 @@ const Setup: NextPage = () => {
       ]);
       if (!isValid) return;
       // Typing an address is not the same as resolving one, and only the
-      // resolved point is usable for matching (SCRUM-302).
+      // resolved point is usable for matching.
       if (blockOnUnresolvedAddresses(role)) return;
     } else if (step === 3) {
       const valid = await trigger([

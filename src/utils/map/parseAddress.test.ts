@@ -76,7 +76,7 @@ describe("parseMapboxFeature", () => {
     expect(result.city).toBe("Mission Hill");
   });
 
-  describe("choosing the city by scope rather than by array position (SCRUM-265)", () => {
+  describe("choosing the city by scope rather than by array position", () => {
     // Mapbox orders context from smallest scope to largest - neighborhood,
     // postcode, place, district, region, country - so the first city-ish entry
     // is the least appropriate one. place is the city; locality and neighborhood

@@ -4,7 +4,7 @@ import { appRouter } from "./index";
 import type { Context } from "./context";
 
 /**
- * Input validation and upstream-call wiring for the Mapbox proxy (SCRUM-244).
+ * Input validation and upstream-call wiring for the Mapbox proxy.
  *
  * `mapboxUrls.test.ts` covers URL construction. What is left to get wrong here
  * is the procedure: forwarding the wrong field, accepting input the builder

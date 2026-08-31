@@ -1,5 +1,5 @@
 /**
- * Delete `Location` rows that no `CarpoolSearch` points at (SCRUM-232).
+ * Delete `Location` rows that no `CarpoolSearch` points at.
  *
  * `user.edit` used to "find or create" a Location by address text, so every
  * address change left the previous row behind and nothing ever deleted it.

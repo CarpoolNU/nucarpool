@@ -7,7 +7,7 @@ import { SendTemplatedEmailCommand } from "@aws-sdk/client-ses";
 import type { PrismaClient } from "@prisma/client";
 
 /**
- * Notification email (SCRUM-225).
+ * Notification email.
  *
  * These procedures used to take `senderName`, `senderEmail`, `receiverName`,
  * `receiverEmail` and the body straight from client input, so any signed-in
@@ -16,7 +16,7 @@ import type { PrismaClient } from "@prisma/client";
  *
  *  - the sender is `ctx.session.user.id`, looked up for its stored name/address;
  *  - the recipient is resolved from the referenced request, never from an
- *    address in the input, and never from a bare user id (SCRUM-270);
+ *    address in the input, and never from a bare user id;
  *  - the body comes from the stored `Message` row where one exists.
  *
  * The client therefore chooses *which* of its own conversations to notify about,
@@ -29,7 +29,7 @@ const MESSAGE_NOTIFICATION_COOLDOWN_MS = 5 * 60 * 1000;
 
 /**
  * A request notification announces a request that was *just* created, so it
- * only fires for a fresh one (SCRUM-270).
+ * only fires for a fresh one.
  *
  * This is the control that matters. Without it the procedure can be called
  * over and over for one long-lived request row, mailing the same person as
@@ -49,7 +49,7 @@ const REQUEST_NOTIFICATION_MAX_AGE_MS = 5 * 60 * 1000;
  * weaker than it looks: `user.requests.delete` removes the row, so a caller
  * willing to delete and re-create can reset the count. It raises the cost of
  * abuse rather than capping it. The control that would actually cap it needs
- * shared state this deployment does not have, tracked as SCRUM-277.
+ * shared state this deployment does not have.
  */
 const REQUEST_NOTIFICATION_WINDOW_MS = 60 * 60 * 1000;
 const REQUEST_NOTIFICATIONS_PER_WINDOW = 10;
@@ -176,7 +176,7 @@ export const emailsRouter = router({
    * Notifies the other party that the caller has requested to carpool with
    * them.
    *
-   * Takes the request being announced, not a bare user id (SCRUM-270). It used
+   * Takes the request being announced, not a bare user id. It used
    * to accept `toId` and mail whoever that named, checking only that the
    * caller was signed in and was not mailing themselves — and every
    * `PublicUser` the map and recommendations return carries a user id, so any
@@ -184,7 +184,7 @@ export const emailsRouter = router({
    *
    * The reason it worked that way was real at the time: the connect flow used
    * to send the mail *before* creating the request, so there was no request
-   * row to reference. SCRUM-234 reordered that, and the request now exists
+   * row to reference. That was reordered, and the request now exists
    * first, so this can verify the relationship the same way the other two
    * procedures do.
    */
@@ -344,21 +344,21 @@ export const emailsRouter = router({
    * Notifies the counterpart that the caller accepted their carpool request.
    *
    * Relies on the request row still existing after acceptance, which it does
-   * today only because accepting never resolves the request (SCRUM-228). If
+   * today only because accepting never resolves the request. If
    * that is fixed to delete the row, this lookup has to move ahead of it.
    *
-   * **Deliberately not rate limited** (SCRUM-270). The limit on
+   * **Deliberately not rate limited**. The limit on
    * `sendRequestNotification` above keys off `Request.dateCreated`, because a
    * request notification announces a brand new row. Acceptance has no
    * equivalent timestamp: nothing records that a request was accepted — that
-   * is the same SCRUM-228 gap — so there is nothing to measure freshness
+   * is the same gap — so there is nothing to measure freshness
    * against, and a window keyed on `dateCreated` would refuse to announce the
    * acceptance of a request made yesterday.
    *
    * The replay vector is real: a caller can invoke this repeatedly for one
-   * request. Two things would close it, neither belonging here — SCRUM-228
-   * resolving the request on acceptance, which removes the row and with it the
-   * window, or the shared rate-limit state in SCRUM-277.
+   * request. Two things would close it, neither belonging here — resolving
+   * the request on acceptance, which removes the row and with it the window,
+   * or shared rate-limit state across instances.
    */
   sendAcceptanceNotification: protectedRouter
     .input(z.object({ requestId: z.string() }).strict())
@@ -376,14 +376,13 @@ export const emailsRouter = router({
 
       assertDeliverable(recipient.email);
 
-      // The *recipient's* role, same as the request flow above (SCRUM-268).
-      // This used to pass the caller's role, preserved from what the client
-      // sent before SCRUM-225. Both acceptance templates are worded for the
-      // recipient and the two roles in a pair are complementary, so supplying
-      // the sender's role always selected the opposite template: a driver
-      // accepting a rider's request told the rider "…accepted your request for
-      // them to join your group", which describes the driver's side, not the
-      // rider's.
+      // The *recipient's* role, same as the request flow above. This used to
+      // pass the caller's role, preserved from what the client sent. Both
+      // acceptance templates are worded for the recipient and the two roles in
+      // a pair are complementary, so supplying the sender's role always
+      // selected the opposite template: a driver accepting a rider's request
+      // told the rider "…accepted your request for them to join your group",
+      // which describes the driver's side, not the rider's.
       const emailParams = generateEmailParams(
         {
           senderName: sender.name,

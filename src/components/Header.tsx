@@ -61,7 +61,7 @@ const MobileNav = styled.div`
 `;
 
 // A real <button>, not a div: this is the entire mobile navigation, and as a
-// div it was unreachable by keyboard (SCRUM-254). Tailwind's preflight already
+// div it was unreachable by keyboard. Tailwind's preflight already
 // makes buttons inherit font and drop their border, but this is styled-
 // components, so the resets are stated here.
 const MobileNavItem = styled.button<{ active: boolean }>`
@@ -156,7 +156,7 @@ const Header = (props: HeaderProps) => {
   // for its mobile instance and nothing for its desktop instance, so the desktop
   // header measured 768 while the page around it measured 640 - and every
   // viewport in between rendered the desktop layout with the mobile bottom
-  // navigation and no usable header (SCRUM-237).
+  // navigation and no usable header.
   const isMobile = useIsMobile();
 
   // Track if user is coming from profile page
@@ -165,7 +165,7 @@ const Header = (props: HeaderProps) => {
   // `props.data` is an object literal rebuilt by `Home` on every render — every
   // filter change, query settle, map event and hover — so depending on it made
   // the subscription effect below tear down and re-run continuously, opening a
-  // fresh WebSocket each time (SCRUM-238). Holding the setter in a ref lets that
+  // fresh WebSocket each time. Holding the setter in a ref lets that
   // effect depend on the user id alone.
   const setSidebarRef = useRef(props.data?.setSidebar);
   useEffect(() => {
@@ -177,9 +177,8 @@ const Header = (props: HeaderProps) => {
     if (!userId) return;
 
     // Shared client, created on first acquire and disconnected when the last
-    // holder releases it (SCRUM-238). Private channel: Pusher will not join it
-    // until /api/pusher/auth signs the subscription for this session
-    // (SCRUM-224).
+    // holder releases it. Private channel: Pusher will not join it
+    // until /api/pusher/auth signs the subscription for this session.
     const pusher = acquirePusherClient();
 
     const channelName = notificationChannel(userId);

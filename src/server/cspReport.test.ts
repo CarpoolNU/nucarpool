@@ -1,5 +1,5 @@
 /**
- * Parsing, sanitizing and rate limiting of CSP violation reports (SCRUM-283).
+ * Parsing, sanitizing and rate limiting of CSP violation reports.
  *
  * `cspReportEndpoint.test.ts` covers the HTTP contract around this. What is
  * covered here is the part that would fail silently in production: this endpoint

@@ -1,7 +1,7 @@
 import { getBaseUrl } from "./getBaseUrl";
 
 /**
- * `getBaseUrl` decides where tRPC sends its requests (SCRUM-310).
+ * `getBaseUrl` decides where tRPC sends its requests.
  *
  * The server-side branches are unreachable while `ssr: false` is set, so
  * nothing in the running app would notice if they regressed. That is exactly

@@ -1,6 +1,6 @@
 /**
  * Maximum lengths for the free text users type, defined once so the client and
- * the server agree (SCRUM-231).
+ * the server agree.
  *
  * Each value is the width of the column the text ends up in. That is the point:
  * these columns are `VARCHAR`, MySQL runs in strict mode, and an oversized
@@ -40,7 +40,7 @@ export const PROFILE_TEXT_MAX_LENGTH = 191;
  * `carpool_search.group_notes` — `VARCHAR(90)`.
  *
  * The driver's free-text note on their group ride preferences. 90 is what the
- * textarea has always allowed and what the column is now sized to (SCRUM-253);
+ * textarea has always allowed and what the column is now sized to;
  * before that the value went into a shared JSON blob and was silently sliced to
  * this length on the way in, whatever the user had typed.
  */

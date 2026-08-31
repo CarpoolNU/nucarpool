@@ -1,5 +1,5 @@
 /**
- * Backfill `Request.status` for pairs who are already carpooling (SCRUM-228).
+ * Backfill `Request.status` for pairs who are already carpooling.
  *
  * The new column defaults to `PENDING`, which is right for every row created
  * from now on but wrong for history: accepting a request never wrote anything,

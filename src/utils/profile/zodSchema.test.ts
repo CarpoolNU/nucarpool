@@ -173,7 +173,7 @@ describe("profileDefaultValues", () => {
   });
 });
 
-describe("onboardSchema — text bounded by its column (SCRUM-231)", () => {
+describe("onboardSchema — text bounded by its column", () => {
   // `companyName`, `preferredName`, `pronouns` and `bio` are all `VARCHAR(191)`.
   // The inputs cap typing and pasting; this catches anything set another way,
   // and turns an over-length value into a field error instead of a failed save.
@@ -201,9 +201,9 @@ describe("onboardSchema — text bounded by its column (SCRUM-231)", () => {
 /**
  * A reversed co-op range was accepted here and stored as submitted, which made
  * the user invisible to every full-overlap search with nothing on the form to
- * say so (SCRUM-302).
+ * say so.
  */
-describe("onboardSchema — co-op date ordering (SCRUM-302)", () => {
+describe("onboardSchema — co-op date ordering", () => {
   const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
 
   const withRange = (start: string, end: string) => ({
@@ -272,7 +272,7 @@ describe("onboardSchema — co-op date ordering (SCRUM-302)", () => {
     }
   });
 
-  it("leaves an overnight shift alone (SCRUM-302)", () => {
+  it("leaves an overnight shift alone", () => {
     // Deliberate: startTime/endTime are times of day, not a range, and
     // `minutesApart` measures them round the clock. A night shift finishing
     // before it started is legal.

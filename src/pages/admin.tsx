@@ -10,7 +10,7 @@ import { Permission } from "@prisma/client";
 import AdminData from "../components/Admin/AdminData";
 
 // One direct session lookup, not a self-directed HTTP round trip to
-// `/api/auth/session` (SCRUM-299). `getSession` from `next-auth/react` is the
+// `/api/auth/session`. `getSession` from `next-auth/react` is the
 // *client* helper and was being called here; `getServerSession` reads the cookie
 // and queries directly, as `server/router/context.ts` already did.
 export async function getServerSideProps(context: GetServerSidePropsContext) {

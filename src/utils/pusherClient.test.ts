@@ -1,5 +1,5 @@
 /**
- * Shared Pusher client lifecycle (SCRUM-238).
+ * Shared Pusher client lifecycle.
  *
  * Both subscriptions used to construct their own client inside a `useEffect`
  * and only `unsubscribe` on cleanup — never `disconnect` — so every
@@ -59,7 +59,7 @@ describe("acquirePusherClient", () => {
 
   it("subscribes through the auth endpoint, since both channels are private", async () => {
     // Without authEndpoint, pusher-js would use its own default and the
-    // private-channel subscriptions from SCRUM-224 would never be signed.
+    // private-channel subscriptions would never be signed.
     const { acquirePusherClient } = await load();
 
     acquirePusherClient();

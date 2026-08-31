@@ -118,7 +118,7 @@ const CarpoolSection = ({
         id="companyName"
         error={errors.companyName}
         type="text"
-        // Matches `company_name`'s `VARCHAR(191)` (SCRUM-231).
+        // Matches `company_name`'s `VARCHAR(191)`.
         charLimit={PROFILE_TEXT_MAX_LENGTH}
         {...register("companyName")}
       />

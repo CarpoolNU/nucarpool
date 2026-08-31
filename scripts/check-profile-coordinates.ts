@@ -1,5 +1,5 @@
 /**
- * Report `CarpoolSearch` rows that are silently unmatchable (SCRUM-302).
+ * Report `CarpoolSearch` rows that are silently unmatchable.
  *
  * `user.edit` used to accept any number as a coordinate and any pair of co-op
  * dates in any order. Neither is rejected by the columns — `coord_lat` /
@@ -13,7 +13,7 @@
  *   from there, so the row appears in no distance-filtered search.
  * - **Out-of-range coordinates.** Outside WGS 84 the same two functions return
  *   arbitrary answers rather than failing, and the `location_coord_lat_coord_lng_idx`
- *   bounding-box query added in SCRUM-245 is scanned for nothing.
+ *   bounding-box query is scanned for nothing.
  * - **Reversed co-op ranges.** `dateOverlapFilter`'s full-overlap branch wants
  *   `startDate <= theirs AND endDate >= theirs`, which no candidate satisfies
  *   once the two are crossed. The partial-overlap negation is arbitrary.

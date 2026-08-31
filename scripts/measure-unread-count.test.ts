@@ -9,15 +9,15 @@ import {
 } from "./measure-unread-count";
 
 /**
- * The reasoning behind the SCRUM-306 measurement, tested for the same reason as
- * `measure-candidate-rows.test.ts` and `measure-requests-payload.test.ts`: this
- * script's output is quoted in a ticket and in the db README as the evidence for
+ * The reasoning behind the unread-badge measurement, tested for the same reason
+ * as `measure-candidate-rows.test.ts` and `measure-requests-payload.test.ts`:
+ * this script's output is quoted in the db README as the evidence for
  * *not* adding an index, and a verdict function that reaches the comfortable
  * answer by accident is worse than no verdict at all.
  *
  * `summarisePlan` and `indexVerdict` carry the weight. Everything the script
  * concludes comes from those two, so they are tested against the plans the
- * database actually returned — before SCRUM-296 and after — rather than against
+ * database actually returned — before and after the fix — rather than against
  * invented ones.
  */
 
@@ -78,9 +78,9 @@ const CURRENT_PLAN: ExplainRow[] = [
 ];
 
 /**
- * The plan for the same query *before* SCRUM-296 removed the role predicate,
- * captured the same way. The two `DEPENDENT SUBQUERY` blocks are the difference
- * that mattered, and the reason the ticket's third criterion was worth acting on.
+ * The plan for the same query *before* the counterpart-role predicate was
+ * removed, captured the same way. The two `DEPENDENT SUBQUERY` blocks are the
+ * difference that mattered.
  */
 const LEGACY_PLAN: ExplainRow[] = [
   ...CURRENT_PLAN.map((r) => row({ ...r, select_type: "PRIMARY" })),
@@ -127,7 +127,7 @@ describe("summarisePlan", () => {
     expect(verdict.estimatedRowsExamined).toBe(4);
   });
 
-  it("flags the pre-SCRUM-296 plan for its dependent subqueries", () => {
+  it("flags the older plan for its dependent subqueries", () => {
     const verdict = summarisePlan(LEGACY_PLAN);
 
     // Not a scan anywhere - which is precisely why "no index on isRead" was

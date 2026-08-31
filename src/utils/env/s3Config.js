@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * Where profile pictures live (SCRUM-282).
+ * Where profile pictures live.
  *
  * The bucket and its region were hardcoded in four places — three commands in
  * `uploadToS3.ts` plus the S3 client, and twice more in `next.config.js`, once

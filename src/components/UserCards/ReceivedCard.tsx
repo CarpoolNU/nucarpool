@@ -19,9 +19,9 @@ export const ReceivedCard = (props: ReceivedCardProps): React.JSX.Element => {
   const user = useContext(UserContext);
 
   // The request stays in this list even when the pair can no longer carpool,
-  // so the card carries the reason (SCRUM-296).
+  // so the card carries the reason.
   //
-  // `user` **can** be a VIEWER here, as of SCRUM-316: the Requests tab used to
+  // `user` **can** be a VIEWER here: the Requests tab used to
   // render Viewer-mode copy in place of every card, which left a VIEWER unable
   // to withdraw a request they had sent. `isCounterpart` below is what lets the
   // name still show - withholding it would be pointless when the notice names
@@ -34,14 +34,14 @@ export const ReceivedCard = (props: ReceivedCardProps): React.JSX.Element => {
       )
     : null;
 
-  // The activation target is now `UserCard`'s own stretched <button>
-  // (SCRUM-279). This used to be a `role="button"` div wrapped *around*
+  // The activation target is now `UserCard`'s own stretched <button>.
+  // This used to be a `role="button"` div wrapped *around*
   // `UserCard`, which made the favourite star a focusable descendant of a
   // widget role — `nested-interactive` — and meant a click on the star bubbled
   // up here and opened the conversation as a side effect.
   //
   // `isCounterpart` is always true on a request card, so this resolves to the
-  // preferred name today for every reader including a VIEWER (SCRUM-316). It
+  // preferred name today for every reader including a VIEWER. It
   // still goes through `counterpartLabel` rather than reading `preferredName`
   // directly, so that if the disclosure rule ever narrows, the button's
   // `aria-label` narrows with it instead of quietly announcing a name the card

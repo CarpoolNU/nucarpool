@@ -275,7 +275,7 @@ describe("calculateScore", () => {
       ).toBe(true);
     });
 
-    it("reads 9:50 vs 10:00 as 10 minutes apart, not 110 (SCRUM-235)", () => {
+    it("reads 9:50 vs 10:00 as 10 minutes apart, not 110", () => {
       const current = rider({ startTime: at(9, 50), endTime: at(17) });
       const candidate = driver({ startTime: at(10, 0), endTime: at(17) });
 
@@ -545,7 +545,7 @@ describe("calculateScore", () => {
     });
   });
 
-  describe("distance measurement (SCRUM-236)", () => {
+  describe("distance measurement", () => {
     /**
      * Distance used to be `sqrt(dLat^2 + dLng^2) * 88`, which treats a degree of
      * longitude as covering the same ground as a degree of latitude. At Boston's
@@ -624,7 +624,7 @@ describe("calculateScore", () => {
       expect(companyApart).toBeCloseTo(homeApart! * 2);
     });
 
-    it("saturates the distance penalty at the 6 mile cutoff (SCRUM-236)", () => {
+    it("saturates the distance penalty at the 6 mile cutoff", () => {
       // Distance used to be added twice, once without a ceiling, so the penalty
       // kept climbing and a distant pair could outweigh every other factor.
       expect(score(rider(), driver({ home: milesNorth(3) }))).toBeCloseTo(0.1);
@@ -632,7 +632,7 @@ describe("calculateScore", () => {
       expect(score(rider(), driver({ home: milesNorth(12) }))).toBeCloseTo(0.2);
     });
 
-    it("never exceeds 1, the sum of the weights (SCRUM-236)", () => {
+    it("never exceeds 1, the sum of the weights", () => {
       const worst = score(
         rider(),
         driver({
@@ -705,7 +705,7 @@ describe("calculateScore", () => {
       ).toBeCloseTo(0.75);
     });
 
-    it("ranks an unrecorded schedule worst when sorting by time (SCRUM-236)", () => {
+    it("ranks an unrecorded schedule worst when sorting by time", () => {
       // Lower is better, so leaving this at 0 made a candidate with no schedule
       // the top result of a sort that is entirely about schedule.
       const unknown = score(
@@ -751,7 +751,7 @@ describe("calculateScore", () => {
       expect(result?.id).toBe("user-42");
     });
 
-    it("stays finite when the filter records no working days (SCRUM-236)", () => {
+    it("stays finite when the filter records no working days", () => {
       // `daysWorking: ""` is the initial filter state on the map page and is
       // never replaced for VIEWER accounts. `1 - 0/0` used to leak NaN into
       // every score, and NaN comparisons made the whole sort arbitrary.
@@ -801,8 +801,7 @@ describe("calculateScore", () => {
 });
 
 /**
- * `minutesApart` reads the stored clock and takes the short way round it
- * (SCRUM-297).
+ * `minutesApart` reads the stored clock and takes the short way round it.
  *
  * Two defects, both invisible to the suite as it stood:
  *
@@ -834,7 +833,7 @@ describe("calculateScore", () => {
  *  - `never reads a local-time accessor` closes the door structurally, in a
  *    single run: the host's zone cannot reach a result that never consults it.
  */
-describe("minutesApart (SCRUM-297)", () => {
+describe("minutesApart", () => {
   /** A schedule time exactly as Prisma returns one for a `@db.Time(0)`. */
   const stored = (clock: string) => new Date(`1970-01-01T${clock}:00Z`);
 
@@ -969,7 +968,7 @@ describe("minutesApart (SCRUM-297)", () => {
   });
 });
 
-describe("time filtering across midnight (SCRUM-297)", () => {
+describe("time filtering across midnight", () => {
   /**
    * The evening pair from the ticket, expressed the way the scorer receives it.
    * `at` builds UTC instants, so these are 23:30 and 00:30 stored - 7:30pm and

@@ -38,7 +38,7 @@ import UnsavedModal from "../../components/Profile/UnsavedModal";
 import useIsMobile from "../../utils/useIsMobile";
 
 // One direct session lookup, not a self-directed HTTP round trip to
-// `/api/auth/session` (SCRUM-299). `getSession` from `next-auth/react` is the
+// `/api/auth/session`. `getSession` from `next-auth/react` is the
 // *client* helper and was being called here; `getServerSession` reads the cookie
 // and queries directly, as `server/router/context.ts` already did.
 export async function getServerSideProps(context: GetServerSidePropsContext) {
@@ -201,7 +201,7 @@ const Index: NextPage = () => {
     // combobox only writes back to the form when a suggestion is chosen. So a
     // non-empty address can sit next to the `[0, 0]` the hook defaults to -
     // which used to be saved, putting the pin ~4000 miles out and dropping the
-    // row from every distance-filtered search (SCRUM-302). `user.edit` refuses
+    // row from every distance-filtered search. `user.edit` refuses
     // it now; this names the field instead of surfacing a Zod error in a toast.
     const unresolved = unresolvedAddressFields({
       role: values.role,
@@ -255,8 +255,7 @@ const Index: NextPage = () => {
     // A failed upload used to stop at the console, so the save below could
     // report success while the avatar silently stayed as it was. The failure is
     // carried down to the save result instead of aborting here, because the
-    // profile fields still save correctly when only the picture fails
-    // (SCRUM-285).
+    // profile fields still save correctly when only the picture fails.
     let pictureUploadFailed = false;
     if (selectedFile) {
       try {
@@ -290,7 +289,7 @@ const Index: NextPage = () => {
   };
   // Leaving the page is conditional on the save having been attempted at all.
   // The guard above returns without saving, and navigating away regardless would
-  // have discarded the field error it just set (SCRUM-302).
+  // have discarded the field error it just set.
   const onSubmitWithContinue: SubmitHandler<OnboardingFormInputs> = async (
     values,
   ) => {

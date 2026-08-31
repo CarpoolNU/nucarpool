@@ -1,6 +1,6 @@
 name: Schema
 
-# Trigger policy, shared by lint / tsc / test / build / env-contract / schema (SCRUM-248):
+# Trigger policy, shared by lint / tsc / test / build / env-contract / schema:
 #   pull_request     - gates every PR before it can merge into main
 #   push to main     - catches anything that reaches main by another route
 # Deliberately not `on: [push]`: while a PR is open that runs every check twice,
@@ -10,15 +10,15 @@ on:
   push:
     branches: [main]
 
-# `GITHUB_TOKEN` is scoped in the file rather than left to a repository setting
-# (SCRUM-309). Every scope not listed becomes `none`, and `contents: read` is all
+# `GITHUB_TOKEN` is scoped in the file rather than left to a repository setting.
+# Every scope not listed becomes `none`, and `contents: read` is all
 # `actions/checkout` needs - nothing here writes to the repository, comments, or
 # calls the API. `auto-comment.yml` is the one workflow that needs more, and
 # declares it on its own job.
 permissions:
   contents: read
 
-# One run per ref, and a superseded run is cancelled (SCRUM-309).
+# One run per ref, and a superseded run is cancelled.
 #
 # `github.ref` is `refs/pull/N/merge` for a `pull_request` and `refs/heads/main`
 # for a push, so two pushes to an open PR share a group and the older run is
@@ -29,12 +29,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# SCRUM-271. Nothing in CI read `prisma/migrations/` before this job, so a schema
-# change merged without a migration was invisible to every check - which is how
-# SCRUM-227 went unnoticed for five months. `tutorialCompleted` sat in
-# schema.prisma with no migration creating `tutorial_completed`, so any database
-# built from migration history alone failed every `User` query with P2022: no
-# sign-in, no account creation.
+# Nothing in CI read `prisma/migrations/` before this job, so a schema change
+# merged without a migration was invisible to every check. That happened: a
+# `tutorialCompleted` field sat in schema.prisma for months with no migration
+# creating `tutorial_completed`, so any database built from migration history
+# alone failed every `User` query with P2022 - no sign-in, no account creation.
 #
 # This job replays the committed migration history into a throwaway database and
 # fails if the result differs from schema.prisma in either direction.
@@ -54,8 +53,7 @@ jobs:
     # real MySQL to replay the migrations into, and it WIPES whatever it is
     # pointed at - which is why this is a service container that dies with the
     # job, and never a developer's database or a shared one. 8.0 matches the
-    # major version PlanetScale serves and the local docker-compose container
-    # (SCRUM-255).
+    # major version PlanetScale serves and the local docker-compose container.
     services:
       mysql:
         image: mysql:8.0

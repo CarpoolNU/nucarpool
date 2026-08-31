@@ -3,8 +3,8 @@ import { findGroupAnomalies } from "./check-driverless-groups";
 
 /**
  * The detection half of the group-integrity check, tested without a database.
- * Driverless and empty groups came from SCRUM-289; driver-only groups from
- * SCRUM-291, whose overwritten-membership bug is what leaves them behind.
+ * Driverless and empty groups come from a driver changing role or leaving;
+ * driver-only groups from the overwritten-membership bug that left them behind.
  *
  * Importing the module is safe because it only calls main() when run directly.
  */
@@ -72,7 +72,7 @@ describe("findGroupAnomalies", () => {
   });
 
   it("leaves a group with two drivers alone", () => {
-    // A separate invariant (SCRUM-291). Every management path still works, so
+    // A separate invariant. Every management path still works, so
     // folding it in here would bury the groups that are actually stuck.
     const { driverless, empty, solo } = findGroupAnomalies([
       group("two-drivers", [

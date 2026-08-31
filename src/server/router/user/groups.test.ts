@@ -10,7 +10,7 @@ import type { Context } from "../context";
 import { cloneState, withTransaction } from "../transactionMock";
 
 /**
- * Authorization tests for the carpool groups router (SCRUM-220).
+ * Authorization tests for the carpool groups router.
  *
  * Every mutation was `protectedRouter` and nothing more, so group and user ids
  * arrived straight from client input: any signed-in student could dissolve
@@ -18,8 +18,8 @@ import { cloneState, withTransaction } from "../transactionMock";
  * message. These tests pin the rule set the UI already implied — driver-only
  * delete/evict, riders may leave, joining needs a request.
  *
- * The driver's message is no longer among them: SCRUM-253 replaced the two
- * message mutations with `updatePreferences`, which writes only the caller's own
+ * The driver's message is no longer among them: the two message
+ * mutations were replaced by `updatePreferences`, which writes only the caller's own
  * search, so there is no shared row left for a rider to hijack.
  *
  * Same `createCaller` + mocked-Prisma approach as `favorites.test.ts`,
@@ -42,7 +42,7 @@ type SearchRow = {
   carpoolId: string | null;
   seatsAvail: number;
   groupMessage: string;
-  /** The SCRUM-253 preference columns. Null until a save writes all three. */
+  /** The preference columns. Null until a save writes all three. */
   groupNotes?: string | null;
   groupMusicPreference?: string | null;
   groupConversationStyle?: string | null;
@@ -101,9 +101,9 @@ const buildGroupsDb = (opts?: {
   );
   const requests = opts?.requests ?? [[DRIVER, RIDER_1]];
 
-  // Understands the `seatsAvail: { gt: n }` filter that `reserveSeat` relies on
-  // (SCRUM-229). Without it the mock matches on userId alone and the
-  // compare-and-swap can never fail, which would make the seat tests vacuous.
+  // Understands the `seatsAvail: { gt: n }` filter that `reserveSeat` relies
+  // on. Without it the mock matches on userId alone and the compare-and-swap
+  // can never fail, which would make the seat tests vacuous.
   const matches = (row: SearchRow, where: any = {}) => {
     if (where.userId !== undefined && row.userId !== where.userId) return false;
     if (where.carpoolId !== undefined && row.carpoolId !== where.carpoolId)
@@ -111,7 +111,7 @@ const buildGroupsDb = (opts?: {
     if (where.id !== undefined && row.id !== where.id) return false;
     // `edit` and `delete` both resolve a group's driver with `{ carpoolId,
     // role: DRIVER }`. Without role matching that lookup returns whichever
-    // member happens to be first, which would make the SCRUM-290 tests pass
+    // member happens to be first, which would make the seat-credit tests pass
     // against the unfixed code.
     if (where.role !== undefined && row.role !== where.role) return false;
 
@@ -136,8 +136,7 @@ const buildGroupsDb = (opts?: {
         .filter((r) => matches(r, where))
         .map((r) => ({ ...r, user: { id: r.userId } })),
     ),
-    // `edit` counts a group's members before letting its driver leave
-    // (SCRUM-289).
+    // `edit` counts a group's members before letting its driver leave.
     count: jest.fn(
       async ({ where }: any) =>
         searches.filter((r) => matches(r, where)).length,
@@ -150,7 +149,7 @@ const buildGroupsDb = (opts?: {
       if (data.seatsAvail?.decrement)
         row.seatsAvail -= data.seatsAvail.decrement;
       if (data.groupMessage !== undefined) row.groupMessage = data.groupMessage;
-      // The SCRUM-253 preference columns.
+      // The preference columns.
       if (data.groupNotes !== undefined) row.groupNotes = data.groupNotes;
       if (data.groupMusicPreference !== undefined)
         row.groupMusicPreference = data.groupMusicPreference;
@@ -200,7 +199,7 @@ const buildGroupsDb = (opts?: {
     }),
   };
 
-  // Seeded pairs start pending; `markRequestAccepted` moves them (SCRUM-228).
+  // Seeded pairs start pending; `markRequestAccepted` moves them.
   const requestStatus = new Map<string, RequestStatus>(
     requests.map(([a, b]) => [`${a}|${b}`, RequestStatus.PENDING]),
   );
@@ -227,8 +226,8 @@ const buildGroupsDb = (opts?: {
     }),
   };
 
-  // The groups mutations wrap their writes in `prisma.$transaction`
-  // (SCRUM-233), so the mock rolls back on a throw. Restoring in place matters:
+  // The groups mutations wrap their writes in `prisma.$transaction`,
+  // so the mock rolls back on a throw. Restoring in place matters:
   // the delegates above close over these exact references.
   const prisma = withTransaction(
     { carpoolSearch, carpoolGroup, request },
@@ -259,7 +258,7 @@ const buildGroupsDb = (opts?: {
     seatsOfSearch: (searchId: string) =>
       searches.find((r) => r.id === searchId)?.seatsAvail,
     messageOf: (id: string) => groups.get(id)?.message,
-    /** The SCRUM-253 preference columns on a user's own search. */
+    /** The preference columns on a user's own search. */
     preferencesOf: (userId: string) => {
       const row = searches.find((r) => r.userId === userId);
       return row
@@ -303,7 +302,7 @@ const callerFor = (session: Session | null, db = buildGroupsDb()) => {
 };
 
 /**
- * `groups.me` and the states that are not failures (SCRUM-241).
+ * `groups.me` and the states that are not failures.
  *
  * This query used to throw for two perfectly ordinary situations - NOT_FOUND
  * with no CarpoolSearch row, BAD_REQUEST with no group - so the client could not
@@ -773,7 +772,7 @@ describe("user.groups.create — only the two people involved", () => {
 });
 
 /**
- * Accepting a request resolves it (SCRUM-228).
+ * Accepting a request resolves it.
  *
  * Building the group used to leave the `Request` untouched, so it stayed pending
  * in both users' Requests tab forever and the duplicate guard in
@@ -921,7 +920,7 @@ describe("user.groups — authentication gate", () => {
   });
 });
 
-describe("seat accounting — deleting restores seats to the driver (SCRUM-229)", () => {
+describe("seat accounting — deleting restores seats to the driver", () => {
   it("credits the driver for every rider the group held", async () => {
     // Two riders were occupying two seats; the driver gets both back.
     const { caller, db } = callerFor(sessionFor(DRIVER));
@@ -948,7 +947,7 @@ describe("seat accounting — deleting restores seats to the driver (SCRUM-229)"
     // `findFirst({ where: { userId } })` with no group scoping, so with an
     // unrelated row ordered first the seats landed on the wrong row entirely —
     // reachable today, unlike the "rider deletes the group" case, which
-    // SCRUM-220 now prevents.
+    // the authorization rules now prevent.
     const db = buildGroupsDb({
       searches: [
         {
@@ -1220,7 +1219,7 @@ describe("seat accounting — normal joins and leaves", () => {
 });
 
 /**
- * Atomicity of the group mutations (SCRUM-233).
+ * Atomicity of the group mutations.
  *
  * Each of these writes to two or three tables. They used to be independent
  * awaits, so a failure part-way through committed the earlier writes and
@@ -1324,7 +1323,7 @@ describe("group mutations are atomic", () => {
   });
 
   it("edit-add returns the seat when linking the rider fails", async () => {
-    // Joining needs a request between the two (SCRUM-220), so the outsider
+    // Joining needs a request between the two, so the outsider
     // being added has one here.
     const db = buildGroupsDb({
       requests: [
@@ -1377,7 +1376,7 @@ describe("group mutations are atomic", () => {
 });
 
 /**
- * Dissolving a group is a success, not an error (SCRUM-281).
+ * Dissolving a group is a success, not an error.
  *
  * `edit` removes the group once a single member would be left, and then used to
  * fall through to a read of that same group — finding nothing, because it had
@@ -1458,7 +1457,7 @@ describe("edit — dissolving the group when one member is left", () => {
   });
 
   it("still credits the driver's seat", async () => {
-    // The seat accounting of SCRUM-229 must survive the early return.
+    // The seat accounting must survive the early return.
     const db = twoPersonGroup();
     const { caller } = callerFor(sessionFor(RIDER_1), db);
 
@@ -1510,7 +1509,7 @@ describe("edit — dissolving the group when one member is left", () => {
 });
 
 /**
- * A driver cannot walk out of a group and leave it unmanageable (SCRUM-289).
+ * A driver cannot walk out of a group and leave it unmanageable.
  *
  * `edit`'s dissolution rule only fires at one remaining member, so a driver
  * leaving a group of three or more leaves the group alive with no DRIVER in it.
@@ -1522,7 +1521,7 @@ describe("edit — dissolving the group when one member is left", () => {
  * Two members is the boundary and stays allowed: the group dissolves on the way
  * out, so nobody is stranded.
  */
-describe("user.groups.edit — a driver cannot strand the group (SCRUM-289)", () => {
+describe("user.groups.edit — a driver cannot strand the group", () => {
   it("refuses to let the driver leave a group of three", async () => {
     // Default fixture: DRIVER + RIDER_1 + RIDER_2 all in GROUP.
     const { caller, db } = callerFor(sessionFor(DRIVER));
@@ -1611,7 +1610,7 @@ describe("user.groups.edit — a driver cannot strand the group (SCRUM-289)", ()
 });
 
 /**
- * `groups.me` says whether the group has a driver (SCRUM-289).
+ * `groups.me` says whether the group has a driver.
  *
  * Preferences are read through the driver's own search, so a driverless group
  * produced four nulls - exactly what a driver who had saved nothing produces.
@@ -1622,7 +1621,7 @@ describe("user.groups.me — a driverless group is reported, not silently blank"
   const driverlessDb = () =>
     buildGroupsDb({
       searches: [
-        // The SCRUM-289 shape: the driver switched to RIDER and stayed in.
+        // The driverless shape: the driver switched to RIDER and stayed in.
         {
           id: "s-driver",
           userId: DRIVER,
@@ -1675,22 +1674,21 @@ describe("user.groups.me — a driverless group is reported, not silently blank"
 });
 
 /**
- * The seat credit on the remove path follows the group, not the client
- * (SCRUM-290).
+ * The seat credit on the remove path follows the group, not the client.
  *
  * `driverId` arrives from input and the remove path never checked it against
  * anything: the authorization block constrains `callerId` and `riderId` only.
  * So a rider leaving their own group could name any user at all and the seat
  * credit landed on that stranger's `carpool_search` row, while the group's real
  * driver was never credited and stayed under-counted for the rest of the
- * group's life. That is the cross-tenant write shape SCRUM-220 and SCRUM-223
- * were filed to remove, surviving in this one branch.
+ * group's life. That is the cross-tenant write shape the authorization work
+ * removed elsewhere, surviving in this one branch.
  *
  * Every pre-existing remove-path test passed the real `DRIVER`, which is why
- * SCRUM-220 and SCRUM-229 both touched this function without catching it. These
- * pass a foreign id on purpose.
+ * earlier work touched this function without catching it. These pass a foreign
+ * id on purpose.
  */
-describe("user.groups.edit — the seat credit follows the group (SCRUM-290)", () => {
+describe("user.groups.edit — the seat credit follows the group", () => {
   it("does not touch a foreign user's row when a rider names them", async () => {
     // OUTSIDER is in no group and has no seats. Under the bug they gained one.
     const { caller, db } = callerFor(sessionFor(RIDER_1));
@@ -1801,7 +1799,7 @@ describe("user.groups.edit — the seat credit follows the group (SCRUM-290)", (
   });
 
   it("lets a rider leave a driverless group instead of trapping them", async () => {
-    // A group already in the SCRUM-289 state has nobody to credit. Leaving one
+    // A group already in the driverless state has nobody to credit. Leaving one
     // at a time is the only way out for its riders, so the missing driver must
     // skip the credit rather than fail the removal.
     const { caller, db } = callerFor(
@@ -1851,11 +1849,11 @@ describe("user.groups.edit — the seat credit follows the group (SCRUM-290)", (
 });
 
 /**
- * One group per user, and a group's driver is a DRIVER (SCRUM-291).
+ * One group per user, and a group's driver is a DRIVER.
  *
  * Both were enforced only by `validateRequestAcceptance` in the client, against
- * `requests.me` data that can be stale. SCRUM-220's table established *who* may
- * call these mutations; it never established which states are legal, so the
+ * `requests.me` data that can be stale. The authorization table established
+ * *who* may call these mutations, never which states are legal, so the
  * server accepted all three of these:
  *
  *   - a rider already in another group being joined to a second one, which left
@@ -1863,13 +1861,13 @@ describe("user.groups.edit — the seat credit follows the group (SCRUM-290)", (
  *   - the same rider being added twice, which ran `reserveSeat` twice while the
  *     membership write did nothing, so the driver paid two seats for one rider;
  *   - two riders naming one of themselves as driver, producing a group with no
- *     DRIVER - the SCRUM-289 state.
+ *     DRIVER - the driverless state.
  *
  * The checks live inside the seat-reservation transaction, so a refusal cannot
  * leave a seat spent, and two concurrent accepts cannot both read "not in a
  * group" before either writes.
  */
-describe("user.groups.edit(add) — one group per rider (SCRUM-291)", () => {
+describe("user.groups.edit(add) — one group per rider", () => {
   it("refuses a rider who is already in another group, spending no seat", async () => {
     const db = buildGroupsDb({
       searches: [
@@ -1914,8 +1912,8 @@ describe("user.groups.edit(add) — one group per rider (SCRUM-291)", () => {
   });
 
   it("refuses a second add of the same rider, spending no second seat", async () => {
-    // `markRequestAccepted` resolves the request rather than deleting it
-    // (SCRUM-228), so `requireRequestBetween` keeps passing and this call used
+    // `markRequestAccepted` resolves the request rather than deleting it,
+    // so `requireRequestBetween` keeps passing and this call used
     // to succeed as a no-op that still cost a seat.
     const db = buildGroupsDb({
       searches: [
@@ -1989,7 +1987,7 @@ describe("user.groups.edit(add) — one group per rider (SCRUM-291)", () => {
   });
 });
 
-describe("user.groups.create — legal states only (SCRUM-291)", () => {
+describe("user.groups.create — legal states only", () => {
   /** Two users with a request between them and no group yet. */
   const pair = (opts: {
     driverRole?: Role;
@@ -2093,21 +2091,21 @@ describe("user.groups.create — legal states only (SCRUM-291)", () => {
 });
 
 /**
- * The double-click, replayed against the server (SCRUM-293).
+ * The double-click, replayed against the server.
  *
  * The Accept button had no in-flight guard, so two clicks fired two independent
- * mutations. Before SCRUM-291 the second one succeeded: it built a second group,
+ * mutations. The second one used to succeed: it built a second group,
  * took a second seat for the same rider, and left the first group as an orphan
  * nothing could reach.
  *
- * SCRUM-293 disables the button while the first call is running, which cannot be
+ * The button is disabled while the first call is running, which cannot be
  * asserted here - there are no component tests in this suite. What *can* be
  * asserted, and is the half that matters if a click still slips through, is that
  * the second call is now a clean rejection: no second group, no second seat, no
- * membership moved. These replay the exact sequence rather than the states
- * SCRUM-291's own tests set up directly.
+ * membership moved. These replay the exact sequence rather than setting the
+ * states up directly.
  */
-describe("a double-clicked Accept is refused the second time (SCRUM-293)", () => {
+describe("a double-clicked Accept is refused the second time", () => {
   it("creates one group and takes one seat, not two", async () => {
     const db = buildGroupsDb({
       searches: [
@@ -2197,9 +2195,9 @@ describe("a double-clicked Accept is refused the second time (SCRUM-293)", () =>
 });
 
 /**
- * The rider slot has to hold a RIDER (SCRUM-296).
+ * The rider slot has to hold a RIDER.
  *
- * SCRUM-291 above closed the driver slot: two riders with a request between them
+ * The checks above closed the driver slot: two riders with a request between them
  * could name one of themselves and build a group with no DRIVER in it. The
  * mirror image stayed open - two DRIVERs, whichever accepts, name the other as
  * the rider - and it is worse than it looks, because it passes every remaining
@@ -2212,7 +2210,7 @@ describe("a double-clicked Accept is refused the second time (SCRUM-293)", () =>
  * message that can name whose role moved; these pin the half that a stale cache
  * or a direct call cannot get around.
  */
-describe("the rider slot holds a rider (SCRUM-296)", () => {
+describe("the rider slot holds a rider", () => {
   /**
    * Two ungrouped users with a request between them, roles configurable.
    * `driverInGroup` puts the driver in `GROUP` already, which is the branch an
@@ -2352,7 +2350,7 @@ describe("the rider slot holds a rider (SCRUM-296)", () => {
 
   it("does not apply the check to the remove path", async () => {
     // Removing reads `riderId` as "the member leaving", and a member whose role
-    // has since changed still has to be able to get out - that is the SCRUM-296
+    // has since changed still has to be able to get out - that is the
     // dead end again, one layer down.
     const db = buildGroupsDb({
       searches: [

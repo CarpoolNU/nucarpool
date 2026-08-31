@@ -1,5 +1,5 @@
 /**
- * Mapbox request URLs (SCRUM-244).
+ * Mapbox request URLs.
  *
  * `mapbox.search` used to build its upstream URL by string concatenation with
  * the user's raw search text spliced into the path:

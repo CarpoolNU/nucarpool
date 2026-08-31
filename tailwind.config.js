@@ -66,7 +66,7 @@ module.exports = {
 
       // The mobile/desktop boundary the JavaScript uses, shared with
       // `useIsMobile` from one definition so the CSS and the layout logic cannot
-      // drift apart (SCRUM-237). Named for the side it turns on, since screens
+      // drift apart. Named for the side it turns on, since screens
       // are min-width: `desktop:` applies at this width and above.
       [DESKTOP_SCREEN_NAME]: `${MOBILE_BREAKPOINT_PX}px`,
       // => @media (min-width: 640px) { ... }

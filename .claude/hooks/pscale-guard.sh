@@ -1,5 +1,5 @@
 #!/bin/bash
-# PlanetScale production-write guard (SCRUM: PlanetScale agent hardening).
+# PlanetScale production-write guard.
 #
 # PreToolUse/Bash hook. Reads the tool-call JSON on stdin and blocks command
 # shapes that could mutate the PlanetScale production branch (`main`) or

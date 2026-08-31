@@ -71,7 +71,7 @@ const addMapEvents = (
   // `document.getElementById("fly").addEventListener(...)`. That reached outside
   // React's lifecycle: the listener was never removed, and it bound only if the
   // button happened to already be in the DOM when the map finished loading. The
-  // button now owns its own onClick (SCRUM-254).
+  // button now owns its own onClick.
 };
 
 export default addMapEvents;

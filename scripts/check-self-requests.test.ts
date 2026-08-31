@@ -1,7 +1,7 @@
 import { findSelfRequestIds } from "./check-self-requests";
 
 /**
- * The detection half of the SCRUM-278 check, tested without a database.
+ * The detection half of the check, tested without a database.
  *
  * Importing the module is safe because it only calls main() when run directly.
  */

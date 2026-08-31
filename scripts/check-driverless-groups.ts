@@ -1,5 +1,5 @@
 /**
- * Report `CarpoolGroup` rows that have no DRIVER member (SCRUM-289).
+ * Report `CarpoolGroup` rows that have no DRIVER member.
  *
  * A group's driver is the member whose `CarpoolSearch.role` is `DRIVER`. Every
  * management path depends on one existing: `requireGroupDriver` throws
@@ -23,9 +23,9 @@
  *
  * Three shapes are reported separately because they are not the same problem.
  * The file is named for the first, which it originally only reported; the third
- * arrived with SCRUM-291, whose overwritten-membership bug is what creates it:
+ * is created by the overwritten-membership bug:
  *
- *   - **Driverless with members.** The SCRUM-289 failure. The members are
+ *   - **Driverless with members.** The members are
  *     listed so someone can contact them; repair is either promoting one
  *     member's `CarpoolSearch.role` back to `DRIVER` or clearing `carpoolId`
  *     for all of them and deleting the group row.
@@ -35,7 +35,7 @@
  *     when a rider's membership was overwritten by a join elsewhere - the
  *     dissolve-at-one-member rule runs in the mutation that removed someone,
  *     and that was a different group. Safe to dissolve, but the same event also
- *     cost that driver a seat, which this script cannot see (SCRUM-291).
+ *     cost that driver a seat, which this script cannot see.
  *
  * Usage:
  *   npx ts-node scripts/check-driverless-groups.ts
@@ -57,7 +57,7 @@ export type GroupWithMembers = {
 };
 
 export type GroupAnomalies = {
-  /** Has members, none of them a DRIVER - the SCRUM-289 failure. */
+  /** Has members, none of them a DRIVER. */
   driverless: GroupWithMembers[];
   /** No members at all - a leaked row, not a stranded carpool. */
   empty: GroupWithMembers[];
@@ -100,7 +100,7 @@ export const findGroupAnomalies = (
     // member, but only inside the mutation that removed someone - so a rider
     // whose membership was overwritten by a join elsewhere left their old
     // group behind holding just its driver, with nothing to clean it up and
-    // the driver's seat never returned (SCRUM-291).
+    // the driver's seat never returned.
     if (group.members.length === 1) {
       solo.push(group);
     }

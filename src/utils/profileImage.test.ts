@@ -5,7 +5,7 @@ import {
 } from "./profileImage";
 
 /**
- * The client-side half of the profile picture constraints (SCRUM-243).
+ * The client-side half of the profile picture constraints.
  *
  * The server enforces the same two rules and its answer is the one that counts;
  * this exists so the upload screen can say why a file was refused instead of

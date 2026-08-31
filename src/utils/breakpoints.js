@@ -4,7 +4,7 @@
  * CommonJS on purpose. `tailwind.config.js` has to `require` this, and Tailwind's
  * config is not run through the TypeScript pipeline - so the value cannot live in
  * a `.ts` file if the CSS and the JavaScript are to share a single definition
- * rather than two numbers that happen to match (SCRUM-237).
+ * rather than two numbers that happen to match.
  *
  * Before this existed there were two thresholds: `useIsMobile` used 640 and
  * `Header` used 768, so every viewport between them rendered the desktop layout

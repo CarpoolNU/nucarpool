@@ -34,7 +34,7 @@ import {
 } from "../../utils/dateUtils";
 
 /**
- * Access rule for `getPresignedDownloadUrl`, decided under SCRUM-243:
+ * Access rule for `getPresignedDownloadUrl`:
  * **any signed-in user may read any user's profile picture.**
  *
  * This is deliberate, not an oversight. Avatars render in recommendations, on
@@ -110,7 +110,7 @@ export const userRouter = router({
       endTime: carpoolSearch?.endTime ?? null,
       coopStartDate: carpoolSearch?.startDate ?? null,
       coopEndDate: carpoolSearch?.endDate ?? null,
-      // Group ride preferences. Real columns since SCRUM-253; `groupMessage` is
+      // Group ride preferences. These are real columns; `groupMessage` is
       // carried alongside only so a row that has not been backfilled yet still
       // resolves through `resolveGroupDetails`.
       groupNotes: carpoolSearch?.groupNotes ?? null,
@@ -143,20 +143,19 @@ export const userRouter = router({
           status: z.nativeEnum(Status),
           seatAvail: z.number().int().min(0).max(MAX_SEATS_AVAILABLE),
           // `company_name`, `preferred_name`, `pronouns` and `bio` are all
-          // `VARCHAR(191)`, and every one of them was unbounded here (SCRUM-231).
+          // `VARCHAR(191)`, and every one of them was unbounded here.
           // The forms cap the two name fields and the bio, but nothing capped
           // `companyName` at all, so a pasted value over the width failed the
           // whole profile save inside Prisma instead of at the boundary.
           companyName: z.string().max(PROFILE_TEXT_MAX_LENGTH),
           companyAddress: z.string(),
           // This is the boundary that writes coordinates to `location`, and it
-          // range-checked none of them (SCRUM-302). The columns are plain
+          // range-checked none of them. The columns are plain
           // `Float`, so MySQL accepts any number, and `locationWithin` /
           // `milesBetween` then produce arbitrary answers rather than failing -
           // an out-of-range row is silently unmatchable and also skews the
-          // bounding-box query added in SCRUM-245. `getDirections` in
-          // `mapbox.ts` has enforced the same bounds since SCRUM-244; the two now
-          // share one definition.
+          // bounding-box query. `getDirections` in `mapbox.ts`
+          // enforces the same bounds; the two share one definition.
           companyCoordLng: longitudeSchema,
           companyCoordLat: latitudeSchema,
           startAddress: z.string(),
@@ -179,7 +178,7 @@ export const userRouter = router({
           companyState: z.string(),
         })
         // Two things `.max()` cannot express, both of which used to be stored
-        // as submitted and then fail silently at match time (SCRUM-302).
+        // as submitted and then fail silently at match time.
         //
         // They live on the input rather than in the resolver so a stale or
         // hand-rolled client gets the same answer as the form, and so the paths
@@ -233,7 +232,7 @@ export const userRouter = router({
       // profile fields saved against stale carpool data, or Location rows
       // written for a CarpoolSearch that was never created. `relationMode =
       // "prisma"` means the database rejects none of that, and there is no
-      // reconciliation job, so the inconsistency was permanent (SCRUM-233).
+      // reconciliation job, so the inconsistency was permanent.
       //
       // What this protects on the read side: `user.me` above spreads
       // `carpoolSearches[0]` and both its Locations onto one flat object, so it
@@ -249,7 +248,7 @@ export const userRouter = router({
             // `licenseSigned` is deliberately absent. Saving a profile is not
             // accepting the terms, and this procedure used to set it to true on
             // every save - so the field recorded "this user saved a profile"
-            // rather than "this user agreed" (SCRUM-240). Only `acceptTerms`
+            // rather than "this user agreed". Only `acceptTerms`
             // writes it now.
           },
         });
@@ -265,10 +264,10 @@ export const userRouter = router({
         // nobody can remove anybody or dissolve the group, and the riders'
         // shared preferences - read through the driver's own search - vanish.
         //
-        // SCRUM-125 added this as a toast in the profile page and the profile
+        // This was once a toast in the profile page and the profile
         // redesign deleted it; it was never server-side at all, so a direct
         // call always bypassed it. It lives here now because this is the only
-        // place the invariant cannot be routed around (SCRUM-289).
+        // place the invariant cannot be routed around.
         //
         // Throwing inside the transaction rolls back the `user.update` above.
         if (
@@ -285,8 +284,8 @@ export const userRouter = router({
         }
 
         // Home and company Locations belong to this CarpoolSearch and nobody
-        // else, so the coordinates just submitted are always what gets stored
-        // (SCRUM-232). This used to match an existing row on address text alone
+        // else, so the coordinates just submitted are always what gets stored.
+        // This used to match an existing row on address text alone
         // and reuse whatever coordinates that row already had.
         const { homeLocationId, companyLocationId } =
           await resolveOwnedLocations(tx, {
@@ -359,7 +358,7 @@ export const userRouter = router({
     }),
 
   /**
-   * Signs an upload URL for the caller's *own* profile picture (SCRUM-243).
+   * Signs an upload URL for the caller's *own* profile picture.
    *
    * The key is always derived from the session, never from input, so this cannot
    * be pointed at another user's object. What input controls is the type and the
@@ -410,8 +409,7 @@ export const userRouter = router({
       }
     }),
   /**
-   * Resolves `{ url: null }` for a user with no picture, never `undefined`
-   * (SCRUM-242).
+   * Resolves `{ url: null }` for a user with no picture, never `undefined`.
    *
    * React Query treats a query function that resolves `undefined` as a
    * failure ("... data is undefined"), and a query in the error state
@@ -420,7 +418,7 @@ export const userRouter = router({
    * so those users - the majority - were never cacheable and paid an S3
    * HeadObject on every avatar mount. `{ url: null }` is a cacheable success.
    *
-   * "No picture" is the only thing `{ url: null }` means (SCRUM-243). A session
+   * "No picture" is the only thing `{ url: null }` means. A session
    * carrying no user is not a picture-state, so it throws instead of borrowing
    * the same answer - that ambiguity was the point of the criterion, and it does
    * not touch the caching behaviour above, which is about successful lookups.
@@ -448,8 +446,8 @@ export const userRouter = router({
   /**
    * Records that the caller accepted the terms shown by `ComplianceModal`.
    *
-   * This is the only writer of `licenseSigned`. Before SCRUM-240 nothing wrote
-   * it on acceptance at all: the "I Agree" button fired a Mixpanel event and
+   * This is the only writer of `licenseSigned`. Nothing used to write it
+   * on acceptance at all: the "I Agree" button fired a Mixpanel event and
    * closed the dialog, and the flag was set as a side effect of `user.edit`.
    *
    * Note on reading the column: it is trustworthy as evidence of acceptance only

@@ -2,14 +2,14 @@
 "use strict";
 
 /**
- * Page-route hygiene check (SCRUM-269).
+ * Page-route hygiene check.
  *
- * Under src/pages/ a filename is also a URL. Next's default `pageExtensions`
- * is ["tsx", "ts", "jsx", "js"], so a co-located `auth.test.ts` is not a test
- * as far as Next is concerned - it is the route `/api/pusher/auth.test`, and
- * it gets compiled and shipped. That is exactly what happened in SCRUM-224:
- * the suite was built into .next/server/pages/api/pusher/auth.test.js, listed
- * in pages-manifest.json, and deployed.
+ * Under src/pages/ a filename is also a URL. Next's default `pageExtensions` is
+ * ["tsx", "ts", "jsx", "js"], so a co-located `auth.test.ts` is not a test as
+ * far as Next is concerned - it is the route `/api/pusher/auth.test`, and it
+ * gets compiled and shipped. That has happened here: a suite was built into
+ * .next/server/pages/api/pusher/auth.test.js, listed in pages-manifest.json,
+ * and deployed.
  *
  * Nothing caught it. `next build` compiles the file happily, `yarn test` reads
  * source and never looks at the route table, and `yarn lint` has no opinion

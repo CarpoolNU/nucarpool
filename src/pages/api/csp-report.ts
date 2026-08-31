@@ -7,7 +7,7 @@ import {
 } from "../../server/cspReport";
 
 /**
- * CSP violation collector (SCRUM-283).
+ * CSP violation collector.
  *
  * The destination named by `report-uri` and `Reporting-Endpoints` in
  * `next.config.js`. Browsers post here on their own initiative when the

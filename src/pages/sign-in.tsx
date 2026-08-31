@@ -9,7 +9,7 @@ import { trackEvent } from "../utils/mixpanel";
 import { browserEnv } from "../utils/env/browser";
 
 // One direct session lookup, not a self-directed HTTP round trip to
-// `/api/auth/session` (SCRUM-299). `getSession` from `next-auth/react` is the
+// `/api/auth/session`. `getSession` from `next-auth/react` is the
 // *client* helper and was being called here; `getServerSession` reads the cookie
 // and queries directly, as `server/router/context.ts` already did.
 export async function getServerSideProps(context: GetServerSidePropsContext) {
@@ -73,7 +73,7 @@ const SignIn: NextPage = () => {
             </div>
           </button>
           {/* Staging only, matching the provider list in [...nextauth].ts.
-              Both now read the same validated value (SCRUM-247), so the button
+              Both now read the same validated value, so the button
               and the provider behind it cannot disagree. */}
           {browserEnv.NEXT_PUBLIC_ENV === "staging" && (
             <button onClick={handleOnGoogleSignInClick}>

@@ -1,7 +1,8 @@
 /**
- * Measures what `user.requests.me` sends, before and after SCRUM-301.
+ * Measures what `user.requests.me` sends, before and after narrowing its
+ * message projection.
  *
- * The ticket asks for before/after row counts and payload size. Row counts and
+ * Row counts and payload size are the numbers that matter. Row counts and
  * payload size are **not** the same story here, and reporting only one of them
  * would misdescribe the change:
  *
@@ -305,7 +306,7 @@ const report = (
   console.log(
     `  per message          : ${Math.round(beforeBytes / Math.max(messages, 1))} B -> ${Math.round(afterBytes / Math.max(messages, 1))} B`,
   );
-  // SCRUM-317: the thread reads its own paginated procedure, so this payload
+  // The thread reads its own paginated procedure, so this payload
   // keeps one message per conversation instead of all of them.
   console.log(
     `  payload    bounded   : ${formatBytes(boundedBytes)}  (${boundedMessages} message(s), newest per conversation)`,

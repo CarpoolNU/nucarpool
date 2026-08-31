@@ -24,7 +24,7 @@ const ComplianceModal = dynamic(
  * enter the app.
  *
  * Mounted once in `_app`, because the previous arrangement put the modal on the
- * onboarding page alone (SCRUM-240). An already-onboarded user with no consent
+ * onboarding page alone. An already-onboarded user with no consent
  * recorded is redirected past `/profile/setup` by `index.tsx`'s
  * `getServerSideProps`, so they never saw the terms - and their next profile save
  * set the flag anyway. Mounting per-page would leave the same gap open for any

@@ -6,7 +6,7 @@ import { inferRouterOutputs } from "@trpc/server";
 
 type RouterOutput = inferRouterOutputs<AppRouter>;
 /**
- * Admin dashboard shapes (SCRUM-246).
+ * Admin dashboard shapes.
  *
  * The dashboard no longer downloads tables and reduces them in the browser; the
  * router returns finished aggregates instead. These describe that contract.
@@ -143,7 +143,7 @@ export type PublicUser = {
   name: string | null;
   /**
    * Present only when the viewer already has a relationship with this user -
-   * the same carpool group, or a request between them (SCRUM-292).
+   * the same carpool group, or a request between them.
    *
    * Optional rather than nullable-and-always-set on purpose: the bulk list
    * endpoints shipped every active user's Northeastern address to any signed-in
@@ -179,7 +179,7 @@ export type Request = {
   id: string;
   message: string;
   /**
-   * PENDING until the request is accepted, ACCEPTED afterwards (SCRUM-228).
+   * PENDING until the request is accepted, ACCEPTED afterwards.
    * Declining deletes the row, so there is no third state. An ACCEPTED request
    * is kept because the pair's conversation hangs off it.
    */
@@ -235,7 +235,7 @@ export type User = {
   coopEndDate: Date | null;
   carpoolId: string | null;
   /**
-   * Group ride preferences (SCRUM-253). Real columns; null in all three means
+   * Group ride preferences. Real columns; null in all three means
    * the row predates the migration, which is what makes `resolveGroupDetails`
    * fall back to `groupMessage`.
    */

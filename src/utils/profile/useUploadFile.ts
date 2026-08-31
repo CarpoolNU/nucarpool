@@ -37,7 +37,7 @@ export const useUploadFile = (selectedFile: File | null) => {
     // selected and the caller asked for it to be uploaded, so returning quietly
     // here would leave the caller reporting a success that never happened. The
     // query is enabled at this point, so reaching this means it errored or has
-    // not resolved yet (SCRUM-285).
+    // not resolved yet.
     if (!presignedData?.url) {
       throw new Error(
         "Could not prepare the profile picture upload. Please try again.",
@@ -46,7 +46,7 @@ export const useUploadFile = (selectedFile: File | null) => {
 
     // Content-Type has to match what the server signed, and the browser sets
     // Content-Length from the body — both are in the signature now, so S3
-    // rejects the request if either one disagrees (SCRUM-243).
+    // rejects the request if either one disagrees.
     const response = await fetch(presignedData.url, {
       method: "PUT",
       headers: {
@@ -64,7 +64,7 @@ export const useUploadFile = (selectedFile: File | null) => {
     // stale bytes. S3 PUTs are read-after-write consistent, so refetching
     // here is enough - this is what the 600ms timer in useProfileImage was
     // standing in for, and unlike the timer it also updates avatars mounted
-    // elsewhere on the page, such as the header (SCRUM-242).
+    // elsewhere on the page, such as the header.
     await invalidateProfileImage();
   };
 

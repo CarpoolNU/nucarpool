@@ -1,11 +1,11 @@
 /**
  * The driver's group preferences.
  *
- * Extracted from `GroupPage.tsx` (SCRUM-252), where four components each held
+ * Extracted from `GroupPage.tsx`, where four components each held
  * their own copy of the parse/serialise/state wiring. Pure functions live here
  * so they can be unit tested; the React wiring is in `useGroupDetails.ts`.
  *
- * These are real columns on the driver's `CarpoolSearch` now (SCRUM-253).
+ * These are real columns on the driver's `CarpoolSearch` now.
  * Everything below about `GROUP_DETAILS_V1:` is a **read path for rows that
  * have not been backfilled yet** and nothing writes that encoding any more.
  * Once `scripts/backfill-group-preferences.ts` has run in every environment and
@@ -26,14 +26,14 @@ export type GroupDetails = {
 
 /**
  * Marks a legacy value as the JSON encoding rather than a plain-text message.
- * Read-only: no code writes this prefix any more (SCRUM-253).
+ * Read-only: no code writes this prefix any more.
  */
 export const GROUP_DETAILS_PREFIX = "GROUP_DETAILS_V1:";
 
 /**
  * Re-exported under the name the form already uses. The values live in
  * `textLimits.ts` so the Zod input on the server and the textarea here cannot
- * drift from the column widths (SCRUM-253).
+ * drift from the column widths.
  */
 export const NOTES_MAX_LENGTH = GROUP_NOTES_MAX_LENGTH;
 
@@ -67,9 +67,8 @@ export const conversationStyleOptions = [
 /**
  * Clamps stored values to the column widths. **Read path only.**
  *
- * This used to run on the way *in* as well, which is the silent truncation
- * SCRUM-253 is about: whatever the user had typed was sliced to fit with no
- * indication. Writes use `trimDetails` and let the Zod input reject an
+ * This used to run on the way *in* as well, which truncated silently:
+ * whatever the user had typed was sliced to fit with no indication. Writes use `trimDetails` and let the Zod input reject an
  * over-length value, so the user hears about it.
  *
  * Clamping on read still matters, because a corrupt legacy blob surfaces as raw
@@ -88,7 +87,7 @@ export const normalizeDetails = (details: GroupDetails): GroupDetails => ({
  *
  * Deliberately does not clamp: the textarea already bounds what can be typed, so
  * an over-length value reaching here is a bug, and the server rejecting it with
- * a visible error beats this function hiding it (SCRUM-253, AC 5).
+ * a visible error beats this function hiding it.
  */
 export const trimDetails = (details: GroupDetails): GroupDetails => ({
   notes: details.notes.trim(),
@@ -111,7 +110,7 @@ export const parseGroupDetails = (message?: string | null): GroupDetails => {
       ) as Partial<GroupDetails>;
 
       // Unknown keys are dropped rather than preserved, which is how the
-      // retired `rideVibe` field (SCRUM-252) disappears from a row: it is
+      // retired `rideVibe` field disappears from a row: it is
       // ignored on read, and the next save writes the value back without it.
       return normalizeDetails({
         notes: parsed.notes ?? "",
@@ -120,8 +119,8 @@ export const parseGroupDetails = (message?: string | null): GroupDetails => {
       });
     } catch {
       // A corrupt blob still surfaces raw in the note field, prefix included -
-      // better visible than discarded. It *is* clamped now, unlike before
-      // SCRUM-253: the form has to hold a value the column can accept, or the
+      // better visible than discarded. It *is* clamped, because
+      // the form has to hold a value the column can accept, or the
       // driver would be unable to save at all until they trimmed text they
       // never wrote.
       return normalizeDetails({ ...DEFAULT_GROUP_DETAILS, notes: message });
@@ -139,12 +138,12 @@ export type StoredGroupPreferences = {
   groupNotes?: string | null;
   groupMusicPreference?: string | null;
   groupConversationStyle?: string | null;
-  /** The pre-SCRUM-253 column, read only when the three above are all null. */
+  /** The legacy column, read only when the three above are all null. */
   groupMessage?: string | null;
 };
 
 /**
- * The single read path every screen uses (SCRUM-253).
+ * The single read path every screen uses.
  *
  * `NoGroupSection` used to read `user.groupMessage` while `GroupSection` read
  * `group.message`, so a driver could see different preferences depending on

@@ -81,7 +81,7 @@ export const favoritesRouter = router({
     .input(
       z
         .object({
-          // The owning user is deliberately absent from this input (SCRUM-223).
+          // The owning user is deliberately absent from this input.
           // It used to be a client-supplied `userId` that was passed straight to
           // `where`, which let any signed-in caller edit anyone else's favorites.
           // The owner now comes from the session and cannot be influenced by the

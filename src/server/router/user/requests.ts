@@ -7,7 +7,7 @@ import { convertCarpoolSearchToPublicWithExactHome } from "../../../utils/public
 import { MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
 
 /**
- * The message columns a conversation is actually read through (SCRUM-301).
+ * The message columns a conversation is actually read through.
  *
  * This was `include: { User: true }`, which attached the author's whole `User`
  * row to every message - `email`, `bio`, `permission`, and `image`, a
@@ -29,7 +29,7 @@ import { MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
  * message, but `Message` in `utils/types.ts` declares it required, so it is kept
  * for one string rather than letting the wire shape drift from the type.
  *
- * **Bounded to one message (SCRUM-317).** This used to return the whole history
+ * **Bounded to one message.** This used to return the whole history
  * of every conversation, because the open thread read it too and bounding it
  * would have been silent truncation. The thread now loads from
  * `user.messages.conversation`, which is paginated and participant-scoped, so
@@ -60,7 +60,7 @@ export const requestsRouter = router({
    * Every request either side of the caller, with the newest message of each
    * pair's conversation.
    *
-   * **Message history is now bounded (SCRUM-317).** It was not, and the reason
+   * **Message history is now bounded.** It was not, and the reason
    * is worth keeping: one query fed two consumers with different needs — the
    * Requests tab, which wants only the newest message per card
    * (`getLatestMessageForRequest`), and the open thread, which renders the whole
@@ -68,12 +68,12 @@ export const requestsRouter = router({
    * scrollback from the one consumer that needed it.
    *
    * The thread now reads `user.messages.conversation` instead, which is
-   * paginated and — unlike `messages.getMessages`, removed in SCRUM-222 for
+   * paginated and — unlike `messages.getMessages`, removed for
    * taking a bare conversation id — authorizes against the request row. With
    * the two consumers separated, this one can return the single row the cards
    * use, which is what `take: 1` above does.
    *
-   * SCRUM-301 had already made each message cheap, dropping a whole `User` row
+   * Narrowing the projection had already made each message cheap, dropping a whole `User` row
    * per message. That was the larger factor by far; this removes what was left
    * of the linear growth. `scripts/measure-requests-payload.ts` measures both.
    */
@@ -212,7 +212,7 @@ export const requestsRouter = router({
     });
 
     // Role compatibility governs discovery, not a relationship that already
-    // exists (SCRUM-296).
+    // exists.
     //
     // These two filters used to also drop any request whose counterpart's role
     // matched the caller's, or was VIEWER - the predicate f9a5b1a introduced
@@ -242,7 +242,7 @@ export const requestsRouter = router({
     .input(
       z
         .object({
-          // The sender is deliberately absent from this input (SCRUM-221). It
+          // The sender is deliberately absent from this input. It
           // used to be a client-supplied `fromId` that became the request's
           // `fromUser`, so any signed-in caller could send a request that
           // appeared to come from someone else. The sender now comes from the
@@ -250,7 +250,7 @@ export const requestsRouter = router({
           // re-added `fromId` a BAD_REQUEST rather than a silently ignored field.
           toId: z.string(),
           // This becomes the conversation's first `Message`, so it is bound by
-          // `message.content`'s `VARCHAR(255)` like any other (SCRUM-231).
+          // `message.content`'s `VARCHAR(255)` like any other.
           // Deliberately not `.min(1)`: ConnectModal's textarea starts empty
           // and its Send button never required text, so sending a bare request
           // is an existing flow rather than an oversight to close here.
@@ -268,7 +268,7 @@ export const requestsRouter = router({
       }
       // A request to yourself is not something the UI can produce — ConnectModal
       // opens from someone else's card — but `toId` is client input on a
-      // mutation any signed-in caller can reach (SCRUM-278). The duplicate
+      // mutation any signed-in caller can reach. The duplicate
       // guard below cannot catch it: for a self-request both halves of its OR
       // are the same pair, so the first one always passes and the row is
       // created, along with a Conversation and an initial Message.
@@ -282,9 +282,9 @@ export const requestsRouter = router({
       // A request is only useful if both people can be notified, and this is
       // now the only place that is knowable: `email` has been removed from the
       // payloads the client builds this call from, because they shipped every
-      // active user's address to every signed-in viewer (SCRUM-292).
-      // ConnectModal used to hold this check alone, which also meant a caller
-      // reaching the procedure directly skipped it entirely.
+      // active user's address to every signed-in viewer. ConnectModal used to
+      // hold this check alone, which also meant a caller reaching the procedure
+      // directly skipped it entirely.
       const contacts = await ctx.prisma.user.findMany({
         where: { id: { in: [userId, input.toId] } },
         select: { id: true, email: true },
@@ -304,7 +304,7 @@ export const requestsRouter = router({
 
       // Two people already carpooling together have nothing to request of each
       // other, and a request between them would be a second way to describe a
-      // relationship the group already records (SCRUM-228).
+      // relationship the group already records.
       const searches = await ctx.prisma.carpoolSearch.findMany({
         where: { userId: { in: [userId, input.toId] } },
         select: { userId: true, carpoolId: true },
@@ -346,7 +346,7 @@ export const requestsRouter = router({
 
       // An accepted request the pair have since left behind. Reopening it,
       // rather than adding a second row, is what lets two people who once
-      // carpooled together do so again (SCRUM-228). It also keeps the pair to
+      // carpooled together do so again. It also keeps the pair to
       // one Request row for good: `extendPublicUser` picks the request for a
       // user with `.find()`, so a second row would make which conversation the
       // UI shows arbitrary.
@@ -388,7 +388,7 @@ export const requestsRouter = router({
       // message are one unit. These used to be four independent awaits, which
       // could leave a request with no conversation, or a conversation never
       // linked back to its request — and `relationMode = "prisma"` rejects
-      // neither, so the half-built thread persisted (SCRUM-233).
+      // neither, so the half-built thread persisted.
       //
       // The link is stored twice, in both directions: `Conversation.requestId`
       // and `Request.conversationId`. Nothing in the schema keeps those two in
@@ -435,7 +435,7 @@ export const requestsRouter = router({
         });
       });
 
-      // Returned so the caller has an id to announce (SCRUM-270). This used to
+      // Returned so the caller has an id to announce. This used to
       // return nothing, which is why ConnectModal had to notify by `toId` and
       // the email procedure had to accept a bare user id.
       return request;
@@ -469,7 +469,7 @@ export const requestsRouter = router({
 
       // Both parties may clear a request: the sender withdraws it, the
       // recipient declines it (`handleRejectRequest` in requestHandlers.ts).
-      // Before SCRUM-221 there was no check at all, so any signed-in user could
+      // There used to be no check at all, so any signed-in user could
       // delete strangers' pending requests out of their Requests tab.
       if (invitation.fromUserId !== userId && invitation.toUserId !== userId) {
         throw new TRPCError({

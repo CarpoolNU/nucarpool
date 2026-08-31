@@ -1,5 +1,5 @@
 /**
- * Backfill the group preference columns from the legacy blob (SCRUM-253).
+ * Backfill the group preference columns from the legacy blob.
  *
  * `carpool_search.group_notes`, `group_music_preference` and
  * `group_conversation_style` replace a `GROUP_DETAILS_V1:` JSON string that was

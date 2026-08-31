@@ -32,7 +32,7 @@ export const mapboxRouter = router({
   /**
    * Address autocomplete, proxied so the Mapbox token stays server-side.
    *
-   * The input is deliberately narrow (SCRUM-244): the caller chooses the
+   * The input is deliberately narrow: the caller chooses the
    * search text and which of two categories to search, and nothing else.
    * `autocomplete`, `country` and `proximity` used to be sent by the client
    * and interpolated straight into the upstream URL, along with a
@@ -168,7 +168,7 @@ export const mapboxRouter = router({
       }
 
       // Bounded candidate query plus scoring, shared with
-      // `user.recommendations.me` (SCRUM-245). The two used to hold separate
+      // `user.recommendations.me`. The two used to hold separate
       // copies of this, each reading every ACTIVE row.
       const sortedSearches = await fetchRankedCandidates({
         prisma: ctx.prisma,
@@ -178,7 +178,7 @@ export const mapboxRouter = router({
         excludedUserIds,
         // Guarded for the same reason as the `sentRequests` branch above: the
         // `favorites` include is `input.favorites`, and Prisma omits the key
-        // rather than returning [] when an include is false (SCRUM-288).
+        // rather than returning [] when an include is false.
         favoriteUserIds: input.favorites ? favorites.map((f) => f.id) : [],
       });
 
@@ -220,8 +220,8 @@ export const mapboxRouter = router({
         // Array of tuples containing longitude and latitude. Bounded so a
         // single call cannot ask Mapbox for an arbitrarily long route, and
         // range-checked so nonsense coordinates are rejected here rather than
-        // forwarded (SCRUM-244). The bounds moved to `utils/coordinates.ts` when
-        // `user.edit` needed the same ones (SCRUM-302).
+        // forwarded. The bounds moved to `utils/coordinates.ts` when
+        // `user.edit` needed the same ones.
         points: z
           .array(z.tuple([longitudeSchema, latitudeSchema]))
           .min(MAPBOX_DIRECTIONS_MIN_POINTS)

@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * Test environment bootstrap (SCRUM-211).
+ * Test environment bootstrap.
  *
  * `src/utils/env/{browser,server}.ts` validate with envsafe at import time, so any
  * suite that reaches `serverEnv` — directly, or transitively through `appRouter` —

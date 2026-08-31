@@ -1,5 +1,5 @@
 /**
- * Driver seat availability (SCRUM-229).
+ * Driver seat availability.
  *
  * `CarpoolSearch.seatsAvail` is the number of seats a driver still has free. It
  * starts as the capacity they enter during onboarding and is decremented as

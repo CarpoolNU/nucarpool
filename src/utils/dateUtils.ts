@@ -10,8 +10,7 @@ import { OnboardingFormInputs } from "./types";
  * UTC date out of whatever `Date` it is given. Building the day in local time
  * with `new Date(year, month, 0)` therefore stored the day before whenever the
  * user sat at a positive UTC offset: picking March in Berlin produced midnight
- * local, which is 23:00 UTC on 30 March, so the column recorded the 30th
- * (SCRUM-239).
+ * local, which is 23:00 UTC on 30 March, so the column recorded the 30th.
  *
  * Constructing the day in UTC makes the stored date the same everywhere.
  */
@@ -57,13 +56,13 @@ const formatDateToMonth = (date: Date | null): string | undefined => {
 
 /**
  * Message for a co-op range whose end falls before its start. Shared so the
- * form and `user.edit` say the same thing (SCRUM-302).
+ * form and `user.edit` say the same thing.
  */
 export const COOP_DATE_ORDER_MESSAGE =
   "End date cannot be before the start date";
 
 /**
- * True when a co-op range runs backwards (SCRUM-302).
+ * True when a co-op range runs backwards.
  *
  * A reversed range is accepted by every column involved and then fails silently
  * at match time: `dateOverlapFilter`'s full-overlap branch asks for

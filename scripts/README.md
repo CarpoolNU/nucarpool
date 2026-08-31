@@ -1,6 +1,6 @@
 # `scripts/`
 
-Operational scripts, and the record of what has been run where (SCRUM-307).
+Operational scripts, and the record of what has been run where.
 
 Everything here is run by hand against a real database. Nothing in CI invokes
 the `.ts` scripts, and nothing schedules them.
@@ -21,8 +21,8 @@ Node 22, per [`.nvmrc`](../.nvmrc). `ts-node` comes from `node_modules`, so
 
 Deliberate. These are one-shot tools meant to be **retired** once applied
 everywhere (see [Retiring a script](#retiring-a-script)). A `package.json` entry
-per script would recreate exactly the mess SCRUM-249 cleaned up — seven entries
-pointing at files deleted long before. The explicit `npx ts-node` path also
+per script would recreate a mess this repository has already had once — seven
+entries pointing at files deleted long before. The explicit `npx ts-node` path also
 keeps `--apply` visible at the call site rather than hidden behind an alias.
 
 ## The scripts
@@ -33,11 +33,11 @@ All three are dry-run by default, refuse to proceed past a `--max` ceiling
 (default 500), and update or delete one row at a time by primary key so a
 partial run leaves a consistent database. Re-running any of them is a no-op.
 
-| Script                                                             | What it does                                                                                 | Origin    |
-| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- | --------- |
-| [`backfill-group-preferences.ts`](./backfill-group-preferences.ts) | Moves the legacy `GROUP_DETAILS_V1:` blob out of `group_message` into the three real columns | SCRUM-253 |
-| [`backfill-request-status.ts`](./backfill-request-status.ts)       | Sets `Request.status = ACCEPTED` for pairs who already share a `carpoolId`                   | SCRUM-228 |
-| [`cleanup-orphan-locations.ts`](./cleanup-orphan-locations.ts)     | Deletes `Location` rows no `CarpoolSearch` points at                                         | SCRUM-232 |
+| Script                                                             | What it does                                                                                 |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| [`backfill-group-preferences.ts`](./backfill-group-preferences.ts) | Moves the legacy `GROUP_DETAILS_V1:` blob out of `group_message` into the three real columns |
+| [`backfill-request-status.ts`](./backfill-request-status.ts)       | Sets `Request.status = ACCEPTED` for pairs who already share a `carpoolId`                   |
+| [`cleanup-orphan-locations.ts`](./cleanup-orphan-locations.ts)     | Deletes `Location` rows no `CarpoolSearch` points at                                         |
 
 Neither backfill exists as a Prisma migration on purpose: `prisma/migrations/`
 is never applied to PlanetScale, so a data migration would be dead text in the
@@ -49,21 +49,21 @@ These write nothing. Pointing them at production is safe, and several are only
 meaningful there — a developer's local database holds too little data to say
 anything.
 
-| Script                                                           | What it reports                                                       | Origin    |
-| ---------------------------------------------------------------- | --------------------------------------------------------------------- | --------- |
-| [`check-self-requests.ts`](./check-self-requests.ts)             | `Request` rows whose two ends are the same user                       | SCRUM-278 |
-| [`check-driverless-groups.ts`](./check-driverless-groups.ts)     | `CarpoolGroup` rows with no `DRIVER` member                           | SCRUM-289 |
-| [`check-profile-coordinates.ts`](./check-profile-coordinates.ts) | Searches unmatchable via `(0, 0)` coordinates or reversed co-op dates | SCRUM-302 |
-| [`measure-candidate-rows.ts`](./measure-candidate-rows.ts)       | Rows read by the explore page's candidate query                       | SCRUM-245 |
-| [`measure-requests-payload.ts`](./measure-requests-payload.ts)   | Rows and payload bytes for `user.requests.me`                         | SCRUM-301 |
-| [`measure-unread-count.ts`](./measure-unread-count.ts)           | Query plan, generated SQL and timings for the unread badge            | SCRUM-306 |
+| Script                                                           | What it reports                                                       |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------- |
+| [`check-self-requests.ts`](./check-self-requests.ts)             | `Request` rows whose two ends are the same user                       |
+| [`check-driverless-groups.ts`](./check-driverless-groups.ts)     | `CarpoolGroup` rows with no `DRIVER` member                           |
+| [`check-profile-coordinates.ts`](./check-profile-coordinates.ts) | Searches unmatchable via `(0, 0)` coordinates or reversed co-op dates |
+| [`measure-candidate-rows.ts`](./measure-candidate-rows.ts)       | Rows read by the explore page's candidate query                       |
+| [`measure-requests-payload.ts`](./measure-requests-payload.ts)   | Rows and payload bytes for `user.requests.me`                         |
+| [`measure-unread-count.ts`](./measure-unread-count.ts)           | Query plan, generated SQL and timings for the unread badge            |
 
 `measure-unread-count.ts` is the odd one out: its useful output is the
 `EXPLAIN` plan, not its timings. Access types describe the shape of the work
 rather than its current size, so the plan is worth reading against a local
 database while the timings are not. For production numbers, PlanetScale
 Insights is the authority and needs no script at all — that is where the
-figures in [the db README](../src/server/db/README.md#the-unread-badge-the-measurement-and-why-no-index-was-added-scrum-306)
+figures in [the db README](../src/server/db/README.md#the-unread-badge-the-measurement-and-why-no-index-was-added)
 came from, because direct production reads return `403` (see below).
 
 The three `check-*` scripts exit `0` when clean and `1` when not, so they can
@@ -73,11 +73,11 @@ only the affected user knows which one they want. They report and stop.
 
 ### Not operational scripts
 
-| File                                               | What it is                                                                   |
-| -------------------------------------------------- | ---------------------------------------------------------------------------- |
-| [`check-env-contract.js`](./check-env-contract.js) | CI: `yarn check:env`, and the source of the placeholder build environment    |
-| [`check-page-routes.js`](./check-page-routes.js)   | CI: `yarn check:routes` and the `build` job's manifest assertion (SCRUM-269) |
-| [`emailtemplate.py`](./emailtemplate.py)           | **Mutates AWS.** Creates and updates the SES templates the app sends         |
+| File                                               | What it is                                                                |
+| -------------------------------------------------- | ------------------------------------------------------------------------- |
+| [`check-env-contract.js`](./check-env-contract.js) | CI: `yarn check:env`, and the source of the placeholder build environment |
+| [`check-page-routes.js`](./check-page-routes.js)   | CI: `yarn check:routes` and the `build` job's manifest assertion          |
+| [`emailtemplate.py`](./emailtemplate.py)           | **Mutates AWS.** Creates and updates the SES templates the app sends      |
 
 `*.test.ts` files next to each script cover the argument parsing and the pure
 planning half, and run in `yarn test`. A passing suite says nothing about what
@@ -97,17 +97,17 @@ A zero outstanding count therefore means _"nothing left to do"_, **not**
 _"it was run"_ — a script that never had candidates and a script applied
 successfully look identical.
 
-| Script                       | local | staging           | production  | Last verified | By        |
-| ---------------------------- | ----- | ----------------- | ----------- | ------------- | --------- |
-| `backfill-group-preferences` | —     | **3 outstanding** | **unknown** | 2026-08-31    | SCRUM-307 |
-| `backfill-request-status`    | —     | 0 outstanding     | **unknown** | 2026-08-31    | SCRUM-307 |
-| `cleanup-orphan-locations`   | —     | 0 outstanding     | **unknown** | 2026-08-31    | SCRUM-307 |
-| `check-self-requests`        | —     | 0 findings        | **unknown** | 2026-08-31    | SCRUM-307 |
-| `check-driverless-groups`    | —     | **1 finding**     | **unknown** | 2026-08-31    | SCRUM-307 |
-| `check-profile-coordinates`  | —     | 0 findings¹       | **unknown** | 2026-08-31    | SCRUM-307 |
+| Script                       | local | staging           | production  | Last verified | By            |
+| ---------------------------- | ----- | ----------------- | ----------- | ------------- | ------------- |
+| `backfill-group-preferences` | —     | **3 outstanding** | **unknown** | 2026-08-31    | initial audit |
+| `backfill-request-status`    | —     | 0 outstanding     | **unknown** | 2026-08-31    | initial audit |
+| `cleanup-orphan-locations`   | —     | 0 outstanding     | **unknown** | 2026-08-31    | initial audit |
+| `check-self-requests`        | —     | 0 findings        | **unknown** | 2026-08-31    | initial audit |
+| `check-driverless-groups`    | —     | **1 finding**     | **unknown** | 2026-08-31    | initial audit |
+| `check-profile-coordinates`  | —     | 0 findings¹       | **unknown** | 2026-08-31    | initial audit |
 
 ¹ 521 rider searches sit at `(0, 0)`, but none belongs to an onboarded user, so
-the script does not count them — see the SCRUM-302 comment thread.
+the script does not count them.
 
 **Production is `unknown` for every row, and not for lack of trying.** Read
 queries against the PlanetScale `main` branch return `403 Permission denied`
@@ -118,15 +118,14 @@ cell above is an open question, not a zero.**
 
 ### Two findings worth acting on
 
-1. **`backfill-group-preferences` is not finished on staging — 3 rows.** This is
-   the blocker for **SCRUM-287**, which drops `carpool_search.group_message` and
-   is only safe once the backfill has been applied _everywhere_. While those
-   rows exist, `resolveGroupDetails`'s legacy fallback is the only thing keeping
-   their preferences readable, so dropping the column would lose data. SCRUM-287
-   cannot be closed on the strength of this file.
+1. **`backfill-group-preferences` is not finished on staging — 3 rows.** This
+   blocks dropping `carpool_search.group_message`, which is only safe once the
+   backfill has been applied _everywhere_. While those rows exist,
+   `resolveGroupDetails`'s legacy fallback is the only thing keeping their
+   preferences readable, so dropping the column would lose data.
 2. **One driverless `CarpoolGroup` on staging.** Expected rather than alarming:
-   SCRUM-289's guards are not retroactive, which is why the check exists. Worth
-   a look, and there is no automatic repair by design.
+   the guards against it are not retroactive, which is why the check exists.
+   Worth a look, and there is no automatic repair by design.
 
 ### Re-checking without running the scripts
 
@@ -194,10 +193,10 @@ hold:
    or is being removed in the same change.
 
 Then delete the script, its `*.test.ts`, and its row above, and say in the
-commit message which environments were verified and when. `backfill-group-preferences.ts`
-is the worked example: SCRUM-287 removes it, the legacy columns, and
-`resolveGroupDetails`'s fallback together — and cannot proceed until point 1
-holds, which today it does not.
+commit message which environments were verified and when.
+`backfill-group-preferences.ts` is the worked example: retiring it means
+removing the script, the legacy columns, and `resolveGroupDetails`'s fallback
+together — and that cannot proceed until point 1 holds, which today it does not.
 
 Read-only `check-*` and `measure-*` scripts are cheaper to keep than to
 re-derive. Retire those only when the thing they measure is gone.

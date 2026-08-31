@@ -1,7 +1,7 @@
 import { SendTemplatedEmailCommandInput } from "@aws-sdk/client-ses";
 
 /**
- * Template selection (SCRUM-268).
+ * Template selection.
  *
  * All four request/acceptance templates in `scripts/emailtemplate.py` are
  * written in the second person and addressed to `{{preferredName}}`, which is

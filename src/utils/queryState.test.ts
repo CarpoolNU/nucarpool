@@ -1,7 +1,7 @@
 import { QueryLike, combineQueryStates, toQueryState } from "./queryState";
 
 /**
- * SCRUM-241: every page destructured `data` alone, so a failed query looked
+ * Every page used to destructure `data` alone, so a failed query looked
  * exactly like an empty result - and on the map page like a load that never
  * finished. These tests pin the collapse from a React Query result to the three
  * states the UI renders differently, which is the part that decides whether a

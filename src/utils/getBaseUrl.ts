@@ -12,7 +12,7 @@
  * correct anyway, because the cost of being wrong here is paid by whoever
  * enables SSR later rather than by the change that broke it.
  *
- * `VERCEL_URL` used to be consulted here (SCRUM-310). The app deploys on AWS
+ * `VERCEL_URL` used to be consulted here. The app deploys on AWS
  * Amplify, where that variable is never set, so the branch was dead **and** the
  * fallback meant a deployed server-side call would have silently targeted
  * `http://localhost:3000` — a failure that would read as a network problem

@@ -6,7 +6,7 @@ import { roleMismatchExplanation } from "./roleCompatibility";
 
 interface RequestHandlers {
   /**
-   * Resolves `true` only when the request was actually accepted (SCRUM-293).
+   * Resolves `true` only when the request was actually accepted.
    *
    * The caller sends the acceptance email and closes the conversation, and both
    * are things that must not happen for an accept that was refused - the
@@ -26,7 +26,7 @@ interface RequestHandlers {
   /**
    * True while any of the three mutations is in flight, so the buttons that
    * trigger them can be disabled. Matches `useGroupMembership`'s flag of the
-   * same name (SCRUM-293).
+   * same name.
    */
   isMutating: boolean;
 }
@@ -49,7 +49,7 @@ export const createRequestHandlers = (
   // Neither of these reports its own failure. `handleAcceptRequest` below
   // catches it instead, because the interesting failures here are the server's
   // membership refusals, and "Something went wrong: ..." framed a rule the user
-  // can act on as if the app had broken (SCRUM-291).
+  // can act on as if the app had broken.
   const { mutateAsync: editGroupAsync, isLoading: isEditingGroup } =
     trpc.user.groups.edit.useMutation({
       onSuccess: () => {
@@ -75,9 +75,8 @@ export const createRequestHandlers = (
   /**
    * A fast pre-check, no longer the thing that enforces these rules.
    *
-   * It reads `requests.me` data that can be stale - the whole of failure
-   * scenario A in SCRUM-291 is a driver whose cache predates the rider joining
-   * somebody else's group - so `groups.create` and `groups.edit` now establish
+   * It reads `requests.me` data that can be stale - the worst case being a
+   * driver whose cache predates the rider joining somebody else's group - so `groups.create` and `groups.edit` now establish
    * the same invariants inside the transaction that reserves the seat. This
    * stays because it is instant and can name the other user, which a server
    * message cannot.
@@ -88,7 +87,7 @@ export const createRequestHandlers = (
   ): boolean => {
     // A request whose two parties can no longer carpool now reaches this
     // button: `requests.me` stopped hiding those, because hiding one did not
-    // stop it blocking new requests (SCRUM-296). It cannot be accepted - the
+    // stop it blocking new requests. It cannot be accepted - the
     // group it would build has two drivers or no driver - and the branches
     // below would misread it, because each treats "I am not a DRIVER" as
     // "they are".
@@ -164,7 +163,7 @@ export const createRequestHandlers = (
   };
 
   /**
-   * `request` is unused, and deliberately so (SCRUM-228).
+   * `request` is unused, and deliberately so.
    *
    * Resolving the request is not the client's job: `groups.create` and
    * `groups.edit` mark it accepted inside the same transaction that writes the
@@ -187,7 +186,7 @@ export const createRequestHandlers = (
       // The server is the authority on whether this join is legal, so its
       // refusal is shown as written rather than relabelled. Catching here also
       // stops the success toast below from firing on a failed accept, and stops
-      // the rejection escaping as an unhandled one (SCRUM-291).
+      // the rejection escaping as an unhandled one.
       toast.error(
         error instanceof Error
           ? error.message
@@ -213,7 +212,7 @@ export const createRequestHandlers = (
     } catch {
       // `deleteRequest` already raised the toast. Swallowed here so a failed
       // delete does not also claim success below, and does not escape as an
-      // unhandled rejection (SCRUM-293).
+      // unhandled rejection.
       return;
     }
 

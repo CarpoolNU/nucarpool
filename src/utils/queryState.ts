@@ -1,6 +1,6 @@
 /**
  * Collapses a React Query result into the three states the UI actually renders
- * differently (SCRUM-241).
+ * differently.
  *
  * Every page used to destructure `data` alone, usually with an empty default:
  *

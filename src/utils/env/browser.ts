@@ -3,7 +3,7 @@ import { bool, envsafe, makeValidator, str } from "envsafe";
 /**
  * Which deployment this build is. The values are an allow-list rather than a
  * free string because this is the most consequential variable in the app and it
- * was the only one not validated at all (SCRUM-247):
+ * was the only one not validated at all:
  *
  *  - `staging` enables the Google provider in `[...nextauth].ts`, renders the
  *    Google button in `sign-in.tsx`, and restricts email recipients to

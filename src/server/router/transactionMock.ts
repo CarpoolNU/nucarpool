@@ -1,6 +1,5 @@
 /**
- * `$transaction` for the hand-rolled Prisma mocks in the router tests
- * (SCRUM-233).
+ * `$transaction` for the hand-rolled Prisma mocks in the router tests.
  *
  * The router tests drive `appRouter.createCaller` against an in-memory fake
  * whose delegates mutate plain arrays and Maps. Once the procedures under test

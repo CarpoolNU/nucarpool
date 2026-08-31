@@ -25,7 +25,7 @@ interface SidebarContentProps {
   /**
    * Whether the list behind this tab loaded. Without it an empty
    * `userCardList` meant three different things - loading, failed, and genuinely
-   * empty - and all three rendered the same "no results" copy (SCRUM-241).
+   * empty - and all three rendered the same "no results" copy.
    */
   loadState: QueryState;
   onViewRouteClick: (user: User, otherUser: PublicUser) => void;
@@ -45,7 +45,7 @@ const emptyMessages = {
   /**
    * A VIEWER with no requests at all. The non-Viewer copy below points at the
    * recommendations sidebar, which is the one place Viewer mode genuinely does
-   * block, so it would be misdirection here (SCRUM-316).
+   * block, so it would be misdirection here.
    */
   viewerNoRequests: `You have no incoming or outgoing requests.
   Viewer mode does not show recommendations, so switch to Rider or Driver in your profile to find people to carpool with.`,
@@ -249,7 +249,7 @@ export const SidebarContent = (props: SidebarContentProps) => {
             `viewerModeHidesCards` is what this used to test inline as
             `subType !== "favorites"`, which swept up the three Requests tabs
             and left a VIEWER unable to reach - or withdraw - a request they had
-            already sent (SCRUM-316). Requests now fall through to the card
+            already sent. Requests now fall through to the card
             list; only recommendations are replaced by copy. */}
         {props.disabled && viewerModeHidesCards(props.subType) ? (
           <div className="m-4 text-center text-lg font-light">

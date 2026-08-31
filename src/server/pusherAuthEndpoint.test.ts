@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 
 /**
- * HTTP contract of the Pusher auth endpoint (SCRUM-224).
+ * HTTP contract of the Pusher auth endpoint.
  *
  * `pusherChannelAuth.test.ts` covers the authorization decision itself. This
  * covers the endpoint around it — that an unauthenticated or unauthorized
@@ -11,7 +11,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
  * `next-auth`, the Prisma client and the Pusher server client are all mocked,
  * so no session store, database or Pusher credential is touched.
  *
- * Deliberately NOT co-located with the handler it covers (SCRUM-269). Every
+ * Deliberately NOT co-located with the handler it covers. Every
  * other test in this repository sits next to its module, but under
  * src/pages/ a filename is also a route: Next's default `pageExtensions`
  * includes `.ts`, so `auth.test.ts` was compiled and shipped as
