@@ -1,7 +1,7 @@
 import { countRows, reduction } from "./measure-candidate-rows";
 
 /**
- * The arithmetic behind the SCRUM-245 measurement, tested because a measurement
+ * Tested because a measurement
  * that quietly counts wrong is worse than no measurement.
  */
 describe("countRows", () => {

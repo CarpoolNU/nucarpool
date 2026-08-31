@@ -2,7 +2,7 @@ import { findCandidates, parseArgs } from "./backfill-group-preferences";
 import { GROUP_DETAILS_PREFIX } from "../src/components/Group/groupDetails";
 
 /**
- * The SCRUM-253 backfill. The property worth pinning hardest is that writing
+ * The property worth pinning hardest is that writing
  * needs `--apply`: everything else here is recoverable, a stray write to
  * production is not.
  */

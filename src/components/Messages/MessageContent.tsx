@@ -33,7 +33,7 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
   );
 
   /**
-   * The thread's own paginated source (SCRUM-317).
+   * The thread's own paginated source.
    *
    * This used to read `request.conversation.messages`, which arrived inside
    * `user.requests.me` and carried the complete history of *every* conversation
@@ -100,9 +100,8 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
     if (!requestId) return;
 
     // Shared client, created on first acquire and disconnected when the last
-    // holder releases it (SCRUM-238). Private channel: Pusher will not join it
+    // holder releases it. Private channel: Pusher will not join it
     // until /api/pusher/auth signs the subscription for this session
-    // (SCRUM-224).
     const pusher = acquirePusherClient();
 
     const channelName = conversationChannel(requestId);
@@ -236,7 +235,7 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
   return (
     <div className="flex h-full flex-1 flex-col overflow-y-auto overflow-x-hidden bg-white p-4">
       {/* Older history is fetched on request rather than shipped with every
-          Requests-tab load (SCRUM-317). Rendered only when the server said
+          Requests-tab load. Rendered only when the server said
           another page exists, so a short thread shows nothing at all. */}
       {threadQuery.hasNextPage && (
         <div className="mb-2 flex justify-center">
@@ -254,7 +253,7 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
       )}
       {messagesByDate.map(({ date, messages }, dateIndex) => (
         // React keys must be strings or numbers; `date` is a Date (and typed
-        // nullable), so it was being coerced on every render (SCRUM-254).
+        // nullable), so it was being coerced on every render.
         <div key={date ? date.toISOString() : `group-${dateIndex}`}>
           <div className="text-md my-2 text-center text-gray-500">
             {date ? format(date, "EEEE, MMMM d, yyyy") : ""}

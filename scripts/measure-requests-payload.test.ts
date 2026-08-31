@@ -8,7 +8,7 @@ import {
 } from "./measure-requests-payload";
 
 /**
- * The arithmetic behind the SCRUM-301 measurement, tested for the same reason as
+ * The arithmetic behind measurement, tested for the same reason as
  * `measure-candidate-rows.test.ts`: a measurement that quietly counts wrong is
  * worse than no measurement, and this one is quoted in the ticket and the PR.
  */

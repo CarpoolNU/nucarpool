@@ -225,7 +225,7 @@ export const buildPayloads = (
   }));
 
   /**
-   * What SCRUM-317 actually sends: the narrow selection **and** only the newest
+   * The narrow selection **and** only the newest
    * message per conversation, because the open thread now loads from
    * `user.messages.conversation` instead of riding along here.
    *
@@ -328,7 +328,7 @@ const runSynthetic = () => {
   };
 
   console.log(
-    "synthetic: the scenario from SCRUM-301, no database required.\n" +
+    "synthetic: no database required.\n" +
       "Row shapes are representative, not measured - see syntheticUser above.\n",
   );
   report("10 conversations x 60 messages", rows, userById);
