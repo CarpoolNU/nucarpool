@@ -224,7 +224,21 @@ export const buildPayloads = (
     messages: row.messages.map(narrowMessage),
   }));
 
-  return { before, after };
+  /**
+   * What SCRUM-317 actually sends: the narrow selection **and** only the newest
+   * message per conversation, because the open thread now loads from
+   * `user.messages.conversation` instead of riding along here.
+   *
+   * The rows are built oldest-first, so the newest is the last one. This is the
+   * shape that stops the payload growing with history at all — `after` above is
+   * smaller per message but still linear in the number of messages.
+   */
+  const bounded = rows.map((row) => ({
+    ...row,
+    messages: row.messages.slice(-1).map(narrowMessage),
+  }));
+
+  return { before, after, bounded };
 };
 
 const formatBytes = (bytes: number): string => {
@@ -261,9 +275,14 @@ const report = (
     joins: { messageAuthors: false, counterparts: false },
   });
 
-  const { before, after } = buildPayloads(rows, userById);
+  const { before, after, bounded } = buildPayloads(rows, userById);
   const beforeBytes = serializedBytes(before);
   const afterBytes = serializedBytes(after);
+  const boundedBytes = serializedBytes(bounded);
+  const boundedMessages = bounded.reduce(
+    (sum, row) => sum + row.messages.length,
+    0,
+  );
 
   console.log(label);
   console.log(
@@ -285,6 +304,17 @@ const report = (
   );
   console.log(
     `  per message          : ${Math.round(beforeBytes / Math.max(messages, 1))} B -> ${Math.round(afterBytes / Math.max(messages, 1))} B`,
+  );
+  // SCRUM-317: the thread reads its own paginated procedure, so this payload
+  // keeps one message per conversation instead of all of them.
+  console.log(
+    `  payload    bounded   : ${formatBytes(boundedBytes)}  (${boundedMessages} message(s), newest per conversation)`,
+  );
+  console.log(
+    `  bounded vs before    : ${reduction(beforeBytes, boundedBytes)}% fewer bytes`,
+  );
+  console.log(
+    `  bounded vs narrowed  : ${reduction(afterBytes, boundedBytes)}% fewer bytes`,
   );
   console.log();
 };

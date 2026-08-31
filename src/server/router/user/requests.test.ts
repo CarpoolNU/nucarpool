@@ -1208,13 +1208,36 @@ describe("user.requests.me - what it asks the database for (SCRUM-301)", () => {
     }
   });
 
-  it("still orders a thread oldest first, which the renderer depends on", async () => {
+  it("asks for the newest message only, not the thread (SCRUM-317)", async () => {
+    // This asserted `{ dateCreated: "asc" }` and no `take`, on the grounds that
+    // "the renderer depends on it". The renderer no longer reads this payload:
+    // `MessageContent` loads the open thread from
+    // `user.messages.conversation`, which is paginated and participant-scoped.
+    //
+    // What is left reading these messages is the card list, and it wants one
+    // row — the newest, for the preview text and the unread dot. `desc` is
+    // load-bearing rather than cosmetic: with `take: 1`, `asc` would keep the
+    // *oldest* message and every card would preview the first thing ever said.
     const include = await includeArg();
 
     for (const side of ["sentRequests", "receivedRequests"] as const) {
       const messages = include[side].include.conversation.include.messages;
 
-      expect(messages.orderBy).toEqual({ dateCreated: "asc" });
+      expect(messages.orderBy).toEqual({ dateCreated: "desc" });
+      expect(messages.take).toBe(1);
+    }
+  });
+
+  it("bounds the payload so it cannot grow with message history", async () => {
+    // The property that matters, stated independently of how it is achieved: a
+    // pair with 500 messages must not transfer 500 rows to render one card.
+    const include = await includeArg();
+
+    for (const side of ["sentRequests", "receivedRequests"] as const) {
+      const messages = include[side].include.conversation.include.messages;
+
+      expect(typeof messages.take).toBe("number");
+      expect(messages.take).toBeLessThanOrEqual(1);
     }
   });
 

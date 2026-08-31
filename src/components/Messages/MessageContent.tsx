@@ -32,8 +32,39 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
     [selectedUser.incomingRequest, selectedUser.outgoingRequest],
   );
 
-  const [conversationMessages, setConversationMessages] = useState(
-    request?.conversation?.messages || [],
+  /**
+   * The thread's own paginated source (SCRUM-317).
+   *
+   * This used to read `request.conversation.messages`, which arrived inside
+   * `user.requests.me` and carried the complete history of *every* conversation
+   * on every mount. That payload is now bounded to one message per card, so the
+   * thread has to fetch its own — which also means it is no longer refetched
+   * wholesale every time the user navigates back to `/`.
+   *
+   * "Next page" is *older*, because the procedure returns newest-first. Pages
+   * are concatenated newest-page-first, so flattening walks backwards through
+   * history and has to be reversed per page to end up in render order.
+   */
+  const threadQuery = trpc.user.messages.conversation.useInfiniteQuery(
+    { requestId: request?.id ?? "" },
+    {
+      enabled: !!request?.id,
+      getNextPageParam: (lastPage) => lastPage.nextCursor,
+      refetchOnMount: "always",
+    },
+  );
+
+  const fetchedMessages = useMemo(
+    () =>
+      (threadQuery.data?.pages ?? [])
+        .slice()
+        .reverse()
+        .flatMap((page) => page.messages),
+    [threadQuery.data?.pages],
+  );
+
+  const [conversationMessages, setConversationMessages] = useState<Message[]>(
+    [],
   );
 
   // Persist default date r
@@ -51,9 +82,18 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
     };
   }, [request?.message, request?.dateCreated, request?.fromUserId]);
 
+  /**
+   * Fetched pages are the source of truth; Pusher only ever appends to the tail.
+   * Merging by id rather than replacing, so a message that arrived in real time
+   * is not dropped when an older page lands and the pages array changes.
+   */
   useEffect(() => {
-    setConversationMessages(request?.conversation?.messages || []);
-  }, [request?.conversation?.messages]);
+    setConversationMessages((live) => {
+      const seen = new Set(fetchedMessages.map((message) => message.id));
+      const liveOnly = live.filter((message) => !seen.has(message.id));
+      return [...fetchedMessages, ...liveOnly];
+    });
+  }, [fetchedMessages]);
 
   useEffect(() => {
     const requestId = request?.id;
@@ -178,12 +218,40 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
     }
   }, []);
 
+  /**
+   * Only follow the tail, never a prepend (SCRUM-317).
+   *
+   * This used to fire on any change to `allMessages`, which was fine while the
+   * whole history arrived at once. With "load older" it would yank the reader
+   * from the message they had scrolled back to down to the newest one — the
+   * opposite of what they asked for. Keyed on the id of the *last* message, so
+   * appends scroll and prepends do not.
+   */
+  const lastMessageId = allMessages[allMessages.length - 1]?.id;
+
   useEffect(() => {
     scrollToBottom();
-  }, [allMessages, scrollToBottom]);
+  }, [lastMessageId, scrollToBottom]);
 
   return (
     <div className="flex h-full flex-1 flex-col overflow-y-auto overflow-x-hidden bg-white p-4">
+      {/* Older history is fetched on request rather than shipped with every
+          Requests-tab load (SCRUM-317). Rendered only when the server said
+          another page exists, so a short thread shows nothing at all. */}
+      {threadQuery.hasNextPage && (
+        <div className="mb-2 flex justify-center">
+          <button
+            type="button"
+            onClick={() => void threadQuery.fetchNextPage()}
+            disabled={threadQuery.isFetchingNextPage}
+            className="rounded-full px-4 py-1 text-sm text-gray-600 underline hover:text-northeastern-red focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-northeastern-red disabled:cursor-not-allowed disabled:no-underline disabled:opacity-60"
+          >
+            {threadQuery.isFetchingNextPage
+              ? "Loading older messages…"
+              : "Load older messages"}
+          </button>
+        </div>
+      )}
       {messagesByDate.map(({ date, messages }, dateIndex) => (
         // React keys must be strings or numbers; `date` is a Date (and typed
         // nullable), so it was being coerced on every render (SCRUM-254).

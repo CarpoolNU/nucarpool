@@ -8,6 +8,34 @@ import {
 } from "../../../utils/pusherChannels";
 import { MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
 
+/**
+ * Messages per page in the open thread (SCRUM-317).
+ *
+ * Bigger than a screenful on purpose: the first page should almost always be
+ * the whole of what a reader wants, so "load older" is the exception rather
+ * than a step everyone takes. It also has to comfortably cover the unread tail
+ * — see the note on `conversation` below.
+ */
+export const CONVERSATION_PAGE_SIZE = 30;
+
+/**
+ * The message columns the thread renders, matching the projection
+ * `user.requests.me` uses (SCRUM-301).
+ *
+ * Deliberately no author relation. The author is always one of the two people
+ * already in the payload, and `sendMessage` broadcasts a bare `message.create`
+ * over Pusher — so anything reading `message.User` would be blank for every
+ * message that arrived in real time anyway.
+ */
+const conversationMessageColumns = {
+  id: true,
+  conversationId: true,
+  content: true,
+  userId: true,
+  isRead: true,
+  dateCreated: true,
+} as const;
+
 export const messageRouter = router({
   getUnreadMessageCount: protectedRouter.query(async ({ ctx }) => {
     const userId = ctx.session.user?.id;
@@ -59,6 +87,113 @@ export const messageRouter = router({
   // by c8a92c9 and 7280573), leaving unreachable surface that carried only
   // risk. Conversations reach the UI through `user.requests.me`, which is
   // already scoped to the caller's own requests.
+  //
+  // `conversation` below is its deliberate replacement (SCRUM-317), and differs
+  // in the way that mattered: it is keyed on a **request id**, not a
+  // conversation id, so authorization is derived from the row rather than
+  // trusted from the input. It is the same shape as `sendMessage`'s check.
+
+  /**
+   * One conversation's messages, newest page first, for the open thread
+   * (SCRUM-317).
+   *
+   * **Why this exists.** `user.requests.me` used to return the complete history
+   * of every conversation the caller was party to, on every mount, because one
+   * query fed two consumers: the Requests tab, which wants only the newest
+   * message per card, and the open thread, which wants everything. A `take` on
+   * the shared payload would have silently removed scrollback from the only
+   * consumer needing it. This procedure gives the thread its own source so that
+   * payload can be bounded — see the note on `me` in `requests.ts`.
+   *
+   * **Why it is keyed on `requestId`.** The procedure this replaces took a bare
+   * `conversationId` and returned whatever it named, which let any signed-in
+   * caller read any thread (SCRUM-222). A request id is no more secret, so the
+   * id is not the protection — the lookup is. The request row carries
+   * `fromUserId` and `toUserId`, so participation is checked against stored
+   * data before a single message is read. Nothing here trusts the caller.
+   *
+   * Messages are scoped through `conversation.requestId`, which is `@unique`,
+   * rather than through `Request.conversationId`. Both links exist and both are
+   * written, but the one on `Conversation` is the authoritative side, so this
+   * cannot be fooled by a `Request` row whose scalar was never populated.
+   *
+   * **Pagination.** Newest-first, so the first page is what a reader wants to
+   * see, and `nextCursor` walks backwards into history. `messages` comes back
+   * oldest-first because that is render order. Ordered by `(dateCreated, id)`
+   * descending: `dateCreated` alone is not a total order — the seed writes
+   * several messages inside one transaction and a fast sender can too — and a
+   * cursor over a non-total order silently skips or repeats rows.
+   *
+   * A conversation that does not exist yet is an empty first page rather than a
+   * `NOT_FOUND`: a request with no messages is an ordinary state, and
+   * `sendMessage` creates the conversation on the first send.
+   */
+  conversation: protectedRouter
+    .input(
+      z.object({
+        requestId: z.string(),
+        /**
+         * Id of the oldest message the client already holds. The next page
+         * continues strictly before it. `nullish` rather than `optional`
+         * because tRPC's `useInfiniteQuery` sends `null` for the first page.
+         */
+        cursor: z.string().nullish(),
+        limit: z.number().int().min(1).max(100).default(CONVERSATION_PAGE_SIZE),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const userId = ctx.session.user?.id;
+      if (!userId) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "User not authenticated",
+        });
+      }
+
+      const request = await ctx.prisma.request.findUnique({
+        where: { id: input.requestId },
+        select: { id: true, fromUserId: true, toUserId: true },
+      });
+
+      if (!request) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: `No request with id '${input.requestId}'`,
+        });
+      }
+
+      // The whole point of the rewrite. Checked before any message is read, so
+      // a refused caller receives no content at all — not a filtered list, and
+      // not a count they could probe with.
+      if (request.fromUserId !== userId && request.toUserId !== userId) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You are not a participant in this conversation.",
+        });
+      }
+
+      // One extra row, to learn whether another page exists without a second
+      // round trip or a `count` over the whole thread.
+      const rows = await ctx.prisma.message.findMany({
+        where: { conversation: { requestId: input.requestId } },
+        select: conversationMessageColumns,
+        orderBy: [{ dateCreated: "desc" }, { id: "desc" }],
+        take: input.limit + 1,
+        ...(input.cursor
+          ? { cursor: { id: input.cursor }, skip: 1 }
+          : undefined),
+      });
+
+      const hasOlder = rows.length > input.limit;
+      const page = hasOlder ? rows.slice(0, input.limit) : rows;
+
+      return {
+        messages: [...page].reverse(),
+        // The oldest row on this page. Null when the thread is exhausted, which
+        // is what stops `useInfiniteQuery` offering "load older".
+        nextCursor: hasOlder ? (page[page.length - 1]?.id ?? null) : null,
+      };
+    }),
 
   sendMessage: protectedRouter
     .input(
