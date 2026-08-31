@@ -74,7 +74,7 @@ export const recommendationsRouter = router({
       }
 
       // Bounded candidate query plus scoring, shared with
-      // `mapbox.geoJsonUserList` (SCRUM-245).
+      // `mapbox.geoJsonUserList`.
       const sortedSearches = await fetchRankedCandidates({
         prisma: ctx.prisma,
         currentUserSearch,
@@ -84,8 +84,7 @@ export const recommendationsRouter = router({
         // Only read when the filter is on, and only included then: the
         // `favorites` include above is `input.filters.favorites`, and Prisma
         // omits the key entirely rather than returning [] for a false include,
-        // so mapping it unconditionally threw on every default page load
-        // (SCRUM-288).
+        // so mapping it unconditionally threw on every default page load.
         favoriteUserIds: input.filters.favorites
           ? favorites.map((f) => f.id)
           : [],

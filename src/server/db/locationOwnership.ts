@@ -1,7 +1,7 @@
 import type { PrismaOrTransaction } from "./client";
 
 /**
- * Location ownership (SCRUM-232).
+ * Location ownership.
  *
  * A `Location` row belongs to exactly one slot of exactly one `CarpoolSearch`.
  * It is never shared between users, and never shared between a user's own home
@@ -24,7 +24,7 @@ import type { PrismaOrTransaction } from "./client";
  *
  * These helpers take `PrismaOrTransaction` rather than `PrismaClient` because
  * `user.edit` now calls them inside `prisma.$transaction`, and a transaction
- * client is not assignable to the full client (SCRUM-233). They must therefore
+ * client is not assignable to the full client. They must therefore
  * never call `$transaction` themselves.
  */
 

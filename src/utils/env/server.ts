@@ -27,7 +27,7 @@ export const serverEnv = {
     AWS_REGION: str({
       input: process.env.REGION_AWS,
     }),
-    // Profile-picture storage (SCRUM-282). Both default to the values that were
+    // Profile-picture storage. Both default to the values that were
     // previously hardcoded, so a deployment that sets neither keeps using the
     // same bucket and no stored object moves.
     //

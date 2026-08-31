@@ -20,7 +20,7 @@ import { QueryError } from "./QueryError";
 /**
  * The "My Group" screen.
  *
- * SCRUM-252: this file used to hold two parallel implementations of the feature,
+ * This file used to hold two parallel implementations of the feature,
  * mobile and desktop, each with its own data fetching, mutation wiring and
  * handlers. What remains is one container per state - `NoGroupSection` and
  * `GroupSection` - which own the query and delegate every mutation to
@@ -295,7 +295,7 @@ const NoGroupSection = ({
   const { data: user } = trpc.user.me.useQuery();
   const { details, setDetails, save, isSaving } = useGroupDetails({
     // Same resolver as the has-group branch below, so a driver sees identical
-    // preferences before and after forming a group (SCRUM-253).
+    // preferences before and after forming a group.
     stored: user,
     // Gated on the query having resolved, not just on the role: the old code
     // guarded with `if (user?.id && role === "DRIVER")`, and without it a click
@@ -345,7 +345,7 @@ const GroupSection = ({
   const isDriver = curUser.role === Role.DRIVER;
 
   const { details, setDetails, save, isSaving } = useGroupDetails({
-    // The driver's own values, read through the group (SCRUM-253). This used to
+    // The driver's own values, read through the group. This used to
     // read `group.message`, a second copy that could disagree with the driver's.
     stored: group?.preferences,
     // As above, mirroring the old `if (group?.id && role === "DRIVER")` guard.
@@ -379,7 +379,7 @@ const GroupSection = ({
     onClose,
   };
 
-  // The group tab gets the same three states as the sidebar lists (SCRUM-241).
+  // The group tab gets the same three states as the sidebar lists.
   // Without this, a failure and a group that has been deleted underneath a stale
   // `carpoolId` both left `GroupMembers` rendering a spinner with no driver to
   // find, indefinitely.

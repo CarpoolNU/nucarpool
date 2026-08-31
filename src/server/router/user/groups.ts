@@ -12,7 +12,7 @@ import {
 } from "../../../utils/textLimits";
 
 /**
- * Carpool group authorization (SCRUM-220).
+ * Carpool group authorization.
  *
  * Every mutation here is `protectedRouter`, but that only proves a session
  * exists — and every NUCarpool user has one. Group and user ids arrived
@@ -35,7 +35,7 @@ import {
  *
  * Adding requires a `Request` between the two users because that request *is*
  * the invitation; without it a rider could self-join any stranger's group.
- * Requests are resolved rather than deleted on acceptance (SCRUM-228), so the
+ * Requests are resolved rather than deleted on acceptance, so the
  * row this check depends on is still there afterwards — which is also what lets
  * `markRequestAccepted` run inside the same transaction as the membership.
  */
@@ -47,7 +47,7 @@ const forbidden = (message: string) =>
   new TRPCError({ code: "FORBIDDEN", message });
 
 /**
- * A group membership the requested change would contradict (SCRUM-291).
+ * A group membership the requested change would contradict.
  *
  * `CONFLICT` rather than `BAD_REQUEST`: the input is well formed and the caller
  * is allowed to ask, but the current state of the data says no. It is also in
@@ -119,7 +119,7 @@ const requireRequestBetween = async (
 };
 
 /**
- * Resolves the request that led to this membership (SCRUM-228).
+ * Resolves the request that led to this membership.
  *
  * Accepting used to build the group and leave the `Request` untouched, so it
  * stayed pending forever in both users' Requests tab and the duplicate guard in
@@ -147,7 +147,7 @@ const markRequestAccepted = async (
 };
 
 /**
- * Takes one seat from the driver, atomically (SCRUM-229).
+ * Takes one seat from the driver, atomically.
  *
  * The `seatsAvail: { gt: 0 }` in the filter makes this a compare-and-swap: the
  * database decrements only if a seat is actually free, and `count` tells us
@@ -206,8 +206,7 @@ export const groupsRouter = router({
     // having a CarpoolSearch row yet - a VIEWER or a half-finished onboarding
     // has neither. This used to throw BAD_REQUEST and NOT_FOUND respectively,
     // which the client could not tell apart from the server being broken, and
-    // which React Query then retried three times on the way to an error state
-    // (SCRUM-241).
+    // which React Query then retried three times on the way to an error state.
     if (!carpoolSearch?.carpoolId) {
       return null;
     }
@@ -249,7 +248,7 @@ export const groupsRouter = router({
     });
 
     // Preferences belong to the driver's own search and are read through the
-    // group rather than copied into it (SCRUM-253). `group.message` used to hold
+    // group rather than copied into it. `group.message` used to hold
     // a second copy that could disagree with this one; it is no longer written,
     // and `groupMessage` rides along only so a row that has not been backfilled
     // yet still resolves. Riders see the driver's values, which is what the two
@@ -259,12 +258,12 @@ export const groupsRouter = router({
     );
 
     // A group with no DRIVER member is not an ordinary state - it is the
-    // SCRUM-289 failure, which `user.edit` and `edit` now both refuse to
+    // driverless failure, which `user.edit` and `edit` now both refuse to
     // create. Rows that predate those guards can still be in it, and until
     // this flag existed they were indistinguishable from a driver who had
     // simply saved no preferences: both produced four nulls. Saying so
     // explicitly is what lets the group page explain itself rather than
-    // quietly showing blank notes (SCRUM-289).
+    // quietly showing blank notes.
     const hasDriver = driverSearch !== undefined;
 
     const updatedGroup = {
@@ -278,7 +277,7 @@ export const groupsRouter = router({
       },
       // Group members are counterparts: they have agreed to carpool together and
       // the group route is drawn from their home coordinates, so these keep full
-      // precision (SCRUM-226).
+      // precision.
       users: memberCarpoolSearches.map(
         convertCarpoolSearchToPublicWithExactHome,
       ),
@@ -304,7 +303,7 @@ export const groupsRouter = router({
       }
       await requireRequestBetween(ctx.prisma, input.driverId, input.riderId);
 
-      // Seat, group and both memberships commit together (SCRUM-233).
+      // Seat, group and both memberships commit together.
       //
       // Reserving first is still right — the compare-and-swap is the step that
       // can legitimately fail, so it should fail before anything is built — but
@@ -316,8 +315,7 @@ export const groupsRouter = router({
         // inside the transaction so two accepts racing for the same rider
         // cannot both see "not in a group" and then both write one. Sequential
         // rather than `Promise.all`: an interactive transaction is one
-        // connection, and Prisma does not promise parallel queries on it
-        // (SCRUM-291).
+        // connection, and Prisma does not promise parallel queries on it.
         const driverSearch = await tx.carpoolSearch.findFirst({
           where: { userId: input.driverId },
           select: { role: true, carpoolId: true },
@@ -344,7 +342,7 @@ export const groupsRouter = router({
 
         // Nothing checked the named driver's role, so two riders with a request
         // between them could name one of themselves and create a group with no
-        // DRIVER in it - the SCRUM-289 state, which no member can manage or
+        // DRIVER in it - the driverless state, which no member can manage or
         // dissolve. `reserveSeat` below would not have caught it either:
         // `user.edit` accepts `seatAvail` for any role and only the client
         // zeroes it for a rider, so a rider can carry seats.
@@ -354,7 +352,7 @@ export const groupsRouter = router({
           );
         }
 
-        // And symmetrically, the rider slot has to hold a RIDER (SCRUM-296).
+        // And symmetrically, the rider slot has to hold a RIDER.
         // The check above closed the driver slot only, which left the mirror
         // image open: two DRIVERs with a request between them, whichever of
         // them accepts, name the other as the rider. That passes every check
@@ -391,7 +389,7 @@ export const groupsRouter = router({
 
         await reserveSeat(tx, input.driverId);
 
-        // `message` is written empty and never read (SCRUM-253). It used to be
+        // `message` is written empty and never read. It used to be
         // seeded from the driver's `groupMessage`, which made the group a second
         // home for the same preferences; they are read through the driver's own
         // search now. The column stays until a follow-up drops it, so that a
@@ -431,7 +429,7 @@ export const groupsRouter = router({
       await requireGroupDriver(ctx.prisma, callerId, input.groupId);
 
       // Detaching the members, crediting the driver and deleting the group
-      // commit together (SCRUM-233).
+      // commit together.
       //
       // This was the worst of the untransactioned sequences. Members are
       // detached before the group row is deleted, so a failure in between left
@@ -439,8 +437,7 @@ export const groupsRouter = router({
       // app at all: retrying reaches `requireGroupDriver` above, whose
       // membership lookup is `{ userId, carpoolId: groupId }`, which now
       // matches nothing, so the driver is told they are not a member of their
-      // own group. Only manual SQL could clear it. The guard in `me` above
-      // ("the membership points at a group row that is gone", SCRUM-241) is
+      // own group. Only manual SQL could clear it. The guard in `me` above is
       // what this class of orphan looked like from the read side.
       return await ctx.prisma.$transaction(async (tx) => {
         // Find all CarpoolSearches that reference this group
@@ -463,7 +460,7 @@ export const groupsRouter = router({
 
         // The seats belong to the driver, whoever pressed the button. This used
         // to read and write the *session user's* row, so a rider deleting the
-        // group took the seats and the driver never got them back (SCRUM-229).
+        // group took the seats and the driver never got them back.
         // The driver is taken from the membership captured above, before the
         // carpoolIds were cleared.
         if (driver) {
@@ -485,8 +482,7 @@ export const groupsRouter = router({
         // Meaningful on the `add` path only, where it is checked against the
         // group and against a request between the two users. The remove path
         // deliberately ignores it and derives the driver from the group's own
-        // membership instead - it used to credit a seat to this id unchecked
-        // (SCRUM-290).
+        // membership instead - it used to credit a seat to this id unchecked.
         driverId: z.string(),
         riderId: z.string(),
         groupId: z.string(),
@@ -551,7 +547,7 @@ export const groupsRouter = router({
         // member - but has no DRIVER, and `requireGroupDriver` then refuses
         // every management action, so the riders cannot remove each other or
         // dissolve it. At two members the group dissolves on the way out, so
-        // leaving is harmless there and stays allowed (SCRUM-289).
+        // leaving is harmless there and stays allowed.
         if (
           callerMembership.role === Role.DRIVER &&
           input.riderId === callerId
@@ -570,31 +566,31 @@ export const groupsRouter = router({
       }
 
       // Membership change, group dissolution and seat accounting commit
-      // together (SCRUM-233). Untransactioned, adding could take a seat without
+      // together. Untransactioned, adding could take a seat without
       // linking the rider, and removing could detach the rider without ever
       // giving the seat back — an under-count with nothing to correct it.
       //
       // The boundary stops before the trailing read. Reads cannot leave partial
       // state, so they gain nothing from being inside it, and keeping the read
       // out means a group this procedure legitimately dissolved is never
-      // resurrected by a rollback (SCRUM-281).
+      // resurrected by a rollback.
       const dissolved = await ctx.prisma.$transaction(async (tx) => {
         // The driver to credit on the remove path, resolved before anything
         // below moves memberships. It has to be captured this early: clearing
         // the departing member and dissolving the group both erase the very
         // `carpoolId` rows the driver is derived from, so reading it after the
-        // fact would find nobody (SCRUM-290).
+        // fact would find nobody.
         let groupDriver: { id: string; seatsAvail: number } | null = null;
 
         if (input.add) {
           // One group per user, checked in here for the same reason as in
-          // `create`. Two cases, both of which used to succeed (SCRUM-291):
+          // `create`. Two cases, both of which used to succeed:
           //
           //   - Already in another group. The `updateMany` below moved them,
           //     leaving the old group holding one member that nothing
           //     dissolves and its driver a seat short for good.
           //   - Already in *this* group. `markRequestAccepted` resolves the
-          //     request rather than deleting it (SCRUM-228), so the row
+          //     request rather than deleting it, so the row
           //     survives and `requireRequestBetween` keeps passing - a second
           //     call ran `reserveSeat` again while the `updateMany` did
           //     nothing, and the driver paid two seats for one rider.
@@ -611,7 +607,7 @@ export const groupsRouter = router({
           }
 
           // The rider slot has to hold a RIDER, for the same reason as in
-          // `create` (SCRUM-296). This is the path an accept takes when the
+          // `create`. This is the path an accept takes when the
           // driver already has a group, so leaving it out would close the
           // first join and not the second.
           if (riderSearch.role !== Role.RIDER) {
@@ -636,7 +632,7 @@ export const groupsRouter = router({
           // Reserve the seat before linking the rider: the compare-and-swap
           // both rejects a full driver and prevents two simultaneous accepts
           // from taking the same seat. Replaces a read-compare-then-decrement
-          // that could do neither reliably (SCRUM-229).
+          // that could do neither reliably.
           await reserveSeat(tx, input.driverId);
 
           // when adding rider, set carpoolId for the rider
@@ -653,7 +649,7 @@ export const groupsRouter = router({
           // `riderId` and nothing else - so crediting `input.driverId` wrote to
           // whatever row the caller named: a stranger got a seat and the real
           // driver stayed permanently under-counted. `delete` above already
-          // derives the driver this way (SCRUM-290).
+          // derives the driver this way.
           groupDriver = await tx.carpoolSearch.findFirst({
             where: { carpoolId: input.groupId, role: Role.DRIVER },
             select: { id: true, seatsAvail: true },
@@ -674,8 +670,7 @@ export const groupsRouter = router({
         // A carpool of one is not a carpool, so the group goes. Reported out of
         // the transaction rather than re-derived after it, because a later read
         // cannot tell "this procedure just dissolved it" from "it is missing for
-        // some other reason" — and it used to report both as an error
-        // (SCRUM-281).
+        // some other reason" — and it used to report both as an error.
         const groupDissolved = remainingMembers.length === 1;
 
         if (groupDissolved) {
@@ -698,7 +693,7 @@ export const groupsRouter = router({
         // group's driver, clamped to the shared maximum.
         //
         // A group with no DRIVER member has nobody to credit, so the credit is
-        // skipped rather than failed. That state is the SCRUM-289 failure -
+        // skipped rather than failed. That state is the driverless failure -
         // now guarded against, but older rows can still be in it - and leaving
         // one at a time is the only way its riders can get out. Throwing here
         // would take that away and trap them.
@@ -716,7 +711,7 @@ export const groupsRouter = router({
       // leaving a two-person carpool reported failure after succeeding, and the
       // `onSuccess` handlers never ran: no confirmation, the modal stayed open,
       // and the React Query invalidations were skipped, leaving stale
-      // membership on screen (SCRUM-281).
+      // membership on screen.
       //
       // `null` for "there is no group any more" matches `me` above, which
       // returns it for the same situation.
@@ -753,7 +748,7 @@ export const groupsRouter = router({
       return updatedGroup;
     }),
   /**
-   * The driver's group ride preferences (SCRUM-253).
+   * The driver's group ride preferences.
    *
    * Replaces `updateMessage` and `updateUserMessage`, which wrote the same
    * GROUP_DETAILS_V1: blob to `group.message` and `carpool_search.group_message`

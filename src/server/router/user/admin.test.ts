@@ -5,13 +5,13 @@ import { appRouter } from "../index";
 import type { Context } from "../context";
 
 /**
- * What the admin dashboard router asks the database for (SCRUM-246).
+ * What the admin dashboard router asks the database for.
  *
  * These assertions are about the *shape of the query*, not about business logic:
  * which columns are selected, that the requested date window reaches the `where`
  * clause, and that messages are only ever counted. That is the part of this
  * router that regressed before, and it is the part a mocked Prisma can verify
- * honestly. Real query behaviour belongs to the database tests (SCRUM-263).
+ * honestly. Real query behaviour belongs to the database tests.
  */
 
 /** What a `MIN`/`MAX` aggregate answers for an empty table. */

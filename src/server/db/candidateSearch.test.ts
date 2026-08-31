@@ -25,7 +25,7 @@ import {
 } from "../../utils/recommendation.fixtures";
 
 /**
- * The safety property this whole change rests on (SCRUM-245): the SQL predicate
+ * The safety property this whole change rests on: the SQL predicate
  * may only remove rows `calculateScore` would have rejected anyway. If a
  * bounding box could ever be tighter than the scorer's circle, the map would
  * silently lose matches, so it is tested as an invariant over many points

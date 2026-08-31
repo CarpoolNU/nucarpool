@@ -1,6 +1,6 @@
 /**
  * What a profile picture is allowed to be, defined once so the client and the
- * server agree (SCRUM-243).
+ * server agree.
  *
  * These live apart from `uploadToS3.ts` on purpose: that module constructs an
  * `S3Client` from `serverEnv` at import time, so anything the browser imports

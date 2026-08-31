@@ -11,9 +11,9 @@ import {
 import type { AdminUserRow } from "./types";
 
 /**
- * The admin dashboard's aggregations. Since SCRUM-246 these run inside the
- * `user.admin` router rather than in the browser, so the numbers asserted here
- * are the ones that go over the wire — the client only formats them.
+ * The admin dashboard's aggregations. These run inside the `user.admin` router
+ * rather than in the browser, so the numbers asserted here are the ones that go
+ * over the wire — the client only formats them.
  *
  * The interesting behaviour is the weekly bucketing, the deliberate `null` gaps
  * that keep flat stretches off the line, and the defaults applied to a user who
@@ -259,7 +259,7 @@ describe("summariseUsers", () => {
 
   it("tallies the days-working frequency under the role that worked them", () => {
     // The call site used to pass (drivers, riders) to a (riders, drivers)
-    // signature, so the two series were swapped in the chart (SCRUM-284).
+    // signature, so the two series were swapped in the chart.
     const { daysFrequency } = summariseUsers([
       user({ role: Role.RIDER, daysWorking: "1,0,0,0,0,0,0" }),
       user({ role: Role.DRIVER, daysWorking: "0,0,0,0,0,0,1" }),

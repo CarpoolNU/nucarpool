@@ -4,7 +4,7 @@ import { parseChannel } from "../utils/pusherChannels";
 type PrismaLike = Pick<PrismaClient, "request">;
 
 /**
- * May `userId` subscribe to `channelName`? (SCRUM-224)
+ * May `userId` subscribe to `channelName`?
  *
  * Deliberately a plain function rather than logic inside the API route, so the
  * decision can be tested directly — this is the whole of the realtime access
@@ -27,7 +27,7 @@ export const canSubscribe = async (
 
     case "conversation": {
       // Only the two parties on the request behind this conversation. Mirrors
-      // the check `sendMessage` applies on the write side (SCRUM-222) — the
+      // the check `sendMessage` applies on the write side — the
       // API and the realtime layer are two doors to the same data.
       const request = await prisma.request.findUnique({
         where: { id: channel.requestId },

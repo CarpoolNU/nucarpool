@@ -4,7 +4,7 @@
  */
 
 /*
- * Every test run reads the same clock (SCRUM-297).
+ * Every test run reads the same clock.
  *
  * Without this, `Date`'s local accessors and constructors resolve against
  * whatever zone the machine is in - UTC on Amplify and GitHub Actions,
@@ -187,7 +187,7 @@ module.exports = {
   // An array of regexp pattern strings that are matched against all test paths,
   // matched tests are skipped.
   //
-  // "/\\.next/" is not part of Jest's default and must stay (SCRUM-269). Next
+  // "/\\.next/" is not part of Jest's default and must stay. Next
   // compiles anything under src/pages/ into .next/server/pages/, and a compiled
   // bundle still contains the `describe`/`it` calls of any test that got swept
   // in. Without this, `yarn test` after a local `yarn build` fails on a build

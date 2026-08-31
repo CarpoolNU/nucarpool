@@ -85,12 +85,12 @@ Note what the input above does **not** contain: the id of the user being edited.
 - **`.strict()` makes the removal stick.** Without it, a client that still sends `userId` is silently ignored rather than rejected, and the field can quietly creep back into the resolver later.
 - **Ids the client does supply still need checking.** `favoriteId` is safe because it names who is favorited, not whose list is written. When an input names a record the caller may not own — a group, request, or conversation — load it first, confirm the session user is a party to it, and `throw new TRPCError({ code: "FORBIDDEN" })` otherwise.
 
-This is not hypothetical. `favorites.edit` shipped without the first of these and let any signed-in user rewrite anyone else's favorites ([SCRUM-223](https://carpoolnu.atlassian.net/browse/SCRUM-223)); a full-repository audit then found the same class of gap in the requests, messages, groups, and email routers.
+This is not hypothetical. `favorites.edit` shipped without the first of these and let any signed-in user rewrite anyone else's favorites; a full-repository audit then found the same class of gap in the requests, messages, groups, and email routers.
 
 Where a router's rules are more than "the caller owns the row", they are written down next to the code rather than here, so they cannot drift from it. Two of these exist:
 
 - The carpool group rules — who may delete a group, evict a rider, or edit the group message — are tabulated at the top of [`user/groups.ts`](./user/groups.ts).
-- `getPresignedDownloadUrl` is the one procedure that deliberately serves **any** user's data to **any** signed-in caller: a profile picture is uploaded to be seen by strangers, and avatars render on the map and in recommendations where no relationship exists yet. The reasoning is at the input schema in [`user.ts`](./user.ts) ([SCRUM-243](https://carpoolnu.atlassian.net/browse/SCRUM-243)). Read it before copying the pattern — it is an exception, not a precedent.
+- `getPresignedDownloadUrl` is the one procedure that deliberately serves **any** user's data to **any** signed-in caller: a profile picture is uploaded to be seen by strangers, and avatars render on the map and in recommendations where no relationship exists yet. The reasoning is at the input schema in [`user.ts`](./user.ts). Read it before copying the pattern — it is an exception, not a precedent.
 
 ## Composition and frontend access
 

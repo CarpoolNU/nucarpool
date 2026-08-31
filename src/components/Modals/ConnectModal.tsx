@@ -13,7 +13,7 @@ import useProfileImage from "../../utils/useProfileImage";
 import { AiOutlineUser } from "react-icons/ai";
 import useIsMobile from "../../utils/useIsMobile";
 // 250 was hardcoded here and nowhere else, five short of the column it is
-// written to. The limit now comes from one place (SCRUM-231).
+// written to. The limit now comes from one place.
 import { MESSAGE_MAX_LENGTH } from "../../utils/textLimits";
 
 interface ConnectModalProps {
@@ -53,13 +53,12 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
 
   // Declared before the request mutation so that mutation's onSuccess can call
   // it. Names, addresses and the driver/rider template are resolved
-  // server-side from the request the id refers to (SCRUM-225, SCRUM-270).
+  // server-side from the request the id refers to.
   const { mutate: sendConnectEmail } =
     trpc.user.emails.sendRequestNotification.useMutation({
       // By the time this runs the request already exists, so a failure here is
       // a failure to notify — not a failure to send the request. Saying
-      // "something went wrong" would tell the user the opposite of the truth
-      // (SCRUM-234).
+      // "something went wrong" would tell the user the opposite of the truth.
       onError: (error: any) => {
         toast.error(
           `Your request was sent, but we could not email ${props.otherUser.preferredName}: ${error.message}`,
@@ -70,15 +69,14 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
   const { mutate: createRequests } = trpc.user.requests.create.useMutation({
     // Shown as written rather than behind "Something went wrong", because every
     // way this procedure refuses is a rule the user can act on - already in a
-    // group with them, a request already open, a missing email address
-    // (SCRUM-292).
+    // group with them, a request already open, a missing email address.
     onError: (error: any) => {
       toast.error(error.message);
     },
     // Everything that tells either person the request exists now waits for the
-    // write to land (SCRUM-234). Previously the email was sent first and the
+    // write to land. Previously the email was sent first and the
     // success toast fired on click, so a CONFLICT — routine, since accepting
-    // never clears a request (SCRUM-228) — produced a success toast, an error
+    // never clears a request — produced a success toast, an error
     // toast, and an email for a request that was never created.
     onSuccess: (request, variables) => {
       setRequestSent(true);
@@ -87,7 +85,7 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
           props.otherUser.preferredName,
       );
       // The id comes from the row the mutation just created, so the server can
-      // check the caller is party to it (SCRUM-270). The preview is taken from
+      // check the caller is party to it. The preview is taken from
       // the mutation variables rather than component state, so it is exactly
       // the text that was submitted.
       sendConnectEmail({
@@ -99,11 +97,11 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
 
   const handleOnClick = () => {
     // The missing-email check that used to sit here has moved into
-    // `requests.create` (SCRUM-292). It read `otherUser.email`, which the map
+    // `requests.create`. It read `otherUser.email`, which the map
     // and recommendation payloads no longer carry, and being client-only it was
     // skipped by anything calling the procedure directly. The `onError` handler
     // above shows the server's refusal, so the button still answers rather than
-    // doing nothing silently (SCRUM-234).
+    // doing nothing silently.
     createRequests({
       toId: props.otherUser.id,
       message: customMessage,

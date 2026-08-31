@@ -4,10 +4,10 @@ import { appRouter } from "../index";
 import type { Context } from "../context";
 
 /**
- * `user.messages.conversation` — the paginated thread source (SCRUM-317).
+ * `user.messages.conversation` — the paginated thread source.
  *
- * This procedure replaces `messages.getMessages`, which was **removed** in
- * SCRUM-222 rather than scoped: it took a bare conversation id, returned every
+ * This procedure replaces `messages.getMessages`, which was **removed** rather
+ * than scoped: it took a bare conversation id, returned every
  * message in it, and read the session user without ever using it, so any
  * signed-in caller could read any conversation. The whole point of the rewrite
  * is that authorization is derived from the request row, so the authorization
@@ -119,7 +119,7 @@ const callerFor = (
   return { caller: appRouter.createCaller(ctx), db };
 };
 
-describe("only participants may read a conversation (SCRUM-222 / SCRUM-317)", () => {
+describe("only participants may read a conversation", () => {
   it("refuses a third party with FORBIDDEN", async () => {
     const { caller } = callerFor(sessionFor(STRANGER));
 

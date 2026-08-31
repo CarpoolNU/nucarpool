@@ -65,7 +65,7 @@ export const authOptions: NextAuthOptions = {
   // Read through the validated environment rather than `process.env` so an
   // unrecognised value cannot quietly fall through to the Azure-only branch —
   // or, worse, a stray "staging" in production silently open Google sign-in to
-  // anyone with a Google account (SCRUM-247).
+  // anyone with a Google account.
   providers:
     serverEnv.NEXT_PUBLIC_ENV === "staging"
       ? [

@@ -23,7 +23,7 @@ describe("formatScheduleTime", () => {
     expect(formatScheduleTime(storedAt(14, 30))).toBe("9:30 AM");
   });
 
-  describe("early shifts (SCRUM-239)", () => {
+  describe("early shifts", () => {
     /**
      * The old copies reinterpreted the value as UTC whenever the Boston hour
      * landed in [01:00, 05:00), which is exactly the range a genuine early

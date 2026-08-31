@@ -2,7 +2,7 @@ import Pusher from "pusher-js";
 import { browserEnv } from "./env/browser";
 
 /**
- * The one browser-side Pusher client (SCRUM-238).
+ * The one browser-side Pusher client.
  *
  * Both subscriptions used to call `new Pusher(...)` inside their own
  * `useEffect` and, on cleanup, only `unsubscribe` — never `disconnect`. Each
@@ -30,7 +30,7 @@ export const acquirePusherClient = (): Pusher => {
   if (!client) {
     client = new Pusher(browserEnv.NEXT_PUBLIC_PUSHER_KEY, {
       cluster: browserEnv.NEXT_PUBLIC_PUSHER_CLUSTER,
-      // Required for the `private-` channels both callers use (SCRUM-224).
+      // Required for the `private-` channels both callers use.
       authEndpoint: "/api/pusher/auth",
     });
   }

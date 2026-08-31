@@ -1,6 +1,6 @@
 name: Build
 
-# Trigger policy, shared by lint / tsc / test / build / env-contract (SCRUM-248):
+# Trigger policy, shared by lint / tsc / test / build / env-contract:
 #   pull_request     - gates every PR before it can merge into main
 #   push to main     - catches anything that reaches main by another route
 # Deliberately not `on: [push]`: while a PR is open that runs every check twice,
@@ -10,15 +10,15 @@ on:
   push:
     branches: [main]
 
-# `GITHUB_TOKEN` is scoped in the file rather than left to a repository setting
-# (SCRUM-309). Every scope not listed becomes `none`, and `contents: read` is all
+# `GITHUB_TOKEN` is scoped in the file rather than left to a repository setting.
+# Every scope not listed becomes `none`, and `contents: read` is all
 # `actions/checkout` needs - nothing here writes to the repository, comments, or
 # calls the API. `auto-comment.yml` is the one workflow that needs more, and
 # declares it on its own job.
 permissions:
   contents: read
 
-# One run per ref, and a superseded run is cancelled (SCRUM-309).
+# One run per ref, and a superseded run is cancelled.
 #
 # `github.ref` is `refs/pull/N/merge` for a `pull_request` and `refs/heads/main`
 # for a push, so two pushes to an open PR share a group and the older run is
@@ -58,7 +58,7 @@ jobs:
       # are the deploy surface (amplify.yml selects one via BUILD_ENV) and run
       # `prisma generate` themselves, which the explicit step above already did.
       - run: yarn build
-      # SCRUM-269. Under the Pages Router a filename is a URL, so a co-located
+      # Under the Pages Router a filename is a URL, so a co-located
       # `*.test.ts` is compiled and shipped as an endpoint. Nothing else here
       # notices: `next build` compiles it happily and the `test` job reads
       # source, never the route table. Checked against the real manifest this

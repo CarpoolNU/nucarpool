@@ -22,7 +22,7 @@ export const SEARCH_CACHE_TIME_MS = 10 * 60 * 1000;
  * return values.
  *
  * Mapbox is metered, so this deliberately uses an ordinary cached query keyed
- * on the search text (SCRUM-244). It used to declare the query `enabled: false`
+ * on the search text. It used to declare the query `enabled: false`
  * and call `refetch()` from an effect on every debounced change — `refetch` is
  * imperative and ignores the cache, so retyping text that had already been
  * searched always went back out to Mapbox. Keying on `value` means a repeat is

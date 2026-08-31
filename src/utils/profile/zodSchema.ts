@@ -18,7 +18,7 @@ export const onboardSchema = z
       .optional(),
     // The four `VARCHAR(191)` profile columns are bounded here as well as in
     // `user.edit`, so an over-length value shows up as a field error on the
-    // form rather than as a failed save (SCRUM-231). `maxLength` on the inputs
+    // form rather than as a failed save. `maxLength` on the inputs
     // stops typing and pasting; this also catches anything set programmatically.
     companyName: z.string().max(PROFILE_TEXT_MAX_LENGTH, tooLong).optional(),
     companyAddress: z.string().optional(),
@@ -96,7 +96,7 @@ export const onboardSchema = z
     // Ordering, checked for every role rather than inside the non-VIEWER block
     // above: a reversed range is wrong whoever stored it, and the block above is
     // about which fields are *required*. `user.edit` refuses the same thing, so
-    // this exists to name the field instead of failing the save (SCRUM-302).
+    // this exists to name the field instead of failing the save.
     //
     // Deliberately absent: any equivalent check on `startTime` / `endTime`.
     // Those are times of day, not a range, and finishing before you started is

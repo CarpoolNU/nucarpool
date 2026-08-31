@@ -23,7 +23,7 @@ import useIsMobile from "../../utils/useIsMobile";
 import { counterpartLabel } from "../Sidebar/viewerAccess";
 
 /**
- * The card's activation, as a pair that cannot be half-supplied (SCRUM-279).
+ * The card's activation, as a pair that cannot be half-supplied.
  *
  * A card that is clickable renders a real `<button>` stretched across itself,
  * and that button has no text content of its own — so without a label it is an
@@ -53,7 +53,7 @@ type UserCardBaseProps = {
   onViewRouteClick?: (user: User, otherUser: PublicUser) => void;
   message?: string;
   /**
-   * A short explanation of why this card cannot be acted on (SCRUM-296).
+   * A short explanation of why this card cannot be acted on.
    *
    * Only the Requests tab passes one: a request whose two parties can no longer
    * carpool stays in the list now, so the card has to say why rather than
@@ -62,7 +62,7 @@ type UserCardBaseProps = {
    */
   notice?: string;
   /**
-   * True when the reader is party to a request with this user (SCRUM-316).
+   * True when the reader is party to a request with this user.
    *
    * Only the two Requests-tab cards pass it. It governs one thing: whether a
    * VIEWER sees the counterpart's name or their role in its place. See
@@ -102,7 +102,7 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
   } = useProfileImage(props.otherUser.id);
 
   const user = useContext(UserContext);
-  // The owning user is no longer sent (SCRUM-223) — the server takes it from
+  // The owning user is no longer sent — the server takes it from
   // the session. The `if (user)` guard this replaces existed only to narrow
   // `user` for `user.id`; the component already returns early when it is absent.
   const handleFavorite = (favoriteId: string, add: boolean) => {
@@ -150,7 +150,7 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
   }
 
   // One source for what this card calls the other person, so the heading below
-  // and the activation button's `aria-label` cannot disagree (SCRUM-279).
+  // and the activation button's `aria-label` cannot disagree.
   const displayName = counterpartLabel({
     viewerRole: user.role,
     isCounterpart: props.isCounterpart ?? false,
@@ -210,7 +210,7 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
         </div>
 
         {/* Rating — a sibling of the activation button rather than a
-            descendant, which is the whole point of SCRUM-279. `z-20` keeps it
+            descendant, which is the whole point. `z-20` keeps it
             above the stretched button; `relative` is what makes `z-20` apply. */}
         <div className="relative z-20 ml-auto">
           <Rating
@@ -343,7 +343,7 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
         </div>
       ) : null}
 
-      {/* The card's activation target (SCRUM-279).
+      {/* The card's activation target.
        *
        * A real <button>, stretched across the card and rendered **last** so it
        * paints over the card's text while staying below the `z-20` controls
@@ -354,7 +354,7 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
        * `nested-interactive`.
        *
        * This replaces the `role="button"` + `tabIndex` + Enter/Space wrapper
-       * SCRUM-254 had to use in `SentCard` and `ReceivedCard`. A real button
+       * `SentCard` and `ReceivedCard` used to need. A real button
        * brings keyboard activation, Space/Enter semantics and the disabled and
        * focus behaviour of a control for free, so all of that is deleted rather
        * than reimplemented.

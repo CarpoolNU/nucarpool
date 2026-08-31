@@ -2,12 +2,12 @@ import { Message, Request } from "./types";
 
 /**
  * `request.message` is a dead column, and this synthetic message is **not**
- * dead code (SCRUM-250).
+ * dead code.
  *
  * `requests.create` hardcodes `Request.message` to `""` and puts the student's
  * actual text in the conversation's first `Message` instead, so `content` below
- * is empty for every row created since. SCRUM-250 listed this as a dead
- * rendering path; it is not. The synthetic message is load-bearing for its
+ * is empty for every row created since. This looks like a dead rendering path
+ * and is not: the synthetic message is load-bearing for its
  * *other* fields: `dateCreated` and `isRead` are what give a request with no
  * conversation messages an unread state and a sort position, via
  * `getCardSortingData`.

@@ -6,7 +6,7 @@ import {
 } from "../utils/pusherChannels";
 
 /**
- * Realtime access control (SCRUM-224).
+ * Realtime access control.
  *
  * Before this, both Pusher channels were public and named after ids other
  * users can already see — `user.requests.me` hands out request ids, every

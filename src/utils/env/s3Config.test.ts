@@ -6,8 +6,7 @@ import {
 } from "./s3Config";
 
 /**
- * The bucket configuration, and the invariant that made it worth extracting
- * (SCRUM-282).
+ * The bucket configuration, and the invariant that made it worth extracting.
  *
  * The bucket and region were hardcoded in four places in `uploadToS3.ts` and
  * twice more in `next.config.js` — once for the CSP `img-src`, once for the

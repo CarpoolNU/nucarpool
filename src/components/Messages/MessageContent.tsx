@@ -178,7 +178,7 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
   // Annotated rather than inferred: `currentDate` is only ever assigned inside
   // the forEach callback below, and TypeScript's control-flow analysis does not
   // track that, so the evolving-array type came out as `{ date: null }` and
-  // every use of `date` was silently typed `never` (SCRUM-254).
+  // every use of `date` was silently typed `never`.
   const messagesByDate: {
     date: Date | null;
     messages: typeof allMessages;
@@ -218,7 +218,7 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
   }, []);
 
   /**
-   * Only follow the tail, never a prepend (SCRUM-317).
+   * Only follow the tail, never a prepend.
    *
    * This used to fire on any change to `allMessages`, which was fine while the
    * whole history arrived at once. With "load older" it would yank the reader

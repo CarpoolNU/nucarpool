@@ -8,11 +8,11 @@ import {
 
 /**
  * The Requests tab used to be gated on the caller's own role, so a VIEWER could
- * not reach requests they had already sent and had no way to withdraw one
- * (SCRUM-316). These pin both halves of the rule: requests stay visible, and
+ * not reach requests they had already sent and had no way to withdraw one.
+ * These pin both halves of the rule: requests stay visible, and
  * recommendations stay hidden.
  *
- * There are no component tests in this repository (SCRUM-263 / SCRUM-264), so
+ * There are no component tests in this repository, so
  * this is the only place the gate is checked. It is a predicate rather than
  * inline JSX for exactly that reason.
  */
@@ -92,7 +92,7 @@ describe("disclosesCounterpartName", () => {
   });
 
   it("shows the name to a VIEWER on a request card", () => {
-    // The regression SCRUM-316 would otherwise have introduced: three sent
+    // The regression this rule avoids: three sent
     // requests all reading "Driver", with nothing to tell them apart.
     expect(disclosesCounterpartName("VIEWER", true)).toBe(true);
   });
@@ -124,7 +124,7 @@ describe("disclosesCounterpartName", () => {
 
 describe("the predicates together", () => {
   it("never hides a request tab", () => {
-    // The invariant SCRUM-316 exists to establish: being in Viewer mode must
+    // The invariant that matters: being in Viewer mode must
     // not remove a relationship the user already has.
     for (const subType of ALL_SUB_TYPES) {
       if (isRequestSubType(subType)) {
@@ -147,7 +147,7 @@ describe("the predicates together", () => {
 });
 
 /**
- * `counterpartLabel` (SCRUM-279).
+ * `counterpartLabel`.
  *
  * The card gained a stretched activation `<button>` with no text content, so it
  * needs an `aria-label`. That label is built from the other person's name — and
@@ -155,8 +155,8 @@ describe("the predicates together", () => {
  * reader, exactly the name Viewer mode withholds on screen.
  *
  * These tests exist because that failure is invisible to visual review: the card
- * would look correct and read wrong. There are no component tests here
- * (SCRUM-263 / SCRUM-264), so this is the only place the coupling is checked.
+ * would look correct and read wrong. There are no component tests here,
+ * so this is the only place the coupling is checked.
  */
 describe("counterpartLabel", () => {
   const jane = { preferredName: "Jane Doe", role: "DRIVER" };
@@ -176,7 +176,7 @@ describe("counterpartLabel", () => {
   });
 
   it("gives a VIEWER the name on a request card", () => {
-    // A request is a relationship, not discovery (SCRUM-316).
+    // A request is a relationship, not discovery.
     expect(
       counterpartLabel({ ...jane, viewerRole: "VIEWER", isCounterpart: true }),
     ).toBe("Jane Doe");

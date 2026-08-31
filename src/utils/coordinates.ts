@@ -1,7 +1,6 @@
 /**
  * What counts as a usable pair of coordinates, defined once so the client, the
- * Mapbox boundary and the procedure that writes to the database all agree
- * (SCRUM-302).
+ * Mapbox boundary and the procedure that writes to the database all agree.
  *
  * Two separate things are checked here, and they fail in different ways.
  *
@@ -11,7 +10,7 @@
  * the centre, and `milesBetween` feeds the value into `Math.cos`, so an
  * out-of-range row is not merely wrong, it is arbitrary. `getDirections` in
  * `server/router/mapbox.ts` already refused these before forwarding them
- * upstream (SCRUM-244); the boundary that *stores* them did not.
+ * upstream; the boundary that *stores* them did not.
  *
  * **Resolution.** `useAddressSelection` starts at `center: [0, 0]` and the
  * combobox resets to it when the input is cleared, so `(0, 0)` is the sentinel

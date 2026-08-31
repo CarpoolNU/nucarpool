@@ -7,7 +7,7 @@ import { MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
 import { cloneState, withTransaction } from "../transactionMock";
 
 /**
- * Authorization tests for the `user.requests` router (SCRUM-221).
+ * Authorization tests for the `user.requests` router.
  *
  * Three defects are pinned here:
  *
@@ -25,7 +25,7 @@ import { cloneState, withTransaction } from "../transactionMock";
  * keeps requests, conversations and messages in memory and applies writes, so a
  * test can assert the *effect* of a mutation (which rows exist, and who they say
  * they are from) rather than only which arguments Prisma received. It is a
- * stand-in for a database, not a substitute for one — see SCRUM-263.
+ * stand-in for a database, not a substitute for one.
  */
 
 const USER_A = "user-a";
@@ -66,7 +66,7 @@ const buildRequestsDb = (
   /** userId -> carpoolId, for the "already carpooling together" guard. */
   groupMembership: Record<string, string | null> = {},
   /**
-   * userId -> email, for the notifiability guard (SCRUM-292). Everyone has one
+   * userId -> email, for the notifiability guard. Everyone has one
    * unless a test says otherwise, because that is the ordinary case: the field
    * comes from Azure AD at sign-in.
    */
@@ -155,7 +155,7 @@ const buildRequestsDb = (
     conversations.set(row.id, row);
 
     // `requests.create` writes the conversation and its first message as one
-    // nested create (SCRUM-233), so the mock has to honour the nested form or
+    // nested create, so the mock has to honour the nested form or
     // the first message would silently vanish here and nowhere else.
     if (data.messages?.create) {
       const nested = Array.isArray(data.messages.create)
@@ -183,7 +183,7 @@ const buildRequestsDb = (
   });
 
   // `create` reads both parties' addresses to check the request can be
-  // notified (SCRUM-292).
+  // notified.
   const userFindMany = jest.fn(async ({ where }: any) => {
     const ids: string[] = where?.id?.in ?? [];
     return ids.map((id) => ({
@@ -192,7 +192,7 @@ const buildRequestsDb = (
     }));
   });
 
-  // `requests.create` commits its four writes as one transaction (SCRUM-233),
+  // `requests.create` commits its four writes as one transaction,
   // so the mock rolls back on a throw rather than merely passing through.
   const prisma = withTransaction(
     {
@@ -392,7 +392,7 @@ describe("user.requests.create — the duplicate guard still holds", () => {
 });
 
 /**
- * Reopening an accepted request (SCRUM-228).
+ * Reopening an accepted request.
  *
  * Accepting used to leave the row pending forever, and the duplicate guard above
  * refuses any existing request between a pair in either direction — so once two
@@ -486,7 +486,7 @@ describe("user.requests.create — an accepted request is reopened, not duplicat
 /**
  * A request is how you ask to share a carpool, so it makes no sense between two
  * people already sharing one — and it would be a second, contradictable record
- * of a relationship the group already holds (SCRUM-228).
+ * of a relationship the group already holds.
  */
 describe("user.requests.create — not while already carpooling together", () => {
   it("refuses when both users are in the same group", async () => {
@@ -546,7 +546,7 @@ describe("user.requests.create — not while already carpooling together", () =>
 
 describe("user.requests.create — a caller cannot request themselves", () => {
   /**
-   * SCRUM-278. The UI never produces this — ConnectModal opens from someone
+   * The UI never produces this — ConnectModal opens from someone
    * else's card — but `toId` is client input on a mutation any signed-in
    * caller can reach.
    *
@@ -714,7 +714,7 @@ describe("user.requests.edit — removed rather than authorized", () => {
   });
 });
 
-describe("user.requests.create — the opening message is bounded (SCRUM-231)", () => {
+describe("user.requests.create — the opening message is bounded", () => {
   // The input goes to `message.content`, not to `request.message`: the handler
   // writes `""` to the request row and puts the text in the conversation's
   // first `Message`. Both columns are `VARCHAR(255)`; neither was bounded here.
@@ -757,7 +757,7 @@ describe("user.requests.create — the opening message is bounded (SCRUM-231)", 
 });
 
 /**
- * Atomicity of `user.requests.create` (SCRUM-233).
+ * Atomicity of `user.requests.create`.
  *
  * A request, its conversation, the link between them and the first message used
  * to be four independent awaits, so a failure part-way through could leave a
@@ -812,7 +812,7 @@ describe("user.requests.create is atomic", () => {
 });
 
 /**
- * A request has to be notifiable (SCRUM-292).
+ * A request has to be notifiable.
  *
  * ConnectModal used to hold this check on its own, reading `otherUser.email`
  * from the recommendation payload. That payload no longer carries the field -
@@ -820,7 +820,7 @@ describe("user.requests.create is atomic", () => {
  * viewer - and a client-only check was skipped entirely by anything calling the
  * procedure directly. The rule lives here now.
  */
-describe("user.requests.create — both people must be reachable (SCRUM-292)", () => {
+describe("user.requests.create — both people must be reachable", () => {
   it("refuses when the recipient has no email, writing nothing", async () => {
     const { caller, db } = callerFor(
       sessionFor(USER_A),
@@ -873,7 +873,7 @@ describe("user.requests.create — both people must be reachable (SCRUM-292)", (
 });
 
 /**
- * `user.requests.me` no longer role-filters an existing request (SCRUM-296).
+ * `user.requests.me` no longer role-filters an existing request.
  *
  * The filter it used to apply - counterpart's role must differ from the
  * caller's, and must not be VIEWER - is the recommendations predicate, and it
@@ -1078,7 +1078,7 @@ describe("user.requests.me - an existing request survives a role change", () => 
 
   it("returns an accepted request as well, whatever the two roles are", async () => {
     // Accepted requests stay attached to the pair so they keep their
-    // conversation (SCRUM-228); the role filter used to take those with it.
+    // conversation; the role filter used to take those with it.
     const { caller } = meCallerFor(
       USER_A,
       [
@@ -1135,7 +1135,7 @@ describe("user.requests.me - an existing request survives a role change", () => 
 });
 
 /**
- * What `me` asks the database for (SCRUM-301).
+ * What `me` asks the database for.
  *
  * These assert on the Prisma arguments rather than on the result, because the
  * result cannot catch this class of regression and neither can the compiler:
@@ -1155,7 +1155,7 @@ describe("user.requests.me - an existing request survives a role change", () => 
  *     is the opposite failure and just as invisible: dropping `isRead` or `id`
  *     would silently break `markMessagesAsRead`.
  */
-describe("user.requests.me - what it asks the database for (SCRUM-301)", () => {
+describe("user.requests.me - what it asks the database for", () => {
   const includeArg = async () => {
     const { caller, db } = meCallerFor(
       USER_A,
@@ -1208,7 +1208,7 @@ describe("user.requests.me - what it asks the database for (SCRUM-301)", () => {
     }
   });
 
-  it("asks for the newest message only, not the thread (SCRUM-317)", async () => {
+  it("asks for the newest message only, not the thread", async () => {
     // This asserted `{ dateCreated: "asc" }` and no `take`, on the grounds that
     // "the renderer depends on it". The renderer no longer reads this payload:
     // `MessageContent` loads the open thread from

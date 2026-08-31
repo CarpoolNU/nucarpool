@@ -78,7 +78,7 @@ const Filters = ({
   };
   // Third copy of this pair, now shared with the onboarding form so the term
   // dates a filter compares against are built the same way the stored co-op
-  // dates are (SCRUM-239).
+  // dates are.
   const handleMonthChange =
     (field: keyof FiltersState) =>
     (event: React.ChangeEvent<HTMLInputElement>) => {

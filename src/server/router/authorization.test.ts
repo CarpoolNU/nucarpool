@@ -12,7 +12,7 @@ import type { Context } from "./context";
  * every assertion is either "the caller was rejected and the database was never
  * touched" or "the caller got through to the resolver". Nothing here needs a
  * database, and nothing here should be extended into business-logic coverage —
- * that belongs on real-database tests (SCRUM-263).
+ * that belongs on real-database tests.
  */
 
 /** What a `MIN`/`MAX` aggregate answers for an empty table. */

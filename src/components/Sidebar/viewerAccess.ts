@@ -1,7 +1,7 @@
 /**
- * What Viewer mode hides, and what it must not (SCRUM-316).
+ * What Viewer mode hides, and what it must not.
  *
- * Viewer is the browsing role, and the default for a new account (SCRUM-117),
+ * Viewer is the browsing role, and the default for a new account,
  * so drifting into it is ordinary. It should stop **discovery and new
  * requests** — which it does, in `recommendation.ts` and `candidateSearch.ts`
  * on the server, and by having nothing to press on a recommendation card.
@@ -9,8 +9,8 @@
  * It should **not** hide relationships that already exist. This is the policy
  * `roleMismatchExplanation` already states: "Requests survive a role change on
  * either side... role compatibility governs discovery, and whether the request
- * can be *accepted*." SCRUM-296 applied that to `user.requests.me` and to the
- * card notices; the Requests tab was still gated on the caller's own role, so a
+ * can be *accepted*." That already applies to `user.requests.me` and to the
+ * card notices; the Requests tab was the last place still gated on the caller's own role, so a
  * VIEWER saw explanatory copy where their cards should be and had no way to
  * withdraw a request they had sent.
  *
@@ -21,7 +21,7 @@
  * with no server change and no new permission.
  *
  * Extracted as a predicate rather than left inline because the repository has no
- * component tests (SCRUM-263 / SCRUM-264), and a gate that decides what a user
+ * component tests, and a gate that decides what a user
  * can reach is worth pinning somewhere a test can see it.
  */
 
@@ -56,7 +56,7 @@ export const viewerModeHidesCards = (subType: string): boolean =>
   subType === "recommendations";
 
 /**
- * Whether a card may show the counterpart's preferred name (SCRUM-316).
+ * Whether a card may show the counterpart's preferred name.
  *
  * `UserCard` shows the other person's *role* — "Driver", "Rider" — in place of
  * their name whenever the reader is a VIEWER. That is a **discovery** rule: a
@@ -66,7 +66,7 @@ export const viewerModeHidesCards = (subType: string): boolean =>
  * A request is not discovery. The reader already sent or received it, and saw
  * the name at the time; the server takes the same line, disclosing a
  * counterpart's email through `convertCarpoolSearchToPublicWithExactHome`
- * (SCRUM-292) while withholding it from a stranger. Withholding here does not
+ * while withholding it from a stranger. Withholding here does not
  * protect anything — the card's own notice names the counterpart, because
  * `roleMismatchExplanation` phrases it that way — and it makes the tab unusable:
  * three sent requests would all read "Driver", with nothing to tell them apart.
@@ -81,10 +81,10 @@ export const disclosesCounterpartName = (
 
 /**
  * What a card calls the other person: their preferred name, or their role when
- * Viewer mode withholds it (SCRUM-279).
+ * Viewer mode withholds it.
  *
  * This exists so the **visible** name and the **accessible** name cannot
- * diverge. Before SCRUM-279 the disclosure rule lived inline in `UserCard`'s
+ * diverge. The disclosure rule used to live inline in `UserCard`'s
  * JSX, which was fine while the name was only ever rendered as text. It stopped
  * being fine when the card gained a stretched activation button: that button has
  * no text content, so it needs an `aria-label`, and a label built from

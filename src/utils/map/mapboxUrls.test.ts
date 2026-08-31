@@ -6,7 +6,7 @@ import {
 } from "./mapboxUrls";
 
 /**
- * URL construction for the Mapbox proxy procedures (SCRUM-244).
+ * URL construction for the Mapbox proxy procedures.
  *
  * The previous implementation concatenated the user's raw search text into the
  * upstream path. These tests are written as assertions about the *parsed*

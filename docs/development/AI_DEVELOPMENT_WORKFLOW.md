@@ -89,8 +89,8 @@ yarn db:start         # local MySQL 8.0 in Docker
 yarn dev              # http://localhost:3000
 ```
 
-You also need a `.env`. [`README.md`](../../README.md) lists every required variable and its
-shape. Get real values from a teammate or the team's Confluence space — never from a commit,
+You also need a `.env`. [`.env.example`](../../.env.example) is the authoritative list of
+every variable and its shape. Get real values from a teammate or the team's Confluence space — never from a commit,
 and never paste them into a Claude session. AWS keys use **suffixed** names
 (`ACCESS_KEY_ID_AWS`, not `AWS_ACCESS_KEY_ID`); standard names fail validation at import time.
 
@@ -243,7 +243,7 @@ editing a PR prompts you. Merging is blocked outright.
 
 > **This lifecycle is executable.** The step-by-step procedure lives in the
 > [`jira-ticket` Skill](../../.claude/skills/jira-ticket/SKILL.md), which Claude Code invokes
-> when you ask it to work on a ticket ("work on SCRUM-215"). This section explains the shape
+> when you ask it to work on a ticket. This section explains the shape
 > and the reasoning; the Skill is what actually runs. Keeping them separate is deliberate —
 > three layers, three jobs: **CLAUDE.md** holds permanent rules, **`.claude/settings.json`**
 > holds permissions, and the **Skill** holds the repeatable procedure.
@@ -430,7 +430,7 @@ enforcement by GitHub. See [§17](#17-known-limitations-and-teamadmin-responsibi
 
 ## 14. CI behavior
 
-Current workflows in [`.github/workflows/`](../../.github/workflows/). The six checks all run
+Current workflows in [`.github/workflows/`](../../.github/workflows/). The seven checks all run
 on the Node version in [`.nvmrc`](../../.nvmrc) (22); `auto-comment.yml` is not a check and runs
 no Node of its own:
 
@@ -442,9 +442,10 @@ no Node of its own:
 | [`build.yml`](../../.github/workflows/build.yml)               | PR + push to `main`                | `prisma generate`, then `yarn build` against placeholder env values                                             |
 | [`env-contract.yml`](../../.github/workflows/env-contract.yml) | PR + push to `main`                | `node scripts/check-env-contract.js`                                                                            |
 | [`schema.yml`](../../.github/workflows/schema.yml)             | PR + push to `main`                | `prisma validate`, then `prisma migrate diff --from-migrations` against a throwaway MySQL 8.0 service container |
+| [`format.yml`](../../.github/workflows/format.yml)             | PR + push to `main`                | `yarn check:format` (`prettier --check .`)                                                                      |
 | [`auto-comment.yml`](../../.github/workflows/auto-comment.yml) | PR touching `prisma/schema.prisma` | comments a reminder to open a PlanetScale deploy request before merging                                         |
 
-- All six checks share one trigger policy: **every pull request, plus pushes to `main`.** They
+- All seven checks share one trigger policy: **every pull request, plus pushes to `main`.** They
   deliberately do not run on pushes to other branches — while a PR is open that would run
   everything twice, once for the push and once for the `pull_request` event. The practical
   consequence is that pushing a branch with no PR yet gets you no CI feedback.
@@ -462,18 +463,17 @@ no Node of its own:
 - `--max-warnings=0` on lint is load-bearing: several rules that matter here, notably
   `react-hooks/exhaustive-deps`, are warnings rather than errors and would otherwise never
   fail the check.
-- `test` runs real tests as of SCRUM-212, which dropped `--passWithNoTests` so an empty run
-  fails instead of passing silently. SCRUM-211 widened coverage to the recommendation scoring
-  algorithm, the `PublicUser` converters, onboarding validation, Mapbox address parsing, email
-  parameter building, the admin dashboard aggregations, and the tRPC authorization middleware.
-  Test files are co-located as `*.test.ts` beside the module they cover.
+- `test` passes no `--passWithNoTests`, so an empty run fails instead of passing silently.
+  Coverage is broad on pure logic and the tRPC routers — the scoring algorithm, the
+  `PublicUser` converters, validation, and the routers' authorization and ownership checks.
+  Test files are co-located as `*.test.ts` beside the module they cover, except that a test
+  file must never go under `src/pages/`, where a filename is also a route.
   [`jest.setup.env.js`](../../jest.setup.env.js) supplies placeholder values by reusing the
   `--github-env` mode of `scripts/check-env-contract.js`, the same source `build.yml` uses, so
   suites that import `serverEnv` — directly or through `appRouter` — load without a `.env`.
-  Everything still runs on mocks: no component, browser or real-database tests exist. Those are SCRUM-263 (disposable MySQL in CI) and
-  SCRUM-264 (Playwright smoke journeys); component tests would first need
-  `jest-environment-jsdom` and a React testing library, since Jest uses `ts-jest` with the
-  default `node` environment.
+  Everything runs on mocks: no component, browser or real-database tests exist. Component
+  tests would first need `jest-environment-jsdom` and a React testing library, since Jest
+  uses `ts-jest` with the default `node` environment.
 - Whether these checks are _required_ before merge is a branch-protection setting, not
   something CI enforces.
 - A husky pre-commit hook runs `npx pretty-quick --staged` locally.
@@ -507,10 +507,10 @@ ecosystem (`package.json` and `yarn.lock`) and for the actions pinned in
 
 - **Secrets.** Never print, echo, or copy `.env` values into output, code, or commits.
   Reference variables by name. Reading `.env` is denied.
-- **Destructive database commands.** `yarn seed` **wipes the database first**;
-  `yarn build:preview` force-pushes the schema and re-seeds. Never run `build:preview` to
-  "test the build" — use `yarn build`. Confirm `DATABASE_URL` targets local Docker MySQL
-  before any schema or seed command. Both are denied in settings for a reason.
+- **Destructive database commands.** `yarn seed` **wipes the database first**, and
+  `prisma db push` alters a schema with no host guard of any kind. Use `yarn build` to test
+  a build, and confirm `DATABASE_URL` targets local Docker MySQL before any schema or seed
+  command. Both are denied in settings for a reason.
   [`src/utils/seedGuard.ts`](../../src/utils/seedGuard.ts) additionally refuses to seed any
   host outside a local allowlist, so a misdirected `DATABASE_URL` fails loudly instead of
   wiping a shared database. Treat that guard as a backstop, not as permission to run seed
@@ -558,8 +558,8 @@ ecosystem (`package.json` and `yarn.lock`) and for the actions pinned in
 **Open items a future developer may pick up:**
 
 - Confirm and document branch protection once someone has admin access.
-- Test coverage is narrow: `test.yml` now runs real tests, but only for the seed guard. No
-  component, router, or end-to-end coverage exists (SCRUM-211).
+- No React component, browser or real-database tests exist. Router and pure-logic coverage
+  is good; anything that needs a rendered component or a real query is unverified.
 
 Everything else in this document describes **current** behavior; only the items above are open
 or planned.

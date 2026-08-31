@@ -54,7 +54,7 @@ export const milesEastOf = (from: Coord, miles: number): Coord => ({
 });
 
 /**
- * A schedule time, built as the UTC instant the scorer reads (SCRUM-297).
+ * A schedule time, built as the UTC instant the scorer reads.
  *
  * This used to be a local-time constructor, chosen to match `minutesApart`'s
  * `Date#getHours`. Both sides have moved to UTC, because that is what a

@@ -11,11 +11,11 @@ import {
 /**
  * The group-details form, owned in one place.
  *
- * Before SCRUM-252 this state, the sync effect and the submit path were written
- * out four times - once each in `NoGroupInfo`, `MobileNoGroupInfo`, `GroupInfo`
+ * This state, the sync effect and the submit path used to be written out four
+ * times - once each in `NoGroupInfo`, `MobileNoGroupInfo`, `GroupInfo`
  * and `MobileGroupInfo`.
  *
- * Since SCRUM-253 there is also only one thing to write. The old save issued two
+ * There is also only one thing to write. The old save issued two
  * mutations - `updateMessage` for `group.message` and `updateUserMessage` for
  * `carpool_search.group_message` - carrying the same JSON blob to two columns
  * that could then disagree, and `group.message` was VARCHAR(191) so the group
@@ -68,7 +68,7 @@ export const useGroupDetails = ({ stored, canEdit }: UseGroupDetailsArgs) => {
 
       // Trimmed, not truncated: the textarea bounds the length, so anything over
       // the limit is a bug that should surface as the server's error rather than
-      // be sliced away here (SCRUM-253).
+      // be sliced away here.
       const normalized = trimDetails(details);
 
       setIsSaving(true);

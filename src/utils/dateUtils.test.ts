@@ -7,7 +7,7 @@ import {
 /**
  * `coopStartDate`/`coopEndDate` are `@db.Date` columns, and Prisma stores the
  * UTC date of whatever `Date` it is given. What matters here is therefore the
- * UTC day, not the local one (SCRUM-239).
+ * UTC day, not the local one.
  */
 const storedDay = (date: Date) => date.toISOString().slice(0, 10);
 
@@ -26,7 +26,7 @@ describe("lastDayOfMonthUTC", () => {
     expect(storedDay(lastDayOfMonthUTC("2024-12")!)).toBe("2024-12-31");
   });
 
-  it("stores the same day whatever offset the picker sat at (SCRUM-239)", () => {
+  it("stores the same day whatever offset the picker sat at", () => {
     // `new Date(year, month, 0)` built local midnight, which is the previous
     // day in UTC for anyone at a positive offset - so choosing March in Berlin
     // recorded 30 March. Building in UTC removes the viewer from the result.
@@ -63,7 +63,7 @@ describe("formatDateToMonth", () => {
 
 /**
  * A reversed co-op range is stored without complaint and then removes the user
- * from every full-overlap search (SCRUM-302).
+ * from every full-overlap search.
  */
 describe("isReversedCoopRange", () => {
   it("accepts a forward range", () => {

@@ -21,7 +21,7 @@ export const PRESIGNED_URL_CACHE_TIME_MS = 30 * 60 * 1000;
  * One request per user per staleTime window, shared by every avatar on the
  * page: the query key is derived from `userId`, so the same person appearing
  * in a card, a modal and a chat header costs one request, not three, and
- * revisiting a view costs none at all (SCRUM-242).
+ * revisiting a view costs none at all.
  *
  * This deliberately has no forced refetch. It used to fire a second request on
  * a 600ms timer after every mount, which doubled the load and still could not

@@ -28,11 +28,11 @@ export const NO_SCHEDULE_TIME = "Not set";
  * if (hour >= 1 && hour < 5) timeInEST = dayjs.tz(time, "UTC");
  * ```
  *
- * That was a guess about rows written before the timezone standardisation in
- * SCRUM-147 / SCRUM-157, and it silently mislabelled genuine early shifts: a
- * 02:00 start was stored correctly as 07:00 UTC and then displayed as 7:00 AM.
- * Both write paths in the tree store a UTC time of day, so the guess is gone
- * and the value is simply converted (SCRUM-239).
+ * That was a guess about rows written before times were standardised on UTC,
+ * and it silently mislabelled genuine early shifts: a 02:00 start was stored
+ * correctly as 07:00 UTC and then displayed as 7:00 AM. Both write paths in the
+ * tree store a UTC time of day, so the guess is gone and the value is simply
+ * converted.
  *
  * Also returns a placeholder rather than throwing on a missing time. The old
  * copies passed `null` straight to `dayjs.tz`, which raises

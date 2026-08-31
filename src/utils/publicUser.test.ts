@@ -90,8 +90,8 @@ const SENSITIVE_FIELDS = [
   "licenseSigned",
   "isOnboarded",
   "groupMessage",
-  // Group ride preferences are for group members, delivered by `groups.me`
-  // (SCRUM-253). They must not ride along on a map or recommendation result.
+  // Group ride preferences are for group members, delivered by `groups.me`.
+  // They must not ride along on a map or recommendation result.
   "groupNotes",
   "groupMusicPreference",
   "groupConversationStyle",
@@ -158,10 +158,10 @@ describe("convertCarpoolSearchToPublic", () => {
 
   it("exposes exactly this set of keys, and no others", () => {
     // This used to compare against `convertToPublic`, which existed only to be
-    // the other half of that comparison and was dead everywhere else
-    // (SCRUM-250). Pinning the set outright is the stronger check: two
-    // converters can drift together, a literal cannot. A new key here is a
-    // deliberate edit, and an accidental one - `email` above all - fails.
+    // the other half of that comparison and was dead everywhere else. Pinning
+    // the set outright is the stronger check: two converters can drift
+    // together, a literal cannot. A new key here is a deliberate edit, and an
+    // accidental one - `email` above all - fails.
     expect(
       Object.keys(convertCarpoolSearchToPublic(buildSearch())).sort(),
     ).toEqual([
@@ -191,7 +191,7 @@ describe("convertCarpoolSearchToPublic", () => {
   });
 });
 
-describe("home coordinate precision (SCRUM-226)", () => {
+describe("home coordinate precision", () => {
   /**
    * `startAddress` is deliberately coarsened to "City, State", but the raw home
    * coordinate used to ride along beside it in bulk responses, where it could
@@ -286,7 +286,7 @@ describe("roundCoord", () => {
 });
 
 /**
- * Who gets an email address (SCRUM-292).
+ * Who gets an email address.
  *
  * `PublicUser` carried `email` unconditionally, so the bulk list endpoints -
  * the map, recommendations, favorites - shipped every active user's
@@ -295,10 +295,10 @@ describe("roundCoord", () => {
  * ranked set. Only two consumers ever needed the field and both have a
  * relationship with the user.
  *
- * This is the same split SCRUM-226 built for home coordinates, applied to the
+ * This is the same split already made for home coordinates, applied to the
  * field that sat beside them in the struct and was missed at the time.
  */
-describe("email disclosure (SCRUM-292)", () => {
+describe("email disclosure", () => {
   it("omits the email address for a viewer with no relationship", () => {
     // The fixture *does* carry an email, so this pins the converter dropping it
     // rather than a row that never had one. That matters: a caller whose

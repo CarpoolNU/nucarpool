@@ -1,5 +1,5 @@
 /**
- * Pusher channel naming (SCRUM-224).
+ * Pusher channel naming.
  *
  * Both channels carry private message content, so both are Pusher *private*
  * channels. The `private-` prefix is not decoration: it is what makes Pusher

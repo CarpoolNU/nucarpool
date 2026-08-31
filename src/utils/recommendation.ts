@@ -48,7 +48,7 @@ export type FInputs = {
  *
  * Exported because the SQL bounding box in `candidateSearch.ts` has to derive
  * its window from the same constant this metric uses, or the box could exclude
- * a point the scorer would have kept (SCRUM-245).
+ * a point the scorer would have kept.
  */
 export const MILES_PER_DEGREE_LATITUDE = 69.09;
 
@@ -59,8 +59,7 @@ export const MILES_PER_DEGREE_LATITUDE = 69.09;
  * longitude as covering the same ground as a degree of latitude. At Boston's
  * latitude a degree of longitude is only about 74% as wide, so east-west
  * separation was overstated by roughly a third relative to north-south and the
- * mile-denominated filters did not mean the same thing in every direction
- * (SCRUM-236).
+ * mile-denominated filters did not mean the same thing in every direction.
  *
  * Equirectangular with a cosine correction is within a fraction of a percent of
  * haversine at commute range, for one cosine.
@@ -83,16 +82,16 @@ export const milesBetween = (
 const MINUTES_PER_DAY = 24 * 60;
 
 /**
- * Minutes between two times of day (SCRUM-235, SCRUM-297).
+ * Minutes between two times of day.
  *
  * Both times are collapsed to a minute offset from midnight before subtracting.
  * The original form — |Δhours| * 60 + |Δminutes| — took the absolute value of
  * each component separately, so a pair whose minutes ran backwards relative to
  * its hours was overstated: 9:50 against 10:00 read as 110 minutes rather than
- * 10 (SCRUM-235). That inflated difference both filtered out compatible users
+ * 10. That inflated difference both filtered out compatible users
  * and penalised their score.
  *
- * Two things about *how* the reading is taken were still wrong (SCRUM-297).
+ * Two things about *how* the reading is taken were still wrong.
  *
  * **The accessors are UTC.** `startTime`/`endTime` are `@db.Time(0)` holding a
  * UTC time of day — see "Schedule times" in `src/server/db/README.md` — and
@@ -307,7 +306,7 @@ export const calculateScore = (
       // carried no working days, which the map sends on first render and for
       // every VIEWER, and the resulting NaN made the whole sort arbitrary. With
       // no days requested there is no overlap to measure, so days contribute
-      // nothing rather than poisoning the comparison (SCRUM-236).
+      // nothing rather than poisoning the comparison.
       const daysScore =
         daysHelper.currentUserDays === 0
           ? 0
@@ -317,7 +316,7 @@ export const calculateScore = (
       // once unclamped, so a distant pair could outweigh every other factor -
       // and days twice whenever both schedules were known. The weights sum to
       // 1, so counting each once is what keeps the score inside 0..1 as the
-      // doc comment claims (SCRUM-236).
+      // doc comment claims.
       finalScore =
         sDistanceScore * weights.startDistance +
         eDistanceScore * weights.endDistance +
@@ -345,7 +344,7 @@ export const calculateScore = (
       } else {
         // Leaving this at 0 ranked a candidate with no recorded schedule as the
         // best possible match under a sort that is entirely about schedule.
-        // Both components cap at 1, so 2 is the worst score here (SCRUM-236).
+        // Both components cap at 1, so 2 is the worst score here.
         finalScore = 2;
       }
     }
@@ -364,7 +363,7 @@ export const calculateScore = (
  * and coordinates off `User` and onto `CarpoolSearch`, everything else on the
  * user row is either derived from the id or hardcoded. The parameter used to be
  * typed with a wide `GenerateUserInput` shape, which forced every caller into a
- * cast to supply fields this function never read; that type is gone (SCRUM-250).
+ * cast to supply fields this function never read; that type is gone.
  *
  * @param userInfo an object carrying the id to build the user around
  * @returns an upsert argument for the user row

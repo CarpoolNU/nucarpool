@@ -6,7 +6,7 @@ import { PublicUser } from "../../utils/types";
 /**
  * Deleting a group and removing a rider from it, owned in one place.
  *
- * Before SCRUM-252 these mutations and handlers existed twice: once in
+ * These mutations and handlers used to exist twice: once in
  * `GroupMembers` (desktop) and once in `MobileGroupMembers`. The two had already
  * drifted in three ways, all resolved here:
  *
@@ -27,7 +27,7 @@ import { PublicUser } from "../../utils/types";
  *
  * Toasts go through `react-toastify`. The desktop copy used a second toast
  * library for the same three events; that one has since been removed, so
- * `react-toastify` is now the only one (SCRUM-275).
+ * `react-toastify` is now the only one.
  */
 
 type UseGroupMembershipArgs = {
@@ -70,7 +70,7 @@ export const useGroupMembership = ({
       // know whether the caller left or merely removed somebody else.
       //
       // `null` data means the server dissolved the group, because one member
-      // cannot carpool alone (SCRUM-281). That leaves the caller without a
+      // cannot carpool alone. That leaves the caller without a
       // group whichever side of the removal they were on — so a driver who
       // removes their last rider now gets the modal dismissed too, which the
       // riderId comparison alone would miss.

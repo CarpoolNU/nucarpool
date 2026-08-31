@@ -11,7 +11,7 @@ declare global {
  * nested — `$transaction`, `$connect`, `$disconnect`, `$on`, `$use`. It is
  * therefore *not* assignable to `PrismaClient`, so any helper that has to run
  * both inside and outside a transaction must accept this type rather than the
- * full client (SCRUM-233).
+ * full client.
  */
 export type TransactionClient = Prisma.TransactionClient;
 

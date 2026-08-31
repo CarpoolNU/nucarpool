@@ -5,7 +5,7 @@ import {
 } from "./check-profile-coordinates";
 
 /**
- * The detection half of the SCRUM-302 check, tested without a database.
+ * The detection half of the check, tested without a database.
  *
  * Importing the module is safe because it only calls main() when run directly.
  */

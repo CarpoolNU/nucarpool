@@ -7,7 +7,7 @@ import { trpc } from "../utils/trpc";
  * The terms a user has to accept before using the app.
  *
  * "I Agree" now records the acceptance and this dialog stays up until that write
- * succeeds (SCRUM-240). It previously fired a Mixpanel event, closed itself, and
+ * succeeds. It previously fired a Mixpanel event, closed itself, and
  * persisted nothing - the flag that gates this dialog was set instead by any
  * profile save, so it was not evidence that anybody had read this text.
  *

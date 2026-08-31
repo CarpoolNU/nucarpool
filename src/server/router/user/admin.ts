@@ -15,8 +15,8 @@ import { AdminUserRow } from "../../../utils/types";
  * Admin dashboard queries. `adminRouter` already restricts these to ADMIN and
  * MANAGER; `updateUserPermission` additionally requires MANAGER.
  *
- * SCRUM-246 reshaped this router around one rule: the browser gets aggregates,
- * not tables. Before, the dashboard downloaded every user, group, request,
+ * This router is shaped around one rule: the browser gets aggregates, not
+ * tables. The dashboard used to download every user, group, request,
  * conversation and message — `getMessages` selected `content`, so the full text
  * of every private message on the platform was transferred to an admin's browser
  * in order to draw a line chart — and then filtered it with a client-side date
@@ -255,7 +255,7 @@ export const adminDataRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       // These were bare `Error`s, which reached the client as an opaque 500
-      // rather than as a refusal the UI could report (SCRUM-246).
+      // rather than as a refusal the UI could report.
       const permission = ctx.session.user?.permission;
       if (permission !== "MANAGER") {
         throw new TRPCError({

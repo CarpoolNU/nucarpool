@@ -5,7 +5,7 @@ import { AdminUserCounts, AdminUserRow, ConversationStats } from "./types";
 /**
  * Pure aggregation for the admin dashboard.
  *
- * Since SCRUM-246 these run on the server, inside `user.admin.getDashboardStats`
+ * These run on the server, inside `user.admin.getDashboardStats`
  * and `getDashboardSeries`, rather than in the browser: the dashboard used to
  * download whole tables and reduce them client-side. They stay here, free of
  * Prisma and of React, so they remain unit-testable — see `adminDataUtils.test.ts`.
@@ -192,7 +192,7 @@ export function summariseUsers(rows: AdminUserRow[]) {
   return {
     userCounts,
     // Previously `getDaysFrequency(drivers, riders)` against a `(riders, drivers)`
-    // signature, which swapped the two series in the chart (SCRUM-284).
+    // signature, which swapped the two series in the chart.
     daysFrequency: getDaysFrequency(riders, drivers),
     membership: {
       driversInGroup: drivers.filter(inGroup).length,

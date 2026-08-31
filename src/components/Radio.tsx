@@ -82,7 +82,7 @@ const Radio = React.forwardRef<HTMLInputElement, RadioProps>(
     // The input is visually hidden and driven by the wrapping label, so a
     // disabled option needs to *look* unavailable too - the disabled input
     // already ignores the click, but without this the button looks live and
-    // the user is left wondering why nothing happened (SCRUM-289).
+    // the user is left wondering why nothing happened.
     const stateClass = disabled
       ? "cursor-not-allowed opacity-50"
       : "cursor-pointer";

@@ -1,10 +1,10 @@
 const nextConfig = require("./next.config.js");
 
 /**
- * The security headers, pinned (SCRUM-257).
+ * The security headers, pinned.
  *
- * SCRUM-257 added six response headers, a report-only CSP, `remotePatterns` and
- * `poweredByHeader: false`. None of it was covered by a test, so any later edit
+ * The headers, the report-only CSP, `remotePatterns` and `poweredByHeader:
+ * false` were added together and none of it was covered by a test, so any edit
  * to `next.config.js` could drop a header silently — nothing else in the repo
  * would notice, and the failure mode of a missing security header is that
  * everything keeps working.
@@ -73,7 +73,7 @@ describe("security headers are sent on every route", () => {
     expect(groups[0]!.source).toBe("/:path*");
   });
 
-  it("sends every header SCRUM-257 introduced", async () => {
+  it("sends every security header", async () => {
     const keys = (await headersFor()).map((entry) => entry.key);
 
     expect(keys).toEqual(
@@ -118,7 +118,7 @@ describe("security headers are sent on every route", () => {
 
     // Deliberate omissions, not oversights: both affect hostnames other than
     // this app's, and `preload` is effectively irreversible. Adding either is
-    // the domain owner's call (SCRUM-257).
+    // the domain owner's call.
     expect(hsts).not.toContain("includeSubDomains");
     expect(hsts).not.toContain("preload");
   });
@@ -139,7 +139,7 @@ describe("security headers are sent on every route", () => {
 
 describe("violation reports have somewhere to go", () => {
   /**
-   * SCRUM-283. A report-only policy with no reporting destination is inert: it
+   * A report-only policy with no reporting destination is inert: it
    * blocks nothing and tells nobody, so the enforcement decision has no data
    * behind it. These pin the two halves of the wiring, which are easy to break
    * independently — `report-to` naming a group no header defines fails silently,
@@ -188,7 +188,7 @@ describe("the CSP is still report-only", () => {
   it("ships as Report-Only and not as an enforcing policy", async () => {
     const keys = (await headersFor()).map((entry) => entry.key);
 
-    // Enforcement is a deliberate later step (SCRUM-257): the policy has never
+    // Enforcement is a deliberate later step: the policy has never
     // been exercised in a browser against the map, chat or profile-picture
     // upload, so enforcing it could break Mapbox's workers or a third-party
     // origin in production. When that step happens, this test should be updated
@@ -270,7 +270,7 @@ describe("the CSP allows what the app actually loads", () => {
     // `useUploadFile` PUTs the file straight to a presigned S3 URL with
     // `fetch`, which `connect-src` governs. The bucket was in `img-src` only,
     // so enforcement would have blocked every profile-picture upload while the
-    // report-only header kept it invisible (SCRUM-305).
+    // report-only header kept it invisible.
     const connectSrc = (await cspDirectives()).get("connect-src")!;
 
     expect(connectSrc).toContain("amazonaws.com");

@@ -1,5 +1,5 @@
 /**
- * What the upload signature actually covers (SCRUM-243).
+ * What the upload signature actually covers.
  *
  * This is the one test in the suite that runs the *real* AWS signer rather than
  * a mock. That is deliberate: the security property here is not "the router

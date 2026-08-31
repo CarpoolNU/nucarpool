@@ -57,7 +57,7 @@ import clearRiderStartMarkers from "../utils/map/clearRiderStartMarkers";
 mapboxgl.accessToken = browserEnv.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
 
 // One direct session lookup, not a self-directed HTTP round trip to
-// `/api/auth/session` (SCRUM-299). `getSession` from `next-auth/react` is the
+// `/api/auth/session`. `getSession` from `next-auth/react` is the
 // *client* helper and was being called here; `getServerSession` reads the cookie
 // and queries directly, as `server/router/context.ts` already did.
 export async function getServerSideProps(context: GetServerSidePropsContext) {
@@ -136,8 +136,7 @@ const Home: NextPage<any> = () => {
     trpc.mapbox.geoJsonUserList.useQuery(debouncedFilters);
 
   // Held as whole query objects rather than destructured to `data` alone: the
-  // error and loading states are what tell an empty list apart from a failed one
-  // (SCRUM-241).
+  // error and loading states are what tell an empty list apart from a failed one.
   const userQuery = trpc.user.me.useQuery();
   const { data: user = null } = userQuery;
 
@@ -155,7 +154,7 @@ const Home: NextPage<any> = () => {
   });
   const { data: favorites = [] } = favoritesQuery;
 
-  // `"always"` rather than `true`, and kept deliberately (SCRUM-301).
+  // `"always"` rather than `true`, and kept deliberately.
   //
   // The global default is `refetchOnMount: false`, and this is the only query
   // that opts out of it. It has to: it is the sole source of conversation
@@ -172,7 +171,7 @@ const Home: NextPage<any> = () => {
   //
   // It also means the payload is re-fetched on every navigation to `/`, which
   // is why the projection above it matters: the narrowing in
-  // `user.requests.me` (SCRUM-301) is what makes paying this on every mount
+  // `user.requests.me` is what makes paying this on every mount
   // reasonable.
   const requestsQuery = trpc.user.requests.me.useQuery(undefined, {
     refetchOnMount: "always",
@@ -584,7 +583,7 @@ const Home: NextPage<any> = () => {
         // offered for a rider not yet collected, and a dropoff only for one
         // already in the car. This replaced a loop whose `if`/`else` branches
         // were identical and both broke on the first element, so it selected
-        // `candidatePoints[0]` while reading as a constraint check (SCRUM-250).
+        // `candidatePoints[0]` while reading as a constraint check.
         const chosenCandidate = candidatePoints[0];
 
         if (!chosenCandidate) break;
@@ -1012,7 +1011,7 @@ const Home: NextPage<any> = () => {
 
   // A failed `user.me` used to leave `data` undefined behind this spinner
   // forever, which was indistinguishable from the app being down and offered
-  // nothing to do about it (SCRUM-241).
+  // nothing to do about it.
   if (userQuery.isError) {
     return (
       <QueryError

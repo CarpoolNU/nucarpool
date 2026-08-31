@@ -12,11 +12,11 @@
 # *names*; no secret value appears in this file. `.env.production` is
 # gitignored.
 #
-# Amplify Hosting's Next.js compute support covers Next.js 12 through 15 (see
-# SCRUM-273). Bumping the framework past that fails at deploy, not at build.
+# Amplify Hosting's Next.js compute support covers Next.js 12 through 15.
+# Bumping the framework past that fails at deploy, not at build.
 #
 # ---------------------------------------------------------------------------
-# Build caching (SCRUM-320)
+# Build caching
 #
 # There was no `cache:` block here at all until now, so every deploy
 # recompiled from scratch and Next.js logged "No build cache found. Please
@@ -36,7 +36,7 @@
 # `.next/cache/**/*` from the paths below and set `NODE_OPTIONS` in the console
 # rather than in this file.
 #
-# Also still open on SCRUM-320: whether the deployed artifact is anywhere near
+# Also still open: whether the deployed artifact is anywhere near
 # Amplify's 220 MB ceiling for SSR apps. An earlier note claimed `.next/cache`
 # pushed it over, but that compared `du -sh .next` against a limit that applies
 # to Amplify's *transformed* `compute` + `static` output, which is a different

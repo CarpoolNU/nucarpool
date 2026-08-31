@@ -12,7 +12,7 @@ NUCarpool is a web app that helps Northeastern University students find carpool 
 - **Pusher** — real-time messaging
 - **AWS SES** for notification email, **AWS S3** for profile pictures
 - **Mixpanel** — analytics
-- **Tailwind CSS**, with Headless UI, MUI, and Ant Design components
+- **Tailwind CSS**, with Headless UI, MUI, Ant Design and styled-components — five UI systems coexist; use whichever the file you are editing already uses
 - **Docker Compose** — local MySQL
 - **Yarn** (Classic) — package manager
 
@@ -78,8 +78,6 @@ Two commands reach that script, not one:
 
 The second is the surprising one, because it is part of normal setup. To apply migrations without seeding, run `npx prisma migrate dev --skip-seed`; appending the flag to `yarn db:schema` does not work, because yarn passes it to `prisma generate` instead.
 
-There used to be a third, `yarn build:preview`, which force-pushed the schema and then re-seeded. It was deleted in SCRUM-249 — see [the db README](src/server/db/README.md#buildpreview-is-gone-and-why-it-had-to-be).
-
 Because the script writes to whatever `DATABASE_URL` points at, [`src/utils/seedGuard.ts`](src/utils/seedGuard.ts) checks the target host before the first delete and refuses anything that is not local:
 
 ```
@@ -109,7 +107,7 @@ Four things that commonly trip people up:
 - **`MYSQL_*` are read only by Docker Compose**, to provision the container. The app reads `DATABASE_URL`, so the user, password, port, and database name inside it must match the container's.
 - **`NEXT_PUBLIC_*` variables are inlined into the client bundle** at build time and are therefore public. Everything else is server-only.
 - **`GOOGLE_*` are required even locally.** The Google sign-in button only appears when `NEXT_PUBLIC_ENV=staging`, but the variables are validated in every environment.
-- **`NEXT_PUBLIC_ENV` must be one of `production`, `staging`, or `development`** — anything else fails validation (SCRUM-247). It selects the auth providers and is written into every S3 profile-picture key (`profile-pictures/{env}/{userId}`), so changing it orphans existing uploads. Leaving it unset locally is fine: it defaults to `development`. A production build has no such default and fails without it.
+- **`NEXT_PUBLIC_ENV` must be one of `production`, `staging`, or `development`** — anything else fails validation. It selects the auth providers and is written into every S3 profile-picture key (`profile-pictures/{env}/{userId}`), so changing it orphans existing uploads. Leaving it unset locally is fine: it defaults to `development`. A production build has no such default and fails without it.
 
 Validation runs at import time in [`src/utils/env/browser.ts`](src/utils/env/browser.ts) and [`src/utils/env/server.ts`](src/utils/env/server.ts), which is why a missing variable stops the app from starting rather than failing later.
 
@@ -122,7 +120,7 @@ Validation runs at import time in [`src/utils/env/browser.ts`](src/utils/env/bro
 | `yarn build`                     | Production build                                     |
 | `yarn lint`                      | Run ESLint                                           |
 | `yarn tsc`                       | Type check                                           |
-| `yarn test`                      | Run Jest (unit tests for the seed guard)             |
+| `yarn test`                      | Run Jest (unit tests, mocks only — no database)      |
 | `yarn db:start` / `yarn db:stop` | Start / stop the local MySQL container               |
 | `yarn db:schema`                 | Apply migrations and regenerate the Prisma client    |
 | `yarn seed`                      | **Wipes** the database, then inserts generated users |
@@ -132,7 +130,7 @@ Validation runs at import time in [`src/utils/env/browser.ts`](src/utils/env/bro
 
 `yarn check:format` runs `prettier --check .` and is a CI job, so a badly formatted file fails the build. A husky pre-commit hook runs `pretty-quick --staged`, which formats what you staged — but only what you staged, so a commit made with `--no-verify` can still fail the check.
 
-**Line endings are normalised to LF by [`.gitattributes`](.gitattributes)**, on every platform and whatever your `core.autocrlf` is set to. This matters because Prettier's `endOfLine` default is `lf`: without normalisation, a Windows checkout with `core.autocrlf=true` gets CRLF everywhere and `yarn check:format` fails on the entire repository — while CI passes, because the GitHub runner checks out LF (SCRUM-315).
+**Line endings are normalised to LF by [`.gitattributes`](.gitattributes)**, on every platform and whatever your `core.autocrlf` is set to. This matters because Prettier's `endOfLine` default is `lf`: without normalisation, a Windows checkout with `core.autocrlf=true` gets CRLF everywhere and `yarn check:format` fails on the entire repository — while CI passes, because the GitHub runner checks out LF.
 
 **If you cloned before `.gitattributes` was added,** apply it to your existing working tree once:
 
@@ -163,16 +161,16 @@ yarn run build:${BUILD_ENV}
 | `build:development` | `NODE_ENV=development prisma generate && next build` |
 | `build:production`  | `NODE_ENV=production prisma generate && next build`  |
 
-All three used a single `&` until SCRUM-304, which backgrounded `prisma generate` instead of sequencing it and discarded its exit code. Because the console selects the script by variable, **a `package.json` script is part of the deploy surface** — that is why `build:preview`, which force-pushed the schema and re-seeded, was deleted rather than merely documented (SCRUM-249).
+The `&&` is load-bearing: with a single `&`, `prisma generate` is backgrounded and its exit code discarded, so the build can compile against a stale client. And because the console selects the script by variable, **a `package.json` script is part of the deploy surface** — see [the db README](src/server/db/README.md#a-packagejson-script-is-part-of-the-deploy-surface).
 
 Two things are deliberately still true and worth knowing:
 
 - **Nothing applies migration files to a shared database.** No step runs `prisma migrate deploy`; schema promotion is a PlanetScale Deploy Request. See [the db README](src/server/db/README.md#what-migrations-are-for-here-and-what-they-are-not).
-- **Server-side tRPC calls resolve their origin from `NEXTAUTH_URL`.** [`getBaseUrl`](src/utils/getBaseUrl.ts) used to branch on `VERCEL_URL`, which Amplify never sets — so the branch was dead and the fallback would have pointed a deployed server-side call at `http://localhost:3000` (fixed in SCRUM-310). Nothing takes that branch today, because `ssr: false` is set in [`src/utils/trpc.ts`](src/utils/trpc.ts) and every page query is a client-side hook. **Enabling SSR makes it live**, so confirm `NEXTAUTH_URL` is set in every deployed environment first.
+- **Server-side tRPC calls resolve their origin from `NEXTAUTH_URL`**, falling back to `http://localhost:3000`. Nothing takes that path today, because `ssr: false` is set in [`src/utils/trpc.ts`](src/utils/trpc.ts) and every page query is a client-side hook. **Enabling SSR makes it live**, so confirm `NEXTAUTH_URL` is set in every deployed environment first — see [`getBaseUrl`](src/utils/getBaseUrl.ts).
 
 ## Content Security Policy
 
-The app sends security headers on every route from [`next.config.js`](next.config.js), pinned by [`next.config.test.ts`](next.config.test.ts). Five of them enforce immediately. The sixth, the Content Security Policy, is deliberately still **report-only**: it has never been exercised in a browser against the map, chat and profile-picture upload, so enforcing it blind could break Mapbox's workers or a third-party origin in production.
+The app sends security headers on every route from [`next.config.js`](next.config.js), pinned by [`next.config.test.ts`](next.config.test.ts). All of them enforce immediately except the Content Security Policy, which is deliberately still **report-only**: it has never been exercised in a browser against the map, chat and profile-picture upload, so enforcing it blind could break Mapbox's workers or a third-party origin in production.
 
 Violations post to `/api/csp-report`, which logs one line per violation prefixed `[csp-report]`. Reading them:
 
@@ -190,7 +188,7 @@ Violations post to `/api/csp-report`, which logs one line per violation prefixed
 
 Enforcing is then a one-line change: rename the header from `Content-Security-Policy-Report-Only` to `Content-Security-Policy`. Exactly one test fails when you do — the one that pins report-only — and updating it is part of that change.
 
-**One gap was found and closed before that exercise, by reading the code rather than waiting for a report (SCRUM-305).** `useUploadFile` PUTs the profile picture straight to a presigned S3 URL with `fetch`, so the bucket is a `connect-src` target as well as an `img-src` one — and it was listed only as an image source. Enforcing the policy as it stood would have blocked every profile-picture upload, one of the four flows the gate exists to check. `connect-src` now names the bucket, and `next.config.test.ts` pins every fetch target the same way it already pinned every image host.
+**One gap was found and closed before that exercise, by reading the code rather than waiting for a report.** `useUploadFile` PUTs the profile picture straight to a presigned S3 URL with `fetch`, so the bucket is a `connect-src` target as well as an `img-src` one — and it was listed only as an image source. Enforcing the policy as it stood would have blocked every profile-picture upload, one of the four flows the gate exists to check. `connect-src` now names the bucket, and `next.config.test.ts` pins every fetch target the same way it already pinned every image host.
 
 The same audit found nothing else: the S3 upload is the **only** `fetch` to an external origin anywhere in browser-reachable code, everything else being same-origin tRPC. Mapbox, Pusher, Mixpanel and the Google font hosts were already covered, and the Azure AD sign-in redirect is a top-level navigation, which no directive here governs. That does not replace exercising a deployed environment — inline styles, extension noise and anything loaded by a dependency at runtime only show up in a real browser — but it removes the one failure the code could predict.
 
@@ -208,3 +206,4 @@ This project is developed with a Jira workflow. Read the workflow guide before y
 | [`CLAUDE.md`](CLAUDE.md)                                                        | The instructions Claude Code loads every session: commands, safety boundaries, architecture and data-model gotchas, and git policy. Useful even if you never run Claude Code — it documents the project, not the tool |
 | [tRPC routers](src/server/router/README.md)                                     | Routers, per-request context, auth middleware, and how to write a procedure — read before adding or changing an endpoint                                                                                              |
 | [Database layer](src/server/db/README.md)                                       | The Prisma client, schema conventions, and the migration workflow — read before touching `prisma/schema.prisma`                                                                                                       |
+| [Operational scripts](scripts/README.md)                                        | The one-off backfill, check and measurement scripts, which of them write, and the record of what has been run in which environment — read before running anything in `scripts/`                                       |

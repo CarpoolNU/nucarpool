@@ -33,31 +33,31 @@ See the [router README](../router/README.md) for how that context is built.
 
 ## Dates and times
 
-Two columns on `CarpoolSearch` store a moment without a zone, so the convention matters (SCRUM-239).
+Two columns on `CarpoolSearch` store a moment without a zone, so the convention matters.
 
 **Schedule times — `startTime` / `endTime` (`DateTime? @db.Time(0)`)**
 
 A time of day in **UTC**, with no date attached. `user.edit` parses the ISO string the client sends and Prisma writes the UTC time of day out of it, so a student picking 9:00 AM in Boston is stored as `14:00:00`.
 
-Render with [`formatScheduleTime`](../../utils/scheduleTime.ts), which converts to `America/New_York`. Every schedule time in the UI goes through that one helper — do not format these columns inline. `UserCard` and `ConnectModal` each used to carry a copy that reinterpreted the value as UTC when the Boston hour fell between 01:00 and 04:59, which was a guess about rows predating the standardisation in SCRUM-147 / SCRUM-157 and mislabelled genuine early shifts.
+Render with [`formatScheduleTime`](../../utils/scheduleTime.ts), which converts to `America/New_York`. Every schedule time in the UI goes through that one helper — do not format these columns inline. `UserCard` and `ConnectModal` each used to carry a copy that reinterpreted the value as UTC when the Boston hour fell between 01:00 and 04:59, which was a guess about rows predating the standardisation on UTC and mislabelled genuine early shifts.
 
 Boston is hardcoded because the product is Northeastern co-op students; a schedule has no meaning in the viewer's own zone.
 
-**An overnight shift is legal, and deliberately unvalidated (SCRUM-302).** These are two times of day, not a range, so nothing requires the second to come after the first: a night shift starting at 22:00 and finishing at 06:00 stores exactly that, and it is correct. [`minutesApart`](../../utils/recommendation.ts) measures the gap between two people's times the short way round the clock — `min(d, 1440 - d)` — so an overnight pair is scored properly rather than merely tolerated, and nothing in the scorer or in [`buildCandidateWhere`](./candidateSearch.ts) compares a user's own start against their own end. Contrast the co-op columns below, which **are** a range and are checked.
+**An overnight shift is legal, and deliberately unvalidated.** These are two times of day, not a range, so nothing requires the second to come after the first: a night shift starting at 22:00 and finishing at 06:00 stores exactly that, and it is correct. [`minutesApart`](../../utils/recommendation.ts) measures the gap between two people's times the short way round the clock — `min(d, 1440 - d)` — so an overnight pair is scored properly rather than merely tolerated, and nothing in the scorer or in [`buildCandidateWhere`](./candidateSearch.ts) compares a user's own start against their own end. Contrast the co-op columns below, which **are** a range and are checked.
 
 **Co-op dates — `startDate` / `endDate` (`DateTime? @db.Date`)**
 
 A calendar day, taken by Prisma from the **UTC** date of whatever `Date` it is handed. Build these with [`lastDayOfMonthUTC`](../../utils/dateUtils.ts) rather than `new Date(year, month, 0)`: the local-time form stored the previous day for anyone at a positive UTC offset, because local midnight is the day before in UTC.
 
-**The range has to run forwards (SCRUM-302).** A reversed one was stored as submitted and then failed silently at match time: `dateOverlapFilter`'s full-overlap branch asks for `startDate <= theirs AND endDate >= theirs`, which no candidate can satisfy once the two are crossed, so the user disappeared from every full-overlap search with nothing to say why, and the partial-overlap negation behaved arbitrarily. `user.edit` and [`onboardSchema`](../../utils/profile/zodSchema.ts) both refuse `endDate < startDate` now, through the shared [`isReversedCoopRange`](../../utils/dateUtils.ts).
+**The range has to run forwards.** A reversed one was stored as submitted and then failed silently at match time: `dateOverlapFilter`'s full-overlap branch asks for `startDate <= theirs AND endDate >= theirs`, which no candidate can satisfy once the two are crossed, so the user disappeared from every full-overlap search with nothing to say why, and the partial-overlap negation behaved arbitrarily. `user.edit` and [`onboardSchema`](../../utils/profile/zodSchema.ts) both refuse `endDate < startDate` now, through the shared [`isReversedCoopRange`](../../utils/dateUtils.ts).
 
 **Equality is allowed**, and has to be: both pickers are month-granularity and `handleMonthChange` stores the _last day_ of the month chosen, so a one-month co-op is the same date twice.
 
 ## Coordinates
 
-`location.coord_lat` and `coord_lng` are plain `Float` columns, so the database accepts any number at all — and out-of-range values do not fail downstream either, they merely stop meaning anything. `locationWithin` adds a degree delta to whatever centre it is given and `milesBetween` feeds the value through `Math.cos`, so a nonsense row is silently unmatchable rather than loud, and it is scanned for nothing by the `location_coord_lat_coord_lng_idx` bounding box added in SCRUM-245.
+`location.coord_lat` and `coord_lng` are plain `Float` columns, so the database accepts any number at all — and out-of-range values do not fail downstream either, they merely stop meaning anything. `locationWithin` adds a degree delta to whatever centre it is given and `milesBetween` feeds the value through `Math.cos`, so a nonsense row is silently unmatchable rather than loud, and it is scanned for nothing by the `location_coord_lat_coord_lng_idx` bounding box.
 
-Both are therefore bounded to WGS 84 at the boundary that writes them (SCRUM-302). The definitions live in [`utils/coordinates.ts`](../../utils/coordinates.ts), shared with `getDirections`, which has range-checked its own input since SCRUM-244.
+Both are therefore bounded to WGS 84 at the boundary that writes them. The definitions live in [`utils/coordinates.ts`](../../utils/coordinates.ts), shared with `getDirections`, which range-checks its own input the same way.
 
 **`(0, 0)` needs a separate rule.** It is inside the valid range, but it is the sentinel [`useAddressSelection`](../../utils/useAddressSelection.ts) starts at and resets to when the address input is cleared, so it means "no address picked yet" rather than a point in the Gulf of Guinea ~4000 miles from Boston. `user.edit` refuses it for every role except `VIEWER` — a VIEWER has no `Location` at all, and `user.me` already reports `(0, 0)` for a row without one. Only the exact pair is refused: longitude 0 is Greenwich and latitude 0 is the equator, and a row at one and not the other is a real place.
 
@@ -75,7 +75,7 @@ It is read-only and has no `--apply`, deliberately: a lost coordinate cannot be 
 
 ## Text lengths
 
-MySQL runs in strict mode, so a value wider than its column makes the write **throw**, not truncate. Prisma surfaces that as `P2000` and tRPC turns it into an `INTERNAL_SERVER_ERROR` — a 500 for what is really a validation problem, raised after the UI has already accepted the text. Every Zod input that writes free text to a bounded column therefore carries a `.max()` matching that column (SCRUM-231).
+MySQL runs in strict mode, so a value wider than its column makes the write **throw**, not truncate. Prisma surfaces that as `P2000` and tRPC turns it into an `INTERNAL_SERVER_ERROR` — a 500 for what is really a validation problem, raised after the UI has already accepted the text. Every Zod input that writes free text to a bounded column therefore carries a `.max()` matching that column.
 
 An unannotated `String` on MySQL is `VARCHAR(191)`, which is why so many of these are 191 rather than something chosen.
 
@@ -98,16 +98,16 @@ The values live in [`textLimits.ts`](../../utils/textLimits.ts) so the form, the
 
 ### The two group-message columns are legacy
 
-Group ride preferences used to be one `GROUP_DETAILS_V1:{…json…}` blob, written into `group.message` _and_ mirrored into `carpool_search.group_message`. SCRUM-253 replaced that with the three real columns above, owned by the driver's own `CarpoolSearch`.
+Group ride preferences used to be one `GROUP_DETAILS_V1:{…json…}` blob, written into `group.message` _and_ mirrored into `carpool_search.group_message`. That was replaced with the three real columns above, owned by the driver's own `CarpoolSearch`.
 
 **Neither column needs widening, and neither should be.** An earlier version of this section said `group.message` could overflow and that restoring `@db.Text` was the fix — a migration and a PlanetScale deploy request for a column that is now written empty. That advice pointed the opposite way to the plan of record:
 
 - **`group.message`** — [`groups.create`](../router/user/groups.ts) writes `""` and nothing reads it. There is no path that puts content in it, so its width is irrelevant.
 - **`carpool_search.group_message`** — read-only, and only as a fallback. [`resolveGroupDetails`](../../components/Group/groupDetails.ts) treats all three `group_*` columns being null as "never saved" and parses the old blob out of this column instead, so a row that has not been backfilled still renders. Nothing writes it.
 
-Both are dropped by **SCRUM-287**, once SCRUM-253 is deployed everywhere and [`scripts/backfill-group-preferences.ts`](../../../scripts/backfill-group-preferences.ts) has run. Until then they stay so that a schema deploy landing before the matching build cannot break the old code.
+**Both should be dropped** once the real columns are deployed everywhere and [`scripts/backfill-group-preferences.ts`](../../../scripts/backfill-group-preferences.ts) has run. Until then they stay so that a schema deploy landing before the matching build cannot break the old code.
 
-**As of 2026-08-31 the backfill is not finished, so SCRUM-287 is not yet safe.** Staging still holds 3 rows whose preferences exist only in `group_message`, and production is unknown — read access to the PlanetScale `main` branch was not available. The run-state table in [`scripts/README.md`](../../../scripts/README.md#run-state-record) is where that answer lives; check it, and the dry run, before dropping either column. While those rows exist, `resolveGroupDetails`'s fallback is the only thing keeping their content readable (SCRUM-307).
+**As of 2026-08-31 the backfill is not finished, so dropping them is not yet safe.** Staging still holds 3 rows whose preferences exist only in `group_message`, and production is unknown — read access to the PlanetScale `main` branch was not available. The run-state table in [`scripts/README.md`](../../../scripts/README.md#run-state-record) is where that answer lives; check it, and the dry run, before dropping either column. While those rows exist, `resolveGroupDetails`'s fallback is the only thing keeping their content readable.
 
 Lengths on the live path are enforced where every other one is: Zod on [`groups.updatePreferences`](../router/user/groups.ts), against the same constants the textarea uses. A failed save is now reported — [`useGroupDetails`](../../components/Group/useGroupDetails.ts) awaits `mutateAsync` and raises an error toast, replacing an `await mutate(...)` that resolved immediately and let the success toast fire regardless.
 
@@ -115,31 +115,31 @@ Lengths on the live path are enforced where every other one is: Zod on [`groups.
 
 `user.license_signed` records that a user accepted the liability disclaimer in [`CompliancePortal.tsx`](../../components/CompliancePortal.tsx). Those terms are written on behalf of Northeastern University and disclaim responsibility for rides, safety and data, so what this column means matters.
 
-**It is trustworthy only for values written by `user.acceptTerms`.** Until SCRUM-240 nothing wrote it on acceptance at all: the "I Agree" button fired a Mixpanel event and closed the dialog, and the flag was set instead as a hardcoded side effect of every `user.edit` call. The modal was also rendered on the onboarding page alone, while [`index.tsx`](../../pages/index.tsx)'s `getServerSideProps` redirects to `/profile/setup` only when `isOnboarded` is false — so an already-onboarded user with no consent recorded never saw the terms, and their next profile save silently set the flag to `true`.
+**It is trustworthy only for values written by `user.acceptTerms`.** Nothing used to write it on acceptance at all: the "I Agree" button fired a Mixpanel event and closed the dialog, and the flag was set instead as a hardcoded side effect of every `user.edit` call. The modal was also rendered on the onboarding page alone, while [`index.tsx`](../../pages/index.tsx)'s `getServerSideProps` redirects to `/profile/setup` only when `isOnboarded` is false — so an already-onboarded user with no consent recorded never saw the terms, and their next profile save silently set the flag to `true`.
 
-Since SCRUM-240: `user.acceptTerms` is the only writer, `user.edit` does not touch the column, and [`ComplianceGate`](../../components/ComplianceGate.tsx) is mounted once in `_app` so the terms appear on whichever page a user without consent lands on.
+Today: `user.acceptTerms` is the only writer, `user.edit` does not touch the column, and [`ComplianceGate`](../../components/ComplianceGate.tsx) is mounted once in `_app` so the terms appear on whichever page a user without consent lands on.
 
 **Pre-existing rows were deliberately left as they are.** Forcing re-consent would put a blocking dialog in front of every active user, and the decision was that the disruption is not worth it. The consequence, which anyone relying on this column needs to know:
 
-| Cohort                           | What `license_signed = true` means                                              |
-| -------------------------------- | ------------------------------------------------------------------------------- |
-| Consent recorded after SCRUM-240 | The user clicked "I Agree" and the write succeeded                              |
-| Rows set before SCRUM-240        | Either acceptance during onboarding **or** any profile save — indistinguishable |
+| Cohort                        | What `license_signed = true` means                                              |
+| ----------------------------- | ------------------------------------------------------------------------------- |
+| Written by `user.acceptTerms` | The user clicked "I Agree" and the write succeeded                              |
+| Rows predating that           | Either acceptance during onboarding **or** any profile save — indistinguishable |
 
 There is no stored signal separating them, because the column carries no timestamp. Adding a timestamp and a terms version — which would also make re-consent possible when the terms are updated, something the terms text explicitly anticipates — needs new columns and is tracked separately. Do not treat a `true` predating that work as evidence for a specific user.
 
 ## Indexes, and how to decide whether one is needed
 
-Most `@@index` entries in `schema.prisma` are there because `relationMode = "prisma"` requires one on every relation scalar field, not because a query was measured against them. Only two exist purely for query performance, and both came out of SCRUM-245:
+Most `@@index` entries in `schema.prisma` are there because `relationMode = "prisma"` requires one on every relation scalar field, not because a query was measured against them. Only two exist purely for query performance:
 
 | Index                            | Serves                                                     |
 | -------------------------------- | ---------------------------------------------------------- |
 | `location(coord_lat, coord_lng)` | the explore page's bounding box                            |
 | `carpool_search(status, role)`   | the candidate filter's two most selective equality columns |
 
-That ratio is deliberate. **A generated query that looks alarming is not evidence, and a missing index is not a diagnosis** — an index costs write throughput on every insert forever, so it needs a measurement behind it. SCRUM-306 is the worked example of reaching the opposite conclusion, and it is worth reading before adding an index here.
+That ratio is deliberate. **A generated query that looks alarming is not evidence, and a missing index is not a diagnosis** — an index costs write throughput on every insert forever, so it needs a measurement behind it. The unread badge below is the worked example of reaching the opposite conclusion, and it is worth reading before adding an index here.
 
-### The unread badge: the measurement, and why no index was added (SCRUM-306)
+### The unread badge: the measurement, and why no index was added
 
 [`getUnreadMessageCount`](../router/user/message.ts) compiles to nested `IN` subqueries over `message`, the fastest-growing table here, filtered on `isRead`, which carries no index. That description is accurate and it was filed as a performance concern. Measured, it is not one.
 
@@ -164,12 +164,12 @@ The composite `message(userId, isRead)` is worse than useless: the predicate is 
 
 **Production, from PlanetScale Insights** (August 2026; Insights is readable where direct production queries return `403`):
 
-|                  | rows read per call | time per call | p50     | p99      | tables | `EXPLAIN` rows |
-| ---------------- | ------------------ | ------------- | ------- | -------- | ------ | -------------- |
-| before SCRUM-296 | 32.5               | 3.47 ms       | 3.07 ms | 13.23 ms | 5      | 13             |
-| after SCRUM-296  | 10.9               | 3.18 ms       | 2.52 ms | 11.27 ms | 3      | 5              |
+|                         | rows read per call | time per call | p50     | p99      | tables | `EXPLAIN` rows |
+| ----------------------- | ------------------ | ------------- | ------- | -------- | ------ | -------------- |
+| with the role predicate | 32.5               | 3.47 ms       | 3.07 ms | 13.23 ms | 5      | 13             |
+| without it (current)    | 10.9               | 3.18 ms       | 2.52 ms | 11.27 ms | 3      | 5              |
 
-**SCRUM-296 already fixed the part that was real.** Removing the counterpart-role predicate — done for a correctness reason, not a performance one — deleted both `DEPENDENT SUBQUERY` blocks from the plan. That matters more than the row counts: a dependent subquery is re-evaluated once per candidate outer row rather than once, so it multiplies where the rest of the plan adds. The four `IN` levels the ticket described are now two, the `user` and `carpool_search` joins are gone, and the SQL text sent per call fell from 1776 to 896 bytes.
+**The part that was real is already fixed.** Removing the counterpart-role predicate — done for a correctness reason, not a performance one — deleted both `DEPENDENT SUBQUERY` blocks from the plan. That matters more than the row counts: a dependent subquery is re-evaluated once per candidate outer row rather than once, so it multiplies where the rest of the plan adds. The four `IN` levels the ticket described are now two, the `user` and `carpool_search` joins are gone, and the SQL text sent per call fell from 1776 to 896 bytes.
 
 The badge also runs about once per session rather than once per navigation: [`trpc.ts`](../../utils/trpc.ts) sets `refetchOnMount: false` and `refetchOnWindowFocus: false` globally, and the only other trigger is [`MessageContent`](../../components/Messages/MessageContent.tsx) invalidating it after marking a thread read.
 
@@ -194,7 +194,7 @@ Avoid `prisma db push`. It applies changes without recording a migration, which 
 
 ### What migrations are for here, and what they are not
 
-Two mechanisms exist, and they do different jobs. Conflating them is what caused SCRUM-227.
+Two mechanisms exist, and they do different jobs. Conflating them is what caused the missing-migration incident described below.
 
 |                                              | Mechanism                                                                                       | Applies to                                                    |
 | -------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
@@ -211,20 +211,20 @@ build:development  = NODE_ENV=development prisma generate && next build
 build:production   = NODE_ENV=production prisma generate && next build
 ```
 
-All three used a single `&` until SCRUM-304. That backgrounded `prisma generate` and started `next build` immediately, so the build could compile against whatever client `yarn install`'s postinstall happened to leave behind, and a failing `prisma generate` never reached the shell — only `next build`'s exit code did. A schema change that broke generation could therefore deploy green against a stale client, which is the SCRUM-227 failure mode arriving by a different route. `&&` is what all three meant.
+**The `&&` matters.** With a single `&`, `prisma generate` is backgrounded and `next build` starts immediately, so the build can compile against a stale client and a failing generate never reaches the shell — a schema change that breaks generation then deploys green.
 
-That separation is deliberate and was reviewed in SCRUM-271. Adopting `prisma migrate deploy` for shared environments would need every shared branch baselined with `prisma migrate resolve --applied` for all existing migrations, and would bypass the online-schema-change and safe-migration behaviour a Deploy Request provides. It is not planned. If it is ever revisited, it needs its own ticket and a baselining plan.
+That separation is deliberate. Adopting `prisma migrate deploy` for shared environments would need every shared branch baselined with `prisma migrate resolve --applied` for all existing migrations, and would bypass the online-schema-change and safe-migration behaviour a Deploy Request provides. It is not planned. If it is ever revisited, it needs its own ticket and a baselining plan.
 
 So a schema change is two commits' worth of work in two places:
 
 1. **In the repository** — edit `schema.prisma`, run `yarn db:schema`, commit the new folder under `prisma/migrations/`.
 2. **In PlanetScale** — push the schema to staging, then open a Deploy Request to promote staging → `main`. A GitHub Action comments a reminder on any PR that touches `schema.prisma`.
 
-Doing only the second is how `tutorial_completed` came to exist in every shared database while no migration created it, which meant a database built from migration history alone failed every `User` query with `P2022` — no sign-in and no account creation. See SCRUM-227.
+Doing only the second is how `tutorial_completed` came to exist in every shared database while no migration created it, which meant a database built from migration history alone failed every `User` query with `P2022` — no sign-in and no account creation.
 
 ### CI enforces step 1
 
-The `schema` check ([`schema.yml`](../../../.github/workflows/schema.yml), SCRUM-271) replays the committed migration history into a throwaway MySQL 8.0 service container and fails if the result differs from `schema.prisma`:
+The `schema` check ([`schema.yml`](../../../.github/workflows/schema.yml)) replays the committed migration history into a throwaway MySQL 8.0 service container and fails if the result differs from `schema.prisma`:
 
 ```bash
 prisma validate
@@ -241,19 +241,13 @@ prisma migrate diff \
 
 The check proves migration history matches `schema.prisma`. It says nothing about what PlanetScale contains — that is still step 2, and still a human decision.
 
-### `build:preview` is gone, and why it had to be
+### A `package.json` script is part of the deploy surface
 
-The script was removed in SCRUM-249. It read:
+`amplify.yml`'s build phase ends in `yarn run build:${BUILD_ENV}` and `BUILD_ENV` is set in the Amplify console, so **any** `build:*` script is one console field away from running against a deployed environment. A `build:preview` entry that ran `echo "y" | prisma db push && … && prisma db seed` was deleted for exactly that reason.
 
-```
-build:preview = prisma generate && echo "y" | prisma db push && next build && prisma db seed
-```
+`prisma db push` is the dangerous half: unlike `yarn seed`, which [`seedGuard.ts`](../../utils/seedGuard.ts) restricts to a localhost allowlist, **it has no host guard at all**. Pointed at a shared database it force-alters the schema successfully, and only a following seed would be refused — after the schema damage, not before it.
 
-An earlier version of this section said "nothing invokes this script; every reference to it in the repository is a warning." That was true when the deploy configuration lived only in the Amplify console. It stopped being true once [`amplify.yml`](../../../amplify.yml) was committed, because the build phase ends in `yarn run build:${BUILD_ENV}` and `BUILD_ENV` is console-set — so `preview` was a reachable value, one console field away from running `prisma db push` and a re-seed against a deployed database.
-
-Why that was the worst of the three build variants: `prisma db push` is step 2 of the table above and **has no host guard**, unlike `yarn seed`, which [`seedGuard.ts`](../../utils/seedGuard.ts) restricts to a localhost allowlist. Pointed at a shared database it would force-alter the schema successfully, and only the _seed_ at step 4 would be refused. The guard fires after the schema damage, not before it.
-
-Deleting the script removes the reachable path entirely. The lesson generalises beyond this one entry: **a `package.json` script is part of the deploy surface whenever the build spec selects a script by variable.** The deny rules for `build:preview` in [`.claude/settings.json`](../../../.claude/settings.json) are deliberately left in place — they cost nothing now and would still fire if the script were ever reintroduced.
+The deny rules for `build:preview` in [`.claude/settings.json`](../../../.claude/settings.json) are deliberately left in place: they cost nothing and would still fire if such a script were reintroduced.
 
 ## Location ownership
 
@@ -281,8 +275,7 @@ branch that updated them, so:
 - Address changes orphaned rows, and nothing ever deleted them.
 
 The strings being matched come from `parseMapboxFeature`, which drops
-unit/suite detail — and per SCRUM-265 can store a neighborhood where the city
-belongs — so collisions were realistic rather than theoretical.
+unit/suite detail, and can store a neighborhood where the city belongs — so collisions were realistic rather than theoretical.
 
 ### How it is maintained
 
@@ -327,8 +320,8 @@ when you run this.
 
 - Two users at the same company now hold two rows rather than one. List queries
   such as `geoJsonUserList` therefore read more `location` rows than they used
-  to. The correctness win is worth it, but it is relevant to SCRUM-176.
-- These writes **are** transactional, since SCRUM-233. `resolveOwnedLocations`
+  to. The correctness win is worth it, but it does cost row reads.
+- These writes **are** transactional. `resolveOwnedLocations`
   is called with the transaction client inside `ctx.prisma.$transaction` in
   [`user.edit`](../router/user.ts), so a failure part-way through rolls back the
   `user` row, both `location` rows and the `CarpoolSearch` together. Before

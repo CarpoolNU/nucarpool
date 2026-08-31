@@ -1,5 +1,5 @@
 /**
- * `createRequestHandlers` — the accept/reject gate (SCRUM-294).
+ * `createRequestHandlers` — the accept/reject gate.
  *
  * `handleAcceptRequest` used to resolve `undefined` whether the acceptance had
  * happened or not, so `MessagePanel.handleAccept` could not tell success from
@@ -9,15 +9,15 @@
  * and `sendAcceptanceNotification` is deliberately not rate limited, so that
  * call was a real email to a real person.
  *
- * SCRUM-291 and SCRUM-293 gave it the boolean these tests pin: `true` only once
- * a group write has landed. Everything that tells either party the acceptance
- * happened now hangs off that value, so "resolves `false`" is the assertion that
- * no email is sent and the conversation stays open, and "no success toast" is the
- * assertion that nothing on the accepter's own screen claims otherwise either.
+ * It returns the boolean these tests pin: `true` only once a group write has
+ * landed. Everything that tells either party the acceptance happened now hangs
+ * off that value, so "resolves `false`" is the assertion that no email is sent
+ * and the conversation stays open, and "no success toast" is the assertion that
+ * nothing on the accepter's own screen claims otherwise either.
  *
  * `trpc` and `react-toastify` are mocked, so `createRequestHandlers` runs outside
  * React and nothing here reaches the network. The click-through itself needs a
- * browser and belongs to SCRUM-264.
+ * browser and is not covered here.
  */
 
 import { Permission, RequestStatus, Role, Status } from "@prisma/client";
@@ -304,7 +304,7 @@ describe("handleAcceptRequest — an acceptance the server refuses", () => {
 
     // Not relabelled as "Something went wrong": the server is the authority on
     // whether the join is legal, and its message names a rule the user can act
-    // on (SCRUM-291).
+    // on.
     expect(mockToastError).toHaveBeenCalledWith(
       "You already belong to a carpool.",
     );
@@ -463,7 +463,7 @@ describe("isMutating", () => {
 });
 
 /**
- * A pair who can no longer carpool (SCRUM-296).
+ * A pair who can no longer carpool.
  *
  * `user.requests.me` used to drop these requests, so this button never saw one:
  * hiding it did not stop it blocking new requests, and left the sender no way to
@@ -495,7 +495,7 @@ describe("handleAcceptRequest - a pair who can no longer carpool", () => {
       );
 
       // False is what stops MessagePanel emailing the other person to say they
-      // were accepted into a group that was never created (SCRUM-294).
+      // were accepted into a group that was never created.
       expect(accepted).toBe(false);
       expectNothingWritten();
       expect(mockToastSuccess).not.toHaveBeenCalled();

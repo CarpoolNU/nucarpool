@@ -317,11 +317,11 @@ const createUserData = async (resolveAddress: AddressResolver) => {
   // create Location and CarpoolSearch records for each user
   for (const userData of usersData) {
     try {
-      // A Location belongs to one slot of one CarpoolSearch, so every user
-      // gets their own pair of rows (SCRUM-232). This used to reuse an
-      // existing row whose address text matched, which silently gave the
-      // seeded user the *other* user's coordinates - so local data did not
-      // reproduce the geometry the recommendation algorithm is scored on.
+      // A Location belongs to one slot of one CarpoolSearch, so every user gets
+      // their own pair of rows. This used to reuse an existing row whose
+      // address text matched, which silently gave the seeded user the *other*
+      // user's coordinates - so local data did not reproduce the geometry the
+      // recommendation algorithm is scored on.
       const homeLocation = await prisma.location.create({
         data: {
           street: userData.startStreet || "",

@@ -2,7 +2,7 @@ import { RequestStatus } from "@prisma/client";
 import { findAcceptedRequestIds, parseArgs } from "./backfill-request-status";
 
 /**
- * The backfill for `Request.status` (SCRUM-228).
+ * The backfill for `Request.status`.
  *
  * Two things are worth pinning without a database: the pairing rule, which
  * decides which historical rows get rewritten, and the argument parsing, which

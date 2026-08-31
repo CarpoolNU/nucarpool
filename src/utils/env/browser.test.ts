@@ -1,5 +1,5 @@
 /**
- * Validation of `NEXT_PUBLIC_ENV` (SCRUM-247).
+ * Validation of `NEXT_PUBLIC_ENV`.
  *
  * This was the only environment variable the app did not validate, and the most
  * consequential one: it selects the auth providers, and it is written verbatim

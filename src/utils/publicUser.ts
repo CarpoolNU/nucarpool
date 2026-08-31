@@ -36,7 +36,7 @@ type CarpoolSearchWithRelations = CarpoolSearch & {
  *
  * Kept as a separate type so the coarsened converter cannot be handed an email
  * to leak by accident: a caller that selects one has to reach for the exact-home
- * converter deliberately (SCRUM-292).
+ * converter deliberately.
  */
 type CarpoolSearchWithContact = CarpoolSearch & {
   user: PublicUserFields & { email: string | null };
@@ -84,9 +84,9 @@ const buildPublicUser = (search: CarpoolSearchWithRelations): PublicUser => ({
  * carpool group, or an existing request between them. Everything else must use
  * `convertCarpoolSearchToPublic`.
  *
- * Both disclosures travel together because the same rule governs them: SCRUM-226
- * established it for coordinates, and `email` sat in the same struct and was not
- * revisited until SCRUM-292.
+ * Both disclosures travel together because the same rule governs them. It was
+ * established for coordinates first; `email` sat in the same struct and was not
+ * revisited until later.
  *
  * @param search an active CarpoolSearch record with user and location relations
  * @returns a user's details, home coordinate exact and email included
@@ -108,9 +108,9 @@ export const convertCarpoolSearchToPublicWithExactHome = (
  * responses - the map, recommendations, favorites - return up to 150 users to
  * any signed-in viewer. Metre-accurate coordinates in those payloads defeat the
  * address coarsening the product deliberately applies, because they can simply
- * be reverse-geocoded (SCRUM-226).
+ * be reverse-geocoded.
  *
- * The email address is omitted for the same reason (SCRUM-292). These payloads
+ * The email address is omitted for the same reason. These payloads
  * carried every active user's Northeastern address to any signed-in viewer -
  * up to 150 per map request, unbounded for favorites, and the whole ranked set
  * for a VIEWER - on screens that never displayed it. Two consumers needed it and

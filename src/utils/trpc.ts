@@ -44,7 +44,7 @@ export const trpc = createTRPCNext<AppRouter>({
 
               // Retrying a request the server has already judged invalid only
               // delays the error state the user is waiting on - three times over,
-              // before the UI is allowed to say anything went wrong (SCRUM-241).
+              // before the UI is allowed to say anything went wrong.
               // Anything not listed here (a 500, a timeout, a dropped
               // connection) is still worth another go.
               if (
@@ -70,7 +70,7 @@ export const trpc = createTRPCNext<AppRouter>({
    * server-side branch in practice. **Turning this on means the deployed
    * server-side origin starts being used for real** — check that `NEXTAUTH_URL`
    * is set in every deployed environment before you do, or requests fall back
-   * to localhost (SCRUM-310).
+   * to localhost.
    *
    * @link https://trpc.io/docs/ssr
    **/

@@ -42,7 +42,7 @@ const UserSection = ({
   // A driver in a carpool group cannot change role until they leave it -
   // dropping the group's only driver leaves it unmanageable for everyone in
   // it. `user.edit` refuses this server-side; the form says so up front so
-  // the answer is not a failed save (SCRUM-125, restored by SCRUM-289).
+  // the answer is not a failed save.
   const lockedToDriver = user?.role === Role.DRIVER && !!user?.carpoolId;
 
   const logout = () => {

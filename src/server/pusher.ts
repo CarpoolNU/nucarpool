@@ -3,7 +3,7 @@ import { serverEnv } from "../utils/env/server";
 
 /**
  * The one server-side Pusher client. Previously constructed inline in the
- * message router; the auth endpoint added for SCRUM-224 needs the same
+ * message router; the private-channel auth endpoint needs the same
  * credentials to sign subscriptions, and two separately configured clients
  * would be a silent way for the two to drift apart.
  */

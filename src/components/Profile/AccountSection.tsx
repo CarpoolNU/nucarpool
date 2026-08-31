@@ -164,7 +164,7 @@ const AccountSection = ({
         </div>
 
         {/* The reason a range was rejected, not just a red label. Ordering is
-            the one date error whose message a user cannot infer (SCRUM-302). */}
+            the one date error whose message a user cannot infer. */}
         {errors.coopEndDate?.message && (
           <ErrorDisplay className="pt-2">
             {errors.coopEndDate.message}

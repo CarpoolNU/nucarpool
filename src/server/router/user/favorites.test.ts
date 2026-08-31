@@ -5,7 +5,7 @@ import { appRouter } from "../index";
 import type { Context } from "../context";
 
 /**
- * Authorization tests for `user.favorites.edit` (SCRUM-223).
+ * Authorization tests for `user.favorites.edit`.
  *
  * The mutation used to take the owning `userId` from client input and pass it
  * straight to `prisma.user.update({ where: { id: input.userId } })`, so any
@@ -22,7 +22,7 @@ import type { Context } from "../context";
  * lets a test assert the *effect* of the mutation — user A's list changed and
  * user B's did not — rather than only asserting which arguments Prisma was
  * called with. It is a stand-in for a real database, not a substitute for one;
- * see the limitations note at the bottom of this file and SCRUM-263.
+ * see the limitations note at the bottom of this file.
  */
 
 const USER_A = "user-a";

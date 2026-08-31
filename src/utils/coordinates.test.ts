@@ -7,8 +7,8 @@ import {
 } from "./coordinates";
 
 /**
- * The coordinate contract shared by the form, `user.edit` and `getDirections`
- * (SCRUM-302). Two distinct failures: a value that is not a place at all, and
+ * The coordinate contract shared by the form, `user.edit` and `getDirections`.
+ * Two distinct failures: a value that is not a place at all, and
  * the in-range sentinel that means "no address picked yet".
  */
 

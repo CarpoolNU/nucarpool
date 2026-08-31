@@ -8,7 +8,7 @@ import { MAX_PROFILE_IMAGE_BYTES } from "../../utils/profileImage";
 import { cloneState, withTransaction } from "./transactionMock";
 
 /**
- * Contract tests for `user.getPresignedDownloadUrl` (SCRUM-242).
+ * Contract tests for `user.getPresignedDownloadUrl`.
  *
  * The important assertion here is a negative one: this procedure must never
  * resolve `undefined`. React Query treats a query function that resolves
@@ -107,9 +107,9 @@ describe("user.getPresignedDownloadUrl", () => {
     // A session with no `user` is the only way to reach this branch. It used to
     // answer `{ url: null }`, which is the same thing this procedure says about
     // a user who simply has not uploaded anything - so a broken session was
-    // indistinguishable from an empty avatar (SCRUM-243).
+    // indistinguishable from an empty avatar.
     //
-    // This does not weaken SCRUM-242: `{ url: null }` is still the answer for
+    // `{ url: null }` is still the answer for
     // every *successful* lookup that finds no object, which is the case that
     // had to stay cacheable.
     const caller = callerFor({
@@ -124,8 +124,8 @@ describe("user.getPresignedDownloadUrl", () => {
   });
 
   it("still resolves { url: null } for a real user with no picture", async () => {
-    // The positive control for the test above: the cacheable shape SCRUM-242
-    // introduced has to survive the change that made a broken session throw.
+    // The positive control for the test above: the cacheable shape has to
+    // survive the change that made a broken session throw.
     mockGetPresignedImageUrl.mockResolvedValueOnce(null);
 
     await expect(
@@ -181,7 +181,7 @@ describe("user.getPresignedDownloadUrl", () => {
 });
 
 /**
- * Upload constraints for `user.getPresignedUrl` (SCRUM-243).
+ * Upload constraints for `user.getPresignedUrl`.
  *
  * This procedure hands out a URL that writes to `profile-pictures/{env}/{id}`.
  * It used to accept `contentType: z.string()` with no size bound at all, so a
@@ -353,7 +353,7 @@ describe("user.getPresignedUrl", () => {
 });
 
 /**
- * End-to-end wiring for Location ownership in `user.edit` (SCRUM-232).
+ * End-to-end wiring for Location ownership in `user.edit`.
  *
  * `locationOwnership.test.ts` covers the decision logic. What is left to get
  * wrong is the wiring: passing the wrong slot's coordinates, reading the
@@ -381,7 +381,7 @@ type SearchRow = {
   userId: string;
   homeLocationId: string;
   companyLocationId: string;
-  /** Only the group guard reads these (SCRUM-289). */
+  /** Only the group guard reads these. */
   role?: Role;
   carpoolId?: string | null;
 };
@@ -455,7 +455,7 @@ const buildEditDb = (
   };
 
   // `user.edit` commits the user row, both Locations and the CarpoolSearch as
-  // one transaction (SCRUM-233), so the mock rolls back on a throw. `created`
+  // one transaction, so the mock rolls back on a throw. `created`
   // is restored too, otherwise generated ids would keep advancing across a
   // rolled-back attempt and the next one would not reuse them.
   const prisma = withTransaction(
@@ -533,8 +533,8 @@ const editInput = (overrides: Record<string, unknown> = {}) =>
   }) as any;
 
 /**
- * Terms acceptance is recorded by `user.acceptTerms` and by nothing else
- * (SCRUM-240). It used to be set to `true` by every profile save, which made
+ * Terms acceptance is recorded by `user.acceptTerms` and by nothing else.
+ * It used to be set to `true` by every profile save, which made
  * `licenseSigned` a record of "this user saved a profile" rather than of consent
  * to a liability disclaimer written on behalf of the university.
  */
@@ -592,7 +592,7 @@ describe("user.acceptTerms", () => {
   });
 });
 
-describe("user.edit — terms acceptance is not a profile field (SCRUM-240)", () => {
+describe("user.edit — terms acceptance is not a profile field", () => {
   it("never writes licenseSigned, even when a client sends it", async () => {
     const db = buildEditDb();
     const caller = editCallerFor(SESSION_USER, db);
@@ -703,11 +703,11 @@ describe("user.edit — Location ownership", () => {
 /**
  * `user.edit` writes four `VARCHAR(191)` columns — `user.bio`,
  * `user.preferred_name`, `user.pronouns` and `carpool_search.company_name` —
- * and every one of them arrived as an unbounded `z.string()` (SCRUM-231).
+ * and every one of them arrived as an unbounded `z.string()`.
  * MySQL runs in strict mode, so an oversized value failed the whole profile
  * save inside Prisma rather than being refused at the boundary.
  */
-describe("user.edit — profile text is bounded by its columns (SCRUM-231)", () => {
+describe("user.edit — profile text is bounded by its columns", () => {
   const fields = ["bio", "preferredName", "pronouns", "companyName"] as const;
   const atLimit = "a".repeat(PROFILE_TEXT_MAX_LENGTH);
 
@@ -751,7 +751,7 @@ describe("user.edit — profile text is bounded by its columns (SCRUM-231)", () 
 
 /**
  * `user.edit` is the boundary that writes coordinates and co-op dates to the
- * database, and it range-checked neither (SCRUM-302).
+ * database, and it range-checked neither.
  *
  * Nothing downstream catches either one. `coord_lat` / `coord_lng` are plain
  * `Float`, `start_date` / `end_date` are independent `Date`, so the save
@@ -761,7 +761,7 @@ describe("user.edit — profile text is bounded by its columns (SCRUM-231)", () 
  * The assertions are all "and writes nothing": the value being refused matters
  * less than the refusal happening before the transaction opens.
  */
-describe("user.edit - coordinates are range-checked (SCRUM-302)", () => {
+describe("user.edit - coordinates are range-checked", () => {
   const coordinateFields = [
     "startCoordLng",
     "startCoordLat",
@@ -840,7 +840,7 @@ describe("user.edit - coordinates are range-checked (SCRUM-302)", () => {
   });
 });
 
-describe("user.edit - unresolved coordinates are refused (SCRUM-302)", () => {
+describe("user.edit - unresolved coordinates are refused", () => {
   // `[0, 0]` is `useAddressSelection`'s "nothing picked yet" default, and it is
   // inside the valid range. A profile saved before the address resolved put the
   // pin ~4000 miles from Boston, so the row matched nobody.
@@ -913,7 +913,7 @@ describe("user.edit - unresolved coordinates are refused (SCRUM-302)", () => {
   });
 });
 
-describe("user.edit - co-op dates must run forwards (SCRUM-302)", () => {
+describe("user.edit - co-op dates must run forwards", () => {
   const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
 
   it("refuses a reversed range, writing nothing", async () => {
@@ -993,7 +993,7 @@ describe("user.edit - co-op dates must run forwards (SCRUM-302)", () => {
 });
 
 /**
- * Atomicity of `user.edit` (SCRUM-233).
+ * Atomicity of `user.edit`.
  *
  * One profile save writes the user row, two `Location` rows and a
  * `CarpoolSearch`. These were four independent awaits, so a failure part-way
@@ -1081,9 +1081,9 @@ describe("user.edit is atomic", () => {
 });
 
 /**
- * A driver in a carpool group cannot change role out of it (SCRUM-289).
+ * A driver in a carpool group cannot change role out of it.
  *
- * SCRUM-125 added this as a `toast.error` in the profile page; the profile
+ * This was once a `toast.error` in the profile page; the profile
  * redesign deleted the handler in December 2024 and nothing replaced it, so
  * this went unguarded for over a year. It was never server-side even before
  * that, so a direct call to the procedure always bypassed it.
@@ -1098,7 +1098,7 @@ describe("user.edit is atomic", () => {
  * take the guard with it: the invariant is asserted against the procedure, not
  * against the form.
  */
-describe("user.edit — a driver in a group cannot change role (SCRUM-289)", () => {
+describe("user.edit — a driver in a group cannot change role", () => {
   const GROUP = "group-1";
 
   /**

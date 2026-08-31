@@ -21,7 +21,7 @@ export function MyApp({
       <SessionProvider session={session} refetchOnWindowFocus={false}>
         <Component {...pageProps} />
         {/* One gate for the whole app, so a signed-in user who has not accepted
-            the terms is shown them on whichever page they land on (SCRUM-240). */}
+            the terms is shown them on whichever page they land on. */}
         <ComplianceGate />
         <ToastContainer />
       </SessionProvider>

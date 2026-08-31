@@ -7,7 +7,7 @@ import { pusherServer } from "../../../server/pusher";
 import { canSubscribe } from "../../../server/pusherChannelAuth";
 
 /**
- * Pusher private-channel authorization (SCRUM-224).
+ * Pusher private-channel authorization.
  *
  * `pusher-js` calls this before joining a `private-` channel. Returning a
  * signature admits the subscriber; anything else and Pusher refuses the

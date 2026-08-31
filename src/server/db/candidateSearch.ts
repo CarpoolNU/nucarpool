@@ -8,7 +8,7 @@ import type { FInputs, Recommendation } from "../../utils/recommendation";
 import type { PrismaOrTransaction } from "./client";
 
 /**
- * The candidate query behind both matching endpoints (SCRUM-245).
+ * The candidate query behind both matching endpoints.
  *
  * `mapbox.geoJsonUserList` and `user.recommendations.me` used to hold two
  * near-identical copies of this: fetch *every* ACTIVE carpool search with its
@@ -17,7 +17,7 @@ import type { PrismaOrTransaction } from "./client";
  * SQL, there was no `take`, and both endpoints run on the same explore page
  * load with the same filters — so every filter interaction read the entire
  * table twice. On PlanetScale, where billing is per row read, that is a direct
- * cost (SCRUM-176).
+ * cost.
  *
  * The rule here is that SQL narrows and `calculateScore` decides. Every
  * predicate below must be a **superset** of what the scorer would keep: it may
@@ -29,7 +29,7 @@ import type { PrismaOrTransaction } from "./client";
  * Deliberately *not* pushed down:
  *
  *   - **Time of day.** `startTime`/`endTime` are `@db.Time(0)` with a known
- *     storage ambiguity (SCRUM-239), and the scorer only applies the filter
+ *     storage ambiguity, and the scorer only applies the filter
  *     when *both* users have times. Comparing them in SQL would risk changing
  *     results to save little.
  *   - **Days working.** A comma-separated string; the `days === 1` rule is a
@@ -201,7 +201,7 @@ export type CurrentSearch = {
 
 /**
  * The `where` for the candidate query — previously `carpoolSearchQuery: any` in
- * both routers, so nothing about it type-checked (SCRUM-245).
+ * both routers, so nothing about it type-checked.
  */
 export const buildCandidateWhere = ({
   currentSearch,
@@ -267,7 +267,7 @@ export const buildCandidateWhere = ({
 /**
  * Exactly the columns both endpoints need, and no more.
  *
- * `email` is deliberately absent (SCRUM-292). Both endpoints hand these rows to
+ * `email` is deliberately absent. Both endpoints hand these rows to
  * `convertCarpoolSearchToPublic`, which does not disclose it, so selecting it
  * would only read a column to throw away - and leave the next person to wire it
  * back into a response.
@@ -297,7 +297,7 @@ export type CandidateSearch = Prisma.CarpoolSearchGetPayload<{
  *
  * The remap used to be `scores.map(s => candidates.find(c => c.user.id === s.id))`
  * in both routers — a linear scan per score, so O(n²) over the whole table. A
- * single index by user id makes it O(n) (SCRUM-245).
+ * single index by user id makes it O(n).
  */
 export const rankCandidates = <T extends Parameters<typeof calculateScore>[0]>(
   candidates: T[],

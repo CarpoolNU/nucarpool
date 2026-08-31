@@ -70,7 +70,7 @@ const StepTwo = ({
           error={errors.companyName}
           type="text"
           // `company_name` is `VARCHAR(191)` and this field had no cap at all,
-          // so a pasted value failed the save inside Prisma (SCRUM-231).
+          // so a pasted value failed the save inside Prisma.
           charLimit={PROFILE_TEXT_MAX_LENGTH}
           {...register("companyName")}
         />

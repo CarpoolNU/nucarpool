@@ -1,7 +1,7 @@
 import { MdErrorOutline } from "react-icons/md";
 
 /**
- * The one error treatment for a failed query (SCRUM-241).
+ * The one error treatment for a failed query.
  *
  * Both places that can fail use this so that "failed to load" reads the same
  * wherever it appears, and so it never looks like an empty result: an icon, a

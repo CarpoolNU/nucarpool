@@ -5,12 +5,12 @@ import type { Context } from "./context";
 
 /**
  * Router-level coverage for the two endpoints that drive the explore page:
- * `user.recommendations.me` and `mapbox.geoJsonUserList` (SCRUM-288).
+ * `user.recommendations.me` and `mapbox.geoJsonUserList`.
  *
  * Both build their candidate query from relations pulled in through a
  * *conditional* include - `favorites: input.filters.favorites`. Prisma omits
  * such a key entirely when the value is false, so it arrives as `undefined`
- * rather than `[]`, and SCRUM-245 left `favorites.map(...)` outside the guard
+ * rather than `[]`, and `favorites.map(...)` was left outside the guard
  * that protects the equivalent `sentRequests` call. Every default page load
  * (`favorites: false`) threw a TypeError and returned INTERNAL_SERVER_ERROR.
  *

@@ -1,7 +1,7 @@
 import { Role } from "@prisma/client";
 
 /**
- * Whether two roles can carpool together (SCRUM-296).
+ * Whether two roles can carpool together.
  *
  * A carpool is one driver and one rider, so exactly one of the pair has to be
  * each. VIEWER is neither: it is the browsing role, which is why discovery
@@ -19,7 +19,7 @@ export const canCarpoolTogether = (a: Role, b: Role): boolean =>
 
 /**
  * Why this pair cannot carpool, phrased for the person reading it, or `null`
- * when they can (SCRUM-296).
+ * when they can.
  *
  * Roles change legitimately at co-op-cycle boundaries, so a request whose two
  * parties no longer fit is an ordinary state rather than an error - the point
