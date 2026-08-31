@@ -3,6 +3,7 @@ import { createTRPCNext } from "@trpc/next";
 import type { AppRouter } from "../server/router";
 import superjson from "superjson";
 import { TRPCError } from "@trpc/server";
+import { getBaseUrl } from "./getBaseUrl";
 
 /**
  * Codes that describe the request rather than a transient failure, so a retry
@@ -20,15 +21,6 @@ const NON_RETRYABLE_CODES: ReadonlySet<TRPCError["code"]> = new Set([
   "PAYLOAD_TOO_LARGE",
   "UNPROCESSABLE_CONTENT",
 ]);
-
-const getBaseUrl = () => {
-  if (typeof window !== "undefined") {
-    return "";
-  }
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`; // SSR should use vercel url
-
-  return `http://localhost:${process.env.PORT ?? 3000}`; // dev SSR should use localhost
-};
 
 export const trpc = createTRPCNext<AppRouter>({
   config(opts) {
@@ -74,6 +66,12 @@ export const trpc = createTRPCNext<AppRouter>({
     };
   },
   /**
+   * Queries render on the client only, so `getBaseUrl` never takes its
+   * server-side branch in practice. **Turning this on means the deployed
+   * server-side origin starts being used for real** — check that `NEXTAUTH_URL`
+   * is set in every deployed environment before you do, or requests fall back
+   * to localhost (SCRUM-310).
+   *
    * @link https://trpc.io/docs/ssr
    **/
   ssr: false,

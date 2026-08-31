@@ -150,7 +150,7 @@ All three used a single `&` until SCRUM-304, which backgrounded `prisma generate
 Two things are deliberately still true and worth knowing:
 
 - **Nothing applies migration files to a shared database.** No step runs `prisma migrate deploy`; schema promotion is a PlanetScale Deploy Request. See [the db README](src/server/db/README.md#what-migrations-are-for-here-and-what-they-are-not).
-- **`getBaseUrl` in [`src/utils/trpc.ts`](src/utils/trpc.ts) still branches on `VERCEL_URL`**, which is never set on Amplify, so the branch is dead. Removing it is tracked separately as **SCRUM-310**; it is left alone here to keep this change to `package.json` and the docs.
+- **Server-side tRPC calls resolve their origin from `NEXTAUTH_URL`.** [`getBaseUrl`](src/utils/getBaseUrl.ts) used to branch on `VERCEL_URL`, which Amplify never sets — so the branch was dead and the fallback would have pointed a deployed server-side call at `http://localhost:3000` (fixed in SCRUM-310). Nothing takes that branch today, because `ssr: false` is set in [`src/utils/trpc.ts`](src/utils/trpc.ts) and every page query is a client-side hook. **Enabling SSR makes it live**, so confirm `NEXTAUTH_URL` is set in every deployed environment first.
 
 ## Content Security Policy
 
