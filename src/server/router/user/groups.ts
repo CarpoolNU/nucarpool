@@ -505,9 +505,6 @@ export const groupsRouter = router({
             "You can only add someone to your own carpool group.",
           );
         }
-        if (callerId !== input.driverId && input.riderId !== callerId) {
-          throw forbidden("You can only add yourself to a carpool group.");
-        }
         await requireRequestBetween(ctx.prisma, input.driverId, input.riderId);
 
         // The target group must actually be the named driver's group.

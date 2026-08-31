@@ -20,9 +20,6 @@ export const trackEvent = (
   mixpanel.track(eventName, properties);
 };
 
-export const setUserProperties = (properties: Record<string, any>) => {
-  mixpanel.people.set(properties);
-};
 export const trackFTUECompletion = (role: string) => {
   trackEvent("FTUE Completed", { role });
 };

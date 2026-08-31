@@ -170,12 +170,6 @@ const user = (overrides: Partial<User> = {}): User => ({
   companyCity: "Boston",
   companyState: "MA",
   companyAddress: "2 Work Ave, Boston, MA",
-  companyPOIAddress: "",
-  companyPOICoordLng: 0,
-  companyPOICoordLat: 0,
-  startPOILocation: "",
-  startPOICoordLng: 0,
-  startPOICoordLat: 0,
   ...overrides,
 });
 

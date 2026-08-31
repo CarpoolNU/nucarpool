@@ -532,7 +532,6 @@ const Home: NextPage<any> = () => {
         driver.startCoordLat,
       ];
       const remainingPickups = new Set(riders.map((rider) => rider.id));
-      const completedDropoffs = new Set<string>();
       const pickedUpRiders = new Set<string>(); // track which riders are in car
 
       // map for quick rider lookup
@@ -580,19 +579,13 @@ const Home: NextPage<any> = () => {
         // sort candidates by distance
         candidatePoints.sort((a, b) => a.distance - b.distance);
 
-        // find the closest valid candidate
-        let chosenCandidate = null;
-
-        for (const candidate of candidatePoints) {
-          if (candidate.type === "dropoff") {
-            // dropoffs always valid if rider is picked up
-            chosenCandidate = candidate;
-            break;
-          } else {
-            chosenCandidate = candidate;
-            break;
-          }
-        }
+        // The nearest candidate is always the valid one, so take it. Every
+        // candidate above is already legal by construction: a pickup is only
+        // offered for a rider not yet collected, and a dropoff only for one
+        // already in the car. This replaced a loop whose `if`/`else` branches
+        // were identical and both broke on the first element, so it selected
+        // `candidatePoints[0]` while reading as a constraint check (SCRUM-250).
+        const chosenCandidate = candidatePoints[0];
 
         if (!chosenCandidate) break;
 
@@ -607,7 +600,6 @@ const Home: NextPage<any> = () => {
         } else {
           // dropoff
           pickedUpRiders.delete(chosenCandidate.riderId);
-          completedDropoffs.add(chosenCandidate.riderId);
         }
       }
 

@@ -1,10 +1,8 @@
 import { EnhancedPublicUser, PublicUser, User } from "../../utils/types";
 import { UserCard } from "./UserCard";
-import { useEffect, useContext, useState } from "react";
+import { useContext } from "react";
 import { UserContext } from "../../utils/userContext";
 import { roleMismatchExplanation } from "../../utils/roleCompatibility";
-import { createPortal } from "react-dom";
-import ReceivedRequestModal from "../Modals/ReceivedRequestModal";
 import { Message } from "../../utils/types";
 import React from "react";
 
@@ -18,7 +16,6 @@ interface ReceivedCardProps {
 }
 export const ReceivedCard = (props: ReceivedCardProps): React.JSX.Element => {
   const user = useContext(UserContext);
-  const [showModal, setShowModal] = useState(false);
 
   // The request stays in this list even when the pair can no longer carpool,
   // so the card carries the reason (SCRUM-296). `user` is never a VIEWER here -
@@ -65,18 +62,6 @@ export const ReceivedCard = (props: ReceivedCardProps): React.JSX.Element => {
           }
         />
       </div>
-      {showModal &&
-        user &&
-        props.otherUser.incomingRequest &&
-        createPortal(
-          <ReceivedRequestModal
-            user={user}
-            otherUser={props.otherUser}
-            onClose={() => setShowModal(false)}
-            req={props.otherUser.incomingRequest}
-          />,
-          document.body,
-        )}
     </>
   );
 };

@@ -3,10 +3,8 @@ import type { CarpoolSearch, Location } from "@prisma/client";
 import {
   convertCarpoolSearchToPublic,
   convertCarpoolSearchToPublicWithExactHome,
-  convertToPublic,
   roundCoord,
 } from "./publicUser";
-import type { User } from "./types";
 
 /**
  * These converters are the boundary between a user's stored record and what other
@@ -15,55 +13,6 @@ import type { User } from "./types";
  */
 
 const EPOCH = new Date(2024, 0, 1);
-
-const buildUser = (overrides: Partial<User> = {}): User => ({
-  id: "user-1",
-  name: "Ada Lovelace",
-  email: "ada@northeastern.edu",
-  emailVerified: EPOCH,
-  image: "https://example.test/ada.png",
-  bio: "Commuting from Somerville",
-  preferredName: "Ada",
-  pronouns: "they/them",
-  permission: Permission.MANAGER,
-  isOnboarded: true,
-  licenseSigned: true,
-  dateCreated: EPOCH,
-  dateModified: EPOCH,
-  role: Role.DRIVER,
-  status: Status.ACTIVE,
-  seatAvail: 3,
-  companyName: "Acme",
-  daysWorking: "0,1,1,1,1,1,0",
-  startTime: new Date(2024, 0, 1, 9),
-  endTime: new Date(2024, 0, 1, 17),
-  coopStartDate: new Date(2024, 0, 1),
-  coopEndDate: new Date(2024, 5, 1),
-  carpoolId: "group-1",
-  groupMessage: "See you at 8:45",
-  groupNotes: "Prefer the Green Line stop",
-  groupMusicPreference: "Podcasts",
-  groupConversationStyle: "Light chat",
-  startCoordLng: -71.1,
-  startCoordLat: 42.39,
-  startStreet: "Highland Ave",
-  startCity: "Somerville",
-  startState: "MA",
-  startAddress: "12 Highland Ave, Somerville, MA 02143",
-  companyCoordLng: -71.05,
-  companyCoordLat: 42.35,
-  companyStreet: "Congress St",
-  companyCity: "Boston",
-  companyState: "MA",
-  companyAddress: "100 Congress St",
-  companyPOIAddress: "",
-  companyPOICoordLng: 0,
-  companyPOICoordLat: 0,
-  startPOILocation: "",
-  startPOICoordLng: 0,
-  startPOICoordLat: 0,
-  ...overrides,
-});
 
 const location = (overrides: Partial<Location> = {}): Location => ({
   id: "loc-1",
@@ -147,67 +96,7 @@ const SENSITIVE_FIELDS = [
   "groupMusicPreference",
   "groupConversationStyle",
   "startStreet",
-  "startPOICoordLat",
-  "startPOICoordLng",
 ];
-
-describe("convertToPublic", () => {
-  it("drops every sensitive field from the merged user record", () => {
-    const result = convertToPublic(buildUser());
-
-    for (const field of SENSITIVE_FIELDS) {
-      expect(result).not.toHaveProperty(field);
-    }
-  });
-
-  it("coarsens the home address to city and state, hiding the street", () => {
-    const result = convertToPublic(
-      buildUser({ startAddress: "12 Highland Ave, Somerville, MA 02143" }),
-    );
-
-    expect(result.startAddress).toBe("Somerville, MA");
-    expect(result.startAddress).not.toContain("Highland");
-  });
-
-  it("falls back to the stored address when the city or state is missing", () => {
-    expect(
-      convertToPublic(buildUser({ startCity: "", startState: "MA" }))
-        .startAddress,
-    ).toBe("12 Highland Ave, Somerville, MA 02143");
-    expect(
-      convertToPublic(buildUser({ startCity: "Somerville", startState: "" }))
-        .startAddress,
-    ).toBe("12 Highland Ave, Somerville, MA 02143");
-  });
-
-  it("reports an explicit placeholder when no address information exists at all", () => {
-    const result = convertToPublic(
-      buildUser({ startCity: "", startState: "", startAddress: "" }),
-    );
-
-    expect(result.startAddress).toBe("Exact Location Unavailable");
-  });
-
-  it("keeps the company address exact, since that is not a home location", () => {
-    expect(convertToPublic(buildUser()).companyAddress).toBe("100 Congress St");
-  });
-
-  it("passes through the fields other users need to evaluate a match", () => {
-    const result = convertToPublic(buildUser());
-
-    expect(result).toMatchObject({
-      id: "user-1",
-      preferredName: "Ada",
-      pronouns: "they/them",
-      role: Role.DRIVER,
-      status: Status.ACTIVE,
-      seatAvail: 3,
-      companyName: "Acme",
-      daysWorking: "0,1,1,1,1,1,0",
-      carpoolId: "group-1",
-    });
-  });
-});
 
 describe("convertCarpoolSearchToPublic", () => {
   it("drops every sensitive field", () => {
@@ -267,14 +156,38 @@ describe("convertCarpoolSearchToPublic", () => {
     expect(result.companyCoordLng).toBe(0);
   });
 
-  it("produces the same public shape as convertToPublic for equivalent input", () => {
-    const fromSearch = convertCarpoolSearchToPublic(buildSearch());
-    const fromUser = convertToPublic(buildUser());
-
-    expect(Object.keys(fromSearch).sort()).toEqual(
-      Object.keys(fromUser).sort(),
-    );
-    expect(fromSearch).toEqual(fromUser);
+  it("exposes exactly this set of keys, and no others", () => {
+    // This used to compare against `convertToPublic`, which existed only to be
+    // the other half of that comparison and was dead everywhere else
+    // (SCRUM-250). Pinning the set outright is the stronger check: two
+    // converters can drift together, a literal cannot. A new key here is a
+    // deliberate edit, and an accidental one - `email` above all - fails.
+    expect(
+      Object.keys(convertCarpoolSearchToPublic(buildSearch())).sort(),
+    ).toEqual([
+      "bio",
+      "carpoolId",
+      "companyAddress",
+      "companyCoordLat",
+      "companyCoordLng",
+      "companyName",
+      "coopEndDate",
+      "coopStartDate",
+      "daysWorking",
+      "endTime",
+      "id",
+      "image",
+      "name",
+      "preferredName",
+      "pronouns",
+      "role",
+      "seatAvail",
+      "startAddress",
+      "startCoordLat",
+      "startCoordLng",
+      "startTime",
+      "status",
+    ]);
   });
 });
 
