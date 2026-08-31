@@ -14,6 +14,36 @@
 #
 # Amplify Hosting's Next.js compute support covers Next.js 12 through 15 (see
 # SCRUM-273). Bumping the framework past that fails at deploy, not at build.
+#
+# ---------------------------------------------------------------------------
+# Build caching (SCRUM-320)
+#
+# There was no `cache:` block here at all until now, so every deploy
+# recompiled from scratch and Next.js logged "No build cache found. Please
+# configure build caching for faster rebuilds". The block at the bottom is
+# what AWS and the Next.js CI guide both recommend.
+#
+# `cache.paths` is separate from `artifacts`: it governs what is preserved
+# *between* builds, not what is served. Adding it cannot change the deployed
+# bundle.
+#
+# **This has not been proven on a real deploy, and it carries a documented
+# risk.** AWS warns that Amplify's CodeBuild container compresses the cache and
+# uploads it to S3, which "could cause your build to fail with an out of memory
+# error". The local numbers put this app squarely in that regime: `.next/cache`
+# measured 438 MB and `node_modules` 1.2 GB on 2026-08-31. If a build starts
+# failing with an OOM after this landed, AWS's remedy is to drop
+# `.next/cache/**/*` from the paths below and set `NODE_OPTIONS` in the console
+# rather than in this file.
+#
+# Also still open on SCRUM-320: whether the deployed artifact is anywhere near
+# Amplify's 220 MB ceiling for SSR apps. An earlier note claimed `.next/cache`
+# pushed it over, but that compared `du -sh .next` against a limit that applies
+# to Amplify's *transformed* `compute` + `static` output, which is a different
+# and much smaller thing. Settle it with
+# `aws amplify get-job --app-id <id> --branch-name <branch> --job-id <n>`,
+# then `du -csh compute static` on the downloaded artifacts.
+# ---------------------------------------------------------------------------
 version: 1
 frontend:
   phases:
@@ -38,3 +68,12 @@ frontend:
     baseDirectory: .next
     files:
       - "**/*"
+
+  # Preserved between builds, not deployed. Paths are relative to the build
+  # root, so these are the repository's own `.next/cache` and `node_modules`
+  # rather than anything under `artifacts.baseDirectory` above. See the
+  # out-of-memory caveat in the header before assuming this is free.
+  cache:
+    paths:
+      - .next/cache/**/*
+      - node_modules/**/*
