@@ -20,9 +20,34 @@ import { trackViewRoute } from "../../utils/mixpanel";
 import useProfileImage from "../../utils/useProfileImage";
 import { AiOutlineUser } from "react-icons/ai";
 import useIsMobile from "../../utils/useIsMobile";
-import { disclosesCounterpartName } from "../Sidebar/viewerAccess";
+import { counterpartLabel } from "../Sidebar/viewerAccess";
 
-interface UserCardProps {
+/**
+ * The card's activation, as a pair that cannot be half-supplied (SCRUM-279).
+ *
+ * A card that is clickable renders a real `<button>` stretched across itself,
+ * and that button has no text content of its own — so without a label it is an
+ * unnamed control, which is its own axe violation (`button-name`). Trading
+ * `nested-interactive` for `button-name` would not be a fix, so the label is
+ * required by the type rather than by a comment asking nicely.
+ *
+ * `onClick` stays optional overall: a card with no activation (every desktop
+ * discovery card) renders no button at all.
+ */
+type CardActivation =
+  | {
+      onClick: () => void;
+      /**
+       * The button's accessible name. Build it with `counterpartLabel` rather
+       * than from `preferredName`, or Viewer mode leaks the name it withholds.
+       */
+      onClickLabel: string;
+      /** Renders as `aria-current` on the activation button. */
+      isSelected?: boolean;
+    }
+  | { onClick?: undefined; onClickLabel?: undefined; isSelected?: undefined };
+
+type UserCardBaseProps = {
   otherUser: EnhancedPublicUser;
   rightButton?: ButtonInfo;
   onViewRouteClick?: (user: User, otherUser: PublicUser) => void;
@@ -47,9 +72,10 @@ interface UserCardProps {
   isCounterpart?: boolean;
   isUnread?: boolean;
   classname?: string;
-  onClick?: () => void;
   isMobileCondensedLayout?: boolean;
-}
+};
+
+export type UserCardProps = UserCardBaseProps & CardActivation;
 
 const getButtonClassName = (button: ButtonInfo): string => {
   const bColor = button.color;
@@ -122,6 +148,16 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
   if (!user) {
     return <Spinner />;
   }
+
+  // One source for what this card calls the other person, so the heading below
+  // and the activation button's `aria-label` cannot disagree (SCRUM-279).
+  const displayName = counterpartLabel({
+    viewerRole: user.role,
+    isCounterpart: props.isCounterpart ?? false,
+    preferredName: props.otherUser.preferredName,
+    role: props.otherUser.role,
+  });
+
   return (
     <div
       className={classNames(
@@ -130,7 +166,6 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
         isMobile ? "mx-1 my-2 gap-1 px-3 py-3" : "m-3.5 gap-2 px-4 py-4",
         props.classname,
       )}
-      onClick={props.onClick}
     >
       <div className={"-ml-2 mb-1 flex flex-row items-center"}>
         {/* Profile Image */}
@@ -139,7 +174,12 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
         ) : profileImageUrl && !imageLoadError ? (
           <Image
             src={profileImageUrl}
-            alt={`${props.otherUser.preferredName}'s Profile Image`}
+            // Not `preferredName`: this alt text announced the name the heading
+            // withholds from a VIEWER on a discovery card, which is the same
+            // accessibility-layer leak the activation button's label is careful
+            // to avoid. Fixed here because it is the identical defect in the
+            // same component, using the value computed for it two lines above.
+            alt={`${displayName}'s Profile Image`}
             width={56}
             height={56}
             className="h-14 w-14 rounded-full object-cover"
@@ -151,16 +191,7 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
         {/* Name and Pronouns */}
         <div className="flex flex-col items-start pl-3.5">
           <div className="text-lg font-semibold">
-            {disclosesCounterpartName(
-              user.role,
-              props.isCounterpart ?? false,
-            ) ? (
-              <p>{props.otherUser.preferredName}</p>
-            ) : (
-              <p>{`${props.otherUser.role.charAt(0)}${props.otherUser.role
-                .slice(1)
-                .toLowerCase()}`}</p>
-            )}
+            <p>{displayName}</p>
           </div>
           <div className="flex flex-row items-start gap-4">
             <p className="font-montserrat text-sm italic">
@@ -178,8 +209,10 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
           </div>
         </div>
 
-        {/* Rating */}
-        <div className="ml-auto">
+        {/* Rating — a sibling of the activation button rather than a
+            descendant, which is the whole point of SCRUM-279. `z-20` keeps it
+            above the stretched button; `relative` is what makes `z-20` apply. */}
+        <div className="relative z-20 ml-auto">
           <Rating
             name=""
             size="large"
@@ -279,7 +312,11 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
 
       {/* 8th row - Buttons*/}
       {props.onViewRouteClick && props.rightButton && !isMobile ? (
-        <div className="flex flex-row justify-between gap-2">
+        // Raised above the activation button for the same reason as the Rating.
+        // These two were the ticket's "same nesting problem in a second form":
+        // real buttons that used to sit inside the card's own click target, so
+        // pressing View Route or Connect also fired it.
+        <div className="relative z-20 flex flex-row justify-between gap-2">
           <button
             disabled={user.status === "INACTIVE" && user.role !== "VIEWER"}
             onClick={() => {
@@ -305,6 +342,35 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
           </button>
         </div>
       ) : null}
+
+      {/* The card's activation target (SCRUM-279).
+       *
+       * A real <button>, stretched across the card and rendered **last** so it
+       * paints over the card's text while staying below the `z-20` controls
+       * above. It is a *sibling* of those controls, not an ancestor, which is
+       * what fixes both halves of the ticket at once: favouriting no longer
+       * bubbles into "open the conversation", because there is nothing to bubble
+       * into, and a <button> containing no focusable descendants is no longer
+       * `nested-interactive`.
+       *
+       * This replaces the `role="button"` + `tabIndex` + Enter/Space wrapper
+       * SCRUM-254 had to use in `SentCard` and `ReceivedCard`. A real button
+       * brings keyboard activation, Space/Enter semantics and the disabled and
+       * focus behaviour of a control for free, so all of that is deleted rather
+       * than reimplemented.
+       *
+       * `inset-0` covers the padding box, so the focus ring traces the card just
+       * inside its left border rather than around the border itself.
+       */}
+      {props.onClick && (
+        <button
+          type="button"
+          aria-label={props.onClickLabel}
+          aria-current={props.isSelected ? "true" : undefined}
+          onClick={props.onClick}
+          className="absolute inset-0 z-10 cursor-pointer rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-northeastern-red"
+        />
+      )}
     </div>
   );
 };

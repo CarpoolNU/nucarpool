@@ -78,3 +78,33 @@ export const disclosesCounterpartName = (
   viewerRole: string,
   isCounterpart: boolean,
 ): boolean => viewerRole !== "VIEWER" || isCounterpart;
+
+/**
+ * What a card calls the other person: their preferred name, or their role when
+ * Viewer mode withholds it (SCRUM-279).
+ *
+ * This exists so the **visible** name and the **accessible** name cannot
+ * diverge. Before SCRUM-279 the disclosure rule lived inline in `UserCard`'s
+ * JSX, which was fine while the name was only ever rendered as text. It stopped
+ * being fine when the card gained a stretched activation button: that button has
+ * no text content, so it needs an `aria-label`, and a label built from
+ * `preferredName` directly would announce to a screen reader exactly the name
+ * the card is withholding on screen.
+ *
+ * A leak through the accessibility layer is still a leak, and it is the harder
+ * kind to notice. So both call sites read the name from here.
+ */
+export const counterpartLabel = (input: {
+  viewerRole: string;
+  isCounterpart: boolean;
+  preferredName: string;
+  role: string;
+}): string => {
+  if (disclosesCounterpartName(input.viewerRole, input.isCounterpart)) {
+    return input.preferredName;
+  }
+
+  // "DRIVER" -> "Driver". Sentence case rather than the raw enum, because this
+  // is read aloud and rendered as a person's stand-in.
+  return `${input.role.charAt(0)}${input.role.slice(1).toLowerCase()}`;
+};
