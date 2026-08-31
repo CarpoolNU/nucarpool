@@ -1,5 +1,11 @@
 import mapboxgl from "mapbox-gl";
-import { CarpoolAddress, CarpoolFeature, PublicUser, User } from "../types";
+import {
+  CarpoolAddress,
+  CarpoolFeature,
+  DirectionsResponse,
+  PublicUser,
+  User,
+} from "../types";
 import { trpc } from "../trpc";
 import { SetStateAction, useEffect } from "react";
 import { toast } from "react-toastify";
@@ -375,6 +381,88 @@ export const viewRoute = (props: ViewRouteProps) => {
   }
 };
 
+/**
+ * Draws the returned route onto the map, replacing the previous line if one is
+ * already there.
+ *
+ * Mutates the map rather than returning anything, which is why it does not
+ * belong in a data-fetching callback: it was previously the body of the
+ * `onSuccess` option on a disabled query.
+ */
+const drawRoute = (map: mapboxgl.Map, response: DirectionsResponse) => {
+  const coordinates = response.routes[0].geometry;
+
+  // Decode the encoded polyline into an array of coordinates
+  const decodedCoordinates = polyline.decode(coordinates);
+
+  // Convert the decoded coordinates into GeoJSON format
+  const geoJsonCoordinates = decodedCoordinates.map(([lat, lon]) => [lon, lat]);
+
+  // Create a GeoJSON LineString feature
+  const lineStringFeature: GeoJSON.Feature<
+    GeoJSON.LineString,
+    GeoJSON.GeoJsonProperties
+  > = {
+    type: "Feature",
+    geometry: {
+      type: "LineString",
+      coordinates: geoJsonCoordinates,
+    },
+    properties: {},
+  };
+
+  if (map.getLayer("route")) {
+    const source = map.getSource("route") as mapboxgl.GeoJSONSource;
+    source.setData(lineStringFeature);
+  } else {
+    // Try different layer positions - let's find one that works
+    let beforeLayerId = "";
+
+    // Try to find a good layer to place the route above
+    const layerIds = [
+      "road-label", // Above road labels
+      "waterway-label", // Above water labels
+      "natural-label", // Above natural feature labels
+      "poi-label", // Above point of interest labels
+      "transit-label", // Above transit labels
+    ];
+
+    // Find the first existing layer to place the route above
+    for (const layerId of layerIds) {
+      if (map.getLayer(layerId)) {
+        beforeLayerId = layerId;
+        break;
+      }
+    }
+
+    // If no specific layer found, use a safe default
+    if (!beforeLayerId) {
+      // Place above base map layers but below markers
+      beforeLayerId = "background";
+    }
+
+    map.addLayer(
+      {
+        id: "route",
+        type: "line",
+        source: {
+          type: "geojson",
+          data: lineStringFeature,
+        },
+        layout: {
+          "line-join": "round",
+          "line-cap": "round",
+        },
+        paint: {
+          "line-color": "#4a89f3",
+          "line-width": 6,
+        },
+      },
+      beforeLayerId,
+    );
+  }
+};
+
 export function useGetDirections({
   points,
   map,
@@ -382,98 +470,53 @@ export function useGetDirections({
   points: [number, number][];
   map: mapboxgl.Map;
 }) {
-  const { refetch } = trpc.mapbox.getDirections.useQuery(
-    {
-      points: points,
-    },
-    {
-      onSuccess: (response) => {
-        const coordinates = response.routes[0].geometry;
+  const utils = trpc.useUtils();
 
-        // Decode the encoded polyline into an array of coordinates
-        const decodedCoordinates = polyline.decode(coordinates);
-
-        // Convert the decoded coordinates into GeoJSON format
-        const geoJsonCoordinates = decodedCoordinates.map(([lat, lon]) => [
-          lon,
-          lat,
-        ]);
-
-        // Create a GeoJSON LineString feature
-        const lineStringFeature: GeoJSON.Feature<
-          GeoJSON.LineString,
-          GeoJSON.GeoJsonProperties
-        > = {
-          type: "Feature",
-          geometry: {
-            type: "LineString",
-            coordinates: geoJsonCoordinates,
-          },
-          properties: {},
-        };
-
-        if (map.getLayer("route")) {
-          const source = map.getSource("route") as mapboxgl.GeoJSONSource;
-          source.setData(lineStringFeature);
-        } else {
-          // Try different layer positions - let's find one that works
-          let beforeLayerId = "";
-
-          // Try to find a good layer to place the route above
-          const layerIds = [
-            "road-label", // Above road labels
-            "waterway-label", // Above water labels
-            "natural-label", // Above natural feature labels
-            "poi-label", // Above point of interest labels
-            "transit-label", // Above transit labels
-          ];
-
-          // Find the first existing layer to place the route above
-          for (const layerId of layerIds) {
-            if (map.getLayer(layerId)) {
-              beforeLayerId = layerId;
-              break;
-            }
-          }
-
-          // If no specific layer found, use a safe default
-          if (!beforeLayerId) {
-            // Place above base map layers but below markers
-            beforeLayerId = "background";
-          }
-
-          map.addLayer(
-            {
-              id: "route",
-              type: "line",
-              source: {
-                type: "geojson",
-                data: lineStringFeature,
-              },
-              layout: {
-                "line-join": "round",
-                "line-cap": "round",
-              },
-              paint: {
-                "line-color": "#4a89f3",
-                "line-width": 6,
-              },
-            },
-            beforeLayerId,
-          );
-        }
-      },
-      onError: (error) => {
-        toast.error(`Something went wrong: ${error}`);
-      },
-      enabled: false,
-      retry: false,
-    },
-  );
   useEffect(() => {
     // ensures that we don't run on page load
-    if (points.length !== 0 && map !== undefined) {
-      refetch();
+    if (points.length === 0 || map === undefined) {
+      return;
     }
-  }, [points, map, refetch]);
+
+    // A response that resolves after `points` has changed, or after the hook
+    // has unmounted, would draw a route the user is no longer looking at. The
+    // query cache used to discard that for us; an imperative fetch has to say
+    // so itself.
+    let cancelled = false;
+
+    utils.mapbox.getDirections
+      .fetch(
+        { points: points },
+        {
+          // Both of these carry over from the query options they replace, and
+          // both are load-bearing.
+          //
+          // `refetch()` always went to the network. `fetch` will serve a cached
+          // entry for a key it already holds, so without `staleTime: 0` a
+          // second look at the same pair would draw a stale line.
+          //
+          // `retry: false` opts out of the shared retry policy in
+          // `src/utils/trpc.ts`, which treats a failed directions call as
+          // transient and would spend three more Mapbox requests on it.
+          staleTime: 0,
+          retry: false,
+        },
+      )
+      .then((response) => {
+        if (cancelled) {
+          return;
+        }
+        drawRoute(map, response);
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+        toast.error(`Something went wrong: ${error}`);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [points, map, utils]);
 }
