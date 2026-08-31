@@ -7,9 +7,10 @@ import { trpc } from "./trpc";
  *
  * getPresignedImageUrl signs for 3600s, so a 15 minute staleTime guarantees
  * every URL handed to <Image> has at least 45 minutes of validity left, even
- * for the last consumer to read it out of the cache. cacheTime is longer so a
- * URL survives a brief period with no avatar mounted - navigating away from
- * the explore page and back should not re-request 50 URLs.
+ * for the last consumer to read it out of the cache. gcTime - what react-query
+ * v4 called cacheTime - is longer, so a URL survives a brief period with no
+ * avatar mounted: navigating away from the explore page and back should not
+ * re-request 50 URLs.
  */
 export const PRESIGNED_URL_STALE_TIME_MS = 15 * 60 * 1000;
 export const PRESIGNED_URL_CACHE_TIME_MS = 30 * 60 * 1000;
@@ -33,7 +34,7 @@ const useProfileImage = (userId?: string) => {
     { userId },
     {
       staleTime: PRESIGNED_URL_STALE_TIME_MS,
-      cacheTime: PRESIGNED_URL_CACHE_TIME_MS,
+      gcTime: PRESIGNED_URL_CACHE_TIME_MS,
     },
   );
 
@@ -61,7 +62,7 @@ const useProfileImage = (userId?: string) => {
  * would refetch every other user's avatar mounted at the time.
  */
 export const useInvalidateProfileImage = () => {
-  const utils = trpc.useContext();
+  const utils = trpc.useUtils();
   return useCallback(
     () => utils.user.getPresignedDownloadUrl.invalidate({ userId: undefined }),
     [utils],

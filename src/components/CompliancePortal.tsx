@@ -20,13 +20,13 @@ export const ComplianceModal = () => {
   const utils = trpc.useUtils();
   const [failed, setFailed] = useState(false);
 
-  const { mutateAsync: acceptTerms, isLoading } =
+  const { mutateAsync: acceptTerms, isPending } =
     trpc.user.acceptTerms.useMutation({
       onSuccess: () => utils.user.me.invalidate(),
     });
 
   const handleAgreeClick = async () => {
-    if (isLoading) {
+    if (isPending) {
       return;
     }
     setFailed(false);
@@ -118,9 +118,9 @@ export const ComplianceModal = () => {
               type="button"
               className="w-25 rounded-md border-2 border-red-700 bg-red-700 p-1 text-slate-50 disabled:opacity-50"
               onClick={handleAgreeClick}
-              disabled={isLoading}
+              disabled={isPending}
             >
-              {isLoading ? "Saving..." : "I Agree"}
+              {isPending ? "Saving..." : "I Agree"}
             </button>
           </Dialog.Panel>
         </div>

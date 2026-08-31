@@ -51,7 +51,7 @@ export default function useSearch({
     {
       enabled: query.length > 0,
       staleTime: SEARCH_STALE_TIME_MS,
-      cacheTime: SEARCH_CACHE_TIME_MS,
+      gcTime: SEARCH_CACHE_TIME_MS,
       // The user is still typing; the next keystroke is a better retry than
       // three immediate ones against a metered API.
       retry: false,

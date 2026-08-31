@@ -23,6 +23,20 @@ const NON_RETRYABLE_CODES: ReadonlySet<TRPCError["code"]> = new Set([
 ]);
 
 export const trpc = createTRPCNext<AppRouter>({
+  /**
+   * tRPC v11 wants the transformer named twice, and both are required — the
+   * compiler rejects either one alone.
+   *
+   * On the link, because serialization is now a per-link concern rather than a
+   * client-wide one: v10 took a single `transformer` on the client config and
+   * v11 replaced that with a `TypeError` type telling you to move it.
+   *
+   * Here at the root, because `createTRPCNext` also needs it outside `config()`
+   * for the data it dehydrates. The two must agree; `superjson` is the same
+   * transformer `initTRPC` is created with on the server, which is what makes
+   * `Date` survive the wire in both directions.
+   */
+  transformer: superjson,
   config(opts) {
     return {
       links: [
@@ -33,9 +47,9 @@ export const trpc = createTRPCNext<AppRouter>({
         }),
         httpBatchLink({
           url: `${getBaseUrl()}/api/trpc`,
+          transformer: superjson,
         }),
       ],
-      transformer: superjson,
       queryClientConfig: {
         defaultOptions: {
           queries: {

@@ -85,7 +85,7 @@ const getButtonClassName = (button: ButtonInfo): string => {
 };
 
 export const UserCard = (props: UserCardProps): React.JSX.Element => {
-  const trpcUtils = trpc.useContext();
+  const trpcUtils = trpc.useUtils();
   const isMobile = useIsMobile();
   const { mutate: mutateFavorites } = trpc.user.favorites.edit.useMutation({
     onError: (error: any) => {

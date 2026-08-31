@@ -60,7 +60,7 @@ export const useEditUserMutation = (
   onComplete: () => void,
   pushMap: boolean = true,
 ) => {
-  const utils = trpc.useContext();
+  const utils = trpc.useUtils();
 
   return trpc.user.edit.useMutation({
     onSuccess: async () => {

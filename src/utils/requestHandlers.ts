@@ -33,9 +33,9 @@ interface RequestHandlers {
 
 // Function to create the handlers
 export const createRequestHandlers = (
-  utils: ReturnType<typeof trpc.useContext>,
+  utils: ReturnType<typeof trpc.useUtils>,
 ): RequestHandlers => {
-  const { mutateAsync: deleteRequestAsync, isLoading: isDeleting } =
+  const { mutateAsync: deleteRequestAsync, isPending: isDeleting } =
     trpc.user.requests.delete.useMutation({
       onError: (error: any) => {
         toast.error(`Something went wrong: ${error.message}`);
@@ -50,7 +50,7 @@ export const createRequestHandlers = (
   // catches it instead, because the interesting failures here are the server's
   // membership refusals, and "Something went wrong: ..." framed a rule the user
   // can act on as if the app had broken.
-  const { mutateAsync: editGroupAsync, isLoading: isEditingGroup } =
+  const { mutateAsync: editGroupAsync, isPending: isEditingGroup } =
     trpc.user.groups.edit.useMutation({
       onSuccess: () => {
         utils.user.requests.me.invalidate();
@@ -58,7 +58,7 @@ export const createRequestHandlers = (
       },
     });
 
-  const { mutateAsync: createGroupAsync, isLoading: isCreatingGroup } =
+  const { mutateAsync: createGroupAsync, isPending: isCreatingGroup } =
     trpc.user.groups.create.useMutation({
       onSuccess: () => {
         utils.user.requests.me.invalidate();

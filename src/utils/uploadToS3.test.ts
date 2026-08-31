@@ -180,7 +180,7 @@ describe("client cache window vs. signature lifetime", () => {
   });
 
   it("never keeps a URL past the point where it could expire", () => {
-    // cacheTime only governs how long an *unused* entry is retained, but an
+    // gcTime only governs how long an *unused* entry is retained, but an
     // entry can be revived by a remount, so it must not exceed the signature
     // either.
     expect(PRESIGNED_URL_CACHE_TIME_MS).toBeLessThan(expiryMs);

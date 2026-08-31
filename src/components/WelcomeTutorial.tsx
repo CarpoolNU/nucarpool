@@ -19,7 +19,7 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
   // Use the exact same mobile detection as the main page
   const isMobile = useIsMobile();
 
-  const utils = trpc.useContext();
+  const utils = trpc.useUtils();
 
   const completeTutorialMutation = trpc.user.completeTutorial.useMutation({
     onSuccess: async () => {

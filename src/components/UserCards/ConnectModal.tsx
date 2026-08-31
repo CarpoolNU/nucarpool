@@ -49,7 +49,7 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
     props.onClose("connect");
   };
 
-  const utils = trpc.useContext();
+  const utils = trpc.useUtils();
 
   // Declared before the request mutation so that mutation's onSuccess can call
   // it. Names, addresses and the driver/rider template are resolved

@@ -42,7 +42,7 @@ const mockMutation = () => {
   const variables: unknown[] = [];
   let rejection: unknown = null;
   let options: MutationOptions = {};
-  let isLoading = false;
+  let isPending = false;
 
   const mutateAsync = jest.fn(async (received: unknown) => {
     variables.push(received);
@@ -58,20 +58,20 @@ const mockMutation = () => {
     mutateAsync,
     useMutation: (received: MutationOptions = {}) => {
       options = received;
-      return { mutateAsync, isLoading };
+      return { mutateAsync, isPending };
     },
     /** Make every subsequent write reject, the way a server refusal does. */
     rejectWith: (error: unknown) => {
       rejection = error;
     },
-    setLoading: (value: boolean) => {
-      isLoading = value;
+    setPending: (value: boolean) => {
+      isPending = value;
     },
     reset: () => {
       variables.length = 0;
       rejection = null;
       options = {};
-      isLoading = false;
+      isPending = false;
       mutateAsync.mockClear();
     },
   };
@@ -444,19 +444,19 @@ describe("isMutating", () => {
   });
 
   it("is true while the delete is in flight", () => {
-    mockDeleteRequest.setLoading(true);
+    mockDeleteRequest.setPending(true);
 
     expect(handlers().isMutating).toBe(true);
   });
 
   it("is true while the group edit is in flight", () => {
-    mockEditGroup.setLoading(true);
+    mockEditGroup.setPending(true);
 
     expect(handlers().isMutating).toBe(true);
   });
 
   it("is true while the group create is in flight", () => {
-    mockCreateGroup.setLoading(true);
+    mockCreateGroup.setPending(true);
 
     expect(handlers().isMutating).toBe(true);
   });

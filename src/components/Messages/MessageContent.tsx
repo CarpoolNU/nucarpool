@@ -24,7 +24,7 @@ import { isEqual } from "lodash";
 
 const MessageContent = ({ selectedUser }: MessageContentProps) => {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const utils = trpc.useContext();
+  const utils = trpc.useUtils();
   const user = useContext(UserContext);
 
   const request = useMemo(

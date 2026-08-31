@@ -181,7 +181,7 @@ const Home: NextPage<any> = () => {
   const recsState = toQueryState(recommendationsQuery);
   const favsState = toQueryState(favoritesQuery);
   const requestsState = toQueryState(requestsQuery);
-  const utils = trpc.useContext();
+  const utils = trpc.useUtils();
 
   // Tutorial logic: Show tutorial if user is onboarded but hasn't completed tutorial
   useEffect(() => {
