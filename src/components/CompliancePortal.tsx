@@ -42,7 +42,7 @@ export const ComplianceModal = () => {
 
   return (
     <Dialog open={true} onClose={() => {}}>
-      <div className="fixed inset-0 z-50 backdrop-blur-sm" aria-hidden="true">
+      <div className="fixed inset-0 z-50 backdrop-blur-xs" aria-hidden="true">
         <div className="fixed inset-0 flex items-center justify-center p-4">
           <Dialog.Panel className="flex h-4/6 w-5/6 flex-col content-center justify-center gap-4 rounded-md bg-white p-9 shadow-md sm:h-4/6 sm:w-4/6 md:h-3/6 md:w-3/6">
             <Dialog.Title className="text-center text-2xl font-bold">
@@ -109,7 +109,7 @@ export const ComplianceModal = () => {
             {failed && (
               <p
                 role="alert"
-                className="text-center text-sm text-northeastern-red"
+                className="text-northeastern-red text-center text-sm"
               >
                 We could not record your agreement. Please try again.
               </p>

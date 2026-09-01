@@ -24,7 +24,7 @@ const FilterSection = ({
       <h3 className="text-lg font-semibold">
         <button
           type="button"
-          className="flex w-full cursor-pointer items-center justify-between text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-northeastern-red"
+          className="focus-visible:outline-northeastern-red flex w-full cursor-pointer items-center justify-between text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
           onClick={toggleOpen}
           aria-expanded={isOpen}
         >
@@ -135,11 +135,11 @@ const Filters = ({
   )}`;
 
   return (
-    <div className="relative mx-1 h-full select-none overflow-y-auto bg-white px-1 pb-20 scrollbar-thin scrollbar-track-stone-100 scrollbar-thumb-busy-red scrollbar-track-rounded-full scrollbar-thumb-rounded-full">
-      <div className="sticky top-0 z-10 border-b border-gray-200 bg-white px-4 pb-5 pt-2">
+    <div className="scrollbar-thumb-busy-red scrollbar-track-rounded-full scrollbar-thumb-rounded-full relative mx-1 h-full scrollbar-thin scrollbar-track-stone-100 overflow-y-auto bg-white px-1 pb-20 select-none">
+      <div className="sticky top-0 z-10 border-b border-gray-200 bg-white px-4 pt-2 pb-5">
         <div className="flex w-full items-center justify-between">
           <button
-            className="flex-1 self-end bg-transparent text-start font-semibold text-northeastern-red hover:text-busy-red"
+            className="text-northeastern-red hover:text-busy-red flex-1 self-end bg-transparent text-start font-semibold"
             onClick={resetFilters}
           >
             Reset All
@@ -197,7 +197,7 @@ const Filters = ({
               max="20"
               value={filters.startDistance}
               onChange={(e) => handleRangeChange("startDistance", e)}
-              className="h-2 w-full appearance-none rounded-full focus:outline-none focus:ring-2 focus:ring-northeastern-red"
+              className="focus:ring-northeastern-red h-2 w-full appearance-none rounded-full focus:ring-2 focus:outline-hidden"
               style={{
                 WebkitAppearance: "none",
                 appearance: "none",
@@ -210,14 +210,14 @@ const Filters = ({
                 borderRadius: "5px",
               }}
             />
-            <div className="text-lg font-semibold text-northeastern-red">
+            <div className="text-northeastern-red text-lg font-semibold">
               {filters.startDistance === 20
                 ? `${filters.startDistance}+`
                 : filters.startDistance}
             </div>
           </div>
 
-          <label className="mb-2 mt-4 block">
+          <label className="mt-4 mb-2 block">
             Max distance from destination (miles)
           </label>
           <div className="flex flex-col items-center gap-3">
@@ -227,7 +227,7 @@ const Filters = ({
               max="20"
               value={filters.endDistance}
               onChange={(e) => handleRangeChange("endDistance", e)}
-              className="h-2 w-full appearance-none rounded-full focus:outline-none focus:ring-2 focus:ring-northeastern-red"
+              className="focus:ring-northeastern-red h-2 w-full appearance-none rounded-full focus:ring-2 focus:outline-hidden"
               style={{
                 WebkitAppearance: "none",
                 appearance: "none",
@@ -240,7 +240,7 @@ const Filters = ({
                 borderRadius: "5px",
               }}
             />
-            <div className="text-lg font-semibold text-northeastern-red">
+            <div className="text-northeastern-red text-lg font-semibold">
               {filters.endDistance === 20
                 ? `${filters.endDistance}+`
                 : filters.endDistance}
@@ -259,7 +259,7 @@ const Filters = ({
             <button
               className={`grow rounded-full px-4 py-2 ${
                 filters.days === 0
-                  ? "border-2 border-black bg-northeastern-red text-white"
+                  ? "bg-northeastern-red border-2 border-black text-white"
                   : "border-2 border-gray-300 bg-white text-black"
               }`}
               onClick={() =>
@@ -274,7 +274,7 @@ const Filters = ({
             <button
               className={`grow rounded-full px-4 py-2 ${
                 filters.days === 1
-                  ? "border-2 border-black bg-northeastern-red text-white"
+                  ? "bg-northeastern-red border-2 border-black text-white"
                   : "border-2 border-gray-300 bg-white text-black"
               }`}
               onClick={() =>
@@ -289,7 +289,7 @@ const Filters = ({
             <button
               className={`grow rounded-full px-4 py-2 ${
                 filters.days === 2
-                  ? "border-2 border-black bg-northeastern-red text-white"
+                  ? "bg-northeastern-red border-2 border-black text-white"
                   : "border-2 border-gray-300 bg-white text-black"
               }`}
               onClick={() =>
@@ -356,7 +356,7 @@ const Filters = ({
                         }));
                       }
                     }}
-                    className="flex h-10 w-14 rounded-full border-2 border-gray-300 p-2 text-center focus:border-transparent focus:ring-2 focus:ring-northeastern-red"
+                    className="focus:ring-northeastern-red flex h-10 w-14 rounded-full border-2 border-gray-300 p-2 text-center focus:border-transparent focus:ring-2"
                   />
                   <p
                     className="w-full pt-2 text-xs"
@@ -387,7 +387,7 @@ const Filters = ({
               max="4"
               value={filters.startTime}
               onChange={(e) => handleRangeChange("startTime", e)}
-              className="h-2 w-full appearance-none rounded-full focus:outline-none focus:ring-2 focus:ring-northeastern-red"
+              className="focus:ring-northeastern-red h-2 w-full appearance-none rounded-full focus:ring-2 focus:outline-hidden"
               style={{
                 WebkitAppearance: "none",
                 appearance: "none",
@@ -398,13 +398,13 @@ const Filters = ({
                 borderRadius: "5px",
               }}
             />
-            <div className="text-lg font-semibold text-northeastern-red">
+            <div className="text-northeastern-red text-lg font-semibold">
               {filters.startTime === 4
                 ? `${filters.startTime}+`
                 : filters.startTime}
             </div>
           </div>
-          <label className="mb-2 mt-4 block">
+          <label className="mt-4 mb-2 block">
             Max deviation in end time (hours)
           </label>
           <div className="flex flex-col items-center gap-3">
@@ -414,7 +414,7 @@ const Filters = ({
               max="4"
               value={filters.endTime}
               onChange={(e) => handleRangeChange("endTime", e)}
-              className="h-2 w-full appearance-none rounded-full focus:outline-none focus:ring-2 focus:ring-northeastern-red"
+              className="focus:ring-northeastern-red h-2 w-full appearance-none rounded-full focus:ring-2 focus:outline-hidden"
               style={{
                 WebkitAppearance: "none",
                 appearance: "none",
@@ -425,7 +425,7 @@ const Filters = ({
                 borderRadius: "5px",
               }}
             />
-            <div className="text-lg font-semibold text-northeastern-red">
+            <div className="text-northeastern-red text-lg font-semibold">
               {filters.endTime === 4 ? `${filters.endTime}+` : filters.endTime}
             </div>
           </div>
@@ -442,7 +442,7 @@ const Filters = ({
             <button
               className={`grow rounded-full border-2 px-4 py-2 ${
                 filters.dateOverlap === 0
-                  ? "border-black bg-northeastern-red text-white"
+                  ? "bg-northeastern-red border-black text-white"
                   : "border-gray-300 bg-white text-black"
               }`}
               onClick={() =>
@@ -457,7 +457,7 @@ const Filters = ({
             <button
               className={`rounded-full border-2 px-4 py-2 ${
                 filters.dateOverlap === 1
-                  ? "border-black bg-northeastern-red text-white"
+                  ? "bg-northeastern-red border-black text-white"
                   : "border-gray-300 bg-white text-black"
               }`}
               onClick={() =>
@@ -472,7 +472,7 @@ const Filters = ({
             <button
               className={`rounded-full border-2 px-4 py-2 ${
                 filters.dateOverlap === 2
-                  ? "border-black bg-northeastern-red text-white"
+                  ? "bg-northeastern-red border-black text-white"
                   : "border-gray-300 bg-white text-black"
               }`}
               onClick={() =>

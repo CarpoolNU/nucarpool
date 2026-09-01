@@ -133,7 +133,7 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
       {showModal &&
         imageSrc &&
         createPortal(
-          <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm">
+          <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-xs">
             <div className="relative w-full max-w-lg overflow-hidden rounded-2xl border-8 border-gray-400 bg-white">
               <div className="relative h-96 w-full">
                 <Cropper
@@ -158,14 +158,14 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
                 <button
                   type="button"
                   onClick={handleCancel}
-                  className="mr-2 rounded-lg bg-gray-300 px-8 py-2 font-montserrat text-lg text-black"
+                  className="font-montserrat mr-2 rounded-lg bg-gray-300 px-8 py-2 text-lg text-black"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={handleCrop}
-                  className="rounded-lg bg-northeastern-red px-8 py-2 font-montserrat text-lg text-white hover:bg-red-700"
+                  className="bg-northeastern-red font-montserrat rounded-lg px-8 py-2 text-lg text-white hover:bg-red-700"
                 >
                   Crop Image
                 </button>
@@ -205,7 +205,7 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
         <div className="ml-4">
           <label
             htmlFor="fileInput"
-            className="ml-10 inline-block cursor-pointer rounded-lg border border-black bg-northeastern-red px-4 py-2 font-montserrat text-xl text-white hover:bg-red-700"
+            className="bg-northeastern-red font-montserrat ml-10 inline-block cursor-pointer rounded-lg border border-black px-4 py-2 text-xl text-white hover:bg-red-700"
           >
             Upload Profile Picture
           </label>

@@ -48,7 +48,7 @@ const ControlledAddressCombobox = (props: ControlledAddressComboboxProps) => {
         >
           {props.isDisabled ? (
             <input
-              className={`h-12 w-full rounded-md bg-gray-100 px-3 py-2 text-gray-400 shadow-sm ${
+              className={`h-12 w-full rounded-md bg-gray-100 px-3 py-2 text-gray-400 shadow-xs ${
                 props.error ? "border-northeastern-red" : "border-gray-200"
               }`}
               type="text"
@@ -57,7 +57,7 @@ const ControlledAddressCombobox = (props: ControlledAddressComboboxProps) => {
             />
           ) : (
             <Combobox.Input
-              className={`h-12 w-full rounded-md px-3 py-2 shadow-sm ${
+              className={`h-12 w-full rounded-md px-3 py-2 shadow-xs ${
                 props.error ? "border-northeastern-red" : "border-black"
               }`}
               displayValue={(feat: CarpoolAddress) =>
@@ -83,9 +83,9 @@ const ControlledAddressCombobox = (props: ControlledAddressComboboxProps) => {
             leaveFrom="opacity-100"
             leaveTo="opacity-0"
           >
-            <Combobox.Options className="absolute w-full rounded-md bg-white text-base shadow-lg focus:outline-none">
+            <Combobox.Options className="absolute w-full rounded-md bg-white text-base shadow-lg focus:outline-hidden">
               {props.addressSuggestions.length === 0 ? (
-                <div className="relative cursor-default select-none px-4 py-2 text-gray-700">
+                <div className="relative cursor-default px-4 py-2 text-gray-700 select-none">
                   Nothing found.
                 </div>
               ) : (
@@ -93,7 +93,7 @@ const ControlledAddressCombobox = (props: ControlledAddressComboboxProps) => {
                   <Combobox.Option
                     key={feat.id}
                     className={({ focus }) =>
-                      `cursor-default select-none border-black p-3 ${
+                      `cursor-default border-black p-3 select-none ${
                         focus ? "bg-blue-400 text-white" : "text-gray-900"
                       }`
                     }

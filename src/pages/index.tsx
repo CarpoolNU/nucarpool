@@ -996,7 +996,7 @@ const Home: NextPage<any> = () => {
 
     return (
       <div
-        className="absolute left-0 right-0 top-0 z-[9999] bg-yellow-100 px-4 py-1 text-center text-xs text-black"
+        className="absolute top-0 right-0 left-0 z-[9999] bg-yellow-100 px-4 py-1 text-center text-xs text-black"
         style={{
           width: "100%",
           position: "fixed",
@@ -1029,7 +1029,7 @@ const Home: NextPage<any> = () => {
   }
 
   const viewerBox = (
-    <div className="absolute left-0 top-0 z-10 m-2 flex min-w-[25rem] flex-col rounded-xl bg-white p-4 shadow-lg">
+    <div className="absolute top-0 left-0 z-10 m-2 flex min-w-[25rem] flex-col rounded-xl bg-white p-4 shadow-lg">
       <h2 className="mb-4 text-xl">Search my route</h2>
       <div className="flex items-center space-x-4">
         <Image
@@ -1122,14 +1122,14 @@ const Home: NextPage<any> = () => {
                   aria-label={
                     isSidebarCollapsed ? "Show the list" : "Hide the list"
                   }
-                  className={`absolute left-1/2 z-30 -translate-x-1/2 transform cursor-pointer transition-all duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-northeastern-red ${
+                  className={`focus-visible:outline-northeastern-red absolute left-1/2 z-30 -translate-x-1/2 transform cursor-pointer transition-all duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
                     isSidebarCollapsed
                       ? "bottom-16"
                       : "bottom-[calc(100%-6rem)]"
                   }`}
                   style={{ padding: "12px 0" }}
                 >
-                  <span className="block h-2 w-20 rounded-full bg-gray-500 shadow-sm transition-colors hover:bg-gray-600"></span>
+                  <span className="block h-2 w-20 rounded-full bg-gray-500 shadow-xs transition-colors hover:bg-gray-600"></span>
                 </button>
               )}
             <div
@@ -1150,7 +1150,7 @@ const Home: NextPage<any> = () => {
                 <div className="flex-shrink-0 border-b border-gray-200 bg-gray-50 px-3 py-2">
                   <button
                     onClick={() => handleMobileSidebarExpand()}
-                    className="flex items-center text-northeastern-red"
+                    className="text-northeastern-red flex items-center"
                   >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -1205,7 +1205,7 @@ const Home: NextPage<any> = () => {
             {!isMobile && (
               <button
                 type="button"
-                className="absolute bottom-[150px] right-[8px] z-10 flex h-8 w-8 items-center justify-center rounded-md border-2 border-solid border-gray-300 bg-white shadow-sm hover:bg-gray-200"
+                className="absolute right-[8px] bottom-[150px] z-10 flex h-8 w-8 items-center justify-center rounded-md border-2 border-solid border-gray-300 bg-white shadow-xs hover:bg-gray-200"
                 aria-label="Recentre the map on your workplace"
                 onClick={() =>
                   mapState?.flyTo({
