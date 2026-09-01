@@ -348,14 +348,14 @@ const Index: NextPage = () => {
       <Header profile={true} checkChanges={checkForChanges} />
 
       {isMobile && (
-        <div className="z-10 w-full border-b-2 border-busy-red bg-stone-100">
+        <div className="border-busy-red z-10 w-full border-b-2 bg-stone-100">
           <ProfileSidebar option={option} setOption={setOption} />
         </div>
       )}
 
       {isMobile ? (
-        <div className="absolute bottom-16 left-0 right-0 top-[6rem] overflow-y-auto">
-          <div className="px-8 pb-24 pt-6">
+        <div className="absolute top-[6rem] right-0 bottom-16 left-0 overflow-y-auto">
+          <div className="px-8 pt-6 pb-24">
             {option === "user" ? (
               <UserSection
                 watch={watch}
@@ -393,11 +393,11 @@ const Index: NextPage = () => {
         </div>
       ) : (
         <div className="relative grid h-[91.5%] w-full grid-cols-[250px_repeat(2,1fr)] overflow-hidden">
-          <div className="sticky top-0 col-start-1 col-end-2 h-full w-[250px] border-r-4 border-busy-red bg-stone-100 lg:w-[350px]">
+          <div className="border-busy-red sticky top-0 col-start-1 col-end-2 h-full w-[250px] border-r-4 bg-stone-100 lg:w-[350px]">
             <ProfileSidebar option={option} setOption={setOption} />
           </div>
 
-          <div className="col-start-2 col-end-4 flex h-full shrink items-start justify-center overflow-y-auto overflow-x-hidden">
+          <div className="col-start-2 col-end-4 flex h-full shrink items-start justify-center overflow-x-hidden overflow-y-auto">
             <div className="mt-10 w-full max-w-2xl px-8">
               {option === "user" ? (
                 <UserSection

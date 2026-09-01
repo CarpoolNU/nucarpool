@@ -82,7 +82,7 @@ const UserManagement = ({ permission }: UserManagementProps) => {
       {!loading && users && (
         <div className="m-auto p-20">
           <div className="flex flex-col gap-10 p-10">
-            <h1 className="text-center font-montserrat text-3xl font-bold text-black">
+            <h1 className="font-montserrat text-center text-3xl font-bold text-black">
               Permissions Management
             </h1>
             {permission !== "MANAGER" && (
@@ -143,7 +143,7 @@ const UserManagement = ({ permission }: UserManagementProps) => {
             </div>
             {permission === "MANAGER" && (
               <button
-                className="text-bold w-full justify-center rounded-2xl bg-northeastern-red py-2 font-lato text-white hover:bg-busy-red"
+                className="text-bold bg-northeastern-red font-lato hover:bg-busy-red w-full justify-center rounded-2xl py-2 text-white"
                 onClick={updatePermission}
               >
                 Update Permission

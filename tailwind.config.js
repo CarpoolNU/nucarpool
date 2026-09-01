@@ -48,6 +48,16 @@ module.exports = {
         montserrat: ["Montserrat", "sans-serif"],
         lato: ["Lato", "sans-serif"],
       },
+      // Tailwind v4 collapsed the drop-shadow scale to a single layer, which
+      // makes `drop-shadow-lg` and `-xl` noticeably lighter and flatter. These
+      // restate v3's two-layer values, so the request cards, the sign-in panel
+      // and the select dropdown that use them are unchanged by the upgrade.
+      // `drop-shadow` and `drop-shadow-2xl` are identical across the two
+      // versions and are deliberately not listed.
+      dropShadow: {
+        lg: ["0 10px 8px rgb(0 0 0 / 0.04)", "0 4px 3px rgb(0 0 0 / 0.1)"],
+        xl: ["0 20px 13px rgb(0 0 0 / 0.03)", "0 8px 5px rgb(0 0 0 / 0.08)"],
+      },
       backgroundImage: {
         floaty:
           "radial-gradient(ellipse 100% 80% at -10% 110% , #C8102E, #FFA9A9, transparent)," +

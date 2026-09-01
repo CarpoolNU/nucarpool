@@ -162,12 +162,12 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
     <div
       className={classNames(
         "align-center relative flex flex-col rounded-xl bg-stone-100 text-left shadow-md",
-        "border-l-[13px] border-l-busy-red font-montserrat",
+        "border-l-busy-red font-montserrat border-l-[13px]",
         isMobile ? "mx-1 my-2 gap-1 px-3 py-3" : "m-3.5 gap-2 px-4 py-4",
         props.classname,
       )}
     >
-      <div className={"-ml-2 mb-1 flex flex-row items-center"}>
+      <div className={"mb-1 -ml-2 flex flex-row items-center"}>
         {/* Profile Image */}
         {isProfileImageLoading ? (
           <div className="h-14 w-14 rounded-full bg-gray-200" />
@@ -246,7 +246,7 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
       {/* Fourth row - messaging bubble */}
       {props.message && !(isMobile && props.isMobileCondensedLayout) && (
         <div
-          className={`mt-2 inline-block max-w-full break-words rounded-lg bg-white p-2 text-sm ${
+          className={`mt-2 inline-block max-w-full rounded-lg bg-white p-2 text-sm break-words ${
             props.isUnread ? "font-bold" : ""
           }`}
         >
@@ -305,7 +305,7 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
         )}
 
       {props.notice && (
-        <div className="rounded-md bg-white p-2 text-sm italic text-gray-700">
+        <div className="rounded-md bg-white p-2 text-sm text-gray-700 italic">
           {props.notice}
         </div>
       )}
@@ -368,7 +368,7 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
           aria-label={props.onClickLabel}
           aria-current={props.isSelected ? "true" : undefined}
           onClick={props.onClick}
-          className="absolute inset-0 z-10 cursor-pointer rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-northeastern-red"
+          className="focus-visible:outline-northeastern-red absolute inset-0 z-10 cursor-pointer rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
         />
       )}
     </div>

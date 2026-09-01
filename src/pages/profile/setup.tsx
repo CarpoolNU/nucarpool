@@ -340,7 +340,7 @@ const Setup: NextPage = () => {
 
   return (
     <div className="relative h-full w-full overflow-hidden">
-      <div className="absolute inset-0 bg-floaty" />
+      <div className="bg-floaty absolute inset-0" />
       <h1 className={titleClass}>CarpoolNU</h1>
 
       {step > 1 && (
@@ -428,7 +428,7 @@ const Setup: NextPage = () => {
             onClick={handleNextStep}
           >
             <div
-              className={`flex items-center font-montserrat ${isMobile ? "text-xl" : "text-2xl"} font-bold`}
+              className={`font-montserrat flex items-center ${isMobile ? "text-xl" : "text-2xl"} font-bold`}
             >
               {watch("role") === Role.VIEWER
                 ? "View Map"

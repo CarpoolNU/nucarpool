@@ -27,7 +27,7 @@ const CustomSelect = <T extends string>({
     <div className={"relative z-20 w-full " + className}>
       <Listbox value={value} onChange={onChange}>
         <div className="relative">
-          <Listbox.Button className="relative w-full cursor-default rounded-lg border border-black bg-white py-2 pl-3 pr-8 text-left focus:outline-none">
+          <Listbox.Button className="relative w-full cursor-default rounded-lg border border-black bg-white py-2 pr-8 pl-3 text-left focus:outline-hidden">
             {title ? (
               <span className="block truncate">{title}</span>
             ) : (
@@ -45,12 +45,12 @@ const CustomSelect = <T extends string>({
             leaveFrom="opacity-100"
             leaveTo="opacity-0"
           >
-            <Listbox.Options className="absolute mt-1 max-h-60 w-full overflow-auto rounded-md border border-black bg-white drop-shadow-xl focus:outline-none">
+            <Listbox.Options className="absolute mt-1 max-h-60 w-full overflow-auto rounded-md border border-black bg-white drop-shadow-xl focus:outline-hidden">
               {options.map((option) => (
                 <Listbox.Option
                   key={option.value}
                   className={({ focus }) =>
-                    `relative cursor-default select-none py-2 pl-3 pr-8 ${
+                    `relative cursor-default py-2 pr-8 pl-3 select-none ${
                       focus ? "bg-northeastern-red text-white" : "text-black"
                     }`
                   }

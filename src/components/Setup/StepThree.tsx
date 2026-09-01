@@ -34,7 +34,7 @@ const StepThree = ({
   return (
     <div className="flex flex-col items-center justify-center bg-white px-2">
       <div
-        className={`mb-4 text-center font-montserrat ${isMobile ? "text-2xl" : "text-3xl"} font-bold`}
+        className={`font-montserrat mb-4 text-center ${isMobile ? "text-2xl" : "text-3xl"} font-bold`}
       >
         <span>When are you&nbsp;</span>
         <span className="text-northeastern-red">carpooling?</span>

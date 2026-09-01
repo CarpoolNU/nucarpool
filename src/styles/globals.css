@@ -1,6 +1,12 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+/* Tailwind v4 is CSS-first and no longer discovers `tailwind.config.js` by
+   itself. Loading it explicitly keeps this project's theme in JavaScript, which
+   matters most for `screens`: the config overrides Tailwind's defaults and
+   derives the `desktop` screen from `MOBILE_BREAKPOINT_PX` in
+   `src/utils/breakpoints.js` - the same constant `useIsMobile` reads - so the
+   media queries and the layout logic cannot drift apart. */
+@config "../../tailwind.config.js";
 
 #__next {
   width: 100vw;

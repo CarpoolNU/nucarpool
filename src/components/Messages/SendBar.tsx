@@ -62,7 +62,7 @@ const SendBar = ({ onSendMessage }: SendBarProps) => {
           role="textbox"
           aria-multiline="true"
           aria-label="Message"
-          className="placeholder w-full flex-1 resize-none border-0 bg-gray-100 p-2 text-lg focus:outline-none"
+          className="placeholder w-full flex-1 resize-none border-0 bg-gray-100 p-2 text-lg focus:outline-hidden"
           ref={messageInputRef}
           style={{
             minHeight: "20px",

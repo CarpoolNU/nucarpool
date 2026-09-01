@@ -233,7 +233,7 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
   }, [lastMessageId, scrollToBottom]);
 
   return (
-    <div className="flex h-full flex-1 flex-col overflow-y-auto overflow-x-hidden bg-white p-4">
+    <div className="flex h-full flex-1 flex-col overflow-x-hidden overflow-y-auto bg-white p-4">
       {/* Older history is fetched on request rather than shipped with every
           Requests-tab load. Rendered only when the server said
           another page exists, so a short thread shows nothing at all. */}
@@ -243,7 +243,7 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
             type="button"
             onClick={() => void threadQuery.fetchNextPage()}
             disabled={threadQuery.isFetchingNextPage}
-            className="rounded-full px-4 py-1 text-sm text-gray-600 underline hover:text-northeastern-red focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-northeastern-red disabled:cursor-not-allowed disabled:no-underline disabled:opacity-60"
+            className="hover:text-northeastern-red focus-visible:outline-northeastern-red rounded-full px-4 py-1 text-sm text-gray-600 underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:no-underline disabled:opacity-60"
           >
             {threadQuery.isFetchingNextPage
               ? "Loading older messages…"

@@ -34,8 +34,8 @@ export const QueryError = ({
     <MdErrorOutline
       className={
         variant === "page"
-          ? "h-12 w-12 text-northeastern-red"
-          : "h-8 w-8 text-northeastern-red"
+          ? "text-northeastern-red h-12 w-12"
+          : "text-northeastern-red h-8 w-8"
       }
       aria-hidden="true"
     />
@@ -54,7 +54,7 @@ export const QueryError = ({
     <button
       type="button"
       onClick={onRetry}
-      className="rounded-md bg-northeastern-red px-4 py-2 font-medium text-white transition-colors hover:bg-red-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-northeastern-red"
+      className="bg-northeastern-red focus-visible:outline-northeastern-red rounded-md px-4 py-2 font-medium text-white transition-colors hover:bg-red-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
     >
       Try again
     </button>

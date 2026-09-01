@@ -55,12 +55,12 @@ const UserSection = ({
         User Profile
       </ProfileHeader>
 
-      <div className="flex font-montserrat text-2xl font-bold">
+      <div className="font-montserrat flex text-2xl font-bold">
         I am a... <span className="text-northeastern-red">*</span>
       </div>
 
       {lockedToDriver && (
-        <Note className="!mb-2 !mt-0 max-w-xl">
+        <Note className="!mt-0 !mb-2 max-w-xl">
           You are the driver of a carpool group, so your role is locked to
           Driver. Leave or dissolve the group from the Group page to change it -
           switching now would leave your riders in a group with no driver.
@@ -149,7 +149,7 @@ const UserSection = ({
         )}
       </div>
 
-      <EntryLabel label="Personal Info" className="mb-4 mt-6 !text-2xl" />
+      <EntryLabel label="Personal Info" className="mt-6 mb-4 !text-2xl" />
 
       {/* Profile picture section */}
       <div
@@ -229,10 +229,10 @@ const UserSection = ({
         </Note>
       </div>
 
-      <div className="flex flex-col gap-5 py-8 font-montserrat">
+      <div className="font-montserrat flex flex-col gap-5 py-8">
         <button
           type="button"
-          className="w-full rounded-lg bg-northeastern-red py-3 text-lg text-white hover:bg-red-700"
+          className="bg-northeastern-red w-full rounded-lg py-3 text-lg text-white hover:bg-red-700"
           onClick={onSubmit}
           aria-label="Save Changes"
         >

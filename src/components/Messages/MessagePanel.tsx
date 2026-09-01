@@ -196,7 +196,7 @@ const MessagePanel = ({
           <button
             className={`flex-1 py-3 text-center text-lg font-medium ${
               activeTab === "message"
-                ? "border-b-2 border-northeastern-red text-northeastern-red"
+                ? "border-northeastern-red text-northeastern-red border-b-2"
                 : ""
             }`}
             onClick={() => setActiveTab("message")}
@@ -206,7 +206,7 @@ const MessagePanel = ({
           <button
             className={`flex-1 py-3 text-center text-lg font-medium ${
               activeTab === "map"
-                ? "border-b-2 border-northeastern-red text-northeastern-red"
+                ? "border-northeastern-red text-northeastern-red border-b-2"
                 : ""
             }`}
             onClick={() => handleMapSwitch()}

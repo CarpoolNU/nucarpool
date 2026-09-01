@@ -27,7 +27,7 @@ const StepFour = ({
 }: StepFourProps) => {
   return (
     <div className="flex flex-col items-center justify-center bg-white px-4">
-      <div className="mb-4 text-center font-montserrat text-3xl font-bold">
+      <div className="font-montserrat mb-4 text-center text-3xl font-bold">
         <span>Who is&nbsp;</span>
         <span className="text-northeastern-red">carpooling?</span>
       </div>

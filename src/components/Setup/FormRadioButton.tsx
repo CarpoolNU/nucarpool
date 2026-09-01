@@ -22,7 +22,7 @@ const RadioButton = React.forwardRef<
     return (
       <label
         htmlFor={id}
-        className={`flex cursor-pointer items-center justify-center rounded-lg border border-black px-6 py-2 font-montserrat text-2xl transition ${
+        className={`font-montserrat flex cursor-pointer items-center justify-center rounded-lg border border-black px-6 py-2 text-2xl transition ${
           currentlySelected === value
             ? "bg-northeastern-red text-white"
             : "bg-white text-black"

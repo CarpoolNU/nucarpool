@@ -42,7 +42,7 @@ const AddressCombobox = ({
         as="div"
       >
         <Combobox.Input
-          className={`h-12 w-full rounded-md px-3 py-2 shadow-sm ${
+          className={`h-12 w-full rounded-md px-3 py-2 shadow-xs ${
             error ? "border-red-500" : "border-black"
           }`}
           displayValue={(feat: CarpoolAddress) => feat.place_name}
@@ -55,9 +55,9 @@ const AddressCombobox = ({
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
-          <Combobox.Options className="absolute w-full rounded-md bg-white text-base shadow-lg focus:outline-none">
+          <Combobox.Options className="absolute w-full rounded-md bg-white text-base shadow-lg focus:outline-hidden">
             {addressSuggestions.length === 0 ? (
-              <div className="relative cursor-default select-none px-4 py-2 text-gray-700">
+              <div className="relative cursor-default px-4 py-2 text-gray-700 select-none">
                 Nothing found.
               </div>
             ) : (
@@ -65,7 +65,7 @@ const AddressCombobox = ({
                 <Combobox.Option
                   key={feat.id}
                   className={({ focus }) =>
-                    `cursor-default select-none border-black p-3 ${
+                    `cursor-default border-black p-3 select-none ${
                       focus ? "bg-blue-400 text-white" : "text-gray-900"
                     }`
                   }

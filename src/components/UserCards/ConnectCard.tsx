@@ -121,11 +121,11 @@ export const ConnectCard = (props: ConnectCardProps): React.JSX.Element => {
         isMobileCondensedLayout={isMobile && props.mobileSelectedUser !== null}
       />
       {props.mobileSelectedUser !== null && isMobile && (
-        <div className="mx-3.5 mb-4 mt-2">
+        <div className="mx-3.5 mt-2 mb-4">
           <button
             onClick={() => handleConnect(props.otherUser)}
             disabled={user?.role === "VIEWER" || user?.status === "INACTIVE"}
-            className="w-full rounded-md bg-northeastern-red p-3 text-center font-semibold text-white hover:bg-red-700 disabled:bg-gray-300"
+            className="bg-northeastern-red w-full rounded-md p-3 text-center font-semibold text-white hover:bg-red-700 disabled:bg-gray-300"
           >
             Connect!
           </button>

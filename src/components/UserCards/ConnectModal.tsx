@@ -118,9 +118,9 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
       onClose={() => onClose("close")}
       className="relative z-50"
     >
-      <div className="fixed inset-0 font-montserrat backdrop-blur-sm">
+      <div className="font-montserrat fixed inset-0 backdrop-blur-xs">
         <div className="fixed inset-0 flex items-center justify-center">
-          <Dialog.Panel className="absolute flex w-5/6 max-w-[700px] select-none flex-col content-center justify-center gap-4 overflow-y-auto overflow-x-hidden rounded-2xl bg-white py-4 shadow-md md:aspect-square">
+          <Dialog.Panel className="absolute flex w-5/6 max-w-[700px] flex-col content-center justify-center gap-4 overflow-x-hidden overflow-y-auto rounded-2xl bg-white py-4 shadow-md select-none md:aspect-square">
             {!requestSent ? (
               <>
                 <div className="relative flex w-full">
@@ -145,7 +145,7 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                         <div className="text-lg font-bold lg:text-xl">
                           <p>{props.otherUser.preferredName}</p>
                         </div>
-                        <p className="font-montserrat text-sm italic text-stone-400">
+                        <p className="font-montserrat text-sm text-stone-400 italic">
                           {props.otherUser.pronouns !== "" && !isMobile
                             ? "(" + `${props.otherUser.pronouns}` + ")"
                             : null}
@@ -264,7 +264,7 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                     via email.
                   </p>
                   <textarea
-                    className="form-input mb-2 flex max-h-32 min-h-16 w-full rounded-lg border border-stone-400 px-6 shadow-sm"
+                    className="form-input mb-2 flex max-h-32 min-h-16 w-full rounded-lg border border-stone-400 px-6 shadow-xs"
                     maxLength={MESSAGE_MAX_LENGTH}
                     defaultValue={customMessage}
                     placeholder={"Send a message"}
@@ -284,7 +284,7 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                         Cancel
                       </button>
                       <button
-                        className="w-full rounded-md bg-northeastern-red p-1 text-slate-50 hover:bg-red-700"
+                        className="bg-northeastern-red w-full rounded-md p-1 text-slate-50 hover:bg-red-700"
                         onClick={handleOnClick}
                       >
                         Send
@@ -318,7 +318,7 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                     </button>
                     {!isMobile && (
                       <button
-                        className="w-full rounded-md bg-northeastern-red p-1 text-slate-50 hover:bg-red-700"
+                        className="bg-northeastern-red w-full rounded-md p-1 text-slate-50 hover:bg-red-700"
                         onClick={handleViewRequest}
                       >
                         View Request

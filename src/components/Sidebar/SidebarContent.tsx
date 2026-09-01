@@ -240,7 +240,7 @@ export const SidebarContent = (props: SidebarContentProps) => {
   return (
     <div className="relative h-full px-3.5">
       <div
-        className={`relative h-full ${isMobile && props.mobileSelectedUser === null ? "overflow-y-scroll" : isMobile && props.mobileSelectedUser !== null ? "overflow-hidden" : "overflow-y-scroll"} pb-32 scrollbar scrollbar-track-stone-100 scrollbar-thumb-busy-red scrollbar-track-rounded-full scrollbar-thumb-rounded-full`}
+        className={`relative h-full ${isMobile && props.mobileSelectedUser === null ? "overflow-y-scroll" : isMobile && props.mobileSelectedUser !== null ? "overflow-hidden" : "overflow-y-scroll"} scrollbar scrollbar-thumb-busy-red scrollbar-track-rounded-full scrollbar-thumb-rounded-full scrollbar-track-stone-100 pb-32`}
       >
         {/* Order matters. Viewer mode comes first because it is a role, not a
             load result - a VIEWER has no use for a retry on a list they cannot

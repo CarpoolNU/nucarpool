@@ -98,7 +98,7 @@ const MessageHeader = ({
         </button>
 
         <div className="w-full text-center">
-          <span className="pl-10 pr-10 font-montserrat font-semibold sm:text-lg md:text-xl lg:text-2xl">
+          <span className="font-montserrat pr-10 pl-10 font-semibold sm:text-lg md:text-xl lg:text-2xl">
             {selectedUser.preferredName}
           </span>
         </div>
@@ -123,7 +123,7 @@ const MessageHeader = ({
           <AiOutlineUser className="h-20 w-20 rounded-full bg-gray-200" />
         )}
 
-        <span className="pl-10 pr-10 font-montserrat font-semibold sm:text-lg md:text-xl lg:text-2xl">
+        <span className="font-montserrat pr-10 pl-10 font-semibold sm:text-lg md:text-xl lg:text-2xl">
           {selectedUser.preferredName}
         </span>
       </div>
@@ -132,7 +132,7 @@ const MessageHeader = ({
           (!groupId || selectedUser.carpoolId !== groupId) && (
             <>
               {roleMismatch && (
-                <p className="mr-10 max-w-sm font-montserrat text-sm text-gray-700">
+                <p className="font-montserrat mr-10 max-w-sm text-sm text-gray-700">
                   {roleMismatch}
                 </p>
               )}
@@ -149,7 +149,7 @@ const MessageHeader = ({
                 <button
                   onClick={onAccept}
                   disabled={isMutating}
-                  className={`mr-10 rounded-lg border-2 border-northeastern-red bg-northeastern-red py-2 text-center text-lg font-medium text-white hover:bg-red-700 sm:px-8 md:px-12 lg:px-20 ${
+                  className={`border-northeastern-red bg-northeastern-red mr-10 rounded-lg border-2 py-2 text-center text-lg font-medium text-white hover:bg-red-700 sm:px-8 md:px-12 lg:px-20 ${
                     isMutating ? DISABLED_CLASS : ""
                   }`}
                 >
@@ -163,7 +163,7 @@ const MessageHeader = ({
           (!groupId || selectedUser.carpoolId !== groupId) && (
             <>
               {roleMismatch && (
-                <p className="mr-10 max-w-sm font-montserrat text-sm text-gray-700">
+                <p className="font-montserrat mr-10 max-w-sm text-sm text-gray-700">
                   {roleMismatch}
                 </p>
               )}

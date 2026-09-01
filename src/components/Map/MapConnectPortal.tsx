@@ -24,7 +24,7 @@ export const MapConnectPortal = (props: ConnectPortalProps) => {
             <div className="max-h-100vh relative mt-11 w-[26rem]">
               <div
                 tabIndex={0}
-                className="mr-3 max-h-[calc(100vh-8rem)] overflow-y-scroll scrollbar scrollbar-track-transparent scrollbar-thumb-northeastern-red scrollbar-track-rounded-full scrollbar-thumb-rounded-full"
+                className="scrollbar scrollbar-thumb-northeastern-red scrollbar-track-rounded-full scrollbar-thumb-rounded-full mr-3 max-h-[calc(100vh-8rem)] scrollbar-track-transparent overflow-y-scroll"
                 style={{
                   maskImage:
                     "linear-gradient(to bottom, transparent 0%, black 5%, black 95%, transparent 100%)",

@@ -57,9 +57,9 @@ const AccountSection = ({
             name="status"
             control={control}
             render={({ field }) => (
-              <div className="flex flex-col items-start font-montserrat">
+              <div className="font-montserrat flex flex-col items-start">
                 <FormControlLabel
-                  className="mb-6 mt-4 pl-3"
+                  className="mt-4 mb-6 pl-3"
                   control={
                     <Switch
                       checked={field.value === Status.ACTIVE}
@@ -94,7 +94,7 @@ const AccountSection = ({
                   label=""
                 />
 
-                <Note className="w-full font-lato !text-base !text-black">
+                <Note className="font-lato w-full !text-base !text-black">
                   Marking your profile inactive will make you invisible on the
                   map and disables sending messages from this profile. Profiles
                   are automatically marked inactive at the end of the of the
@@ -107,7 +107,7 @@ const AccountSection = ({
 
         <EntryLabel
           label="Co-op Term Dates"
-          className={"mb-6 mt-12 !text-2xl"}
+          className={"mt-12 mb-6 !text-2xl"}
         />
 
         {/* Date pickers stack on mobile for better fit */}
@@ -178,10 +178,10 @@ const AccountSection = ({
           don&apos;t know exact dates, you can use approximate dates.
         </Note>
 
-        <div className="py-8 font-montserrat">
+        <div className="font-montserrat py-8">
           <button
             type="button"
-            className="w-full rounded-lg bg-northeastern-red py-3 text-lg text-white hover:bg-red-700"
+            className="bg-northeastern-red w-full rounded-lg py-3 text-lg text-white hover:bg-red-700"
             onClick={onSubmit}
           >
             Save Changes

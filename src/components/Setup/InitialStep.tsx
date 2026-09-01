@@ -28,21 +28,21 @@ const InitialStep = ({
   const isMobile = useIsMobile();
 
   return (
-    <div className="flex select-none flex-col items-center">
+    <div className="flex flex-col items-center select-none">
       <h2
-        className={`mb-2 text-center font-montserrat ${isMobile ? "text-4xl" : "text-5xl"} font-bold`}
+        className={`font-montserrat mb-2 text-center ${isMobile ? "text-4xl" : "text-5xl"} font-bold`}
       >
         Welcome to{" "}
       </h2>
       <h2
-        className={`mb-4 text-center font-montserrat ${isMobile ? "text-4xl" : "text-5xl"} font-bold text-northeastern-red`}
+        className={`font-montserrat mb-4 text-center ${isMobile ? "text-4xl" : "text-5xl"} text-northeastern-red font-bold`}
       >
         CarpoolNU
       </h2>
       {step === 0 && (
         <button
           onClick={handleNextStep}
-          className={`${isMobile ? "mt-12" : "mt-16"} rounded-lg border border-black bg-northeastern-red px-6 py-2 font-montserrat ${isMobile ? "text-xl" : "text-2xl"} text-white transition hover:bg-red-700`}
+          className={`${isMobile ? "mt-12" : "mt-16"} bg-northeastern-red font-montserrat rounded-lg border border-black px-6 py-2 ${isMobile ? "text-xl" : "text-2xl"} text-white transition hover:bg-red-700`}
         >
           Get Started
         </button>
@@ -58,7 +58,7 @@ const InitialStep = ({
       {step === 1 && (
         <div className="mt-4 flex flex-col items-center justify-center">
           <h3
-            className={`mb-3 font-montserrat ${isMobile ? "text-l" : "text-2xl"} font-semibold`}
+            className={`font-montserrat mb-3 ${isMobile ? "text-l" : "text-2xl"} font-semibold`}
           >
             Please select a role to start:
           </h3>
@@ -97,7 +97,7 @@ const InitialStep = ({
             />
           </div>
           <p
-            className={`pt-3 font-montserrat ${isMobile ? "text-base" : "text-lg"}`}
+            className={`font-montserrat pt-3 ${isMobile ? "text-base" : "text-lg"}`}
           >
             {watch("role") === Role.DRIVER && (
               <span>Looking for Carpoolers to join you.</span>
@@ -114,7 +114,7 @@ const InitialStep = ({
               <div className="flex flex-col">
                 <div className="flex items-center justify-center">
                   <span
-                    className={`mr-2 font-montserrat ${isMobile ? "text-base" : "text-lg"} font-semibold`}
+                    className={`font-montserrat mr-2 ${isMobile ? "text-base" : "text-lg"} font-semibold`}
                   >
                     Seat Availability
                   </span>
@@ -129,7 +129,7 @@ const InitialStep = ({
                   />
                 </div>
                 {errors.seatAvail && (
-                  <span className="mt-1 text-center text-sm text-northeastern-red">
+                  <span className="text-northeastern-red mt-1 text-center text-sm">
                     Enter a number between 1 and 6
                   </span>
                 )}
