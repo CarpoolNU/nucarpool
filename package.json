@@ -63,8 +63,6 @@
     "next-auth": "4.24.15",
     "pusher": "^5.3.4",
     "pusher-js": "8.6.0",
-    "rc-picker": "4.11.3",
-    "rc-trigger": "^5.3.4",
     "react": "19.2.8",
     "react-chartjs-2": "5.3.1",
     "react-dom": "19.2.8",
