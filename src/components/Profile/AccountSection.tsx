@@ -131,7 +131,7 @@ const AccountSection = ({
                   "YYYY/MM",
                 ),
               })}
-              onChange={(date: Dayjs, dateString) =>
+              onChange={(date: Dayjs | null, dateString) =>
                 setValue("coopStartDate", date ? date.toDate() : null)
               }
               format="YYYY-MM"
@@ -156,7 +156,7 @@ const AccountSection = ({
                   "YYYY/MM",
                 ),
               })}
-              onChange={(date: Dayjs, dateString) =>
+              onChange={(date: Dayjs | null, dateString) =>
                 setValue("coopEndDate", date ? date.toDate() : null)
               }
               format="YYYY-MM"
