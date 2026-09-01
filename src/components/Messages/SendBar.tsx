@@ -52,8 +52,8 @@ const SendBar = ({ onSendMessage }: SendBarProps) => {
   };
 
   return (
-    <div className="border-t p-6">
-      <div className="mx-10 flex items-center overflow-hidden rounded-lg border bg-gray-100">
+    <div className="border-t border-gray-200 p-6">
+      <div className="mx-10 flex items-center overflow-hidden rounded-lg border border-gray-200 bg-gray-100">
         <div
           contentEditable="true"
           // The visible "Type a message..." hint is a CSS `:empty:before`

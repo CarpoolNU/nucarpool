@@ -135,7 +135,7 @@ const AccountSection = ({
                 setValue("coopStartDate", date ? date.toDate() : null)
               }
               format="YYYY-MM"
-              className="h-14 w-full rounded-md border p-2 text-lg"
+              className="h-14 w-full rounded-md border border-gray-200 p-2 text-lg"
             />
           </div>
 
@@ -160,7 +160,7 @@ const AccountSection = ({
                 setValue("coopEndDate", date ? date.toDate() : null)
               }
               format="YYYY-MM"
-              className="h-14 w-full rounded-md border p-2 text-lg"
+              className="h-14 w-full rounded-md border border-gray-200 p-2 text-lg"
             />
           </div>
         </div>

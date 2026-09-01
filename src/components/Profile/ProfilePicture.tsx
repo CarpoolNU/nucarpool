@@ -205,7 +205,7 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
         <div className="ml-4">
           <label
             htmlFor="fileInput"
-            className="border-1 ml-10 inline-block cursor-pointer rounded-lg border border-black bg-northeastern-red px-4 py-2 font-montserrat text-xl text-white hover:bg-red-700"
+            className="ml-10 inline-block cursor-pointer rounded-lg border border-black bg-northeastern-red px-4 py-2 font-montserrat text-xl text-white hover:bg-red-700"
           >
             Upload Profile Picture
           </label>
