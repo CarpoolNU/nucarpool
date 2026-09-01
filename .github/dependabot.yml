@@ -86,10 +86,19 @@ updates:
         patterns:
           - "@mui/*"
           - "@emotion/*"
+      # `rc-*` used to be here for the `rc-picker` and `rc-trigger` pins, which
+      # were antd v5 internals declared as direct dependencies and imported
+      # nowhere. Both are gone, and antd v6 renamed its internals to the
+      # `@rc-component/*` scope, so the pattern matched nothing.
+      #
+      # It is deliberately not replaced with `@rc-component/*`: those are
+      # transitive dependencies of antd, and npm version updates only ever
+      # propose direct dependencies, so that pattern would be just as dead.
+      # antd carries its own internals across a major - `antd` alone is the
+      # whole group.
       antd:
         patterns:
           - "antd"
-          - "rc-*"
       chart:
         patterns:
           - "chart.js"
