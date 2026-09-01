@@ -13,7 +13,35 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "preserve",
-    "incremental": true
+    "incremental": true,
+
+    /*
+     * Both of the options below are required by TypeScript 6 and are inert on 5.
+     *
+     * `types` pins which ambient `@types/*` packages enter the program.
+     * TypeScript 5 loaded every package in `node_modules/@types` — 31 of them
+     * here — while TypeScript 6 loads only the ones reachable through a real
+     * `import`. `@types/jest` is reachable no other way: it declares
+     * `describe`, `it`, `expect` and the `jest` namespace as globals, and not
+     * one of this repository's 54 test files imports them from
+     * `@jest/globals`. Without this line the upgrade produces 3148 errors, all
+     * of them in test files. Only `jest` and `node` need naming; the other ten
+     * `@types/*` dependencies are module typings that come in through their own
+     * imports and are unaffected.
+     *
+     * `rootDir` is set because TypeScript 6 refuses to infer it: it now errors
+     * with TS5011 when the common source directory of the program is
+     * ambiguous. `ts-jest` compiles one file at a time, so the "common source
+     * directory" of each compilation is whatever folder that single file lives
+     * in — `./src/utils`, `./scripts`, and so on — and 53 of 54 suites fail to
+     * *load*. That failure mode is the dangerous one, and the one SCRUM-324 was
+     * filed for: the suites never run, so `yarn test` reports the tests that
+     * remain as passing rather than reporting a failure. `tsc` itself is
+     * unaffected either way, because `noEmit` means no output layout is ever
+     * produced.
+     */
+    "types": ["jest", "node"],
+    "rootDir": "."
   },
   "include": [
     "next-env.d.ts",
