@@ -74,12 +74,12 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
           onClick={() => setOption("user")}
         >
           {option === "user" && (
-            <div className="absolute h-full w-3 rounded-r-xl bg-northeastern-red"></div>
+            <div className="bg-northeastern-red absolute h-full w-3 rounded-r-xl"></div>
           )}
           <div
             className={`relative ml-4 w-12 lg:ml-12 ${
               option === "user" &&
-              "after:absolute after:inset-0 after:bg-northeastern-red after:mix-blend-screen"
+              "after:bg-northeastern-red after:absolute after:inset-0 after:mix-blend-screen"
             } `}
           >
             <div className="relative flex justify-center">
@@ -93,12 +93,12 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
           onClick={() => setOption("carpool")}
         >
           {option === "carpool" && (
-            <div className="absolute left-0 h-full w-3 rounded-r-xl bg-northeastern-red"></div>
+            <div className="bg-northeastern-red absolute left-0 h-full w-3 rounded-r-xl"></div>
           )}
           <div
             className={`relative ml-4 w-12 lg:ml-12 ${
               option === "carpool" &&
-              "after:absolute after:inset-0 after:bg-northeastern-red after:mix-blend-screen"
+              "after:bg-northeastern-red after:absolute after:inset-0 after:mix-blend-screen"
             } `}
           >
             <div className="relative flex justify-center">
@@ -113,12 +113,12 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
           onClick={() => setOption("account")}
         >
           {option === "account" && (
-            <div className="absolute left-0 h-full w-3 rounded-r-xl bg-northeastern-red"></div>
+            <div className="bg-northeastern-red absolute left-0 h-full w-3 rounded-r-xl"></div>
           )}
           <div
             className={`relative ml-4 w-12 lg:ml-12 ${
               option === "account" &&
-              "after:absolute after:inset-0 after:bg-northeastern-red after:mix-blend-screen"
+              "after:bg-northeastern-red after:absolute after:inset-0 after:mix-blend-screen"
             } `}
           >
             <div className="relative flex justify-center">

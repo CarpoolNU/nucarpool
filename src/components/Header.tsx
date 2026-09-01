@@ -376,8 +376,8 @@ const Header = (props: HeaderProps) => {
         >
           Requests
           {(unreadMessagesCount !== 0 || currentunreadMessagesCount !== 0) && (
-            <span className="absolute right-0 top-0 flex h-6 w-6 items-center justify-center rounded-full bg-white">
-              <span className="text-xs font-bold text-northeastern-red">
+            <span className="absolute top-0 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-white">
+              <span className="text-northeastern-red text-xs font-bold">
                 {currentunreadMessagesCount !== 0
                   ? currentunreadMessagesCount
                   : unreadMessagesCount}

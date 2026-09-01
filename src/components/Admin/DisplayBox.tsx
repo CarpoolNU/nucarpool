@@ -7,7 +7,7 @@ interface DisplayBoxProps {
 }
 const DisplayBox = ({ data, title }: DisplayBoxProps) => {
   return (
-    <div className="flex flex-col justify-center space-y-2 rounded-lg border border-black p-6 font-montserrat drop-shadow-2xl">
+    <div className="font-montserrat flex flex-col justify-center space-y-2 rounded-lg border border-black p-6 drop-shadow-2xl">
       <div className="text-center text-2xl font-bold">{title}</div>
       <div className="grid grid-flow-col items-center gap-1 divide-x text-center">
         {data.map((data, index) => {

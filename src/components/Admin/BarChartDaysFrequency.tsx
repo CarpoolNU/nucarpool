@@ -102,7 +102,7 @@ function BarChartDaysFrequency({
   return (
     <div className="flex h-[500px] w-full flex-col">
       <Bar data={barData} options={barOptions} />
-      <span className="w-full text-center font-lato text-sm text-gray-400">
+      <span className="font-lato w-full text-center text-sm text-gray-400">
         All bars currently only include active users aside from
         &quot;Inactive&quot;
       </span>

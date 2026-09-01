@@ -83,7 +83,7 @@ const ExploreSidebar = (props: ExploreSidebarProps) => {
             <button
               className={
                 curOption === "recommendations"
-                  ? "rounded-xl bg-northeastern-red p-2 text-xl font-semibold text-white"
+                  ? "bg-northeastern-red rounded-xl p-2 text-xl font-semibold text-white"
                   : "rounded-xl p-2 text-xl font-semibold text-black"
               }
               onClick={() => {
@@ -95,7 +95,7 @@ const ExploreSidebar = (props: ExploreSidebarProps) => {
             <button
               className={
                 curOption === "favorites"
-                  ? "rounded-xl bg-northeastern-red p-2 text-xl font-semibold text-white"
+                  ? "bg-northeastern-red rounded-xl p-2 text-xl font-semibold text-white"
                   : "rounded-xl p-2 text-xl font-semibold text-black"
               }
               onClick={() => {

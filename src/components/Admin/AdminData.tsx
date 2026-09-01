@@ -214,7 +214,7 @@ function AdminData() {
       <div className="flex h-full w-full flex-col space-y-4 px-8">
         <button
           onClick={handleDownloadData}
-          className="self-start rounded bg-northeastern-red px-4 py-2 font-bold text-white hover:bg-red-700"
+          className="bg-northeastern-red self-start rounded px-4 py-2 font-bold text-white hover:bg-red-700"
         >
           Download Data
         </button>
@@ -280,7 +280,7 @@ function AdminData() {
               step={7 * 24 * 60 * 60 * 1000}
             />
           </ConfigProvider>
-          <div className="flex justify-between font-montserrat">
+          <div className="font-montserrat flex justify-between">
             <span>
               {format(startOfWeek(new Date(rangeStart)), "MMM dd, yyyy")}
             </span>

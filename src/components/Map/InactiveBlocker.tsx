@@ -31,7 +31,7 @@ const InactiveBlocker = () => {
         </p>
         <button
           onClick={handleProfileClick}
-          className="mt-6 inline-block rounded-lg bg-northeastern-red px-9 py-3 text-lg font-medium text-white hover:bg-red-800"
+          className="bg-northeastern-red mt-6 inline-block rounded-lg px-9 py-3 text-lg font-medium text-white hover:bg-red-800"
         >
           Go to Profile
         </button>

@@ -26,7 +26,7 @@ const ControlledTimePicker = (props: ControlledTimePickerProps) => {
 
   const customSuffixIcon = (): ReactNode => {
     return (
-      <div className="h-1/12 flex w-1/12 justify-center text-center text-xs text-northeastern-red">
+      <div className="text-northeastern-red flex h-1/12 w-1/12 justify-center text-center text-xs">
         ▼
       </div>
     );

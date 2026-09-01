@@ -144,10 +144,10 @@ const CarpoolSection = ({
       {errors.companyAddress && (
         <ErrorDisplay>{errors.companyAddress.message}</ErrorDisplay>
       )}
-      <div className="py-8 font-montserrat">
+      <div className="font-montserrat py-8">
         <button
           type="button"
-          className="w-full rounded-lg bg-northeastern-red py-3 text-lg text-white hover:bg-red-700"
+          className="bg-northeastern-red w-full rounded-lg py-3 text-lg text-white hover:bg-red-700"
           onClick={onSubmit}
         >
           Save Changes

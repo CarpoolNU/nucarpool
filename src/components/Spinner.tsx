@@ -4,7 +4,7 @@ const Spinner: React.FC = () => {
   return (
     <div className="flex h-full w-full flex-col items-center justify-center space-y-4">
       <svg
-        className="h-20 w-20 animate-spin text-northeastern-red"
+        className="text-northeastern-red h-20 w-20 animate-spin"
         xmlns="http://www.w3.org/2000/svg"
         fill="none"
         viewBox="0 0 24 24"
