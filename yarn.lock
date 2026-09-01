@@ -77,10 +77,10 @@
     "@smithy/types" "^4.17.2"
     tslib "^2.6.2"
 
-"@aws-sdk/client-s3@^3.1116.0":
-  version "3.1116.0"
-  resolved "https://registry.yarnpkg.com/@aws-sdk/client-s3/-/client-s3-3.1116.0.tgz#1e2eec221df81a255a4942bbcbe37e90f5dc3099"
-  integrity sha512-UKRl9qSVW0rZpvSOauQNpYAy8+ONBAVYnpfKVtCyOF+FZVT1tl6MunYuHvuarCrroD2/YJs+tHTALYNgAlec3Q==
+"@aws-sdk/client-s3@^3.1117.0":
+  version "3.1117.0"
+  resolved "https://registry.yarnpkg.com/@aws-sdk/client-s3/-/client-s3-3.1117.0.tgz#43aacd46d4f4e4b12b4edd5f65a437e898824b0e"
+  integrity sha512-M/zyjg0u0Sxm73sInvyDb9+/YUuAOz8/xxmcmj0quJ7NXllZqXPxzjti3oVDz/lQ5mDf7iuxBLc0Y3deJI2hRw==
   dependencies:
     "@aws-sdk/checksums" "^3.1000.29"
     "@aws-sdk/core" "^3.977.9"
@@ -94,10 +94,10 @@
     "@smithy/types" "^4.17.2"
     tslib "^2.6.2"
 
-"@aws-sdk/client-ses@^3.1116.0":
-  version "3.1116.0"
-  resolved "https://registry.yarnpkg.com/@aws-sdk/client-ses/-/client-ses-3.1116.0.tgz#22054a3b974e2f74c977dea1060770c9ae685fed"
-  integrity sha512-kVkoaeT5xQbUrmTFVcFOnFsBH/BzJk6G14jO2wqp1TCCDlmqHLWwVuzuZ9WiXwTlsSvnJnBMVzigq6IPlP7rzg==
+"@aws-sdk/client-ses@^3.1117.0":
+  version "3.1117.0"
+  resolved "https://registry.yarnpkg.com/@aws-sdk/client-ses/-/client-ses-3.1117.0.tgz#62964276174962ebc6d2c94f50588e888b88cf28"
+  integrity sha512-5evofeSRqa/o3Otf2yq7KItuTAUsDFkurcpUraj3Zc38GT6A47BXIMoC0rKEIPCMQJJTpN2OL2MNm5C7xuNfug==
   dependencies:
     "@aws-sdk/core" "^3.977.9"
     "@aws-sdk/credential-provider-node" "^3.972.81"
@@ -256,10 +256,10 @@
     "@smithy/types" "^4.17.2"
     tslib "^2.6.2"
 
-"@aws-sdk/s3-request-presigner@^3.1116.0":
-  version "3.1116.0"
-  resolved "https://registry.yarnpkg.com/@aws-sdk/s3-request-presigner/-/s3-request-presigner-3.1116.0.tgz#baee24de1b90bddf9ff4ae596cf4043154608dbf"
-  integrity sha512-WwaaVpvrZyML5L8SNY7sUGsYlMeCHzQ/8A/ms7dz/7sfYRvPn+qf0OasUWk+zuT8qGwjsYhILD0WVtlqUU08pQ==
+"@aws-sdk/s3-request-presigner@^3.1117.0":
+  version "3.1117.0"
+  resolved "https://registry.yarnpkg.com/@aws-sdk/s3-request-presigner/-/s3-request-presigner-3.1117.0.tgz#b11eac7c0703ad28f47a4bdd25477510ce7a3a73"
+  integrity sha512-4aivFw3OXy83wuh3utC2F6bgNg4SCdcCLOSXRvYF23qEL0OzGvkjqzLTU+T191laBKjbU/m6nJLFrZsEtOo9ow==
   dependencies:
     "@aws-sdk/core" "^3.977.9"
     "@aws-sdk/signature-v4-multi-region" "^3.996.46"
