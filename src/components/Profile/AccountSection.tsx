@@ -84,8 +84,10 @@ const AccountSection = ({
                           backgroundColor: "#bdbdbd",
                         },
                       }}
-                      inputProps={{
-                        "aria-label": "Mark profile inactive",
+                      slotProps={{
+                        input: {
+                          "aria-label": "Mark profile inactive",
+                        },
                       }}
                     />
                   }

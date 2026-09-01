@@ -568,7 +568,9 @@ const Filters = ({
                   color: "#c8102e",
                 },
               }}
-              inputProps={{ "aria-label": "Include users I have messaged" }}
+              slotProps={{
+                input: { "aria-label": "Include users I have messaged" },
+              }}
             />
             <span className="text-gray-black">
               Include users I have messaged
