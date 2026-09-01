@@ -101,7 +101,7 @@ const StepThree = ({
             <DatePicker<Dayjs>
               id="coopStartDate"
               picker="month"
-              onChange={(date: Dayjs, dateString) =>
+              onChange={(date: Dayjs | null, dateString) =>
                 setValue("coopStartDate", date ? date.toDate() : null)
               }
               format="YYYY-MM"
@@ -120,7 +120,7 @@ const StepThree = ({
             <DatePicker<Dayjs>
               id="coopEndDate"
               picker="month"
-              onChange={(date: Dayjs, dateString) =>
+              onChange={(date: Dayjs | null, dateString) =>
                 setValue("coopEndDate", date ? date.toDate() : null)
               }
               format="YYYY-MM"
