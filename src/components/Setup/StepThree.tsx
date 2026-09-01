@@ -106,7 +106,7 @@ const StepThree = ({
               }
               format="YYYY-MM"
               inputReadOnly={true}
-              className={`${isMobile ? "h-10 text-base" : "h-12 text-lg"} w-full rounded-md border p-2`}
+              className={`${isMobile ? "h-10 text-base" : "h-12 text-lg"} w-full rounded-md border border-gray-200 p-2`}
             />
           </div>
 
@@ -125,7 +125,7 @@ const StepThree = ({
               }
               format="YYYY-MM"
               inputReadOnly={true}
-              className={`${isMobile ? "h-10 text-base" : "h-12 text-lg"} w-full rounded-md border p-2`}
+              className={`${isMobile ? "h-10 text-base" : "h-12 text-lg"} w-full rounded-md border border-gray-200 p-2`}
             />
           </div>
         </div>

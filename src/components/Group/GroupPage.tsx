@@ -131,7 +131,7 @@ const GroupDetailsPreview = ({
 }) => {
   if (!hasAnyDetail(details)) {
     return (
-      <p className="rounded-md border px-3 py-2 text-sm text-gray-600">
+      <p className="rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-600">
         {emptyMessage}
       </p>
     );
@@ -699,7 +699,7 @@ const DesktopGroupView = ({
     )}
 
     <div className="mt-4 flex min-h-0 flex-grow flex-col">
-      <div className="flex h-full flex-col divide-y-2 overflow-y-auto rounded-md border px-2">
+      <div className="flex h-full flex-col divide-y-2 overflow-y-auto rounded-md border border-gray-200 px-2">
         <GroupMembers users={users} onLeftGroup={onClose} />
       </div>
     </div>

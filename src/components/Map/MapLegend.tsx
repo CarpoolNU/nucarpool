@@ -10,7 +10,7 @@ export const MapLegend = (props: MapLegendProps) => {
   const role = props.role;
   return (
     <>
-      <div className="text-md absolute bottom-8 left-2 z-10 flex flex-col rounded-xl border bg-white p-2 md:text-lg">
+      <div className="text-md absolute bottom-8 left-2 z-10 flex flex-col rounded-xl border border-gray-200 bg-white p-2 md:text-lg">
         <div className="my-1 flex flex-row items-center">
           {(role === "VIEWER" || role === "RIDER") && (
             <Image

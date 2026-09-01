@@ -116,7 +116,7 @@ export const ComplianceModal = () => {
             )}
             <button
               type="button"
-              className="w-25 rounded-md border-2 border-red-700 bg-red-700 p-1 text-slate-50 disabled:opacity-50"
+              className="rounded-md border-2 border-red-700 bg-red-700 p-1 text-slate-50 disabled:opacity-50"
               onClick={handleAgreeClick}
               disabled={isPending}
             >

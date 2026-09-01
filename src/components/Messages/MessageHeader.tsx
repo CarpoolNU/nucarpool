@@ -73,7 +73,7 @@ const MessageHeader = ({
 
   if (ismobile) {
     return (
-      <div className="relative flex items-center border-b bg-white py-4">
+      <div className="relative flex items-center border-b border-gray-200 bg-white py-4">
         <button
           type="button"
           className="absolute left-4 text-gray-600"
@@ -107,7 +107,7 @@ const MessageHeader = ({
   }
 
   return (
-    <div className="flex items-center justify-between border-b bg-white p-8">
+    <div className="flex items-center justify-between border-b border-gray-200 bg-white p-8">
       <div className="flex items-center">
         {isProfileImageLoading ? (
           <div className="h-20 w-20 rounded-full bg-gray-200" />

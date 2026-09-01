@@ -6,7 +6,7 @@ type UnsavedModalProps = {
 
 function UnsavedModal({ onClose, onSave, onContinue }: UnsavedModalProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 font-montserrat">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 font-montserrat">
       <div className="relative flex w-1/3 flex-col justify-center rounded-lg bg-white px-6 py-16 text-center shadow-lg">
         <button
           onClick={onClose}
