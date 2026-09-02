@@ -24,8 +24,8 @@ import {
  *
  * | Action                  | Who may do it                                          | UI evidence                                            |
  * | ----------------------- | ------------------------------------------------------ | ------------------------------------------------------ |
- * | `create`                | either named party, and only with a request between them | `initiateGroup` runs from an accepted request          |
- * | `edit` (add a rider)    | the group's driver, or the rider adding themselves       | same accept flow; a rider joins the driver's group     |
+ * | `create`                | the party the request was **sent to**                    | `handleAccept` reads `incomingRequest`                 |
+ * | `edit` (add a rider)    | the party the request was **sent to**                    | same accept flow; a rider joins the driver's group     |
  * | `edit` (remove a rider) | the driver removes anyone; a rider removes only themselves | "Remove" is driver-only; riders get "Leave Group"    |
  * | `delete`                | the group's driver                                       | "Delete Group" renders only when `role === DRIVER`     |
  * | `updatePreferences`     | any user, on their own search only                       | the form renders only for a DRIVER, but the write is self-scoped |
@@ -34,9 +34,13 @@ import {
  * and whose `role` is DRIVER — `CarpoolGroup` itself stores no owner.
  *
  * Adding requires a `Request` between the two users because that request *is*
- * the invitation; without it a rider could self-join any stranger's group.
- * Requests are resolved rather than deleted on acceptance, so the
- * row this check depends on is still there afterwards — which is also what lets
+ * the invitation; without it a rider could self-join any stranger's group. It
+ * is not enough that one exists, though — the caller has to be the person it
+ * was addressed to, or the invitation proves nothing, because anyone can create
+ * one. `requireAcceptableRequest` is where that is enforced and why.
+ *
+ * Requests are resolved rather than deleted on acceptance, so the row this
+ * check depends on is still there afterwards — which is also what lets
  * `markRequestAccepted` run inside the same transaction as the membership.
  */
 
@@ -95,9 +99,48 @@ const requireGroupDriver = async (
   return membership;
 };
 
-/** Throws unless a request exists between the two users, in either direction. */
-const requireRequestBetween = async (
+/**
+ * Throws unless there is a carpool request between these two users that
+ * `callerId` is the one entitled to accept.
+ *
+ * **Existence is not consent, and that was the bug.** This used to check only
+ * that some request existed between the pair, in either direction, with no
+ * condition on who was calling. `user.requests.create` lets any signed-in user
+ * create a request to any other user unilaterally, so the caller could
+ * manufacture the very thing that was taken as proof: send a request, then
+ * "accept" it themselves. A rider could walk into any driver's group — and a
+ * driver could pull in any rider — spending a seat and, through `groups.me`,
+ * disclosing the other person's exact home coordinates and email address, which
+ * `convertCarpoolSearchToPublicWithExactHome` releases to group members.
+ *
+ * The missing invariant is direction. A `Request` records who asked
+ * (`fromUserId`) and who was asked (`toUserId`), and **only the person it was
+ * addressed to has agreed to anything**. So the rule is simply that the caller
+ * must be `toUserId`. Both legitimate flows satisfy it, because the accepter is
+ * always the recipient:
+ *
+ *   - a rider asks a driver, the driver accepts   -> caller is the driver, `toUserId` is the driver
+ *   - a driver asks a rider, the rider accepts    -> caller is the rider, `toUserId` is the rider
+ *
+ * The UI has always worked this way and is where the rule comes from:
+ * `MessagePanel.handleAccept` reads `selectedUser.incomingRequest`, and
+ * `MessageHeader` only renders Accept for an *incoming* request. `incomingRequest`
+ * is built in `index.tsx` from `requests.received`, which is exactly
+ * `toUserId === me`. Nothing was enforcing it on the server.
+ *
+ * The either-direction lookup stays. Direction of the *request* is not the
+ * constraint — a request may travel either way — direction relative to the
+ * *caller* is.
+ *
+ * Deliberately not checked here: that the request is still `PENDING`. Accepting
+ * is what sets `ACCEPTED` (`markRequestAccepted`, in the same transaction), so
+ * requiring it beforehand would be circular, and requiring `PENDING` is a
+ * separate question about consent expiring after a group is dissolved — see
+ * SCRUM-353.
+ */
+const requireAcceptableRequest = async (
   prisma: PrismaClientLike,
+  callerId: string,
   driverId: string,
   riderId: string,
 ) => {
@@ -108,7 +151,7 @@ const requireRequestBetween = async (
         { fromUserId: riderId, toUserId: driverId },
       ],
     },
-    select: { id: true },
+    select: { id: true, fromUserId: true, toUserId: true },
   });
 
   if (!request) {
@@ -116,6 +159,14 @@ const requireRequestBetween = async (
       "A carpool request between these users is required before they can share a group.",
     );
   }
+
+  if (request.toUserId !== callerId) {
+    throw forbidden(
+      "Only the person a carpool request was sent to can accept it.",
+    );
+  }
+
+  return request;
 };
 
 /**
@@ -301,7 +352,12 @@ export const groupsRouter = router({
           "You can only create a carpool group that you are part of.",
         );
       }
-      await requireRequestBetween(ctx.prisma, input.driverId, input.riderId);
+      await requireAcceptableRequest(
+        ctx.prisma,
+        callerId,
+        input.driverId,
+        input.riderId,
+      );
 
       // Seat, group and both memberships commit together.
       //
@@ -494,14 +550,21 @@ export const groupsRouter = router({
 
       if (input.add) {
         // Joining: either the driver brings a rider in, or a rider joins the
-        // driver's group themselves. Both come out of accepting a request, so
-        // one has to exist; otherwise a rider could join any stranger's group.
+        // driver's group themselves. Both come out of *accepting* a request, so
+        // one has to exist and the caller has to be the person it was sent to —
+        // existence alone proves nothing, because anyone can create a request
+        // to anyone. See `requireAcceptableRequest`.
         if (callerId !== input.driverId && callerId !== input.riderId) {
           throw forbidden(
             "You can only add someone to your own carpool group.",
           );
         }
-        await requireRequestBetween(ctx.prisma, input.driverId, input.riderId);
+        await requireAcceptableRequest(
+          ctx.prisma,
+          callerId,
+          input.driverId,
+          input.riderId,
+        );
 
         // The target group must actually be the named driver's group.
         const driverMembership = await membershipOf(
@@ -591,7 +654,7 @@ export const groupsRouter = router({
           //     dissolves and its driver a seat short for good.
           //   - Already in *this* group. `markRequestAccepted` resolves the
           //     request rather than deleting it, so the row
-          //     survives and `requireRequestBetween` keeps passing - a second
+          //     survives and `requireAcceptableRequest` keeps passing - a second
           //     call ran `reserveSeat` again while the `updateMany` did
           //     nothing, and the driver paid two seats for one rider.
           const riderSearch = await tx.carpoolSearch.findFirst({
