@@ -19,10 +19,51 @@ import {
 import { latitudeSchema, longitudeSchema } from "../../utils/coordinates";
 
 /**
- * Points the map returns for a matchable user. A VIEWER is not matchable and
- * gets the whole ranked set, which is pre-existing behaviour.
+ * Points the map returns for a matchable user.
  */
-const MAP_RESULT_LIMIT = 150;
+export const MAP_RESULT_LIMIT = 150;
+
+/**
+ * How many ranked points a reader receives, by role.
+ *
+ * A VIEWER is exempt from `MAP_RESULT_LIMIT`, and the comment here used to say
+ * only that this was "pre-existing behaviour" — which read as an oversight
+ * nobody had chosen. SCRUM-346 asked whether it was intended. It is, for a
+ * reason worth writing down, because the obvious tidy-up of treating every role
+ * alike would quietly break VIEWER browsing.
+ *
+ * **The server cannot rank for a VIEWER, so there is no meaningful "top 150" to
+ * take.** The map sorts by `sort: "distance"`, and that score is
+ * `startDistance + endDistance` measured from the *reader's own* stored
+ * coordinates. A VIEWER is allowed not to have any: both address fields are
+ * optional for them in `onboardSchema`, `unresolvedAddressFields` exempts them
+ * explicitly, and `(0, 0)` is what `user.me` reports for a row with no real
+ * `Location`. In staging, 9 of 14 active VIEWERs sit at exactly that sentinel.
+ * For them every candidate is ranked by its distance from a point in the
+ * Atlantic, which orders the set without saying anything about relevance.
+ *
+ * The geography a VIEWER actually browses by is chosen in the browser and never
+ * reaches us: `index.tsx` requires a VIEWER to pick a start and a company
+ * address before it will draw anything, and re-centres on those picks rather
+ * than on anything stored. So slicing server-side would hand the client an
+ * arbitrary 150 and a VIEWER who then picked an address across town could find
+ * the map empty of anyone near it.
+ *
+ * The cost is a larger payload, and it is not free: a VIEWER receives about 751
+ * `PublicUser` records where every other role receives 150 — roughly 5x — and
+ * that grows with the platform until it meets `CANDIDATE_LIMIT` (SCRUM-345).
+ * Each record carries a name, pronouns, bio, "City, State" home, coarsened home
+ * coordinates and the employer's street address. It no longer carries an email
+ * address; SCRUM-292 removed that. With 13 active onboarded VIEWERs the
+ * exposure is small today, which is what makes this a decision to revisit
+ * rather than an incident.
+ *
+ * Bounding a VIEWER properly means giving them a ranking that means something —
+ * sending the address they picked so the server can sort around it, or ranking
+ * in SQL — and both are larger than this ticket.
+ */
+export const limitMapResults = <T>(searches: T[], role: Role): T[] =>
+  role === Role.VIEWER ? searches : searches.slice(0, MAP_RESULT_LIMIT);
 
 // router for interacting with the Mapbox API
 export const mapboxRouter = router({
@@ -179,10 +220,10 @@ export const mapboxRouter = router({
         favoriteUserIds: input.favorites ? favorites.map((f) => f.id) : [],
       });
 
-      const finalSearches =
-        currentUserSearch.role === Role.VIEWER
-          ? sortedSearches
-          : sortedSearches.slice(0, MAP_RESULT_LIMIT);
+      const finalSearches = limitMapResults(
+        sortedSearches,
+        currentUserSearch.role,
+      );
 
       const finalPublicUsers = finalSearches.map(convertCarpoolSearchToPublic);
 

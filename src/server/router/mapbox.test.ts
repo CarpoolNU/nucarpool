@@ -1,7 +1,8 @@
-import { Permission } from "@prisma/client";
+import { Permission, Role } from "@prisma/client";
 import type { Session } from "next-auth";
 import { appRouter } from "./index";
 import type { Context } from "./context";
+import { MAP_RESULT_LIMIT, limitMapResults } from "./mapbox";
 
 /**
  * Input validation and upstream-call wiring for the Mapbox proxy.
@@ -211,5 +212,53 @@ describe("mapbox.getDirections — input", () => {
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
 
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("geoJsonUserList — how many points each role receives", () => {
+  /**
+   * The VIEWER exemption, pinned.
+   *
+   * Nothing covered this before, so the obvious tidy-up — treating every role
+   * alike — would have looked like a cleanup and passed CI. It is a deliberate
+   * decision (SCRUM-346): the map ranks by distance from the reader's own
+   * stored coordinates, a VIEWER is allowed not to have any, and the address
+   * they actually browse by is picked in the browser and never sent here. So
+   * there is no meaningful "nearest 150" to take for them. `limitMapResults`
+   * carries the full reasoning.
+   *
+   * These assert the boundary rather than a round number, so raising
+   * `MAP_RESULT_LIMIT` does not require editing them.
+   */
+  const searches = (n: number) => Array.from({ length: n }, (_, i) => i);
+
+  it.each([Role.DRIVER, Role.RIDER])(
+    "caps a %s at MAP_RESULT_LIMIT",
+    (role) => {
+      expect(
+        limitMapResults(searches(MAP_RESULT_LIMIT + 25), role),
+      ).toHaveLength(MAP_RESULT_LIMIT);
+    },
+  );
+
+  it("does not cap a VIEWER", () => {
+    const all = searches(MAP_RESULT_LIMIT + 25);
+    expect(limitMapResults(all, Role.VIEWER)).toHaveLength(all.length);
+  });
+
+  it("keeps the ranked order, taking the best rather than an arbitrary slice", () => {
+    // `sortedSearches` arrives best-first, so the cap has to take the head.
+    expect(limitMapResults([0, 1, 2, 3], Role.RIDER).slice(0, 4)).toEqual([
+      0, 1, 2, 3,
+    ]);
+    expect(
+      limitMapResults(searches(MAP_RESULT_LIMIT + 1), Role.DRIVER)[0],
+    ).toBe(0);
+  });
+
+  it("leaves a set already under the limit untouched, for every role", () => {
+    for (const role of [Role.DRIVER, Role.RIDER, Role.VIEWER]) {
+      expect(limitMapResults([0, 1, 2], role)).toEqual([0, 1, 2]);
+    }
   });
 });
