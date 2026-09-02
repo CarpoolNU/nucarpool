@@ -24,8 +24,8 @@ import {
  *
  * | Action                  | Who may do it                                          | UI evidence                                            |
  * | ----------------------- | ------------------------------------------------------ | ------------------------------------------------------ |
- * | `create`                | the party the request was **sent to**                    | `handleAccept` reads `incomingRequest`                 |
- * | `edit` (add a rider)    | the party the request was **sent to**                    | same accept flow; a rider joins the driver's group     |
+ * | `create`                | the party a **pending** request was **sent to**           | `handleAccept` reads `incomingRequest`, gated on PENDING |
+ * | `edit` (add a rider)    | the party a **pending** request was **sent to**           | same accept flow; a rider joins the driver's group     |
  * | `edit` (remove a rider) | the driver removes anyone; a rider removes only themselves | "Remove" is driver-only; riders get "Leave Group"    |
  * | `delete`                | the group's driver                                       | "Delete Group" renders only when `role === DRIVER`     |
  * | `updatePreferences`     | any user, on their own search only                       | the form renders only for a DRIVER, but the write is self-scoped |
@@ -34,14 +34,17 @@ import {
  * and whose `role` is DRIVER — `CarpoolGroup` itself stores no owner.
  *
  * Adding requires a `Request` between the two users because that request *is*
- * the invitation; without it a rider could self-join any stranger's group. It
- * is not enough that one exists, though — the caller has to be the person it
- * was addressed to, or the invitation proves nothing, because anyone can create
- * one. `requireAcceptableRequest` is where that is enforced and why.
+ * the invitation; without it a rider could self-join any stranger's group. Two
+ * things beyond existence are required, and neither used to be: the caller has
+ * to be the person it was addressed to — anyone can create a request, so
+ * existence alone proves nothing — and it has to be **unused**.
+ * `requireAcceptableRequest` is where both are enforced and why.
  *
  * Requests are resolved rather than deleted on acceptance, so the row this
  * check depends on is still there afterwards — which is also what lets
- * `markRequestAccepted` run inside the same transaction as the membership.
+ * `markRequestAccepted` run inside the same transaction as the membership. The
+ * cost of keeping it is that a resolved row is indistinguishable from a live
+ * invitation unless `status` is read, which is exactly what SCRUM-353 fixed.
  */
 
 /** Just the Prisma surface these helpers touch, so they are easy to test. */
@@ -132,11 +135,24 @@ const requireGroupDriver = async (
  * constraint — a request may travel either way — direction relative to the
  * *caller* is.
  *
- * Deliberately not checked here: that the request is still `PENDING`. Accepting
- * is what sets `ACCEPTED` (`markRequestAccepted`, in the same transaction), so
- * requiring it beforehand would be circular, and requiring `PENDING` is a
- * separate question about consent expiring after a group is dissolved — see
- * SCRUM-353.
+ * **The request must also still be outstanding.** SCRUM-347 established *who*
+ * may accept; this is *how long* an acceptance stays valid, and the answer is
+ * "until it is used". `markRequestAccepted` resolves the row rather than
+ * deleting it, so an `ACCEPTED` request outlives the group it created — and
+ * without this check it went on satisfying every condition above forever. A
+ * driver whose rider left could put them straight back with no fresh
+ * agreement, repeatedly, and nothing would tell the rider: group mutations
+ * send no email and fire no Pusher event.
+ *
+ * Requiring `PENDING` is not circular, though requiring `ACCEPTED` would be:
+ * accepting is what *sets* `ACCEPTED`, in the transaction that follows this
+ * check, so at this point a live invitation is always still `PENDING`.
+ *
+ * The way back is already built. `requests.create` finds a resolved row and
+ * reopens it — `status: PENDING`, with `fromUserId`/`toUserId` rewritten so
+ * whoever is asking now is the sender — which makes the *other* party the
+ * accepter, exactly as a first request does. So a pair who once carpooled can
+ * carpool again; they just have to ask again. That is the point.
  */
 const requireAcceptableRequest = async (
   prisma: PrismaClientLike,
@@ -151,7 +167,12 @@ const requireAcceptableRequest = async (
         { fromUserId: riderId, toUserId: driverId },
       ],
     },
-    select: { id: true, fromUserId: true, toUserId: true },
+    select: {
+      id: true,
+      fromUserId: true,
+      toUserId: true,
+      status: true,
+    },
   });
 
   if (!request) {
@@ -163,6 +184,17 @@ const requireAcceptableRequest = async (
   if (request.toUserId !== callerId) {
     throw forbidden(
       "Only the person a carpool request was sent to can accept it.",
+    );
+  }
+
+  // Distinguished from "no request exists" above on purpose: the two refusals
+  // call for different things from the user, and collapsing them into one
+  // message would tell someone whose invitation is merely spent that they have
+  // no relationship with the other person at all.
+  if (request.status !== RequestStatus.PENDING) {
+    throw forbidden(
+      "That carpool request has already been used. Send a new request to " +
+        "carpool with this person again.",
     );
   }
 
