@@ -208,10 +208,16 @@ const buildGroupsDb = (opts?: {
     clauses.some((c) => c.fromUserId === a && c.toUserId === b);
 
   const request = {
+    // Returns the direction, not just a hit. `requireAcceptableRequest` reads
+    // `toUserId` to decide whether the caller is the person the request was
+    // addressed to, so a mock that answered with a bare id could not tell the
+    // legitimate accept from the self-accept SCRUM-347 was filed for.
     findFirst: jest.fn(async ({ where }: any) => {
       const clauses: any[] = where?.OR ?? [where ?? {}];
-      const hit = requests.some(([a, b]) => matchesPair(clauses, a, b));
-      return hit ? { id: "request-1" } : null;
+      const hit = requests.find(([a, b]) => matchesPair(clauses, a, b));
+      if (!hit) return null;
+      const [fromUserId, toUserId] = hit;
+      return { id: `request-${fromUserId}-${toUserId}`, fromUserId, toUserId };
     }),
     updateMany: jest.fn(async ({ where, data }: any) => {
       const clauses: any[] = where?.OR ?? [where ?? {}];
@@ -608,8 +614,8 @@ describe("user.groups.edit — adding a member needs an invitation", () => {
     add: true,
   });
 
-  it("lets the driver add a rider they have a request with", async () => {
-    const db = buildGroupsDb({ requests: [[DRIVER, OUTSIDER]] });
+  it("lets the driver add a rider who asked to join", async () => {
+    const db = buildGroupsDb({ requests: [[OUTSIDER, DRIVER]] });
     const { caller } = callerFor(sessionFor(DRIVER), db);
 
     await caller.user.groups.edit(join(OUTSIDER));
@@ -617,8 +623,8 @@ describe("user.groups.edit — adding a member needs an invitation", () => {
     expect(db.carpoolIdOf(OUTSIDER)).toBe(GROUP);
   });
 
-  it("lets a rider join a driver's group themselves", async () => {
-    const db = buildGroupsDb({ requests: [[OUTSIDER, DRIVER]] });
+  it("lets a rider join a driver's group when the driver invited them", async () => {
+    const db = buildGroupsDb({ requests: [[DRIVER, OUTSIDER]] });
     const { caller } = callerFor(sessionFor(OUTSIDER), db);
 
     await caller.user.groups.edit(join(OUTSIDER));
@@ -654,7 +660,7 @@ describe("user.groups.edit — adding a member needs an invitation", () => {
 
   it("refuses when the named group is not that driver's group", async () => {
     const db = buildGroupsDb({
-      requests: [[DRIVER, OUTSIDER]],
+      requests: [[OUTSIDER, DRIVER]],
       groups: [
         { id: GROUP, message: "m" },
         { id: OTHER_GROUP, message: "m" },
@@ -676,7 +682,14 @@ describe("user.groups.edit — adding a member needs an invitation", () => {
 });
 
 describe("user.groups.create — only the two people involved", () => {
-  const freshPair = () =>
+  /**
+   * `invitation` is `[asker, asked]`. It defaults to the rider asking the
+   * driver, because `requireAcceptableRequest` only lets the person a request
+   * was *sent to* accept it — so which way the request points decides which of
+   * the two may create the group. Before SCRUM-347 the direction was
+   * irrelevant and every test here seeded the same one.
+   */
+  const freshPair = (invitation: RequestPair = [RIDER_1, DRIVER]) =>
     buildGroupsDb({
       searches: [
         {
@@ -705,11 +718,11 @@ describe("user.groups.create — only the two people involved", () => {
         },
       ],
       groups: [],
-      requests: [[DRIVER, RIDER_1]],
+      requests: [invitation],
     });
 
-  it("lets the driver create the group", async () => {
-    const db = freshPair();
+  it("lets the driver create the group, accepting the rider's request", async () => {
+    const db = freshPair([RIDER_1, DRIVER]);
     const { caller } = callerFor(sessionFor(DRIVER), db);
 
     await caller.user.groups.create({ driverId: DRIVER, riderId: RIDER_1 });
@@ -717,8 +730,10 @@ describe("user.groups.create — only the two people involved", () => {
     expect(db.groupIds()).toHaveLength(1);
   });
 
-  it("lets the rider create the group", async () => {
-    const db = freshPair();
+  it("lets the rider create the group, accepting the driver's request", async () => {
+    // The mirror image, and the reason the either-direction lookup stays: a
+    // driver may also do the asking, and then the rider is the one who accepts.
+    const db = freshPair([DRIVER, RIDER_1]);
     const { caller } = callerFor(sessionFor(RIDER_1), db);
 
     await caller.user.groups.create({ driverId: DRIVER, riderId: RIDER_1 });
@@ -802,35 +817,20 @@ describe("accepting a request resolves it", () => {
         },
       ],
       groups: [],
-      requests: [[DRIVER, RIDER_1]],
+      requests: [[RIDER_1, DRIVER]],
     });
     const { caller } = callerFor(sessionFor(DRIVER), db);
 
-    expect(db.requestStatusOf(DRIVER, RIDER_1)).toBe(RequestStatus.PENDING);
+    expect(db.requestStatusOf(RIDER_1, DRIVER)).toBe(RequestStatus.PENDING);
 
     await caller.user.groups.create({ driverId: DRIVER, riderId: RIDER_1 });
 
-    expect(db.requestStatusOf(DRIVER, RIDER_1)).toBe(RequestStatus.ACCEPTED);
+    expect(db.requestStatusOf(RIDER_1, DRIVER)).toBe(RequestStatus.ACCEPTED);
   });
 
   it("marks the request accepted when a rider joins an existing group", async () => {
-    const db = buildGroupsDb({ requests: [[DRIVER, OUTSIDER]] });
-    const { caller } = callerFor(sessionFor(DRIVER), db);
-
-    await caller.user.groups.edit({
-      driverId: DRIVER,
-      riderId: OUTSIDER,
-      groupId: GROUP,
-      add: true,
-    });
-
-    expect(db.requestStatusOf(DRIVER, OUTSIDER)).toBe(RequestStatus.ACCEPTED);
-  });
-
-  it("resolves a request sent in either direction", async () => {
-    // The rider asked the driver; accepting still resolves that row.
     const db = buildGroupsDb({ requests: [[OUTSIDER, DRIVER]] });
-    const { caller } = callerFor(sessionFor(OUTSIDER), db);
+    const { caller } = callerFor(sessionFor(DRIVER), db);
 
     await caller.user.groups.edit({
       driverId: DRIVER,
@@ -840,6 +840,28 @@ describe("accepting a request resolves it", () => {
     });
 
     expect(db.requestStatusOf(OUTSIDER, DRIVER)).toBe(RequestStatus.ACCEPTED);
+  });
+
+  it("resolves a request the driver sent, when the rider accepts it", async () => {
+    // The other direction: the driver did the asking, so the rider is the one
+    // who may accept, and the row still resolves.
+    //
+    // This case used to be written with the *sender* accepting — an OUTSIDER
+    // who had asked the driver, calling `edit` themselves — and asserted that
+    // it succeeded. That was SCRUM-347: it pinned the self-accept as correct
+    // behaviour, which is how the hole survived three rounds of group
+    // authorization hardening. The refusal is now pinned below.
+    const db = buildGroupsDb({ requests: [[DRIVER, OUTSIDER]] });
+    const { caller } = callerFor(sessionFor(OUTSIDER), db);
+
+    await caller.user.groups.edit({
+      driverId: DRIVER,
+      riderId: OUTSIDER,
+      groupId: GROUP,
+      add: true,
+    });
+
+    expect(db.requestStatusOf(DRIVER, OUTSIDER)).toBe(RequestStatus.ACCEPTED);
   });
 
   it("leaves the request pending when the join fails", async () => {
@@ -864,7 +886,7 @@ describe("accepting a request resolves it", () => {
           groupMessage: "",
         },
       ],
-      requests: [[DRIVER, OUTSIDER]],
+      requests: [[OUTSIDER, DRIVER]],
     });
     const { caller } = callerFor(sessionFor(DRIVER), db);
 
@@ -877,7 +899,7 @@ describe("accepting a request resolves it", () => {
       }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
 
-    expect(db.requestStatusOf(DRIVER, OUTSIDER)).toBe(RequestStatus.PENDING);
+    expect(db.requestStatusOf(OUTSIDER, DRIVER)).toBe(RequestStatus.PENDING);
     expect(db.carpoolIdOf(OUTSIDER)).toBeNull();
   });
 
@@ -893,6 +915,147 @@ describe("accepting a request resolves it", () => {
     });
 
     expect(db.requestStatusOf(DRIVER, RIDER_1)).toBe(RequestStatus.PENDING);
+  });
+});
+
+/**
+ * SCRUM-347: you cannot accept a request you sent yourself.
+ *
+ * `requireAcceptableRequest` — `requireRequestBetween` as it was then — checked
+ * only that *some* request existed between the pair, in either direction, with
+ * no condition on the caller at all. Any signed-in
+ * user can create a request to anyone through `user.requests.create`, so the
+ * caller could manufacture the proof and then act on it: send a request, then
+ * accept it on the other person's behalf.
+ *
+ * What that bought an attacker is the reason this is not merely untidy. The
+ * join spends one of the driver's seats, and membership is what `groups.me`
+ * reads through `convertCarpoolSearchToPublicWithExactHome` — so it hands over
+ * the other person's **full-precision home coordinates and email address**,
+ * defeating the neighbourhood-level coarsening every bulk payload applies. The
+ * group id needed for the `edit` variant is not secret either: `PublicUser`
+ * carries `carpoolId`, so the map hands it to every signed-in viewer.
+ *
+ * Both directions are covered below, because both are unilateral: a rider
+ * walking into a driver's group, and a driver dragging a rider into theirs.
+ *
+ * Every case asserts that *nothing moved* — no group, no seat, no membership,
+ * and the request left as it was. A refusal that still spent a seat would be a
+ * denial-of-service on the driver.
+ */
+describe("user.groups — only the person a request was sent to may accept it", () => {
+  const ungroupedPair = () => [
+    {
+      id: "s-driver",
+      userId: DRIVER,
+      role: Role.DRIVER,
+      carpoolId: null,
+      seatsAvail: 3,
+      groupMessage: "",
+    },
+    {
+      id: "s-outsider",
+      userId: OUTSIDER,
+      role: Role.RIDER,
+      carpoolId: null,
+      seatsAvail: 0,
+      groupMessage: "",
+    },
+  ];
+
+  it("refuses create when the rider accepts their own request to the driver", async () => {
+    // The exploit as filed: the outsider sends the request, then calls
+    // `create` naming themselves as the rider. Every other check passes.
+    const db = buildGroupsDb({
+      searches: ungroupedPair(),
+      groups: [],
+      requests: [[OUTSIDER, DRIVER]],
+    });
+    const { caller } = callerFor(sessionFor(OUTSIDER), db);
+
+    await expect(
+      caller.user.groups.create({ driverId: DRIVER, riderId: OUTSIDER }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(db.groupIds()).toEqual([]);
+    expect(db.carpoolGroup.create).not.toHaveBeenCalled();
+    expect(db.carpoolIdOf(OUTSIDER)).toBeNull();
+    expect(db.seatsOf(DRIVER)).toBe(3);
+    expect(db.requestStatusOf(OUTSIDER, DRIVER)).toBe(RequestStatus.PENDING);
+  });
+
+  it("refuses create when the driver accepts their own request to the rider", async () => {
+    // The mirror image, and equally unilateral: the driver asks, then pulls the
+    // rider in without the rider ever agreeing. This direction was the one the
+    // old tests seeded by default, which is why nothing caught it.
+    const db = buildGroupsDb({
+      searches: ungroupedPair(),
+      groups: [],
+      requests: [[DRIVER, OUTSIDER]],
+    });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await expect(
+      caller.user.groups.create({ driverId: DRIVER, riderId: OUTSIDER }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(db.groupIds()).toEqual([]);
+    expect(db.carpoolIdOf(OUTSIDER)).toBeNull();
+    expect(db.seatsOf(DRIVER)).toBe(3);
+    expect(db.requestStatusOf(DRIVER, OUTSIDER)).toBe(RequestStatus.PENDING);
+  });
+
+  it("refuses edit-add when the rider joins the driver's group on their own request", async () => {
+    // The variant that needs no group of its own: the driver already has one,
+    // and its id reaches the client in every map payload as `carpoolId`.
+    const db = buildGroupsDb({ requests: [[OUTSIDER, DRIVER]] });
+    const seatsBefore = db.seatsOf(DRIVER)!;
+    const { caller } = callerFor(sessionFor(OUTSIDER), db);
+
+    await expect(
+      caller.user.groups.edit({
+        driverId: DRIVER,
+        riderId: OUTSIDER,
+        groupId: GROUP,
+        add: true,
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(db.carpoolIdOf(OUTSIDER)).toBeNull();
+    expect(db.seatsOf(DRIVER)).toBe(seatsBefore);
+    expect(db.requestStatusOf(OUTSIDER, DRIVER)).toBe(RequestStatus.PENDING);
+  });
+
+  it("refuses edit-add when the driver adds a rider on the driver's own request", async () => {
+    const db = buildGroupsDb({ requests: [[DRIVER, OUTSIDER]] });
+    const seatsBefore = db.seatsOf(DRIVER)!;
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await expect(
+      caller.user.groups.edit({
+        driverId: DRIVER,
+        riderId: OUTSIDER,
+        groupId: GROUP,
+        add: true,
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(db.carpoolIdOf(OUTSIDER)).toBeNull();
+    expect(db.seatsOf(DRIVER)).toBe(seatsBefore);
+    expect(db.requestStatusOf(DRIVER, OUTSIDER)).toBe(RequestStatus.PENDING);
+  });
+
+  it("still refuses a caller who is party to no request at all", async () => {
+    // The original guard, unchanged: a third party is refused before the
+    // request is even looked up, so it keeps its own message.
+    const db = buildGroupsDb({ requests: [[OUTSIDER, DRIVER]] });
+    const { caller } = callerFor(sessionFor(RIDER_2), db);
+
+    await expect(
+      caller.user.groups.create({ driverId: DRIVER, riderId: OUTSIDER }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(db.request.findFirst).not.toHaveBeenCalled();
   });
 });
 
@@ -1044,7 +1207,7 @@ describe("seat accounting — a full driver cannot take another rider", () => {
         },
       ],
       groups: carpoolId ? [{ id: GROUP, message: "m" }] : [],
-      requests: [[DRIVER, OUTSIDER]],
+      requests: [[OUTSIDER, DRIVER]],
     });
 
   it("rejects create and leaves seats at zero rather than -1", async () => {
@@ -1102,7 +1265,7 @@ describe("seat accounting — normal joins and leaves", () => {
         },
       ],
       groups: [],
-      requests: [[DRIVER, RIDER_1]],
+      requests: [[RIDER_1, DRIVER]],
     });
     const { caller } = callerFor(sessionFor(DRIVER), db);
 
@@ -1112,7 +1275,7 @@ describe("seat accounting — normal joins and leaves", () => {
   });
 
   it("takes a seat when a rider is added to an existing group", async () => {
-    const db = buildGroupsDb({ requests: [[DRIVER, OUTSIDER]] });
+    const db = buildGroupsDb({ requests: [[OUTSIDER, DRIVER]] });
     const { caller } = callerFor(sessionFor(DRIVER), db);
 
     await caller.user.groups.edit({
@@ -1196,7 +1359,7 @@ describe("seat accounting — normal joins and leaves", () => {
 
   it("keeps seats within range across a sequence of joins and leaves", async () => {
     // The property the ticket actually asks for, over a realistic sequence.
-    const db = buildGroupsDb({ requests: [[DRIVER, OUTSIDER]] });
+    const db = buildGroupsDb({ requests: [[OUTSIDER, DRIVER]] });
     const { caller } = callerFor(sessionFor(DRIVER), db);
 
     const edit = (riderId: string, add: boolean) =>
@@ -1274,7 +1437,7 @@ describe("group mutations are atomic", () => {
     const db = buildGroupsDb({
       searches: twoUnlinkedUsers(),
       groups: [],
-      requests: [[DRIVER, RIDER_1]],
+      requests: [[RIDER_1, DRIVER]],
     });
     const { caller } = callerFor(sessionFor(DRIVER), db);
 
@@ -1323,12 +1486,12 @@ describe("group mutations are atomic", () => {
   });
 
   it("edit-add returns the seat when linking the rider fails", async () => {
-    // Joining needs a request between the two, so the outsider
-    // being added has one here.
+    // Joining needs a request the caller may accept, so the outsider being
+    // added has asked the driver here.
     const db = buildGroupsDb({
       requests: [
         [DRIVER, RIDER_1],
-        [DRIVER, OUTSIDER],
+        [OUTSIDER, DRIVER],
       ],
     });
     const { caller } = callerFor(sessionFor(DRIVER), db);
@@ -1894,7 +2057,7 @@ describe("user.groups.edit(add) — one group per rider", () => {
         { id: GROUP, message: "" },
         { id: OTHER_GROUP, message: "" },
       ],
-      requests: [[DRIVER, RIDER_1]],
+      requests: [[RIDER_1, DRIVER]],
     });
     const { caller } = callerFor(sessionFor(DRIVER), db);
 
@@ -1913,7 +2076,7 @@ describe("user.groups.edit(add) — one group per rider", () => {
 
   it("refuses a second add of the same rider, spending no second seat", async () => {
     // `markRequestAccepted` resolves the request rather than deleting it,
-    // so `requireRequestBetween` keeps passing and this call used
+    // so `requireAcceptableRequest` keeps passing and this call used
     // to succeed as a no-op that still cost a seat.
     const db = buildGroupsDb({
       searches: [
@@ -1934,7 +2097,7 @@ describe("user.groups.edit(add) — one group per rider", () => {
           groupMessage: "",
         },
       ],
-      requests: [[DRIVER, RIDER_1]],
+      requests: [[RIDER_1, DRIVER]],
     });
     const { caller } = callerFor(sessionFor(DRIVER), db);
 
@@ -1971,7 +2134,7 @@ describe("user.groups.edit(add) — one group per rider", () => {
           groupMessage: "",
         },
       ],
-      requests: [[DRIVER, RIDER_1]],
+      requests: [[RIDER_1, DRIVER]],
     });
     const { caller } = callerFor(sessionFor(DRIVER), db);
 
@@ -2018,7 +2181,9 @@ describe("user.groups.create — legal states only", () => {
         opts.driverCarpoolId || opts.riderCarpoolId
           ? [{ id: OTHER_GROUP, message: "" }]
           : [],
-      requests: [[DRIVER, RIDER_1]],
+      // The rider asked, so the driver is the one who may accept — every test
+      // in this block calls as the driver.
+      requests: [[RIDER_1, DRIVER]],
     });
 
   it("refuses a named driver whose role is RIDER", async () => {
@@ -2127,7 +2292,7 @@ describe("a double-clicked Accept is refused the second time", () => {
         },
       ],
       groups: [],
-      requests: [[DRIVER, RIDER_1]],
+      requests: [[RIDER_1, DRIVER]],
     });
     const { caller } = callerFor(sessionFor(DRIVER), db);
 
@@ -2169,7 +2334,7 @@ describe("a double-clicked Accept is refused the second time", () => {
           groupMessage: "",
         },
       ],
-      requests: [[DRIVER, RIDER_1]],
+      requests: [[RIDER_1, DRIVER]],
     });
     const { caller } = callerFor(sessionFor(DRIVER), db);
 
@@ -2220,6 +2385,7 @@ describe("the rider slot holds a rider", () => {
     driverRole?: Role;
     riderRole?: Role;
     driverInGroup?: boolean;
+    invitation?: RequestPair;
   }) =>
     buildGroupsDb({
       searches: [
@@ -2241,7 +2407,10 @@ describe("the rider slot holds a rider", () => {
         },
       ],
       groups: opts.driverInGroup ? [{ id: GROUP, message: "" }] : [],
-      requests: [[DRIVER, OUTSIDER]],
+      // `[asker, asked]`, defaulting to the outsider asking the driver so the
+      // driver is the one entitled to accept. The one test below that calls as
+      // the outsider passes the opposite direction.
+      requests: [opts.invitation ?? [OUTSIDER, DRIVER]],
     });
 
   it("refuses create when the named rider is a DRIVER", async () => {
@@ -2256,7 +2425,7 @@ describe("the rider slot holds a rider", () => {
     // The refusal must not cost the driver a seat, nor resolve the request -
     // the pair are still free to clear it themselves.
     expect(db.seatsOf(DRIVER)).toBe(3);
-    expect(db.requestStatusOf(DRIVER, OUTSIDER)).toBe(RequestStatus.PENDING);
+    expect(db.requestStatusOf(OUTSIDER, DRIVER)).toBe(RequestStatus.PENDING);
   });
 
   it("refuses create when the named rider is a VIEWER", async () => {
@@ -2272,8 +2441,14 @@ describe("the rider slot holds a rider", () => {
   });
 
   it("refuses create when the rider is the caller, not just when the driver is", async () => {
-    // Either party may call `create`, so the guard cannot depend on who did.
-    const db = facing({ riderRole: Role.DRIVER });
+    // Either party may call `create` — whichever of them the request was sent
+    // to — so the rider-slot guard cannot depend on who did. Here the driver
+    // asked, which makes the outsider the legitimate accepter, and the call is
+    // still refused because the outsider is not a RIDER.
+    const db = facing({
+      riderRole: Role.DRIVER,
+      invitation: [DRIVER, OUTSIDER],
+    });
     const { caller } = callerFor(sessionFor(OUTSIDER), db);
 
     await expect(
@@ -2300,7 +2475,7 @@ describe("the rider slot holds a rider", () => {
 
     expect(db.carpoolIdOf(OUTSIDER)).toBeNull();
     expect(db.seatsOf(DRIVER)).toBe(3);
-    expect(db.requestStatusOf(DRIVER, OUTSIDER)).toBe(RequestStatus.PENDING);
+    expect(db.requestStatusOf(OUTSIDER, DRIVER)).toBe(RequestStatus.PENDING);
   });
 
   it("refuses edit when the named rider is a VIEWER", async () => {
