@@ -46,8 +46,58 @@ import type { PrismaOrTransaction } from "./client";
  * above the platform's current size so that it bounds pathological growth
  * without changing today's results. Raising the real ceiling means ranking in
  * SQL, which is a larger change than this ticket.
+ *
+ * Reaching it is no longer silent — see `candidateLimitWarning`.
  */
 export const CANDIDATE_LIMIT = 2000;
+
+/** Prefix for the ceiling warning, matching `cspReport`'s logging convention. */
+export const CANDIDATE_LIMIT_LOG_PREFIX = "[candidate-limit]";
+
+/**
+ * The warning to emit when the candidate query came back truncated, or `null`
+ * when it did not.
+ *
+ * The ceiling above is a cost bound that does not degrade gracefully: `take`
+ * makes Prisma append `ORDER BY carpool_search.id ASC`, and cuid order has
+ * nothing to do with match quality, so the rows dropped at the boundary are
+ * arbitrary rather than the worst. Nothing reported that, which is the actual
+ * hazard — the first symptom would be users quietly not seeing matches that
+ * exist, which is indistinguishable from there being no good matches. This
+ * turns that into a log line.
+ *
+ * **How full is it really?** Measured against the production-derived `staging`
+ * branch, in the widest case (distance filters "any", so no bounding box, and
+ * no date filter), the query reads:
+ *
+ *   - 48 rows for a RIDER — only drivers, and only with a seat
+ *   - 685 rows for a DRIVER
+ *   - 751 rows for a VIEWER, who is offered both roles
+ *
+ * So the worst case is about **38% of the ceiling**, and reaching it needs the
+ * matchable population to grow by roughly 165%. An earlier estimate of 64% on
+ * SCRUM-345 counted every ACTIVE `carpool_search` row; the query also requires
+ * `user.isOnboarded` and a compatible role, and 521 of staging's rows are
+ * un-onboarded signups sitting at the `(0, 0)` sentinel.
+ *
+ * That headroom is why ranking in SQL is deliberately **not** done here: it
+ * would have to reproduce `calculateScore`'s ordering closely enough to keep
+ * the scoring tests meaningful, and nothing today needs it. This warning is
+ * what makes deferring it safe rather than a bet — the ceiling can no longer
+ * be reached quietly while everyone assumes there is room.
+ */
+export const candidateLimitWarning = ({
+  rowsFetched,
+  role,
+  sort,
+}: {
+  rowsFetched: number;
+  role: Role;
+  sort: string;
+}): string | null =>
+  rowsFetched > CANDIDATE_LIMIT
+    ? `${CANDIDATE_LIMIT_LOG_PREFIX} candidate query hit its ${CANDIDATE_LIMIT}-row ceiling for a ${role} sorting by "${sort}". Rows past the ceiling are dropped in id order, not by score, so this ranking is missing candidates that may outrank the ones kept.`
+    : null;
 
 /** Distance filter values at or above this mean "any", so no bound applies. */
 const DISTANCE_FILTER_MAX = 20;
@@ -339,7 +389,13 @@ export const fetchRankedCandidates = async ({
   excludedUserIds: string[];
   favoriteUserIds: string[];
 }): Promise<CandidateSearch[]> => {
-  const candidates = await prisma.carpoolSearch.findMany({
+  // One row past the ceiling, so truncation is *detected* rather than guessed
+  // at. Asking for exactly `CANDIDATE_LIMIT` cannot distinguish "the ceiling
+  // cut the set short" from "exactly that many rows matched", and the second
+  // case would report a loss that never happened. The extra row is discarded
+  // below, so the ranked output is identical either way; the cost is one row
+  // read, and only when the set is genuinely that large.
+  const fetched = await prisma.carpoolSearch.findMany({
     where: buildCandidateWhere({
       currentSearch: currentUserSearch,
       filters,
@@ -347,8 +403,23 @@ export const fetchRankedCandidates = async ({
       favoriteUserIds,
     }),
     include: candidateInclude,
-    take: CANDIDATE_LIMIT,
+    take: CANDIDATE_LIMIT + 1,
   });
+
+  const warning = candidateLimitWarning({
+    rowsFetched: fetched.length,
+    role: currentUserSearch.role,
+    sort,
+  });
+  if (warning) {
+    console.warn(warning);
+  }
+
+  // Sliced only when it has to be, so the ordinary path does not copy the array.
+  const candidates =
+    fetched.length > CANDIDATE_LIMIT
+      ? fetched.slice(0, CANDIDATE_LIMIT)
+      : fetched;
 
   return rankCandidates(candidates, currentUserSearch, filters, sort);
 };
