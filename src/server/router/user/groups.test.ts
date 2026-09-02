@@ -208,16 +208,30 @@ const buildGroupsDb = (opts?: {
     clauses.some((c) => c.fromUserId === a && c.toUserId === b);
 
   const request = {
-    // Returns the direction, not just a hit. `requireAcceptableRequest` reads
-    // `toUserId` to decide whether the caller is the person the request was
-    // addressed to, so a mock that answered with a bare id could not tell the
-    // legitimate accept from the self-accept SCRUM-347 was filed for.
+    // Returns the direction and the live status, not just a hit.
+    // `requireAcceptableRequest` reads `toUserId` to decide whether the caller
+    // is the person the request was addressed to (SCRUM-347) and `status` to
+    // decide whether the invitation is still unused (SCRUM-353). A mock that
+    // answered with a bare id could not tell a legitimate accept from either a
+    // self-accept or a replay of a spent request.
+    //
+    // `status` is read from `requestStatus` rather than captured at seed time,
+    // so a row `markRequestAccepted` resolved earlier in the same test is seen
+    // as resolved by a later call. That is what makes the double-accept and
+    // re-add sequences below testable at all.
     findFirst: jest.fn(async ({ where }: any) => {
       const clauses: any[] = where?.OR ?? [where ?? {}];
       const hit = requests.find(([a, b]) => matchesPair(clauses, a, b));
       if (!hit) return null;
       const [fromUserId, toUserId] = hit;
-      return { id: `request-${fromUserId}-${toUserId}`, fromUserId, toUserId };
+      return {
+        id: `request-${fromUserId}-${toUserId}`,
+        fromUserId,
+        toUserId,
+        status:
+          requestStatus.get(`${fromUserId}|${toUserId}`) ??
+          RequestStatus.PENDING,
+      };
     }),
     updateMany: jest.fn(async ({ where, data }: any) => {
       const clauses: any[] = where?.OR ?? [where ?? {}];
@@ -1059,6 +1073,197 @@ describe("user.groups — only the person a request was sent to may accept it", 
   });
 });
 
+/**
+ * SCRUM-353: an invitation is spent once it is used.
+ *
+ * SCRUM-347 settled *who* may accept a request. This is *how long* the
+ * acceptance stays valid. `markRequestAccepted` resolves the row rather than
+ * deleting it — deliberately, because `sendAcceptanceNotification` reads it and
+ * the conversation hangs off its id — so an ACCEPTED request outlives the group
+ * it created. Without a status check it went on satisfying every other
+ * condition indefinitely: a driver whose rider left could put them straight
+ * back, as often as they liked, and nothing would tell the rider, because group
+ * mutations send no email and fire no Pusher event.
+ *
+ * These drive the real lifecycle — join, leave, try again — rather than seeding
+ * a resolved row directly, so they exercise the same `markRequestAccepted`
+ * transition production does. That is also why the mock reads `status` live
+ * from `requestStatus` instead of capturing it at seed time.
+ *
+ * The way back is asserted too, and matters as much as the refusal: requiring
+ * PENDING must not strand a pair who genuinely want to carpool again.
+ */
+describe("user.groups — a used invitation cannot be replayed", () => {
+  const soloDriverAndRider = () => [
+    {
+      id: "s-driver",
+      userId: DRIVER,
+      role: Role.DRIVER,
+      carpoolId: null,
+      seatsAvail: 3,
+      groupMessage: "",
+    },
+    {
+      id: "s-rider-1",
+      userId: RIDER_1,
+      role: Role.RIDER,
+      carpoolId: null,
+      seatsAvail: 0,
+      groupMessage: "",
+    },
+  ];
+
+  /**
+   * What `requests.create`'s reopen branch does, reproduced at the data layer.
+   * That branch lives in another router, so this suite cannot call it — but it
+   * sets `status: PENDING` on exactly this row, which is the state the join
+   * needs to see.
+   */
+  const reopen = (db: ReturnType<typeof buildGroupsDb>, pair: RequestPair) =>
+    db.request.updateMany({
+      where: { OR: [{ fromUserId: pair[0], toUserId: pair[1] }] },
+      data: { status: RequestStatus.PENDING },
+    });
+
+  it("refuses to re-add a rider who left, on the invitation they already used", async () => {
+    // The ticket's scenario, start to finish.
+    const db = buildGroupsDb({ requests: [[OUTSIDER, DRIVER]] });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+    const join = { driverId: DRIVER, riderId: OUTSIDER, groupId: GROUP };
+
+    // The outsider asks, the driver accepts. This is the legitimate join.
+    await caller.user.groups.edit({ ...join, add: true });
+    expect(db.carpoolIdOf(OUTSIDER)).toBe(GROUP);
+    expect(db.requestStatusOf(OUTSIDER, DRIVER)).toBe(RequestStatus.ACCEPTED);
+    const seatsWhileRiding = db.seatsOf(DRIVER)!;
+
+    // The rider leaves. Their seat comes back; the request row does not change.
+    await caller.user.groups.edit({ ...join, add: false });
+    expect(db.carpoolIdOf(OUTSIDER)).toBeNull();
+    expect(db.requestStatusOf(OUTSIDER, DRIVER)).toBe(RequestStatus.ACCEPTED);
+    const seatsAfterLeaving = db.seatsOf(DRIVER)!;
+    expect(seatsAfterLeaving).toBe(seatsWhileRiding + 1);
+
+    // The driver tries to put them back. This used to succeed.
+    await expect(
+      caller.user.groups.edit({ ...join, add: true }),
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      message: expect.stringContaining("already been used"),
+    });
+
+    expect(db.carpoolIdOf(OUTSIDER)).toBeNull();
+    expect(db.seatsOf(DRIVER)).toBe(seatsAfterLeaving);
+  });
+
+  it("admits them again once a fresh request reopens the row", async () => {
+    // The other half: refusing a replay must not mean the pair can never
+    // carpool again. Asking again is what makes it legal.
+    const db = buildGroupsDb({ requests: [[OUTSIDER, DRIVER]] });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+    const join = { driverId: DRIVER, riderId: OUTSIDER, groupId: GROUP };
+
+    await caller.user.groups.edit({ ...join, add: true });
+    await caller.user.groups.edit({ ...join, add: false });
+    await expect(
+      caller.user.groups.edit({ ...join, add: true }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    await reopen(db, [OUTSIDER, DRIVER]);
+
+    await caller.user.groups.edit({ ...join, add: true });
+
+    expect(db.carpoolIdOf(OUTSIDER)).toBe(GROUP);
+    expect(db.requestStatusOf(OUTSIDER, DRIVER)).toBe(RequestStatus.ACCEPTED);
+  });
+
+  it("refuses to rebuild a dissolved group on the same invitation", async () => {
+    // The `create` path. Dissolving returns everyone's membership and the
+    // driver's seats, but leaves the request resolved, so `create` must refuse
+    // for the same reason `edit` does.
+    const db = buildGroupsDb({
+      searches: soloDriverAndRider(),
+      groups: [],
+      requests: [[RIDER_1, DRIVER]],
+    });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    const group = await caller.user.groups.create({
+      driverId: DRIVER,
+      riderId: RIDER_1,
+    });
+    expect(db.seatsOf(DRIVER)).toBe(2);
+
+    await caller.user.groups.delete({ groupId: group.id });
+    expect(db.groupIds()).toEqual([]);
+    expect(db.seatsOf(DRIVER)).toBe(3);
+    expect(db.requestStatusOf(RIDER_1, DRIVER)).toBe(RequestStatus.ACCEPTED);
+
+    await expect(
+      caller.user.groups.create({ driverId: DRIVER, riderId: RIDER_1 }),
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      message: expect.stringContaining("already been used"),
+    });
+
+    expect(db.groupIds()).toEqual([]);
+    expect(db.seatsOf(DRIVER)).toBe(3);
+    expect(db.carpoolIdOf(RIDER_1)).toBeNull();
+  });
+
+  it("says the invitation is spent, not that there is no relationship", async () => {
+    // The two refusals ask different things of the user — send a new request
+    // versus you have no request with this person — so they must not collapse
+    // into one message. This is the criterion that ruled out putting `status`
+    // in the `where` clause, where a spent row would have been indistinguishable
+    // from a missing one.
+    const spent = buildGroupsDb({ requests: [[OUTSIDER, DRIVER]] });
+    const spentCaller = callerFor(sessionFor(DRIVER), spent).caller;
+    const join = { driverId: DRIVER, riderId: OUTSIDER, groupId: GROUP };
+
+    await spentCaller.user.groups.edit({ ...join, add: true });
+    await spentCaller.user.groups.edit({ ...join, add: false });
+
+    await expect(
+      spentCaller.user.groups.edit({ ...join, add: true }),
+    ).rejects.toMatchObject({
+      message: expect.stringContaining("already been used"),
+    });
+
+    const none = buildGroupsDb({ requests: [] });
+    const noneCaller = callerFor(sessionFor(DRIVER), none).caller;
+
+    await expect(
+      noneCaller.user.groups.edit({ ...join, add: true }),
+    ).rejects.toMatchObject({
+      message: expect.stringContaining("is required before they can share"),
+    });
+  });
+
+  it("reports the wrong-caller refusal ahead of the spent-invitation one", async () => {
+    // Both would refuse, and the order decides which the user is told. Someone
+    // who was never entitled to accept should hear that, not be invited to send
+    // a new request they also could not accept.
+    const db = buildGroupsDb({ requests: [[OUTSIDER, DRIVER]] });
+    const driver = callerFor(sessionFor(DRIVER), db).caller;
+    const join = { driverId: DRIVER, riderId: OUTSIDER, groupId: GROUP };
+
+    await driver.user.groups.edit({ ...join, add: true });
+    await driver.user.groups.edit({ ...join, add: false });
+
+    // The outsider sent the request, so they may not accept it — and it is also
+    // spent. The direction refusal is the one that should surface.
+    const outsider = callerFor(sessionFor(OUTSIDER), db).caller;
+
+    await expect(
+      outsider.user.groups.edit({ ...join, add: true }),
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      message: expect.stringContaining("was sent to can accept it"),
+    });
+  });
+});
+
 describe("user.groups — authentication gate", () => {
   it("rejects anonymous callers on every mutation without touching the data", async () => {
     const { caller, db } = callerFor(null);
@@ -1372,6 +1577,16 @@ describe("seat accounting — normal joins and leaves", () => {
 
     await edit(OUTSIDER, true);
     await edit(OUTSIDER, false);
+
+    // Rejoining needs a fresh invitation now (SCRUM-353) — the one they used
+    // on the way in is spent. This is what `requests.create`'s reopen branch
+    // writes, and including it keeps the sequence a realistic one rather than
+    // one the product would refuse.
+    await db.request.updateMany({
+      where: { OR: [{ fromUserId: OUTSIDER, toUserId: DRIVER }] },
+      data: { status: RequestStatus.PENDING },
+    });
+
     await edit(OUTSIDER, true);
     await edit(RIDER_1, false);
 
@@ -2269,6 +2484,18 @@ describe("user.groups.create — legal states only", () => {
  * the second call is now a clean rejection: no second group, no second seat, no
  * membership moved. These replay the exact sequence rather than setting the
  * states up directly.
+ *
+ * **Which guard refuses moved in SCRUM-353, and the code with it.** The first
+ * accept resolves the request to ACCEPTED, so the second call is now stopped by
+ * `requireAcceptableRequest` — the invitation is spent — before it ever reaches
+ * the membership checks that used to answer CONFLICT. The state asserted below
+ * is unchanged, which is the property these tests exist for; the message is
+ * asserted too, so a future change that moves the refusal again is visible
+ * here rather than silently passing for a different reason.
+ *
+ * The membership guards those CONFLICTs came from are still covered, by
+ * "refuses a second add of the same rider" and "refuses a rider who is already
+ * in another group" — both of which use a genuinely pending request.
  */
 describe("a double-clicked Accept is refused the second time", () => {
   it("creates one group and takes one seat, not two", async () => {
@@ -2302,10 +2529,15 @@ describe("a double-clicked Accept is refused the second time", () => {
       riderId: RIDER_1,
     });
 
-    // Click two, before the first response has been rendered.
+    // Click two, before the first response has been rendered. Refused because
+    // click one already spent the invitation, not because the driver is now in
+    // a group — see the note on this describe block.
     await expect(
       caller.user.groups.create({ driverId: DRIVER, riderId: RIDER_1 }),
-    ).rejects.toMatchObject({ code: "CONFLICT" });
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      message: expect.stringContaining("already been used"),
+    });
 
     expect(db.groupIds()).toEqual([group.id]);
     expect(db.seatsOf(DRIVER)).toBe(2);
@@ -2352,7 +2584,10 @@ describe("a double-clicked Accept is refused the second time", () => {
         groupId: GROUP,
         add: true,
       }),
-    ).rejects.toMatchObject({ code: "CONFLICT" });
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      message: expect.stringContaining("already been used"),
+    });
 
     expect(db.seatsOf(DRIVER)).toBe(2);
     expect(db.carpoolIdOf(RIDER_1)).toBe(GROUP);
