@@ -16,6 +16,9 @@ import useIsMobile from "../../utils/useIsMobile";
 // written to. The limit now comes from one place.
 import { MESSAGE_MAX_LENGTH } from "../../utils/textLimits";
 
+/** Matches the in-flight styling `MessageHeader` uses on its own buttons. */
+const DISABLED_CLASS = "cursor-not-allowed opacity-40 hover:bg-inherit";
+
 interface ConnectModalProps {
   user: User;
   otherUser: EnhancedPublicUser;
@@ -66,34 +69,44 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
       },
     });
 
-  const { mutate: createRequests } = trpc.user.requests.create.useMutation({
-    // Shown as written rather than behind "Something went wrong", because every
-    // way this procedure refuses is a rule the user can act on - already in a
-    // group with them, a request already open, a missing email address.
-    onError: (error: any) => {
-      toast.error(error.message);
-    },
-    // Everything that tells either person the request exists now waits for the
-    // write to land. Previously the email was sent first and the
-    // success toast fired on click, so a CONFLICT — routine, since accepting
-    // never clears a request — produced a success toast, an error
-    // toast, and an email for a request that was never created.
-    onSuccess: (request, variables) => {
-      setRequestSent(true);
-      toast.success(
-        "A request to carpool has been sent to " +
-          props.otherUser.preferredName,
-      );
-      // The id comes from the row the mutation just created, so the server can
-      // check the caller is party to it. The preview is taken from
-      // the mutation variables rather than component state, so it is exactly
-      // the text that was submitted.
-      sendConnectEmail({
-        requestId: request.id,
-        messagePreview: variables.message,
-      });
-    },
-  });
+  // `isSending` is what disables Send while the write is in flight.
+  // `requestSent` below cannot do that job: it is set in `onSuccess`, so it
+  // only flips after the round trip, and a second click inside that window
+  // used to fire a second `requests.create`. Both would find no existing
+  // request and both would create one — two rows, two conversations, two first
+  // messages and two notification emails for one pair, and withdrawing then
+  // cleared only one of them. It goes false again on error, so a genuine retry
+  // after a failure is still possible.
+  const { mutate: createRequests, isPending: isSending } =
+    trpc.user.requests.create.useMutation({
+      // Shown as written rather than behind "Something went wrong", because
+      // every way this procedure refuses is a rule the user can act on -
+      // already in a group with them, a request already open, a missing email
+      // address.
+      onError: (error: any) => {
+        toast.error(error.message);
+      },
+      // Everything that tells either person the request exists now waits for
+      // the write to land. Previously the email was sent first and the
+      // success toast fired on click, so a CONFLICT — routine, since accepting
+      // never clears a request — produced a success toast, an error
+      // toast, and an email for a request that was never created.
+      onSuccess: (request, variables) => {
+        setRequestSent(true);
+        toast.success(
+          "A request to carpool has been sent to " +
+            props.otherUser.preferredName,
+        );
+        // The id comes from the row the mutation just created, so the server
+        // can check the caller is party to it. The preview is taken from
+        // the mutation variables rather than component state, so it is exactly
+        // the text that was submitted.
+        sendConnectEmail({
+          requestId: request.id,
+          messagePreview: variables.message,
+        });
+      },
+    });
 
   const handleOnClick = () => {
     // The missing-email check that used to sit here has moved into
@@ -284,8 +297,11 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                         Cancel
                       </button>
                       <button
-                        className="bg-northeastern-red w-full rounded-md p-1 text-slate-50 hover:bg-red-700"
+                        className={`bg-northeastern-red w-full rounded-md p-1 text-slate-50 hover:bg-red-700 ${
+                          isSending ? DISABLED_CLASS : ""
+                        }`}
                         onClick={handleOnClick}
+                        disabled={isSending}
                       >
                         Send
                       </button>
