@@ -3,7 +3,10 @@ import {
   boundingBox,
   buildCandidateWhere,
   rankCandidates,
+  fetchRankedCandidates,
+  candidateLimitWarning,
   CANDIDATE_LIMIT,
+  CANDIDATE_LIMIT_LOG_PREFIX,
 } from "./candidateSearch";
 import type { CurrentSearch } from "./candidateSearch";
 import {
@@ -531,5 +534,123 @@ describe("CANDIDATE_LIMIT", () => {
     // The map keeps 150 and recommendations 50; the bound exists to cap cost,
     // not to paginate.
     expect(CANDIDATE_LIMIT).toBeGreaterThan(150);
+  });
+});
+
+describe("candidateLimitWarning", () => {
+  /**
+   * The ceiling used to be reachable in silence, which is the part that
+   * mattered: `take` drops rows in cuid order, so the ones lost at the
+   * boundary are arbitrary rather than the worst matches, and a user would
+   * simply stop seeing matches that exist. These pin the signal that replaces
+   * the silence (SCRUM-345).
+   */
+  const args = { role: Role.RIDER, sort: "distance" };
+
+  it("says nothing below the ceiling", () => {
+    expect(
+      candidateLimitWarning({ ...args, rowsFetched: CANDIDATE_LIMIT - 1 }),
+    ).toBeNull();
+  });
+
+  it("says nothing when exactly the ceiling came back, because nothing was dropped", () => {
+    // The query asks for CANDIDATE_LIMIT + 1, so getting the ceiling back
+    // means the set ended there of its own accord. Warning here would report a
+    // loss that never happened.
+    expect(
+      candidateLimitWarning({ ...args, rowsFetched: CANDIDATE_LIMIT }),
+    ).toBeNull();
+  });
+
+  it("warns once the extra row arrives, which is the only proof of truncation", () => {
+    const warning = candidateLimitWarning({
+      ...args,
+      rowsFetched: CANDIDATE_LIMIT + 1,
+    });
+
+    expect(warning).toContain(CANDIDATE_LIMIT_LOG_PREFIX);
+    expect(warning).toContain(String(CANDIDATE_LIMIT));
+  });
+
+  it("names the role and the sort, so a log line says which query truncated", () => {
+    const warning = candidateLimitWarning({
+      role: Role.VIEWER,
+      sort: "time",
+      rowsFetched: CANDIDATE_LIMIT + 1,
+    });
+
+    expect(warning).toContain("VIEWER");
+    expect(warning).toContain("time");
+  });
+
+  it("says the loss is by id order rather than by score", () => {
+    // The whole point of the wording: whoever reads this must not assume the
+    // dropped rows were the worst matches.
+    expect(
+      candidateLimitWarning({ ...args, rowsFetched: CANDIDATE_LIMIT + 1 }),
+    ).toMatch(/id order/);
+  });
+});
+
+describe("fetchRankedCandidates — the ceiling", () => {
+  const rider = buildSearch({ id: "current", role: Role.RIDER });
+
+  const drivers = (n: number) =>
+    Array.from({ length: n }, (_, i) =>
+      buildSearch({
+        id: `d${i}`,
+        role: Role.DRIVER,
+        home: milesNorthOf(ORIGIN, (i % 40) + 1),
+      }),
+    );
+
+  const run = async (rows: unknown[]) => {
+    const findMany = jest.fn().mockResolvedValue(rows);
+    const ranked = await fetchRankedCandidates({
+      prisma: { carpoolSearch: { findMany } } as unknown as Parameters<
+        typeof fetchRankedCandidates
+      >[0]["prisma"],
+      currentUserSearch: rider,
+      filters: { ...anyFilters(), favorites: false },
+      sort: "distance",
+      excludedUserIds: [],
+      favoriteUserIds: [],
+    });
+    return { findMany, ranked };
+  };
+
+  let warnSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+  });
+
+  it("asks the database for one row more than the ceiling", async () => {
+    const { findMany } = await run([]);
+
+    expect(findMany.mock.calls[0][0].take).toBe(CANDIDATE_LIMIT + 1);
+  });
+
+  it("stays quiet and keeps everything when the set is under the ceiling", async () => {
+    const { ranked } = await run(drivers(5));
+
+    expect(ranked).toHaveLength(5);
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it("warns and discards the probe row once the ceiling is exceeded", async () => {
+    const { ranked } = await run(drivers(CANDIDATE_LIMIT + 1));
+
+    // The extra row exists only to detect truncation and must not reach the
+    // ranked output.
+    expect(ranked).toHaveLength(CANDIDATE_LIMIT);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(String(warnSpy.mock.calls[0][0])).toContain(
+      CANDIDATE_LIMIT_LOG_PREFIX,
+    );
   });
 });
