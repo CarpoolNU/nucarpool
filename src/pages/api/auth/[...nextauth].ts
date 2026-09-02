@@ -7,6 +7,7 @@ import AzureADProvider from "next-auth/providers/azure-ad";
 import GoogleProvider from "next-auth/providers/google";
 import { Adapter } from "next-auth/adapters";
 import { Prisma } from "@prisma/client";
+import { isSignInAllowed } from "../../../server/authSignIn";
 
 const CustomPrismaAdapter = (p: typeof prisma): Adapter => {
   return {
@@ -28,6 +29,21 @@ const CustomPrismaAdapter = (p: typeof prisma): Adapter => {
 
 export const authOptions: NextAuthOptions = {
   callbacks: {
+    /**
+     * The only thing standing between the staging Google provider and any
+     * Google account on the internet. There was no `signIn` callback here at
+     * all, so no sign-in was ever refused on the basis of who was signing in —
+     * see `authSignIn.ts` for the rule and why Azure AD is left untouched.
+     *
+     * Returning `false` sends NextAuth to its error page rather than throwing.
+     */
+    signIn({ user, account }) {
+      return isSignInAllowed({
+        provider: account?.provider,
+        email: user.email,
+        env: serverEnv.NEXT_PUBLIC_ENV,
+      });
+    },
     session({ session, user }) {
       if (session.user) {
         session.user.id = user.id;
