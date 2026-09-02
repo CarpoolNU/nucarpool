@@ -10,10 +10,10 @@ import { useContext, useState } from "react";
 import { createPortal } from "react-dom";
 import ConnectModal from "./ConnectModal";
 import { UserContext } from "../../utils/userContext";
-import { Role } from "@prisma/client";
 import { trackEvent } from "../../utils/mixpanel";
 import useIsMobile from "../../utils/useIsMobile";
 import { counterpartLabel } from "../Sidebar/viewerAccess";
+import { connectAction } from "./connectAction";
 import React from "react";
 
 interface ConnectCardProps {
@@ -30,30 +30,6 @@ export const ConnectCard = (props: ConnectCardProps): React.JSX.Element => {
   const [showModal, setShowModal] = useState(false);
   const isMobile = useIsMobile();
 
-  const handleExistingReceivedRequest = () => {
-    toast.info(
-      "You already have an incoming carpool request from " +
-        props.otherUser.preferredName +
-        ". Navigate to the received requests tab to connect with them!",
-    );
-  };
-
-  const handleExistingSentRequest = () => {
-    toast.info(
-      "You already have an outgoing carpool request to " +
-        props.otherUser.preferredName +
-        ". Please wait for them to respond to your request!",
-    );
-  };
-
-  const handleNoSeatAvailability = () => {
-    toast.info(
-      "You do not have any seats available in your car to connect with " +
-        props.otherUser.preferredName +
-        ".",
-    );
-  };
-
   const handleConnect = (otherUser: EnhancedPublicUser) => {
     trackEvent("Connect Button Clicked", {
       userRole: user?.role,
@@ -61,15 +37,24 @@ export const ConnectCard = (props: ConnectCardProps): React.JSX.Element => {
       hasOutgoingRequest: otherUser.outgoingRequest,
     });
 
-    if (otherUser.incomingRequest) {
-      handleExistingReceivedRequest();
-    } else if (otherUser.outgoingRequest) {
-      handleExistingSentRequest();
-    } else if (user?.role === Role.DRIVER && user.seatAvail === 0) {
-      handleNoSeatAvailability();
-    } else {
-      setShowModal(true);
+    // The three refusals and their wording live in `connectAction`, which tests
+    // can reach. What used to be here tested a request's *presence*, so a
+    // resolved one blocked Connect just as a pending one did — see that module
+    // for why that made re-carpooling impossible.
+    const decision = connectAction({
+      incomingRequest: otherUser.incomingRequest,
+      outgoingRequest: otherUser.outgoingRequest,
+      viewerRole: user?.role,
+      seatAvail: user?.seatAvail,
+      preferredName: otherUser.preferredName,
+    });
+
+    if (decision.kind === "blocked") {
+      toast.info(decision.message);
+      return;
     }
+
+    setShowModal(true);
   };
 
   const onClose = (action: string) => {
