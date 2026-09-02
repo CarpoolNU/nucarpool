@@ -392,6 +392,93 @@ describe("user.requests.create — the duplicate guard still holds", () => {
 });
 
 /**
+ * SCRUM-349: a double-clicked Send must not build the pair two of everything.
+ *
+ * The duplicate-guard tests above all *seed* an existing row, so they prove the
+ * guard reads correctly — but none of them ever ran `create` twice, which is
+ * the sequence a double-click actually produces and the one the defect lived
+ * in. The lookup used to happen outside any transaction, so two calls could
+ * both find nothing and both take the create branch, leaving two `Request`
+ * rows, two `Conversation`s, two first `Message`s and two notification emails.
+ *
+ * The end state was worse than untidy: withdrawing deleted one row by id and
+ * left the other, so the next attempt was refused with CONFLICT for a request
+ * neither party could see — unrecoverable through the UI.
+ *
+ * These run the real sequence. What they cannot show is the concurrency: the
+ * mock is single-threaded, so the second call always observes the first. That
+ * is a genuine limit rather than an oversight — moving the read inside the
+ * transaction narrows the window but does not close it, because MySQL will not
+ * lock rows a non-locking SELECT did not find. The control that removes the
+ * realistic path is the in-flight guard on `ConnectModal`'s Send button, which
+ * has no component test in this repository to pin it. See "One request per
+ * pair" in `src/server/db/README.md` for why no unique constraint was added.
+ */
+describe("user.requests.create — pressing Send twice", () => {
+  const SENT = { toId: USER_B, message: "carpool?" };
+
+  /** The state after the first click has landed. */
+  const afterFirstClick = async () => {
+    const db = buildRequestsDb();
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await caller.user.requests.create(SENT);
+
+    return { db, caller };
+  };
+
+  it("refuses the second click", async () => {
+    const { caller } = await afterFirstClick();
+
+    await expect(caller.user.requests.create(SENT)).rejects.toMatchObject({
+      code: "CONFLICT",
+    });
+  });
+
+  it("leaves exactly one request between the pair", async () => {
+    const { db, caller } = await afterFirstClick();
+
+    await expect(caller.user.requests.create(SENT)).rejects.toBeInstanceOf(
+      TRPCError,
+    );
+
+    expect(db.rows()).toEqual([
+      expect.objectContaining({ fromUserId: USER_A, toUserId: USER_B }),
+    ]);
+    expect(db.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("writes one opening message, not two", async () => {
+    // The duplicate conversation is what actually stranded a message:
+    // `extendPublicUser` resolves a user's request with `.find()`, so only one
+    // of the two threads was ever reachable from the UI. A second message here
+    // would mean a second conversation had been built.
+    const { db, caller } = await afterFirstClick();
+
+    await expect(caller.user.requests.create(SENT)).rejects.toBeInstanceOf(
+      TRPCError,
+    );
+
+    expect(db.messages()).toEqual([
+      expect.objectContaining({ content: "carpool?", userId: USER_A }),
+    ]);
+  });
+
+  it("still refuses when the two clicks arrive in opposite directions", async () => {
+    // Two people pressing Connect on each other at once. The guard is
+    // direction-agnostic, so the second is refused whichever way it points.
+    const { db } = await afterFirstClick();
+    const { caller: other } = callerFor(sessionFor(USER_B), db);
+
+    await expect(
+      other.user.requests.create({ toId: USER_A, message: "you too?" }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+
+    expect(db.rows()).toHaveLength(1);
+  });
+});
+
+/**
  * Reopening an accepted request.
  *
  * Accepting used to leave the row pending forever, and the duplicate guard above

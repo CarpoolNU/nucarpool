@@ -128,6 +128,31 @@ Today: `user.acceptTerms` is the only writer, `user.edit` does not touch the col
 
 There is no stored signal separating them, because the column carries no timestamp. Adding a timestamp and a terms version — which would also make re-consent possible when the terms are updated, something the terms text explicitly anticipates — needs new columns and is tracked separately. Do not treat a `true` predating that work as evidence for a specific user.
 
+## One request per pair, and why it is not a constraint
+
+`user.requests.create` treats "one `Request` row per pair of users" as an invariant. `extendPublicUser` picks a user's request with `.find()`, so a second row would make which conversation the UI shows arbitrary, and the reopen branch depends on there being exactly one row to reopen.
+
+**Nothing in the database enforces it.** `Request` carries `@@index([fromUserId])` and `@@index([toUserId])` and no unique constraint, so the guarantee is procedural: the lookup and the write happen in one transaction, and `ConnectModal` disables Send while the mutation is in flight. SCRUM-349 is where that was decided; the reasoning is recorded here so the next reader does not have to rediscover it.
+
+The invariant is over an **unordered** pair — `(A,B)` and `(B,A)` are the same relationship, which is why the duplicate guard is written as an `OR` over both directions — and MySQL cannot express that directly. Three options were weighed:
+
+| Option                                        | Catches                                                           | Cost                                                                                        |
+| --------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `@@unique([fromUserId, toUserId])`            | the double-click case, where both calls write the same direction  | a migration and a PlanetScale deploy request; still misses simultaneous opposite directions |
+| unique index on a generated `pair_key` column | everything                                                        | raw SQL in the migration, a column Prisma 4 cannot declare, plus the deploy request         |
+| no constraint (**chosen**)                    | nothing structurally; the client guard removes the realistic path | none                                                                                        |
+
+**Why no constraint was the answer, for now.** The transaction narrows the race but does not close it — MySQL will not lock rows a non-locking `SELECT` did not find, so two transactions can both see nothing and both insert. What actually removes the realistic path is the in-flight guard on the button, because the vector is a human double-click rather than concurrent clients. Against that, a directed unique index buys partial protection for a schema deploy, and the correct index buys full protection for raw SQL Prisma cannot express. Measured against production-derived `staging` on 2026-09-02: **477 requests, 0 duplicate pairs in either direction.** Paying a deploy request to enforce an invariant nothing has yet violated was not judged worth it.
+
+**What would change the answer.** Any duplicate appearing in production, or a second client that can call `requests.create` without the modal. Before adding the index, re-run the duplicate audit — index creation fails outright if any exist, and de-duplicating means deciding what happens to the losing row's conversation and messages, which overlaps SCRUM-295.
+
+```sql
+SELECT COUNT(*) FROM (
+  SELECT LEAST(fromUserId, toUserId) a, GREATEST(fromUserId, toUserId) b
+  FROM request GROUP BY a, b HAVING COUNT(*) > 1
+) duplicates;
+```
+
 ## Indexes, and how to decide whether one is needed
 
 Most `@@index` entries in `schema.prisma` are there because `relationMode = "prisma"` requires one on every relation scalar field, not because a query was measured against them. Only two exist purely for query performance:

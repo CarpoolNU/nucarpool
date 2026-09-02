@@ -321,42 +321,62 @@ export const requestsRouter = router({
         });
       }
 
-      const existingRequest = await ctx.prisma.request.findFirst({
-        where: {
-          OR: [
-            {
-              fromUserId: userId,
-              toUserId: input.toId,
-            },
-            {
-              fromUserId: input.toId,
-              toUserId: userId,
-            },
-          ],
-        },
-      });
-
-      // Still awaiting an answer, in either direction — the original guard.
-      if (existingRequest?.status === RequestStatus.PENDING) {
-        throw new TRPCError({
-          code: "CONFLICT",
-          message: `Existing request between '${input.toId} and ${userId}'`,
-        });
-      }
-
-      // An accepted request the pair have since left behind. Reopening it,
-      // rather than adding a second row, is what lets two people who once
-      // carpooled together do so again. It also keeps the pair to
-      // one Request row for good: `extendPublicUser` picks the request for a
-      // user with `.find()`, so a second row would make which conversation the
-      // UI shows arbitrary.
+      // The lookup and whichever branch it selects commit together.
       //
-      // The direction is rewritten because whoever is asking now is the sender
-      // now, regardless of who asked the first time. The conversation is not
-      // touched: it hangs off the request id, which does not change, so the
-      // pair keep the thread they already had.
-      if (existingRequest) {
-        return await ctx.prisma.$transaction(async (tx) => {
+      // The read used to sit outside any transaction, and the branch it chose
+      // then opened one — so the decision was taken against a snapshot that
+      // could already be stale by the time it was acted on. A double-clicked
+      // Send sent two calls; both found no row, both took the create branch,
+      // and the pair ended up with two Request rows, two Conversations, two
+      // first Messages and two notification emails. Withdrawing then deleted
+      // one row by id and left the other, so the next attempt was refused with
+      // CONFLICT for a request neither party could see — a dead end reachable
+      // by an ordinary double-click.
+      //
+      // **This narrows the window; it does not close it.** MySQL will not lock
+      // rows a non-locking SELECT did not find, so two transactions can still
+      // both see nothing and both insert. The guarantee is procedural, not
+      // enforced: `ConnectModal` disables Send while the mutation is in flight,
+      // which is what removes the realistic path, and there is deliberately no
+      // unique constraint — see "One request per pair" in
+      // `src/server/db/README.md` for why, and for what would have to change to
+      // make it structural.
+      const request = await ctx.prisma.$transaction(async (tx) => {
+        const existingRequest = await tx.request.findFirst({
+          where: {
+            OR: [
+              {
+                fromUserId: userId,
+                toUserId: input.toId,
+              },
+              {
+                fromUserId: input.toId,
+                toUserId: userId,
+              },
+            ],
+          },
+        });
+
+        // Still awaiting an answer, in either direction — the original guard.
+        if (existingRequest?.status === RequestStatus.PENDING) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: `Existing request between '${input.toId} and ${userId}'`,
+          });
+        }
+
+        // An accepted request the pair have since left behind. Reopening it,
+        // rather than adding a second row, is what lets two people who once
+        // carpooled together do so again. It also keeps the pair to
+        // one Request row for good: `extendPublicUser` picks the request for a
+        // user with `.find()`, so a second row would make which conversation
+        // the UI shows arbitrary.
+        //
+        // The direction is rewritten because whoever is asking now is the
+        // sender now, regardless of who asked the first time. The conversation
+        // is not touched: it hangs off the request id, which does not change,
+        // so the pair keep the thread they already had.
+        if (existingRequest) {
           const reopened = await tx.request.update({
             where: { id: existingRequest.id },
             data: {
@@ -381,24 +401,23 @@ export const requestsRouter = router({
           }
 
           return reopened;
-        });
-      }
+        }
 
-      // A request, its conversation, the link between them and the first
-      // message are one unit. These used to be four independent awaits, which
-      // could leave a request with no conversation, or a conversation never
-      // linked back to its request — and `relationMode = "prisma"` rejects
-      // neither, so the half-built thread persisted.
-      //
-      // The link is stored twice, in both directions: `Conversation.requestId`
-      // and `Request.conversationId`. Nothing in the schema keeps those two in
-      // agreement, which is why writing a conversation still takes two
-      // statements rather than one nested create.
-      //
-      // What this protects on the read side: `user.requests.me` above includes
-      // `conversation.messages` through the request, so a thread that exists on
-      // one side of the link only is invisible from the other.
-      const request = await ctx.prisma.$transaction(async (tx) => {
+        // A request, its conversation, the link between them and the first
+        // message are one unit. These used to be four independent awaits,
+        // which could leave a request with no conversation, or a conversation
+        // never linked back to its request — and `relationMode = "prisma"`
+        // rejects neither, so the half-built thread persisted.
+        //
+        // The link is stored twice, in both directions:
+        // `Conversation.requestId` and `Request.conversationId`. Nothing in the
+        // schema keeps those two in agreement, which is why writing a
+        // conversation still takes two statements rather than one nested
+        // create.
+        //
+        // What this protects on the read side: `user.requests.me` above
+        // includes `conversation.messages` through the request, so a thread
+        // that exists on one side of the link only is invisible from the other.
         const created = await tx.request.create({
           data: {
             message: "",
