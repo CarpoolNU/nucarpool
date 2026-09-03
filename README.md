@@ -113,18 +113,19 @@ Validation runs at import time in [`src/utils/env/browser.ts`](src/utils/env/bro
 
 ## Useful Commands
 
-| Command                          | Purpose                                              |
-| -------------------------------- | ---------------------------------------------------- |
-| `yarn dev`                       | Start the development server on port 3000            |
-| `yarn startup`                   | Start the local database, then the dev server        |
-| `yarn build`                     | Production build                                     |
-| `yarn lint`                      | Run ESLint                                           |
-| `yarn tsc`                       | Type check                                           |
-| `yarn test`                      | Run Jest (unit tests, mocks only — no database)      |
-| `yarn db:start` / `yarn db:stop` | Start / stop the local MySQL container               |
-| `yarn db:schema`                 | Apply migrations and regenerate the Prisma client    |
-| `yarn seed`                      | **Wipes** the database, then inserts generated users |
-| `yarn check:format`              | Prettier, check only — run before pushing            |
+| Command                          | Purpose                                               |
+| -------------------------------- | ----------------------------------------------------- |
+| `yarn dev`                       | Start the development server on port 3000             |
+| `yarn startup`                   | Start the local database, then the dev server         |
+| `yarn build`                     | Production build                                      |
+| `yarn lint`                      | Run ESLint                                            |
+| `yarn tsc`                       | Type check                                            |
+| `yarn test`                      | Run Jest (unit tests, mocks only — no database)       |
+| `yarn test:db`                   | Run the integration suite against `TEST_DATABASE_URL` |
+| `yarn db:start` / `yarn db:stop` | Start / stop the local MySQL container                |
+| `yarn db:schema`                 | Apply migrations and regenerate the Prisma client     |
+| `yarn seed`                      | **Wipes** the database, then inserts generated users  |
+| `yarn check:format`              | Prettier, check only — run before pushing             |
 
 ## Formatting and line endings
 

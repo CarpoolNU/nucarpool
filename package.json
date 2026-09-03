@@ -20,6 +20,7 @@
     "seed": "yarn prisma db seed",
     "prepare": "husky",
     "test": "jest",
+    "test:db": "jest --config jest.integration.config.js",
     "build:main": "prisma generate && next build",
     "startup": "yarn db:start && next dev",
     "build:development": "NODE_ENV=development prisma generate && next build",

@@ -274,6 +274,73 @@ The check proves migration history matches `schema.prisma`. It says nothing abou
 
 The deny rules for `build:preview` in [`.claude/settings.json`](../../../.claude/settings.json) are deliberately left in place: they cost nothing and would still fire if such a script were reintroduced.
 
+## Integration tests against a real database
+
+`yarn test` runs entirely on mocks. A hand-built Prisma double returns whatever the test told it to, which is the right shape for testing a middleware contract and structurally incapable of catching a malformed `where`, a wrong relation traversal, a referential action that `relationMode = "prisma"` only emulates, or a multi-step write that does not actually roll back. `yarn test:db` is the second suite, and it runs against a real MySQL 8.0. SCRUM-263.
+
+**What it contains today is the harness and its own self-test.** The router and referential-action coverage the ticket exists for is not written yet, so nothing about real queries is verified by it so far. Do not read a green `yarn test:db` as coverage of anything but the harness.
+
+### Running it
+
+The suite needs a database it is allowed to destroy. Create one on your local container:
+
+```bash
+yarn db:start
+docker exec mysql-on-docker mysql -uroot -p"$MYSQL_ROOT_PASSWORD" \
+  -e "CREATE DATABASE IF NOT EXISTS nucarpool_test"
+```
+
+Then put it in `.env` as its **own variable**, alongside `DATABASE_URL` rather than instead of it:
+
+```
+TEST_DATABASE_URL=mysql://root:<password>@127.0.0.1:3306/nucarpool_test
+```
+
+```bash
+yarn test:db
+```
+
+`globalSetup` approves the target, claims the database, applies the committed migration history to it, and empties it. Nothing else has to be run by hand.
+
+### It will not touch anything else, and cannot be told to
+
+Two independent locks, and neither has an override. That is the deliberate difference from [`seedGuard.ts`](../../utils/seedGuard.ts), which has `SEED_ALLOW_REMOTE` because seeding a shared branch is something a human might one day legitimately need. Truncating one never is, and an escape hatch here would be set once in a workflow file and then be permanent.
+
+**The connection string**, checked by [`testDatabaseGuard.ts`](../../utils/testDatabaseGuard.ts). Twelve rules, refused in this order: the variable is set; it is not the same string as `DATABASE_URL`; it parses; the scheme is `mysql:`; there is a hostname; that hostname is in `seedGuard.ts`'s `LOCAL_HOSTNAMES`; a database is named; the name percent-decodes; the decoded name is only `[A-Za-z0-9_-]`; it contains none of `prod`, `stag`, `live`, `main`; one of its `_`/`-` separated words is exactly `test`; and it does not address the same host, port and database as `DATABASE_URL`.
+
+Two of those are worth knowing about rather than just obeying:
+
+- **The name is decoded before it is judged, then restricted to a plain identifier.** `mysql:` is not a _special_ scheme in the WHATWG URL standard, so Node preserves percent escapes in the path. `mysql://localhost/%70roduction_test` therefore reads as neither containing `prod` nor being anything but a `test` database — a raw-path rule accepts it, and the driver then decodes it and connects to `production_test`. Decoding closes that; the charset check closes the rest of the class without having to reason about individual escapes.
+- **`test` has to be a word, not a substring**, because `latest`, `greatest` and `attestation` all contain it. The forbidden stems are the mirror image: matched as substrings, and they win even alongside a `test` word, so `staging_test` is refused. Allowing is strict and refusing is broad, which does mean the guard refuses some harmless names — `nucarpooltest` has no delimiter, and `localhost.` is a real way to say localhost that is not in the allowlist. Both fail closed.
+
+**The database's own contents**, checked by [`integrationDatabase.ts`](../../testing/integrationDatabase.ts) — which lives in `src/testing/`, deliberately outside `src/server/` so nothing the application can reach imports a module that truncates tables. The guard can tell that a name carries a `test` word; it cannot tell whether the rows behind it matter to somebody. A developer whose own database is called `nucarpool_test` passes every rule above, and on a laptop with MySQL listening on 127.0.0.1 the host rule is no obstacle either. So the harness claims a database before writing to it: an **empty** database is adopted and marked with `_nucarpool_integration_marker`, a database already carrying that marker is recognised, and a database with tables and no marker is **refused, with nothing written**. The claim runs before `prisma migrate deploy`, not after — running the migration first would have created eleven tables in someone else's database before anything noticed.
+
+Neither lock ever drops or empties anything to make a database usable. A refusal is for a human to resolve.
+
+### `prisma migrate deploy` here is not a change to the deploy workflow
+
+The harness runs `prisma migrate deploy` against the disposable database `TEST_DATABASE_URL` names, and against nothing else. That is the point of the suite rather than an incidental detail: building the schema from the committed migration history is what makes the history itself testable on every run, and it is exactly how the missing `tutorial_completed` migration would have been caught.
+
+**It does not mean this repository has adopted `prisma migrate deploy` for shared environments.** Everything in [What migrations are for here, and what they are not](#what-migrations-are-for-here-and-what-they-are-not) still holds: PlanetScale is changed by `prisma db push` to staging followed by a Deploy Request promoting staging to `main`, nothing in the deploy pipeline reads `prisma/migrations/`, and adopting `migrate deploy` for shared branches would need every one of them baselined with `prisma migrate resolve --applied` first. That is still not planned and still needs its own ticket.
+
+The guard is what keeps the two apart mechanically rather than by convention: a PlanetScale hostname can never be an approved target, so this command has no route to one.
+
+### Isolation, and what that means for writing a test
+
+[`jest.integration.setupAfterEnv.js`](../../../jest.integration.setupAfterEnv.js) truncates **before every test**, so a suite is order-independent and a crashed run leaves nothing for the next one. Before rather than after, so a failing test's rows are still there to look at.
+
+The consequence: **build fixtures in `beforeEach` or in the test body, never in `beforeAll`** — a `beforeAll` insert is truncated before the first test that would have read it.
+
+Truncation discovers tables through `information_schema`, not through Prisma's model list, and that is load-bearing. `_Favorites` is the join table behind the implicit many-to-many `User.favorites`, and Prisma exposes **no delegate** for it — a model-driven reset leaves favourite rows standing between tests. Migration history has also created and later dropped tables (`invitation`, `_userCarpools`), so a hand-written list would rot. Order does not matter, because `relationMode = "prisma"` means MySQL holds no foreign keys at all; nothing disables `FOREIGN_KEY_CHECKS`, and if a real constraint is ever added, a loud failure here is the correct outcome.
+
+The suite runs with `maxWorkers: 1`, set in the config rather than passed on the command line so it cannot be dropped. There is one database, and truncation is global to it, so two workers would empty it from under each other and the failures would look like flaky assertions. The way out, when the suite is big enough to need it, is a database per worker keyed on `JEST_WORKER_ID` — not more workers on one database.
+
+### Why two configurations rather than one
+
+A database-backed test is named `*.db.test.ts` and sits next to the module it covers, like every other test here. [`jest.config.js`](../../../jest.config.js) excludes that pattern, which is what keeps `yarn test` runnable with no database and no Docker; [`jest.integration.config.js`](../../../jest.integration.config.js) spreads the base config for the transform, the envsafe placeholders and the `TZ` pinning, then **overrides** `testPathIgnorePatterns` — inheriting it would make the integration config ignore the only files it exists to run, and Jest would report "no tests found" rather than fail.
+
+The `TZ` pinning matters more here than in the mocked suite: `carpool_search` stores `@db.Time(0)` and `@db.Date` columns, and an assertion on a value that has been through MySQL and back is only reproducible with the zone fixed.
+
 ## Profile picture presence
 
 `User.profilePictureUpdatedAt` records when a user last uploaded a profile

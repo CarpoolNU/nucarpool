@@ -102,6 +102,8 @@
 
       "Bash(yarn db:schema)",
       "Bash(yarn db:schema *)",
+      "Bash(yarn test:db)",
+      "Bash(yarn test:db *)",
       "Edit(package.json)",
       "Edit(yarn.lock)",
       "Edit(package-lock.json)",
