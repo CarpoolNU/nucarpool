@@ -20,7 +20,6 @@ import { trackViewRoute } from "../../utils/mixpanel";
 import useProfileImage from "../../utils/useProfileImage";
 import { AiOutlineUser } from "react-icons/ai";
 import useIsMobile from "../../utils/useIsMobile";
-import { counterpartLabel } from "../Sidebar/viewerAccess";
 
 /**
  * The card's activation, as a pair that cannot be half-supplied.
@@ -38,8 +37,9 @@ type CardActivation =
   | {
       onClick: () => void;
       /**
-       * The button's accessible name. Build it with `counterpartLabel` rather
-       * than from `preferredName`, or Viewer mode leaks the name it withholds.
+       * The button's accessible name. Built from `otherUser.preferredName`, the
+       * same value the card's heading and the image's `alt` read, so the three
+       * cannot disagree about who this card is about.
        */
       onClickLabel: string;
       /** Renders as `aria-current` on the activation button. */
@@ -74,15 +74,6 @@ type UserCardBaseProps = {
    * useful on such a card.
    */
   rightButtonDisabled?: boolean;
-  /**
-   * True when the reader is party to a request with this user.
-   *
-   * Only the two Requests-tab cards pass it. It governs one thing: whether a
-   * VIEWER sees the counterpart's name or their role in its place. See
-   * `disclosesCounterpartName` for why a relationship lifts that rule and
-   * discovery does not.
-   */
-  isCounterpart?: boolean;
   isUnread?: boolean;
   classname?: string;
   isMobileCondensedLayout?: boolean;
@@ -175,15 +166,6 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
     return <Spinner />;
   }
 
-  // One source for what this card calls the other person, so the heading below
-  // and the activation button's `aria-label` cannot disagree.
-  const displayName = counterpartLabel({
-    viewerRole: user.role,
-    isCounterpart: props.isCounterpart ?? false,
-    preferredName: props.otherUser.preferredName,
-    role: props.otherUser.role,
-  });
-
   return (
     <div
       className={classNames(
@@ -200,12 +182,11 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
         ) : profileImageUrl && !imageLoadError ? (
           <Image
             src={profileImageUrl}
-            // Not `preferredName`: this alt text announced the name the heading
-            // withholds from a VIEWER on a discovery card, which is the same
-            // accessibility-layer leak the activation button's label is careful
-            // to avoid. Fixed here because it is the identical defect in the
-            // same component, using the value computed for it two lines above.
-            alt={`${displayName}'s Profile Image`}
+            // The same value as the heading below and the activation button's
+            // `aria-label`. SCRUM-279 found this announcing a name Viewer mode
+            // was hiding on screen; SCRUM-323 removed the hiding, so all three
+            // read `preferredName` and there is nothing left to diverge.
+            alt={`${props.otherUser.preferredName}'s Profile Image`}
             width={56}
             height={56}
             className="h-14 w-14 rounded-full object-cover"
@@ -217,7 +198,7 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
         {/* Name and Pronouns */}
         <div className="flex flex-col items-start pl-3.5">
           <div className="text-lg font-semibold">
-            <p>{displayName}</p>
+            <p>{props.otherUser.preferredName}</p>
           </div>
           <div className="flex flex-row items-start gap-4">
             <p className="font-montserrat text-sm italic">

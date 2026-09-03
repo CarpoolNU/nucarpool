@@ -12,7 +12,6 @@ import ConnectModal from "./ConnectModal";
 import { UserContext } from "../../utils/userContext";
 import { trackEvent } from "../../utils/mixpanel";
 import useIsMobile from "../../utils/useIsMobile";
-import { counterpartLabel } from "../Sidebar/viewerAccess";
 import { connectAction } from "./connectAction";
 import { carpoolUnavailableExplanation } from "../../utils/roleCompatibility";
 import { driverHasNoSeatsExplanation } from "../../utils/carpoolSeats";
@@ -104,17 +103,6 @@ export const ConnectCard = (props: ConnectCardProps): React.JSX.Element => {
       }))
     : null;
 
-  // This is a **discovery** card, so a VIEWER sees the other person's role in
-  // place of their name — and the activation button's accessible
-  // name has to respect that, or Viewer mode withholds the name on screen while
-  // a screen reader reads it out.
-  const label = counterpartLabel({
-    viewerRole: user?.role ?? "",
-    isCounterpart: false,
-    preferredName: props.otherUser.preferredName,
-    role: props.otherUser.role,
-  });
-
   // Tapping the card expands it on mobile, and does nothing on desktop. That
   // used to be an `onClick` passed unconditionally with an `isMobile` check
   // inside it, which now matters: `UserCard` renders its stretched activation
@@ -128,7 +116,7 @@ export const ConnectCard = (props: ConnectCardProps): React.JSX.Element => {
     isMobile && props.handleMobileExpand
       ? {
           onClick: () => props.handleMobileExpand?.(props.otherUser.id),
-          onClickLabel: `Show ${label}'s full details`,
+          onClickLabel: `Show ${props.otherUser.preferredName}'s full details`,
         }
       : {};
 
