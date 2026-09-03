@@ -144,7 +144,7 @@ successfully look identical.
 | `check-seat-counts`                   | —     | **1 finding**²      | **unknown**          | 2026-09-02    | SCRUM-348     |
 | `repair-seat-residue`                 | —     | **2 outstanding**   | **unknown**          | 2026-09-02    | SCRUM-348     |
 | `cleanup-orphan-conversations`        | —     | **11 outstanding**³ | **620 outstanding**³ | 2026-09-03    | SCRUM-295     |
-| `backfill-profile-picture-timestamps` | —     | **not run**⁵        | **not run**⁵         | 2026-09-03    | SCRUM-276     |
+| `backfill-profile-picture-timestamps` | —     | **1,298 null**⁵     | **unknown**⁵         | 2026-09-03    | SCRUM-366     |
 
 ¹ 521 rider searches sit at `(0, 0)`, but none belongs to an onboarded user, so
 the script does not count them.
@@ -201,15 +201,36 @@ app, and the backfill never touches it by design. Worth knowing before
 SCRUM-287 drops the column: it destroys a copy nothing can read, not a
 preference a driver can see.
 
-⁵ New in SCRUM-276 and **not yet run anywhere**, which is a different state
-from "zero outstanding": the count is unknown because the column it fills was
-only just added. Nothing is broken in the meantime — `getPresignedDownloadUrl`
-falls back to the S3 `HeadObject` for any row whose timestamp is null, which is
-exactly the behaviour that preceded the column — so what is outstanding is the
-saving rather than a fix. Every user who uploads after the deploy is free from
-then on; this script converts everyone else. It cannot run until the column is
-deployed to the environment in question, which needs a PlanetScale deploy
-request.
+⁵ New in SCRUM-276 and **still not run anywhere**, but no longer for the reason
+first recorded here: the column is now deployed. Re-measured on 2026-09-03 for
+SCRUM-366, which is the contract half and cannot start until this row is clear.
+
+**The schema is deployed to both shared branches.** `user` carries
+`profile_picture_updated_at datetime(3)` on PlanetScale `main`, read from schema
+metadata, and on `staging`, where a query against the column succeeds. So the
+deploy request has happened and precondition 1 of SCRUM-366 holds.
+
+**Staging: 1,298 user rows, 1,298 null, 0 recorded.** Read-only, nothing
+modified.
+
+Two things that cell is not. It is **not an outstanding count** — it is an upper
+bound on one. The script only writes a row that has an object at
+`profile-pictures/{env}/{userId}`, and most of those 1,298 users have never
+uploaded a picture, so the number of rows it would actually fill is smaller and
+**cannot be determined from the database alone**. Answering it needs
+`s3:ListBucket`, which is why this is the one script here that reads AWS, and
+why its dry run — not this cell — is what SCRUM-366's precondition asks for.
+
+It is also **not evidence about the deployed build**. `0 recorded` is equally
+consistent with "Amplify has not shipped the SCRUM-276 build to staging" and
+with "it has, and nobody has uploaded a picture since"; the two are
+indistinguishable from here. That is precondition 3, and it is unverified.
+
+Nothing is broken in the meantime — `getPresignedDownloadUrl` falls back to the
+S3 `HeadObject` for any null row, exactly the behaviour that preceded the
+column — so what is outstanding is the saving rather than a fix. Every user who
+uploads after the deploy is free from then on; this script converts everyone
+else.
 
 **Staging was not a useful guide to the scale here.** 11 versus 620 is not a
 sampling difference: of the conversations that ever carried a thread, almost all
@@ -232,13 +253,19 @@ Read queries against the PlanetScale `main` branch return `403 Permission
 denied` with the credentials available here — **schema metadata for `main` is
 readable, only row data is not**, which is enough to confirm a column exists but
 never how many rows need fixing — so these cells cannot be filled
-from this repository. `backfill-profile-picture-timestamps` reads `not run`
-rather than `unknown` for a different reason: its column was only just added, so
-there is nothing to have measured yet (footnote 5). `cleanup-orphan-conversations` is the exception: it was
+from this repository. `cleanup-orphan-conversations` is the exception: it was
 measured read-only through DBeaver on 2026-09-03, which is the route that
-works. **Every other production cell above is an open question, not a zero** —
-and the 11-versus-620 gap on the row that _has_ been measured is the reason to
-treat them that way.
+works.
+
+`backfill-profile-picture-timestamps` is the one row DBeaver would **not**
+settle either. Its question is "which users have an object in S3 but no
+timestamp", and no amount of database access answers the first half — see
+footnote 5. That row needs the script's own dry run, run somewhere with
+`s3:ListBucket`.
+
+**Every other production cell above is an open question, not a zero** — and the
+11-versus-620 gap on the row that _has_ been measured is the reason to treat
+them that way.
 
 ### `emailtemplate.py` — a republish is outstanding
 
