@@ -453,6 +453,38 @@ describe("handleAcceptRequest — the writes a real acceptance makes", () => {
 });
 
 describe("handleRejectRequest", () => {
+  /**
+   * SCRUM-362. Reject and Withdraw Request are two buttons on one handler, and
+   * they used to share one sentence — so withdrawing your own request reported
+   * that the *other* person's request to *you* had been deleted. Wrong person,
+   * wrong direction, and a claim they had asked you when you had asked them.
+   */
+  it("says the request was withdrawn when the caller is the sender", async () => {
+    const { handleRejectRequest } = handlers();
+
+    await handleRejectRequest(user(), otherUser(), {
+      ...request,
+      fromUserId: "user-1",
+      toUserId: "user-2",
+    });
+
+    expect(mockToastSuccess).toHaveBeenCalledWith(
+      "Your carpool request to Robin has been withdrawn.",
+    );
+  });
+
+  it("still says deleted when the caller is the recipient", async () => {
+    // The unchanged half. The default fixture points user-2 → user-1, which is
+    // the incoming case, so this is the sentence Reject has always printed.
+    const { handleRejectRequest } = handlers();
+
+    await handleRejectRequest(user(), otherUser(), request);
+
+    expect(mockToastSuccess).toHaveBeenCalledWith(
+      "Robin's request to carpool with you has been deleted.",
+    );
+  });
+
   it("deletes the request and reports it", async () => {
     const { handleRejectRequest } = handlers();
 

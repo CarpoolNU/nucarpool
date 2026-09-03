@@ -237,8 +237,18 @@ export const createRequestHandlers = (
       return;
     }
 
+    // Which way the request pointed decides the sentence. This one string was
+    // used for both, so withdrawing your *own* request reported
+    // "<name>'s request to carpool with you has been deleted" — the wrong
+    // person, the wrong direction, and a claim that they had asked you when
+    // you had asked them.
+    //
+    // Both buttons that reach here are in `MessageHeader`, labelled Reject and
+    // Withdraw Request, and both call the same handler. SCRUM-362.
     toast.success(
-      `${otherUser.preferredName}'s request to carpool with you has been deleted.`,
+      request.fromUserId === user.id
+        ? `Your carpool request to ${otherUser.preferredName} has been withdrawn.`
+        : `${otherUser.preferredName}'s request to carpool with you has been deleted.`,
     );
   };
 

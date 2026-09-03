@@ -1,5 +1,4 @@
 import React, { useContext } from "react";
-import { RequestStatus } from "@prisma/client";
 import { EnhancedPublicUser } from "../../utils/types";
 import { UserContext } from "../../utils/userContext";
 import { roleMismatchExplanation } from "../../utils/roleCompatibility";
@@ -7,6 +6,7 @@ import { AiOutlineUser } from "react-icons/ai";
 import Image from "next/image";
 import useProfileImage from "../../utils/useProfileImage";
 import useIsMobile from "../../utils/useIsMobile";
+import { messageHeaderControls } from "./messageHeaderControls";
 
 /**
  * How a button in flight looks. The same `opacity-40` `SendBar` already uses, so
@@ -32,16 +32,23 @@ const MessageHeader = ({
   groupId,
   isMutating = false,
 }: MessageHeaderProps) => {
-  // Only a request still awaiting an answer offers Accept, Reject or Withdraw.
-  // An accepted request stays attached to the user so the pair keep
-  // their conversation, but it is no longer something to respond to. This used
-  // to be a plain presence check, which is why an accepted request kept showing
-  // its Accept button; the group comparison below was standing in for the status
-  // the row did not carry.
-  const hasIncomingRequest =
-    selectedUser.incomingRequest?.status === RequestStatus.PENDING;
-  const hasOutgoingRequest =
-    selectedUser.outgoingRequest?.status === RequestStatus.PENDING;
+  // Which controls this pair's state offers. The rule lives in
+  // `messageHeaderControls` so it can be tested — this component cannot be,
+  // there being no jsdom or React testing library here.
+  //
+  // `none` for a pair already in the same group is SCRUM-362: that state used
+  // to offer a "Leave Conversation" button wired to `onReject`, so pressing it
+  // deleted their accepted request and destroyed a thread they could not get
+  // back. See that module for why it was removed rather than repaired.
+  const controls = messageHeaderControls({
+    incomingStatus: selectedUser.incomingRequest?.status,
+    outgoingStatus: selectedUser.outgoingRequest?.status,
+    groupId,
+    otherCarpoolId: selectedUser.carpoolId,
+  });
+
+  const hasIncomingRequest = controls.kind === "respond";
+  const hasOutgoingRequest = controls.kind === "withdraw";
 
   // A pending request whose two parties can no longer carpool - either of them
   // switched role after it was sent - is no longer hidden from the Requests tab,
@@ -128,68 +135,62 @@ const MessageHeader = ({
         </span>
       </div>
       <div className="relative flex items-center justify-between">
-        {hasIncomingRequest &&
-          (!groupId || selectedUser.carpoolId !== groupId) && (
-            <>
-              {roleMismatch && (
-                <p className="font-montserrat mr-10 max-w-sm text-sm text-gray-700">
-                  {roleMismatch}
-                </p>
-              )}
+        {hasIncomingRequest && (
+          <>
+            {roleMismatch && (
+              <p className="font-montserrat mr-10 max-w-sm text-sm text-gray-700">
+                {roleMismatch}
+              </p>
+            )}
+            <button
+              onClick={onReject}
+              disabled={isMutating}
+              className={`mr-10 rounded-lg border-2 border-black bg-white py-2 text-center text-lg font-medium text-black hover:bg-gray-100 sm:px-8 md:px-12 lg:px-20 ${
+                isMutating ? DISABLED_CLASS : ""
+              }`}
+            >
+              Reject
+            </button>
+            {!roleMismatch && (
               <button
-                onClick={onReject}
+                onClick={onAccept}
                 disabled={isMutating}
-                className={`mr-10 rounded-lg border-2 border-black bg-white py-2 text-center text-lg font-medium text-black hover:bg-gray-100 sm:px-8 md:px-12 lg:px-20 ${
+                className={`border-northeastern-red bg-northeastern-red mr-10 rounded-lg border-2 py-2 text-center text-lg font-medium text-white hover:bg-red-700 sm:px-8 md:px-12 lg:px-20 ${
                   isMutating ? DISABLED_CLASS : ""
                 }`}
               >
-                Reject
+                Accept
               </button>
-              {!roleMismatch && (
-                <button
-                  onClick={onAccept}
-                  disabled={isMutating}
-                  className={`border-northeastern-red bg-northeastern-red mr-10 rounded-lg border-2 py-2 text-center text-lg font-medium text-white hover:bg-red-700 sm:px-8 md:px-12 lg:px-20 ${
-                    isMutating ? DISABLED_CLASS : ""
-                  }`}
-                >
-                  Accept
-                </button>
-              )}
-            </>
-          )}
-        {hasOutgoingRequest &&
-          !hasIncomingRequest &&
-          (!groupId || selectedUser.carpoolId !== groupId) && (
-            <>
-              {roleMismatch && (
-                <p className="font-montserrat mr-10 max-w-sm text-sm text-gray-700">
-                  {roleMismatch}
-                </p>
-              )}
-              <button
-                onClick={onReject}
-                disabled={isMutating}
-                className={`mr-10 rounded-lg border-2 border-black bg-white py-2 text-center text-lg font-medium text-black hover:bg-gray-100 md:px-12 lg:px-20 ${
-                  isMutating ? DISABLED_CLASS : ""
-                }`}
-              >
-                Withdraw Request
-              </button>
-            </>
-          )}
-        {groupId && selectedUser.carpoolId === groupId && (
-          <button
-            onClick={onReject}
-            disabled={isMutating}
-            className={`mr-10 rounded-lg border-2 border-black bg-white py-2 text-center text-lg font-medium text-black hover:bg-gray-100 md:px-12 lg:px-20 ${
-              isMutating ? DISABLED_CLASS : ""
-            }`}
-          >
-            Leave Conversation
-          </button>
+            )}
+          </>
+        )}
+        {hasOutgoingRequest && (
+          <>
+            {roleMismatch && (
+              <p className="font-montserrat mr-10 max-w-sm text-sm text-gray-700">
+                {roleMismatch}
+              </p>
+            )}
+            <button
+              onClick={onReject}
+              disabled={isMutating}
+              className={`mr-10 rounded-lg border-2 border-black bg-white py-2 text-center text-lg font-medium text-black hover:bg-gray-100 md:px-12 lg:px-20 ${
+                isMutating ? DISABLED_CLASS : ""
+              }`}
+            >
+              Withdraw Request
+            </button>
+          </>
         )}
 
+        {/*
+          A pair already carpooling together get no button here, only the
+          close control below. There used to be a "Leave Conversation" button
+          in this slot on `onReject`, which deleted their accepted request and
+          with it a thread they could not recreate. SCRUM-362 removed it: `×`
+          already closes the panel, and the Group page already leaves the
+          carpool.
+        */}
         <button
           onClick={handleClose}
           className="h-14 w-14 cursor-pointer items-center justify-center text-3xl text-black"
