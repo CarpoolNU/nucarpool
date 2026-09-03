@@ -11,6 +11,15 @@
  * lets go. `pusher-js` is mocked, so nothing here opens a connection.
  */
 
+// Marks this file as a module. Without it TypeScript treats the file as a
+// global script and every top-level declaration below becomes a program-wide
+// global, so the next test file to declare a name this one uses fails to
+// compile — with most of the errors reported against *this* file rather than
+// the new one. The `jest.mock` + `jest.resetModules()` + dynamic-`import()`
+// idiom is why no ordinary import already does the job: the module under test
+// must not be imported before its mock is registered. Keep it. See SCRUM-355.
+export {};
+
 const mockDisconnect = jest.fn();
 // Parameters are declared so `mock.calls[n][1]` is typed; without them the call
 // tuple is empty and `tsc` rejects the index, even though jest is happy.

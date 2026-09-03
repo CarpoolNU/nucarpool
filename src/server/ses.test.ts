@@ -12,11 +12,6 @@
  * `@aws-sdk/client-ses` is mocked, so nothing here opens a socket to SES.
  */
 
-// This import is load-bearing beyond `serverEnv`: it is what makes the file a
-// module rather than a global script. `pusherClient.test.ts` has no top-level
-// import, so its `const load` is a *global*, and the identically named helper
-// below is a redeclaration `tsc` rejects — reported against that file, not
-// this one. SCRUM-355 tracks fixing it at the source.
 import { serverEnv } from "../utils/env/server";
 
 const mockSESClientConstructor = jest.fn(
