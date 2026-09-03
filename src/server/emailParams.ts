@@ -22,6 +22,52 @@ import { SendTemplatedEmailCommandInput } from "@aws-sdk/client-ses";
  * every acceptance email was worded for the other party.
  */
 
+/**
+ * Escaping of user-controlled template data.
+ *
+ * SES renders the `HtmlPart` of a stored template with Handlebars, and the
+ * three values below — a recipient's preferred name, the other party's name,
+ * and the body of a request or chat message — are all user-controlled and all
+ * land inside HTML tags:
+ *
+ *   <p>Hello {{preferredName}},</p>
+ *   <p>{{OtherUser}} sent you a message in Carpool NU:</p>
+ *   <p><strong>{{message}}</strong></p>
+ *
+ * In stock Handlebars a double-brace placeholder HTML-escapes and only a
+ * triple brace does not, so `{{message}}` would be safe. **SES does not follow
+ * that rule.** The AWS SES developer guide states it outright:
+ *
+ *   "SES doesn't escape HTML content when rendering the HTML template for a
+ *    message. This means if you're including user inputted data, such as from
+ *    a contact form, you will need to escape it on the client side."
+ *
+ *   https://docs.aws.amazon.com/ses/latest/dg/send-personalized-email-advanced.html
+ *
+ * So escaping is ours to do, and `generateEmailParams` is the one place to do
+ * it: every send goes through it, and no other code builds `TemplateData`.
+ *
+ * Only `&`, `<` and `>` are escaped, not quotes. Every placeholder in
+ * `scripts/emailtemplate.py` sits in element text content, never in an
+ * attribute value, and quotes carry no meaning there. Escaping them instead
+ * costs real text: one `TemplateData` blob feeds both the `HtmlPart` and the
+ * `TextPart`, so anything escaped here shows up literally in the plain-text
+ * alternative, and apostrophes are far too common in ordinary messages to
+ * mangle. `&`, `<` and `>` are rare enough for that to be an acceptable
+ * trade, and the plain-text part has no injection semantics to protect.
+ *
+ * **If a placeholder is ever moved into an attribute** — `href="{{...}}"`, say
+ * — this is no longer sufficient and the quote characters have to come with
+ * it. See SCRUM-360 for splitting the HTML and text variables, which is what
+ * would let this escape aggressively without damaging the `TextPart`.
+ */
+export function escapeHtmlText(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 export interface BaseEmailSchema {
   senderName: string;
   senderEmail: string;
@@ -59,18 +105,18 @@ export function generateEmailParams(
         ? "DriverRequestTemplate"
         : "RiderRequestTemplate";
       templateData = {
-        preferredName: requestSchema.receiverName,
-        OtherUser: requestSchema.senderName,
-        message: requestSchema.messagePreview,
+        preferredName: escapeHtmlText(requestSchema.receiverName),
+        OtherUser: escapeHtmlText(requestSchema.senderName),
+        message: escapeHtmlText(requestSchema.messagePreview),
       };
       break;
     case "message":
       const messageSchema = schema as MessageEmailSchema;
       templateName = "MessageNotificationTemplate";
       templateData = {
-        preferredName: messageSchema.receiverName,
-        OtherUser: messageSchema.senderName,
-        message: messageSchema.messageText,
+        preferredName: escapeHtmlText(messageSchema.receiverName),
+        OtherUser: escapeHtmlText(messageSchema.senderName),
+        message: escapeHtmlText(messageSchema.messageText),
       };
       break;
     case "acceptance":
@@ -79,8 +125,8 @@ export function generateEmailParams(
         ? "DriverAcceptanceTemplate"
         : "RiderAcceptanceTemplate";
       templateData = {
-        preferredName: acceptanceSchema.receiverName,
-        OtherUser: acceptanceSchema.senderName,
+        preferredName: escapeHtmlText(acceptanceSchema.receiverName),
+        OtherUser: escapeHtmlText(acceptanceSchema.senderName),
       };
       break;
     default:
