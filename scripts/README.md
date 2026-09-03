@@ -124,17 +124,17 @@ A zero outstanding count therefore means _"nothing left to do"_, **not**
 _"it was run"_ — a script that never had candidates and a script applied
 successfully look identical.
 
-| Script                         | local | staging             | production  | Last verified | By            |
-| ------------------------------ | ----- | ------------------- | ----------- | ------------- | ------------- |
-| `backfill-group-preferences`   | —     | **3 outstanding**   | **unknown** | 2026-08-31    | initial audit |
-| `backfill-request-status`      | —     | 0 outstanding       | **unknown** | 2026-08-31    | initial audit |
-| `cleanup-orphan-locations`     | —     | 0 outstanding       | **unknown** | 2026-08-31    | initial audit |
-| `check-self-requests`          | —     | 0 findings          | **unknown** | 2026-08-31    | initial audit |
-| `check-driverless-groups`      | —     | **1 finding**       | **unknown** | 2026-08-31    | initial audit |
-| `check-profile-coordinates`    | —     | 0 findings¹         | **unknown** | 2026-08-31    | initial audit |
-| `check-seat-counts`            | —     | **1 finding**²      | **unknown** | 2026-09-02    | SCRUM-348     |
-| `repair-seat-residue`          | —     | **2 outstanding**   | **unknown** | 2026-09-02    | SCRUM-348     |
-| `cleanup-orphan-conversations` | —     | **11 outstanding**³ | **unknown** | 2026-09-02    | SCRUM-295     |
+| Script                         | local | staging             | production           | Last verified | By            |
+| ------------------------------ | ----- | ------------------- | -------------------- | ------------- | ------------- |
+| `backfill-group-preferences`   | —     | **3 outstanding**   | **unknown**          | 2026-08-31    | initial audit |
+| `backfill-request-status`      | —     | 0 outstanding       | **unknown**          | 2026-08-31    | initial audit |
+| `cleanup-orphan-locations`     | —     | 0 outstanding       | **unknown**          | 2026-08-31    | initial audit |
+| `check-self-requests`          | —     | 0 findings          | **unknown**          | 2026-08-31    | initial audit |
+| `check-driverless-groups`      | —     | **1 finding**       | **unknown**          | 2026-08-31    | initial audit |
+| `check-profile-coordinates`    | —     | 0 findings¹         | **unknown**          | 2026-08-31    | initial audit |
+| `check-seat-counts`            | —     | **1 finding**²      | **unknown**          | 2026-09-02    | SCRUM-348     |
+| `repair-seat-residue`          | —     | **2 outstanding**   | **unknown**          | 2026-09-02    | SCRUM-348     |
+| `cleanup-orphan-conversations` | —     | **11 outstanding**³ | **620 outstanding**³ | 2026-09-03    | SCRUM-295     |
 
 ¹ 521 rider searches sit at `(0, 0)`, but none belongs to an onboarded user, so
 the script does not count them.
@@ -144,22 +144,35 @@ the script does not count them.
 row, which is the finding `check-driverless-groups` reports as "empty" — the
 two scripts see the same group from different sides.
 
-³ 11 orphan conversations holding **25 messages**. Same provenance caveat as
-the two rows above: measured by direct SQL on SCRUM-295, not by running the
-script, and no `--apply` has been run anywhere.
+³ Staging: 11 orphan conversations holding **25 messages**. Production:
+**620 conversations holding 1,258 messages**, every one of the 620 non-empty,
+the largest holding 28 — measured read-only through DBeaver on 2026-09-03, with
+nothing modified.
 
-**None of these three figures was produced by running its script.** They come
-from the direct SQL on SCRUM-348 and SCRUM-295, run against staging on
-2026-09-02, before any of the three scripts existed. The conditions are the same, so the numbers should hold,
+**Staging was not a useful guide to the scale here.** 11 versus 620 is not a
+sampling difference: of the conversations that ever carried a thread, almost all
+of the production population is orphaned. Treat the other two scripts' staging
+figures with the same suspicion.
+
+**620 exceeds the default `--max` of 500, so `--apply` will refuse** with exit
+code 2 until the ceiling is raised explicitly (`--apply --max 700`). The dry run
+reports normally. That is the guard working: 1,258 messages should not be
+deleted by a command indistinguishable from the one that would delete eleven
+rows.
+
+**No `--apply` has been run anywhere**, and the seat figures on the two rows
+above were produced by direct SQL rather than by running their scripts. The conditions are the same, so the numbers should hold,
 but a dry run has not confirmed them and **no `--apply` has been run anywhere**.
 Run the dry run before the apply rather than trusting this cell.
 
-**Production is `unknown` for every row, and not for lack of trying.** Read
-queries against the PlanetScale `main` branch return `403 Permission denied`
-with the credentials available here. Determining production state needs either
-a token with production read access or someone running the dry runs with
-`DATABASE_URL` pointed at production. **Until that happens, every production
-cell above is an open question, not a zero.**
+**Production is `unknown` for every row but one, and not for lack of trying.**
+Read queries against the PlanetScale `main` branch return `403 Permission
+denied` with the credentials available here, so these cells cannot be filled
+from this repository. `cleanup-orphan-conversations` is the exception: it was
+measured read-only through DBeaver on 2026-09-03, which is the route that
+works. **Every other production cell above is an open question, not a zero** —
+and the 11-versus-620 gap on the row that _has_ been measured is the reason to
+treat them that way.
 
 ### `emailtemplate.py` — a republish is outstanding
 
@@ -221,14 +234,17 @@ unsuffixed variables can be deleted from `emailParams.ts`.
    they re-save their profile. **The production count is the open question**:
    the 403 noted above means nobody has measured it, and one row on staging is a
    lower bound rather than the answer.
-4. **11 orphan conversations on staging holding 25 messages.** The residue of
-   the cascade pointing the wrong way, fixed in `requests.delete` by SCRUM-295
-   so the population cannot grow. Worth deciding on rather than deferring: the
-   rows are unreachable by every user-facing path, so they are pure retention
-   risk, and they inflate `admin.getDashboardStats`'s conversation count and
-   messages-per-conversation average permanently until removed. Deleting them
-   destroys 25 real messages, which is the point of the per-candidate counts in
-   the dry run.
+4. **620 orphan conversations in production, holding 1,258 messages.** The
+   residue of the cascade pointing the wrong way, fixed in `requests.delete` by
+   SCRUM-295 so the population cannot grow. **This is the largest finding in
+   this table by two orders of magnitude**, and the one where staging (11
+   conversations, 25 messages) was most misleading. The rows are unreachable by
+   every user-facing path, so they are pure retention risk — private message
+   content nobody can read and nobody can delete — and they inflate
+   `admin.getDashboardStats`'s conversation count and messages-per-conversation
+   average permanently until removed. Deleting them destroys 1,258 real
+   messages, which is why the dry run prints per-candidate counts and why
+   `--apply` refuses until `--max` is raised past 620.
 
 ### Re-checking without running the scripts
 

@@ -541,8 +541,8 @@ export const requestsRouter = router({
       // was nothing running Request → Conversation, so every decline,
       // withdrawal and "Leave Conversation" left a `conversation` row and all
       // its `message` rows behind, with `Conversation.requestId` dangling at a
-      // row that no longer existed. 11 of them, holding 25 real messages, on
-      // production-derived staging.
+      // row that no longer existed. 620 of them in production, holding 1,258
+      // real messages between them.
       //
       // Deleting rather than preserving, decided on SCRUM-295: the thread is
       // already unreachable the instant the request row goes.

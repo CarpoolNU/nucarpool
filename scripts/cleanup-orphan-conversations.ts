@@ -17,14 +17,25 @@
  * them is `admin.getDashboardStats`, which is why the dashboard's conversation
  * figure and its messages-per-conversation average drift upward permanently.
  *
- * **This deletes real message content.** 11 conversations holding 25 messages
- * on production-derived staging when SCRUM-295 was measured; production is
- * unknown, because read queries against the PlanetScale `main` branch return
- * 403 with the credentials in this repository. The dry run prints the message
- * count per conversation before anything is written, and that is the number to
- * look at: these are words two people typed to each other, and nobody can read
- * them any more. Deleting them is the privacy-respecting answer rather than a
- * tidy-up, but it is irreversible, so read the report.
+ * **This deletes real message content, and production is much larger than
+ * staging.** Measured read-only on 2026-09-03:
+ *
+ *   - production: **620 conversations, all of them non-empty, 1,258 messages**
+ *     in total, the largest holding 28
+ *   - staging: 11 conversations, 25 messages
+ *
+ * So `--apply` against production destroys over twelve hundred messages that
+ * two people typed to each other and nobody can read any more. Deleting them
+ * is the privacy-respecting answer rather than a tidy-up — they are
+ * unreachable, undeletable by their authors, and inflating the admin dashboard
+ * — but it is irreversible, so read the report first. The dry run prints the
+ * message count per conversation for exactly that reason.
+ *
+ * **620 exceeds the default `--max` of 500, deliberately.** The dry run reports
+ * fine, but `--apply` will refuse with exit code 2 until the ceiling is raised
+ * explicitly — `--apply --max 700`. That is the guard doing its job: a
+ * population this size should not be deleted by a command that looks identical
+ * to the one that would have deleted eleven rows.
  *
  * Safety, because this deletes production rows:
  *

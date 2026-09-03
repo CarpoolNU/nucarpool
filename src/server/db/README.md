@@ -451,11 +451,16 @@ count it reports is the number actually removed.
 prints the message count per conversation; that is the number to read before
 applying.
 
-Staging reported 11 orphan conversations holding 25 messages on 2026-09-02;
-production is unknown. Both the record and the query that answers it without
-running the script live in
-[`scripts/README.md`](../../../scripts/README.md#run-state-record) — update it
-when you run this.
+**Production holds 620 of them, containing 1,258 messages** — measured
+read-only on 2026-09-03, every one of the 620 non-empty, the largest holding 28. Staging reported 11 conversations and 25 messages on 2026-09-02, so
+staging was not a useful guide to the scale: of the conversations that ever
+carried a thread, almost all of the production population is orphaned.
+
+That is over twelve hundred messages, and 620 exceeds the script's default
+`--max` of 500, so `--apply` refuses until the ceiling is raised explicitly.
+Both the record and the query that answers it without running the script live
+in [`scripts/README.md`](../../../scripts/README.md#run-state-record) — update
+it when you run this.
 
 ### Consequences to know about
 
