@@ -7,7 +7,6 @@ import {
 } from "../../utils/types";
 import { UserContext } from "../../utils/userContext";
 import { roleMismatchExplanation } from "../../utils/roleCompatibility";
-import { counterpartLabel } from "../Sidebar/viewerAccess";
 import { UserCard } from "./UserCard";
 import React from "react";
 
@@ -28,9 +27,9 @@ export const SentCard = (props: SentCardProps): React.JSX.Element => {
   //
   // `user` **can** be a VIEWER here: the Requests tab used to
   // render Viewer-mode copy in place of every card, which left a VIEWER unable
-  // to withdraw a request they had sent. `isCounterpart` below is what lets the
-  // name still show - withholding it would be pointless when the notice names
-  // them anyway, and would make several requests indistinguishable.
+  // to withdraw a request they had sent. The name shows either way now -
+  // SCRUM-323 removed the Viewer-mode name withholding entirely, so the notice
+  // below and the card's heading name the same person.
   const roleMismatch = user
     ? roleMismatchExplanation(
         user.role,
@@ -44,26 +43,12 @@ export const SentCard = (props: SentCardProps): React.JSX.Element => {
   // `UserCard`, which made the favourite star a focusable descendant of a
   // widget role — `nested-interactive` — and meant a click on the star bubbled
   // up here and opened the conversation as a side effect.
-  //
-  // `isCounterpart` is always true on a request card, so this resolves to the
-  // preferred name today for every reader including a VIEWER. It
-  // still goes through `counterpartLabel` rather than reading `preferredName`
-  // directly, so that if the disclosure rule ever narrows, the button's
-  // `aria-label` narrows with it instead of quietly announcing a name the card
-  // has stopped showing. `ConnectCard` is where that rule actually bites.
-  const label = counterpartLabel({
-    viewerRole: user?.role ?? "",
-    isCounterpart: true,
-    preferredName: props.otherUser.preferredName,
-    role: props.otherUser.role,
-  });
 
   return (
     <UserCard
       otherUser={props.otherUser}
-      isCounterpart
       onClick={props.onClick}
-      onClickLabel={`Open conversation with ${label}`}
+      onClickLabel={`Open conversation with ${props.otherUser.preferredName}`}
       isSelected={props.selectedUser?.id === props.otherUser.id}
       message={props.latestMessage?.content}
       notice={roleMismatch ?? undefined}
