@@ -388,12 +388,27 @@ decline, withdrawal and "Leave Conversation" left a `conversation` row and all
 its `message` rows behind, with `Conversation.requestId` dangling at a row that
 no longer existed.
 
-Those rows are **unreachable, not merely untidy**:
+Those rows are **unreachable, not merely untidy** — and there are three read
+paths, not two, which matters because they do not all use the same link:
 
 - `messages.getConversationMessages` looks the request up first and throws
-  `NOT_FOUND` without it, so no participant check ever passes.
-- The unread count joins through `conversation.request.some(...)`, which
-  matches nothing for an orphan, so they never reach a badge.
+  `NOT_FOUND` without it, so no participant check ever passes. This one is
+  settled by `Conversation.requestId` alone.
+- `requests.me` includes `sentRequests`/`receivedRequests` → `conversation` →
+  `messages`, which traverses **`Request.conversationId`** — the other link.
+- The unread count joins `conversation.request.some(...)`, the back-relation on
+  that same column, so it never reaches a badge.
+
+That split matters: "no request owns this row" and "nothing can read this row"
+are two different questions, and `findOrphanConversationIds` only asks the
+first. Both were asked
+of production, read-only, on 2026-09-03: **0** orphans were still pointed at by
+a live request through `conversationId`, and all **620** fail both links. The
+two answers coincide today, because no current write path can link a
+conversation to a request other than the one it was keyed on — but the schema
+does not enforce it, since `Request.conversationId` is not unique. That is why
+the cleanup script re-checks both links before each delete, and why SCRUM-364
+tracks aligning the predicate with that check.
 
 So the cost was not a broken feature. It was private message content persisting
 indefinitely with no route to it and no deletion path, plus two problems that
@@ -456,8 +471,15 @@ read-only on 2026-09-03, every one of the 620 non-empty, the largest holding 28.
 staging was not a useful guide to the scale: of the conversations that ever
 carried a thread, almost all of the production population is orphaned.
 
+**All 620 are confirmed unreachable through both links**, per the reads above.
+What has _not_ been decided is whether to delete them: that is held in
+SCRUM-365 and needs explicit human approval. No `--apply` has been run in any
+environment.
+
 That is over twelve hundred messages, and 620 exceeds the script's default
 `--max` of 500, so `--apply` refuses until the ceiling is raised explicitly.
+Raising it is not the intended route: SCRUM-364 adds a subset option so the
+population can be retired in tranches beneath the existing ceiling.
 Both the record and the query that answers it without running the script live
 in [`scripts/README.md`](../../../scripts/README.md#run-state-record) — update
 it when you run this.

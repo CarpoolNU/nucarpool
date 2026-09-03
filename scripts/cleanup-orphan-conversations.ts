@@ -10,18 +10,27 @@
  * for the backlog rather than a recurring chore — running it a second time
  * should report zero.
  *
- * **These rows are unreachable, not merely untidy.**
- * `getConversationMessages` looks the request up first and throws NOT_FOUND
- * without it; the unread count joins through `conversation.request.some(...)`,
- * which matches nothing. No user-facing path can read one. What does count
- * them is `admin.getDashboardStats`, which is why the dashboard's conversation
- * figure and its messages-per-conversation average drift upward permanently.
+ * **These rows are unreachable, not merely untidy — and that was measured
+ * rather than assumed.** `getConversationMessages` looks the request up first
+ * and throws NOT_FOUND without it. The other two read paths, `requests.me` and
+ * the unread count, reach a conversation through `Request.conversationId`
+ * instead, which `findOrphanConversationIds` does not test — so "no request
+ * owns this row" and "nothing can read this row" are two different questions.
+ * Both were answered on production, read-only, on 2026-09-03: **zero** orphans
+ * were still pointed at by a live request, and all **620** fail both links. So
+ * the plan below was exactly the unreachable set. What counts them regardless is
+ * `admin.getDashboardStats`, which is why the dashboard's conversation figure
+ * and its messages-per-conversation average drift upward permanently.
+ * SCRUM-364 tracks aligning the predicate with the pre-delete re-check.
  *
  * **This deletes real message content, and production is much larger than
  * staging.** Measured read-only on 2026-09-03:
  *
  *   - production: **620 conversations, all of them non-empty, 1,258 messages**
  *     in total, the largest holding 28
+ *   - production, both links: **620** unreachable through
+ *     `Conversation.requestId` *and* `Request.conversationId`; **0** still
+ *     referenced either way
  *   - staging: 11 conversations, 25 messages
  *
  * So `--apply` against production destroys over twelve hundred messages that
