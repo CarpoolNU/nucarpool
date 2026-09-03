@@ -135,7 +135,7 @@ successfully look identical.
 
 | Script                                | local | staging             | production           | Last verified | By            |
 | ------------------------------------- | ----- | ------------------- | -------------------- | ------------- | ------------- |
-| `backfill-group-preferences`          | —     | **3 outstanding**   | **unknown**          | 2026-08-31    | initial audit |
+| `backfill-group-preferences`          | —     | **3 outstanding**⁴  | **unknown**⁴         | 2026-09-03    | SCRUM-287     |
 | `backfill-request-status`             | —     | 0 outstanding       | **unknown**          | 2026-08-31    | initial audit |
 | `cleanup-orphan-locations`            | —     | 0 outstanding       | **unknown**          | 2026-08-31    | initial audit |
 | `check-self-requests`                 | —     | 0 findings          | **unknown**          | 2026-08-31    | initial audit |
@@ -144,7 +144,7 @@ successfully look identical.
 | `check-seat-counts`                   | —     | **1 finding**²      | **unknown**          | 2026-09-02    | SCRUM-348     |
 | `repair-seat-residue`                 | —     | **2 outstanding**   | **unknown**          | 2026-09-02    | SCRUM-348     |
 | `cleanup-orphan-conversations`        | —     | **11 outstanding**³ | **620 outstanding**³ | 2026-09-03    | SCRUM-295     |
-| `backfill-profile-picture-timestamps` | —     | **not run**⁴        | **not run**⁴         | 2026-09-03    | SCRUM-276     |
+| `backfill-profile-picture-timestamps` | —     | **not run**⁵        | **not run**⁵         | 2026-09-03    | SCRUM-276     |
 
 ¹ 521 rider searches sit at `(0, 0)`, but none belongs to an onboarded user, so
 the script does not count them.
@@ -171,7 +171,37 @@ below, under
 SCRUM-364 tracks aligning the script's plan with its own pre-delete re-check,
 which already tests both links.
 
-⁴ New in SCRUM-276 and **not yet run anywhere**, which is a different state
+⁴ Re-measured read-only on 2026-09-03 for SCRUM-287, which cannot start until
+this row reads zero everywhere. Staging still has **3** un-migrated rows, and
+all three carry a **plain-text** legacy message rather than a
+`GROUP_DETAILS_V1:` blob — none encoded, none blank. `parseGroupDetails` maps
+plain text to `notes`, so `hasAnyDetail` is true for all three and the backfill
+would write all three. **Dropping `carpool_search.group_message` today would
+lose three drivers' notes**, which confirms finding 1 below rather than
+softening it.
+
+Two counts, and this table records the first: the SQL below counts _un-migrated
+rows with a legacy message_, while the script additionally reports how many
+_carry preferences worth writing_. They coincide on staging (3 and 3). They need
+not in general — a row whose blob parses to nothing is deliberately skipped and
+stays in the first count forever — so the script's own dry run, not this cell,
+is what SCRUM-287's precondition asks for.
+
+Production is still `unknown` and could not be measured: data queries against
+`main` return 403 (below). **Schema metadata for `main` is readable, though, and
+that settles a different question** — `carpool_search` there carries
+`group_notes`, `group_music_preference` and `group_conversation_style` alongside
+the legacy `group_message`, so the SCRUM-253 schema _is_ deployed to production.
+Precondition 1 of SCRUM-287 holds; precondition 2 is the open one.
+
+Separately, `group` on staging holds 11 rows, of which **1 has a non-blank
+`message`**. Nothing reads that column — `resolveGroupDetails` only ever reads
+`carpool_search.group_message` — so that value is already unreachable from the
+app, and the backfill never touches it by design. Worth knowing before
+SCRUM-287 drops the column: it destroys a copy nothing can read, not a
+preference a driver can see.
+
+⁵ New in SCRUM-276 and **not yet run anywhere**, which is a different state
 from "zero outstanding": the count is unknown because the column it fills was
 only just added. Nothing is broken in the meantime — `getPresignedDownloadUrl`
 falls back to the S3 `HeadObject` for any row whose timestamp is null, which is
@@ -197,10 +227,14 @@ above were produced by direct SQL rather than by running their scripts. The cond
 but a dry run has not confirmed them and **no `--apply` has been run anywhere**.
 Run the dry run before the apply rather than trusting this cell.
 
-**Production is `unknown` for every row but one, and not for lack of trying.**
+**Production is unmeasured for every row but one, and not for lack of trying.**
 Read queries against the PlanetScale `main` branch return `403 Permission
-denied` with the credentials available here, so these cells cannot be filled
-from this repository. `cleanup-orphan-conversations` is the exception: it was
+denied` with the credentials available here — **schema metadata for `main` is
+readable, only row data is not**, which is enough to confirm a column exists but
+never how many rows need fixing — so these cells cannot be filled
+from this repository. `backfill-profile-picture-timestamps` reads `not run`
+rather than `unknown` for a different reason: its column was only just added, so
+there is nothing to have measured yet (footnote 5). `cleanup-orphan-conversations` is the exception: it was
 measured read-only through DBeaver on 2026-09-03, which is the route that
 works. **Every other production cell above is an open question, not a zero** —
 and the 11-versus-620 gap on the row that _has_ been measured is the reason to
@@ -250,11 +284,15 @@ unsuffixed variables can be deleted from `emailParams.ts`.
 
 ### Four findings worth acting on
 
-1. **`backfill-group-preferences` is not finished on staging — 3 rows.** This
-   blocks dropping `carpool_search.group_message`, which is only safe once the
+1. **`backfill-group-preferences` is not finished on staging — 3 rows**, and as
+   of 2026-09-03 that is confirmed by direct read rather than inferred: all
+   three hold plain-text legacy messages, which `parseGroupDetails` turns into
+   notes, so the backfill would write all three. This blocks dropping
+   `carpool_search.group_message` (SCRUM-287), which is only safe once the
    backfill has been applied _everywhere_. While those rows exist,
    `resolveGroupDetails`'s legacy fallback is the only thing keeping their
-   preferences readable, so dropping the column would lose data.
+   preferences readable, so dropping the column would lose data. The production
+   count remains unmeasured — see footnote 4.
 2. **One driverless `CarpoolGroup` on staging.** Expected rather than alarming:
    the guards against it are not retroactive, which is why the check exists.
    Worth a look, and there is no automatic repair by design.
