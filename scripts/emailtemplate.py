@@ -20,6 +20,17 @@ region_name=aws_region
 )
 
 # Define the templates
+#
+# `{{preferredName}}`, `{{OtherUser}}` and `{{message}}` are user-controlled, and
+# SES does not HTML-escape template substitutions in an `HtmlPart` — see the note
+# at https://docs.aws.amazon.com/ses/latest/dg/send-personalized-email-advanced.html
+# and the comment above `escapeHtmlText` in `src/server/emailParams.ts`, which is
+# where the escaping happens.
+#
+# That escaping covers `&`, `<` and `>` only, which is sufficient for element text
+# content and nothing more. **Keep every placeholder in text content.** Moving one
+# into an attribute value — `href="{{...}}"`, say — needs quote escaping too, and
+# adding that is SCRUM-360, not a template-only edit.
 templates = [
     {
         "TemplateName": "DriverRequestTemplate",

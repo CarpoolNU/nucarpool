@@ -1,4 +1,4 @@
-import { generateEmailParams } from "./emailParams";
+import { escapeHtmlText, generateEmailParams } from "./emailParams";
 import type {
   AcceptanceEmailSchema,
   MessageEmailSchema,
@@ -147,5 +147,94 @@ describe("generateEmailParams", () => {
         false,
       ),
     ).toThrow("Invalid email type");
+  });
+});
+
+/**
+ * SES does not escape substitutions in a template's `HtmlPart`, so every
+ * user-controlled value has to arrive already escaped. See the comment above
+ * `escapeHtmlText` for the AWS note that says so, and for why the escape set
+ * stops at `&`, `<` and `>`.
+ */
+describe("escapeHtmlText", () => {
+  it("escapes the characters that can open or close a tag", () => {
+    expect(escapeHtmlText("<b>bold</b>")).toBe("&lt;b&gt;bold&lt;/b&gt;");
+  });
+
+  it("escapes an ampersand first, so an entity is not double-encoded", () => {
+    expect(escapeHtmlText("&lt;")).toBe("&amp;lt;");
+  });
+
+  it("leaves quotes alone, because no placeholder sits in an attribute", () => {
+    expect(escapeHtmlText(`I'm "here"`)).toBe(`I'm "here"`);
+  });
+
+  it("leaves ordinary text untouched", () => {
+    expect(escapeHtmlText("See you at 8:45")).toBe("See you at 8:45");
+  });
+
+  it("handles the empty string", () => {
+    expect(escapeHtmlText("")).toBe("");
+  });
+});
+
+describe("generateEmailParams HTML escaping", () => {
+  const injected = {
+    senderName: '<a href="https://evil.example">Ada</a>',
+    senderEmail: "ada@northeastern.edu",
+    receiverName: "Grace & Co",
+    receiverEmail: "grace@northeastern.edu",
+  };
+
+  it("escapes both names and the message body of a request", () => {
+    const params = generateEmailParams(
+      { ...injected, recipientIsDriver: true, messagePreview: "<b>x</b>" },
+      "request",
+      false,
+    );
+
+    expect(templateData(params)).toEqual({
+      preferredName: "Grace &amp; Co",
+      OtherUser: '&lt;a href="https://evil.example"&gt;Ada&lt;/a&gt;',
+      message: "&lt;b&gt;x&lt;/b&gt;",
+    });
+  });
+
+  it("escapes the body of a message notification", () => {
+    const params = generateEmailParams(
+      { ...injected, messageText: "<script>alert(1)</script>" },
+      "message",
+      false,
+    );
+
+    expect(templateData(params).message).toBe(
+      "&lt;script&gt;alert(1)&lt;/script&gt;",
+    );
+  });
+
+  it("escapes the names in an acceptance, which carries no message", () => {
+    const params = generateEmailParams(
+      { ...injected, recipientIsDriver: false },
+      "acceptance",
+      false,
+    );
+
+    expect(templateData(params)).toEqual({
+      preferredName: "Grace &amp; Co",
+      OtherUser: '&lt;a href="https://evil.example"&gt;Ada&lt;/a&gt;',
+    });
+  });
+
+  it("does not escape the addresses, which are not template data", () => {
+    const params = generateEmailParams(
+      { ...injected, messageText: "hi" },
+      "message",
+      true,
+    );
+
+    expect(params.Destination).toEqual({
+      ToAddresses: ["grace@northeastern.edu"],
+      CcAddresses: ["ada@northeastern.edu"],
+    });
   });
 });
