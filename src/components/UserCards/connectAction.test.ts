@@ -32,6 +32,10 @@ const action = (over: Partial<Parameters<typeof connectAction>[0]> = {}) => {
     // stays out of the way of every case that is not about it. A test that
     // wants that refusal names `otherRole` itself.
     otherRole: viewerRole === Role.DRIVER ? Role.RIDER : Role.DRIVER,
+    // A counterpart with room, so SCRUM-361's refusal stays out of the way of
+    // every case that is not about it — the same reasoning as `otherRole`
+    // above. A test that wants that refusal names `otherSeatAvail` itself.
+    otherSeatAvail: 2,
     otherStatus: Status.ACTIVE,
     ...over,
   });
@@ -294,5 +298,99 @@ describe("connectAction — a favourite who cannot be carpooled with", () => {
     expect(action({ viewerRole: Role.RIDER, otherRole: Role.DRIVER })).toEqual({
       kind: "open",
     });
+  });
+});
+
+/**
+ * SCRUM-361: the mirror of the reader's own seat refusal.
+ *
+ * Discovery excludes a full driver, so this is the favourites tab and the
+ * stale-list case. Without it a rider could send a request that `reserveSeat`
+ * refused at every acceptance, and neither party was told why.
+ */
+describe("connectAction — the counterpart has no seats", () => {
+  it("refuses a rider connecting with a driver who has filled up", () => {
+    expect(action({ viewerRole: Role.RIDER, otherSeatAvail: 0 })).toEqual({
+      kind: "blocked",
+      message:
+        "Sam has no seats free in their car right now, so they could not " +
+        "accept a request yet.",
+    });
+  });
+
+  it("refuses one whose count went negative, the same way", () => {
+    // The SCRUM-348 row. `hasSeatAvailable` is the single predicate, so this
+    // needs no separate branch — asserted because it is the case that was
+    // live in production data.
+    expect(action({ viewerRole: Role.RIDER, otherSeatAvail: -1 })).toEqual({
+      kind: "blocked",
+      message:
+        "Sam has no seats free in their car right now, so they could not " +
+        "accept a request yet.",
+    });
+  });
+
+  it("opens for a driver with even one seat", () => {
+    expect(action({ viewerRole: Role.RIDER, otherSeatAvail: 1 })).toEqual({
+      kind: "open",
+    });
+  });
+
+  it("ignores a rider counterpart's seat count, which means nothing", () => {
+    // A rider's `seatAvail` is 0 by convention. Refusing on it would block
+    // every driver from connecting with anyone.
+    expect(
+      action({
+        viewerRole: Role.DRIVER,
+        seatAvail: 3,
+        otherRole: Role.RIDER,
+        otherSeatAvail: 0,
+      }),
+    ).toEqual({ kind: "open" });
+  });
+
+  it("does not refuse before the counterpart's seats have loaded", () => {
+    expect(
+      action({ viewerRole: Role.RIDER, otherSeatAvail: undefined }),
+    ).toEqual({ kind: "open" });
+  });
+
+  /**
+   * The precedence this fix had to not break.
+   *
+   * `connectAction` reports an outstanding request before the reader's own
+   * seat count, on the grounds that a reader with a request pending has
+   * nothing to do about the seats. Folding the counterpart's seats into the
+   * `carpoolUnavailableExplanation` block above would have been one line and
+   * would have honoured that rule for the reader's seats while breaking it
+   * for the counterpart's.
+   */
+  it("reports an outstanding request ahead of the counterpart's seats", () => {
+    expect(
+      action({
+        viewerRole: Role.RIDER,
+        otherSeatAvail: 0,
+        outgoingRequest: pending,
+      }),
+    ).toEqual({
+      kind: "blocked",
+      message:
+        "You already have an outgoing carpool request to Sam. " +
+        "Please wait for them to respond to your request!",
+    });
+  });
+
+  it("reports role incompatibility ahead of the counterpart's seats", () => {
+    // Two drivers cannot carpool whatever the seat counts are, and the seat
+    // sentence would imply a seat is all that is missing.
+    const result = action({
+      viewerRole: Role.DRIVER,
+      seatAvail: 3,
+      otherRole: Role.DRIVER,
+      otherSeatAvail: 0,
+    });
+
+    expect(result.kind).toBe("blocked");
+    expect((result as { message: string }).message).toContain("both drivers");
   });
 });

@@ -15,6 +15,7 @@ import useIsMobile from "../../utils/useIsMobile";
 import { counterpartLabel } from "../Sidebar/viewerAccess";
 import { connectAction } from "./connectAction";
 import { carpoolUnavailableExplanation } from "../../utils/roleCompatibility";
+import { driverHasNoSeatsExplanation } from "../../utils/carpoolSeats";
 import React from "react";
 
 interface ConnectCardProps {
@@ -49,6 +50,7 @@ export const ConnectCard = (props: ConnectCardProps): React.JSX.Element => {
       seatAvail: user?.seatAvail,
       preferredName: otherUser.preferredName,
       otherRole: otherUser.role,
+      otherSeatAvail: otherUser.seatAvail,
       otherStatus: otherUser.status,
     });
 
@@ -81,12 +83,25 @@ export const ConnectCard = (props: ConnectCardProps): React.JSX.Element => {
   // affordance goes inert so the card does not read as if they were available.
   // `connectAction` refuses the same case, which is what actually prevents a
   // request that could be sent but never accepted.
+  //
+  // A driver who has filled up is the third reason, added by SCRUM-361 and
+  // asked last because it is the most temporary of the three: a role change or
+  // a paused search says the pair cannot carpool at all right now, while no
+  // free seats says only *not yet*. Composed here rather than inside
+  // `carpoolUnavailableExplanation` because seats are not role compatibility,
+  // and because `connectAction` needs to ask the two questions at different
+  // points in its order of precedence.
   const unavailable = user
-    ? carpoolUnavailableExplanation(user.role, {
+    ? (carpoolUnavailableExplanation(user.role, {
         role: props.otherUser.role,
         status: props.otherUser.status,
         preferredName: props.otherUser.preferredName,
-      })
+      }) ??
+      driverHasNoSeatsExplanation({
+        role: props.otherUser.role,
+        seatAvail: props.otherUser.seatAvail,
+        preferredName: props.otherUser.preferredName,
+      }))
     : null;
 
   // This is a **discovery** card, so a VIEWER sees the other person's role in

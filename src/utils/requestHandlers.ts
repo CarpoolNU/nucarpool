@@ -109,10 +109,27 @@ export const createRequestHandlers = (
     if (user.role === "DRIVER") {
       // `!hasSeatAvailable` rather than `=== 0`: a driver stuck at a negative
       // count would otherwise be told to go ahead and then refused by
-      // `reserveSeat` with the same sentence this branch prints. SCRUM-348.
+      // `reserveSeat`, whose NO_SEATS_MESSAGE describes the driver in the
+      // third person and reads oddly when the driver is the one seeing it.
+      // SCRUM-348.
       if (!hasSeatAvailable(user.seatAvail)) {
+        // Says what happens next, because the request is not dead. This used
+        // to read "You do not have any space in your car to accept X." — true,
+        // and it left the driver with a refusal and no idea whether the
+        // request had been lost, whether retrying would help, or what would
+        // change the answer. Nothing here rejects or hides the request, so it
+        // is still theirs to accept when a seat frees.
+        //
+        // SCRUM-361 turned this from wording into the fix for one of two
+        // populations: new requests to a full driver are now refused at the
+        // card, but requests already sent can only be met with an explanation.
+        // Both routes to a seat are named, since a count of 0 may mean the car
+        // is full *or* that they never entered one.
         toast.error(
-          `You do not have any space in your car to accept ${otherUser.preferredName}.`,
+          `You have no seats free right now, so you cannot accept ` +
+            `${otherUser.preferredName} yet. Their request stays in your ` +
+            `list — accept it once a seat opens up, or raise your seat count ` +
+            `in your profile.`,
         );
         return false;
       }
