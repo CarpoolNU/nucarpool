@@ -1,7 +1,17 @@
 import { Permission, Role, RequestStatus } from "@prisma/client";
 import type { Session } from "next-auth";
 import { appRouter } from "../index";
-import { MAX_SEATS_AVAILABLE } from "../../../utils/carpoolSeats";
+import {
+  MAX_SEATS_AVAILABLE,
+  hasSeatAvailable,
+} from "../../../utils/carpoolSeats";
+import { calculateScore } from "../../../utils/recommendation";
+import { buildCandidateWhere } from "../../db/candidateSearch";
+import type { CurrentSearch } from "../../db/candidateSearch";
+import {
+  anyFilters,
+  buildSearch,
+} from "../../../utils/recommendation.fixtures";
 import {
   GROUP_NOTES_MAX_LENGTH,
   GROUP_OPTION_MAX_LENGTH,
@@ -2802,5 +2812,137 @@ describe("the rider slot holds a rider", () => {
     });
 
     expect(db.carpoolIdOf(RIDER_2)).toBeNull();
+  });
+});
+
+/**
+ * SCRUM-348: the two halves of one inconsistency, asserted together.
+ *
+ * A driver at `seats_avail = -1` was a live, ACTIVE row in production-derived
+ * data — the residue of the accounting SCRUM-229 fixed without repairing what
+ * it had already written. The write path refused it and the read path
+ * advertised it, so the row was recommended to riders and then rejected every
+ * one of them with a message naming the driver as having no space.
+ *
+ * These are in one block on purpose. Either assertion alone passed before the
+ * fix: the join has always been refused, and the offer was always made. It is
+ * their *disagreement* that was the bug, so the test that guards it has to be
+ * able to see both.
+ */
+describe("a driver at a negative seat count", () => {
+  const negativeSeatDriver = () =>
+    buildGroupsDb({
+      searches: [
+        {
+          id: "s-driver",
+          userId: DRIVER,
+          role: Role.DRIVER,
+          carpoolId: GROUP,
+          seatsAvail: -1,
+          groupMessage: "",
+        },
+        {
+          id: "s-outsider",
+          userId: OUTSIDER,
+          role: Role.RIDER,
+          carpoolId: null,
+          seatsAvail: 0,
+          groupMessage: "",
+        },
+      ],
+      requests: [[OUTSIDER, DRIVER]],
+    });
+
+  it("cannot accept a rider — the write path refuses the reservation", async () => {
+    const db = negativeSeatDriver();
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await expect(
+      caller.user.groups.edit({
+        driverId: DRIVER,
+        riderId: OUTSIDER,
+        groupId: GROUP,
+        add: true,
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    expect(db.carpoolIdOf(OUTSIDER)).toBeNull();
+    // And the count is not driven further down by the failed attempt.
+    expect(db.seatsOf(DRIVER)).toBe(-1);
+  });
+
+  it("is not offered to a rider — the read path agrees with that refusal", () => {
+    const rider = buildSearch({ id: "current", role: Role.RIDER });
+    const driver = buildSearch({
+      id: "candidate",
+      role: Role.DRIVER,
+      seatsAvail: -1,
+    });
+
+    // The scorer drops it.
+    expect(calculateScore(rider, anyFilters(), "any")(driver)).toBeUndefined();
+
+    // And so does the SQL that runs before the scorer, so the row is not even
+    // read. `{ gt: 0 }` is the same object `reserveSeat` decrements under.
+    const clause = buildCandidateWhere({
+      currentSearch: rider as unknown as CurrentSearch,
+      filters: { ...anyFilters(), favorites: false },
+      excludedUserIds: ["current"],
+      favoriteUserIds: [],
+    }).seatsAvail as { gt: number };
+
+    expect(-1 > clause.gt).toBe(false);
+    expect(hasSeatAvailable(-1)).toBe(false);
+  });
+
+  it("is offered and joinable again once the count is repaired to a real seat", async () => {
+    // What the repair plus a driver re-entering their capacity produces. The
+    // repair itself writes 0, which is still "no space" — truthfully so.
+    const driver = buildSearch({
+      id: "candidate",
+      role: Role.DRIVER,
+      seatsAvail: 1,
+    });
+
+    expect(
+      calculateScore(
+        buildSearch({ id: "current", role: Role.RIDER }),
+        anyFilters(),
+        "any",
+      )(driver),
+    ).not.toBeUndefined();
+
+    const db = buildGroupsDb({
+      searches: [
+        {
+          id: "s-driver",
+          userId: DRIVER,
+          role: Role.DRIVER,
+          carpoolId: GROUP,
+          seatsAvail: 1,
+          groupMessage: "",
+        },
+        {
+          id: "s-outsider",
+          userId: OUTSIDER,
+          role: Role.RIDER,
+          carpoolId: null,
+          seatsAvail: 0,
+          groupMessage: "",
+        },
+      ],
+      requests: [[OUTSIDER, DRIVER]],
+    });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await caller.user.groups.edit({
+      driverId: DRIVER,
+      riderId: OUTSIDER,
+      groupId: GROUP,
+      add: true,
+    });
+
+    expect(db.carpoolIdOf(OUTSIDER)).toBe(GROUP);
+    expect(db.seatsOf(DRIVER)).toBe(0);
   });
 });

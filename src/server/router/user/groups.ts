@@ -5,7 +5,11 @@ import _ from "lodash";
 import { Role, CarpoolGroup, RequestStatus, User } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import { convertCarpoolSearchToPublicWithExactHome } from "../../publicUser";
-import { NO_SEATS_MESSAGE, clampSeats } from "../../../utils/carpoolSeats";
+import {
+  NO_SEATS_MESSAGE,
+  SEAT_AVAILABLE_FILTER,
+  clampSeats,
+} from "../../../utils/carpoolSeats";
 import {
   GROUP_NOTES_MAX_LENGTH,
   GROUP_OPTION_MAX_LENGTH,
@@ -232,17 +236,21 @@ const markRequestAccepted = async (
 /**
  * Takes one seat from the driver, atomically.
  *
- * The `seatsAvail: { gt: 0 }` in the filter makes this a compare-and-swap: the
+ * `SEAT_AVAILABLE_FILTER` in the filter makes this a compare-and-swap: the
  * database decrements only if a seat is actually free, and `count` tells us
  * whether it did. The old shape — read the row, compare in JS, then decrement —
  * could not go below zero only by luck of timing, and `create` skipped the
  * comparison entirely, so the first rider added to a full driver left
  * `seatsAvail` at -1. Two riders accepting at the same instant could do the
  * same even where the check existed.
+ *
+ * The filter is imported rather than spelled `{ gt: 0 }` here so that this and
+ * the candidate query cannot drift apart again. They already had: this side
+ * refused a negative count while the read path advertised it. SCRUM-348.
  */
 const reserveSeat = async (prisma: PrismaClientLike, driverUserId: string) => {
   const reserved = await prisma.carpoolSearch.updateMany({
-    where: { userId: driverUserId, seatsAvail: { gt: 0 } },
+    where: { userId: driverUserId, seatsAvail: SEAT_AVAILABLE_FILTER },
     data: { seatsAvail: { decrement: 1 } },
   });
 

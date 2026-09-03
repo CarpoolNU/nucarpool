@@ -76,6 +76,16 @@ describe("calculateScore", () => {
         matches: false,
       },
       {
+        // SCRUM-348. The guard tested `=== 0`, so this row scored as available
+        // and was offered — while `reserveSeat` refused every acceptance,
+        // because it has always tested `> 0`.
+        name: "a rider is not matched with a driver whose seat count went negative",
+        currentRole: Role.RIDER,
+        candidateRole: Role.DRIVER,
+        candidateSeats: -1,
+        matches: false,
+      },
+      {
         name: "a rider is matched with a driver who has at least one seat",
         currentRole: Role.RIDER,
         candidateRole: Role.DRIVER,
