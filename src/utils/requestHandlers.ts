@@ -3,6 +3,7 @@ import { Request, Role } from "@prisma/client";
 import { trpc } from "./trpc";
 import { toast } from "react-toastify/unstyled";
 import { roleMismatchExplanation } from "./roleCompatibility";
+import { hasSeatAvailable } from "./carpoolSeats";
 
 interface RequestHandlers {
   /**
@@ -106,7 +107,10 @@ export const createRequestHandlers = (
     }
 
     if (user.role === "DRIVER") {
-      if (user.seatAvail === 0) {
+      // `!hasSeatAvailable` rather than `=== 0`: a driver stuck at a negative
+      // count would otherwise be told to go ahead and then refused by
+      // `reserveSeat` with the same sentence this branch prints. SCRUM-348.
+      if (!hasSeatAvailable(user.seatAvail)) {
         toast.error(
           `You do not have any space in your car to accept ${otherUser.preferredName}.`,
         );

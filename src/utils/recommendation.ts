@@ -4,6 +4,7 @@ import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import _ from "lodash";
 import { MapUser } from "./types";
+import { hasSeatAvailable } from "./carpoolSeats";
 import { z } from "zod";
 
 /** Type for storing recommendation scores associated with a particular user */
@@ -204,7 +205,7 @@ export const calculateScore = (
 
     if (
       (currentUser.role === "RIDER" &&
-        (user.role === "RIDER" || user.seatAvail === 0)) ||
+        (user.role === "RIDER" || !hasSeatAvailable(user.seatAvail))) ||
       (currentUser.role === "DRIVER" && user.role === "DRIVER") ||
       user.role === "VIEWER" ||
       (currentUser.carpoolId && currentUser.carpoolId === user.carpoolId)

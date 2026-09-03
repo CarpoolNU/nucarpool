@@ -254,6 +254,25 @@ describe("handleAcceptRequest — a refused acceptance", () => {
     );
   });
 
+  it("refuses a driver whose seat count went negative", async () => {
+    // SCRUM-348: `=== 0` let this through to `groups.edit`, which refused it
+    // with the same sentence from the server. Refusing here means the driver
+    // is told before the email and the conversation close are attempted.
+    const { handleAcceptRequest } = handlers();
+
+    const accepted = await handleAcceptRequest(
+      user({ role: Role.DRIVER, seatAvail: -1 }),
+      otherUser(),
+      request,
+    );
+
+    expect(accepted).toBe(false);
+    expectNothingWritten();
+    expect(mockToastError).toHaveBeenCalledWith(
+      "You do not have any space in your car to accept Robin.",
+    );
+  });
+
   it("refuses a driver whose rider is already in a group", async () => {
     const { handleAcceptRequest } = handlers();
 

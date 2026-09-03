@@ -16,6 +16,10 @@ import {
 } from "../../utils/recommendation";
 import type { FInputs } from "../../utils/recommendation";
 import {
+  SEAT_AVAILABLE_FILTER,
+  hasSeatAvailable,
+} from "../../utils/carpoolSeats";
+import {
   anyFilters,
   BOSTON,
   buildSearch,
@@ -304,7 +308,10 @@ describe("buildCandidateWhere — role compatibility", () => {
     const result = where(Role.RIDER);
 
     expect(result.role).toEqual({ in: [Role.DRIVER] });
-    expect(result.seatsAvail).toEqual({ not: 0 });
+    // The shared constant rather than a literal: `reserveSeat` decrements
+    // under this same object, and spelling it out here is what let the two
+    // drift apart until SCRUM-348.
+    expect(result.seatsAvail).toBe(SEAT_AVAILABLE_FILTER);
   });
 
   it("offers a driver only riders, and does not test seats", () => {
@@ -673,5 +680,73 @@ describe("fetchRankedCandidates — the ceiling", () => {
     expect(String(warnSpy.mock.calls[0][0])).toContain(
       CANDIDATE_LIMIT_LOG_PREFIX,
     );
+  });
+});
+
+/**
+ * The superset property for seats, in the same spirit as the date one above:
+ * the SQL filter is evaluated in JavaScript and compared to the scorer's own
+ * verdict, over every seat count worth asking about.
+ *
+ * Seats are stricter than dates. For dates, SQL keeping a row the scorer later
+ * rejects is a wasted read and allowed; for seats the two are the *same*
+ * object, so agreement is exact in both directions. That is deliberate — the
+ * bug this pins was precisely a pair of predicates that agreed on every value
+ * except the one production held.
+ */
+describe("seat filter agrees with calculateScore", () => {
+  const SEAT_COUNTS = [-3, -1, 0, 1, 4, 6];
+
+  /** Evaluates just the operator this module emits for seats. */
+  const filterKeeps = (
+    filter: Record<string, unknown>,
+    seats: number,
+  ): boolean => {
+    const entries = Object.entries(filter);
+    expect(entries.length).toBe(1);
+    const [op, operand] = entries[0];
+    if (op !== "gt") throw new Error(`unhandled seat filter operator: ${op}`);
+    return seats > (operand as number);
+  };
+
+  it.each(SEAT_COUNTS)(
+    "keeps the same drivers as the scorer at %i seat(s)",
+    (seats) => {
+      const rider = buildSearch({ id: "current", role: Role.RIDER });
+      const candidate = buildSearch({
+        id: "candidate",
+        role: Role.DRIVER,
+        seatsAvail: seats,
+      });
+
+      const clause = buildCandidateWhere({
+        currentSearch: rider as unknown as CurrentSearch,
+        filters: { ...anyFilters(), favorites: false },
+        excludedUserIds: ["current"],
+        favoriteUserIds: [],
+      }).seatsAvail as Record<string, unknown>;
+
+      const keptBySql = filterKeeps(clause, seats);
+      const keptByScorer =
+        calculateScore(rider, anyFilters(), "any")(candidate) !== undefined;
+
+      expect(keptBySql).toBe(keptByScorer);
+      // And both agree with the predicate reserveSeat uses.
+      expect(keptBySql).toBe(hasSeatAvailable(seats));
+    },
+  );
+
+  it("drops a negative seat count, which the previous `not: 0` kept", () => {
+    const clause = buildCandidateWhere({
+      currentSearch: buildSearch({
+        id: "current",
+        role: Role.RIDER,
+      }) as unknown as CurrentSearch,
+      filters: { ...anyFilters(), favorites: false },
+      excludedUserIds: ["current"],
+      favoriteUserIds: [],
+    }).seatsAvail as Record<string, unknown>;
+
+    expect(filterKeeps(clause, -1)).toBe(false);
   });
 });

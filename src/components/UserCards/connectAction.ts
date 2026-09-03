@@ -1,5 +1,6 @@
 import { RequestStatus, Role, Status } from "@prisma/client";
 import { carpoolUnavailableExplanation } from "../../utils/roleCompatibility";
+import { hasSeatAvailable } from "../../utils/carpoolSeats";
 
 /**
  * What pressing **Connect** on a discovery card should do.
@@ -132,11 +133,19 @@ export const connectAction = ({
     return { kind: "blocked", message: outgoingPending(preferredName) };
   }
 
-  // `=== 0` rather than `<= 0`, preserving the existing check exactly. A
-  // negative seat count is a real state in production data and is deliberately
-  // not handled here — see SCRUM-348, which owns both the repair and the
-  // decision about which comparison the app should use.
-  if (viewerRole === Role.DRIVER && seatAvail === 0) {
+  // SCRUM-348 made that decision: non-positive is unavailable, via the
+  // `hasSeatAvailable` predicate `reserveSeat` already used. A driver at a
+  // negative count is now told they have no space instead of being sent to a
+  // modal whose acceptance the server refuses.
+  //
+  // `undefined` still falls through as open, which is not an oversight — it is
+  // "seats not loaded yet", and the block below would otherwise refuse a
+  // perfectly good driver for the moment before `user.me` resolves.
+  if (
+    viewerRole === Role.DRIVER &&
+    seatAvail !== undefined &&
+    !hasSeatAvailable(seatAvail)
+  ) {
     return { kind: "blocked", message: noSeats(preferredName) };
   }
 

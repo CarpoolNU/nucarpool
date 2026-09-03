@@ -6,6 +6,7 @@ import {
 } from "../../utils/recommendation";
 import type { FInputs, Recommendation } from "../../utils/recommendation";
 import type { PrismaOrTransaction } from "./client";
+import { SEAT_AVAILABLE_FILTER } from "../../utils/carpoolSeats";
 
 /**
  * The candidate query behind both matching endpoints.
@@ -283,11 +284,16 @@ export const buildCandidateWhere = ({
     role: { in: compatibleRoles(currentSearch.role) },
   };
 
-  // Only a RIDER cares about seats, and the scorer tests `=== 0` exactly, so
-  // `not: 0` rather than `gt: 0` — a negative value would be kept by the
-  // scorer and must not be dropped here.
+  // Only a RIDER cares about seats. `SEAT_AVAILABLE_FILTER` is the same
+  // predicate `reserveSeat` decrements under and `calculateScore` scores by,
+  // so the superset rule below holds by identity rather than by argument.
+  //
+  // This was `not: 0`, to match a scorer that tested `=== 0` — the pair agreed
+  // with each other and both admitted a negative count, so the one ACTIVE
+  // driver at -1 was offered to riders and then refused every one of them.
+  // See SCRUM-348 and `hasSeatAvailable`.
   if (currentSearch.role === Role.RIDER) {
-    where.seatsAvail = { not: 0 };
+    where.seatsAvail = SEAT_AVAILABLE_FILTER;
   }
 
   // Already carpooling together. `carpoolId` is nullable and SQL's `!=` drops

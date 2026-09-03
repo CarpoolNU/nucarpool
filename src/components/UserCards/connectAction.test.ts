@@ -173,13 +173,15 @@ describe("connectAction — seat availability", () => {
     });
   });
 
-  it("leaves a negative seat count to SCRUM-348 rather than handling it here", () => {
-    // `=== 0` is preserved deliberately, so a driver whose count went negative
-    // is not refused by this check. That row is a real state in production
-    // data; repairing it and deciding the comparison belong to SCRUM-348, and
-    // changing it here would silently widen this fix.
+  it("refuses a driver whose seat count went negative", () => {
+    // SCRUM-348 made the call this test used to defer: non-positive is
+    // unavailable. A driver at -1 is a real state in production data, and
+    // `reserveSeat` would refuse the acceptance anyway — so opening the modal
+    // only led to a server error naming the driver as having no space.
     expect(action({ viewerRole: Role.DRIVER, seatAvail: -1 })).toEqual({
-      kind: "open",
+      kind: "blocked",
+      message:
+        "You do not have any seats available in your car to connect with Sam.",
     });
   });
 });

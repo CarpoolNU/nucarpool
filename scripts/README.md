@@ -7,11 +7,11 @@ the `.ts` scripts, and nothing schedules them.
 
 **Before running anything: confirm what `DATABASE_URL` points at.** None of
 these scripts print the connection string, which means none of them will tell
-you that you are pointed at production. Three of them write.
+you that you are pointed at production. Four of them write.
 
 ```bash
 npx ts-node scripts/<name>.ts            # every script: report only
-npx ts-node scripts/<name>.ts --apply    # the three that write
+npx ts-node scripts/<name>.ts --apply    # the four that write
 ```
 
 Node 22, per [`.nvmrc`](../.nvmrc). `ts-node` comes from `node_modules`, so
@@ -29,7 +29,7 @@ keeps `--apply` visible at the call site rather than hidden behind an alias.
 
 ### Writes to the database
 
-All three are dry-run by default, refuse to proceed past a `--max` ceiling
+All four are dry-run by default, refuse to proceed past a `--max` ceiling
 (default 500), and update or delete one row at a time by primary key so a
 partial run leaves a consistent database. Re-running any of them is a no-op.
 
@@ -38,6 +38,16 @@ partial run leaves a consistent database. Re-running any of them is a no-op.
 | [`backfill-group-preferences.ts`](./backfill-group-preferences.ts) | Moves the legacy `GROUP_DETAILS_V1:` blob out of `group_message` into the three real columns |
 | [`backfill-request-status.ts`](./backfill-request-status.ts)       | Sets `Request.status = ACCEPTED` for pairs who already share a `carpoolId`                   |
 | [`cleanup-orphan-locations.ts`](./cleanup-orphan-locations.ts)     | Deletes `Location` rows no `CarpoolSearch` points at                                         |
+| [`repair-seat-residue.ts`](./repair-seat-residue.ts)               | Clamps out-of-range `seats_avail` into `[0, 6]` and deletes member-less `group` rows         |
+
+`repair-seat-residue` is the only one whose prefix is neither `backfill-` nor
+`cleanup-`, because it both writes a column and deletes a row and neither verb
+covers that. Its two halves are one defect's residue rather than two chores:
+the overwritten-membership bug (SCRUM-291) cost a driver a seat and abandoned
+their old group in the same event, so finding one is a reason to look for the
+other. **Deploy the read-path fix from SCRUM-348 before running it** — with
+`hasSeatAvailable` live, a negative row is already out of matching, which makes
+this data hygiene rather than the fix itself.
 
 Neither backfill exists as a Prisma migration on purpose: `prisma/migrations/`
 is never applied to PlanetScale, so a data migration would be dead text in the
@@ -54,6 +64,7 @@ anything.
 | [`check-self-requests.ts`](./check-self-requests.ts)             | `Request` rows whose two ends are the same user                       |
 | [`check-driverless-groups.ts`](./check-driverless-groups.ts)     | `CarpoolGroup` rows with no `DRIVER` member                           |
 | [`check-profile-coordinates.ts`](./check-profile-coordinates.ts) | Searches unmatchable via `(0, 0)` coordinates or reversed co-op dates |
+| [`check-seat-counts.ts`](./check-seat-counts.ts)                 | `CarpoolSearch` rows with `seats_avail` outside `[0, 6]`              |
 | [`measure-candidate-rows.ts`](./measure-candidate-rows.ts)       | Rows read by the explore page's candidate query                       |
 | [`measure-requests-payload.ts`](./measure-requests-payload.ts)   | Rows and payload bytes for `user.requests.me`                         |
 | [`measure-unread-count.ts`](./measure-unread-count.ts)           | Query plan, generated SQL and timings for the unread badge            |
@@ -66,10 +77,18 @@ Insights is the authority and needs no script at all — that is where the
 figures in [the db README](../src/server/db/README.md#the-unread-badge-the-measurement-and-why-no-index-was-added)
 came from, because direct production reads return `403` (see below).
 
-The three `check-*` scripts exit `0` when clean and `1` when not, so they can
+The four `check-*` scripts exit `0` when clean and `1` when not, so they can
 gate a follow-up. **None of them has an `--apply`, and that is a decision
-rather than an omission** — for each, there is no single correct repair, and
-only the affected user knows which one they want. They report and stop.
+rather than an omission.** For the first three there is no single correct
+repair, and only the affected user knows which one they want. For
+`check-seat-counts` there is one — clamp into range — but keeping `check-*`
+uniformly read-only is worth more than saving a file, so the repair lives in
+`repair-seat-residue.ts` and this script stays safe to point anywhere. They
+report and stop.
+
+`check-seat-counts` has no `*.test.ts` of its own because it has no argument
+parsing and no planning half: the selection is `findOutOfRangeSeatRows`, tested
+in [`src/server/db/seatIntegrity.test.ts`](../src/server/db/seatIntegrity.test.ts).
 
 ### Not operational scripts
 
@@ -105,9 +124,22 @@ successfully look identical.
 | `check-self-requests`        | —     | 0 findings        | **unknown** | 2026-08-31    | initial audit |
 | `check-driverless-groups`    | —     | **1 finding**     | **unknown** | 2026-08-31    | initial audit |
 | `check-profile-coordinates`  | —     | 0 findings¹       | **unknown** | 2026-08-31    | initial audit |
+| `check-seat-counts`          | —     | **1 finding**²    | **unknown** | 2026-09-02    | SCRUM-348     |
+| `repair-seat-residue`        | —     | **2 outstanding** | **unknown** | 2026-09-02    | SCRUM-348     |
 
 ¹ 521 rider searches sit at `(0, 0)`, but none belongs to an onboarded user, so
 the script does not count them.
+
+² One `carpool_search` row at `seats_avail = -1`, DRIVER and ACTIVE. The
+`repair-seat-residue` row is that same seat row plus one member-less `group`
+row, which is the finding `check-driverless-groups` reports as "empty" — the
+two scripts see the same group from different sides.
+
+**Neither figure was produced by running the script.** Both come from the
+direct SQL in SCRUM-348, run against staging on 2026-09-02, before either
+script existed. The conditions are the same, so the numbers should hold,
+but a dry run has not confirmed them and **no `--apply` has been run anywhere**.
+Run the dry run before the apply rather than trusting this cell.
 
 **Production is `unknown` for every row, and not for lack of trying.** Read
 queries against the PlanetScale `main` branch return `403 Permission denied`
@@ -158,7 +190,7 @@ unsuffixed variables can be deleted from `emailParams.ts`.
 | staging     | **no**      | —    | —   |
 | production  | **no**      | —    | —   |
 
-### Two findings worth acting on
+### Three findings worth acting on
 
 1. **`backfill-group-preferences` is not finished on staging — 3 rows.** This
    blocks dropping `carpool_search.group_message`, which is only safe once the
@@ -168,6 +200,14 @@ unsuffixed variables can be deleted from `emailParams.ts`.
 2. **One driverless `CarpoolGroup` on staging.** Expected rather than alarming:
    the guards against it are not retroactive, which is why the check exists.
    Worth a look, and there is no automatic repair by design.
+3. **One ACTIVE driver on staging at `seats_avail = -1`, and one member-less
+   `group` row.** The residue of SCRUM-229 and SCRUM-291, whose code fixes were
+   never retroactive. The read-path fix in SCRUM-348 has closed the user-facing
+   half — that driver is no longer offered to riders they cannot accept — so
+   what remains is a driver advertising no space until either the repair runs or
+   they re-save their profile. **The production count is the open question**:
+   the 403 noted above means nobody has measured it, and one row on staging is a
+   lower bound rather than the answer.
 
 ### Re-checking without running the scripts
 
@@ -203,7 +243,22 @@ SELECT COUNT(*) FROM request WHERE fromUserId = toUserId;
 SELECT COUNT(*) FROM `group` g WHERE NOT EXISTS (
   SELECT 1 FROM carpool_search cs WHERE cs.carpoolId = g.id AND cs.role = 'DRIVER'
 );
+
+-- check-seat-counts: seat counts outside [0, MAX_SEATS_AVAILABLE]
+SELECT id, userId, role, status, seats_avail FROM carpool_search
+WHERE seats_avail < 0 OR seats_avail > 6;
+
+-- repair-seat-residue: the same rows, plus the member-less group rows it deletes
+SELECT COUNT(*) FROM carpool_search WHERE seats_avail < 0 OR seats_avail > 6;
+SELECT COUNT(*) FROM `group` g WHERE NOT EXISTS (
+  SELECT 1 FROM carpool_search cs WHERE cs.carpoolId = g.id
+);
 ```
+
+The `6` is `MAX_SEATS_AVAILABLE` written out. It is a constant in
+[`carpoolSeats.ts`](../src/utils/carpoolSeats.ts) and SQL cannot import it, so
+if that value ever changes these two queries are what to update — the scripts
+themselves will already be right.
 
 Preferring the dry run to the query is still better where it is practical: the
 scripts report _which_ rows, and `backfill-group-preferences` additionally
