@@ -356,3 +356,127 @@ when you run this.
 - Nothing in the database enforces the invariant. Giving `Location` an owning
   `carpoolSearchId` would, at the cost of a schema change, a PlanetScale deploy
   request and a backfill.
+
+## Conversation ownership
+
+The `Request` ↔ `Conversation` relationship is stored **twice**, and the schema
+keeps neither side honest:
+
+- `Request.conversationId` — the declared relation, nullable, with
+  `onDelete: Cascade`. `Request` holds the foreign key, so it is the **child**.
+- `Conversation.requestId` — `@unique`, with **no relation declared at all**. A
+  bare string that nothing validates.
+
+`relationMode = "prisma"` means MySQL enforces none of it either way.
+
+`Conversation.requestId` is the authoritative side. That is what
+[`findOrCreateConversation`](./conversationLink.ts) keys on, and the reason is
+in its header: reading `Request.conversationId` answers whether _that row_
+knows about a conversation, not whether one exists, and the two can disagree.
+
+The invariant is maintained in application code, and this is what it is:
+
+> Every `Conversation` row is referenced by a `Request` that still exists, and
+> no `Request` is deleted without its `Conversation`.
+
+### Why it matters
+
+The declared cascade runs the wrong way for deletion. `onDelete: Cascade` on
+`Request.conversation` means **deleting a Conversation deletes its Requests** —
+the reverse of what is needed. Nothing ran Request → Conversation, so every
+decline, withdrawal and "Leave Conversation" left a `conversation` row and all
+its `message` rows behind, with `Conversation.requestId` dangling at a row that
+no longer existed.
+
+Those rows are **unreachable, not merely untidy**:
+
+- `messages.getConversationMessages` looks the request up first and throws
+  `NOT_FOUND` without it, so no participant check ever passes.
+- The unread count joins through `conversation.request.some(...)`, which
+  matches nothing for an orphan, so they never reach a badge.
+
+So the cost was not a broken feature. It was private message content persisting
+indefinitely with no route to it and no deletion path, plus two problems that
+do not self-correct: `admin.getDashboardStats` counts orphans in both
+`conversation.count()` and its `message.groupBy`, so the dashboard's
+conversation figure and messages-per-conversation average drift permanently
+upward, and the dead rows keep costing PlanetScale row reads.
+
+### How it is maintained
+
+`requests.delete` deletes the request, then its messages, then the conversation
+— all in one `$transaction`. The request has to go first: the other order trips
+the declared Conversation → Request cascade, which removes the request as a
+side effect and makes the explicit `delete` throw.
+
+The messages are deleted **explicitly**, not left to the `onDelete: Cascade`
+declared on `Message.conversation`. Prisma does emulate that cascade under
+`relationMode = "prisma"`, so this is belt and braces — but if it ever did not,
+the result would be `message` rows pointing at a conversation that no longer
+exists, which is a worse version of the orphan this section is about. And no
+test here could tell: the suite runs on a mock, so a test asserting the cascade
+would only assert that the mock implements it. Two explicit statements need no
+such assumption, which is why `requests.test.ts`'s mock deliberately does
+**not** cascade.
+
+The filter comes from `conversationsToDeleteWith`, which covers **both** links
+for the reason above, and which never emits `{ id: undefined }` — Prisma reads
+a key present with an `undefined` value as _no filter on that key_, so
+including it unconditionally would turn a one-row delete into a whole-table
+delete. Most requests have no conversation at all, which is why the call is
+`deleteMany` rather than `delete`.
+
+**Declining destroys the thread, and that is deliberate** (SCRUM-295). It is
+not in tension with `requests.create`'s reopen branch keeping "the thread they
+already had": that branch acts on an `ACCEPTED` request row that still exists,
+whereas this path has just removed the row, so there is nothing left to reopen
+and no history a later request could inherit.
+
+### Rows orphaned before this rule existed
+
+[`scripts/cleanup-orphan-conversations.ts`](../../../scripts/cleanup-orphan-conversations.ts)
+removes them. A one-off for the backlog, not a recurring chore — a second run
+should report zero.
+
+```bash
+npx ts-node scripts/cleanup-orphan-conversations.ts            # report only
+npx ts-node scripts/cleanup-orphan-conversations.ts --apply    # delete
+```
+
+Dry run unless `--apply` is passed, re-checks every candidate by both links
+immediately before deleting it, and refuses to run past `--max` (default 500).
+It deletes the messages explicitly too, for the same reason and so that the
+count it reports is the number actually removed.
+**Unlike the Location cleanup it destroys message content**, so the dry run
+prints the message count per conversation; that is the number to read before
+applying.
+
+**Production holds 620 of them, containing 1,258 messages** — measured
+read-only on 2026-09-03, every one of the 620 non-empty, the largest holding 28. Staging reported 11 conversations and 25 messages on 2026-09-02, so
+staging was not a useful guide to the scale: of the conversations that ever
+carried a thread, almost all of the production population is orphaned.
+
+That is over twelve hundred messages, and 620 exceeds the script's default
+`--max` of 500, so `--apply` refuses until the ceiling is raised explicitly.
+Both the record and the query that answers it without running the script live
+in [`scripts/README.md`](../../../scripts/README.md#run-state-record) — update
+it when you run this.
+
+### Consequences to know about
+
+- **The schema was left alone.** Correcting the relation direction, or giving
+  `Conversation.requestId` a real relation, would put the invariant in the
+  schema at the cost of a migration and a PlanetScale deploy request — and
+  under `relationMode = "prisma"` MySQL still would not hold it. Two statements
+  in a transaction enforce the same thing today. If the direction is ever
+  corrected, `conversationsToDeleteWith` and the cleanup script become
+  redundant together.
+- **`Conversation.request` is a list** (`Request[]`), because the relation is
+  declared from the nullable child side. Nothing stops two requests pointing at
+  one conversation, and the unread-count query's `request: { some: ... }`
+  reflects that shape rather than a one-to-one.
+- A null `Request.conversationId` is a **legitimate state**, not corruption —
+  every request older than migration `20240910182030_conversationmodel` has
+  one, which was 462 of 477 rows on staging. Those are repaired lazily by
+  `findOrCreateConversation` on the first write that needs a conversation,
+  never backfilled.

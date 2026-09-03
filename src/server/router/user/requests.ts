@@ -4,7 +4,10 @@ import { protectedRouter, router } from "../createRouter";
 
 import { Prisma, RequestStatus } from "@prisma/client";
 import { convertCarpoolSearchToPublicWithExactHome } from "../../publicUser";
-import { findOrCreateConversation } from "../../db/conversationLink";
+import {
+  conversationsToDeleteWith,
+  findOrCreateConversation,
+} from "../../db/conversationLink";
 import { MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
 
 /**
@@ -531,10 +534,68 @@ export const requestsRouter = router({
         });
       }
 
-      await ctx.prisma.request.delete({
-        where: {
-          id: input.invitationId,
-        },
+      // The conversation goes with the request, in one transaction.
+      //
+      // The cascade in the schema points the other way: `Request` holds the
+      // foreign key, so `onDelete: Cascade` runs Conversation → Request. There
+      // was nothing running Request → Conversation, so every decline,
+      // withdrawal and "Leave Conversation" left a `conversation` row and all
+      // its `message` rows behind, with `Conversation.requestId` dangling at a
+      // row that no longer existed. 620 of them in production, holding 1,258
+      // real messages between them.
+      //
+      // Deleting rather than preserving, decided on SCRUM-295: the thread is
+      // already unreachable the instant the request row goes.
+      // `getConversationMessages` looks the request up first and throws
+      // NOT_FOUND without it, and the unread count joins through
+      // `conversation.request.some(...)`, which matches nothing. So nothing
+      // retrievable is lost — what is lost is private message content with no
+      // route to it, no deletion path, and a permanent upward drift in the
+      // admin dashboard's conversation count.
+      //
+      // This is *not* in tension with the reopen branch above keeping "the
+      // thread they already had". That branch acts on an ACCEPTED request row
+      // that still exists; this one has just removed the row, so there is
+      // nothing left to reopen and no history a later request could inherit.
+      //
+      // Fixed here rather than by correcting the relation direction in
+      // `schema.prisma`: that is a PlanetScale deploy request for an invariant
+      // two statements enforce, and `relationMode = "prisma"` means MySQL would
+      // not hold it either way.
+      await ctx.prisma.$transaction(async (tx) => {
+        // Request first. The other order would trip the declared
+        // Conversation → Request cascade, which deletes the request as a side
+        // effect and makes this `delete` throw NOT_FOUND.
+        await tx.request.delete({ where: { id: input.invitationId } });
+
+        // Resolved rather than filtered in place, so the messages can be
+        // deleted by id. Most requests have no conversation at all — 462 of
+        // 477 on staging predate the `Conversation` model — which is why this
+        // is a `findMany` and a `deleteMany` rather than a `delete` that would
+        // throw on matching nothing.
+        const doomed = await tx.conversation.findMany({
+          where: { OR: conversationsToDeleteWith(invitation) },
+          select: { id: true },
+        });
+
+        if (doomed.length === 0) {
+          return;
+        }
+
+        const ids = doomed.map((conversation) => conversation.id);
+
+        // The messages are deleted explicitly rather than left to the
+        // `onDelete: Cascade` declared on `Message.conversation`.
+        //
+        // Prisma does emulate that cascade under `relationMode = "prisma"`, so
+        // this is belt and braces — but the failure mode if it ever did not is
+        // `message` rows pointing at a conversation that no longer exists,
+        // which is a worse version of the orphan this whole ticket is about.
+        // No test in this repository can tell the difference: the suite runs on
+        // a mock, so a test asserting the cascade only asserts that the mock
+        // implements it. Two explicit statements need no such assumption.
+        await tx.message.deleteMany({ where: { conversationId: { in: ids } } });
+        await tx.conversation.deleteMany({ where: { id: { in: ids } } });
       });
     }),
 });
