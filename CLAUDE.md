@@ -163,6 +163,13 @@ it rather than filing a duplicate. If none exists and the problem is outside the
 current task's scope, create the issue. Filing it is authorized; you do not need
 to be asked.
 
+**File it during the session that found it.** Reporting a problem in chat, in an
+audit report, or in a PR description does not satisfy this — none of those is the
+board, and once the session ends the transcript is the only record. An unrecorded
+finding is indistinguishable from one that was never found. If you have been told
+not to write to Jira, say so, name the finding in your report, and file it as soon
+as that restriction lifts: deferred with an explicit owner, never dropped.
+
 **A newly created discovered issue stays in `To Do`.** Filing is not starting.
 Move it to `In Progress` only when the request authorizes working on that problem
 (for example "find and fix", "resolve", "work on") **and** you actually begin work
@@ -179,6 +186,13 @@ Give a new issue the evidence you have: affected area, observed vs. expected
 behavior, impact, relevant paths, and the ticket you were on when you found it.
 Do not file trivial observations, speculation, or anything the active ticket
 already covers.
+
+**Use the established issue format** — nine sections, a `Priority`, and labels,
+including the `Database Risk` block that tells a human whether the ticket implies
+a production data change. It is specified in
+[`docs/AI_DEVELOPMENT_WORKFLOW.md`](docs/AI_DEVELOPMENT_WORKFLOW.md#issue-format),
+along with the priority and label conventions. Do not reconstruct it by copying an
+older ticket.
 
 ## Git and GitHub
 
@@ -240,3 +254,4 @@ merge manually through GitHub.
 - [`src/server/router/README.md`](src/server/router/README.md) — routers, context, writing procedures
 - [`src/server/db/README.md`](src/server/db/README.md) — Prisma client, schema notes, migration workflow
 - [`scripts/README.md`](scripts/README.md) — the ops scripts, which of them write, and **the record of what has been run in which environment**. Read it before running anything in `scripts/`, and update its table after you do. Production state is currently unknown for every script.
+- [`docs/AI_DEVELOPMENT_WORKFLOW.md`](docs/AI_DEVELOPMENT_WORKFLOW.md) — the Jira and GitHub workflow in full, and **the authoritative [issue format](docs/AI_DEVELOPMENT_WORKFLOW.md#issue-format)**, priority scale, label vocabulary and `Database Risk` values
