@@ -71,3 +71,47 @@ export const SEAT_AVAILABLE_FILTER = { gt: 0 } as const;
  */
 export const isSeatCountInRange = (seats: number) =>
   Number.isInteger(seats) && seats >= 0 && seats <= MAX_SEATS_AVAILABLE;
+
+/**
+ * Why a rider cannot connect with this driver *right now*, or `null`.
+ *
+ * The counterpart's seats, not the reader's own — `connectAction` has always
+ * refused a reader-driver with no space, and this is the mirror image nothing
+ * covered. A rider reaching a full driver's card could send a request that
+ * `reserveSeat` would refuse for as long as the driver stayed full, and neither
+ * party was told why. SCRUM-361.
+ *
+ * The card can only be reached two ways, both of them ordinary: a favourite
+ * who filled up since being starred (`favorites.me` returns them deliberately,
+ * so the un-favourite star survives — SCRUM-351), or a list that went stale
+ * between the query and the click. Discovery itself excludes full drivers.
+ *
+ * Copy, rather than a bare boolean, because this is shown twice: as the card's
+ * notice and as the refusal if Connect is pressed anyway. It lives here beside
+ * `hasSeatAvailable` rather than with the role explanations, because seats are
+ * not a role — but it is phrased to sit alongside them, matching
+ * `carpoolUnavailableExplanation`'s "right now" framing for a state that is
+ * temporary by nature.
+ *
+ * `null` for a RIDER counterpart: their `seatAvail` is 0 by convention and
+ * means nothing. `null` for `undefined`, which is "not loaded yet" rather than
+ * "no space".
+ */
+export const driverHasNoSeatsExplanation = (other: {
+  role: string;
+  seatAvail: number | undefined;
+  preferredName: string;
+}): string | null => {
+  if (other.role !== "DRIVER" || other.seatAvail === undefined) {
+    return null;
+  }
+
+  if (hasSeatAvailable(other.seatAvail)) {
+    return null;
+  }
+
+  return (
+    `${other.preferredName} has no seats free in their car right now, so ` +
+    "they could not accept a request yet."
+  );
+};

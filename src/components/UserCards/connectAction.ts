@@ -1,6 +1,9 @@
 import { RequestStatus, Role, Status } from "@prisma/client";
 import { carpoolUnavailableExplanation } from "../../utils/roleCompatibility";
-import { hasSeatAvailable } from "../../utils/carpoolSeats";
+import {
+  driverHasNoSeatsExplanation,
+  hasSeatAvailable,
+} from "../../utils/carpoolSeats";
 
 /**
  * What pressing **Connect** on a discovery card should do.
@@ -73,6 +76,7 @@ export const connectAction = ({
   seatAvail,
   preferredName,
   otherRole,
+  otherSeatAvail,
   otherStatus,
 }: {
   incomingRequest: RequestState;
@@ -83,6 +87,12 @@ export const connectAction = ({
   preferredName: string;
   /** The other person's role, for the compatibility refusal below. */
   otherRole: Role;
+  /**
+   * The other person's seat count, for the mirror of the `seatAvail` refusal:
+   * a full *counterpart* is as un-connectable as a full reader.
+   * `undefined` before their card's payload carries it.
+   */
+  otherSeatAvail: number | undefined;
   /** Whether the other person's search is paused. */
   otherStatus: Status;
 }): ConnectAction => {
@@ -147,6 +157,28 @@ export const connectAction = ({
     !hasSeatAvailable(seatAvail)
   ) {
     return { kind: "blocked", message: noSeats(preferredName) };
+  }
+
+  // And the mirror: a rider pressing Connect on a driver who has filled up.
+  // Nothing refused this, so the request was written and then refused by
+  // `reserveSeat` at every acceptance — SCRUM-361.
+  //
+  // Deliberately *here* rather than folded into the
+  // `carpoolUnavailableExplanation` block above, which would have been one
+  // line. That block runs before the request checks, and the rule those
+  // checks establish is that an outstanding request is reported first — a
+  // reader with a request pending hears about the request, not the seats.
+  // Putting the counterpart's seats up there would honour that rule for the
+  // reader's own seats and break it for the counterpart's. The wording still
+  // comes from one place, so the card's notice and this refusal cannot drift.
+  const counterpartFull = driverHasNoSeatsExplanation({
+    role: otherRole,
+    seatAvail: otherSeatAvail,
+    preferredName,
+  });
+
+  if (counterpartFull) {
+    return { kind: "blocked", message: counterpartFull };
   }
 
   return { kind: "open" };

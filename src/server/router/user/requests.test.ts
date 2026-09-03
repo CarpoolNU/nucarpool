@@ -71,6 +71,14 @@ const buildRequestsDb = (
    * comes from Azure AD at sign-in.
    */
   emails: Record<string, string | null> = {},
+  /**
+   * userId -> seatsAvail. `create` deliberately does not read this — see the
+   * SCRUM-361 block at the bottom of this file — so it exists only so that
+   * absence can be asserted rather than assumed. Last in the list, and
+   * defaulted, because the parameters here are positional: inserting it
+   * earlier silently turned two `emails` arguments into seat counts.
+   */
+  seats: Record<string, number> = {},
 ) => {
   const requests = new Map<string, RequestRow>(
     seed.map((row) => [row.id, { ...row }]),
@@ -119,6 +127,7 @@ const buildRequestsDb = (
     return ids.map((userId) => ({
       userId,
       carpoolId: groupMembership[userId] ?? null,
+      seatsAvail: seats[userId] ?? 3,
     }));
   });
 
@@ -1538,5 +1547,76 @@ describe("user.requests.me - what it asks the database for", () => {
     for (const relation of ["User", "toUser", "fromUser", "user"]) {
       expect(JSON.stringify(include)).not.toContain(`"${relation}"`);
     }
+  });
+});
+
+/**
+ * SCRUM-361: the server stays permissive, deliberately.
+ *
+ * A rider could reach a full driver's card through favourites or a stale list
+ * and send a request `reserveSeat` would refuse at every acceptance. The fix
+ * refuses at the card — `connectAction` and the card's own notice — and
+ * leaves this mutation alone.
+ *
+ * That was a decision, not an omission, and these tests are where it is
+ * recorded. Two reasons for it:
+ *
+ *   - A request to a currently-full driver is not meaningless. Seats free up,
+ *     and the request becomes acceptable with nothing further needed. Refusing
+ *     here would remove that rather than fix anything.
+ *   - Requests already sent to a full driver cannot be helped by a guard on
+ *     `create`. They are addressed by the driver-side copy in
+ *     `requestHandlers`, which now says the request is still theirs to accept.
+ *
+ * If a future change makes this fail, that is the point: the seat check moving
+ * server-side needs the queueing question answered first, not answered by
+ * accident.
+ */
+describe("user.requests.create — a full driver is not refused here", () => {
+  it("writes the request even when the recipient has no seats free", async () => {
+    const db = buildRequestsDb([], {}, {}, { [USER_B]: 0 });
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await caller.user.requests.create({ toId: USER_B, message: "hello" });
+
+    expect(db.create).toHaveBeenCalled();
+  });
+
+  it("writes it for a negative count too", async () => {
+    // The SCRUM-348 row. Uniform with 0 here, as everywhere else.
+    const db = buildRequestsDb([], {}, {}, { [USER_B]: -1 });
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await caller.user.requests.create({ toId: USER_B, message: "hello" });
+
+    expect(db.create).toHaveBeenCalled();
+  });
+
+  it("reopens an accepted request against a full driver, as it would any other", async () => {
+    // The pair carpooled before and want to again. The driver being full now
+    // is a reason to wait, not a reason to refuse the reopen.
+    const db = buildRequestsDb(
+      [
+        requestRow("old", USER_A, USER_B, {
+          status: RequestStatus.ACCEPTED,
+          conversationId: "conversation-old",
+        }),
+      ],
+      {},
+      {},
+      { [USER_B]: 0 },
+    );
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await caller.user.requests.create({ toId: USER_B, message: "again?" });
+
+    expect(db.rows()).toHaveLength(1);
+    expect(db.rows()[0]).toMatchObject({
+      id: "old",
+      status: RequestStatus.PENDING,
+      fromUserId: USER_A,
+      toUserId: USER_B,
+    });
+    expect(db.create).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,6 @@
 import {
   MAX_SEATS_AVAILABLE,
+  driverHasNoSeatsExplanation,
   SEAT_AVAILABLE_FILTER,
   clampSeats,
   hasSeatAvailable,
@@ -90,5 +91,54 @@ describe("isSeatCountInRange", () => {
     for (const seats of SEAT_COUNTS) {
       expect(isSeatCountInRange(clampSeats(seats))).toBe(true);
     }
+  });
+});
+
+describe("driverHasNoSeatsExplanation", () => {
+  const driver = (seatAvail: number | undefined) => ({
+    role: "DRIVER",
+    seatAvail,
+    preferredName: "Sam",
+  });
+
+  it("explains a driver with no seats, naming them", () => {
+    expect(driverHasNoSeatsExplanation(driver(0))).toBe(
+      "Sam has no seats free in their car right now, so they could not " +
+        "accept a request yet.",
+    );
+  });
+
+  it("says the same for a negative count", () => {
+    // One predicate, so the SCRUM-348 row needs no branch of its own.
+    expect(driverHasNoSeatsExplanation(driver(-1))).toBe(
+      driverHasNoSeatsExplanation(driver(0)),
+    );
+  });
+
+  it("is silent for a driver with room", () => {
+    expect(driverHasNoSeatsExplanation(driver(1))).toBeNull();
+    expect(driverHasNoSeatsExplanation(driver(MAX_SEATS_AVAILABLE))).toBeNull();
+  });
+
+  it("is silent for a rider, whose seat count is 0 by convention", () => {
+    expect(
+      driverHasNoSeatsExplanation({
+        role: "RIDER",
+        seatAvail: 0,
+        preferredName: "Sam",
+      }),
+    ).toBeNull();
+  });
+
+  it("is silent before the count has loaded", () => {
+    // `undefined` is "not known yet", not "no space" — refusing on it would
+    // put a notice on every card for the moment before the payload arrives.
+    expect(driverHasNoSeatsExplanation(driver(undefined))).toBeNull();
+  });
+
+  it("phrases it as temporary, matching the other card notices", () => {
+    // The role and status notices say "right now" because those states are
+    // reversible. A seat count is the most reversible of the three.
+    expect(driverHasNoSeatsExplanation(driver(0))).toContain("right now");
   });
 });

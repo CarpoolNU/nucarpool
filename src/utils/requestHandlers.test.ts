@@ -250,7 +250,7 @@ describe("handleAcceptRequest — a refused acceptance", () => {
     expectNothingWritten();
     expect(mockToastSuccess).not.toHaveBeenCalled();
     expect(mockToastError).toHaveBeenCalledWith(
-      "You do not have any space in your car to accept Robin.",
+      "You have no seats free right now, so you cannot accept Robin yet. Their request stays in your list — accept it once a seat opens up, or raise your seat count in your profile.",
     );
   });
 
@@ -269,8 +269,25 @@ describe("handleAcceptRequest — a refused acceptance", () => {
     expect(accepted).toBe(false);
     expectNothingWritten();
     expect(mockToastError).toHaveBeenCalledWith(
-      "You do not have any space in your car to accept Robin.",
+      "You have no seats free right now, so you cannot accept Robin yet. Their request stays in your list — accept it once a seat opens up, or raise your seat count in your profile.",
     );
+  });
+
+  it("tells a full driver the request is still theirs to accept later", async () => {
+    // SCRUM-361. New requests to a full driver are refused at the card now,
+    // but a request already sent can only be explained — so this copy is the
+    // whole of the fix for that population, and worth pinning.
+    const { handleAcceptRequest } = handlers();
+
+    await handleAcceptRequest(
+      user({ role: Role.DRIVER, seatAvail: 0 }),
+      otherUser(),
+      request,
+    );
+
+    const [message] = mockToastError.mock.calls[0] as [string];
+    expect(message).toContain("stays in your list");
+    expect(message).toContain("raise your seat count");
   });
 
   it("refuses a driver whose rider is already in a group", async () => {
@@ -558,7 +575,11 @@ describe("handleAcceptRequest - a pair who can no longer carpool", () => {
     expect(mockToastError).toHaveBeenCalledTimes(1);
     const [message] = mockToastError.mock.calls[0] as [string];
     expect(message).toContain("both drivers");
-    expect(message).not.toContain("space in your car");
+    // The seat refusal must not be what they hear: it is the role that is
+    // wrong, and no seat count would fix it. Pinned against the current
+    // wording rather than the wording SCRUM-361 replaced, which would have
+    // made this assertion vacuous.
+    expect(message).not.toContain("no seats free");
   });
 
   it("still accepts the compatible pair it was hiding these behind", async () => {
