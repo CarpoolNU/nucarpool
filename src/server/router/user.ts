@@ -15,7 +15,9 @@ import { emailsRouter } from "./user/email";
 import {
   generatePresignedUrl,
   getPresignedImageUrl,
+  signProfileImageUrl,
 } from "../../utils/uploadToS3";
+import { resolveImageLookup } from "../../utils/profileImageLookup";
 import {
   MAX_PROFILE_IMAGE_BYTES,
   PROFILE_IMAGE_CONTENT_TYPES,
@@ -434,6 +436,24 @@ export const userRouter = router({
         });
       }
       try {
+        // The whole of SCRUM-276. A primary-key lookup on an already-open
+        // connection replaces an S3 `HeadObject` over the network, for every
+        // user whose picture state has been recorded.
+        //
+        // `null` does **not** mean "no picture": every row predating the column
+        // has it, whether or not an object exists, so those fall through to the
+        // old path. `resolveImageLookup` owns that distinction and says why
+        // reading `null` as "no picture" would have deleted the avatar of
+        // everyone who already had one.
+        const owner = await ctx.prisma.user.findUnique({
+          where: { id: userId },
+          select: { profilePictureUpdatedAt: true },
+        });
+
+        if (resolveImageLookup(owner?.profilePictureUpdatedAt) === "sign") {
+          return { url: await signProfileImageUrl(userId) };
+        }
+
         return { url: await getPresignedImageUrl(userId) };
       } catch (error) {
         throw new TRPCError({
@@ -442,6 +462,47 @@ export const userRouter = router({
         });
       }
     }),
+
+  /**
+   * Records that the caller's profile picture has just been uploaded.
+   *
+   * The client PUTs straight to S3 with a presigned URL, so **the server is
+   * never otherwise told the upload happened** — which is why this exists
+   * rather than the write living in `getPresignedUrl`. Signing an upload URL is
+   * not evidence that anything was uploaded: the user may abandon the form, or
+   * S3 may reject the body for a content type or length that disagrees with the
+   * signature. Writing the column when the URL is *issued* would therefore mark
+   * pictures present that do not exist, and `getPresignedDownloadUrl` would
+   * then sign URLs for missing objects and show broken images — the exact
+   * failure the rejected alternative in SCRUM-276 was rejected for.
+   *
+   * So the client calls this after its PUT returns `ok`, and only then.
+   *
+   * Idempotent, and correct for a replacement as much as a first upload: it
+   * writes `now()` either way, which is what keeps the column accurate when a
+   * user changes their picture.
+   *
+   * Scoped to the session user with no input at all. A `userId` parameter would
+   * let any signed-in caller assert that somebody else has a picture, and the
+   * only honest source for "who uploaded" is the session that signed the URL.
+   */
+  recordProfilePictureUpload: protectedRouter.mutation(async ({ ctx }) => {
+    const userId = ctx.session.user?.id;
+
+    if (!userId) {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "User not authenticated",
+      });
+    }
+
+    await ctx.prisma.user.update({
+      where: { id: userId },
+      data: { profilePictureUpdatedAt: new Date() },
+    });
+
+    return { success: true };
+  }),
 
   /**
    * Records that the caller accepted the terms shown by `ComplianceModal`.

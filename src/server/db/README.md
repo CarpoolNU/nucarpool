@@ -274,6 +274,91 @@ The check proves migration history matches `schema.prisma`. It says nothing abou
 
 The deny rules for `build:preview` in [`.claude/settings.json`](../../../.claude/settings.json) are deliberately left in place: they cost nothing and would still fire if such a script were reintroduced.
 
+## Profile picture presence
+
+`User.profilePictureUpdatedAt` records when a user last uploaded a profile
+picture, and is null when they never have. It exists to answer one question
+without leaving the datacenter: **does this user have a picture?**
+
+### Why a column at all
+
+`getPresignedImageUrl` did two things, and only one of them cost anything:
+
+- `HeadObjectCommand` — a real network round trip to S3.
+- `getSignedUrl` — a local HMAC computation that makes **no** network call.
+
+So the `HeadObject` was the entire AWS cost of rendering an avatar, and it
+existed purely to tell "no picture" apart from "picture exists" so the UI could
+show its fallback icon instead of a broken image. SCRUM-242 removed the
+_repeated_ lookups; on a cold cache an explore view still paid up to 50 of them,
+and `geoJsonUserList` can return 150 users. SCRUM-276 replaced the question with
+a primary-key read on a connection that is already open.
+
+### The server is not told about uploads, so something has to tell it
+
+The client PUTs straight to S3 with a presigned URL. Nothing in that flow
+reaches the server, which is why `user.recordProfilePictureUpload` exists and
+why the client calls it **after** the PUT returns `ok`.
+
+Writing the column when the upload URL is _issued_ would be simpler and wrong:
+signing a URL is not evidence that anything was uploaded. The user may abandon
+the form, and S3 rejects a body whose content type or length disagrees with the
+signature (SCRUM-243). The column would then claim pictures exist that do not,
+and the download path would sign URLs for missing objects — producing exactly
+the broken-image flash that SCRUM-276 rejected as its alternative design.
+
+### Null means "ask S3", not "no picture"
+
+This is the part that is easy to get wrong, and getting it wrong is not subtle:
+
+> Every row written before the column existed is null, **whether or not an
+> object exists**. "Never uploaded" and "uploaded before the column existed" are
+> the same value.
+
+So reading null as absence would remove the avatar of every user who already had
+one. [`resolveImageLookup`](../../utils/profileImageLookup.ts) is the predicate
+that keeps the two apart, and a null row still takes the old `HeadObject` path.
+
+The consequence is worth stating plainly: **the saving is progressive, not
+immediate.** Everyone who uploads after the deploy is free from then on;
+everyone else costs exactly what they did before until
+[`scripts/backfill-profile-picture-timestamps.ts`](../../../scripts/backfill-profile-picture-timestamps.ts)
+has run.
+
+### Expand now, contract later
+
+The same sequence `group_message` follows, for the same reason — see
+[Changing the schema](#changing-the-schema) on why a schema deploy and an
+application deploy are not simultaneous:
+
+1. **Expand** — add the column, write it on upload, read it when set and fall
+   back when null. This is what shipped, and it is safe to deploy in either
+   order relative to the schema.
+2. **Migrate** — run the backfill in every environment, from the S3 listing.
+   It writes `LastModified` rather than `now()`, so the column keeps meaning
+   "when the picture last changed".
+3. **Contract** — delete the fallback in `getPresignedImageUrl`, and retire the
+   script. Only once its dry run reports nothing to do everywhere.
+
+Step 3 is a separate ticket on purpose. Until it happens the `HeadObject` code
+is still reachable, and that is the point of it rather than an oversight.
+
+### Consequences to know about
+
+- **There is no delete-picture path in the app.** A user can only replace their
+  picture, and a replacement writes a fresh timestamp, so the column cannot go
+  stale in the other direction. If a removal feature is ever added it has to
+  clear the column, or the download path will sign URLs for an object that has
+  been deleted.
+- **The column is not exposed to clients.** It is read server-side inside
+  `getPresignedDownloadUrl` and nowhere else, so it is absent from
+  `PublicUserFields` and from the merged `User` type. It could serve as a
+  cache-busting key for `useProfileImage` later; the existing explicit
+  invalidation already covers the case that matters, so it was not wired up.
+- **`NEXT_PUBLIC_ENV` namespaces the S3 keys**, which is why changing it orphans
+  uploads — and why the backfill lists one prefix and reports zero rather than
+  failing if pointed at the wrong one.
+
 ## Location ownership
 
 `Location` has no owning foreign key — `CarpoolSearch` points at it, not the

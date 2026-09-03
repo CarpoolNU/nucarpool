@@ -143,28 +143,43 @@ model CarpoolGroup {
 
 // Represents a User--need this for NextAuth and the data it stores.
 model User {
-  id                String          @id @default(cuid()) // primary key
-  name              String?
-  email             String?         @unique
-  emailVerified     DateTime?       @map(name: "email_verified")
-  image             String?         @db.MediumText
-  bio               String          @default("")
-  preferredName     String          @default("")
-  pronouns          String          @default("")
-  accounts          Account[] // can have multiple accounts
-  sessions          Session[] // can have multiple settings
-  permission        Permission      @default(USER)
-  isOnboarded       Boolean         @default(false) @map("is_onboarded")
-  tutorialCompleted Boolean         @default(false) @map("tutorial_completed")
-  licenseSigned     Boolean         @default(false) @map("license_signed")
-  favoritedBy       User[]          @relation("Favorites")
-  favorites         User[]          @relation("Favorites")
-  sentRequests      Request[]       @relation("sentRequests")
-  receivedRequests  Request[]       @relation("receivedRequests")
-  message           Message[]
-  dateCreated       DateTime        @default(now())
-  dateModified      DateTime        @default(now()) @updatedAt
-  carpoolSearches   CarpoolSearch[]
+  id                      String          @id @default(cuid()) // primary key
+  name                    String?
+  email                   String?         @unique
+  emailVerified           DateTime?       @map(name: "email_verified")
+  image                   String?         @db.MediumText
+  bio                     String          @default("")
+  preferredName           String          @default("")
+  pronouns                String          @default("")
+  accounts                Account[] // can have multiple accounts
+  sessions                Session[] // can have multiple settings
+  permission              Permission      @default(USER)
+  isOnboarded             Boolean         @default(false) @map("is_onboarded")
+  tutorialCompleted       Boolean         @default(false) @map("tutorial_completed")
+  licenseSigned           Boolean         @default(false) @map("license_signed")
+  // When this user's profile picture was last uploaded, and null when they have
+  // never uploaded one. Set by `user.recordProfilePictureUpload` after the
+  // client's presigned PUT succeeds, since the PUT goes straight to S3 and the
+  // server is not otherwise told.
+  //
+  // It exists so `getPresignedDownloadUrl` can answer "has a picture?" without
+  // an S3 `HeadObject`, which was the entire AWS cost of rendering an avatar
+  // (SCRUM-276). A timestamp rather than a boolean: it also records when the
+  // picture last changed, and can serve as a cache-busting key later.
+  //
+  // **Null still means "ask S3"**, not "no picture", until
+  // `scripts/backfill-profile-picture-timestamps.ts` has run everywhere -- every
+  // row predating this column is null while the object may well exist. See
+  // `resolveImageLookup`.
+  profilePictureUpdatedAt DateTime?       @map("profile_picture_updated_at")
+  favoritedBy             User[]          @relation("Favorites")
+  favorites               User[]          @relation("Favorites")
+  sentRequests            Request[]       @relation("sentRequests")
+  receivedRequests        Request[]       @relation("receivedRequests")
+  message                 Message[]
+  dateCreated             DateTime        @default(now())
+  dateModified            DateTime        @default(now()) @updatedAt
+  carpoolSearches         CarpoolSearch[]
 
   @@map(name: "user")
 }

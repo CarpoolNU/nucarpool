@@ -8,6 +8,7 @@ import { serverEnv } from "./env/server";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { browserEnv } from "./env/browser";
 import { ProfileImageContentType } from "./profileImage";
+import { profilePicturePrefix } from "./profileImageLookup";
 
 // Create an S3 client instance
 const s3Client = new S3Client({
@@ -53,10 +54,9 @@ export async function generatePresignedUrl(
   contentType: ProfileImageContentType,
   contentLength: number,
 ) {
-  const build = browserEnv.NEXT_PUBLIC_ENV;
   const command = new PutObjectCommand({
     Bucket: serverEnv.S3_BUCKET_NAME,
-    Key: `profile-pictures/${build}/${fileName}`,
+    Key: `${profilePicturePrefix(browserEnv.NEXT_PUBLIC_ENV)}${fileName}`,
     ContentType: contentType,
     ContentLength: contentLength,
   });
@@ -97,19 +97,56 @@ function isObjectNotFound(error: unknown): boolean {
   return status === 404 || (error as { name?: string })?.name === "NotFound";
 }
 
+/** The object key a user's profile picture lives at, in this environment. */
+function profileImageKey(fileName: string): string {
+  return `${profilePicturePrefix(browserEnv.NEXT_PUBLIC_ENV)}${fileName}`;
+}
+
+/**
+ * Signs a GET URL without asking S3 whether the object is there.
+ *
+ * **This makes no network call.** `getSignedUrl` is a local HMAC computation,
+ * which is the fact SCRUM-276 turns on: once
+ * `User.profilePictureUpdatedAt` says a picture exists, the `HeadObject` below
+ * is pure cost and this is all that is needed.
+ *
+ * Returns null only if signing itself fails, which means misconfigured
+ * credentials rather than a missing picture. The caller cannot tell those apart
+ * from the return value, and does not need to - both render the fallback icon -
+ * but the log line distinguishes them.
+ */
+export async function signProfileImageUrl(fileName: string) {
+  try {
+    const command = new GetObjectCommand({
+      Bucket: serverEnv.S3_BUCKET_NAME,
+      Key: profileImageKey(fileName),
+    });
+    return await getSignedUrl(s3Client, command, {
+      expiresIn: PRESIGNED_DOWNLOAD_EXPIRY_SECONDS,
+    });
+  } catch (error) {
+    console.error("Error signing image url", error);
+    return null;
+  }
+}
+
 /**
  * Returns a presigned GET URL for the user's profile picture, or null if they
- * do not have one.
+ * do not have one, asking S3 which it is.
  *
- * Note on cost: getSignedUrl is a local HMAC computation and makes no network
- * call. The HeadObject above is the only AWS API request here, and it exists
+ * Note on cost: the HeadObject here is the only AWS API request, and it exists
  * purely to tell "no picture" apart from "picture exists" so the UI can show
  * its fallback icon instead of a broken image.
+ *
+ * **Now the fallback rather than the default path.**
+ * `getPresignedDownloadUrl` calls `signProfileImageUrl` instead whenever
+ * `User.profilePictureUpdatedAt` is set, and only reaches this when the column
+ * is null - a row that predates it, whose object may or may not exist. Once
+ * `scripts/backfill-profile-picture-timestamps.ts` has run everywhere there are
+ * no such rows and this function can go; see `resolveImageLookup`.
  */
 export async function getPresignedImageUrl(fileName: string) {
-  const build = browserEnv.NEXT_PUBLIC_ENV;
-  const key = `profile-pictures/${build}/${fileName}`;
-  const expiry = PRESIGNED_DOWNLOAD_EXPIRY_SECONDS;
+  const key = profileImageKey(fileName);
 
   try {
     // Check if the object exists
@@ -123,15 +160,5 @@ export async function getPresignedImageUrl(fileName: string) {
     return null;
   }
 
-  try {
-    // If the object exists, generate a pre-signed URL
-    const command = new GetObjectCommand({
-      Bucket: serverEnv.S3_BUCKET_NAME,
-      Key: key,
-    });
-    return await getSignedUrl(s3Client, command, { expiresIn: expiry });
-  } catch (error) {
-    console.error("Error getting image url", error);
-    return null;
-  }
+  return signProfileImageUrl(fileName);
 }
