@@ -21,32 +21,43 @@ region_name=aws_region
 
 # Define the templates
 #
-# `{{preferredName}}`, `{{OtherUser}}` and `{{message}}` are user-controlled, and
-# SES does not HTML-escape template substitutions in an `HtmlPart` — see the note
-# at https://docs.aws.amazon.com/ses/latest/dg/send-personalized-email-advanced.html
-# and the comment above `escapeHtmlText` in `src/server/emailParams.ts`, which is
-# where the escaping happens.
+# `preferredName`, `OtherUser` and `message` are user-controlled, and SES does not
+# escape template substitutions — see the note at
+# https://docs.aws.amazon.com/ses/latest/dg/send-personalized-email-advanced.html
 #
-# That escaping covers `&`, `<` and `>` only, which is sufficient for element text
-# content and nothing more. **Keep every placeholder in text content.** Moving one
-# into an attribute value — `href="{{...}}"`, say — needs quote escaping too, and
-# adding that is SCRUM-360, not a template-only edit.
+# One `TemplateData` blob feeds both parts of a template, so each part reads its
+# own variables and `generateEmailParams` in `src/server/emailParams.ts` emits the
+# same value under both:
+#
+#   HtmlPart -> {{...Html}}    escaped, safe in text content and in attributes
+#   TextPart -> {{...Plain}}   raw, because plain text has nothing to inject into
+#
+# Keep that split. An `HtmlPart` reading a `...Plain` variable is an HTML injection
+# bug, and a `TextPart` reading a `...Html` one shows entities to the reader.
+#
+# The unsuffixed `{{preferredName}}` / `{{OtherUser}}` / `{{message}}` are the
+# previous generation. They are still emitted, so a template that has not been
+# republished keeps working, but no template here should use them any more.
+#
+# **Running this script mutates AWS.** The app deploy that emits the suffixed
+# variables must land first, and the run belongs in `README.md`'s record. See
+# SCRUM-360.
 templates = [
     {
         "TemplateName": "DriverRequestTemplate",
         "SubjectPart": "New Carpool Request",
         "HtmlPart": """
-        <p>Hello {{preferredName}},</p>
-        <p>{{OtherUser}} has sent a request to join your Carpool group. Here's a preview of their message:</p>
-        <p><strong>{{message}}</strong></p>
+        <p>Hello {{preferredNameHtml}},</p>
+        <p>{{OtherUserHtml}} has sent a request to join your Carpool group. Here's a preview of their message:</p>
+        <p><strong>{{messageHtml}}</strong></p>
         <p><a href="https://www.carpoolnu.com">Click here to accept or reject the request</a></p>
         """,
         "TextPart": """
-        Hello {{preferredName}},
+        Hello {{preferredNamePlain}},
 
-        {{OtherUser}} has sent a request to join your Carpool group. Here's a preview of their message:
+        {{OtherUserPlain}} has sent a request to join your Carpool group. Here's a preview of their message:
 
-        {{message}}
+        {{messagePlain}}
 
         To accept or reject the request, visit: https://www.carpoolnu.com
         """
@@ -55,17 +66,17 @@ templates = [
         "TemplateName": "RiderRequestTemplate",
         "SubjectPart": "New Carpool Invitation",
         "HtmlPart": """
-        <p>Hello {{preferredName}},</p>
-        <p>{{OtherUser}} sent a request for you to join their Carpool group. Here's a preview of their message:</p>
-        <p><strong>{{message}}</strong></p>
+        <p>Hello {{preferredNameHtml}},</p>
+        <p>{{OtherUserHtml}} sent a request for you to join their Carpool group. Here's a preview of their message:</p>
+        <p><strong>{{messageHtml}}</strong></p>
         <p><a href="https://www.carpoolnu.com">Click here to see accept or reject the request</a></p>
         """,
         "TextPart": """
-        Hello {{preferredName}},
+        Hello {{preferredNamePlain}},
 
-        {{OtherUser}} sent a request for you to join their Carpool group. Here's a preview of their message:
+        {{OtherUserPlain}} sent a request for you to join their Carpool group. Here's a preview of their message:
 
-        {{message}}
+        {{messagePlain}}
 
         To accept or reject the request, visit: https://www.carpoolnu.com
         """
@@ -74,17 +85,17 @@ templates = [
         "TemplateName": "MessageNotificationTemplate",
         "SubjectPart": "New Message in Carpool NU",
         "HtmlPart": """
-        <p>Hello {{preferredName}},</p>
-        <p>{{OtherUser}} sent you a message in Carpool NU:</p>
-        <p><strong>{{message}}</strong></p>
+        <p>Hello {{preferredNameHtml}},</p>
+        <p>{{OtherUserHtml}} sent you a message in Carpool NU:</p>
+        <p><strong>{{messageHtml}}</strong></p>
         <p><a href="https://www.carpoolnu.com">Click here to open Carpool NU</a></p>
         """,
         "TextPart": """
-        Hello {{preferredName}},
+        Hello {{preferredNamePlain}},
 
-        {{OtherUser}} sent you a message in Carpool NU:
+        {{OtherUserPlain}} sent you a message in Carpool NU:
 
-        {{message}}
+        {{messagePlain}}
 
         To view the message, visit: https://www.carpoolnu.com
         """
@@ -93,14 +104,14 @@ templates = [
         "TemplateName": "DriverAcceptanceTemplate",
         "SubjectPart": "Request Accepted",
         "HtmlPart": """
-        <p>Hello {{preferredName}},</p>
-        <p>{{OtherUser}} has accepted your request for them to join your group.</p>
+        <p>Hello {{preferredNameHtml}},</p>
+        <p>{{OtherUserHtml}} has accepted your request for them to join your group.</p>
         <p><a href="https://www.carpoolnu.com">Click here to open Carpool NU</a></p>
         """,
         "TextPart": """
-        Hello {{preferredName}},
+        Hello {{preferredNamePlain}},
 
-        {{OtherUser}} has accepted your request for them to join your group.
+        {{OtherUserPlain}} has accepted your request for them to join your group.
 
         To view your group, visit: https://www.carpoolnu.com
         """
@@ -109,14 +120,14 @@ templates = [
         "TemplateName": "RiderAcceptanceTemplate",
         "SubjectPart": "Request Accepted",
         "HtmlPart": """
-        <p>Hello {{preferredName}},</p>
-        <p>{{OtherUser}} has accepted your request to join their Carpool group.</p>
+        <p>Hello {{preferredNameHtml}},</p>
+        <p>{{OtherUserHtml}} has accepted your request to join their Carpool group.</p>
         <p><a href="https://www.carpoolnu.com">Click here to open Carpool NU</a></p>
         """,
         "TextPart": """
-        Hello {{preferredName}},
+        Hello {{preferredNamePlain}},
 
-        {{OtherUser}} has accepted your request to join their Carpool group.
+        {{OtherUserPlain}} has accepted your request to join their Carpool group.
 
         To view your group, visit: https://www.carpoolnu.com
         """

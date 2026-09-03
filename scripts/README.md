@@ -116,6 +116,48 @@ a token with production read access or someone running the dry runs with
 `DATABASE_URL` pointed at production. **Until that happens, every production
 cell above is an open question, not a zero.**
 
+### `emailtemplate.py` — a republish is outstanding
+
+`emailtemplate.py` is not in the table above, because it does not touch the
+database and "outstanding rows" is the wrong question for it. It has its own
+pending state instead.
+
+SCRUM-360 changed the templates in this repository so that each part of an
+email reads its own variables — the `HtmlPart` the escaped `{{...Html}}` set,
+the `TextPart` the raw `{{...Plain}}` set. **That change is inert until someone
+runs the script**, because the templates live in AWS and this file is only a
+description of them.
+
+| What                               | State                                                  |
+| ---------------------------------- | ------------------------------------------------------ |
+| App emits the suffixed variables   | Yes, from the SCRUM-360 deploy onwards                 |
+| Templates in AWS read them         | **Not republished.** Still on the unsuffixed variables |
+| Unsuffixed variables still emitted | Yes, deliberately — see `src/server/emailParams.ts`    |
+
+Nothing is broken in the meantime: `generateEmailParams` still emits the
+unsuffixed `{{preferredName}}` / `{{OtherUser}}` / `{{message}}`, escaped, so
+the templates currently live in AWS keep rendering exactly as they did. What is
+outstanding is the improvement, not a fix — until the republish, HTML entities
+still leak into the plain-text part of every notification.
+
+**The ordering is not optional.** The app deploy emitting the suffixed
+variables must land before the republish. Republishing first points the live
+templates at variables the deployed app does not send, and SES renders a
+missing variable as nothing — so names and message bodies would vanish from
+live email. **Confirm the SCRUM-360 deploy is live in the target environment
+before republishing it**, rather than assuming that merging was enough.
+
+Running it needs `ACCESS_KEY_ID_AWS` / `SECRET_ACCESS_KEY_AWS` / `REGION_AWS`
+in `.env`, and **confirm which AWS account they point at first** — the script
+names no environment and will happily update production templates. Record the
+run here when it happens, and once it is recorded for every environment the
+unsuffixed variables can be deleted from `emailParams.ts`.
+
+| Environment | Republished | Date | By  |
+| ----------- | ----------- | ---- | --- |
+| staging     | **no**      | —    | —   |
+| production  | **no**      | —    | —   |
+
 ### Two findings worth acting on
 
 1. **`backfill-group-preferences` is not finished on staging — 3 rows.** This

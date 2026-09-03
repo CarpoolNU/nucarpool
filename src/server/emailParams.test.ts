@@ -1,4 +1,8 @@
-import { escapeHtmlText, generateEmailParams } from "./emailParams";
+import {
+  escapeHtmlAttribute,
+  escapeHtmlText,
+  generateEmailParams,
+} from "./emailParams";
 import type {
   AcceptanceEmailSchema,
   MessageEmailSchema,
@@ -86,6 +90,12 @@ describe("generateEmailParams", () => {
       preferredName: "Grace",
       OtherUser: "Ada",
       message: "Would you like to carpool?",
+      preferredNameHtml: "Grace",
+      OtherUserHtml: "Ada",
+      messageHtml: "Would you like to carpool?",
+      preferredNamePlain: "Grace",
+      OtherUserPlain: "Ada",
+      messagePlain: "Would you like to carpool?",
     });
   });
 
@@ -105,6 +115,10 @@ describe("generateEmailParams", () => {
     expect(templateData(params)).toEqual({
       preferredName: "Grace",
       OtherUser: "Ada",
+      preferredNameHtml: "Grace",
+      OtherUserHtml: "Ada",
+      preferredNamePlain: "Grace",
+      OtherUserPlain: "Ada",
     });
   });
 
@@ -197,6 +211,13 @@ describe("generateEmailParams HTML escaping", () => {
       preferredName: "Grace &amp; Co",
       OtherUser: '&lt;a href="https://evil.example"&gt;Ada&lt;/a&gt;',
       message: "&lt;b&gt;x&lt;/b&gt;",
+      preferredNameHtml: "Grace &amp; Co",
+      OtherUserHtml:
+        "&lt;a href=&quot;https://evil.example&quot;&gt;Ada&lt;/a&gt;",
+      messageHtml: "&lt;b&gt;x&lt;/b&gt;",
+      preferredNamePlain: "Grace & Co",
+      OtherUserPlain: '<a href="https://evil.example">Ada</a>',
+      messagePlain: "<b>x</b>",
     });
   });
 
@@ -222,6 +243,11 @@ describe("generateEmailParams HTML escaping", () => {
     expect(templateData(params)).toEqual({
       preferredName: "Grace &amp; Co",
       OtherUser: '&lt;a href="https://evil.example"&gt;Ada&lt;/a&gt;',
+      preferredNameHtml: "Grace &amp; Co",
+      OtherUserHtml:
+        "&lt;a href=&quot;https://evil.example&quot;&gt;Ada&lt;/a&gt;",
+      preferredNamePlain: "Grace & Co",
+      OtherUserPlain: '<a href="https://evil.example">Ada</a>',
     });
   });
 
@@ -236,5 +262,133 @@ describe("generateEmailParams HTML escaping", () => {
       ToAddresses: ["grace@northeastern.edu"],
       CcAddresses: ["ada@northeastern.edu"],
     });
+  });
+});
+
+/**
+ * SES renders one `TemplateData` blob into both parts of a template, so each
+ * part reads its own variables: the `HtmlPart` the escaped `...Html` set, the
+ * `TextPart` the raw `...Plain` set. The unsuffixed set is the previous
+ * generation, still emitted so that a template not yet republished keeps
+ * working. See the note above `escapeHtmlText` and SCRUM-360.
+ */
+describe("escapeHtmlAttribute", () => {
+  it("agrees with escapeHtmlText on input carrying no quotes", () => {
+    const value = "<b>me & you</b>";
+
+    expect(escapeHtmlAttribute(value)).toBe(escapeHtmlText(value));
+    expect(escapeHtmlAttribute(value)).toBe("&lt;b&gt;me &amp; you&lt;/b&gt;");
+  });
+
+  it("escapes the quotes that can break out of an attribute value", () => {
+    expect(escapeHtmlAttribute(`" onmouseover="alert(1)`)).toBe(
+      "&quot; onmouseover=&quot;alert(1)",
+    );
+    expect(escapeHtmlAttribute("' onmouseover='alert(1)")).toBe(
+      "&#39; onmouseover=&#39;alert(1)",
+    );
+  });
+
+  it("escapes an ampersand once, not twice", () => {
+    expect(escapeHtmlAttribute("&quot;")).toBe("&amp;quot;");
+  });
+
+  it("leaves ordinary text untouched", () => {
+    expect(escapeHtmlAttribute("See you at 8:45")).toBe("See you at 8:45");
+  });
+});
+
+describe("the HtmlPart and TextPart variable split", () => {
+  const withApostrophe = {
+    ...base,
+    receiverName: "Grace O'Brien",
+    senderName: "Ada & Co",
+  };
+
+  it("gives the plain-text part exactly what the user typed", () => {
+    const data = templateData(
+      generateEmailParams(
+        { ...withApostrophe, messageText: "I'm running late — me & you at 8?" },
+        "message",
+        false,
+      ),
+    );
+
+    expect(data.preferredNamePlain).toBe("Grace O'Brien");
+    expect(data.OtherUserPlain).toBe("Ada & Co");
+    expect(data.messagePlain).toBe("I'm running late — me & you at 8?");
+  });
+
+  it("escapes the HTML part aggressively, apostrophes included", () => {
+    const data = templateData(
+      generateEmailParams(
+        { ...withApostrophe, messageText: `say "hi" & <bye>` },
+        "message",
+        false,
+      ),
+    );
+
+    expect(data.preferredNameHtml).toBe("Grace O&#39;Brien");
+    expect(data.OtherUserHtml).toBe("Ada &amp; Co");
+    expect(data.messageHtml).toBe("say &quot;hi&quot; &amp; &lt;bye&gt;");
+  });
+
+  it("still emits the legacy set, escaped as it was, for templates awaiting a republish", () => {
+    const data = templateData(
+      generateEmailParams(
+        { ...withApostrophe, messageText: `say "hi" & <bye>` },
+        "message",
+        false,
+      ),
+    );
+
+    expect(data.preferredName).toBe("Grace O'Brien");
+    expect(data.OtherUser).toBe("Ada &amp; Co");
+    expect(data.message).toBe(`say "hi" &amp; &lt;bye&gt;`);
+  });
+
+  it("never leaves a tag unescaped in either escaped set", () => {
+    const data = templateData(
+      generateEmailParams(
+        { ...base, messageText: "<script>alert(1)</script>" },
+        "message",
+        false,
+      ),
+    );
+
+    for (const key of ["message", "messageHtml"]) {
+      expect(data[key]).not.toContain("<");
+      expect(data[key]).not.toContain(">");
+    }
+    expect(data.messagePlain).toContain("<script>");
+  });
+
+  it("emits every variable a template can reference, and nothing else", () => {
+    const request = templateData(
+      generateEmailParams(requestSchema(true), "request", false),
+    );
+    const acceptance = templateData(
+      generateEmailParams(acceptanceSchema(true), "acceptance", false),
+    );
+
+    expect(Object.keys(request).sort()).toEqual([
+      "OtherUser",
+      "OtherUserHtml",
+      "OtherUserPlain",
+      "message",
+      "messageHtml",
+      "messagePlain",
+      "preferredName",
+      "preferredNameHtml",
+      "preferredNamePlain",
+    ]);
+    expect(Object.keys(acceptance).sort()).toEqual([
+      "OtherUser",
+      "OtherUserHtml",
+      "OtherUserPlain",
+      "preferredName",
+      "preferredNameHtml",
+      "preferredNamePlain",
+    ]);
   });
 });
