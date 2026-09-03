@@ -1,4 +1,4 @@
-import { Permission } from "@prisma/client";
+import { Permission, Role, Status } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
 import type { Session } from "next-auth";
 import { appRouter } from "../index";
@@ -222,5 +222,277 @@ describe("user.favorites.edit — authentication gate", () => {
       caller.user.favorites.edit({ favoriteId: TARGET, add: true }),
     ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     expect(db.update).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * SCRUM-351: `favorites.me` no longer hides a favourite it cannot match.
+ *
+ * The procedure used to drop any favourite whose role equalled the caller's,
+ * whose role was VIEWER, or whose search was INACTIVE — the predicate that
+ * belongs in discovery. Applied to a curated list it created a state with no
+ * way out: this query is the only source of the favourites list, the
+ * un-favourite star lives on the card it renders, and `buildCandidateWhere`
+ * narrows the explore map to compatible roles as well. The person disappeared
+ * from every surface while their `_Favorites` row persisted.
+ *
+ * These drive the real `appRouter` with a mocked Prisma, in the style of the
+ * `edit` tests above. Nothing here renders a card — see the limitations note at
+ * the end of the file.
+ */
+
+const CALLER = "caller";
+
+/** A CarpoolSearch row shaped as `convertCarpoolSearchToPublic` expects it. */
+const favoriteSearch = (
+  id: string,
+  over: { role?: Role; status?: Status } = {},
+) => ({
+  id: `search-${id}`,
+  userId: id,
+  role: over.role ?? Role.DRIVER,
+  status: over.status ?? Status.ACTIVE,
+  seatsAvail: 3,
+  companyName: "Acme",
+  daysWorking: "0,1,1,1,1,1,0",
+  startTime: null,
+  endTime: null,
+  startDate: null,
+  endDate: null,
+  carpoolId: null,
+  user: {
+    id,
+    name: `${id} name`,
+    // Deliberately present on the row the resolver reads, so the assertion that
+    // it is absent from the response is testing the converter rather than a
+    // fixture that never had one.
+    email: `${id}@northeastern.edu`,
+    image: null,
+    bio: "",
+    preferredName: id,
+    pronouns: "",
+  },
+  homeLocation: {
+    city: "Boston",
+    state: "MA",
+    // Chosen so two-decimal coarsening is visible: 42.351234 -> 42.35.
+    coordLat: 42.351234,
+    coordLng: -71.056789,
+  },
+  companyLocation: {
+    streetAddress: "1 Main St",
+    coordLat: 42.4,
+    coordLng: -71.1,
+  },
+});
+
+/**
+ * A Prisma double for the three reads `me` performs: the caller's own search
+ * (an existence guard), the caller's favorites, and those favourites' searches.
+ */
+const buildMeDb = ({
+  callerRole = Role.RIDER,
+  callerSearch = true,
+  favorites,
+}: {
+  callerRole?: Role;
+  callerSearch?: boolean;
+  favorites: ReturnType<typeof favoriteSearch>[];
+}) => {
+  const findMany = jest.fn(async () => favorites);
+
+  return {
+    prisma: {
+      carpoolSearch: {
+        findFirst: jest.fn(async () =>
+          callerSearch ? { role: callerRole } : null,
+        ),
+        findMany,
+      },
+      user: {
+        findUnique: jest.fn(async () => ({
+          favorites: favorites.map((f) => ({ id: f.userId })),
+        })),
+        update: jest.fn(),
+      },
+    },
+    findMany,
+  };
+};
+
+const meCallerFor = (db: ReturnType<typeof buildMeDb>, userId = CALLER) => {
+  const ctx = {
+    req: undefined,
+    res: undefined,
+    session: sessionFor(userId),
+    prisma: db.prisma,
+    sesClient: { send: jest.fn() },
+  } as unknown as Context;
+
+  return appRouter.createCaller(ctx);
+};
+
+const idsFrom = async (db: ReturnType<typeof buildMeDb>) =>
+  (await meCallerFor(db).user.favorites.me()).map((f) => f.id).sort();
+
+describe("user.favorites.me — a favourite survives becoming unmatchable", () => {
+  it("returns a favourite whose role now matches the caller's", async () => {
+    // The headline case: a RIDER favourited a DRIVER who has since become a
+    // RIDER. Before the fix this returned an empty list.
+    const db = buildMeDb({
+      callerRole: Role.RIDER,
+      favorites: [favoriteSearch("same-role", { role: Role.RIDER })],
+    });
+
+    expect(await idsFrom(db)).toEqual(["same-role"]);
+  });
+
+  it("returns a favourite who has switched to VIEWER", async () => {
+    const db = buildMeDb({
+      callerRole: Role.RIDER,
+      favorites: [favoriteSearch("viewer", { role: Role.VIEWER })],
+    });
+
+    expect(await idsFrom(db)).toEqual(["viewer"]);
+  });
+
+  it("returns a favourite whose search is INACTIVE", async () => {
+    const db = buildMeDb({
+      callerRole: Role.RIDER,
+      favorites: [favoriteSearch("paused", { status: Status.INACTIVE })],
+    });
+
+    expect(await idsFrom(db)).toEqual(["paused"]);
+  });
+
+  it("returns every category at once, keeping the compatible one", async () => {
+    // The failure scenario from the ticket: three favourites, two of which
+    // drifted. All three have to come back, or the list is still lying.
+    const db = buildMeDb({
+      callerRole: Role.RIDER,
+      favorites: [
+        favoriteSearch("compatible"),
+        favoriteSearch("same-role", { role: Role.RIDER }),
+        favoriteSearch("viewer", { role: Role.VIEWER }),
+        favoriteSearch("paused", { status: Status.INACTIVE }),
+      ],
+    });
+
+    expect(await idsFrom(db)).toEqual([
+      "compatible",
+      "paused",
+      "same-role",
+      "viewer",
+    ]);
+  });
+
+  it("is unchanged for an ordinary compatible favourite", async () => {
+    const db = buildMeDb({
+      callerRole: Role.DRIVER,
+      favorites: [favoriteSearch("rider", { role: Role.RIDER })],
+    });
+
+    expect(await idsFrom(db)).toEqual(["rider"]);
+  });
+
+  it("does not narrow the query by role or status either", async () => {
+    // The filter was in JavaScript, so a "fix" that pushed it into SQL would
+    // pass every assertion above while reintroducing the bug. The query must
+    // select favourites by user id and nothing else.
+    const db = buildMeDb({ favorites: [favoriteSearch("rider")] });
+
+    await meCallerFor(db).user.favorites.me();
+
+    const [{ where }] = db.findMany.mock.calls[0] as any[];
+    expect(where).toEqual({ userId: { in: ["rider"] } });
+  });
+
+  it("still returns an empty list when nothing is favourited", async () => {
+    const db = buildMeDb({ favorites: [] });
+
+    expect(await idsFrom(db)).toEqual([]);
+  });
+
+  it("still refuses a caller with no CarpoolSearch of their own", async () => {
+    // The guard the removed filter's `role` used to be selected for. It is not
+    // part of this fix and must not have been dropped with it.
+    const db = buildMeDb({ callerSearch: false, favorites: [] });
+
+    await expect(meCallerFor(db).user.favorites.me()).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+  });
+});
+
+describe("user.favorites.me — returning more rows must not disclose more", () => {
+  it("omits the email address from every entry", async () => {
+    // SCRUM-292 removed email from the bulk payloads, favourites among them.
+    // Relaxing the row filter must not quietly widen the per-row shape.
+    const db = buildMeDb({
+      callerRole: Role.RIDER,
+      favorites: [
+        favoriteSearch("compatible"),
+        favoriteSearch("same-role", { role: Role.RIDER }),
+        favoriteSearch("paused", { status: Status.INACTIVE }),
+      ],
+    });
+
+    const result = await meCallerFor(db).user.favorites.me();
+
+    expect(result).toHaveLength(3);
+    for (const favorite of result) {
+      expect(favorite.email).toBeUndefined();
+      expect(Object.keys(favorite)).not.toContain("email");
+    }
+  });
+
+  it("coarsens the home coordinate on the newly-included entries too", async () => {
+    // A favourite is not a counterpart, so the coarsened converter applies to
+    // them exactly as it does to a compatible favourite.
+    const db = buildMeDb({
+      callerRole: Role.RIDER,
+      favorites: [
+        favoriteSearch("same-role", { role: Role.RIDER }),
+        favoriteSearch("paused", { status: Status.INACTIVE }),
+      ],
+    });
+
+    const result = await meCallerFor(db).user.favorites.me();
+
+    for (const favorite of result) {
+      expect(favorite.startCoordLat).toBe(42.35);
+      expect(favorite.startCoordLng).toBe(-71.06);
+      // The workplace is not a home and is deliberately not coarsened.
+      expect(favorite.companyCoordLat).toBe(42.4);
+    }
+  });
+
+  it("still carries the role and status the card needs to explain itself", async () => {
+    // `ConnectCard` builds its notice from these two fields, so the payload
+    // has to keep them for the explanation to be possible at all.
+    const db = buildMeDb({
+      callerRole: Role.RIDER,
+      favorites: [favoriteSearch("paused", { status: Status.INACTIVE })],
+    });
+
+    const [favorite] = await meCallerFor(db).user.favorites.me();
+
+    expect(favorite?.role).toBe(Role.DRIVER);
+    expect(favorite?.status).toBe(Status.INACTIVE);
+  });
+});
+
+describe("user.favorites.edit — a newly-visible favourite can be removed", () => {
+  it("un-favourites someone whose role change used to hide them", async () => {
+    // The point of the whole ticket: the row was unreachable because no card
+    // rendered, so no star existed to press. `edit` itself never had a role
+    // condition, so once the entry is listed this works - which is what makes
+    // relaxing the read filter a complete fix rather than half of one.
+    const db = buildFavoritesDb({ [CALLER]: ["same-role"] });
+    const { caller } = callerFor(sessionFor(CALLER), db);
+
+    await caller.user.favorites.edit({ favoriteId: "same-role", add: false });
+
+    expect(db.favoritesOf(CALLER)).toEqual([]);
   });
 });

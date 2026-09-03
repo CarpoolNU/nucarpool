@@ -380,6 +380,27 @@ describe("buildCandidateWhere — group, favorites, bounds", () => {
     expect(build(base).userId).toEqual({ notIn: ["me"] });
   });
 
+  it("keeps discovery's role and status narrowing under the favorites filter", () => {
+    // SCRUM-351 asked whether the explore map's favorites filter should agree
+    // with the favorites *list* about who is included. It should not, and this
+    // pins that.
+    //
+    // `favorites.me` stopped filtering by role and status, because hiding an
+    // unmatchable favourite also hid the only star that can un-favourite them.
+    // This query answers a different question: it is discovery, narrowed to
+    // favourites, and every predicate here is a superset of what
+    // `calculateScore` keeps. The scorer returns `undefined` for an
+    // incompatible role and for any VIEWER, so dropping these would read more
+    // rows and surface nobody new - the map would look identical and cost more.
+    //
+    // Making the map genuinely show them would mean changing the scorer, which
+    // is a discovery change, not a favourites-list fix.
+    const result = build(base, {}, true, ["a", "b"]);
+
+    expect(result.role).toEqual({ in: [Role.DRIVER] });
+    expect(result.status).toBe(Status.ACTIVE);
+  });
+
   it("bounds both locations when both distance filters are active", () => {
     const result = build(base, { startDistance: 6, endDistance: 10 });
 

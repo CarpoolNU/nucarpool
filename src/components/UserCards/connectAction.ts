@@ -1,4 +1,5 @@
-import { RequestStatus, Role } from "@prisma/client";
+import { RequestStatus, Role, Status } from "@prisma/client";
+import { carpoolUnavailableExplanation } from "../../utils/roleCompatibility";
 
 /**
  * What pressing **Connect** on a discovery card should do.
@@ -70,6 +71,8 @@ export const connectAction = ({
   viewerRole,
   seatAvail,
   preferredName,
+  otherRole,
+  otherStatus,
 }: {
   incomingRequest: RequestState;
   outgoingRequest: RequestState;
@@ -77,7 +80,47 @@ export const connectAction = ({
   viewerRole: Role | undefined;
   seatAvail: number | undefined;
   preferredName: string;
+  /** The other person's role, for the compatibility refusal below. */
+  otherRole: Role;
+  /** Whether the other person's search is paused. */
+  otherStatus: Status;
 }): ConnectAction => {
+  // Checked first, and ahead of the request refusals, because it is the more
+  // fundamental fact: a pair who cannot carpool at all should not hear about
+  // the state of a request between them, and the card is already showing this
+  // very sentence as its notice — the button must not contradict it.
+  //
+  // This branch exists for SCRUM-351. `favorites.me` no longer hides a
+  // favourite whose role changed or whose search was paused, so a Connect
+  // button can now sit on a card for someone the pair can never carpool with.
+  // Without this, pressing it would open the modal and `requests.create` would
+  // happily write the request - there is no role guard on the server, only on
+  // `groups.create`/`groups.edit` - leaving a request that can be sent but
+  // never accepted.
+  //
+  // Recommendation cards cannot reach it: `calculateScore` drops every
+  // incompatible role and `buildCandidateWhere` never returns an INACTIVE row,
+  // so for that caller this is always `null`.
+  //
+  // Scoped to what the *other* person's role and status make impossible. A
+  // reader who is themselves a VIEWER is deliberately excluded: that is not
+  // SCRUM-351's defect, this function has never refused on it, and the UI
+  // already disables both Connect buttons for a VIEWER. `ConnectCard` still
+  // shows them the notice, because `carpoolUnavailableExplanation` answers the
+  // reader's own Viewer mode first - it is the card that explains, and this
+  // that refuses, and the two are allowed to cover different ground.
+  if (viewerRole && viewerRole !== Role.VIEWER) {
+    const unavailable = carpoolUnavailableExplanation(viewerRole, {
+      role: otherRole,
+      status: otherStatus,
+      preferredName,
+    });
+
+    if (unavailable) {
+      return { kind: "blocked", message: unavailable };
+    }
+  }
+
   // Order preserved from the original: an outstanding request in either
   // direction is reported before the seat check, so a driver with no seats and
   // a pending request hears about the request rather than the seats.

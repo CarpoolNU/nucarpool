@@ -1,4 +1,4 @@
-import { RequestStatus, Role } from "@prisma/client";
+import { RequestStatus, Role, Status } from "@prisma/client";
 import { connectAction } from "./connectAction";
 
 /**
@@ -19,15 +19,23 @@ import { connectAction } from "./connectAction";
 const pending = { status: RequestStatus.PENDING };
 const accepted = { status: RequestStatus.ACCEPTED };
 
-const action = (over: Partial<Parameters<typeof connectAction>[0]> = {}) =>
-  connectAction({
+const action = (over: Partial<Parameters<typeof connectAction>[0]> = {}) => {
+  const viewerRole = "viewerRole" in over ? over.viewerRole : Role.RIDER;
+
+  return connectAction({
     incomingRequest: undefined,
     outgoingRequest: undefined,
-    viewerRole: Role.RIDER,
+    viewerRole,
     seatAvail: 0,
     preferredName: "Sam",
+    // Whichever role *fits* the viewer, so the SCRUM-351 compatibility refusal
+    // stays out of the way of every case that is not about it. A test that
+    // wants that refusal names `otherRole` itself.
+    otherRole: viewerRole === Role.DRIVER ? Role.RIDER : Role.DRIVER,
+    otherStatus: Status.ACTIVE,
     ...over,
   });
+};
 
 describe("connectAction — no request between the two users", () => {
   it("opens the modal", () => {
@@ -171,6 +179,117 @@ describe("connectAction — seat availability", () => {
     // data; repairing it and deciding the comparison belong to SCRUM-348, and
     // changing it here would silently widen this fix.
     expect(action({ viewerRole: Role.DRIVER, seatAvail: -1 })).toEqual({
+      kind: "open",
+    });
+  });
+});
+
+/**
+ * SCRUM-351: a favourite the reader cannot carpool with.
+ *
+ * `favorites.me` used to drop any favourite whose role matched the reader's,
+ * was VIEWER, or whose search was INACTIVE — which removed the card, and with
+ * it the only star that can un-favourite them. They are returned now, so a
+ * Connect button can sit on a card for a pair who can never carpool. Nothing on
+ * the server stops that request being written: `requests.create` has no role
+ * guard, only `groups.create`/`groups.edit` do. So this refusal is what keeps a
+ * request that can be sent but never accepted from being created at all.
+ *
+ * `ConnectCard` also disables the button and shows the same sentence as the
+ * card's notice, but neither of those is reachable from a test in this
+ * repository — there is no jsdom and no React testing library. This is the
+ * layer that can be pinned.
+ */
+describe("connectAction — a favourite who cannot be carpooled with", () => {
+  it("refuses two riders, and says which way out there is", () => {
+    const result = action({ viewerRole: Role.RIDER, otherRole: Role.RIDER });
+
+    expect(result).toEqual({
+      kind: "blocked",
+      message:
+        "You and Sam are both riders, so neither of you can drive. " +
+        "One of you would need to switch to Driver.",
+    });
+  });
+
+  it("refuses two drivers", () => {
+    // `seatAvail` is deliberately non-zero: the refusal must be about the pair,
+    // not smuggled in by the seat check further down.
+    const result = action({
+      viewerRole: Role.DRIVER,
+      otherRole: Role.DRIVER,
+      seatAvail: 3,
+    });
+
+    expect(result).toEqual({
+      kind: "blocked",
+      message:
+        "You and Sam are both drivers, so you cannot carpool together. " +
+        "One of you would need to switch to Rider.",
+    });
+  });
+
+  it("refuses a favourite who has switched to Viewer mode, without request copy", () => {
+    const result = action({ viewerRole: Role.RIDER, otherRole: Role.VIEWER });
+
+    expect(result).toEqual({
+      kind: "blocked",
+      message:
+        "Sam has switched to Viewer mode and is not carpooling right now.",
+    });
+    // The requests wording ends "or clear the request". There is no request on
+    // a favourite, so that instruction must not appear here.
+    expect(result).not.toMatchObject({
+      message: expect.stringContaining("request"),
+    });
+  });
+
+  it("refuses a favourite whose search is paused", () => {
+    const result = action({ otherStatus: Status.INACTIVE });
+
+    expect(result).toEqual({
+      kind: "blocked",
+      message:
+        "Sam has paused their carpool search, so you cannot carpool with " +
+        "them right now.",
+    });
+  });
+
+  it("does not refuse on the reader's own Viewer mode", () => {
+    // Deliberate boundary. This refusal is about what the *other* person's
+    // role and status make impossible, which is SCRUM-351's defect; the
+    // reader's own Viewer mode is not, this function has never refused on it,
+    // and both Connect buttons are already `disabled` for a VIEWER. The card
+    // still explains it - `carpoolUnavailableExplanation` answers the reader's
+    // own Viewer mode first, and `ConnectCard` calls it directly for the
+    // notice.
+    expect(action({ viewerRole: Role.VIEWER, otherRole: Role.DRIVER })).toEqual(
+      {
+        kind: "open",
+      },
+    );
+  });
+
+  it("reports the incompatibility ahead of a pending request", () => {
+    // The card is already showing the incompatibility as its notice, so a
+    // refusal naming the request instead would contradict what the reader can
+    // see. It is also the more fundamental fact: no request between this pair
+    // can be accepted regardless of its status.
+    const result = action({
+      viewerRole: Role.RIDER,
+      otherRole: Role.RIDER,
+      incomingRequest: pending,
+    });
+
+    expect(result).toMatchObject({
+      message: expect.stringContaining("both riders"),
+    });
+  });
+
+  it("still opens for a compatible, actively searching favourite", () => {
+    // The regression that matters most: the ordinary favourite must be
+    // untouched by any of the above.
+    expect(action({ viewerRole: Role.RIDER, otherRole: Role.DRIVER })).toEqual({
       kind: "open",
     });
   });
