@@ -55,12 +55,25 @@ type UserCardBaseProps = {
   /**
    * A short explanation of why this card cannot be acted on.
    *
-   * Only the Requests tab passes one: a request whose two parties can no longer
-   * carpool stays in the list now, so the card has to say why rather than
-   * disappear. Discovery cards never need it, because recommendations and
-   * favorites are still role-filtered.
+   * The Requests tab passes one because a request whose two parties can no
+   * longer carpool stays in the list, so the card has to say why rather than
+   * disappear. Favourites now do the same: SCRUM-351 stopped `favorites.me`
+   * filtering by role and status, since hiding those entries also hid the only
+   * un-favourite star. Recommendations still never need it - the scorer only
+   * ever offers a compatible, ACTIVE person.
    */
   notice?: string;
+  /**
+   * Renders `rightButton` inert without removing it.
+   *
+   * Separate from the caller-side conditions on the button below, which are
+   * about the *reader* - Viewer mode, a paused search of their own. This one is
+   * about the pair: a favourite whose role no longer fits cannot be connected
+   * with, and `notice` above is carrying the reason. Passing `rightButton:
+   * undefined` instead would take View Route down with it, which is still
+   * useful on such a card.
+   */
+  rightButtonDisabled?: boolean;
   /**
    * True when the reader is party to a request with this user.
    *
@@ -77,10 +90,23 @@ type UserCardBaseProps = {
 
 export type UserCardProps = UserCardBaseProps & CardActivation;
 
+/**
+ * The right-hand action button's classes.
+ *
+ * The `disabled:` pair matches the mobile Connect button's existing
+ * `disabled:bg-gray-300`, so the two say the same thing. Without them the
+ * button kept its full red while being inert, which mattered once favourites
+ * started carrying entries the reader cannot connect with (SCRUM-351): a card
+ * whose notice explains they are unavailable must not also show a live-looking
+ * Connect. It applies equally to the two reader-side conditions that could
+ * already disable this button - Viewer mode and the reader's own paused search
+ * - which had the same mismatch.
+ */
 const getButtonClassName = (button: ButtonInfo): string => {
   const bColor = button.color;
   return classNames(
     `${bColor} w-1/2 hover:bg-red-700 rounded-md p-1 my-1 text-center text-white`,
+    "disabled:bg-gray-300 disabled:hover:bg-gray-300",
   );
 };
 
@@ -335,7 +361,11 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
                 props.rightButton.onPress(props.otherUser);
               }
             }}
-            disabled={user.role === "VIEWER" || user.status === "INACTIVE"}
+            disabled={
+              user.role === "VIEWER" ||
+              user.status === "INACTIVE" ||
+              (props.rightButtonDisabled ?? false)
+            }
             className={getButtonClassName(props.rightButton)}
           >
             {props.rightButton?.text}

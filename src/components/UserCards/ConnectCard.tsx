@@ -14,6 +14,7 @@ import { trackEvent } from "../../utils/mixpanel";
 import useIsMobile from "../../utils/useIsMobile";
 import { counterpartLabel } from "../Sidebar/viewerAccess";
 import { connectAction } from "./connectAction";
+import { carpoolUnavailableExplanation } from "../../utils/roleCompatibility";
 import React from "react";
 
 interface ConnectCardProps {
@@ -47,6 +48,8 @@ export const ConnectCard = (props: ConnectCardProps): React.JSX.Element => {
       viewerRole: user?.role,
       seatAvail: user?.seatAvail,
       preferredName: otherUser.preferredName,
+      otherRole: otherUser.role,
+      otherStatus: otherUser.status,
     });
 
     if (decision.kind === "blocked") {
@@ -67,6 +70,24 @@ export const ConnectCard = (props: ConnectCardProps): React.JSX.Element => {
     onPress: () => handleConnect(props.otherUser),
     color: "bg-northeastern-red",
   };
+
+  // Why this pair cannot carpool right now, or `null`.
+  //
+  // Always `null` on a recommendation card - the scorer only offers compatible,
+  // ACTIVE people - so this is in practice the favourites tab. SCRUM-351 stopped
+  // `favorites.me` hiding a favourite whose role changed or whose search was
+  // paused, because hiding them removed the only un-favourite star there is.
+  // They are shown explained instead: the notice says why, and the Connect
+  // affordance goes inert so the card does not read as if they were available.
+  // `connectAction` refuses the same case, which is what actually prevents a
+  // request that could be sent but never accepted.
+  const unavailable = user
+    ? carpoolUnavailableExplanation(user.role, {
+        role: props.otherUser.role,
+        status: props.otherUser.status,
+        preferredName: props.otherUser.preferredName,
+      })
+    : null;
 
   // This is a **discovery** card, so a VIEWER sees the other person's role in
   // place of their name — and the activation button's accessible
@@ -101,6 +122,8 @@ export const ConnectCard = (props: ConnectCardProps): React.JSX.Element => {
       <UserCard
         otherUser={props.otherUser}
         rightButton={connectButtonInfo}
+        rightButtonDisabled={unavailable !== null}
+        notice={unavailable ?? undefined}
         onViewRouteClick={props.onViewRouteClick}
         {...activation}
         isMobileCondensedLayout={isMobile && props.mobileSelectedUser !== null}
@@ -109,7 +132,11 @@ export const ConnectCard = (props: ConnectCardProps): React.JSX.Element => {
         <div className="mx-3.5 mt-2 mb-4">
           <button
             onClick={() => handleConnect(props.otherUser)}
-            disabled={user?.role === "VIEWER" || user?.status === "INACTIVE"}
+            disabled={
+              user?.role === "VIEWER" ||
+              user?.status === "INACTIVE" ||
+              unavailable !== null
+            }
             className="bg-northeastern-red w-full rounded-md p-3 text-center font-semibold text-white hover:bg-red-700 disabled:bg-gray-300"
           >
             Connect!

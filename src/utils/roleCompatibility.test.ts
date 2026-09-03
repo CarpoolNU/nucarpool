@@ -1,6 +1,7 @@
-import { Role } from "@prisma/client";
+import { Role, Status } from "@prisma/client";
 import {
   canCarpoolTogether,
+  carpoolUnavailableExplanation,
   roleMismatchExplanation,
 } from "./roleCompatibility";
 
@@ -100,5 +101,110 @@ describe("roleMismatchExplanation", () => {
         expect(explained).toBe(!canCarpoolTogether(mine, theirs));
       }
     }
+  });
+});
+
+/**
+ * SCRUM-351: the favourites-tab wording.
+ *
+ * `favorites.me` used to hide a favourite whose role matched the reader's, was
+ * VIEWER, or whose search was INACTIVE — which took away the card and with it
+ * the only un-favourite star, so the `_Favorites` row became permanent and
+ * invisible. They are shown explained instead, and this is the copy.
+ *
+ * Two things separate it from `roleMismatchExplanation`: status is not a role,
+ * and that function's other-VIEWER branch ends "or clear the request", which is
+ * request copy that would be wrong on a favourite.
+ */
+const other = (
+  over: Partial<Parameters<typeof carpoolUnavailableExplanation>[1]> = {},
+) => ({
+  role: Role.DRIVER,
+  status: Status.ACTIVE,
+  preferredName: "Alex",
+  ...over,
+});
+
+describe("carpoolUnavailableExplanation", () => {
+  it("explains nothing for a compatible favourite who is still searching", () => {
+    expect(carpoolUnavailableExplanation(Role.RIDER, other())).toBeNull();
+    expect(
+      carpoolUnavailableExplanation(Role.DRIVER, other({ role: Role.RIDER })),
+    ).toBeNull();
+  });
+
+  it("answers a paused search first, because a paused search has no role to fit", () => {
+    // Both incompatible *and* paused: the paused search is the fact reported,
+    // since someone not searching at all makes their role beside the point.
+    expect(
+      carpoolUnavailableExplanation(
+        Role.RIDER,
+        other({ role: Role.RIDER, status: Status.INACTIVE }),
+      ),
+    ).toBe(
+      "Alex has paused their carpool search, so you cannot carpool with them right now.",
+    );
+  });
+
+  it("explains a paused search even when the roles would otherwise fit", () => {
+    expect(
+      carpoolUnavailableExplanation(
+        Role.RIDER,
+        other({ status: Status.INACTIVE }),
+      ),
+    ).toBe(
+      "Alex has paused their carpool search, so you cannot carpool with them right now.",
+    );
+  });
+
+  it("drops the request instruction when the other person is in Viewer mode", () => {
+    const message = carpoolUnavailableExplanation(
+      Role.RIDER,
+      other({ role: Role.VIEWER }),
+    );
+
+    expect(message).toBe(
+      "Alex has switched to Viewer mode and is not carpooling right now.",
+    );
+    // The requests version of this sentence continues "You can keep messaging
+    // them, or clear the request." A favourite has no request to clear.
+    expect(message).not.toContain("request");
+    expect(roleMismatchExplanation(Role.RIDER, Role.VIEWER, "Alex")).toContain(
+      "clear the request",
+    );
+  });
+
+  it("names the reader's own Viewer mode ahead of the other person's", () => {
+    // Both VIEWERs: the one the reader can act on is their own, which is the
+    // behaviour inherited from `roleMismatchExplanation`.
+    expect(
+      carpoolUnavailableExplanation(Role.VIEWER, other({ role: Role.VIEWER })),
+    ).toBe(
+      "You are in Viewer mode, so you cannot carpool with Alex. " +
+        "Switch to Driver or Rider in your profile.",
+    );
+  });
+
+  it("shares the same-role wording with the requests copy", () => {
+    // These three cases read correctly for a favourite as they stand, so they
+    // are deliberately not reworded - this pins that they stay shared.
+    for (const [reader, otherRole] of [
+      [Role.RIDER, Role.RIDER],
+      [Role.DRIVER, Role.DRIVER],
+      [Role.VIEWER, Role.DRIVER],
+    ] as const) {
+      expect(
+        carpoolUnavailableExplanation(reader, other({ role: otherRole })),
+      ).toBe(roleMismatchExplanation(reader, otherRole, "Alex"));
+    }
+  });
+
+  it("uses the preferred name it is given", () => {
+    expect(
+      carpoolUnavailableExplanation(
+        Role.RIDER,
+        other({ role: Role.RIDER, preferredName: "Jordan" }),
+      ),
+    ).toContain("Jordan");
   });
 });
