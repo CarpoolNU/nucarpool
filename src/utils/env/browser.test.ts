@@ -12,6 +12,15 @@
  * supplies the other required variables.
  */
 
+// Marks this file as a module. Without it TypeScript treats the file as a
+// global script and every top-level declaration below becomes a program-wide
+// global, so the next test file to declare a name this one uses fails to
+// compile — with most of the errors reported against *this* file rather than
+// the new one. The `jest.mock` + `jest.resetModules()` + dynamic-`import()`
+// idiom is why no ordinary import already does the job: the module under test
+// must not be imported before its mock is registered. Keep it. See SCRUM-355.
+export {};
+
 const ENV_MODULE = "./browser";
 
 /** Re-imports the env module with `NEXT_PUBLIC_ENV` set to `value`. */
