@@ -29,12 +29,14 @@ import { cloneState, withTransaction } from "./transactionMock";
 
 const mockGetPresignedImageUrl = jest.fn();
 const mockGeneratePresignedUrl = jest.fn();
+const mockSignProfileImageUrl = jest.fn();
 
 jest.mock("../../utils/uploadToS3", () => ({
   getPresignedImageUrl: (...args: unknown[]) =>
     mockGetPresignedImageUrl(...args),
   generatePresignedUrl: (...args: unknown[]) =>
     mockGeneratePresignedUrl(...args),
+  signProfileImageUrl: (...args: unknown[]) => mockSignProfileImageUrl(...args),
 }));
 
 const SESSION_USER = "session-user";
@@ -51,17 +53,36 @@ const sessionFor = (id: string): Session => ({
   },
 });
 
+/**
+ * `getPresignedDownloadUrl` reads `User.profilePictureUpdatedAt` to decide
+ * whether it can skip S3 (SCRUM-276), so the caller needs a `user.findUnique`.
+ *
+ * The default is `null`, which is deliberately the *fallback* path: every row
+ * that predates the column has it, so that is what production mostly looks
+ * like until the backfill runs, and it is the behaviour the tests below this
+ * were originally written against.
+ */
+const mockUserFindUnique = jest.fn();
+const mockUserUpdate = jest.fn();
+
 const callerFor = (session: Session | null) =>
   appRouter.createCaller({
     req: undefined,
     res: undefined,
     session,
-    prisma: {},
+    prisma: {
+      user: {
+        findUnique: (...args: unknown[]) => mockUserFindUnique(...args),
+        update: (...args: unknown[]) => mockUserUpdate(...args),
+      },
+    },
     sesClient: { send: jest.fn() },
   } as unknown as Context);
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockUserFindUnique.mockResolvedValue({ profilePictureUpdatedAt: null });
+  mockUserUpdate.mockResolvedValue({});
 });
 
 describe("user.getPresignedDownloadUrl", () => {
@@ -197,6 +218,166 @@ describe("user.getPresignedDownloadUrl", () => {
  * separate property, pinned against the real signer in
  * `src/utils/uploadToS3.signature.test.ts`.
  */
+/**
+ * SCRUM-276: the recorded picture timestamp replaces the S3 `HeadObject`.
+ *
+ * `HeadObject` was the entire AWS cost of rendering an avatar - `getSignedUrl`
+ * is a local HMAC and calls nothing - so the acceptance criterion is literally
+ * "zero S3 API calls", and that is assertable here: the mocked
+ * `getPresignedImageUrl` is the only thing in this file that would talk to S3,
+ * so `not.toHaveBeenCalled()` is the criterion.
+ *
+ * The other half matters more. `null` must **not** be read as "no picture":
+ * every row predating the column has it while the object may well exist, so
+ * treating null as absence would remove the avatar of every user who already
+ * had one. That is why the fallback exists and why it is pinned below.
+ */
+describe("user.getPresignedDownloadUrl — recorded picture state", () => {
+  it("signs without any S3 call once an upload has been recorded", async () => {
+    mockUserFindUnique.mockResolvedValue({
+      profilePictureUpdatedAt: new Date("2026-09-03T12:00:00Z"),
+    });
+    mockSignProfileImageUrl.mockResolvedValueOnce(SIGNED);
+    const caller = callerFor(sessionFor(SESSION_USER));
+
+    await expect(
+      caller.user.getPresignedDownloadUrl({ userId: OTHER_USER }),
+    ).resolves.toEqual({ url: SIGNED });
+
+    expect(mockSignProfileImageUrl).toHaveBeenCalledWith(OTHER_USER);
+    // The acceptance criterion, stated as an absence.
+    expect(mockGetPresignedImageUrl).not.toHaveBeenCalled();
+  });
+
+  it("reads the state of the user being asked about, not the caller", async () => {
+    mockUserFindUnique.mockResolvedValue({
+      profilePictureUpdatedAt: new Date("2026-09-03T12:00:00Z"),
+    });
+    mockSignProfileImageUrl.mockResolvedValueOnce(SIGNED);
+    const caller = callerFor(sessionFor(SESSION_USER));
+
+    await caller.user.getPresignedDownloadUrl({ userId: OTHER_USER });
+
+    // Keying this off the session would answer for the wrong person: a caller
+    // with a picture would get a signed URL for every avatar on the page.
+    expect(mockUserFindUnique).toHaveBeenCalledWith({
+      where: { id: OTHER_USER },
+      select: { profilePictureUpdatedAt: true },
+    });
+  });
+
+  it("falls back to S3 when nothing has been recorded", async () => {
+    // The un-backfilled row. Not an edge case - it is every row that existed
+    // before the column, so it is the majority until the backfill runs.
+    mockUserFindUnique.mockResolvedValue({ profilePictureUpdatedAt: null });
+    mockGetPresignedImageUrl.mockResolvedValueOnce(SIGNED);
+    const caller = callerFor(sessionFor(SESSION_USER));
+
+    await expect(
+      caller.user.getPresignedDownloadUrl({ userId: OTHER_USER }),
+    ).resolves.toEqual({ url: SIGNED });
+
+    expect(mockGetPresignedImageUrl).toHaveBeenCalledWith(OTHER_USER);
+    expect(mockSignProfileImageUrl).not.toHaveBeenCalled();
+  });
+
+  it("falls back to S3 for a user row that does not exist at all", async () => {
+    // `findUnique` resolves null, so the procedure reads
+    // `owner?.profilePictureUpdatedAt` as undefined. Signing on that would
+    // hand out a URL for an object nobody uploaded.
+    mockUserFindUnique.mockResolvedValue(null);
+    mockGetPresignedImageUrl.mockResolvedValueOnce(null);
+    const caller = callerFor(sessionFor(SESSION_USER));
+
+    await expect(
+      caller.user.getPresignedDownloadUrl({ userId: OTHER_USER }),
+    ).resolves.toEqual({ url: null });
+
+    expect(mockSignProfileImageUrl).not.toHaveBeenCalled();
+  });
+
+  it("still resolves { url: null } rather than undefined on the signing path", async () => {
+    // The SCRUM-242 cacheability contract has to survive the new branch: a
+    // signing failure is a successful lookup that found nothing renderable.
+    mockUserFindUnique.mockResolvedValue({
+      profilePictureUpdatedAt: new Date("2026-09-03T12:00:00Z"),
+    });
+    mockSignProfileImageUrl.mockResolvedValueOnce(null);
+    const caller = callerFor(sessionFor(SESSION_USER));
+
+    const result = await caller.user.getPresignedDownloadUrl({
+      userId: OTHER_USER,
+    });
+
+    expect(result).not.toBeUndefined();
+    expect(result).toEqual({ url: null });
+  });
+});
+
+/**
+ * `user.recordProfilePictureUpload`.
+ *
+ * The client PUTs straight to S3, so this is the only thing that tells the
+ * server a picture exists. Two properties are worth pinning: it writes for the
+ * session user and nobody else, and it takes no input that could redirect it.
+ */
+describe("user.recordProfilePictureUpload", () => {
+  it("records the upload against the session user", async () => {
+    const caller = callerFor(sessionFor(SESSION_USER));
+
+    await expect(caller.user.recordProfilePictureUpload()).resolves.toEqual({
+      success: true,
+    });
+
+    expect(mockUserUpdate).toHaveBeenCalledTimes(1);
+    const call = mockUserUpdate.mock.calls[0][0] as {
+      where: { id: string };
+      data: { profilePictureUpdatedAt: Date };
+    };
+    expect(call.where).toEqual({ id: SESSION_USER });
+    expect(call.data.profilePictureUpdatedAt).toBeInstanceOf(Date);
+  });
+
+  it("refuses a session with no user", async () => {
+    const caller = callerFor({
+      expires: "2099-01-01T00:00:00.000Z",
+    } as unknown as Session);
+
+    await expect(
+      caller.user.recordProfilePictureUpload(),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    expect(mockUserUpdate).not.toHaveBeenCalled();
+  });
+
+  it("is rejected without a session at all", async () => {
+    await expect(
+      callerFor(null).user.recordProfilePictureUpload(),
+    ).rejects.toBeInstanceOf(TRPCError);
+    expect(mockUserUpdate).not.toHaveBeenCalled();
+  });
+
+  it("writes a fresh timestamp on a replacement, keeping the column accurate", async () => {
+    // The acceptance criterion about replacing a picture. There is no delete
+    // path in the app, so replacement is the only way the value changes after
+    // the first upload.
+    const caller = callerFor(sessionFor(SESSION_USER));
+
+    await caller.user.recordProfilePictureUpload();
+    await caller.user.recordProfilePictureUpload();
+
+    expect(mockUserUpdate).toHaveBeenCalledTimes(2);
+    const [first, second] = mockUserUpdate.mock.calls.map(
+      (call) =>
+        (call[0] as { data: { profilePictureUpdatedAt: Date } }).data
+          .profilePictureUpdatedAt,
+    );
+    // Never null, and never carried over from the previous call.
+    expect(first).toBeInstanceOf(Date);
+    expect(second).toBeInstanceOf(Date);
+    expect(second.getTime()).toBeGreaterThanOrEqual(first.getTime());
+  });
+});
+
 describe("user.getPresignedUrl", () => {
   const SIGNED_PUT = "https://bucket.s3.us-east-2.amazonaws.com/put?sig=abc";
 

@@ -10,6 +10,11 @@ import {
 export const useUploadFile = (selectedFile: File | null) => {
   const invalidateProfileImage = useInvalidateProfileImage();
   const uploadable = !!selectedFile && isUploadableProfileImage(selectedFile);
+  // The server is not otherwise told the PUT happened - the client uploads
+  // straight to S3 - so this is what records the picture's existence and lets
+  // `getPresignedDownloadUrl` skip its S3 HeadObject (SCRUM-276).
+  const { mutateAsync: recordUpload } =
+    trpc.user.recordProfilePictureUpload.useMutation();
 
   const { data: presignedData, error } = trpc.user.getPresignedUrl.useQuery(
     {
@@ -58,6 +63,15 @@ export const useUploadFile = (selectedFile: File | null) => {
     if (!response.ok) {
       throw new Error(`Failed to upload file: ${response.statusText}`);
     }
+
+    // Only now, and never before the PUT: signing an upload URL is not
+    // evidence that anything was uploaded, and recording a picture that does
+    // not exist would make the download path sign URLs for a missing object.
+    //
+    // Awaited before the invalidation below, in that order deliberately: the
+    // refetch it triggers reads this column, so invalidating first would race
+    // the write and could refetch the old state.
+    await recordUpload();
 
     // The object at profile-pictures/{env}/{userId} has just been replaced,
     // so every cached presigned URL for the signed-in user now points at

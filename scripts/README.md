@@ -7,11 +7,11 @@ the `.ts` scripts, and nothing schedules them.
 
 **Before running anything: confirm what `DATABASE_URL` points at.** None of
 these scripts print the connection string, which means none of them will tell
-you that you are pointed at production. Five of them write.
+you that you are pointed at production. Six of them write.
 
 ```bash
 npx ts-node scripts/<name>.ts            # every script: report only
-npx ts-node scripts/<name>.ts --apply    # the five that write
+npx ts-node scripts/<name>.ts --apply    # the six that write
 ```
 
 Node 22, per [`.nvmrc`](../.nvmrc). `ts-node` comes from `node_modules`, so
@@ -29,17 +29,26 @@ keeps `--apply` visible at the call site rather than hidden behind an alias.
 
 ### Writes to the database
 
-All five are dry-run by default, refuse to proceed past a `--max` ceiling
+All six are dry-run by default, refuse to proceed past a `--max` ceiling
 (default 500), and update or delete one row at a time by primary key so a
 partial run leaves a consistent database. Re-running any of them is a no-op.
 
-| Script                                                                 | What it does                                                                                 |
-| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| [`backfill-group-preferences.ts`](./backfill-group-preferences.ts)     | Moves the legacy `GROUP_DETAILS_V1:` blob out of `group_message` into the three real columns |
-| [`backfill-request-status.ts`](./backfill-request-status.ts)           | Sets `Request.status = ACCEPTED` for pairs who already share a `carpoolId`                   |
-| [`cleanup-orphan-locations.ts`](./cleanup-orphan-locations.ts)         | Deletes `Location` rows no `CarpoolSearch` points at                                         |
-| [`repair-seat-residue.ts`](./repair-seat-residue.ts)                   | Clamps out-of-range `seats_avail` into `[0, 6]` and deletes member-less `group` rows         |
-| [`cleanup-orphan-conversations.ts`](./cleanup-orphan-conversations.ts) | Deletes `conversation` rows whose request is gone, and the `message` rows in them            |
+| Script                                                                               | What it does                                                                                 |
+| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| [`backfill-group-preferences.ts`](./backfill-group-preferences.ts)                   | Moves the legacy `GROUP_DETAILS_V1:` blob out of `group_message` into the three real columns |
+| [`backfill-request-status.ts`](./backfill-request-status.ts)                         | Sets `Request.status = ACCEPTED` for pairs who already share a `carpoolId`                   |
+| [`cleanup-orphan-locations.ts`](./cleanup-orphan-locations.ts)                       | Deletes `Location` rows no `CarpoolSearch` points at                                         |
+| [`repair-seat-residue.ts`](./repair-seat-residue.ts)                                 | Clamps out-of-range `seats_avail` into `[0, 6]` and deletes member-less `group` rows         |
+| [`cleanup-orphan-conversations.ts`](./cleanup-orphan-conversations.ts)               | Deletes `conversation` rows whose request is gone, and the `message` rows in them            |
+| [`backfill-profile-picture-timestamps.ts`](./backfill-profile-picture-timestamps.ts) | Records `user.profile_picture_updated_at` for every picture already in S3                    |
+
+**`backfill-profile-picture-timestamps` is the only script here that reads
+AWS**, not just the database. It needs `s3:ListBucket` on the configured bucket,
+performs no S3 writes and deletes nothing, and `NEXT_PUBLIC_ENV` selects which
+key prefix it lists. Pointing it at the wrong environment lists an empty prefix
+and reports zero rather than failing, so confirm that variable as well as
+`DATABASE_URL`. It writes `LastModified` from the S3 listing rather than
+`now()`, because the column is meant to say when the picture last changed.
 
 **`cleanup-orphan-conversations` is the only script here that destroys message
 content** — words two people typed to each other, which nothing can read any
@@ -124,17 +133,18 @@ A zero outstanding count therefore means _"nothing left to do"_, **not**
 _"it was run"_ — a script that never had candidates and a script applied
 successfully look identical.
 
-| Script                         | local | staging             | production           | Last verified | By            |
-| ------------------------------ | ----- | ------------------- | -------------------- | ------------- | ------------- |
-| `backfill-group-preferences`   | —     | **3 outstanding**   | **unknown**          | 2026-08-31    | initial audit |
-| `backfill-request-status`      | —     | 0 outstanding       | **unknown**          | 2026-08-31    | initial audit |
-| `cleanup-orphan-locations`     | —     | 0 outstanding       | **unknown**          | 2026-08-31    | initial audit |
-| `check-self-requests`          | —     | 0 findings          | **unknown**          | 2026-08-31    | initial audit |
-| `check-driverless-groups`      | —     | **1 finding**       | **unknown**          | 2026-08-31    | initial audit |
-| `check-profile-coordinates`    | —     | 0 findings¹         | **unknown**          | 2026-08-31    | initial audit |
-| `check-seat-counts`            | —     | **1 finding**²      | **unknown**          | 2026-09-02    | SCRUM-348     |
-| `repair-seat-residue`          | —     | **2 outstanding**   | **unknown**          | 2026-09-02    | SCRUM-348     |
-| `cleanup-orphan-conversations` | —     | **11 outstanding**³ | **620 outstanding**³ | 2026-09-03    | SCRUM-295     |
+| Script                                | local | staging             | production           | Last verified | By            |
+| ------------------------------------- | ----- | ------------------- | -------------------- | ------------- | ------------- |
+| `backfill-group-preferences`          | —     | **3 outstanding**   | **unknown**          | 2026-08-31    | initial audit |
+| `backfill-request-status`             | —     | 0 outstanding       | **unknown**          | 2026-08-31    | initial audit |
+| `cleanup-orphan-locations`            | —     | 0 outstanding       | **unknown**          | 2026-08-31    | initial audit |
+| `check-self-requests`                 | —     | 0 findings          | **unknown**          | 2026-08-31    | initial audit |
+| `check-driverless-groups`             | —     | **1 finding**       | **unknown**          | 2026-08-31    | initial audit |
+| `check-profile-coordinates`           | —     | 0 findings¹         | **unknown**          | 2026-08-31    | initial audit |
+| `check-seat-counts`                   | —     | **1 finding**²      | **unknown**          | 2026-09-02    | SCRUM-348     |
+| `repair-seat-residue`                 | —     | **2 outstanding**   | **unknown**          | 2026-09-02    | SCRUM-348     |
+| `cleanup-orphan-conversations`        | —     | **11 outstanding**³ | **620 outstanding**³ | 2026-09-03    | SCRUM-295     |
+| `backfill-profile-picture-timestamps` | —     | **not run**⁴        | **not run**⁴         | 2026-09-03    | SCRUM-276     |
 
 ¹ 521 rider searches sit at `(0, 0)`, but none belongs to an onboarded user, so
 the script does not count them.
@@ -160,6 +170,16 @@ below, under
 [Re-checking without running the scripts](#re-checking-without-running-the-scripts).
 SCRUM-364 tracks aligning the script's plan with its own pre-delete re-check,
 which already tests both links.
+
+⁴ New in SCRUM-276 and **not yet run anywhere**, which is a different state
+from "zero outstanding": the count is unknown because the column it fills was
+only just added. Nothing is broken in the meantime — `getPresignedDownloadUrl`
+falls back to the S3 `HeadObject` for any row whose timestamp is null, which is
+exactly the behaviour that preceded the column — so what is outstanding is the
+saving rather than a fix. Every user who uploads after the deploy is free from
+then on; this script converts everyone else. It cannot run until the column is
+deployed to the environment in question, which needs a PlanetScale deploy
+request.
 
 **Staging was not a useful guide to the scale here.** 11 versus 620 is not a
 sampling difference: of the conversations that ever carried a thread, almost all
