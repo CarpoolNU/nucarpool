@@ -86,15 +86,30 @@ export const conversationsToDeleteWith = (request: {
 /**
  * Conversation rows whose `requestId` points at a `Request` that is gone.
  *
- * These are unreachable rather than merely untidy. `getConversationMessages`
- * looks the request up first and throws NOT_FOUND without it, and the unread
- * count joins through `conversation.request.some(...)`, which matches nothing
- * for an orphan — so no user-facing path can read one, and no user-facing
- * count includes one. What does include them is
- * `admin.getDashboardStats`, whose `conversation.count()` and
- * `message.groupBy` both count orphans, which is why the dashboard's
- * conversation figure and its messages-per-conversation average drift upward
- * and cannot be reconciled afterwards.
+ * **This tests one of the two links, and unreachability needs both.** Two of
+ * the three read paths reach a conversation through `Request.conversationId`
+ * rather than through `Conversation.requestId`: `requests.me` includes
+ * `sentRequests/receivedRequests → conversation → messages`, and the unread
+ * count joins `conversation.request.some(...)`, the back-relation on that same
+ * column. `Request.conversationId` is not unique and `Conversation.request` is
+ * a `Request[]`, so nothing in the schema stops a live request pointing at a
+ * row this function calls an orphan.
+ *
+ * No current write path creates that state — `findOrCreateConversation` and
+ * both branches of `requests.create` only ever link a conversation to the
+ * request it was keyed on — and production held **zero** such rows when both
+ * links were measured read-only on 2026-09-03, against **620** that fail both.
+ * So the returned set was exactly the unreachable set there. It is not
+ * guaranteed to be, which is why `cleanup-orphan-conversations.ts` re-checks
+ * *both* links immediately before each delete rather than trusting this plan.
+ * SCRUM-364 tracks closing the gap.
+ *
+ * `getConversationMessages` is settled by this link alone: it looks the request
+ * up first and throws NOT_FOUND without it, so no participant check ever
+ * passes. What counts orphans regardless is `admin.getDashboardStats`, whose
+ * `conversation.count()` and `message.groupBy` both include them, which is why
+ * the dashboard's conversation figure and its messages-per-conversation average
+ * drift upward and cannot be reconciled afterwards.
  *
  * Nothing creates these any more — `requests.delete` removes the conversation
  * with the request — but every decline, withdrawal and "Leave Conversation"

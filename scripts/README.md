@@ -149,6 +149,18 @@ two scripts see the same group from different sides.
 the largest holding 28 — measured read-only through DBeaver on 2026-09-03, with
 nothing modified.
 
+**Both request links were checked on the same date, also read-only:** **0** of
+the 620 were still pointed at by a live request through `Request.conversationId`,
+and all **620** fail that link _and_ `Conversation.requestId`. The distinction
+matters because the outstanding count uses the `Conversation.requestId`
+predicate only, while `requests.me` and the unread badge read a conversation
+through the other column — so the two questions could in principle disagree.
+Here they do not, which makes all 620 **confirmed unreachable**. The queries are
+below, under
+[Re-checking without running the scripts](#re-checking-without-running-the-scripts).
+SCRUM-364 tracks aligning the script's plan with its own pre-delete re-check,
+which already tests both links.
+
 **Staging was not a useful guide to the scale here.** 11 versus 620 is not a
 sampling difference: of the conversations that ever carried a thread, almost all
 of the production population is orphaned. Treat the other two scripts' staging
@@ -239,12 +251,16 @@ unsuffixed variables can be deleted from `emailParams.ts`.
    SCRUM-295 so the population cannot grow. **This is the largest finding in
    this table by two orders of magnitude**, and the one where staging (11
    conversations, 25 messages) was most misleading. The rows are unreachable by
-   every user-facing path, so they are pure retention risk — private message
-   content nobody can read and nobody can delete — and they inflate
-   `admin.getDashboardStats`'s conversation count and messages-per-conversation
-   average permanently until removed. Deleting them destroys 1,258 real
-   messages, which is why the dry run prints per-candidate counts and why
-   `--apply` refuses until `--max` is raised past 620.
+   every user-facing path — verified on **both** request links, see footnote 3
+   — so they are pure retention risk: private message content nobody can read
+   and nobody can delete. They also inflate `admin.getDashboardStats`'s
+   conversation count and messages-per-conversation average permanently until
+   removed. Deleting them destroys 1,258 real messages, which is why the dry
+   run prints per-candidate counts and why `--apply` refuses until `--max` is
+   raised past 620. **Raising it is not the intended route** — SCRUM-364 adds a
+   subset option so the population can be retired in tranches beneath the
+   existing ceiling, and SCRUM-365 holds the decision about whether to delete
+   at all.
 
 ### Re-checking without running the scripts
 
@@ -289,6 +305,20 @@ WHERE NOT EXISTS (SELECT 1 FROM request r WHERE r.id = c.requestId);
 SELECT COUNT(*) FROM message m
 JOIN conversation c ON c.id = m.conversationId
 WHERE NOT EXISTS (SELECT 1 FROM request r WHERE r.id = c.requestId);
+
+-- the second link: orphans a live request still points at through
+-- Request.conversationId, which requests.me and the unread badge would still
+-- read. Expected to return nothing; any row here is NOT an unreachable orphan.
+SELECT c.id, c.requestId AS dead_request_id, r2.id AS live_request_id
+FROM conversation c
+LEFT JOIN request r1 ON r1.id = c.requestId
+JOIN      request r2 ON r2.conversationId = c.id
+WHERE r1.id IS NULL;
+
+-- the provably unreachable population: fails both links
+SELECT COUNT(*) FROM conversation c
+WHERE NOT EXISTS (SELECT 1 FROM request r1 WHERE r1.id = c.requestId)
+  AND NOT EXISTS (SELECT 1 FROM request r2 WHERE r2.conversationId = c.id);
 
 -- check-seat-counts: seat counts outside [0, MAX_SEATS_AVAILABLE]
 SELECT id, userId, role, status, seats_avail FROM carpool_search
