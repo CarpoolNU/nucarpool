@@ -143,6 +143,101 @@ changing. Without it, the next co-op inherits a change with no rationale.
 Tickets define **what** should change; the repo and its READMEs define **how** the code works
 today. Tickets here are often thin — when scope is missing, ask rather than invent.
 
+### Issue format
+
+Every substantive ticket uses the same nine sections, in this order. **This is the source of
+truth for that shape** — do not reconstruct it by copying an older ticket.
+
+```markdown
+## Problem
+
+## Evidence
+
+## Impact
+
+## Risk
+
+## Database Risk
+
+## Proposed Fix
+
+## Acceptance Criteria
+
+## Testing Requirements
+
+## Dependencies / Related Tickets
+```
+
+| Section                            | Contents                                                                                                                          |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| **Problem**                        | What is wrong, stated so someone who has not read the code can follow it. Numbered sub-points when there is more than one defect. |
+| **Evidence**                       | `path:line` references and observed values. This is what makes a ticket checkable rather than an assertion.                       |
+| **Impact**                         | Who is affected and how. Say plainly when the answer is "nobody yet".                                                             |
+| **Risk**                           | Four labelled lines: `Overall Risk`, `Likelihood`, `Impact`, `Blast Radius`.                                                      |
+| **Database Risk**                  | `DB Risk`, plus `Schema change` / `Migration` / `Backfill` as YES or NO.                                                          |
+| **Proposed Fix**                   | The approach, and the options where a real choice exists. Not a diff.                                                             |
+| **Acceptance Criteria**            | Checkable statements, including the commands that must pass.                                                                      |
+| **Testing Requirements**           | `Unit` / `Integration` / `Regression` / `Database tests`, each either specified or explicitly "none" **with the reason**.         |
+| **Dependencies / Related Tickets** | Related keys with their status and one line on the relationship. Name the ticket you were on when you found it.                   |
+
+Close with one line recording where the issue came from — the ticket being worked, the audit, or
+the session.
+
+**Risk scales.** `Overall Risk`, `Likelihood` and `Impact` are `LOW` / `MEDIUM` / `HIGH`, with
+`CRITICAL` available for `Overall Risk`. `Blast Radius` names what breaks in the worst case:
+
+| Blast Radius | Meaning                                   |
+| ------------ | ----------------------------------------- |
+| `LOCAL`      | One function or component                 |
+| `FEATURE`    | One user-facing capability                |
+| `DATA`       | Rows in a real database                   |
+| `APP`        | The whole application                     |
+| `PROCESS`    | Team workflow or tooling; no runtime code |
+
+**`Database Risk` is the field a human reads to decide whether a ticket touches real data**, so
+it is never omitted — not even to say `NONE`:
+
+| DB Risk     | Meaning                                                 |
+| ----------- | ------------------------------------------------------- |
+| `NONE`      | No database interaction                                 |
+| `QUERY`     | Reads only — no row changes                             |
+| `SCHEMA`    | Changes `schema.prisma`: columns, indexes, relations    |
+| `MIGRATION` | Needs a file in `prisma/migrations/`                    |
+| `BACKFILL`  | Bulk change to existing rows — update, delete or insert |
+
+`SCHEMA` implies **both** a committed migration and a PlanetScale deploy request, which are
+[two separate things](../src/server/db/README.md#changing-the-schema). `BACKFILL` means a
+one-shot in [`scripts/`](../scripts/README.md), and is irreversible unless that script records
+the prior values.
+
+### Priority and labels
+
+**Priority is the Jira field, not a label.** This project uses `High`, `Medium` and `Low` in
+practice. Derive it from the `Risk` block rather than choosing independently, and if the two
+would disagree, say why in the ticket.
+
+**Labels are kebab-case** and describe **area** and **kind**. Prefer an existing label to a new
+one; this is the set in use:
+
+- **Area** — `backend`, `frontend`, `database`, `infrastructure`, `ci-cd`, `deployment`,
+  `email`, `messaging`, `admin-dashboard`, `mapbox`, `pusher`, `aws-s3`, `aws-ses`, `prisma`,
+  `nextjs`
+- **Kind** — `tech-debt`, `product-correctness`, `data-integrity`, `security`, `authorization`,
+  `privacy`, `performance`, `reliability`, `accessibility`, `documentation`, `testing`,
+  `tooling`, `dependencies`, `validation`, `regression`, `race-condition`, `dead-code`,
+  `maintainability`, `investigation`, `process`, `ai-tooling`, `backfill`
+- **Batch** — a per-sweep label such as `repo-audit-2026-08-27`, so one audit's output can be
+  found again as a set
+
+**The set has already drifted, so check before inventing.** `ux` / `user-experience`, `ci` /
+`ci-cd`, and `aws` against the per-service labels are each two names for one idea, and `pii` and
+`compliance` overlap `privacy`. Use the longer, later spelling in each pair. Existing tickets
+were deliberately **not** retagged: the value is in not adding a third variant, not in rewriting
+closed work.
+
+**Do not add `P0`–`P3` labels.** SCRUM-288…322 carry them alongside the Priority field, which is
+the same information stored twice. That convention was dropped — the field is authoritative.
+
 ### Status lifecycle
 
 ```
@@ -386,7 +481,31 @@ risk. Widening scope mid-change is how small tickets become un-reviewable.
 
 A filed issue carries the evidence you have: affected area, observed vs. expected behavior,
 impact, relevant paths, and the ticket you were on. Filing is pre-authorized — no need to ask.
-Do not file speculation, trivia, or anything the active ticket already covers.
+Do not file speculation, trivia, or anything the active ticket already covers. Use the
+[issue format](#issue-format), including the `Database Risk` block.
+
+### When to file — before the session ends
+
+**A discovered problem is filed in Jira during the session that found it.** Reporting it in
+chat, in an audit report, or in a PR description does not satisfy the rule — none of those is
+the board, and once the session ends the transcript is the only record. An unrecorded finding is
+indistinguishable from one that was never found, and nothing afterwards reveals that a problem
+was seen and dropped.
+
+Why the deadline and not just the obligation: "file it eventually" has no failure mode anyone
+can observe. A session that ends with a finding still in prose looks exactly like a session
+that found nothing.
+
+This changes **when** filing happens, not the status rules. A newly filed issue still lands in
+`To Do` — filing is not starting.
+
+The carve-out is unchanged: trivia, speculation, duplicates and anything the active ticket
+already covers are still not filed. "File what you find" is not "pad the board".
+
+**If you have been told not to write to Jira** — a read-only audit, an investigate-only scope —
+say so, name the finding in your report, and file it as soon as that restriction lifts. That
+instruction is legitimate and is to be followed; quietly dropping the finding is not. The
+finding is deferred with an explicit owner, never lost.
 
 ## 12. Permission and safety model
 
@@ -598,7 +717,7 @@ or planned.
 
 **Jira first. In Progress when you start. Feature branches only. Stage specific paths. Code
 Review only once the PR exists. Own it through review-readiness — the PR is not the finish
-line. Claude never merges and never sets Done.**
+line. File what you find before the session ends. Claude never merges and never sets Done.**
 
 ---
 

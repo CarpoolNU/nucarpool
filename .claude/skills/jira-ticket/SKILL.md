@@ -17,7 +17,7 @@ the finish line.
 | Jira issue                                                                    | Live requirements and acceptance criteria                                  |
 | Repository + READMEs                                                          | How the code actually works today                                          |
 | Confluence (space `CNCS`)                                                     | Deeper architecture, infra, deployment, process, product history           |
-| [`docs/AI_DEVELOPMENT_WORKFLOW.md`](../../../docs/AI_DEVELOPMENT_WORKFLOW.md) | The human-facing explanation of this system                                |
+| [`docs/AI_DEVELOPMENT_WORKFLOW.md`](../../../docs/AI_DEVELOPMENT_WORKFLOW.md) | The workflow in full, and **the issue format**, priority scale and labels  |
 
 Do not copy the tech stack, data model, environment variables, or permission lists into your
 reasoning output — consult them where they live.
@@ -45,7 +45,10 @@ No implementation begins as an anonymous, untracked change.
   when a genuine ambiguity would change the work.
 - **No key given**, and the request is meaningful project work: **search Jira first** with a
   couple of phrasings. Use an existing issue if one matches; otherwise create one describing
-  the goal, then proceed.
+  the goal, then proceed. Write it in the
+  [issue format](../../../docs/AI_DEVELOPMENT_WORKFLOW.md#issue-format) — nine sections, a
+  `Priority`, labels, and the `Database Risk` block — rather than copying the shape of an
+  older ticket.
 - **Trivial actions** — answering a question, reading code, a one-line typo, exploratory
   investigation — do not need a ticket. Use judgment; do not manufacture bureaucracy.
 
@@ -184,13 +187,24 @@ When you find a new actionable problem:
 2. If not — **do not scope-creep the current PR.** Search Jira first, with more than one
    phrasing if the wording is uncertain.
 3. Match found → reference it.
-4. No match → create an issue carrying the evidence you have: affected area, observed vs.
-   expected behavior, impact, relevant paths, and the ticket you were on when you found it.
+4. No match → create an issue **in this session**, in the
+   [issue format](../../../docs/AI_DEVELOPMENT_WORKFLOW.md#issue-format): the evidence you have
+   with `path:line` references, the `Risk` and `Database Risk` blocks, acceptance criteria, and
+   the ticket you were on when you found it.
 5. **Leave the new issue in `To Do`** (see the status rule below).
 6. Return to the original task.
 
 Do not file trivial observations, speculation, duplicates, or anything the active ticket
 already covers.
+
+**File before the session ends.** Reporting a finding in chat, in a report, or in a PR
+description does not satisfy this — none of those is the board, and once the session ends the
+transcript is the only record. An unrecorded finding is indistinguishable from one that was
+never found.
+
+**If you have been told not to write to Jira** — a read-only audit, an investigate-only scope —
+say so, name the finding in your report, and file it the moment that restriction lifts. Follow
+the instruction; do not quietly drop the finding. It is deferred with an explicit owner.
 
 ### Status of a discovered ticket
 
