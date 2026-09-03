@@ -25,18 +25,10 @@ import { SendTemplatedEmailCommandInput } from "@aws-sdk/client-ses";
 /**
  * Escaping of user-controlled template data.
  *
- * SES renders the `HtmlPart` of a stored template with Handlebars, and the
- * three values below — a recipient's preferred name, the other party's name,
- * and the body of a request or chat message — are all user-controlled and all
- * land inside HTML tags:
- *
- *   <p>Hello {{preferredName}},</p>
- *   <p>{{OtherUser}} sent you a message in Carpool NU:</p>
- *   <p><strong>{{message}}</strong></p>
- *
- * In stock Handlebars a double-brace placeholder HTML-escapes and only a
- * triple brace does not, so `{{message}}` would be safe. **SES does not follow
- * that rule.** The AWS SES developer guide states it outright:
+ * Three values here are user-controlled: a recipient's preferred name, the
+ * other party's name, and the body of a request or chat message. SES renders
+ * them into both the `HtmlPart` and the `TextPart` of a stored template, and
+ * it does not escape anything on the way:
  *
  *   "SES doesn't escape HTML content when rendering the HTML template for a
  *    message. This means if you're including user inputted data, such as from
@@ -44,28 +36,76 @@ import { SendTemplatedEmailCommandInput } from "@aws-sdk/client-ses";
  *
  *   https://docs.aws.amazon.com/ses/latest/dg/send-personalized-email-advanced.html
  *
- * So escaping is ours to do, and `generateEmailParams` is the one place to do
- * it: every send goes through it, and no other code builds `TemplateData`.
+ * So escaping is ours, and `generateEmailParams` is the one place to do it:
+ * every send goes through it and no other code builds `TemplateData`.
  *
- * Only `&`, `<` and `>` are escaped, not quotes. Every placeholder in
- * `scripts/emailtemplate.py` sits in element text content, never in an
- * attribute value, and quotes carry no meaning there. Escaping them instead
- * costs real text: one `TemplateData` blob feeds both the `HtmlPart` and the
- * `TextPart`, so anything escaped here shows up literally in the plain-text
- * alternative, and apostrophes are far too common in ordinary messages to
- * mangle. `&`, `<` and `>` are rare enough for that to be an acceptable
- * trade, and the plain-text part has no injection semantics to protect.
+ * The awkward part is that `SendTemplatedEmail` takes **one** `TemplateData`
+ * blob for both parts. A single set of variables therefore cannot be right for
+ * both — escape it and HTML entities leak into the plain-text alternative,
+ * where there is nothing to protect and they are just noise; leave it raw and
+ * the HTML body is injectable. So each part gets its own variables, and the
+ * same source value is emitted under more than one key:
  *
- * **If a placeholder is ever moved into an attribute** — `href="{{...}}"`, say
- * — this is no longer sufficient and the quote characters have to come with
- * it. See SCRUM-360 for splitting the HTML and text variables, which is what
- * would let this escape aggressively without damaging the `TextPart`.
+ *   {{...Html}}   escaped with `escapeHtmlAttribute` — safe in element text
+ *                 content *and* in an attribute value. Read by the `HtmlPart`.
+ *   {{...Plain}}  raw. Read by the `TextPart`, which has no injection
+ *                 semantics and should show exactly what the user typed.
+ *
+ * The third set is the unsuffixed `{{preferredName}}` / `{{OtherUser}}` /
+ * `{{message}}`, escaped with `escapeHtmlText`. **Those are legacy, and they
+ * are load-bearing until the templates are republished.** The templates live
+ * in AWS, not in this repository: editing `scripts/emailtemplate.py` changes
+ * nothing until someone runs it, and the templates deployed right now read the
+ * unsuffixed names in their `HtmlPart`. Dropping them here — or, worse,
+ * redefining them as raw — would silently un-escape live email for however
+ * long that gap lasts. They cost a few bytes, they keep the change revertible
+ * without a second AWS mutation, and they can be deleted once a republish is
+ * recorded in `scripts/README.md`. See SCRUM-360.
  */
+
+/** Escapes for HTML element text content. Not sufficient inside an attribute. */
 export function escapeHtmlText(value: string): string {
   return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+}
+
+/**
+ * Escapes for anywhere in HTML, attribute values included.
+ *
+ * A superset of `escapeHtmlText`. Quotes are what an attribute value needs and
+ * text content does not, and escaping them is free here precisely because the
+ * `TextPart` no longer reads these variables — apostrophes are common enough
+ * in ordinary messages ("I'm", "let's") that this would have been unacceptable
+ * while one variable had to serve both parts.
+ */
+export function escapeHtmlAttribute(value: string): string {
+  return escapeHtmlText(value).replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+/**
+ * The two names, under all three variable sets. See the note above for why the
+ * same value is emitted more than once.
+ */
+function nameVariables(receiverName: string, senderName: string) {
+  return {
+    preferredName: escapeHtmlText(receiverName),
+    OtherUser: escapeHtmlText(senderName),
+    preferredNameHtml: escapeHtmlAttribute(receiverName),
+    OtherUserHtml: escapeHtmlAttribute(senderName),
+    preferredNamePlain: receiverName,
+    OtherUserPlain: senderName,
+  };
+}
+
+/** The message body, under all three variable sets. Acceptances have none. */
+function messageVariables(message: string) {
+  return {
+    message: escapeHtmlText(message),
+    messageHtml: escapeHtmlAttribute(message),
+    messagePlain: message,
+  };
 }
 
 export interface BaseEmailSchema {
@@ -105,18 +145,16 @@ export function generateEmailParams(
         ? "DriverRequestTemplate"
         : "RiderRequestTemplate";
       templateData = {
-        preferredName: escapeHtmlText(requestSchema.receiverName),
-        OtherUser: escapeHtmlText(requestSchema.senderName),
-        message: escapeHtmlText(requestSchema.messagePreview),
+        ...nameVariables(requestSchema.receiverName, requestSchema.senderName),
+        ...messageVariables(requestSchema.messagePreview),
       };
       break;
     case "message":
       const messageSchema = schema as MessageEmailSchema;
       templateName = "MessageNotificationTemplate";
       templateData = {
-        preferredName: escapeHtmlText(messageSchema.receiverName),
-        OtherUser: escapeHtmlText(messageSchema.senderName),
-        message: escapeHtmlText(messageSchema.messageText),
+        ...nameVariables(messageSchema.receiverName, messageSchema.senderName),
+        ...messageVariables(messageSchema.messageText),
       };
       break;
     case "acceptance":
@@ -124,10 +162,10 @@ export function generateEmailParams(
       templateName = acceptanceSchema.recipientIsDriver
         ? "DriverAcceptanceTemplate"
         : "RiderAcceptanceTemplate";
-      templateData = {
-        preferredName: escapeHtmlText(acceptanceSchema.receiverName),
-        OtherUser: escapeHtmlText(acceptanceSchema.senderName),
-      };
+      templateData = nameVariables(
+        acceptanceSchema.receiverName,
+        acceptanceSchema.senderName,
+      );
       break;
     default:
       throw new Error("Invalid email type");
