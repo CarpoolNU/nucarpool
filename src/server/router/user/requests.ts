@@ -4,6 +4,7 @@ import { protectedRouter, router } from "../createRouter";
 
 import { Prisma, RequestStatus } from "@prisma/client";
 import { convertCarpoolSearchToPublicWithExactHome } from "../../publicUser";
+import { findOrCreateConversation } from "../../db/conversationLink";
 import { MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
 
 /**
@@ -386,18 +387,51 @@ export const requestsRouter = router({
             },
           });
 
-          // An empty message is a real flow — ConnectModal's Send button never
-          // required text — but on a conversation that already exists, an empty
-          // row would just be noise in the thread. On a first request it is
-          // still written, because the conversation needs a first message.
-          if (input.message && reopened.conversationId) {
+          // Two decisions that used to share one `if`, for two unrelated
+          // reasons.
+          //
+          // *Whether* to write a message is the empty-message question. An
+          // empty message is a real flow — ConnectModal's Send button never
+          // required text — and on a reopened request an empty row would just
+          // be noise in a thread that already has history. On a first request
+          // it is still written, because the conversation needs a first
+          // message. That behaviour is unchanged.
+          //
+          // *Where* to write it is a different question, and the compound
+          // guard answered it wrongly: it also required
+          // `reopened.conversationId`, so a request with no conversation had
+          // the user's text silently dropped while the mutation still
+          // resolved. The client raised its success toast and
+          // `sendRequestNotification` emailed the recipient a preview of a
+          // message that was never stored — so the recipient opened an empty
+          // thread holding an email that quoted it. That is not a defensive
+          // check against an impossible state: every request predating
+          // migration `20240910182030_conversationmodel` has a null link, 462
+          // of 477 rows on production-derived staging.
+          //
+          // `findOrCreateConversation` repairs the link instead, and is shared
+          // with `sendMessage`, which had the identical bug and fixed it
+          // first. See that helper for why it keys on `Conversation.requestId`
+          // rather than on the request row's own column.
+          if (input.message) {
+            const conversation = await findOrCreateConversation(
+              tx,
+              reopened.id,
+            );
+
             await tx.message.create({
               data: {
-                conversationId: reopened.conversationId,
+                conversationId: conversation.id,
                 content: input.message,
                 userId,
               },
             });
+
+            // `reopened` was read before the link could have been repaired, so
+            // returning it unchanged would report `null` for a conversation
+            // that now exists. The create branch below is careful about the
+            // same thing, for the same reason.
+            return { ...reopened, conversationId: conversation.id };
           }
 
           return reopened;
