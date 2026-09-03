@@ -75,7 +75,21 @@ const buildRequestsDb = (
   const requests = new Map<string, RequestRow>(
     seed.map((row) => [row.id, { ...row }]),
   );
-  const conversations = new Map<string, { id: string; requestId: string }>();
+
+  // A seeded request that claims a conversation gets one, so that
+  // `conversation.findUnique({ where: { requestId } })` can find it. Without
+  // this the map started empty and the lookup missed for a request whose
+  // `conversationId` was set — which would make the SCRUM-350 tests below pass
+  // for the wrong reason, reporting a repaired link where the real database
+  // would have found the conversation already there.
+  const conversations = new Map<string, { id: string; requestId: string }>(
+    seed
+      .filter((row) => row.conversationId !== null)
+      .map((row) => [
+        row.conversationId as string,
+        { id: row.conversationId as string, requestId: row.id },
+      ]),
+  );
   const messages: {
     conversationId: string;
     content: string;
@@ -232,9 +246,12 @@ const buildRequestsDb = (
     /** Every surviving request row, ordered by id for stable assertions. */
     rows: () => [...requests.values()].sort((a, b) => a.id.localeCompare(b.id)),
     messages: () => [...messages],
+    /** Conversation rows, for asserting the `Conversation.requestId` side. */
+    conversations: () => [...conversations.values()],
     create,
     destroy,
     update,
+    conversationCreate,
   };
 };
 
@@ -567,6 +584,188 @@ describe("user.requests.create — an accepted request is reopened, not duplicat
     await expect(
       caller.user.requests.create({ toId: USER_B, message: "again" }),
     ).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+});
+
+/**
+ * SCRUM-350: reopening a request with no conversation used to destroy the
+ * message.
+ *
+ * The reopen branch wrote the message only `if (input.message &&
+ * reopened.conversationId)`. Those are two unrelated conditions sharing one
+ * guard, and the second one was wrong: a request with a null link had the
+ * user's text dropped while the mutation still resolved. `ConnectModal` then
+ * raised its success toast and emailed the recipient a `messagePreview` of a
+ * message that had never been stored, so the recipient opened an empty thread
+ * holding an email that quoted it.
+ *
+ * Not a guard against an impossible state: `Conversation` arrived in migration
+ * `20240910182030_conversationmodel`, and every older request has
+ * `conversationId = NULL` — 462 of 477 rows on production-derived staging.
+ * Reaching the branch also needs `status = ACCEPTED`, which
+ * `scripts/backfill-request-status.ts` grants in bulk and has not yet been run
+ * in production.
+ *
+ * The four combinations below are {null link, existing link} × {empty message,
+ * non-empty message}. Only two of them had coverage before.
+ */
+describe("user.requests.create — reopening repairs a missing conversation", () => {
+  /** An accepted legacy request: no conversation, as 462 rows have. */
+  const legacy = (id: string, from: string, to: string) =>
+    requestRow(id, from, to, {
+      status: RequestStatus.ACCEPTED,
+      conversationId: null,
+    });
+
+  const linked = (id: string, from: string, to: string) =>
+    requestRow(id, from, to, {
+      status: RequestStatus.ACCEPTED,
+      conversationId: `conversation-${id}`,
+    });
+
+  it("stores the message instead of discarding it", async () => {
+    // The regression this ticket exists for.
+    const db = buildRequestsDb([legacy("legacy", USER_A, USER_B)]);
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await caller.user.requests.create({
+      toId: USER_B,
+      message: "want to carpool again this semester?",
+    });
+
+    expect(db.messages()).toEqual([
+      {
+        conversationId: "conversation-legacy",
+        content: "want to carpool again this semester?",
+        userId: USER_A,
+      },
+    ]);
+  });
+
+  it("writes both sides of the link, which nothing in the schema keeps in agreement", async () => {
+    const db = buildRequestsDb([legacy("legacy", USER_A, USER_B)]);
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await caller.user.requests.create({ toId: USER_B, message: "hello" });
+
+    // `Conversation.requestId` — the authoritative side.
+    expect(db.conversations()).toEqual([
+      { id: "conversation-legacy", requestId: "legacy" },
+    ]);
+    // `Request.conversationId` — the side `user.requests.me` reads through.
+    expect(db.rows()[0]?.conversationId).toBe("conversation-legacy");
+  });
+
+  it("returns a request carrying the conversation it just linked", async () => {
+    // `reopened` is read before the repair, so returning it unchanged would
+    // report null for a conversation that now exists.
+    const db = buildRequestsDb([legacy("legacy", USER_A, USER_B)]);
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await expect(
+      caller.user.requests.create({ toId: USER_B, message: "hello" }),
+    ).resolves.toMatchObject({
+      status: RequestStatus.PENDING,
+      conversationId: "conversation-legacy",
+    });
+  });
+
+  it("creates no conversation when a legacy request is reopened with no message", async () => {
+    // A null link is a legitimate state, so an empty reopen should not
+    // manufacture a thread nobody has written to. `messages.conversation`
+    // already treats a missing conversation as an empty first page.
+    const db = buildRequestsDb([legacy("legacy", USER_A, USER_B)]);
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await caller.user.requests.create({ toId: USER_B, message: "" });
+
+    expect(db.messages()).toEqual([]);
+    expect(db.conversations()).toEqual([]);
+    expect(db.conversationCreate).not.toHaveBeenCalled();
+    expect(db.rows()[0]).toMatchObject({
+      status: RequestStatus.PENDING,
+      conversationId: null,
+    });
+  });
+
+  it("appends to an existing conversation without creating a second one", async () => {
+    const db = buildRequestsDb([linked("old", USER_A, USER_B)]);
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await caller.user.requests.create({ toId: USER_B, message: "round two" });
+
+    expect(db.conversationCreate).not.toHaveBeenCalled();
+    expect(db.conversations()).toEqual([
+      { id: "conversation-old", requestId: "old" },
+    ]);
+    expect(db.messages()).toEqual([
+      {
+        conversationId: "conversation-old",
+        content: "round two",
+        userId: USER_A,
+      },
+    ]);
+  });
+
+  it("writes nothing to an existing conversation for an empty message", async () => {
+    const db = buildRequestsDb([linked("old", USER_A, USER_B)]);
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await caller.user.requests.create({ toId: USER_B, message: "" });
+
+    expect(db.messages()).toEqual([]);
+    expect(db.conversationCreate).not.toHaveBeenCalled();
+  });
+
+  it("reuses a conversation the request row does not know about", async () => {
+    // The two sides of the link can disagree, because only
+    // `Conversation.requestId` is unique and nothing enforces agreement. The
+    // lookup is keyed on that side for exactly this case: keying on the
+    // request row would try to create a second conversation for the same
+    // `requestId` and hit the unique constraint.
+    const db = buildRequestsDb([legacy("legacy", USER_A, USER_B)]);
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    // An orphan conversation: present, but never linked back to the request.
+    await db.prisma.conversation.create({ data: { requestId: "legacy" } });
+    db.conversationCreate.mockClear();
+
+    await caller.user.requests.create({ toId: USER_B, message: "hello" });
+
+    expect(db.conversationCreate).not.toHaveBeenCalled();
+    expect(db.conversations()).toHaveLength(1);
+    expect(db.messages()).toEqual([
+      {
+        conversationId: "conversation-legacy",
+        content: "hello",
+        userId: USER_A,
+      },
+    ]);
+  });
+
+  it("leaves no conversation or message behind when the message write fails", async () => {
+    // The repair is two statements and the message a third. Untransactioned,
+    // this failure would leave a conversation linked to a request with no
+    // message in it — the half-built thread the create path was already
+    // careful about.
+    const db = buildRequestsDb([legacy("legacy", USER_A, USER_B)]);
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    db.prisma.message.create.mockImplementationOnce(async () => {
+      throw new Error("connection lost");
+    });
+
+    await expect(
+      caller.user.requests.create({ toId: USER_B, message: "hello" }),
+    ).rejects.toThrow("connection lost");
+
+    expect(db.conversations()).toEqual([]);
+    expect(db.messages()).toEqual([]);
+    // The reopen itself is rolled back too, so the row is untouched.
+    expect(db.rows()[0]).toMatchObject({
+      status: RequestStatus.ACCEPTED,
+      conversationId: null,
+    });
   });
 });
 

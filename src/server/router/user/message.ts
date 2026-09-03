@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { protectedRouter, router } from "../createRouter";
 import { z } from "zod";
 import { pusherServer } from "../../pusher";
+import { findOrCreateConversation } from "../../db/conversationLink";
 import {
   conversationChannel,
   notificationChannel,
@@ -267,6 +268,12 @@ export const messageRouter = router({
       // linked, and then silently discarded with a success response.
       // The message is now written on both paths.
       //
+      // The find-or-create itself now lives in `findOrCreateConversation`,
+      // shared with `requests.create`'s reopen branch — which had the same bug
+      // in the same shape and was fixed on SCRUM-350. Two hand-written copies
+      // of a two-statement link repair that has already been got wrong twice
+      // is the thing worth not having.
+      //
       // All three writes commit together. Repairing the missing conversation
       // takes two statements — the link is stored on both `Conversation` and
       // `Request` — so untransactioned this could link a conversation and then
@@ -275,20 +282,10 @@ export const messageRouter = router({
       // the transaction below: it is a side effect that cannot be rolled back,
       // and it must not run until the message is durable.
       const newMessage = await ctx.prisma.$transaction(async (tx) => {
-        let conversation = await tx.conversation.findUnique({
-          where: { requestId: input.requestId },
-        });
-
-        if (!conversation) {
-          conversation = await tx.conversation.create({
-            data: { requestId: input.requestId },
-          });
-
-          await tx.request.update({
-            where: { id: input.requestId },
-            data: { conversationId: conversation.id },
-          });
-        }
+        const conversation = await findOrCreateConversation(
+          tx,
+          input.requestId,
+        );
 
         return await tx.message.create({
           data: {
