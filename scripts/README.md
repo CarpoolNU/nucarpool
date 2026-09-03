@@ -7,11 +7,11 @@ the `.ts` scripts, and nothing schedules them.
 
 **Before running anything: confirm what `DATABASE_URL` points at.** None of
 these scripts print the connection string, which means none of them will tell
-you that you are pointed at production. Four of them write.
+you that you are pointed at production. Five of them write.
 
 ```bash
 npx ts-node scripts/<name>.ts            # every script: report only
-npx ts-node scripts/<name>.ts --apply    # the four that write
+npx ts-node scripts/<name>.ts --apply    # the five that write
 ```
 
 Node 22, per [`.nvmrc`](../.nvmrc). `ts-node` comes from `node_modules`, so
@@ -29,16 +29,24 @@ keeps `--apply` visible at the call site rather than hidden behind an alias.
 
 ### Writes to the database
 
-All four are dry-run by default, refuse to proceed past a `--max` ceiling
+All five are dry-run by default, refuse to proceed past a `--max` ceiling
 (default 500), and update or delete one row at a time by primary key so a
 partial run leaves a consistent database. Re-running any of them is a no-op.
 
-| Script                                                             | What it does                                                                                 |
-| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| [`backfill-group-preferences.ts`](./backfill-group-preferences.ts) | Moves the legacy `GROUP_DETAILS_V1:` blob out of `group_message` into the three real columns |
-| [`backfill-request-status.ts`](./backfill-request-status.ts)       | Sets `Request.status = ACCEPTED` for pairs who already share a `carpoolId`                   |
-| [`cleanup-orphan-locations.ts`](./cleanup-orphan-locations.ts)     | Deletes `Location` rows no `CarpoolSearch` points at                                         |
-| [`repair-seat-residue.ts`](./repair-seat-residue.ts)               | Clamps out-of-range `seats_avail` into `[0, 6]` and deletes member-less `group` rows         |
+| Script                                                                 | What it does                                                                                 |
+| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| [`backfill-group-preferences.ts`](./backfill-group-preferences.ts)     | Moves the legacy `GROUP_DETAILS_V1:` blob out of `group_message` into the three real columns |
+| [`backfill-request-status.ts`](./backfill-request-status.ts)           | Sets `Request.status = ACCEPTED` for pairs who already share a `carpoolId`                   |
+| [`cleanup-orphan-locations.ts`](./cleanup-orphan-locations.ts)         | Deletes `Location` rows no `CarpoolSearch` points at                                         |
+| [`repair-seat-residue.ts`](./repair-seat-residue.ts)                   | Clamps out-of-range `seats_avail` into `[0, 6]` and deletes member-less `group` rows         |
+| [`cleanup-orphan-conversations.ts`](./cleanup-orphan-conversations.ts) | Deletes `conversation` rows whose request is gone, and the `message` rows in them            |
+
+**`cleanup-orphan-conversations` is the only script here that destroys message
+content** — words two people typed to each other, which nothing can read any
+more. Its dry run prints the message count per candidate for that reason; read
+those numbers before `--apply`. Deleting is the privacy-respecting answer
+rather than a tidy-up, but it is irreversible. See
+[Conversation ownership](../src/server/db/README.md#conversation-ownership).
 
 `repair-seat-residue` is the only one whose prefix is neither `backfill-` nor
 `cleanup-`, because it both writes a column and deletes a row and neither verb
@@ -116,16 +124,17 @@ A zero outstanding count therefore means _"nothing left to do"_, **not**
 _"it was run"_ — a script that never had candidates and a script applied
 successfully look identical.
 
-| Script                       | local | staging           | production  | Last verified | By            |
-| ---------------------------- | ----- | ----------------- | ----------- | ------------- | ------------- |
-| `backfill-group-preferences` | —     | **3 outstanding** | **unknown** | 2026-08-31    | initial audit |
-| `backfill-request-status`    | —     | 0 outstanding     | **unknown** | 2026-08-31    | initial audit |
-| `cleanup-orphan-locations`   | —     | 0 outstanding     | **unknown** | 2026-08-31    | initial audit |
-| `check-self-requests`        | —     | 0 findings        | **unknown** | 2026-08-31    | initial audit |
-| `check-driverless-groups`    | —     | **1 finding**     | **unknown** | 2026-08-31    | initial audit |
-| `check-profile-coordinates`  | —     | 0 findings¹       | **unknown** | 2026-08-31    | initial audit |
-| `check-seat-counts`          | —     | **1 finding**²    | **unknown** | 2026-09-02    | SCRUM-348     |
-| `repair-seat-residue`        | —     | **2 outstanding** | **unknown** | 2026-09-02    | SCRUM-348     |
+| Script                         | local | staging             | production  | Last verified | By            |
+| ------------------------------ | ----- | ------------------- | ----------- | ------------- | ------------- |
+| `backfill-group-preferences`   | —     | **3 outstanding**   | **unknown** | 2026-08-31    | initial audit |
+| `backfill-request-status`      | —     | 0 outstanding       | **unknown** | 2026-08-31    | initial audit |
+| `cleanup-orphan-locations`     | —     | 0 outstanding       | **unknown** | 2026-08-31    | initial audit |
+| `check-self-requests`          | —     | 0 findings          | **unknown** | 2026-08-31    | initial audit |
+| `check-driverless-groups`      | —     | **1 finding**       | **unknown** | 2026-08-31    | initial audit |
+| `check-profile-coordinates`    | —     | 0 findings¹         | **unknown** | 2026-08-31    | initial audit |
+| `check-seat-counts`            | —     | **1 finding**²      | **unknown** | 2026-09-02    | SCRUM-348     |
+| `repair-seat-residue`          | —     | **2 outstanding**   | **unknown** | 2026-09-02    | SCRUM-348     |
+| `cleanup-orphan-conversations` | —     | **11 outstanding**³ | **unknown** | 2026-09-02    | SCRUM-295     |
 
 ¹ 521 rider searches sit at `(0, 0)`, but none belongs to an onboarded user, so
 the script does not count them.
@@ -135,9 +144,13 @@ the script does not count them.
 row, which is the finding `check-driverless-groups` reports as "empty" — the
 two scripts see the same group from different sides.
 
-**Neither figure was produced by running the script.** Both come from the
-direct SQL in SCRUM-348, run against staging on 2026-09-02, before either
-script existed. The conditions are the same, so the numbers should hold,
+³ 11 orphan conversations holding **25 messages**. Same provenance caveat as
+the two rows above: measured by direct SQL on SCRUM-295, not by running the
+script, and no `--apply` has been run anywhere.
+
+**None of these three figures was produced by running its script.** They come
+from the direct SQL on SCRUM-348 and SCRUM-295, run against staging on
+2026-09-02, before any of the three scripts existed. The conditions are the same, so the numbers should hold,
 but a dry run has not confirmed them and **no `--apply` has been run anywhere**.
 Run the dry run before the apply rather than trusting this cell.
 
@@ -190,7 +203,7 @@ unsuffixed variables can be deleted from `emailParams.ts`.
 | staging     | **no**      | —    | —   |
 | production  | **no**      | —    | —   |
 
-### Three findings worth acting on
+### Four findings worth acting on
 
 1. **`backfill-group-preferences` is not finished on staging — 3 rows.** This
    blocks dropping `carpool_search.group_message`, which is only safe once the
@@ -208,6 +221,14 @@ unsuffixed variables can be deleted from `emailParams.ts`.
    they re-save their profile. **The production count is the open question**:
    the 403 noted above means nobody has measured it, and one row on staging is a
    lower bound rather than the answer.
+4. **11 orphan conversations on staging holding 25 messages.** The residue of
+   the cascade pointing the wrong way, fixed in `requests.delete` by SCRUM-295
+   so the population cannot grow. Worth deciding on rather than deferring: the
+   rows are unreachable by every user-facing path, so they are pure retention
+   risk, and they inflate `admin.getDashboardStats`'s conversation count and
+   messages-per-conversation average permanently until removed. Deleting them
+   destroys 25 real messages, which is the point of the per-candidate counts in
+   the dry run.
 
 ### Re-checking without running the scripts
 
@@ -243,6 +264,15 @@ SELECT COUNT(*) FROM request WHERE fromUserId = toUserId;
 SELECT COUNT(*) FROM `group` g WHERE NOT EXISTS (
   SELECT 1 FROM carpool_search cs WHERE cs.carpoolId = g.id AND cs.role = 'DRIVER'
 );
+
+-- cleanup-orphan-conversations: conversations whose request is gone
+SELECT COUNT(*) FROM conversation c
+WHERE NOT EXISTS (SELECT 1 FROM request r WHERE r.id = c.requestId);
+
+-- and the messages that would go with them
+SELECT COUNT(*) FROM message m
+JOIN conversation c ON c.id = m.conversationId
+WHERE NOT EXISTS (SELECT 1 FROM request r WHERE r.id = c.requestId);
 
 -- check-seat-counts: seat counts outside [0, MAX_SEATS_AVAILABLE]
 SELECT id, userId, role, status, seats_avail FROM carpool_search

@@ -1,4 +1,8 @@
-import { findOrCreateConversation } from "./conversationLink";
+import {
+  conversationsToDeleteWith,
+  findOrCreateConversation,
+  findOrphanConversationIds,
+} from "./conversationLink";
 import type { TransactionClient } from "./client";
 
 /**
@@ -121,5 +125,103 @@ describe("findOrCreateConversation — no conversation yet", () => {
       id: `conversation-${REQUEST_ID}`,
       requestId: REQUEST_ID,
     });
+  });
+});
+
+/**
+ * The other half of the link problem: not a conversation missing
+ * from a request, but a conversation whose request is gone.
+ */
+describe("findOrphanConversationIds", () => {
+  const conversation = (id: string, requestId: string) => ({ id, requestId });
+
+  it("selects exactly the conversations whose request is gone", () => {
+    const conversations = [
+      conversation("c-live", "r-live"),
+      conversation("c-dead", "r-dead"),
+      conversation("c-live-2", "r-live-2"),
+    ];
+
+    expect(
+      findOrphanConversationIds(conversations, ["r-live", "r-live-2"]),
+    ).toEqual(["c-dead"]);
+  });
+
+  it("returns nothing when every conversation has its request", () => {
+    expect(
+      findOrphanConversationIds([conversation("c", "r")], ["r", "r-other"]),
+    ).toEqual([]);
+  });
+
+  it("treats every conversation as an orphan when no requests remain", () => {
+    // The shape a logic error would produce, which is what `--max` in the
+    // script exists to stop from being acted on.
+    expect(
+      findOrphanConversationIds(
+        [conversation("a", "r-a"), conversation("b", "r-b")],
+        [],
+      ),
+    ).toEqual(["a", "b"]);
+  });
+
+  it("returns nothing for an empty table", () => {
+    expect(findOrphanConversationIds([], ["r"])).toEqual([]);
+  });
+
+  it("is not confused by a request id that matches a conversation id", () => {
+    // The two id spaces are separate cuids, but the set arithmetic must key
+    // on `requestId` rather than on `id` for the right reason, not by luck.
+    expect(findOrphanConversationIds([conversation("x", "y")], ["x"])).toEqual([
+      "x",
+    ]);
+  });
+
+  /**
+   * The idempotency the cleanup depends on: feeding it the rows a previous run
+   * would have left finds nothing to do.
+   */
+  it("finds nothing among the rows a previous run would have kept", () => {
+    const conversations = [
+      conversation("c-live", "r-live"),
+      conversation("c-dead", "r-dead"),
+    ];
+    const live = ["r-live"];
+
+    const orphans = new Set(findOrphanConversationIds(conversations, live));
+    const survivors = conversations.filter((row) => !orphans.has(row.id));
+
+    expect(findOrphanConversationIds(survivors, live)).toEqual([]);
+  });
+});
+
+describe("conversationsToDeleteWith", () => {
+  it("covers both links when the request knows its conversation", () => {
+    expect(
+      conversationsToDeleteWith({ id: "r-1", conversationId: "c-1" }),
+    ).toEqual([{ requestId: "r-1" }, { id: "c-1" }]);
+  });
+
+  it("omits the id filter when the request has no conversation", () => {
+    // The important one. `{ id: undefined }` is read by `deleteMany` as "no
+    // filter on id", so including it unconditionally would turn a delete of
+    // one row into a delete of the whole table.
+    const filters = conversationsToDeleteWith({
+      id: "r-1",
+      conversationId: null,
+    });
+
+    expect(filters).toEqual([{ requestId: "r-1" }]);
+    for (const filter of filters) {
+      expect(Object.values(filter)).not.toContain(undefined);
+    }
+  });
+
+  it("is never empty, so `{ OR: [] }` cannot be built from it", () => {
+    // Prisma treats an empty OR as matching nothing, which would silently
+    // stop the cleanup rather than fail loudly — but a caller that spreads
+    // this into a wider filter deserves the stronger guarantee.
+    expect(
+      conversationsToDeleteWith({ id: "r-1", conversationId: null }).length,
+    ).toBeGreaterThan(0);
   });
 });

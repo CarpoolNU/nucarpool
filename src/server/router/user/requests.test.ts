@@ -196,6 +196,68 @@ const buildRequestsDb = (
     return { ...row };
   });
 
+  /**
+   * `requests.delete` removes the conversation with the request.
+   *
+   * Two deliberate choices, because a friendlier mock would hide the bugs it
+   * exists to catch:
+   *
+   *   - **A key present with value `undefined` matches everything**, which is
+   *     what real Prisma does and why `conversationsToDeleteWith` never emits
+   *     `{ id: undefined }`. A mock that treated it as "matches nothing" would
+   *     let a delete-the-whole-table filter pass as a delete of one row.
+   *   - **Nothing here cascades.** Prisma emulates `onDelete: Cascade` under
+   *     `relationMode = "prisma"`, but a mock that emulated it too would make
+   *     "the messages were deleted" a fact about the mock rather than about
+   *     the router. So messages survive unless the router deletes them itself,
+   *     which is what the assertions then check.
+   */
+  const matchesConversationFilter = (
+    filter: any,
+    row: { id: string; requestId: string },
+  ) => {
+    const keys = Object.keys(filter);
+    if (keys.length === 0) return true;
+    return keys.every((key) => {
+      const expected = filter[key];
+      if (expected === undefined) return true;
+      if (expected && typeof expected === "object" && "in" in expected) {
+        return (expected.in as string[]).includes(
+          (row as Record<string, string>)[key],
+        );
+      }
+      return (row as Record<string, string>)[key] === expected;
+    });
+  };
+
+  const conversationFindMany = jest.fn(async ({ where }: any) => {
+    const filters: any[] = where?.OR ?? [where ?? {}];
+    return [...conversations.values()]
+      .filter((row) => filters.some((f) => matchesConversationFilter(f, row)))
+      .map((row) => ({ ...row }));
+  });
+
+  const conversationDeleteMany = jest.fn(async ({ where }: any) => {
+    const filters: any[] = where?.OR ?? [where ?? {}];
+    const doomed = [...conversations.values()].filter((row) =>
+      filters.some((f) => matchesConversationFilter(f, row)),
+    );
+    for (const row of doomed) conversations.delete(row.id);
+    return { count: doomed.length };
+  });
+
+  const messageDeleteMany = jest.fn(async ({ where }: any) => {
+    const ids: string[] = where?.conversationId?.in ?? [];
+    let count = 0;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (ids.includes(messages[i].conversationId)) {
+        messages.splice(i, 1);
+        count++;
+      }
+    }
+    return { count };
+  });
+
   const messageCreate = jest.fn(async ({ data }: any) => {
     messages.push({
       conversationId: data.conversationId,
@@ -231,9 +293,11 @@ const buildRequestsDb = (
       user: { findMany: userFindMany },
       conversation: {
         findUnique: conversationFindUnique,
+        findMany: conversationFindMany,
         create: conversationCreate,
+        deleteMany: conversationDeleteMany,
       },
-      message: { create: messageCreate },
+      message: { create: messageCreate, deleteMany: messageDeleteMany },
     },
     () => ({
       requests: cloneState(requests),
@@ -261,6 +325,8 @@ const buildRequestsDb = (
     destroy,
     update,
     conversationCreate,
+    conversationDeleteMany,
+    messageDeleteMany,
   };
 };
 
@@ -1618,5 +1684,158 @@ describe("user.requests.create — a full driver is not refused here", () => {
       toUserId: USER_B,
     });
     expect(db.create).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The cascade in the schema points the other way — `Request` holds the foreign
+ * key, so `onDelete: Cascade` runs Conversation → Request — and nothing ran
+ * Request → Conversation. Every decline, withdrawal and "Leave Conversation"
+ * therefore left a `conversation` row and its `message` rows behind, with
+ * `Conversation.requestId` dangling at a row that no longer existed. 11 of
+ * them holding 25 real messages on production-derived staging.
+ *
+ * Deleting rather than preserving was the decision, because the thread is
+ * unreachable the instant the request row goes: `getConversationMessages`
+ * throws NOT_FOUND without a request, and the unread count joins through
+ * `conversation.request.some(...)`. What persisted was private message content
+ * with no route to it and no deletion path.
+ */
+describe("user.requests.delete — the conversation goes with it", () => {
+  /** The invariant, stated once: no conversation may outlive its request. */
+  const expectNoDanglingConversation = (db: {
+    rows: () => { id: string }[];
+    conversations: () => { id: string; requestId: string }[];
+  }) => {
+    const liveRequestIds = new Set(db.rows().map((row) => row.id));
+    for (const conversation of db.conversations()) {
+      expect(liveRequestIds.has(conversation.requestId)).toBe(true);
+    }
+  };
+
+  it("deletes the conversation attached to the request", async () => {
+    const db = buildRequestsDb([
+      requestRow("req-1", USER_A, USER_B, {
+        conversationId: "conversation-req-1",
+      }),
+    ]);
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    expect(db.conversations()).toHaveLength(1);
+
+    await caller.user.requests.delete({ invitationId: "req-1" });
+
+    expect(db.rows()).toEqual([]);
+    expect(db.conversations()).toEqual([]);
+    expectNoDanglingConversation(db);
+  });
+
+  it("deletes the messages itself, not by relying on the cascade", async () => {
+    // Built through the real create path so the message is written the way the
+    // application writes it, rather than seeded into the mock by hand.
+    const db = buildRequestsDb();
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    const created = await caller.user.requests.create({
+      toId: USER_B,
+      message: "are you still driving?",
+    });
+
+    expect(db.messages()).toHaveLength(1);
+
+    await caller.user.requests.delete({ invitationId: created.id });
+
+    expect(db.conversations()).toEqual([]);
+    expect(db.messages()).toEqual([]);
+  });
+
+  it("succeeds for a request that never had a conversation", async () => {
+    // 462 of 477 rows on staging predate the Conversation model. `delete`
+    // would have thrown NOT_FOUND for these, which is why the mutation uses
+    // `deleteMany`.
+    const db = buildRequestsDb([requestRow("req-1", USER_A, USER_B)]);
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await expect(
+      caller.user.requests.delete({ invitationId: "req-1" }),
+    ).resolves.not.toThrow();
+
+    expect(db.rows()).toEqual([]);
+  });
+
+  it("leaves another pair's conversation alone", async () => {
+    // The assertion the mock is built to be able to fail: a filter of
+    // `{ id: undefined }` matches every row in real Prisma, so a delete that
+    // was meant to remove one conversation would empty the table.
+    const db = buildRequestsDb([
+      requestRow("req-1", USER_A, USER_B, {
+        conversationId: "conversation-req-1",
+      }),
+      requestRow("req-2", USER_B, USER_C, {
+        conversationId: "conversation-req-2",
+      }),
+    ]);
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await caller.user.requests.delete({ invitationId: "req-1" });
+
+    expect(db.conversations()).toEqual([
+      { id: "conversation-req-2", requestId: "req-2" },
+    ]);
+    expectNoDanglingConversation(db);
+  });
+
+  it("removes a conversation reachable only through Request.conversationId", async () => {
+    // The two links can disagree — nothing in the schema keeps them in
+    // agreement, which is the whole reason `conversationLink.ts` exists. A
+    // delete keyed only on `Conversation.requestId` would leave this behind.
+    const db = buildRequestsDb([
+      requestRow("req-1", USER_A, USER_B, {
+        conversationId: "conversation-stale",
+      }),
+    ]);
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await caller.user.requests.delete({ invitationId: "req-1" });
+
+    expect(db.conversations()).toEqual([]);
+  });
+
+  it("does not delete a conversation when the caller is refused", async () => {
+    // Authorization runs before either delete, so a stranger's attempt must
+    // leave both rows exactly as they were.
+    const db = buildRequestsDb([
+      requestRow("req-1", USER_A, USER_B, {
+        conversationId: "conversation-req-1",
+      }),
+    ]);
+    const { caller } = callerFor(sessionFor(USER_C), db);
+
+    await expect(
+      caller.user.requests.delete({ invitationId: "req-1" }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(db.rows()).toHaveLength(1);
+    expect(db.conversations()).toHaveLength(1);
+  });
+
+  it("rolls the request delete back if the conversation delete fails", async () => {
+    // Both writes commit together or neither does. A half-applied delete is
+    // exactly the orphan this ticket is about, so the transaction is the fix
+    // rather than an ordering detail.
+    const db = buildRequestsDb([
+      requestRow("req-1", USER_A, USER_B, {
+        conversationId: "conversation-req-1",
+      }),
+    ]);
+    db.conversationDeleteMany.mockRejectedValueOnce(new Error("boom"));
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await expect(
+      caller.user.requests.delete({ invitationId: "req-1" }),
+    ).rejects.toThrow();
+
+    expect(db.rows()).toHaveLength(1);
+    expect(db.conversations()).toHaveLength(1);
   });
 });

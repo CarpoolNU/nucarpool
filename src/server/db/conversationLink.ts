@@ -59,3 +59,61 @@ export const findOrCreateConversation = async (
 
   return conversation;
 };
+
+/**
+ * The conversation ids to remove when a request is deleted.
+ *
+ * Both links, because the schema stores the relationship twice and nothing
+ * keeps the two in agreement — the problem this module's header describes.
+ * Keying only on `Conversation.requestId` would be right in every consistent
+ * case and would leave a row behind in exactly the inconsistent one that
+ * `findOrCreateConversation` exists to survive.
+ *
+ * Built as a filter list rather than an id list because `Conversation.requestId`
+ * identifies a row without being its primary key. Returned non-empty always, so
+ * the caller cannot hand Prisma `{ OR: [] }`, and never containing
+ * `{ id: undefined }`, which `deleteMany` would read as "no filter" and apply
+ * to every row in the table.
+ */
+export const conversationsToDeleteWith = (request: {
+  id: string;
+  conversationId: string | null;
+}): ({ id: string } | { requestId: string })[] => [
+  { requestId: request.id },
+  ...(request.conversationId ? [{ id: request.conversationId }] : []),
+];
+
+/**
+ * Conversation rows whose `requestId` points at a `Request` that is gone.
+ *
+ * These are unreachable rather than merely untidy. `getConversationMessages`
+ * looks the request up first and throws NOT_FOUND without it, and the unread
+ * count joins through `conversation.request.some(...)`, which matches nothing
+ * for an orphan — so no user-facing path can read one, and no user-facing
+ * count includes one. What does include them is
+ * `admin.getDashboardStats`, whose `conversation.count()` and
+ * `message.groupBy` both count orphans, which is why the dashboard's
+ * conversation figure and its messages-per-conversation average drift upward
+ * and cannot be reconciled afterwards.
+ *
+ * Nothing creates these any more — `requests.delete` removes the conversation
+ * with the request — but every decline, withdrawal and "Leave Conversation"
+ * before that fix left one behind, holding whatever the pair had typed. Kept
+ * as a pure function for the same reason as `findOrphanLocationIds`: the set
+ * arithmetic is what is worth testing, and the reads and deletes live in
+ * `scripts/cleanup-orphan-conversations.ts`.
+ *
+ * A null `requestId` is not possible — the column is non-nullable — so unlike
+ * the Location case there is no "never linked" state to exclude. Every
+ * conversation claims a request; the only question is whether that request
+ * still exists.
+ */
+export const findOrphanConversationIds = (
+  conversations: readonly { id: string; requestId: string }[],
+  liveRequestIds: readonly string[],
+): string[] => {
+  const live = new Set(liveRequestIds);
+  return conversations
+    .filter((conversation) => !live.has(conversation.requestId))
+    .map((conversation) => conversation.id);
+};
