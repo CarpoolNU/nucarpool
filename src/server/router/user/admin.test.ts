@@ -3,6 +3,11 @@ import { addWeeks, startOfWeek } from "date-fns";
 import type { Session } from "next-auth";
 import { appRouter } from "../index";
 import type { Context } from "../context";
+import {
+  DASHBOARD_WINDOW_ORDER_MESSAGE,
+  DASHBOARD_WINDOW_SPAN_MESSAGE,
+} from "./admin";
+import { MAX_DASHBOARD_WEEKS } from "../../adminDataUtils";
 
 /**
  * What the admin dashboard router asks the database for.
@@ -236,6 +241,130 @@ describe("getDashboardSeries", () => {
     expect(series.requestCount[0]).toBe(3);
     expect(series.driverRequestCount[0]).toBe(1);
     expect(series.riderRequestCount[0]).toBe(1);
+  });
+
+  /**
+   * The window used to be `z.object({ start: z.date(), end: z.date() })` and
+   * nothing else, so the number of week buckets the handler allocates came
+   * straight from client input. The widest representable window is ~2.84e7
+   * weeks; allocating it exhausts a 2 GB heap in about eleven seconds, which
+   * kills the Node process and every co-located request with it rather than
+   * just returning slowly.
+   *
+   * `expect(everyCallArgument(prisma)).toEqual([])` is the assertion that
+   * matters in each rejection: validation has to refuse *before* the handler
+   * runs, since the allocation happens ahead of any database work.
+   */
+  const rejectedWindow = async (window: unknown) => {
+    const { caller, prisma } = callerFor();
+
+    const error = await caller.user.admin
+      .getDashboardSeries(window as { start: Date; end: Date })
+      .then(
+        () => null,
+        (thrown) => thrown as any,
+      );
+
+    return { error, prisma };
+  };
+
+  /** The Zod issues behind a tRPC input rejection. */
+  const issuesOf = (error: any) => error?.cause?.issues ?? [];
+
+  it("refuses a window whose end precedes its start, without querying", async () => {
+    // Accepted silently before: `generateWeekLabels` takes Math.min/Math.max so
+    // it charted the axis anyway, while the order-sensitive `where` clause
+    // became `gte: <later>, lt: <earlier>` and matched nothing. The admin saw
+    // labels over flat zeroes — indistinguishable from a genuinely quiet week.
+    const { error, prisma } = await rejectedWindow({ start: end, end: start });
+
+    expect(error.code).toBe("BAD_REQUEST");
+    expect(issuesOf(error)).toContainEqual(
+      expect.objectContaining({
+        path: ["end"],
+        message: DASHBOARD_WINDOW_ORDER_MESSAGE,
+      }),
+    );
+    expect(everyCallArgument(prisma)).toEqual([]);
+  });
+
+  it("refuses a window wider than the maximum, naming the limit", async () => {
+    const { error, prisma } = await rejectedWindow({
+      start,
+      end: addWeeks(start, MAX_DASHBOARD_WEEKS),
+    });
+
+    expect(error.code).toBe("BAD_REQUEST");
+    expect(issuesOf(error)).toContainEqual(
+      expect.objectContaining({
+        path: ["end"],
+        message: DASHBOARD_WINDOW_SPAN_MESSAGE,
+      }),
+    );
+    expect(DASHBOARD_WINDOW_SPAN_MESSAGE).toContain(
+      String(MAX_DASHBOARD_WEEKS),
+    );
+    expect(everyCallArgument(prisma)).toEqual([]);
+  });
+
+  it("refuses the widest representable window, where the span is not a number", async () => {
+    // The trap this case exists for: `startOfWeek` on a date within six days of
+    // the `Date` minimum walks past the representable range and returns an
+    // invalid date, so the span is NaN. `NaN > MAX_DASHBOARD_WEEKS` is false, so
+    // a ceiling comparison alone would admit precisely the worst input there is.
+    const { error, prisma } = await rejectedWindow({
+      start: new Date(-8.64e15),
+      end: new Date(8.64e15),
+    });
+
+    expect(error.code).toBe("BAD_REQUEST");
+    expect(everyCallArgument(prisma)).toEqual([]);
+  });
+
+  it("refuses an unrecognised field rather than ignoring it", async () => {
+    const { error, prisma } = await rejectedWindow({ start, end, weeks: 1e9 });
+
+    expect(error.code).toBe("BAD_REQUEST");
+    expect(everyCallArgument(prisma)).toEqual([]);
+  });
+
+  it("accepts a window of exactly the maximum span", async () => {
+    // The ceiling is inclusive, so the boundary is asserted from both sides.
+    const { caller, prisma } = callerFor();
+
+    const series = await caller.user.admin.getDashboardSeries({
+      start,
+      end: addWeeks(start, MAX_DASHBOARD_WEEKS - 1),
+    });
+
+    expect(series.weekLabels).toHaveLength(MAX_DASHBOARD_WEEKS);
+    expect(prisma.user.findMany).toHaveBeenCalled();
+  });
+
+  it("accepts a window that starts and ends in the same week", async () => {
+    // Equal ends are a legitimate one-bucket chart, not a degenerate range.
+    const { caller } = callerFor();
+
+    const series = await caller.user.admin.getDashboardSeries({
+      start,
+      end: start,
+    });
+
+    expect(series.weekLabels).toEqual([startOfWeek(start)]);
+  });
+
+  it("still accepts the window the dashboard itself asks for", async () => {
+    // `AdminData` sends startOfWeek(minDate) to startOfWeek(maxDate) from
+    // `getDateRange`, which is derived from real row timestamps. A few years of
+    // data must stay far inside the ceiling.
+    const { caller, prisma } = callerFor();
+
+    await caller.user.admin.getDashboardSeries({
+      start: startOfWeek(new Date(2022, 0, 1)),
+      end: startOfWeek(new Date(2026, 8, 4)),
+    });
+
+    expect(prisma.user.findMany).toHaveBeenCalled();
   });
 });
 

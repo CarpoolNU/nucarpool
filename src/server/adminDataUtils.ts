@@ -19,6 +19,22 @@ import {
  * so the chart is now the same for every viewer instead of shifting per browser.
  */
 
+/**
+ * Ceiling on the week buckets a single dashboard window may produce.
+ *
+ * `generateWeekLabels` allocates one `Date` per week and the count comes from
+ * the window alone, with no relation to how many rows exist, so the bound has
+ * to be explicit somewhere. Ten years is far past any window the dashboard can
+ * offer — its slider is clamped to the extent of real `dateCreated` values, and
+ * the platform is a few years old — while staying finite.
+ *
+ * Enforced twice on purpose. `getDashboardSeries` rejects an over-wide window
+ * at its input schema, which is the copy that reports the problem to the
+ * caller; the check inside `generateWeekLabels` is a backstop for any future
+ * caller that reaches the function without going through that schema.
+ */
+export const MAX_DASHBOARD_WEEKS = 520;
+
 interface ItemWithDate {
   dateCreated: Date;
 }
@@ -59,6 +75,28 @@ export const countCumulativeItemsPerWeek = (
   return counts;
 };
 
+/**
+ * How many week buckets a window covers, inclusive of both ends.
+ *
+ * Shared with `getDashboardSeries`, which uses it to size a window *before*
+ * accepting one. The point of sharing is that the schema's ceiling and the
+ * array `generateWeekLabels` would actually allocate are the same number,
+ * rather than two expressions that could drift apart.
+ *
+ * Assumes `start` precedes `end`; a reversed pair returns a negative count.
+ * Callers that take their window from user input order it first — the schema
+ * rejects a reversed window outright, since the `where` clause built from the
+ * same two dates is order-sensitive even though this file is not.
+ *
+ * Returns `NaN` at the very edges of the representable range: `startOfWeek` on
+ * a date within six days of the `Date` minimum walks back past it and yields an
+ * invalid date. Callers must test with `Number.isFinite` rather than comparing
+ * against a ceiling, because every comparison with `NaN` is false — a bare
+ * `weeks > MAX` check silently *admits* the widest window there is.
+ */
+export const weeksSpanned = (start: Date, end: Date): number =>
+  differenceInWeeks(startOfWeek(end), startOfWeek(start)) + 1;
+
 export function generateWeekLabels(allDates: Date[]): Date[] {
   let weekLabels: Date[] = [];
 
@@ -70,7 +108,27 @@ export function generateWeekLabels(allDates: Date[]): Date[] {
       new Date(Math.max(...allDates.map((date) => date.getTime()))),
     );
 
-    const weeksDifference = differenceInWeeks(maxWeekDate, minWeekDate) + 1;
+    const weeksDifference = weeksSpanned(minWeekDate, maxWeekDate);
+
+    // Unreachable through `getDashboardSeries`, which refuses an over-wide
+    // window at its schema. Here because this function is exported and unit
+    // tested on its own, so a caller added later would otherwise inherit the
+    // hazard: the loop below allocates one `Date` per week from arithmetic on
+    // its argument, and the widest representable window asks for ~2.84e7 of
+    // them. Measured, that exhausts a 2 GB heap in about eleven seconds and
+    // kills the process rather than merely returning slowly.
+    //
+    // Throws rather than clamping. Clamping would quietly return labels for a
+    // window nobody asked for, which is harder to notice than a stack trace.
+    if (
+      !Number.isFinite(weeksDifference) ||
+      weeksDifference > MAX_DASHBOARD_WEEKS
+    ) {
+      throw new RangeError(
+        `Refusing to build ${weeksDifference} week labels; the maximum is ` +
+          `${MAX_DASHBOARD_WEEKS}.`,
+      );
+    }
 
     for (let i = 0; i < weeksDifference; i++) {
       const weekStart = addWeeks(minWeekDate, i);
