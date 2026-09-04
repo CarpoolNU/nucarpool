@@ -2,6 +2,7 @@ import { Role, Status } from "@prisma/client";
 import {
   canCarpoolTogether,
   carpoolUnavailableExplanation,
+  requestUnavailableExplanation,
   roleMismatchExplanation,
 } from "./roleCompatibility";
 
@@ -204,6 +205,114 @@ describe("carpoolUnavailableExplanation", () => {
       carpoolUnavailableExplanation(
         Role.RIDER,
         other({ role: Role.RIDER, preferredName: "Jordan" }),
+      ),
+    ).toContain("Jordan");
+  });
+});
+
+describe("requestUnavailableExplanation", () => {
+  it("explains nothing for a compatible pair who are both still searching", () => {
+    expect(
+      requestUnavailableExplanation(Role.DRIVER, other({ role: Role.RIDER })),
+    ).toBeNull();
+    expect(
+      requestUnavailableExplanation(Role.RIDER, other({ role: Role.DRIVER })),
+    ).toBeNull();
+  });
+
+  /**
+   * The case this function exists for. Before SCRUM-369 a request whose
+   * counterpart had paused was dropped by `requests.me` entirely, so the cards
+   * never had to describe one; they called `roleMismatchExplanation`, which
+   * knows nothing about status.
+   *
+   * A paused DRIVER and an active RIDER is a *compatible* pair, so that
+   * function returns `null` for it — a card with no notice at all, next to an
+   * Accept button that refuses. This is the gap the switch closes, and it is
+   * why the two assertions below are worth having together.
+   */
+  it("explains a paused counterpart whose role still fits", () => {
+    expect(
+      requestUnavailableExplanation(
+        Role.RIDER,
+        other({ role: Role.DRIVER, status: Status.INACTIVE }),
+      ),
+    ).toBe(
+      "Alex has paused their carpool search, so you cannot carpool with them right now.",
+    );
+  });
+
+  it("is the case roleMismatchExplanation alone cannot answer", () => {
+    // Same pair, the old helper: compatible roles, so nothing to say.
+    expect(roleMismatchExplanation(Role.RIDER, Role.DRIVER, "Alex")).toBeNull();
+  });
+
+  it("answers a paused search before a role mismatch", () => {
+    // Incompatible *and* paused. Someone not searching at all makes their role
+    // beside the point, so the paused search is the fact reported — the same
+    // precedence `carpoolUnavailableExplanation` uses.
+    expect(
+      requestUnavailableExplanation(
+        Role.RIDER,
+        other({ role: Role.RIDER, status: Status.INACTIVE }),
+      ),
+    ).toBe(
+      "Alex has paused their carpool search, so you cannot carpool with them right now.",
+    );
+  });
+
+  it("words a paused search identically to the favourites copy", () => {
+    // One sentence, one source. A favourite and a request state the same fact
+    // about the same person, so they must not drift apart.
+    const paused = other({ role: Role.DRIVER, status: Status.INACTIVE });
+
+    expect(requestUnavailableExplanation(Role.RIDER, paused)).toBe(
+      carpoolUnavailableExplanation(Role.RIDER, paused),
+    );
+  });
+
+  /**
+   * The one place the two deliberately differ.
+   *
+   * `carpoolUnavailableExplanation` drops "You can keep messaging them, or
+   * clear the request" from its Viewer branch, because a favourite has no
+   * request to clear. On a request there is one, so this delegates to
+   * `roleMismatchExplanation` and keeps the instruction.
+   */
+  it("keeps the request wording for a Viewer counterpart, unlike the favourites copy", () => {
+    const viewer = other({ role: Role.VIEWER });
+
+    expect(requestUnavailableExplanation(Role.RIDER, viewer)).toBe(
+      "Alex has switched to Viewer mode and is not carpooling right " +
+        "now. You can keep messaging them, or clear the request.",
+    );
+    expect(requestUnavailableExplanation(Role.RIDER, viewer)).not.toBe(
+      carpoolUnavailableExplanation(Role.RIDER, viewer),
+    );
+  });
+
+  it("delegates every remaining case to roleMismatchExplanation unchanged", () => {
+    for (const [reader, otherRole] of [
+      [Role.RIDER, Role.RIDER],
+      [Role.DRIVER, Role.DRIVER],
+      [Role.VIEWER, Role.DRIVER],
+      [Role.VIEWER, Role.VIEWER],
+    ] as const) {
+      expect(
+        requestUnavailableExplanation(reader, other({ role: otherRole })),
+      ).toBe(roleMismatchExplanation(reader, otherRole, "Alex"));
+    }
+  });
+
+  it("uses the preferred name it is given", () => {
+    expect(
+      requestUnavailableExplanation(
+        Role.DRIVER,
+        other({
+          role: Role.RIDER,
+          status: Status.INACTIVE,
+          preferredName: "Jordan",
+        }),
       ),
     ).toContain("Jordan");
   });

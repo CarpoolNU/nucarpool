@@ -147,10 +147,7 @@ export const requestsRouter = router({
     // get CarpoolSearches for all users in sent requests
     const sentUserIds = user.sentRequests.map((req) => req.toUserId);
     const sentCarpoolSearches = await ctx.prisma.carpoolSearch.findMany({
-      where: {
-        userId: { in: sentUserIds },
-        status: { not: "INACTIVE" },
-      },
+      where: { userId: { in: sentUserIds } },
       include: {
         user: {
           select: {
@@ -171,10 +168,7 @@ export const requestsRouter = router({
     // get CarpoolSearches for all users in received requests
     const receivedUserIds = user.receivedRequests.map((req) => req.fromUserId);
     const receivedCarpoolSearches = await ctx.prisma.carpoolSearch.findMany({
-      where: {
-        userId: { in: receivedUserIds },
-        status: { not: "INACTIVE" },
-      },
+      where: { userId: { in: receivedUserIds } },
       include: {
         user: {
           select: {
@@ -253,9 +247,23 @@ export const requestsRouter = router({
     // the UI shows on those requests, and accepting one is refused by
     // `groups.create`/`groups.edit` rather than by hiding it here.
     //
-    // The null check that remains is not about roles: a counterpart whose
-    // search is INACTIVE is absent from the two queries above, so there is no
-    // `PublicUser` to build a card from.
+    // Nor is it about status any more. The two queries above also carried
+    // `status: { not: "INACTIVE" }`, which reproduced the identical dead end
+    // one filter away: pausing a search is something any user can do from
+    // their own profile at any time, and the moment either party did, the
+    // request vanished from both Requests tabs while `create`'s duplicate
+    // guard — which reads only `Request.status` — went on refusing every retry
+    // with `CONFLICT`. Neither party could withdraw it, decline it or replace
+    // it until the other reactivated. SCRUM-369.
+    //
+    // `requestUnavailableExplanation` is what the card shows on those
+    // requests, and `validateRequestAcceptance` plus the status checks in
+    // `groups.create`/`groups.edit` are what stop one being accepted — the
+    // same division of labour SCRUM-296 settled on for roles.
+    //
+    // What the null check covers now is a genuine absence: a counterpart with
+    // no `CarpoolSearch` at all, who never finished onboarding. There is no
+    // `PublicUser` to build a card from, and no hidden row behind it.
     return {
       sent: sent.filter((req) => req.toUser !== null),
       received: received.filter((req) => req.fromUser !== null),
