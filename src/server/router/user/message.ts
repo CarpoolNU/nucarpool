@@ -20,6 +20,40 @@ import { MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
 export const CONVERSATION_PAGE_SIZE = 30;
 
 /**
+ * How many pages' worth of ids one `markMessagesAsRead` call may carry.
+ *
+ * The cap is a multiple of the page size rather than the page size itself,
+ * because `MessageContent` does not send one page's ids — it sends the unread
+ * ids of *every page loaded so far*. Its thread is a `useInfiniteQuery`, the
+ * mark-read effect filters the accumulated `allMessages`, and the mutation's
+ * `onSuccess` invalidates the unread count and `requests.me` but **not**
+ * `messages.conversation`. So the fetched pages keep `isRead: false` in cache,
+ * and each press of "load older" resends a strictly longer array: 30, then 60,
+ * then 90.
+ *
+ * Capping at `CONVERSATION_PAGE_SIZE` would therefore reject the second page of
+ * any thread whose backlog is genuinely unread, and the client would swallow it
+ * — `onError` only logs — leaving messages unread with nothing on screen to say
+ * why. Twenty pages is far past what a reader will page back through while
+ * anything remains unread, and still a bound.
+ */
+export const MAX_MARK_READ_PAGES = 20;
+
+/** Ids accepted by one `markMessagesAsRead` call. */
+export const MAX_MARK_READ_IDS = CONVERSATION_PAGE_SIZE * MAX_MARK_READ_PAGES;
+
+/**
+ * Longest id that call will consider.
+ *
+ * Bounding each element matters as much as bounding their number: 600 strings
+ * of unbounded length is still an unbounded statement. 191 is Prisma's default
+ * width for an unannotated `String` on MySQL, which is what `Message.id` is —
+ * and it holds a cuid, nowhere near that. `getPresignedDownloadUrlInput` in
+ * `user.ts` sets the same ceiling for the same reason.
+ */
+export const MESSAGE_ID_MAX_LENGTH = 191;
+
+/**
  * The message columns the thread renders, matching the projection
  * `user.requests.me` uses.
  *
@@ -332,11 +366,31 @@ export const messageRouter = router({
       return newMessage;
     }),
 
+  /**
+   * Marks the caller's unread messages read, scoped to conversations they are
+   * a party to.
+   *
+   * The input was `z.array(z.string())` with no ceiling of any kind, which made
+   * it the one list-shaped input in this router that a caller could size
+   * freely — the array goes straight into `id: { in: ... }`, so how large an
+   * `IN` list MySQL parses and plans was the caller's choice. The ownership
+   * predicate below eliminates the rows either way, so nothing could be marked
+   * read that the caller does not own; the cost was in planning a statement
+   * that could not match, and in the packet size PlanetScale would have to
+   * accept. See SCRUM-372.
+   *
+   * `.strict()` for the same reason the other hardened inputs have it: a
+   * mistyped or re-added key should be a `BAD_REQUEST`, not silently dropped.
+   */
   markMessagesAsRead: protectedRouter
     .input(
-      z.object({
-        messageIds: z.array(z.string()),
-      }),
+      z
+        .object({
+          messageIds: z
+            .array(z.string().min(1).max(MESSAGE_ID_MAX_LENGTH))
+            .max(MAX_MARK_READ_IDS),
+        })
+        .strict(),
     )
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user?.id;

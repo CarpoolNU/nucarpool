@@ -35,6 +35,15 @@ jest.mock("pusher", () => ({
 
 // `jest.mock` is hoisted above imports, so the router below picks up the mock.
 import { appRouter } from "../index";
+// Same reason, and it has to be here rather than at the top of the file:
+// `message.ts` imports `server/pusher.ts`, which constructs the mocked Pusher
+// at module scope, and `mockTrigger` above is not assigned until this module's
+// body runs. Importing it any earlier throws before a single test loads.
+import {
+  CONVERSATION_PAGE_SIZE,
+  MAX_MARK_READ_IDS,
+  MESSAGE_ID_MAX_LENGTH,
+} from "./message";
 
 const SENDER = "user-from";
 const RECIPIENT = "user-to";
@@ -845,5 +854,174 @@ describe("getUnreadMessageCount - the badge and the Requests tab agree", () => {
       appRouter.createCaller(ctx).user.messages.getUnreadMessageCount(),
     ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     expect(db.count).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The size of what `markMessagesAsRead` will accept.
+ *
+ * Its input was `z.array(z.string())` with no ceiling of any kind — the one
+ * list-shaped input in this router a caller could size freely. The array goes
+ * straight into `id: { in: ... }`, so how large an `IN` list MySQL had to parse
+ * and plan was the caller's choice. Ownership is enforced separately and is not
+ * what changed; these pin the bound, and the last case pins that the bound did
+ * not eat the ownership predicate on the way in. See SCRUM-372.
+ */
+describe("markMessagesAsRead — the id list is bounded", () => {
+  /** A double for just this procedure: nothing else here calls `updateMany`. */
+  const buildMarkReadDb = () => {
+    const updateMany = jest.fn(async () => ({ count: 0 }));
+    return {
+      prisma: { message: { updateMany } } as unknown as Context["prisma"],
+      updateMany,
+    };
+  };
+
+  const markReadCallerFor = (userId: string) => {
+    const db = buildMarkReadDb();
+    const ctx = {
+      req: undefined,
+      res: undefined,
+      session: sessionFor(userId),
+      prisma: db.prisma,
+      sesClient: { send: jest.fn() },
+    } as unknown as Context;
+    return { caller: appRouter.createCaller(ctx), db };
+  };
+
+  const ids = (n: number) =>
+    Array.from({ length: n }, (_, i) => `message-${i}`);
+
+  it("accepts a full page of ids", async () => {
+    const { caller, db } = markReadCallerFor(SENDER);
+
+    await caller.user.messages.markMessagesAsRead({
+      messageIds: ids(CONVERSATION_PAGE_SIZE),
+    });
+
+    expect(db.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * The case that decided the cap.
+   *
+   * `MessageContent` does not send one page's ids. Its thread is a
+   * `useInfiniteQuery`, the mark-read effect filters the accumulated
+   * `allMessages`, and the mutation's `onSuccess` invalidates the unread count
+   * and `requests.me` but not `messages.conversation` — so the fetched pages
+   * keep `isRead: false` and every press of "load older" resends a strictly
+   * longer array. A cap of `CONVERSATION_PAGE_SIZE` would reject the second
+   * page of any genuinely unread backlog, and `onError` only logs, so the user
+   * would see messages stay unread with nothing to explain it.
+   */
+  it("accepts several pages' worth, which is what the real client sends", async () => {
+    const { caller, db } = markReadCallerFor(SENDER);
+
+    await caller.user.messages.markMessagesAsRead({
+      messageIds: ids(CONVERSATION_PAGE_SIZE * 3),
+    });
+
+    expect(db.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts exactly the cap", async () => {
+    const { caller, db } = markReadCallerFor(SENDER);
+
+    await caller.user.messages.markMessagesAsRead({
+      messageIds: ids(MAX_MARK_READ_IDS),
+    });
+
+    expect(db.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses one more than the cap, without querying", async () => {
+    const { caller, db } = markReadCallerFor(SENDER);
+
+    await expect(
+      caller.user.messages.markMessagesAsRead({
+        messageIds: ids(MAX_MARK_READ_IDS + 1),
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    expect(db.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses an id longer than the column that holds it", async () => {
+    // Counting the ids is not enough on its own: this many strings of
+    // unbounded length is still an unbounded statement.
+    const { caller, db } = markReadCallerFor(SENDER);
+
+    await expect(
+      caller.user.messages.markMessagesAsRead({
+        messageIds: ["a".repeat(MESSAGE_ID_MAX_LENGTH + 1)],
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    expect(db.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses an empty id", async () => {
+    const { caller, db } = markReadCallerFor(SENDER);
+
+    await expect(
+      caller.user.messages.markMessagesAsRead({ messageIds: [""] }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    expect(db.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses an unrecognised key rather than ignoring it", async () => {
+    const { caller, db } = markReadCallerFor(SENDER);
+
+    await expect(
+      caller.user.messages.markMessagesAsRead({
+        messageIds: ids(1),
+        conversationId: CONVERSATION_ID,
+      } as any),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    expect(db.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("still scopes the write to conversations the caller is a party to", async () => {
+    // SCRUM-222's predicate, asserted here because this ticket touches the
+    // input that feeds it and must leave the `where` clause alone. Note it does
+    // not depend on the array: an id the caller does not own matches nothing.
+    const { caller, db } = markReadCallerFor(SENDER);
+
+    await caller.user.messages.markMessagesAsRead({ messageIds: ids(2) });
+
+    expect(db.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: ["message-0", "message-1"] },
+        conversation: {
+          request: {
+            some: {
+              OR: [{ fromUserId: SENDER }, { toUserId: SENDER }],
+            },
+          },
+        },
+      },
+      data: { isRead: true },
+    });
+  });
+
+  it("rejects an anonymous caller without querying", async () => {
+    const db = buildMarkReadDb();
+    const ctx = {
+      req: undefined,
+      res: undefined,
+      session: null,
+      prisma: db.prisma,
+      sesClient: { send: jest.fn() },
+    } as unknown as Context;
+
+    await expect(
+      appRouter
+        .createCaller(ctx)
+        .user.messages.markMessagesAsRead({ messageIds: ids(1) }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+    expect(db.updateMany).not.toHaveBeenCalled();
   });
 });
