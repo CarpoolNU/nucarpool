@@ -1,4 +1,4 @@
-import { Permission } from "@prisma/client";
+import { Permission, RequestStatus } from "@prisma/client";
 import type { Session } from "next-auth";
 import type { Context } from "../context";
 
@@ -103,6 +103,7 @@ const buildEmailDb = (opts?: {
     toUserId: string;
     conversationId: string | null;
     dateCreated?: Date;
+    status?: RequestStatus;
   } | null;
   messages?: MessageRow[];
   /**
@@ -122,10 +123,13 @@ const buildEmailDb = (opts?: {
           conversationId: CONVERSATION_ID,
         }
       : opts?.request;
-  // Fresh unless a test says otherwise: a request notification only fires for
-  // a request that was just created.
+  // Fresh and pending unless a test says otherwise: a request notification
+  // only fires for a request that was just created, and a request that was
+  // just created has not been accepted. Acceptance cases opt in explicitly —
+  // defaulting to ACCEPTED here would let a procedure that never reads
+  // `status` pass every test in the file.
   const request = rawRequest
-    ? { dateCreated: new Date(), ...rawRequest }
+    ? { dateCreated: new Date(), status: RequestStatus.PENDING, ...rawRequest }
     : rawRequest;
   const senderRequests = opts?.senderRequests ?? [];
   const messages = opts?.messages ?? [];
@@ -626,9 +630,31 @@ describe("user.emails.sendMessageNotification — participants only, stored body
   });
 });
 
-describe("user.emails.sendAcceptanceNotification — participants only", () => {
+describe("user.emails.sendAcceptanceNotification — only the party who accepted, and only once it is accepted", () => {
+  /**
+   * An acceptance email asserts a specific fact about a specific person, so
+   * the procedure requires more than the shared "are you a participant" check:
+   * the request must be `ACCEPTED`, and the caller must be the party it was
+   * addressed to. The fixture default is a fresh `PENDING` request, which is
+   * no longer this flow, so every genuine case builds the accepted row.
+   */
+  const acceptedRequestDb = (
+    fromUserId = ALICE,
+    toUserId = BOB,
+    status: RequestStatus = RequestStatus.ACCEPTED,
+  ) =>
+    buildEmailDb({
+      request: {
+        id: REQUEST_ID,
+        fromUserId,
+        toUserId,
+        conversationId: CONVERSATION_ID,
+        status,
+      },
+    });
+
   it("resolves both parties from the request and copies the sender", async () => {
-    const { caller, db } = callerFor(sessionFor(BOB));
+    const { caller, db } = callerFor(sessionFor(BOB), acceptedRequestDb());
 
     await caller.user.emails.sendAcceptanceNotification({
       requestId: REQUEST_ID,
@@ -643,11 +669,71 @@ describe("user.emails.sendAcceptanceNotification — participants only", () => {
   });
 
   it("refuses a caller who is not a party to the request", async () => {
-    const { caller, db } = callerFor(sessionFor(MALLORY));
+    const { caller, db } = callerFor(sessionFor(MALLORY), acceptedRequestDb());
 
     await expect(
       caller.user.emails.sendAcceptanceNotification({ requestId: REQUEST_ID }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(db.ses).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The defect these three cases exist to pin.
+   *
+   * The procedure did not read `Request.status` at all, and the shared party
+   * check admits either side of a request. Together that let the *sender* of a
+   * still-pending request make the platform email their target "Alice accepted
+   * your carpool request" — about a request the target never made and nobody
+   * accepted — from our verified SES identity, as many times as they liked.
+   *
+   * Both halves are asserted separately because either one alone still leaves
+   * a way to send a false notice: the status check alone would let the wrong
+   * party announce a real acceptance, and the direction check alone would let
+   * a recipient announce an acceptance that never happened.
+   *
+   * `expect(db.ses).not.toHaveBeenCalled()` is the load-bearing assertion, as
+   * everywhere else in this file. A refusal that still sends the mail is the
+   * failure that actually matters.
+   */
+  it("refuses the sender of a pending request, who could otherwise fabricate the whole notice", async () => {
+    const db = buildEmailDb(); // Alice -> Bob, PENDING by default.
+    const { caller } = callerFor(sessionFor(ALICE), db);
+
+    await expect(
+      caller.user.emails.sendAcceptanceNotification({ requestId: REQUEST_ID }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(db.ses).not.toHaveBeenCalled();
+  });
+
+  it("refuses a request nobody has accepted, even asked by its recipient", async () => {
+    const db = acceptedRequestDb(ALICE, BOB, RequestStatus.PENDING);
+    const { caller } = callerFor(sessionFor(BOB), db);
+
+    await expect(
+      caller.user.emails.sendAcceptanceNotification({ requestId: REQUEST_ID }),
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      message: "That carpool request has not been accepted.",
+    });
+
+    expect(db.ses).not.toHaveBeenCalled();
+  });
+
+  it("refuses the requester of an accepted request, who is not the party that accepted it", async () => {
+    const db = acceptedRequestDb();
+    const { caller } = callerFor(sessionFor(ALICE), db);
+
+    // A distinct message from the case above on purpose: "you did not accept
+    // this" and "this was not accepted" call for different things from the
+    // caller, and one shared message would leave both unclear.
+    await expect(
+      caller.user.emails.sendAcceptanceNotification({ requestId: REQUEST_ID }),
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      message: "Only the person a request was sent to can accept it.",
+    });
 
     expect(db.ses).not.toHaveBeenCalled();
   });
@@ -666,7 +752,7 @@ describe("user.emails.sendAcceptanceNotification — participants only", () => {
    */
   it("tells a rider their request was accepted, when a driver accepts", async () => {
     // Alice (rider) asked to join Bob's (driver) carpool; Bob accepts.
-    const { caller, db } = callerFor(sessionFor(BOB));
+    const { caller, db } = callerFor(sessionFor(BOB), acceptedRequestDb());
 
     await caller.user.emails.sendAcceptanceNotification({
       requestId: REQUEST_ID,
@@ -680,14 +766,7 @@ describe("user.emails.sendAcceptanceNotification — participants only", () => {
 
   it("tells a driver their invitation was accepted, when a rider accepts", async () => {
     // The other direction: Bob (driver) invited Alice (rider), Alice accepts.
-    const db = buildEmailDb({
-      request: {
-        id: REQUEST_ID,
-        fromUserId: BOB,
-        toUserId: ALICE,
-        conversationId: CONVERSATION_ID,
-      },
-    });
+    const db = acceptedRequestDb(BOB, ALICE);
     const { caller } = callerFor(sessionFor(ALICE), db);
 
     await caller.user.emails.sendAcceptanceNotification({
