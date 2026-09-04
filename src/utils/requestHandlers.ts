@@ -2,7 +2,7 @@ import { User, EnhancedPublicUser } from "../utils/types";
 import { Request, Role } from "@prisma/client";
 import { trpc } from "./trpc";
 import { toast } from "react-toastify/unstyled";
-import { roleMismatchExplanation } from "./roleCompatibility";
+import { requestUnavailableExplanation } from "./roleCompatibility";
 import { hasSeatAvailable } from "./carpoolSeats";
 
 interface RequestHandlers {
@@ -93,16 +93,19 @@ export const createRequestHandlers = (
     // below would misread it, because each treats "I am not a DRIVER" as
     // "they are".
     //
-    // Refused here so the message can name whose role moved and what would fix
-    // it. `groups.create` and `groups.edit` refuse it too; that is the half
-    // that holds when this cache is stale.
-    const mismatch = roleMismatchExplanation(
-      user.role,
-      otherUser.role,
-      otherUser.preferredName,
-    );
-    if (mismatch) {
-      toast.error(mismatch);
+    // Status is part of that question now, not just role. SCRUM-369 stopped
+    // `requests.me` hiding a request whose counterpart had *paused* their
+    // search, for the same reason SCRUM-296 stopped it hiding a role change,
+    // so the Accept button reaches those too. A paused counterpart is not
+    // looking for a carpool, and their roles may well still fit — which is
+    // exactly the case a role-only check waves through.
+    //
+    // Refused here so the message can name what changed and what would fix
+    // it. `groups.create` and `groups.edit` refuse both halves too; that is
+    // the half that holds when this cache is stale.
+    const unavailable = requestUnavailableExplanation(user.role, otherUser);
+    if (unavailable) {
+      toast.error(unavailable);
       return false;
     }
 

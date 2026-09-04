@@ -2,7 +2,13 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { router, protectedRouter } from "../createRouter";
 import _ from "lodash";
-import { Role, CarpoolGroup, RequestStatus, User } from "@prisma/client";
+import {
+  Role,
+  CarpoolGroup,
+  RequestStatus,
+  Status,
+  User,
+} from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import { convertCarpoolSearchToPublicWithExactHome } from "../../publicUser";
 import {
@@ -86,7 +92,7 @@ const membershipOf = async (
 ) =>
   prisma.carpoolSearch.findFirst({
     where: { userId, carpoolId: groupId },
-    select: { id: true, role: true },
+    select: { id: true, role: true, status: true },
   });
 
 /** Throws unless the caller is the DRIVER of `groupId`. */
@@ -414,7 +420,7 @@ export const groupsRouter = router({
         // connection, and Prisma does not promise parallel queries on it.
         const driverSearch = await tx.carpoolSearch.findFirst({
           where: { userId: input.driverId },
-          select: { role: true, carpoolId: true },
+          select: { role: true, status: true, carpoolId: true },
         });
 
         if (!driverSearch) {
@@ -426,7 +432,7 @@ export const groupsRouter = router({
 
         const riderSearch = await tx.carpoolSearch.findFirst({
           where: { userId: input.riderId },
-          select: { role: true, carpoolId: true },
+          select: { role: true, status: true, carpoolId: true },
         });
 
         if (!riderSearch) {
@@ -463,6 +469,33 @@ export const groupsRouter = router({
         // or a direct call cannot get around.
         if (riderSearch.role !== Role.RIDER) {
           throw forbidden("Only a rider can join a carpool group as a rider.");
+        }
+
+        // Pausing a search is the status half of the same problem the two role
+        // checks above solve, and it arrived the same way: SCRUM-369 stopped
+        // `requests.me` hiding a request whose counterpart had paused, so the
+        // Accept button now appears for those as well. Nothing here read
+        // `status` before, and the roles in such a pair usually still fit — a
+        // paused RIDER and an active DRIVER pass every check above — so this is
+        // the case a role-only guard admits.
+        //
+        // Both slots, not just the counterpart's: whichever side paused, the
+        // group being built is one of the two people is not looking for.
+        // `validateRequestAcceptance` refuses it first, for a message that can
+        // name them; this is the half a stale cache or a direct call cannot get
+        // around.
+        if (driverSearch.status === Status.INACTIVE) {
+          throw forbidden(
+            "That driver has paused their carpool search, so they cannot " +
+              "start a group right now.",
+          );
+        }
+
+        if (riderSearch.status === Status.INACTIVE) {
+          throw forbidden(
+            "That rider has paused their carpool search, so they cannot " +
+              "join a group right now.",
+          );
         }
 
         // Overwriting an existing membership left the old group behind holding
@@ -615,6 +648,19 @@ export const groupsRouter = router({
         if (!driverMembership || driverMembership.role !== Role.DRIVER) {
           throw forbidden("That carpool group does not belong to this driver.");
         }
+
+        // The driver's own status, checked here rather than in the transaction
+        // below because this is where the driver is resolved. This is the path
+        // a *rider* takes when accepting the request of a driver who already
+        // has a group, so without it a paused driver still gains riders — the
+        // `create` equivalent is inside the transaction with the two role
+        // checks. See SCRUM-369.
+        if (driverMembership.status === Status.INACTIVE) {
+          throw forbidden(
+            "That driver has paused their carpool search, so nobody can join " +
+              "their group right now.",
+          );
+        }
       } else {
         // Leaving or evicting: the caller must be in the group, and unless
         // they are its driver they may only remove themselves.
@@ -699,7 +745,7 @@ export const groupsRouter = router({
           //     nothing, and the driver paid two seats for one rider.
           const riderSearch = await tx.carpoolSearch.findFirst({
             where: { userId: input.riderId },
-            select: { role: true, carpoolId: true },
+            select: { role: true, status: true, carpoolId: true },
           });
 
           if (!riderSearch) {
@@ -716,6 +762,16 @@ export const groupsRouter = router({
           if (riderSearch.role !== Role.RIDER) {
             throw forbidden(
               "Only a rider can join a carpool group as a rider.",
+            );
+          }
+
+          // And the rider's status, for the same reason as in `create`: this
+          // is the path an accept takes when the driver already has a group,
+          // so leaving it out would close the first join and not the second.
+          if (riderSearch.status === Status.INACTIVE) {
+            throw forbidden(
+              "That rider has paused their carpool search, so they cannot " +
+                "join a group right now.",
             );
           }
 

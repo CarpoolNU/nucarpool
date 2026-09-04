@@ -67,6 +67,15 @@ export const roleMismatchExplanation = (
 };
 
 /**
+ * The one sentence the two explanations below share.
+ *
+ * Pausing is the same fact wherever it is read, and both callers state it
+ * identically, so it lives in one place rather than being copied into each.
+ */
+const pausedSearchExplanation = (name: string): string =>
+  `${name} has paused their carpool search, so you cannot carpool with them right now.`;
+
+/**
  * Why a favourite cannot be carpooled with *right now*, or `null` when they
  * can.
  *
@@ -97,7 +106,7 @@ export const carpoolUnavailableExplanation = (
   const name = other.preferredName;
 
   if (other.status === Status.INACTIVE) {
-    return `${name} has paused their carpool search, so you cannot carpool with them right now.`;
+    return pausedSearchExplanation(name);
   }
 
   // Their own Viewer mode, but only when it is not also the reader's: when both
@@ -109,3 +118,31 @@ export const carpoolUnavailableExplanation = (
 
   return roleMismatchExplanation(userRole, other.role, name);
 };
+
+/**
+ * Why a request cannot be acted on *right now*, or `null` when it can.
+ *
+ * The request counterpart of `carpoolUnavailableExplanation`. `requests.me`
+ * used to drop any request whose counterpart's search was INACTIVE, which left
+ * the pair with no card, no Withdraw control, and a duplicate guard in
+ * `requests.create` that still answered every retry with CONFLICT — the status
+ * half of the dead end SCRUM-296 closed for roles, one filter away in the same
+ * function.
+ *
+ * Status is answered before role for the same reason it is in
+ * `carpoolUnavailableExplanation`: someone who has paused is not looking for a
+ * carpool at all, which makes their role beside the point.
+ *
+ * Everything else delegates to `roleMismatchExplanation` rather than to
+ * `carpoolUnavailableExplanation`, and the difference is deliberate. That
+ * function drops the "You can keep messaging them, or clear the request"
+ * instruction from its Viewer branch because a favourite has no request to
+ * clear. Here there is one, so the request wording is the half worth keeping.
+ */
+export const requestUnavailableExplanation = (
+  userRole: Role,
+  other: { role: Role; status: Status; preferredName: string },
+): string | null =>
+  other.status === Status.INACTIVE
+    ? pausedSearchExplanation(other.preferredName)
+    : roleMismatchExplanation(userRole, other.role, other.preferredName);

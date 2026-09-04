@@ -1,4 +1,4 @@
-import { Permission, Role, RequestStatus } from "@prisma/client";
+import { Permission, Role, RequestStatus, Status } from "@prisma/client";
 import type { Session } from "next-auth";
 import { appRouter } from "../index";
 import {
@@ -49,6 +49,13 @@ type SearchRow = {
   id: string;
   userId: string;
   role: Role;
+  /**
+   * Optional, and absent from most fixtures on purpose: a row that never sets
+   * it must behave exactly as an ACTIVE one, so the SCRUM-369 guards cannot
+   * quietly start refusing the hundred cases in this file that say nothing
+   * about status.
+   */
+  status?: Status;
   carpoolId: string | null;
   seatsAvail: number;
   groupMessage: string;
@@ -2944,5 +2951,175 @@ describe("a driver at a negative seat count", () => {
 
     expect(db.carpoolIdOf(OUTSIDER)).toBe(GROUP);
     expect(db.seatsOf(DRIVER)).toBe(0);
+  });
+});
+
+/**
+ * A paused search stops a group being built, on both slots.
+ *
+ * The status half of the two role checks above, and it arrived the same way.
+ * SCRUM-369 stopped `user.requests.me` hiding a request whose counterpart had
+ * paused their search — the dead end being that the request was invisible in
+ * both Requests tabs while `requests.create`'s duplicate guard went on refusing
+ * every retry with CONFLICT, so neither party could withdraw it — which put an
+ * Accept button in front of those pairs for the first time.
+ *
+ * Nothing here read `CarpoolSearch.status` before. That matters because such a
+ * pair is usually *role*-compatible: a paused RIDER and an active DRIVER pass
+ * every check this file already had, so a role-only guard waves through exactly
+ * the case the visibility change introduced.
+ *
+ * `validateRequestAcceptance` refuses it first, with a message that can name
+ * the person; these pin the half a stale cache or a direct call cannot get
+ * around.
+ */
+describe("a paused search cannot be built into a group", () => {
+  /** Two ungrouped users with a request between them, statuses configurable. */
+  const paused = (opts: {
+    driverStatus?: Status;
+    riderStatus?: Status;
+    driverInGroup?: boolean;
+  }) =>
+    buildGroupsDb({
+      searches: [
+        {
+          id: "s-driver",
+          userId: DRIVER,
+          role: Role.DRIVER,
+          status: opts.driverStatus ?? Status.ACTIVE,
+          carpoolId: opts.driverInGroup ? GROUP : null,
+          seatsAvail: 3,
+          groupMessage: "",
+        },
+        {
+          id: "s-outsider",
+          userId: OUTSIDER,
+          role: Role.RIDER,
+          status: opts.riderStatus ?? Status.ACTIVE,
+          carpoolId: null,
+          seatsAvail: 0,
+          groupMessage: "",
+        },
+      ],
+      groups: opts.driverInGroup ? [{ id: GROUP, message: "" }] : [],
+      // The outsider asks, so the driver is the one entitled to accept.
+      requests: [[OUTSIDER, DRIVER]],
+    });
+
+  it("creates the group when both are active", async () => {
+    // The control. Without it every assertion below could pass because the
+    // fixture is broken rather than because the guard fired.
+    const db = paused({});
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await caller.user.groups.create({ driverId: DRIVER, riderId: OUTSIDER });
+
+    expect(db.groupIds()).toHaveLength(1);
+  });
+
+  it("refuses create when the rider has paused", async () => {
+    const db = paused({ riderStatus: Status.INACTIVE });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await expect(
+      caller.user.groups.create({ driverId: DRIVER, riderId: OUTSIDER }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(db.groupIds()).toEqual([]);
+    // The refusal must not cost the driver a seat, nor resolve the request —
+    // the pair are still free to clear it themselves, which is the whole point
+    // of making it visible again.
+    expect(db.seatsOf(DRIVER)).toBe(3);
+    expect(db.requestStatusOf(OUTSIDER, DRIVER)).toBe(RequestStatus.PENDING);
+  });
+
+  it("refuses create when the driver has paused", async () => {
+    // Both slots, not just the counterpart's: whichever side paused, the group
+    // is one of the two people is not looking for.
+    const db = paused({ driverStatus: Status.INACTIVE });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await expect(
+      caller.user.groups.create({ driverId: DRIVER, riderId: OUTSIDER }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(db.groupIds()).toEqual([]);
+    expect(db.seatsOf(DRIVER)).toBe(3);
+  });
+
+  it("refuses edit when the rider has paused", async () => {
+    // `edit` is the branch an accept takes when the driver already has a
+    // group, so leaving it out would close the first join and not the second.
+    const db = paused({ riderStatus: Status.INACTIVE, driverInGroup: true });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await expect(
+      caller.user.groups.edit({
+        driverId: DRIVER,
+        riderId: OUTSIDER,
+        groupId: GROUP,
+        add: true,
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(db.seatsOf(DRIVER)).toBe(3);
+    expect(db.requestStatusOf(OUTSIDER, DRIVER)).toBe(RequestStatus.PENDING);
+  });
+
+  it("refuses edit when the driver has paused", async () => {
+    // The path a *rider* takes when accepting the request of a driver who
+    // already has a group. Checking only the rider would let a paused driver
+    // keep gaining riders.
+    const db = paused({ driverStatus: Status.INACTIVE, driverInGroup: true });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await expect(
+      caller.user.groups.edit({
+        driverId: DRIVER,
+        riderId: OUTSIDER,
+        groupId: GROUP,
+        add: true,
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(db.seatsOf(DRIVER)).toBe(3);
+  });
+
+  it("still lets a paused member leave the group they are already in", async () => {
+    // The remove path is untouched, and must stay so. Pausing is how someone
+    // steps back from carpooling; it cannot also be what traps them in a
+    // group — that would be the dead end this ticket closed, in a new place.
+    const db = buildGroupsDb({
+      searches: [
+        {
+          id: "s-driver",
+          userId: DRIVER,
+          role: Role.DRIVER,
+          status: Status.ACTIVE,
+          carpoolId: GROUP,
+          seatsAvail: 1,
+          groupMessage: "",
+        },
+        {
+          id: "s-rider-1",
+          userId: RIDER_1,
+          role: Role.RIDER,
+          status: Status.INACTIVE,
+          carpoolId: GROUP,
+          seatsAvail: 0,
+          groupMessage: "",
+        },
+      ],
+    });
+    const { caller } = callerFor(sessionFor(RIDER_1), db);
+
+    await caller.user.groups.edit({
+      driverId: DRIVER,
+      riderId: RIDER_1,
+      groupId: GROUP,
+      add: false,
+    });
+
+    expect(db.seatsOf(DRIVER)).toBe(2);
   });
 });

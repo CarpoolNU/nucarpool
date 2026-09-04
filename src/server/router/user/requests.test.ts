@@ -1333,12 +1333,21 @@ const buildRequestsMeDb = (
    * some other test's argument.
    */
   homes: Record<string, { coordLng: number; coordLat: number }> = {},
+  /**
+   * Users with no `CarpoolSearch` row at all — someone who never finished
+   * onboarding. Distinct from an INACTIVE search, and after SCRUM-369 the only
+   * thing the resolver's null checks still cover. Positional and last, for the
+   * reason recorded above.
+   */
+  missingSearches: string[] = [],
 ) => {
   const searchFor = (userId: string) =>
-    searchRow(userId, roles[userId] ?? Role.VIEWER, {
-      status: statuses[userId],
-      home: homes[userId],
-    });
+    missingSearches.includes(userId)
+      ? null
+      : searchRow(userId, roles[userId] ?? Role.VIEWER, {
+          status: statuses[userId],
+          home: homes[userId],
+        });
 
   const userFindUnique = jest.fn(async ({ where }: any) => ({
     id: where.id,
@@ -1357,11 +1366,21 @@ const buildRequestsMeDb = (
   const carpoolSearchFindMany = jest.fn(async ({ where }: any) => {
     const ids: string[] = where?.userId?.in ?? [];
 
-    // `me` asks for `status: { not: "INACTIVE" }`, and the resolver's remaining
-    // null check depends on that exclusion, so the double has to honour it.
+    // Applies whatever status condition the query actually carries, rather
+    // than a hard-coded one. It used to exclude INACTIVE unconditionally,
+    // mirroring the `status: { not: "INACTIVE" }` the resolver then had — which
+    // meant the double produced the filtered result whether or not the query
+    // asked for it, and SCRUM-369's removal of that filter would have passed
+    // every test in this file unnoticed.
+    const excluded: Status | undefined = where?.status?.not;
+
     return ids
       .map(searchFor)
-      .filter((search) => search.status !== Status.INACTIVE);
+      .filter(
+        (search): search is NonNullable<typeof search> =>
+          search !== null &&
+          (excluded === undefined || search.status !== excluded),
+      );
   });
 
   return {
@@ -1383,8 +1402,9 @@ const meCallerFor = (
   roles: Record<string, Role>,
   statuses: Record<string, Status> = {},
   homes: Record<string, { coordLng: number; coordLat: number }> = {},
+  missingSearches: string[] = [],
 ) => {
-  const db = buildRequestsMeDb(seed, roles, statuses, homes);
+  const db = buildRequestsMeDb(seed, roles, statuses, homes, missingSearches);
   const ctx = {
     req: undefined,
     res: undefined,
@@ -1503,16 +1523,91 @@ describe("user.requests.me - an existing request survives a role change", () => 
     ]);
   });
 
-  it("still drops a request whose counterpart has no active search", async () => {
-    // The one filter that remains, and it is not about roles: an INACTIVE
-    // counterpart is absent from the `CarpoolSearch` query, so there is no
-    // `PublicUser` to build a card from. Pinned so that removing the role
-    // predicate is not read as removing this too.
+  /**
+   * This case used to assert the opposite — that an INACTIVE counterpart was
+   * dropped — and was written to stop the role fix being read as covering
+   * status too. SCRUM-369 established that it should never have been the
+   * exception: pausing a search is something any user can do from their own
+   * profile, and the moment either party did, the request vanished from both
+   * Requests tabs while `create`'s duplicate guard went on refusing every
+   * retry with CONFLICT. Neither party could withdraw it, decline it or
+   * replace it until the other reactivated. It is the same dead end SCRUM-296
+   * closed for roles, one filter away in the same function.
+   */
+  it("returns a sent request whose counterpart has paused their search", async () => {
     const { caller } = meCallerFor(
       USER_A,
       [requestRow("request-1", USER_A, USER_B)],
       { [USER_A]: Role.RIDER, [USER_B]: Role.DRIVER },
       { [USER_B]: Status.INACTIVE },
+    );
+
+    const result = await caller.user.requests.me();
+
+    expect(result.sent).toEqual([
+      expect.objectContaining({
+        id: "request-1",
+        toUser: expect.objectContaining({
+          id: USER_B,
+          status: Status.INACTIVE,
+        }),
+      }),
+    ]);
+  });
+
+  it("returns a received request whose counterpart has paused their search", async () => {
+    // The other direction. The recipient has the same dead end as the sender:
+    // no card means no way to decline.
+    const { caller } = meCallerFor(
+      USER_A,
+      [requestRow("request-1", USER_B, USER_A)],
+      { [USER_A]: Role.RIDER, [USER_B]: Role.DRIVER },
+      { [USER_B]: Status.INACTIVE },
+    );
+
+    const result = await caller.user.requests.me();
+
+    expect(result.received).toEqual([
+      expect.objectContaining({
+        id: "request-1",
+        fromUser: expect.objectContaining({
+          id: USER_B,
+          status: Status.INACTIVE,
+        }),
+      }),
+    ]);
+  });
+
+  it("never asks the database to filter by status either", async () => {
+    // The `where` form of the same predicate, pinned for the reason the role
+    // case below is: the filter has to be gone from the query, not merely from
+    // the resolver, or the counterpart never arrives to be projected.
+    const { caller, db } = meCallerFor(
+      USER_A,
+      [requestRow("request-1", USER_A, USER_B)],
+      { [USER_A]: Role.RIDER, [USER_B]: Role.DRIVER },
+      { [USER_B]: Status.INACTIVE },
+    );
+
+    await caller.user.requests.me();
+
+    for (const call of db.carpoolSearchFindMany.mock.calls) {
+      expect(JSON.stringify(call[0]?.where ?? {})).not.toContain("status");
+    }
+  });
+
+  it("still drops a request whose counterpart never onboarded", async () => {
+    // What the resolver's null checks cover now, and all they cover: a
+    // counterpart with no `CarpoolSearch` row at all. That is a genuine
+    // absence — there is no `PublicUser` to build a card from — rather than a
+    // row deliberately hidden from the query.
+    const { caller } = meCallerFor(
+      USER_A,
+      [requestRow("request-1", USER_A, USER_B)],
+      { [USER_A]: Role.RIDER, [USER_B]: Role.DRIVER },
+      {},
+      {},
+      [USER_B],
     );
 
     const result = await caller.user.requests.me();
