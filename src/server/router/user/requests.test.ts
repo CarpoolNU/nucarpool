@@ -1248,10 +1248,41 @@ describe("user.requests.create — both people must be reachable", () => {
  * `create` does to a pending request whatever the two roles are, and these pin
  * the list that now shows the same request.
  */
+/**
+ * A home `Location` for the SCRUM-368 tests, which are the only ones that care
+ * where anybody lives.
+ *
+ * Five decimal places deliberately, so that coarsening to two is unmistakable
+ * rather than a rounding coincidence.
+ */
+const homeLocationAt = (
+  userId: string,
+  coords: { coordLng: number; coordLat: number },
+) => ({
+  id: `home-${userId}`,
+  city: "Somerville",
+  state: "MA",
+  street: "Highland Ave",
+  streetAddress: `12 Highland Ave`,
+  coordLng: coords.coordLng,
+  coordLat: coords.coordLat,
+  dateCreated: new Date(2024, 0, 1),
+  dateModified: new Date(2024, 0, 1),
+});
+
 const searchRow = (
   userId: string,
   role: Role,
-  overrides: { status?: Status; carpoolId?: string | null } = {},
+  overrides: {
+    status?: Status;
+    carpoolId?: string | null;
+    /**
+     * Left null by default, which is what every test predating SCRUM-368
+     * expects: they assert on which requests come back, never on where their
+     * counterparts live.
+     */
+    home?: { coordLng: number; coordLat: number } | null;
+  } = {},
 ) => ({
   id: `search-${userId}`,
   userId,
@@ -1266,8 +1297,11 @@ const searchRow = (
   startDate: null,
   endDate: null,
   groupMessage: null,
-  homeLocationId: null,
+  homeLocationId: overrides.home ? `home-${userId}` : null,
   companyLocationId: null,
+  // Every row carries an address, because `me`'s counterpart queries select the
+  // column: the coarsened path has to be shown dropping an email that is
+  // genuinely present, not one that was never there.
   user: {
     id: userId,
     name: userId,
@@ -1277,7 +1311,7 @@ const searchRow = (
     preferredName: userId,
     pronouns: "",
   },
-  homeLocation: null,
+  homeLocation: overrides.home ? homeLocationAt(userId, overrides.home) : null,
   companyLocation: null,
 });
 
@@ -1292,10 +1326,18 @@ const buildRequestsMeDb = (
   seed: RequestRow[],
   roles: Record<string, Role>,
   statuses: Record<string, Status> = {},
+  /**
+   * userId -> home coordinate, for the SCRUM-368 disclosure tests. Last in the
+   * list and defaulted for the reason `buildRequestsDb` records above: these
+   * parameters are positional, so a new one inserted earlier silently reads
+   * some other test's argument.
+   */
+  homes: Record<string, { coordLng: number; coordLat: number }> = {},
 ) => {
   const searchFor = (userId: string) =>
     searchRow(userId, roles[userId] ?? Role.VIEWER, {
       status: statuses[userId],
+      home: homes[userId],
     });
 
   const userFindUnique = jest.fn(async ({ where }: any) => ({
@@ -1340,8 +1382,9 @@ const meCallerFor = (
   seed: RequestRow[],
   roles: Record<string, Role>,
   statuses: Record<string, Status> = {},
+  homes: Record<string, { coordLng: number; coordLat: number }> = {},
 ) => {
-  const db = buildRequestsMeDb(seed, roles, statuses);
+  const db = buildRequestsMeDb(seed, roles, statuses, homes);
   const ctx = {
     req: undefined,
     res: undefined,
@@ -1837,5 +1880,201 @@ describe("user.requests.delete — the conversation goes with it", () => {
 
     expect(db.rows()).toHaveLength(1);
     expect(db.conversations()).toHaveLength(1);
+  });
+});
+
+/**
+ * SCRUM-368 — what `requests.me` discloses about the *other* person.
+ *
+ * Both counterpart projections used the exact-home converter unconditionally,
+ * so a request the caller had created a moment earlier released that person's
+ * precise home coordinate and Northeastern address. `requests.create` takes a
+ * bare `toId` and asks the recipient nothing, so the viewer could manufacture
+ * the very relationship that authorised the disclosure — and doing it once per
+ * id out of `mapbox.geoJsonUserList` walked the whole matchable user base.
+ *
+ * These pin the rule per request row. `convertRequestCounterpart` in
+ * `publicUser.test.ts` covers the decision itself; these cover the procedure
+ * applying it to the right half of each pair.
+ *
+ * Read alongside "an existing request survives a role change" above: that pins
+ * which requests are returned, and SCRUM-296 and SCRUM-316 both closed dead
+ * ends caused by requests disappearing from this list. Nothing here removes a
+ * request — the fix narrows disclosure, never visibility.
+ */
+const EXACT_HOME = { coordLng: -71.08874812, coordLat: 42.33907341 };
+const COARSE_HOME = { coordLng: -71.09, coordLat: 42.34 };
+
+/** Both parties are real, matchable users who live somewhere. */
+const BOTH_AT_HOME = { [USER_A]: EXACT_HOME, [USER_B]: EXACT_HOME };
+const RIDER_AND_DRIVER = { [USER_A]: Role.RIDER, [USER_B]: Role.DRIVER };
+
+describe("user.requests.me - a pending request discloses nothing extra", () => {
+  it("coarsens the recipient's home coordinate for the sender", async () => {
+    const { caller } = meCallerFor(
+      USER_A,
+      [requestRow("request-1", USER_A, USER_B)],
+      RIDER_AND_DRIVER,
+      {},
+      BOTH_AT_HOME,
+    );
+
+    const result = await caller.user.requests.me();
+
+    expect(result.sent[0]!.toUser!.startCoordLng).toBe(COARSE_HOME.coordLng);
+    expect(result.sent[0]!.toUser!.startCoordLat).toBe(COARSE_HOME.coordLat);
+  });
+
+  it("withholds the recipient's email from the sender", async () => {
+    const { caller } = meCallerFor(
+      USER_A,
+      [requestRow("request-1", USER_A, USER_B)],
+      RIDER_AND_DRIVER,
+      {},
+      BOTH_AT_HOME,
+    );
+
+    const result = await caller.user.requests.me();
+
+    expect(result.sent[0]!.toUser).not.toHaveProperty("email");
+  });
+
+  it("tells the recipient no more about the sender", async () => {
+    // Deliberately symmetric. Being asked is better evidence than asking, but
+    // it is still not agreement by the person whose home coordinate is at
+    // stake, and nothing in the accept decision needs a doorstep.
+    const { caller } = meCallerFor(
+      USER_B,
+      [requestRow("request-1", USER_A, USER_B)],
+      RIDER_AND_DRIVER,
+      {},
+      BOTH_AT_HOME,
+    );
+
+    const result = await caller.user.requests.me();
+
+    expect(result.received[0]!.fromUser!.startCoordLat).toBe(
+      COARSE_HOME.coordLat,
+    );
+    expect(result.received[0]!.fromUser).not.toHaveProperty("email");
+  });
+
+  it("still returns the request, with a counterpart to build a card from", async () => {
+    const { caller } = meCallerFor(
+      USER_A,
+      [requestRow("request-1", USER_A, USER_B)],
+      RIDER_AND_DRIVER,
+      {},
+      BOTH_AT_HOME,
+    );
+
+    const result = await caller.user.requests.me();
+
+    expect(result.sent.map((req) => req.id)).toEqual(["request-1"]);
+    expect(result.sent[0]!.toUser).not.toBeNull();
+  });
+
+  it("keeps the caller's own record exact on both sides", async () => {
+    // The two converters decide what is disclosed about somebody else. The
+    // caller's own coordinate and address are already theirs.
+    const sender = await meCallerFor(
+      USER_A,
+      [requestRow("request-1", USER_A, USER_B)],
+      RIDER_AND_DRIVER,
+      {},
+      BOTH_AT_HOME,
+    ).caller.user.requests.me();
+
+    const recipient = await meCallerFor(
+      USER_B,
+      [requestRow("request-1", USER_A, USER_B)],
+      RIDER_AND_DRIVER,
+      {},
+      BOTH_AT_HOME,
+    ).caller.user.requests.me();
+
+    expect(sender.sent[0]!.fromUser.startCoordLng).toBe(EXACT_HOME.coordLng);
+    expect(sender.sent[0]!.fromUser.email).toBe(`${USER_A}@northeastern.edu`);
+    expect(recipient.received[0]!.toUser.startCoordLng).toBe(
+      EXACT_HOME.coordLng,
+    );
+  });
+});
+
+describe("user.requests.me - an accepted request is mutual, and discloses both", () => {
+  const accepted = [
+    requestRow("request-1", USER_A, USER_B, {
+      status: RequestStatus.ACCEPTED,
+    }),
+  ];
+
+  it("gives the sender the recipient's exact coordinate and email", async () => {
+    const { caller } = meCallerFor(
+      USER_A,
+      accepted,
+      RIDER_AND_DRIVER,
+      {},
+      BOTH_AT_HOME,
+    );
+
+    const result = await caller.user.requests.me();
+
+    expect(result.sent[0]!.toUser!.startCoordLng).toBe(EXACT_HOME.coordLng);
+    expect(result.sent[0]!.toUser!.startCoordLat).toBe(EXACT_HOME.coordLat);
+    expect(result.sent[0]!.toUser!.email).toBe(`${USER_B}@northeastern.edu`);
+  });
+
+  it("gives the recipient the same in the other direction", async () => {
+    const { caller } = meCallerFor(
+      USER_B,
+      accepted,
+      RIDER_AND_DRIVER,
+      {},
+      BOTH_AT_HOME,
+    );
+
+    const result = await caller.user.requests.me();
+
+    expect(result.received[0]!.fromUser!.startCoordLat).toBe(
+      EXACT_HOME.coordLat,
+    );
+    expect(result.received[0]!.fromUser!.email).toBe(
+      `${USER_A}@northeastern.edu`,
+    );
+  });
+});
+
+describe("user.requests.me - the status is read per request, not per response", () => {
+  it("discloses the accepted counterpart and coarsens the pending one together", async () => {
+    // The realistic shape: several outgoing requests, one of them accepted. A
+    // fix applied to the response rather than to each row would either leak
+    // every pending counterpart or blank out the accepted one.
+    const { caller } = meCallerFor(
+      USER_A,
+      [
+        requestRow("request-1", USER_A, USER_B, {
+          status: RequestStatus.ACCEPTED,
+        }),
+        requestRow("request-2", USER_A, USER_C),
+      ],
+      { ...RIDER_AND_DRIVER, [USER_C]: Role.DRIVER },
+      {},
+      { ...BOTH_AT_HOME, [USER_C]: EXACT_HOME },
+    );
+
+    const result = await caller.user.requests.me();
+    const byId = new Map(result.sent.map((req) => [req.id, req]));
+
+    expect(byId.get("request-1")!.toUser!.startCoordLat).toBe(
+      EXACT_HOME.coordLat,
+    );
+    expect(byId.get("request-1")!.toUser!.email).toBe(
+      `${USER_B}@northeastern.edu`,
+    );
+
+    expect(byId.get("request-2")!.toUser!.startCoordLat).toBe(
+      COARSE_HOME.coordLat,
+    );
+    expect(byId.get("request-2")!.toUser).not.toHaveProperty("email");
   });
 });

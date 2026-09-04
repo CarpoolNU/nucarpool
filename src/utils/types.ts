@@ -142,8 +142,11 @@ export type PublicUser = {
   id: string;
   name: string | null;
   /**
-   * Present only when the viewer already has a relationship with this user -
-   * the same carpool group, or a request between them.
+   * Present only when the viewer already has a mutual relationship with this
+   * user - the same carpool group, or a request between them that was
+   * *accepted*. A request the viewer merely sent proves nothing about the
+   * person it names, because anyone can create one unilaterally; see
+   * `convertRequestCounterpart`.
    *
    * Optional rather than nullable-and-always-set on purpose: the bulk list
    * endpoints shipped every active user's Northeastern address to any signed-in

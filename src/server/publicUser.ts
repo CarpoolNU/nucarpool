@@ -1,4 +1,4 @@
-import { Location, CarpoolSearch } from "@prisma/client";
+import { Location, CarpoolSearch, RequestStatus } from "@prisma/client";
 import { PublicUser } from "../utils/types";
 
 /**
@@ -80,9 +80,24 @@ const buildPublicUser = (search: CarpoolSearchWithRelations): PublicUser => ({
  * Builds a `PublicUser` keeping the home coordinate at full precision, and
  * including the email address.
  *
- * Only for a viewer who already has a relationship with this user - the same
- * carpool group, or an existing request between them. Everything else must use
- * `convertCarpoolSearchToPublic`.
+ * Only for a viewer who already has a **mutual** relationship with this user -
+ * the same carpool group, or a request between them that was *accepted*.
+ * Everything else must use `convertCarpoolSearchToPublic`.
+ *
+ * **Mutual is the load-bearing word, and it used to be missing.** The rule was
+ * written as "an existing request between them", which sounds like a
+ * relationship and is not one: `requests.create` lets any signed-in user create
+ * a request to any other user unilaterally, with no consent and no
+ * acknowledgement from the person it names. So the viewer could manufacture
+ * their own authorisation - send a request, then read the exact home coordinate
+ * and email address of whoever they had just named - and doing that once per id
+ * returned by `mapbox.geoJsonUserList` walked the whole user base. That stepped
+ * around both the coarsening and the `email` removal, which is what
+ * `convertRequestCounterpart` below now prevents by asking *which* request
+ * status is evidence of anything.
+ *
+ * Group membership was always mutual and is unchanged: `groups.me` reaches this
+ * through people who have already agreed to carpool together.
  *
  * Both disclosures travel together because the same rule governs them. It was
  * established for coordinates first; `email` sat in the same struct and was not
@@ -118,8 +133,11 @@ export const convertCarpoolSearchToPublicWithExactHome = (
  *
  * **This is the default on purpose.** Use
  * `convertCarpoolSearchToPublicWithExactHome` only where the viewer already has
- * a relationship with the user - the same carpool group, or an existing request
- * between them - so that a caller which forgets to choose gets the safe result.
+ * a mutual relationship with the user - the same carpool group, or an accepted
+ * request between them - so that a caller which forgets to choose gets the safe
+ * result. For a request specifically, reach for `convertRequestCounterpart`
+ * below rather than choosing by hand: the status test is the whole of the rule,
+ * and a caller writing it out again is a caller who can get it wrong.
  *
  * @param search an active CarpoolSearch record with user and location relations
  * @returns non-sensitive information about a user, home coarsened, no email
@@ -135,6 +153,49 @@ export const convertCarpoolSearchToPublic = (
     startCoordLat: coarsenHomeCoord(publicUser.startCoordLat),
   };
 };
+
+/**
+ * The counterpart of a request, disclosing what that request's status has
+ * actually established.
+ *
+ * A plain function rather than a conditional inside `requests.me`, for the
+ * reason `canSubscribe` gives: this *is* the access rule, so it should be
+ * testable on its own rather than only through a procedure that needs a Prisma
+ * double to reach.
+ *
+ * **`ACCEPTED` is the line, and only `ACCEPTED`.** A `PENDING` request records
+ * that somebody asked, which one person can do alone and about anybody;
+ * accepting is the first point at which the person being disclosed has agreed
+ * to anything. `markRequestAccepted` writes that status inside the same
+ * transaction as the group membership, so it is exactly as trustworthy as the
+ * membership itself.
+ *
+ * Deliberately **not** also exempting a request the viewer merely *received*.
+ * That is better evidence than one they sent - the other person chose to make
+ * contact - but it is still not agreement by the person whose home coordinate
+ * is at stake, and nothing in the product needs it: deciding whether to accept
+ * uses the neighbourhood point and the in-app thread, which is what every
+ * recommendation card already offers before a request exists at all.
+ *
+ * The counterpart stays *visible* either way. This narrows what each request
+ * discloses and never which requests are returned - hiding them is what
+ * SCRUM-296 and SCRUM-316 were filed to undo.
+ *
+ * @param search the counterpart's CarpoolSearch, with user and location relations
+ * @param status the status of the request between the viewer and that user
+ */
+export const convertRequestCounterpart = (
+  search: CarpoolSearchWithContact,
+  status: RequestStatus,
+): PublicUser =>
+  status === RequestStatus.ACCEPTED
+    ? convertCarpoolSearchToPublicWithExactHome(search)
+    : // `search` carries an `email` the coarsened converter does not read:
+      // `buildPublicUser` enumerates its fields, so the address is dropped
+      // rather than passed through. The column is still selected because one
+      // query serves requests of both statuses and cannot know per row which
+      // converter will be used.
+      convertCarpoolSearchToPublic(search);
 
 export const roundCoord = (coord: number) => {
   return Math.round((coord + Number.EPSILON) * 100000) / 100000;

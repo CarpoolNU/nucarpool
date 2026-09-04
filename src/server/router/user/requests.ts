@@ -3,7 +3,10 @@ import { z } from "zod";
 import { protectedRouter, router } from "../createRouter";
 
 import { Prisma, RequestStatus } from "@prisma/client";
-import { convertCarpoolSearchToPublicWithExactHome } from "../../publicUser";
+import {
+  convertCarpoolSearchToPublicWithExactHome,
+  convertRequestCounterpart,
+} from "../../publicUser";
 import {
   conversationsToDeleteWith,
   findOrCreateConversation,
@@ -189,6 +192,23 @@ export const requestsRouter = router({
       },
     });
 
+    // The caller's own row stays exact on both sides below. It is their own
+    // home coordinate and their own address, which they already have; the two
+    // converters exist to decide what is disclosed about *somebody else*.
+    //
+    // The counterpart is the one that has to be earned, and until SCRUM-368 it
+    // was not: both projections were unconditionally the exact-home converter,
+    // so a request the caller had created themselves a moment earlier released
+    // the other person's precise home coordinate and Northeastern address.
+    // `requests.create` takes a bare `toId` and asks nobody, so that made the
+    // whole matchable user base readable by anyone willing to send one request
+    // per id out of `mapbox.geoJsonUserList`. `convertRequestCounterpart` owns
+    // the rule and says why `ACCEPTED` is the line.
+    //
+    // Note what did *not* change: every request either party has is still
+    // returned. SCRUM-296 and SCRUM-316 both closed dead ends caused by
+    // requests disappearing from this list, so the fix narrows disclosure
+    // rather than visibility.
     const sent = user.sentRequests.map((req) => {
       const toUserSearch = sentCarpoolSearches.find(
         (s) => s.userId === req.toUserId,
@@ -197,7 +217,7 @@ export const requestsRouter = router({
         ...req,
         fromUser: convertCarpoolSearchToPublicWithExactHome(currentUserSearch),
         toUser: toUserSearch
-          ? convertCarpoolSearchToPublicWithExactHome(toUserSearch)
+          ? convertRequestCounterpart(toUserSearch, req.status)
           : null,
       };
     });
@@ -209,7 +229,7 @@ export const requestsRouter = router({
       return {
         ...req,
         fromUser: fromUserSearch
-          ? convertCarpoolSearchToPublicWithExactHome(fromUserSearch)
+          ? convertRequestCounterpart(fromUserSearch, req.status)
           : null,
         toUser: convertCarpoolSearchToPublicWithExactHome(currentUserSearch),
       };
