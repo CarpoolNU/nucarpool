@@ -1,8 +1,9 @@
-import { Permission, Role, Status } from "@prisma/client";
+import { Permission, RequestStatus, Role, Status } from "@prisma/client";
 import type { CarpoolSearch, Location } from "@prisma/client";
 import {
   convertCarpoolSearchToPublic,
   convertCarpoolSearchToPublicWithExactHome,
+  convertRequestCounterpart,
   roundCoord,
 } from "./publicUser";
 
@@ -357,5 +358,96 @@ describe("email disclosure", () => {
 
     expect(result).not.toHaveProperty("email");
     expect(result.startCoordLng).toBe(-71.09);
+  });
+});
+
+/**
+ * SCRUM-368. The disclosure rule above says "a counterpart", and `requests.me`
+ * used to read that as "anyone there is a request row with" — which any user
+ * can create, about any other user, in one unanswered mutation. So the viewer
+ * could manufacture the relationship that authorised the disclosure.
+ *
+ * `convertRequestCounterpart` is where the rule now lives, and these pin the
+ * only thing it decides: whether the request's status is evidence that the
+ * person being disclosed agreed to anything.
+ */
+describe("convertRequestCounterpart", () => {
+  const preciseHome = location({
+    coordLng: -71.08874812,
+    coordLat: 42.33907341,
+  });
+
+  it("coarsens the home coordinate and withholds the email for a PENDING request", () => {
+    const result = convertRequestCounterpart(
+      buildSearch({}, { homeLocation: preciseHome }),
+      RequestStatus.PENDING,
+    );
+
+    expect(result.startCoordLng).toBe(-71.09);
+    expect(result.startCoordLat).toBe(42.34);
+    expect(result).not.toHaveProperty("email");
+  });
+
+  it("discloses both for an ACCEPTED request", () => {
+    const result = convertRequestCounterpart(
+      buildSearch({}, { homeLocation: preciseHome }),
+      RequestStatus.ACCEPTED,
+    );
+
+    expect(result.startCoordLng).toBe(-71.08874812);
+    expect(result.startCoordLat).toBe(42.33907341);
+    expect(result.email).toBe("ada@northeastern.edu");
+  });
+
+  it("drops the email the caller's query still selects, rather than passing it through", () => {
+    // The counterpart queries in `requests.me` select `email` because one query
+    // serves requests of both statuses. So the row reaching the coarsened path
+    // genuinely carries an address, and this is what stops it being returned.
+    const search = buildSearch({}, { homeLocation: preciseHome });
+    expect(search.user.email).toBe("ada@northeastern.edu");
+
+    const serialised = JSON.parse(
+      JSON.stringify(convertRequestCounterpart(search, RequestStatus.PENDING)),
+    );
+
+    expect(Object.keys(serialised)).not.toContain("email");
+  });
+
+  it("does not treat a REJECTED request as agreement", () => {
+    // Only ACCEPTED opens the disclosure. Enumerating the enum rather than
+    // testing PENDING alone is what makes a future status default to closed.
+    for (const status of Object.values(RequestStatus)) {
+      const result = convertRequestCounterpart(
+        buildSearch({}, { homeLocation: preciseHome }),
+        status,
+      );
+
+      if (status === RequestStatus.ACCEPTED) {
+        expect(result.startCoordLat).toBe(42.33907341);
+      } else {
+        expect(result.startCoordLat).toBe(42.34);
+        expect(result).not.toHaveProperty("email");
+      }
+    }
+  });
+
+  it("returns the same field set either way, so only precision differs", () => {
+    // The two branches must stay one shape: a consumer should not have to know
+    // which converter ran to know which keys exist. `email` is the deliberate
+    // exception, and is optional on `PublicUser` for exactly that reason.
+    const pending = convertRequestCounterpart(
+      buildSearch(),
+      RequestStatus.PENDING,
+    );
+    const accepted = convertRequestCounterpart(
+      buildSearch(),
+      RequestStatus.ACCEPTED,
+    );
+
+    expect(
+      Object.keys(accepted)
+        .filter((key) => key !== "email")
+        .sort(),
+    ).toEqual(Object.keys(pending).sort());
   });
 });
