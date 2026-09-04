@@ -6,8 +6,10 @@ import { addWeeks, startOfWeek } from "date-fns";
 import {
   buildLineChartData,
   generateWeekLabels,
+  MAX_DASHBOARD_WEEKS,
   summariseConversations,
   summariseUsers,
+  weeksSpanned,
 } from "../../adminDataUtils";
 import { AdminUserRow } from "../../../utils/types";
 
@@ -54,6 +56,76 @@ const MIXED_ROLE_GROUP: Prisma.CarpoolGroupWhereInput = {
 
 /** The code assumes one CarpoolSearch per user, as the rest of the app does. */
 const FIRST_SEARCH = { take: 1 } as const;
+
+/** Reported when a dashboard window runs backwards. */
+export const DASHBOARD_WINDOW_ORDER_MESSAGE =
+  "End date cannot be before the start date";
+
+/** Reported when a dashboard window is too wide to chart. Names the ceiling. */
+export const DASHBOARD_WINDOW_SPAN_MESSAGE = `Date range cannot span more than ${MAX_DASHBOARD_WEEKS} weeks`;
+
+/**
+ * The window `getDashboardSeries` accepts.
+ *
+ * `z.object({ start: z.date(), end: z.date() })` was the whole of it, which
+ * left two holes.
+ *
+ * The serious one is the span. The handler turns the window into one array
+ * element per week *before* any database work — `generateWeekLabels` computes
+ * the week count from the two dates and loops — so the iteration count comes
+ * straight from client input with no relation to how much data exists.
+ * `superjson` carries a `Date` intact and JavaScript dates run to roughly
+ * ±271,821 years, so a single request can ask for ~2.84e7 allocations —
+ * measured, that exhausts a 2 GB heap in about eleven seconds. It is not a slow
+ * query: the loop runs in-process before any I/O, so the process dies and takes
+ * every other request the instance was serving with it. An admin mistyping a
+ * year is enough; the input does not have to be hostile.
+ *
+ * The quieter one is ordering. `generateWeekLabels` takes `Math.min`/`Math.max`
+ * internally so it accepts a reversed pair, but the `where` clause below is
+ * built from the same two dates and is *not* order-insensitive: reversed, it
+ * asks for `gte: <later>, lt: <earlier>` and matches nothing. The result was a
+ * chart with axis labels and flat zero series — indistinguishable from a
+ * genuinely quiet window, and reported as success.
+ *
+ * Bounded at the schema rather than inside `generateWeekLabels` so the caller
+ * is told what was wrong; clamping downstream would draw a chart for a window
+ * nobody asked for. This is also where every comparable input in the codebase
+ * is bounded — `limit` in `messages.conversation`, `points` in
+ * `mapbox.getDirections`, `contentLength` in `getPresignedUrl`.
+ */
+const dashboardWindow = z
+  .object({ start: z.date(), end: z.date() })
+  .strict()
+  .superRefine((data, ctx) => {
+    // Strict inversion only, matching `isReversedCoopRange`: a window whose
+    // ends fall in the same week is a legitimate one-bucket chart.
+    if (data.end.getTime() < data.start.getTime()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["end"],
+        message: DASHBOARD_WINDOW_ORDER_MESSAGE,
+      });
+      // A span computed from a reversed window is negative and meaningless;
+      // reporting it too would bury the issue the admin can act on.
+      return;
+    }
+
+    // `Number.isFinite` first, and not merely for tidiness: `weeksSpanned`
+    // returns NaN within six days of the `Date` minimum, where `startOfWeek`
+    // walks back past the representable range. `NaN > MAX_DASHBOARD_WEEKS` is
+    // false, so a bare ceiling comparison would admit the single widest window
+    // that exists — measured at ~2.84e7 weeks, which exhausts a 2 GB heap in
+    // about eleven seconds.
+    const weeks = weeksSpanned(data.start, data.end);
+    if (!Number.isFinite(weeks) || weeks > MAX_DASHBOARD_WEEKS) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["end"],
+        message: DASHBOARD_WINDOW_SPAN_MESSAGE,
+      });
+    }
+  });
 
 export const adminDataRouter = router({
   /**
@@ -125,7 +197,7 @@ export const adminDataRouter = router({
    * lifetime, and a narrower selection reads fewer rows.
    */
   getDashboardSeries: adminRouter
-    .input(z.object({ start: z.date(), end: z.date() }))
+    .input(dashboardWindow)
     .query(async ({ ctx, input }) => {
       const weekLabels = generateWeekLabels([input.start, input.end]);
       const dateCreated = {

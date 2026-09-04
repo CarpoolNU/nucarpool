@@ -1,12 +1,15 @@
 import { Role, Status } from "@prisma/client";
+import { addWeeks } from "date-fns";
 import {
   buildLineChartData,
   countCumulativeItemsPerWeek,
   countRole,
   generateWeekLabels,
   getDaysFrequency,
+  MAX_DASHBOARD_WEEKS,
   summariseConversations,
   summariseUsers,
+  weeksSpanned,
 } from "./adminDataUtils";
 import type { AdminUserRow } from "../utils/types";
 
@@ -130,12 +133,49 @@ describe("generateWeekLabels", () => {
     ]);
   });
 
+  /**
+   * Order-insensitive by construction — the function takes `Math.min` and
+   * `Math.max` of its argument. Worth pinning, but note that
+   * `getDashboardSeries` no longer leans on it: the `where` clause it builds
+   * from the same two dates *is* order-sensitive, so its schema rejects a
+   * reversed window before reaching here rather than quietly charting one.
+   */
   it("does not depend on the input order", () => {
     expect(generateWeekLabels([on(2024, 1, 22), on(2024, 1, 8)])).toEqual([
       WEEK_0,
       WEEK_1,
       WEEK_2,
     ]);
+  });
+
+  /**
+   * The loop allocates one `Date` per week and takes its bound from arithmetic
+   * on the argument, so an unbounded caller exhausts the heap and kills the
+   * process. `getDashboardSeries` refuses an over-wide window at its schema, but
+   * this function is exported and used on its own, so it refuses too — loudly,
+   * because clamping would return labels for a window nobody asked for.
+   */
+  it("builds a window of exactly the maximum span", () => {
+    const labels = generateWeekLabels([
+      WEEK_0,
+      addWeeks(WEEK_0, MAX_DASHBOARD_WEEKS - 1),
+    ]);
+
+    expect(labels).toHaveLength(MAX_DASHBOARD_WEEKS);
+  });
+
+  it("refuses a window one week wider than the maximum", () => {
+    expect(() =>
+      generateWeekLabels([WEEK_0, addWeeks(WEEK_0, MAX_DASHBOARD_WEEKS)]),
+    ).toThrow(RangeError);
+  });
+
+  it("refuses the whole representable date range instead of allocating it", () => {
+    // The unbounded case in full: ±8.64e15 ms is about ±271,821 years, so this
+    // window is ~1.4e13 iterations. It must reject rather than try.
+    expect(() =>
+      generateWeekLabels([new Date(-8.64e15), new Date(8.64e15)]),
+    ).toThrow(RangeError);
   });
 
   it("spans the requested window, which is how the router derives the x-axis", () => {
@@ -145,6 +185,35 @@ describe("generateWeekLabels", () => {
       WEEK_0,
       WEEK_1,
     ]);
+  });
+});
+
+describe("weeksSpanned", () => {
+  /**
+   * `getDashboardSeries` sizes a window with this before accepting it, and
+   * `generateWeekLabels` sizes the array it allocates with the same call. The
+   * two agreeing is what makes the schema's ceiling meaningful, so it is
+   * asserted rather than assumed.
+   */
+  it("agrees with the number of labels generateWeekLabels emits", () => {
+    for (const [start, end] of [
+      [WEEK_0, WEEK_0],
+      [WEEK_0, WEEK_2],
+      [WEEK_0, addWeeks(WEEK_0, 51)],
+      [on(2024, 1, 8), on(2024, 1, 10)],
+    ] as const) {
+      expect(weeksSpanned(start, end)).toBe(
+        generateWeekLabels([start, end]).length,
+      );
+    }
+  });
+
+  it("counts both ends, so a window inside one week spans one", () => {
+    expect(weeksSpanned(on(2024, 1, 8), on(2024, 1, 10))).toBe(1);
+  });
+
+  it("goes negative on a reversed window, which is why callers order first", () => {
+    expect(weeksSpanned(WEEK_2, WEEK_0)).toBeLessThan(0);
   });
 });
 
