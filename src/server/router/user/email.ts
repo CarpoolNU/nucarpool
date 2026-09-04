@@ -4,6 +4,7 @@ import { router, protectedRouter } from "../createRouter";
 import { generateEmailParams } from "../../emailParams";
 import { browserEnv } from "../../../utils/env/browser";
 import { SendTemplatedEmailCommand } from "@aws-sdk/client-ses";
+import { RequestStatus } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 
 /**
@@ -143,6 +144,7 @@ const resolveRequestParties = async (
       toUserId: true,
       conversationId: true,
       dateCreated: true,
+      status: true,
     },
   });
 
@@ -341,34 +343,64 @@ export const emailsRouter = router({
     }),
 
   /**
-   * Notifies the counterpart that the caller accepted their carpool request.
+   * Notifies the requester that the caller accepted their carpool request.
    *
-   * Relies on the request row still existing after acceptance, which it does
-   * today only because accepting never resolves the request. If
-   * that is fixed to delete the row, this lookup has to move ahead of it.
+   * Two checks narrower than the shared helper's "is a participant", because
+   * this procedure asserts something specific about who did what:
    *
-   * **Deliberately not rate limited**. The limit on
-   * `sendRequestNotification` above keys off `Request.dateCreated`, because a
-   * request notification announces a brand new row. Acceptance has no
-   * equivalent timestamp: nothing records that a request was accepted — that
-   * is the same gap — so there is nothing to measure freshness
-   * against, and a window keyed on `dateCreated` would refuse to announce the
-   * acceptance of a request made yesterday.
+   *  - the caller must be `toUserId`. Only the person a request was addressed
+   *    to can accept it — the invariant `requireAcceptableRequest` enforces in
+   *    `groups.ts`, and the same direction rule `sendRequestNotification`
+   *    applies above. The helper admits either party and the template is
+   *    addressed to whichever party did *not* call, so without this a
+   *    request's sender could produce a coherent-looking but entirely
+   *    fabricated notice.
+   *  - the request must actually be `ACCEPTED`. This used to read
+   *    `Request.status` not at all, so a `PENDING` request satisfied the
+   *    procedure exactly as an accepted one did: the sender of a request could
+   *    make the platform email their target "<sender> accepted your request"
+   *    about something nobody had accepted, repeatedly and from our verified
+   *    SES identity.
    *
-   * The replay vector is real: a caller can invoke this repeatedly for one
-   * request. Two things would close it, neither belonging here — resolving
-   * the request on acceptance, which removes the row and with it the window,
-   * or shared rate-limit state across instances.
+   * The refusals are worded separately on purpose, following
+   * `requireAcceptableRequest`: "you did not accept this" and "this was not
+   * accepted" call for different things from the caller, and collapsing them
+   * would leave both unclear.
+   *
+   * **Deliberately not rate limited.** The limit on `sendRequestNotification`
+   * above keys off `Request.dateCreated`, because a request notification
+   * announces a brand new row. Acceptance has no equivalent timestamp — the
+   * status is a flag, not a time — so a window keyed on `dateCreated` would
+   * refuse to announce the acceptance of a request made yesterday.
+   *
+   * Replay is therefore still possible, but the checks above bound it to
+   * requests genuinely accepted with the caller as their recipient, which is a
+   * real relationship rather than an unbounded set. That is a large reduction
+   * and not a cap; the per-user cap across `user.emails.*` is SCRUM-277.
    */
   sendAcceptanceNotification: protectedRouter
     .input(z.object({ requestId: z.string() }).strict())
     .mutation(async ({ ctx, input }) => {
       const callerId = requireSessionUserId(ctx.session.user?.id);
-      const { sender, recipient } = await resolveRequestParties(
+      const { request, sender, recipient } = await resolveRequestParties(
         ctx.prisma,
         input.requestId,
         callerId,
       );
+
+      if (request.toUserId !== callerId) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Only the person a request was sent to can accept it.",
+        });
+      }
+
+      if (request.status !== RequestStatus.ACCEPTED) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "That carpool request has not been accepted.",
+        });
+      }
 
       if (!sender || !recipient) {
         return { sent: false as const, reason: "missing_email_address" };
