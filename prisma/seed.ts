@@ -12,6 +12,7 @@ import {
   AddressResolver,
   createAddressResolver,
 } from "../src/utils/seedAddresses";
+import { scheduleTimeFromClock } from "../src/utils/scheduleTime";
 
 const prisma = new PrismaClient();
 
@@ -429,8 +430,15 @@ const genRandomUsers = async (
       timezone === "UTC" ? 2 + Math.floor(rand(3)) : 8 + Math.floor(rand(3));
     const endHour =
       timezone === "UTC" ? 10 + Math.floor(rand(3)) : 16 + Math.floor(rand(3));
-    const startTime = new Date(2023, 0, 1, startHour, startMin).toISOString();
-    const endTime = new Date(2023, 0, 1, endHour, endMin).toISOString();
+    // Anchored through the same helper the app writes with, so seeded rows
+    // carry the convention `formatScheduleTime` reads. These used to be built
+    // with `new Date(2023, 0, 1, h, m)`, whose offset came from the *seeding
+    // machine's* zone, so the same seed produced different stored times on a
+    // Boston laptop and a UTC container. The hour selection above is unchanged
+    // — `timezone: "UTC"` selects an early-shift cohort here, despite the name,
+    // rather than compensating for the host.
+    const startTime = scheduleTimeFromClock(startHour, startMin).toISOString();
+    const endTime = scheduleTimeFromClock(endHour, endMin).toISOString();
 
     const userStartLat = startCoordLat - coordOffset + rand(doubleOffset);
     const userStartLng = startCoordLng - coordOffset + rand(doubleOffset);

@@ -1,5 +1,6 @@
 import { Role } from "@prisma/client";
 import { calculateScore, minutesApart } from "./recommendation";
+import { scheduleTimeFromClock } from "./scheduleTime";
 import type { FInputs } from "./recommendation";
 import {
   anyFilters,
@@ -865,6 +866,35 @@ describe("minutesApart", () => {
     expect(minutesApart(stored("00:00"), stored("12:00"))).toBe(720);
     expect(minutesApart(stored("00:00"), stored("13:00"))).toBe(660);
     expect(minutesApart(stored("00:00"), stored("23:59"))).toBe(1);
+  });
+
+  /**
+   * SCRUM-373. `minutesApart` is correct — it reads UTC and wraps at midnight —
+   * but it can only be as right as the values it is handed. Those used to
+   * acquire their offset from the day the user saved, so two students on the
+   * same shift were measured an hour apart if one onboarded in July and the
+   * other in January. `scheduleTimeFromClock` is what makes the inputs
+   * comparable; this pins the consequence at the level the scorer sees.
+   */
+  it("measures identical local schedules as identical, whenever they were saved", () => {
+    const nine = scheduleTimeFromClock(9, 0);
+    const five = scheduleTimeFromClock(17, 0);
+
+    expect(minutesApart(nine, nine)).toBe(0);
+    expect(minutesApart(five, five)).toBe(0);
+  });
+
+  it("no longer sees the phantom hour a DST-saved row used to contribute", () => {
+    // What the two rows looked like before the fix: a July 9:00 AM stored as
+    // 13:00 against a January 9:00 AM stored as 14:00. The gap is spurious, it
+    // is 75% of the 80-minute scoring cutoff, and at the strictest filter
+    // setting it removed each user from the other's results entirely.
+    expect(minutesApart(stored("13:00"), stored("14:00"))).toBe(60);
+
+    // Both are now written through the same anchor, so the pair collapses.
+    expect(
+      minutesApart(scheduleTimeFromClock(9, 0), scheduleTimeFromClock(9, 0)),
+    ).toBe(0);
   });
 
   it("reads the value that was stored, whatever the host would render it as", () => {

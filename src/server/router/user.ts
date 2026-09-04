@@ -34,6 +34,7 @@ import {
   COOP_DATE_ORDER_MESSAGE,
   isReversedCoopRange,
 } from "../../utils/dateUtils";
+import { normalizeScheduleTime } from "../../utils/scheduleTime";
 
 /**
  * Access rule for `getPresignedDownloadUrl`:
@@ -213,11 +214,22 @@ export const userRouter = router({
         }),
     )
     .mutation(async ({ input, ctx }) => {
+      // Re-anchored rather than stored as sent. The client ships an ISO
+      // instant, and its date component used to decide which `America/New_York`
+      // offset the stored time of day was built with — today's for a first-time
+      // pick, the epoch's for an edit — while the read path always resolves the
+      // epoch's. A schedule saved under daylight saving was therefore stored an
+      // hour early and read back an hour early. `normalizeScheduleTime` puts
+      // both ends on one anchor; it is the only place an offset is chosen.
+      //
+      // Deliberately server-side: this is the sole writer of these columns, so
+      // normalising here also repairs what a stale client sends rather than
+      // waiting for every browser to pick up a new bundle.
       const startTimeDate = input.startTime
-        ? new Date(Date.parse(input.startTime))
+        ? normalizeScheduleTime(input.startTime)
         : undefined;
       const endTimeDate = input.endTime
-        ? new Date(Date.parse(input.endTime))
+        ? normalizeScheduleTime(input.endTime)
         : undefined;
 
       const id = ctx.session.user?.id;

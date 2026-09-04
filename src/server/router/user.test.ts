@@ -1,3 +1,14 @@
+import dayjs from "dayjs";
+import utcPlugin from "dayjs/plugin/utc";
+import timezonePlugin from "dayjs/plugin/timezone";
+import {
+  formatScheduleTime,
+  SCHEDULE_TIMEZONE,
+} from "../../utils/scheduleTime";
+
+dayjs.extend(utcPlugin);
+dayjs.extend(timezonePlugin);
+
 import { Permission, Role } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
 import type { Session } from "next-auth";
@@ -1393,5 +1404,108 @@ describe("user.edit — a driver in a group cannot change role", () => {
     );
 
     expect(db.searchFor(SESSION_USER)).toMatchObject({ role: Role.RIDER });
+  });
+});
+
+/**
+ * SCRUM-373 — `user.edit` is the only writer of `startTime` / `endTime`, so it
+ * is where the schedule-time convention has to be enforced.
+ *
+ * The client sends an ISO instant whose *date* component decided which
+ * `America/New_York` offset the stored time of day acquired: today's for a
+ * first-time pick, `1970-01-01`'s for an edit of an existing value. The read
+ * path always resolves the epoch's. So a 9:00 AM saved under daylight saving
+ * was stored as `13:00` and read back as 8:00 AM, while the same pick in
+ * January was stored as `14:00` and read back correctly.
+ *
+ * Normalising here rather than only in the picker is what makes the fix
+ * independent of which bundle a browser is running.
+ */
+describe("user.edit anchors schedule times", () => {
+  /** What a picker anchored on `date` sends for a Boston clock face. */
+  const clientSends = (date: string, hour: number, minute = 0) =>
+    dayjs
+      .tz(date, SCHEDULE_TIMEZONE)
+      .hour(hour)
+      .minute(minute)
+      .second(0)
+      .millisecond(0)
+      .toDate()
+      .toISOString();
+
+  const SUMMER = "2026-07-15T00:00:00.000Z";
+  const WINTER = "2026-01-15T00:00:00.000Z";
+
+  const savedTimes = async (startIso: string, endIso: string) => {
+    const db = buildEditDb();
+    await editCallerFor(SESSION_USER, db).user.edit(
+      editInput({ startTime: startIso, endTime: endIso }),
+    );
+    const search = db.searchFor(SESSION_USER) as
+      { startTime?: Date; endTime?: Date } | undefined;
+    return {
+      start: search?.startTime?.toISOString(),
+      end: search?.endTime?.toISOString(),
+    };
+  };
+
+  it("stores the same value whether the save happened in July or January", async () => {
+    const summer = await savedTimes(
+      clientSends(SUMMER, 9),
+      clientSends(SUMMER, 17),
+    );
+    const winter = await savedTimes(
+      clientSends(WINTER, 9),
+      clientSends(WINTER, 17),
+    );
+
+    expect(summer.start).toBe(winter.start);
+    expect(summer.end).toBe(winter.end);
+  });
+
+  it("stores a 9-to-5 as the 14:00/22:00 the read path renders correctly", async () => {
+    const { start, end } = await savedTimes(
+      clientSends(SUMMER, 9),
+      clientSends(SUMMER, 17),
+    );
+
+    expect(start).toBe("1970-01-01T14:00:00.000Z");
+    expect(end).toBe("1970-01-01T22:00:00.000Z");
+    expect(formatScheduleTime(new Date(start!))).toBe("9:00 AM");
+    expect(formatScheduleTime(new Date(end!))).toBe("5:00 PM");
+  });
+
+  it("leaves an already-anchored value untouched, so a re-save does not drift", async () => {
+    // The edit path already sent epoch-anchored instants and stored them
+    // correctly. That must stay true, or this fix would break the half of the
+    // data that was right.
+    const { start, end } = await savedTimes(
+      "1970-01-01T14:00:00.000Z",
+      "1970-01-01T22:00:00.000Z",
+    );
+
+    expect(start).toBe("1970-01-01T14:00:00.000Z");
+    expect(end).toBe("1970-01-01T22:00:00.000Z");
+  });
+
+  it("still accepts an overnight shift, in either season", async () => {
+    // Times of day, not a range. `minutesApart` measures them round the clock.
+    const { start, end } = await savedTimes(
+      clientSends(SUMMER, 22),
+      clientSends(SUMMER, 6),
+    );
+
+    expect(formatScheduleTime(new Date(start!))).toBe("10:00 PM");
+    expect(formatScheduleTime(new Date(end!))).toBe("6:00 AM");
+  });
+
+  it("writes nothing for a schedule the client omits", async () => {
+    const db = buildEditDb();
+    await editCallerFor(SESSION_USER, db).user.edit(editInput());
+
+    const search = db.searchFor(SESSION_USER) as
+      { startTime?: Date; endTime?: Date } | undefined;
+    expect(search?.startTime).toBeUndefined();
+    expect(search?.endTime).toBeUndefined();
   });
 });

@@ -37,9 +37,13 @@ Two columns on `CarpoolSearch` store a moment without a zone, so the convention 
 
 **Schedule times — `startTime` / `endTime` (`DateTime? @db.Time(0)`)**
 
-A time of day in **UTC**, with no date attached. `user.edit` parses the ISO string the client sends and Prisma writes the UTC time of day out of it, so a student picking 9:00 AM in Boston is stored as `14:00:00`.
+A time of day in **UTC**, with no date attached, and **always resolved against `1970-01-01`** — the `SCHEDULE_ANCHOR_DATE` in [`scheduleTime.ts`](../../utils/scheduleTime.ts). A student picking 9:00 AM in Boston is stored as `14:00:00`.
 
-Render with [`formatScheduleTime`](../../utils/scheduleTime.ts), which converts to `America/New_York`. Every schedule time in the UI goes through that one helper — do not format these columns inline. `UserCard` and `ConnectModal` each used to carry a copy that reinterpreted the value as UTC when the Boston hour fell between 01:00 and 04:59, which was a guess about rows predating the standardisation on UTC and mislabelled genuine early shifts.
+**The anchor is the load-bearing part, and this section used to omit it.** `America/New_York` is UTC-5 in winter and UTC-4 under daylight saving, so "the UTC time of day" is not a well-defined function of a clock face until a date is fixed. It was not: `user.edit` used to keep whatever instant the client sent, and the client's picker anchored a first-time pick on _today_ and an edit on the epoch — while the read path resolved the epoch's offset unconditionally, because Prisma hands a `Time` column back as an epoch-dated `Date`. A 9:00 AM saved in July went in as `13:00` and came back as 8:00 AM; the same pick in January went in as `14:00` and came back correctly. The example above is the winter case, which is why it looked right (SCRUM-373).
+
+Write through [`scheduleTimeFromClock`](../../utils/scheduleTime.ts) and render with [`formatScheduleTime`](../../utils/scheduleTime.ts). `user.edit` additionally passes what the client sends through `normalizeScheduleTime`, which re-anchors it — so a stale bundle still sending a today-anchored instant is repaired at the boundary rather than stored wrong. Every schedule time in the UI goes through the one formatter; do not format these columns inline. `UserCard` and `ConnectModal` each used to carry a copy that reinterpreted the value as UTC when the Boston hour fell between 01:00 and 04:59, which was a guess about rows predating the standardisation on UTC and mislabelled genuine early shifts.
+
+**Rows written before SCRUM-373 under daylight saving are still an hour early.** Nothing in the row records which offset produced it — `13:00` is a correct winter 8:00 AM and an incorrect summer 9:00 AM — so the repair needs a decision rather than a migration. See SCRUM-374.
 
 Boston is hardcoded because the product is Northeastern co-op students; a schedule has no meaning in the viewer's own zone.
 
