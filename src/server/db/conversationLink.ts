@@ -84,32 +84,41 @@ export const conversationsToDeleteWith = (request: {
 ];
 
 /**
- * Conversation rows whose `requestId` points at a `Request` that is gone.
+ * Conversation rows that no live `Request` reaches by either link.
  *
- * **This tests one of the two links, and unreachability needs both.** Two of
- * the three read paths reach a conversation through `Request.conversationId`
- * rather than through `Conversation.requestId`: `requests.me` includes
- * `sentRequests/receivedRequests → conversation → messages`, and the unread
- * count joins `conversation.request.some(...)`, the back-relation on that same
- * column. `Request.conversationId` is not unique and `Conversation.request` is
- * a `Request[]`, so nothing in the schema stops a live request pointing at a
- * row this function calls an orphan.
+ * **Both links, because unreachability needs both.** The relationship is stored
+ * twice and nothing in the schema keeps the two in agreement, so there are two
+ * separate ways a request can still reach a conversation:
  *
- * No current write path creates that state — `findOrCreateConversation` and
- * both branches of `requests.create` only ever link a conversation to the
- * request it was keyed on — and production held **zero** such rows when both
- * links were measured read-only on 2026-09-03, against **620** that fail both.
- * So the returned set was exactly the unreachable set there. It is not
- * guaranteed to be, which is why `cleanup-orphan-conversations.ts` re-checks
- * *both* links immediately before each delete rather than trusting this plan.
- * SCRUM-364 tracks closing the gap.
+ *   - `Conversation.requestId` — the authoritative side, and the only one
+ *     `getConversationMessages` consults. It looks the request up first and
+ *     throws NOT_FOUND without it, so no participant check ever passes.
+ *   - `Request.conversationId` — how the other two read paths get there.
+ *     `requests.me` includes `sentRequests/receivedRequests → conversation →
+ *     messages`, and the unread count joins `conversation.request.some(...)`,
+ *     the back-relation on that same column. The column is not unique and
+ *     `Conversation.request` is a `Request[]`, so nothing stops a live request
+ *     pointing at a row whose own `requestId` is dead.
  *
- * `getConversationMessages` is settled by this link alone: it looks the request
- * up first and throws NOT_FOUND without it, so no participant check ever
- * passes. What counts orphans regardless is `admin.getDashboardStats`, whose
+ * Testing only the first would classify such a cross-linked row as an orphan
+ * while `requests.me` still renders its messages. No current write path creates
+ * that state — `findOrCreateConversation` and both branches of
+ * `requests.create` only ever link a conversation to the request it was keyed
+ * on — and production held **zero** cross-linked rows when both links were
+ * measured read-only on 2026-09-03, against **620** failing both. So the
+ * one-link predicate this replaced did not produce a wrong number for that
+ * population; it was an upper bound that happened to be exact.
+ *
+ * It is now the same definition `cleanup-orphan-conversations.ts` re-checks
+ * immediately before each delete, which is the point of the change: the plan
+ * and the action can no longer disagree, so a rescue at delete time means the
+ * database changed under the run rather than that the two predicates differ.
+ *
+ * What counts orphans regardless is `admin.getDashboardStats`, whose
  * `conversation.count()` and `message.groupBy` both include them, which is why
  * the dashboard's conversation figure and its messages-per-conversation average
- * drift upward and cannot be reconciled afterwards.
+ * drift upward and cannot be reconciled afterwards. That distortion is accepted
+ * for now: the 620 are retained by decision (SCRUM-365), not pending deletion.
  *
  * Nothing creates these any more — `requests.delete` removes the conversation
  * with the request — but every decline, withdrawal and "Leave Conversation"
@@ -120,15 +129,27 @@ export const conversationsToDeleteWith = (request: {
  *
  * A null `requestId` is not possible — the column is non-nullable — so unlike
  * the Location case there is no "never linked" state to exclude. Every
- * conversation claims a request; the only question is whether that request
- * still exists.
+ * conversation claims a request; the only question is whether anything still
+ * reaches it.
  */
 export const findOrphanConversationIds = (
   conversations: readonly { id: string; requestId: string }[],
-  liveRequestIds: readonly string[],
+  liveRequests: readonly { id: string; conversationId: string | null }[],
 ): string[] => {
-  const live = new Set(liveRequestIds);
+  const liveRequestIds = new Set(liveRequests.map((request) => request.id));
+  // The second link, collected once rather than scanned per conversation: at
+  // production scale this is 620 candidates against every live request.
+  const claimedConversationIds = new Set(
+    liveRequests
+      .map((request) => request.conversationId)
+      .filter((id): id is string => id !== null),
+  );
+
   return conversations
-    .filter((conversation) => !live.has(conversation.requestId))
+    .filter(
+      (conversation) =>
+        !liveRequestIds.has(conversation.requestId) &&
+        !claimedConversationIds.has(conversation.id),
+    )
     .map((conversation) => conversation.id);
 };
