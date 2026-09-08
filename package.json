@@ -10,7 +10,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings=0",
+    "lint": "eslint \"src/**/*.{ts,tsx,js,jsx}\" --max-warnings=0",
     "check:env": "node scripts/check-env-contract.js",
     "check:format": "prettier --check .",
     "check:routes": "node scripts/check-page-routes.js",
