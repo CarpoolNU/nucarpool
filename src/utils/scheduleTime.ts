@@ -1,4 +1,4 @@
-import dayjs from "dayjs";
+import dayjs, { type Dayjs } from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 
@@ -14,8 +14,52 @@ dayjs.extend(timezone);
  */
 export const SCHEDULE_TIMEZONE = "America/New_York";
 
+/**
+ * The date every schedule time is resolved against, on **both** the write and
+ * the read side.
+ *
+ * `startTime`/`endTime` are `@db.Time(0)` — a time of day with no date — so
+ * turning "9:00 AM in Boston" into a stored value requires picking a UTC
+ * offset, and Boston has two. `America/New_York` is UTC-5 in winter and UTC-4
+ * under daylight saving, so the offset can only be chosen by naming a date.
+ *
+ * Reading always named one: Prisma hands the column back as
+ * `1970-01-01T<hh:mm>Z`, so `dayjs.tz` resolved the zone on 1 January 1970 —
+ * always EST. Writing named a different one: the picker returned an instant on
+ * *the day the user saved*, so a July save resolved at EDT and stored 9:00 AM
+ * as `13:00` where January stored it as `14:00`. The two halves therefore
+ * disagreed for the roughly two-thirds of the year DST covers, and one
+ * wall-clock time had two stored forms depending on nothing the user could see
+ * (SCRUM-373).
+ *
+ * Pinning both sides here is what makes the round trip exact. The value is the
+ * epoch deliberately, because that is the anchor the read side already had:
+ * every correctly-stored row predating the fix stays correct, and the repair in
+ * SCRUM-374 is confined to rows written under DST rather than to every row in
+ * the table.
+ */
+export const SCHEDULE_ANCHOR_DATE = "1970-01-01";
+
 /** Shown when a user has no schedule recorded. */
 export const NO_SCHEDULE_TIME = "Not set";
+
+/**
+ * A stored schedule time as a Boston wall clock, or `null` if there isn't one.
+ *
+ * The shared half of `formatScheduleTime` and `toPickerScheduleTime`: both need
+ * the stored instant expressed in `SCHEDULE_TIMEZONE`, one to format it and one
+ * to hand it to antd. Because every stored value is epoch-dated, the zone
+ * resolves at `SCHEDULE_ANCHOR_DATE` — which is the point.
+ */
+const toScheduleZone = (time: Date | null | undefined): Dayjs | null => {
+  // Checked before the conversion, not after: `dayjs.tz` throws on an
+  // unusable value rather than returning an invalid dayjs to test.
+  if (!time || Number.isNaN(new Date(time).getTime())) {
+    return null;
+  }
+
+  return dayjs.tz(time, SCHEDULE_TIMEZONE);
+};
 
 /**
  * Renders a stored `startTime`/`endTime` for display.
@@ -39,11 +83,70 @@ export const NO_SCHEDULE_TIME = "Not set";
  * `RangeError: Invalid time value`, and `startTime`/`endTime` are both nullable.
  */
 export const formatScheduleTime = (time: Date | null | undefined): string => {
-  // Checked before the conversion, not after: `dayjs.tz` throws on an
-  // unusable value rather than returning an invalid dayjs to test.
-  if (!time || Number.isNaN(new Date(time).getTime())) {
-    return NO_SCHEDULE_TIME;
+  const boston = toScheduleZone(time);
+
+  return boston ? boston.format("h:mm A") : NO_SCHEDULE_TIME;
+};
+
+/**
+ * Turns what the user picked into the value stored in `startTime`/`endTime`.
+ *
+ * **Reads the wall clock, not the instant.** antd hands back a `Dayjs` carrying
+ * a full date, and which date that is varies: today for a first-time pick,
+ * `SCHEDULE_ANCHOR_DATE` when editing a value that already exists. The instant
+ * therefore encodes whichever offset that date happened to fall under, which is
+ * the whole of SCRUM-373. Taking `.hour()` and `.minute()` — the digits the user
+ * actually saw in the input — and rebuilding them at the anchor discards that
+ * date entirely.
+ *
+ * Two consequences worth having:
+ *
+ *   - **The picker's own anchor date stops mattering.** Editing an existing time
+ *     and setting a fresh one now produce the same stored value, without
+ *     depending on any assumption about which date antd chose.
+ *   - **The viewer's timezone stops mattering.** The digits are interpreted as
+ *     Boston time whoever picked them, so a student onboarding from California
+ *     stores the schedule they typed rather than one shifted by three hours.
+ */
+export const toStoredScheduleTime = (
+  picked: Dayjs | null | undefined,
+): Date | null => {
+  if (!picked || !picked.isValid()) {
+    return null;
   }
 
-  return dayjs.tz(time, SCHEDULE_TIMEZONE).format("h:mm A");
+  const hour = String(picked.hour()).padStart(2, "0");
+  const minute = String(picked.minute()).padStart(2, "0");
+
+  const boston = dayjs.tz(
+    `${SCHEDULE_ANCHOR_DATE} ${hour}:${minute}`,
+    SCHEDULE_TIMEZONE,
+  );
+
+  // Re-seated onto the anchor date *in UTC*, because Boston is behind UTC: a
+  // wall clock of 19:00 or later is already the next UTC day, so the instant
+  // above would land on 1970-01-02. The stored column is unaffected either way
+  // — `@db.Time(0)` keeps the time of day and discards the date — but the
+  // in-memory value is compared and round-tripped, and Prisma reads these rows
+  // back epoch-dated. Normalising here makes the value this produces
+  // byte-identical to the value that comes back out, so loading a profile and
+  // saving it untouched is genuinely a no-op.
+  return dayjs
+    .utc(SCHEDULE_ANCHOR_DATE)
+    .hour(boston.utc().hour())
+    .minute(boston.utc().minute())
+    .toDate();
 };
+
+/**
+ * The inverse: a stored schedule time as a value antd's `TimePicker` can show.
+ *
+ * Needed because the obvious `dayjs(stored)` renders the instant in the
+ * *browser's* zone, so the same row displayed 9:00 AM in Boston and 6:00 AM in
+ * California. Anchoring in `SCHEDULE_TIMEZONE` makes the picker agree with
+ * `formatScheduleTime` and with `toStoredScheduleTime`, so opening a profile and
+ * saving it unchanged is a no-op rather than a silent rewrite.
+ */
+export const toPickerScheduleTime = (
+  stored: Date | null | undefined,
+): Dayjs | null => toScheduleZone(stored);

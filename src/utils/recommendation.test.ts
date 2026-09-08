@@ -1,5 +1,12 @@
 import { Role } from "@prisma/client";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
 import { calculateScore, minutesApart } from "./recommendation";
+import { SCHEDULE_TIMEZONE, toStoredScheduleTime } from "./scheduleTime";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 import type { FInputs } from "./recommendation";
 import {
   anyFilters,
@@ -1051,5 +1058,86 @@ describe("time filtering across midnight", () => {
     );
 
     expect(straddling).toBeCloseTo(daytime!);
+  });
+});
+
+/**
+ * SCRUM-373, measured where it cost the product rather than where it was
+ * written.
+ *
+ * `minutesApart` was never wrong here — SCRUM-297 made it sound. What was wrong
+ * were its *inputs*: the write path resolved Boston's UTC offset from the day
+ * the user saved, so one wall-clock time had two stored forms. Two students with
+ * identical 9-to-5 schedules came out 60 minutes apart if one onboarded in
+ * winter and the other in summer.
+ *
+ * That 60 minutes is large against the tolerances it feeds. Against
+ * `cutoffs.startTime = 80` and weights of 0.1 on each end, a phantom gap on both
+ * costs 0.15 of a total weight of 1.0 — more than the whole `days` weight — and
+ * at the strictest Start/End Time filter setting it removes the pair from each
+ * other's results outright.
+ *
+ * These assertions go through `toStoredScheduleTime`, so they measure the write
+ * path and the comparison together. They fail against the pre-fix component,
+ * which sent the picker's raw instant.
+ */
+describe("minutesApart across the seasons a schedule was entered in", () => {
+  const WINTER = "2026-01-15";
+  const SUMMER = "2026-07-15";
+
+  /** A schedule saved on a given day, as the fixed picker now stores it. */
+  const savedOn = (day: string, wallClock: string): Date => {
+    const stored = toStoredScheduleTime(
+      dayjs.tz(`${day} ${wallClock}`, SCHEDULE_TIMEZONE),
+    );
+
+    if (!stored) {
+      throw new Error(`could not build a schedule time for ${wallClock}`);
+    }
+
+    return stored;
+  };
+
+  it("scores two identical local schedules as zero apart", () => {
+    // The headline: the same 9:00 AM, onboarded six months apart.
+    expect(
+      minutesApart(savedOn(WINTER, "09:00"), savedOn(SUMMER, "09:00")),
+    ).toBe(0);
+  });
+
+  it("scores both ends of an identical working day as zero apart", () => {
+    expect(
+      minutesApart(savedOn(WINTER, "09:00"), savedOn(SUMMER, "09:00")),
+    ).toBe(0);
+    expect(
+      minutesApart(savedOn(WINTER, "17:00"), savedOn(SUMMER, "17:00")),
+    ).toBe(0);
+  });
+
+  it("still measures a genuine difference between two schedules", () => {
+    // The fix must not flatten real gaps into zero.
+    expect(
+      minutesApart(savedOn(SUMMER, "09:00"), savedOn(SUMMER, "10:30")),
+    ).toBe(90);
+    expect(
+      minutesApart(savedOn(WINTER, "09:00"), savedOn(SUMMER, "10:30")),
+    ).toBe(90);
+  });
+
+  it("keeps the midnight wrap SCRUM-297 fixed", () => {
+    // 7:30 PM and 8:30 PM, entered in different seasons.
+    expect(
+      minutesApart(savedOn(WINTER, "19:30"), savedOn(SUMMER, "20:30")),
+    ).toBe(60);
+  });
+
+  it("holds for every wall clock on the dial", () => {
+    for (let hour = 0; hour < 24; hour++) {
+      const clock = `${String(hour).padStart(2, "0")}:15`;
+
+      expect(minutesApart(savedOn(WINTER, clock), savedOn(SUMMER, clock))).toBe(
+        0,
+      );
+    }
   });
 });

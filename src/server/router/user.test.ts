@@ -6,6 +6,16 @@ import type { Context } from "./context";
 import { PROFILE_TEXT_MAX_LENGTH } from "../../utils/textLimits";
 import { MAX_PROFILE_IMAGE_BYTES } from "../../utils/profileImage";
 import { cloneState, withTransaction } from "./transactionMock";
+import dayjs from "dayjs";
+import utcPlugin from "dayjs/plugin/utc";
+import timezonePlugin from "dayjs/plugin/timezone";
+import {
+  SCHEDULE_TIMEZONE,
+  toStoredScheduleTime,
+} from "../../utils/scheduleTime";
+
+dayjs.extend(utcPlugin);
+dayjs.extend(timezonePlugin);
 
 /**
  * Contract tests for `user.getPresignedDownloadUrl`.
@@ -565,6 +575,9 @@ type SearchRow = {
   /** Only the group guard reads these. */
   role?: Role;
   carpoolId?: string | null;
+  /** Written by `user.edit`, and asserted on for SCRUM-373. */
+  startTime?: Date | null;
+  endTime?: Date | null;
 };
 
 const buildEditDb = (
@@ -1393,5 +1406,73 @@ describe("user.edit — a driver in a group cannot change role", () => {
     );
 
     expect(db.searchFor(SESSION_USER)).toMatchObject({ role: Role.RIDER });
+  });
+});
+
+/**
+ * The server half of SCRUM-373's contract: `user.edit` stores the schedule time
+ * the client sent and does not reinterpret it.
+ *
+ * The offset can only be chosen where the wall clock is known, which is the
+ * picker — `toStoredScheduleTime` anchors it there. The router therefore has
+ * exactly one job, to parse the ISO string through unchanged, and these pin
+ * that. A well-meaning conversion added here later would silently reintroduce
+ * the seasonal drift, and nothing else in the suite would notice.
+ */
+describe("user.edit — schedule times", () => {
+  const savedOn = (day: string, wallClock: string): Date => {
+    const stored = toStoredScheduleTime(
+      dayjs.tz(`${day} ${wallClock}`, SCHEDULE_TIMEZONE),
+    );
+
+    if (!stored) {
+      throw new Error(`could not build a schedule time for ${wallClock}`);
+    }
+
+    return stored;
+  };
+
+  it("stores the anchored value the client sent, unchanged", async () => {
+    const db = buildEditDb();
+    const startTime = savedOn("2026-07-15", "09:00");
+    const endTime = savedOn("2026-07-15", "17:00");
+
+    await editCallerFor(SESSION_USER, db).user.edit(
+      editInput({
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+      }),
+    );
+
+    expect(db.searchFor(SESSION_USER)?.startTime).toEqual(startTime);
+    expect(db.searchFor(SESSION_USER)?.endTime).toEqual(endTime);
+  });
+
+  it("stores one value for one wall clock, whichever season it was picked in", async () => {
+    // The same 9:00 AM, submitted by a client that picked it in July and by one
+    // that picked it in January. Before the fix these arrived as different
+    // instants and were stored as different times.
+    const summer = buildEditDb();
+    const winter = buildEditDb();
+
+    await editCallerFor(SESSION_USER, summer).user.edit(
+      editInput({ startTime: savedOn("2026-07-15", "09:00").toISOString() }),
+    );
+    await editCallerFor(SESSION_USER, winter).user.edit(
+      editInput({ startTime: savedOn("2026-01-15", "09:00").toISOString() }),
+    );
+
+    expect(summer.searchFor(SESSION_USER)?.startTime).toEqual(
+      winter.searchFor(SESSION_USER)?.startTime,
+    );
+  });
+
+  it("leaves the columns alone when the client sends no times", async () => {
+    // Both are nullable and the profile form allows a partial save.
+    const db = buildEditDb();
+
+    await editCallerFor(SESSION_USER, db).user.edit(editInput());
+
+    expect(db.searchFor(SESSION_USER)?.startTime).toBeUndefined();
   });
 });
