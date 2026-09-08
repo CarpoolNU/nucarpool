@@ -52,7 +52,11 @@ import InactiveBlocker from "../components/Map/InactiveBlocker";
 import updateGeoJsonUsers from "../utils/map/updateGeoJsonUsers";
 import useIsMobile from "../utils/useIsMobile";
 import updateStartLocation from "../utils/map/updateStartLocation";
-import clearRiderStartMarkers from "../utils/map/clearRiderStartMarkers";
+import {
+  removeDestinationMarker,
+  runViewRouteClick,
+} from "../utils/map/viewRouteClick";
+import { isValidCoordinates } from "../utils/map/coordinates";
 
 mapboxgl.accessToken = browserEnv.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
 
@@ -103,9 +107,17 @@ const Home: NextPage<any> = () => {
     favorites: false,
     messaged: false,
   };
-  const [tempOtherUser, setTempOtherUser] = useState<PublicUser | null>(null);
-  const [tempOtherUserMarkerActive, setTempOtherUserMarkerActive] =
-    useState(false);
+  /**
+   * The one destination pin the page has put on the map for a clicked user.
+   *
+   * Was `tempOtherUser` plus `tempOtherUserMarkerActive` state until
+   * SCRUM-379. `DestinationMarkerRef` in `utils/map/viewRouteClick.ts` records
+   * why it has to be a ref: the two effects below both listed that state in
+   * their dependency arrays *and* reset it in their bodies, which is an effect
+   * that retriggers itself. It only ever stayed shut because the sole line that
+   * set the state sat in a branch that could not be reached.
+   */
+  const destinationMarker = useRef<PublicUser | null>(null);
   const [defaultFilters] = useState<FiltersState>(initialFilters);
   const [filters, setFilters] = useState<FiltersState>(initialFilters);
   const [sort, setSort] = useState<string>("any");
@@ -312,181 +324,36 @@ const Home: NextPage<any> = () => {
   const enhancedRecs = recommendations.map(extendPublicUser);
   const enhancedFavs = favorites.map(extendPublicUser);
 
+  /**
+   * Takes the page's one destination pin off the map.
+   *
+   * Wrapped here rather than called inline so the two effects below can share
+   * it and still satisfy `react-hooks/exhaustive-deps`.
+   */
+  const removeMarkedDestination = useCallback(() => {
+    removeDestinationMarker(mapState, destinationMarker);
+  }, [mapState]);
+
+  /**
+   * **View Route.** The body lives in `utils/map/viewRouteClick.ts` - see the
+   * header there for why, and `viewRoutePlan.ts` for the branch decision it
+   * used to get wrong.
+   */
   const onViewRouteClick = useCallback(
     (user: User, clickedUser: PublicUser) => {
-      // clear rider start markers from group route when viewing individual routes
-      if (mapState) {
-        clearRiderStartMarkers(mapState);
-      }
-
-      // add null checks for required objects
-      if (!geoJsonUsers || !mapState || !user || !clickedUser) {
-        console.error("Required objects not available for route viewing");
-        return;
-      }
-
-      // skip parts that might reset state if in request context
-      const isInRequestContext =
-        selectedUserId && selectedUserId === clickedUser.id;
-
-      if (!isInRequestContext) {
-        setOtherUser(clickedUser);
-      }
-
-      // validate user and clickedUser have required coordinate properties
-      if (
-        !isValidCoordinates(user.startCoordLng, user.startCoordLat) ||
-        !isValidCoordinates(user.companyCoordLng, user.companyCoordLat) ||
-        !isValidCoordinates(
-          clickedUser.startCoordLng,
-          clickedUser.startCoordLat,
-        ) ||
-        !isValidCoordinates(
-          clickedUser.companyCoordLng,
-          clickedUser.companyCoordLat,
-        )
-      ) {
-        console.error("Invalid user coordinates for route viewing");
-        return;
-      }
-
-      // add null check for geoJsonUsers.features
-      const isOtherUserInGeoList =
-        geoJsonUsers.features?.some(
-          (f) => f.properties?.id === clickedUser.id,
-        ) ?? false;
-
-      const isPrevOtherUserInGeoList =
-        geoJsonUsers.features?.some(
-          (f) => f.properties?.id === tempOtherUser?.id,
-        ) ?? false;
-
-      const shouldRemoveMarker =
-        tempOtherUserMarkerActive &&
-        ((tempOtherUser && tempOtherUser.id !== clickedUser.id) ||
-          isPrevOtherUserInGeoList);
-
-      const isViewerAddressSelected =
-        companyAddressSelected.place_name !== "" &&
-        startAddressSelected.place_name !== "";
-      const companyCord: number[] = companyAddressSelected.center;
-      const startCord: number[] = startAddressSelected.center;
-      const userStartLng = isViewerAddressSelected
-        ? startCord[0]
-        : user.startCoordLng;
-      const userStartLat = isViewerAddressSelected
-        ? startCord[1]
-        : user.startCoordLat;
-      const userCompanyLng = isViewerAddressSelected
-        ? companyCord[0]
-        : user.companyCoordLng;
-      const userCompanyLat = isViewerAddressSelected
-        ? companyCord[1]
-        : user.companyCoordLat;
-      const userCoord =
-        !isViewerAddressSelected && user.role === "VIEWER"
-          ? undefined
-          : {
-              startLat: userStartLat,
-              startLng: userStartLng,
-              endLat: userCompanyLat,
-              endLng: userCompanyLng,
-            };
-
-      if (user.role !== "VIEWER") {
-        updateUserLocation(mapState, userStartLng, userStartLat);
-        updateCompanyLocation(
-          mapState,
-          userCompanyLng,
-          userCompanyLat,
-          user.role,
-          user.id,
-          user,
-          true,
-        );
-      }
-
-      if (shouldRemoveMarker && tempOtherUser) {
-        updateCompanyLocation(
-          mapState,
-          tempOtherUser.companyCoordLng,
-          tempOtherUser.companyCoordLat,
-          tempOtherUser.role,
-          tempOtherUser.id,
-          tempOtherUser,
-          false,
-          true,
-        );
-        setTempOtherUserMarkerActive(false);
-        setTempOtherUser(null);
-      }
-
-      if (!isInRequestContext) {
-        if (!isOtherUserInGeoList && selectedUserId === clickedUser.id) {
-          updateCompanyLocation(
-            mapState,
-            clickedUser.companyCoordLng,
-            clickedUser.companyCoordLat,
-            clickedUser.role,
-            clickedUser.id,
-            clickedUser,
-            false,
-            false,
-          );
-          setTempOtherUserMarkerActive(true);
-          setTempOtherUser(clickedUser);
-        } else if (!isOtherUserInGeoList && selectedUserId !== clickedUser.id) {
-          setOtherUser(null);
-          return;
-        }
-      } else {
-        // always show the user's marker when in request context
-        updateCompanyLocation(
-          mapState,
-          clickedUser.companyCoordLng,
-          clickedUser.companyCoordLat,
-          clickedUser.role,
-          clickedUser.id,
-          clickedUser,
-          false,
-          false,
-        );
-      }
-
-      const viewProps = {
+      runViewRouteClick({
         user,
-        otherUser: clickedUser,
+        clickedUser,
         map: mapState,
-        userCoord,
+        geoJsonUsers,
+        selectedUserId,
+        startAddressSelected,
+        companyAddressSelected,
         isMobile,
-      };
-
-      if (user.role === "RIDER") {
-        setPoints([
-          [clickedUser.startCoordLng, clickedUser.startCoordLat],
-          [userStartLng, userStartLat],
-          [userCompanyLng, userCompanyLat],
-          [clickedUser.companyCoordLng, clickedUser.companyCoordLat],
-        ]);
-      } else if (
-        user.role === "DRIVER" ||
-        isViewerAddressSelected ||
-        !!selectedUserId
-      ) {
-        setPoints([
-          [userStartLng, userStartLat],
-          [clickedUser.startCoordLng, clickedUser.startCoordLat],
-          [clickedUser.companyCoordLng, clickedUser.companyCoordLat],
-          [userCompanyLng, userCompanyLat],
-        ]);
-      } else {
-        setPoints([
-          [clickedUser.startCoordLng, clickedUser.startCoordLat],
-          [clickedUser.companyCoordLng, clickedUser.companyCoordLat],
-        ]);
-      }
-
-      viewRoute(viewProps);
+        destinationMarker,
+        setOtherUser,
+        setPoints,
+      });
     },
     [
       geoJsonUsers,
@@ -494,8 +361,6 @@ const Home: NextPage<any> = () => {
       companyAddressSelected,
       startAddressSelected,
       mapState,
-      tempOtherUser,
-      tempOtherUserMarkerActive,
       isMobile,
     ],
   );
@@ -772,18 +637,6 @@ const Home: NextPage<any> = () => {
     };
   }, [isMobile, mobileSelectedUserID, sidebarRef, handleMobileSidebarExpand]);
 
-  // Helper function to validate coordinates
-  const isValidCoordinates = (lng?: number, lat?: number): boolean => {
-    return (
-      lng !== undefined &&
-      lat !== undefined &&
-      !isNaN(lng) &&
-      !isNaN(lat) &&
-      isFinite(lng) &&
-      isFinite(lat)
-    );
-  };
-
   useEffect(() => {
     if (user && user.role !== "VIEWER") {
       // update filter params
@@ -869,24 +722,15 @@ const Home: NextPage<any> = () => {
     setOtherUser(null);
     // Reset collapsed state when switching tabs
     setIsSidebarCollapsed(false);
-    if (tempOtherUserMarkerActive && tempOtherUser && mapState) {
-      updateCompanyLocation(
-        mapState,
-        tempOtherUser.companyCoordLng,
-        tempOtherUser.companyCoordLat,
-        tempOtherUser.role,
-        tempOtherUser.id,
-        tempOtherUser,
-        false,
-        true,
-      );
-      setTempOtherUserMarkerActive(false);
-      setTempOtherUser(null);
-    }
+    // Changing tab drops the pin along with the route it belonged to. This
+    // block existed before SCRUM-379 and could never run - the state it tested
+    // was only ever set from an unreachable branch - so a pin genuinely did
+    // survive a tab change. It no longer does.
+    removeMarkedDestination();
     if (mapState) {
       clearDirections(mapState);
     }
-  }, [sidebarType, tempOtherUser, tempOtherUserMarkerActive, mapState]);
+  }, [sidebarType, mapState, removeMarkedDestination]);
 
   // initial route rendering
   useEffect(() => {
@@ -937,20 +781,10 @@ const Home: NextPage<any> = () => {
         };
       }
 
-      if (tempOtherUserMarkerActive && tempOtherUser) {
-        updateCompanyLocation(
-          mapState,
-          tempOtherUser.companyCoordLng,
-          tempOtherUser.companyCoordLat,
-          tempOtherUser.role,
-          tempOtherUser.id,
-          tempOtherUser,
-          false,
-          true,
-        );
-        setTempOtherUserMarkerActive(false);
-        setTempOtherUser(null);
-      }
+      // About to draw the viewer's own route, so any other user's destination
+      // pin is now orphaned - `viewRoute` has already cleared their start
+      // marker and destination popup, but not this layer.
+      removeMarkedDestination();
       const viewProps = {
         user,
         otherUser: undefined,
@@ -973,9 +807,8 @@ const Home: NextPage<any> = () => {
     otherUser,
     startAddressSelected,
     user,
-    tempOtherUser,
-    tempOtherUserMarkerActive,
     isMobile,
+    removeMarkedDestination,
   ]);
   useSearch({
     value: companyAddress,
