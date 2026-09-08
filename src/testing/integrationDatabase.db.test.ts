@@ -18,7 +18,7 @@ import {
  *
  * **This file needs a real MySQL** and runs only through `yarn test:db`. It is
  * excluded from `yarn test` by the `\.db\.test\.ts$` pattern in
- * `jest.config.js`, which is what lets the mocked suite keep running with no
+ * `jest.shared.config.js`, which is what lets the mocked suite keep running with no
  * database and no Docker.
  */
 

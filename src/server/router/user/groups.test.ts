@@ -2496,8 +2496,9 @@ describe("user.groups.create — legal states only", () => {
  * nothing could reach.
  *
  * The button is disabled while the first call is running, which cannot be
- * asserted here - there are no component tests in this suite. What *can* be
- * asserted, and is the half that matters if a click still slips through, is that
+ * asserted here - this is a `.test.ts` in the `node` project, with no DOM. A
+ * `.test.tsx` could assert it since SCRUM-377, and none does. What *can* be
+ * asserted here, and is the half that matters if a click still slips through, is that
  * the second call is now a clean rejection: no second group, no second seat, no
  * membership moved. These replay the exact sequence rather than setting the
  * states up directly.

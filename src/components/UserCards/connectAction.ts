@@ -36,8 +36,10 @@ import {
  * fixes what they claim.
  *
  * Extracted as a pure function rather than left inline for the reason
- * `viewerAccess.ts` gives: this repository has no component tests, so a rule
- * deciding what a user can reach has to live somewhere a test can see it.
+ * `viewerAccess.ts` gives: a rule deciding what a user can reach belongs
+ * somewhere a test can state it directly, rather than being inferred from a
+ * rendered card. Before SCRUM-377 there was no other option; now it is a
+ * preference, and still the right one here.
  */
 
 /** Only the part of a request this decision reads. */

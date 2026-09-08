@@ -841,7 +841,8 @@ describe("calculateScore", () => {
  * invalidates it. Such a loop reads the pinned zone for every iteration and
  * passes against any implementation, which is worse than no test. Instead:
  *
- *  - `jest.config.js` pins `TZ` in the parent process, before the workers fork.
+ *  - `jest.shared.config.js` pins `TZ` in the parent process, before the workers
+ *    fork.
  *  - `test.yml` runs the whole suite twice, under `UTC` and `America/New_York`,
  *    via `NUCARPOOL_TEST_TZ`. That is the real multi-zone run.
  *  - `runs under the zone that was requested of it` below fails if a requested

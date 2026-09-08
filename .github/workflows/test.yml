@@ -45,7 +45,7 @@ jobs:
       - run: yarn test
       # The same suite again, in a zone that is not UTC.
       #
-      # `jest.config.js` pins TZ so that a run is reproducible, which also means
+      # `jest.shared.config.js` pins TZ so a run is reproducible, which also means
       # a single run can only ever prove one zone. `minutesApart` was wrong in
       # exactly the gap between two of them - correct on a developer's
       # `America/New_York` machine, wrong on this runner - so the property worth

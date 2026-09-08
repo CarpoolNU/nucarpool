@@ -33,8 +33,9 @@ const MessageHeader = ({
   isMutating = false,
 }: MessageHeaderProps) => {
   // Which controls this pair's state offers. The rule lives in
-  // `messageHeaderControls` so it can be tested — this component cannot be,
-  // there being no jsdom or React testing library here.
+  // `messageHeaderControls` so a test can state it as a table rather than
+  // infer it from a render. This component has no suite of its own yet,
+  // though since SCRUM-377 it could have one.
   //
   // `none` for a pair already in the same group is SCRUM-362: that state used
   // to offer a "Leave Conversation" button wired to `onReject`, so pressing it

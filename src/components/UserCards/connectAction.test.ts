@@ -202,9 +202,9 @@ describe("connectAction — seat availability", () => {
  * request that can be sent but never accepted from being created at all.
  *
  * `ConnectCard` also disables the button and shows the same sentence as the
- * card's notice, but neither of those is reachable from a test in this
- * repository — there is no jsdom and no React testing library. This is the
- * layer that can be pinned.
+ * card's notice. Neither is asserted anywhere: rendering it has been possible
+ * since SCRUM-377 added the jsdom project, but no `ConnectCard.test.tsx`
+ * exists yet. This is the layer that is pinned.
  */
 describe("connectAction — a favourite who cannot be carpooled with", () => {
   it("refuses two riders, and says which way out there is", () => {

@@ -503,7 +503,8 @@ describe("user.requests.create — the duplicate guard still holds", () => {
  * transaction narrows the window but does not close it, because MySQL will not
  * lock rows a non-locking SELECT did not find. The control that removes the
  * realistic path is the in-flight guard on `ConnectModal`'s Send button, which
- * has no component test in this repository to pin it. See "One request per
+ * still has no component test pinning it - possible since SCRUM-377, not
+ * written. See "One request per
  * pair" in `src/server/db/README.md` for why no unique constraint was added.
  */
 describe("user.requests.create — pressing Send twice", () => {

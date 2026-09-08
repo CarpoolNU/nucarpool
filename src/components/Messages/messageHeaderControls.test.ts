@@ -4,9 +4,10 @@ import { messageHeaderControls } from "./messageHeaderControls";
 /**
  * The conversation header's request controls.
  *
- * `MessageHeader` renders these and cannot be tested — no jsdom, no React
- * testing library — so the rule was extracted here, the way `connectAction`
- * was extracted from `ConnectCard`.
+ * `MessageHeader` renders these, and the rule was extracted here so it could
+ * be stated as a table — the way `connectAction` was extracted from
+ * `ConnectCard`. When that happened the component was not reachable from a
+ * test at all; since SCRUM-377 it is, and still has no suite of its own.
  *
  * The case this exists for is the last block: a pair already carpooling
  * together get **no** control. That slot used to hold a "Leave Conversation"
