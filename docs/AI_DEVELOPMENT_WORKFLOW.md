@@ -585,16 +585,18 @@ no Node of its own:
 - `test` passes no `--passWithNoTests`, so an empty run fails instead of passing silently.
   Coverage is broad on pure logic and the tRPC routers — the scoring algorithm, the
   `PublicUser` converters, validation, and the routers' authorization and ownership checks.
-  Test files are co-located as `*.test.ts` beside the module they cover, except that a test
-  file must never go under `src/pages/`, where a filename is also a route.
+  Test files are co-located beside the module they cover — `*.test.ts` for logic, `*.test.tsx`
+  for anything that renders or runs a hook — except that a test file must never go under
+  `src/pages/`, where a filename is also a route.
   [`jest.setup.env.js`](../jest.setup.env.js) supplies placeholder values by reusing the
   `--github-env` mode of `scripts/check-env-contract.js`, the same source `build.yml` uses, so
   suites that import `serverEnv` — directly or through `appRouter` — load without a `.env`.
-  Everything runs on mocks: no component, browser or real-database tests exist. Component
-  tests would first need `jest-environment-jsdom` and a React testing library, since Jest
-  runs `ts-jest` in the default `node` environment.
-- `jest.config.js` configures that transform explicitly instead of using the `ts-jest`
-  preset, and transforms `node_modules` as well. An ESM-only dependency otherwise reaches
+  Everything runs on mocks; no browser or end-to-end tests exist. Component tests do, as of
+  SCRUM-377: `yarn test` runs two Jest projects, `node` for `*.test.ts` and `jsdom` for
+  `*.test.tsx`, and the React layer is covered thinly — three suites — so a frontend change
+  is still mostly unguarded.
+- [`jest.shared.config.js`](../jest.shared.config.js) configures that transform explicitly
+  instead of using the `ts-jest` preset, and transforms `node_modules` as well. An ESM-only dependency otherwise reaches
   Jest as raw `import` syntax and the whole suite fails to load, so its tests silently stop
   running rather than failing. The comment there explains why the allow-list alternative was
   rejected.

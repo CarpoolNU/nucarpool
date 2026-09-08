@@ -33,9 +33,11 @@ const MOBILE_BREAKPOINT_PX = 640;
 const DESKTOP_SCREEN_NAME = "desktop";
 
 /**
- * Split out from the hook so the boundary itself is testable: the hook needs a
- * DOM and this repo has no jsdom environment configured, but the comparison is
- * the part that can be got wrong.
+ * Split out from the hook so the boundary itself is testable without a DOM.
+ * That was originally the only way to test it at all; since SCRUM-377 the hook
+ * has its own suite in `useIsMobile.test.tsx`, and this stays split because
+ * `tailwind.config.js` has to `require` it and Tailwind's config is not run
+ * through the TypeScript pipeline.
  *
  * Strictly below the breakpoint, matching `min-width` CSS semantics - at exactly
  * `MOBILE_BREAKPOINT_PX` the `desktop:` utilities apply, so this must be false.

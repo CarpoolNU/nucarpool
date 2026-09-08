@@ -111,7 +111,7 @@ const MINUTES_PER_DAY = 24 * 60;
  * from the other's results. `min(d, 1440 - d)` takes the short way, which also
  * caps the value at 720.
  *
- * `jest.config.js` pins `TZ` so this stays verifiable in CI.
+ * `jest.shared.config.js` pins `TZ` so this stays verifiable in CI.
  */
 export const minutesApart = (a: Date, b: Date): number => {
   const minutesOfDay = (time: Date) =>

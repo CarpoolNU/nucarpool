@@ -20,9 +20,10 @@
  * were the only missing piece: rendering them restores self-service withdrawal
  * with no server change and no new permission.
  *
- * Extracted as a predicate rather than left inline because the repository has no
- * component tests, and a gate that decides what a user
- * can reach is worth pinning somewhere a test can see it.
+ * Extracted as a predicate rather than left inline because a gate that decides
+ * what a user can reach is worth pinning somewhere a test can state it
+ * directly. That was also the only option before SCRUM-377 added a jsdom
+ * project; it remains the better one for a pure decision.
  */
 
 /**

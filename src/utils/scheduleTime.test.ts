@@ -26,7 +26,7 @@ const storedAt = (utcHour: number, utcMinute = 0): Date =>
  * depends on the offset in force on that date.
  *
  * Built with an explicit zone rather than a bare `dayjs()` so the season is a
- * property of the test rather than of `jest.config.js`'s `TZ`. In
+ * property of the test rather than of `jest.shared.config.js`'s `TZ`. In
  * `America/New_York`, 9:00 AM is 14:00Z in January and 13:00Z in July — that
  * gap is the bug, and these two values are what carry it into the assertions.
  */

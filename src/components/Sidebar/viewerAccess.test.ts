@@ -10,9 +10,9 @@ import {
  * These pin both halves of the rule: requests stay visible, and
  * recommendations stay hidden.
  *
- * There are no component tests in this repository, so
- * this is the only place the gate is checked. It is a predicate rather than
- * inline JSX for exactly that reason.
+ * The sidebar itself has no suite, so this is the only place the gate is
+ * checked. It is a predicate rather than inline JSX for exactly that reason —
+ * which before SCRUM-377 was the only way to check it at all.
  */
 
 const ALL_SUB_TYPES: SidebarSubType[] = [
