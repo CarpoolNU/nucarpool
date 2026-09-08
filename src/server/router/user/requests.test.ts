@@ -1023,6 +1023,197 @@ describe("user.requests.delete — only a participant may clear a request", () =
   });
 });
 
+describe("user.requests.delete — not while still carpooling together", () => {
+  /**
+   * The server half of SCRUM-362, which fixed only the client half.
+   *
+   * That ticket removed the "Leave Conversation" button, because a pair in an
+   * active carpool pressing it deleted their accepted request and with it -
+   * after SCRUM-295 - the conversation and every message, permanently and with
+   * no route to recovery. The button is gone; the procedure was never guarded,
+   * so a direct call, a stale bundle or the next caller to reuse `delete`
+   * could still do it. `create` has refused the same pair with CONFLICT for
+   * some time; these are the mirror of its four cases.
+   *
+   * The assertion that matters on the refusal path is that the transaction is
+   * never entered - `conversationDeleteMany` and `messageDeleteMany` never
+   * called - not merely that the rows happen to survive. The existing tests
+   * below cover the success path; being wrong here is what is irreversible.
+   */
+  const grouped = (): Record<string, string | null> => ({
+    [USER_A]: "group-1",
+    [USER_B]: "group-1",
+  });
+
+  const acceptedPair = (membership: Record<string, string | null>) =>
+    buildRequestsDb(
+      [
+        requestRow("req-1", USER_A, USER_B, {
+          status: RequestStatus.ACCEPTED,
+          conversationId: "conversation-req-1",
+        }),
+      ],
+      membership,
+    );
+
+  it("refuses the sender with CONFLICT and deletes nothing", async () => {
+    const db = acceptedPair(grouped());
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await expect(
+      caller.user.requests.delete({ invitationId: "req-1" }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+
+    expect(db.destroy).not.toHaveBeenCalled();
+    expect(db.conversationDeleteMany).not.toHaveBeenCalled();
+    expect(db.messageDeleteMany).not.toHaveBeenCalled();
+    expect(db.rows()).toEqual([expect.objectContaining({ id: "req-1" })]);
+    expect(db.conversations()).toEqual([
+      { id: "conversation-req-1", requestId: "req-1" },
+    ]);
+  });
+
+  it("refuses the recipient too, not just the sender", async () => {
+    // Either party may clear a request, so either party could destroy the
+    // thread. Guarding one direction would leave the bug in place for the
+    // other.
+    const db = acceptedPair(grouped());
+    const { caller } = callerFor(sessionFor(USER_B), db);
+
+    await expect(
+      caller.user.requests.delete({ invitationId: "req-1" }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+
+    expect(db.destroy).not.toHaveBeenCalled();
+  });
+
+  it("names the Group page, so the refusal says what to do instead", async () => {
+    // Leaving the group is the supported way out, and it keeps the
+    // conversation - `useGroupMembership` does not touch the request row. Once
+    // they are no longer grouped this same call succeeds, which the test below
+    // covers. A CONFLICT with no route out would just be a dead end.
+    const db = acceptedPair(grouped());
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await expect(
+      caller.user.requests.delete({ invitationId: "req-1" }),
+    ).rejects.toThrow(/Group page/);
+  });
+
+  it("keeps the messages of a pair who messaged and then formed a group", async () => {
+    // Built through the real create path so the conversation and its message
+    // are written the way the application writes them, then advanced to the
+    // state the guard is about: accepted, and grouped.
+    //
+    // `membership` is mutated rather than passed pre-grouped because `create`
+    // itself refuses a grouped pair - the two guards are now consistent, which
+    // means this state can only be reached in the order it happens in real
+    // life. `db.update` stands in for `groups.create`, which lives in another
+    // router and another harness.
+    const membership: Record<string, string | null> = {
+      [USER_A]: null,
+      [USER_B]: null,
+    };
+    const db = buildRequestsDb([], membership);
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    const created = await caller.user.requests.create({
+      toId: USER_B,
+      message: "are you still driving?",
+    });
+    expect(db.messages()).toHaveLength(1);
+
+    await db.update({
+      where: { id: created.id },
+      data: { status: RequestStatus.ACCEPTED },
+    });
+    membership[USER_A] = "group-1";
+    membership[USER_B] = "group-1";
+
+    await expect(
+      caller.user.requests.delete({ invitationId: created.id }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+
+    expect(db.messages()).toHaveLength(1);
+    expect(db.conversations()).toHaveLength(1);
+  });
+
+  it("allows deletion once the two are in different groups", async () => {
+    const db = acceptedPair({ [USER_A]: "group-1", [USER_B]: "group-2" });
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await expect(
+      caller.user.requests.delete({ invitationId: "req-1" }),
+    ).resolves.not.toThrow();
+
+    expect(db.rows()).toEqual([]);
+    expect(db.conversations()).toEqual([]);
+  });
+
+  it("allows deletion when neither user is in a group", async () => {
+    // The pair who carpooled and have since parted. SCRUM-353 and SCRUM-354
+    // both worked to make this row clearable, which is why the guard is
+    // ACCEPTED *and* grouped rather than ACCEPTED alone.
+    const db = acceptedPair({ [USER_A]: null, [USER_B]: null });
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await expect(
+      caller.user.requests.delete({ invitationId: "req-1" }),
+    ).resolves.not.toThrow();
+
+    expect(db.rows()).toEqual([]);
+  });
+
+  it("allows deletion when one user has no carpool search row at all", async () => {
+    // Reads as `undefined` rather than `null`. Two people with no group are
+    // not in the same group, and `fromGroup &&` is what keeps this from
+    // firing on a pair of absent values.
+    const db = acceptedPair({ [USER_A]: null });
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await expect(
+      caller.user.requests.delete({ invitationId: "req-1" }),
+    ).resolves.not.toThrow();
+
+    expect(db.rows()).toEqual([]);
+  });
+
+  it("still withdraws a PENDING request between two users who share a group", async () => {
+    // Reachable through the reopen path, and it must stay withdrawable: a
+    // request nobody accepted carries no history worth protecting, and
+    // SCRUM-295's behaviour for PENDING is unchanged by this ticket. The guard
+    // is keyed on status first, so this does not even issue the group query.
+    const db = buildRequestsDb(
+      [
+        requestRow("req-1", USER_A, USER_B, {
+          conversationId: "conversation-req-1",
+        }),
+      ],
+      grouped(),
+    );
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await expect(
+      caller.user.requests.delete({ invitationId: "req-1" }),
+    ).resolves.not.toThrow();
+
+    expect(db.rows()).toEqual([]);
+    expect(db.conversations()).toEqual([]);
+  });
+
+  it("still answers FORBIDDEN for a third party, not CONFLICT", async () => {
+    // The participant check runs first and must keep doing so. A stranger
+    // learning "those two are carpooling" from the error code would be a
+    // disclosure this guard introduced.
+    const db = acceptedPair(grouped());
+    const { caller } = callerFor(sessionFor(USER_C), db);
+
+    await expect(
+      caller.user.requests.delete({ invitationId: "req-1" }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+});
+
 describe("user.requests — authentication gate", () => {
   it("rejects an anonymous create without touching the database", async () => {
     const { caller, db } = callerFor(null);
