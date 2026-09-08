@@ -11,6 +11,29 @@
           }
         ]
       }
+    ],
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "JSXAttribute[name.name=\"dangerouslySetInnerHTML\"]",
+        "message": "dangerouslySetInnerHTML renders its input as raw HTML, and the app's only defence against stored XSS is that no raw-HTML sink exists. Every free-text column a user controls - user.bio, user.preferredName, user.pronouns, message.content, carpool_search.company_name, carpool_search.group_notes - is validated for length and nothing else (src/utils/textLimits.ts), so `<script>alert(1)</script>` is a legal value. Render it as JSX text and let React escape it. If the HTML is genuinely trusted and no part of it derives from user input, put `// eslint-disable-next-line no-restricted-syntax` on the line above with a comment naming where the HTML comes from and why it is trusted."
+      },
+      {
+        "selector": "Property[key.name=\"dangerouslySetInnerHTML\"], Property[key.value=\"dangerouslySetInnerHTML\"]",
+        "message": "dangerouslySetInnerHTML renders its input as raw HTML, and passing it through a props object rather than a JSX attribute changes nothing. See the JSX-attribute message above: render user-controlled text as JSX text and let React escape it. If the HTML is genuinely trusted, put `// eslint-disable-next-line no-restricted-syntax` on the line above with a comment naming its source and why it is trusted."
+      },
+      {
+        "selector": "MemberExpression[property.name=/^(inner|outer)HTML$/], MemberExpression[property.value=/^(inner|outer)HTML$/]",
+        "message": ".innerHTML and .outerHTML treat their value as markup: assigning to either parses the string as HTML and executes any script it contains, so a stored value carrying markup runs in the viewer's browser. Reading them is flagged too, because string-level DOM manipulation is how a value ends up being assigned back. Use .textContent for text, or build nodes with document.createElement. Mapbox popups must stay on .setText() rather than .setHTML() - src/utils/map/viewRoute.ts is the precedent. If raw HTML is genuinely required and its source is trusted, put `// eslint-disable-next-line no-restricted-syntax` on the line above with a comment justifying the source."
+      },
+      {
+        "selector": "MemberExpression[property.name=\"insertAdjacentHTML\"], MemberExpression[property.value=\"insertAdjacentHTML\"]",
+        "message": "insertAdjacentHTML parses its second argument as HTML, so any user-controlled value reaching it becomes stored XSS. Insert a text node, or build nodes with document.createElement. If raw HTML is genuinely required and its source is trusted, put `// eslint-disable-next-line no-restricted-syntax` on the line above with a comment justifying the source."
+      },
+      {
+        "selector": "MemberExpression[object.name=\"document\"][property.name=/^write(ln)?$/], MemberExpression[object.name=\"document\"][property.value=/^write(ln)?$/]",
+        "message": "document.write parses its argument as HTML into the document and executes any script in it. There is no reason to reach for it in a React application - render the content as JSX instead. If it is genuinely required and its input is trusted, put `// eslint-disable-next-line no-restricted-syntax` on the line above with a comment justifying the source."
+      }
     ]
   }
 }
