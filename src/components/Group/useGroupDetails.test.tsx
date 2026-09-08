@@ -17,17 +17,19 @@
  * required - before any `const` in this file is initialised - so anything it
  * closed over would be read in its temporal dead zone.
  *
- * **Every `stored` value below is referentially stable across renders, and has
- * to be.** The sync effect is keyed on the identity of `stored` and sets state
- * to a freshly built object, so a caller that passes a new object literal each
- * render never converges: effect, setState, render, new object, effect. Writing
- * `stored: makeStored()` inline in `renderHook` reproduces that in about ninety
- * seconds of climbing memory and then a 4GB heap-limit abort, which is how it
- * was found. `GroupPage.tsx` is safe because both of its call sites pass React
- * Query data (`user`, `group?.preferences`) straight through, and that is
- * referentially stable between fetches - but nothing in the hook says so, and
- * nothing stops the next caller from building the object. SCRUM-389; this file
- * does not work around it silently.
+ * **`stored` no longer has to be referentially stable** - SCRUM-389. It did
+ * when this file was written: the sync effect keyed on the identity of `stored`
+ * and wrote a freshly built object into state, so a caller passing a new object
+ * literal each render never converged, and `stored: freshStored()` inline in
+ * `renderHook` cost about ninety seconds of climbing memory and then a 4GB
+ * heap-limit abort. The effect now bails out when the resolved value is
+ * unchanged, and the first two tests below are the ones that hold it to that.
+ *
+ * The frozen module-level constants are kept anyway. They are not a workaround
+ * any more, just the clearer way to write a test whose subject is the values
+ * rather than the identity - `renderWithStored` changes `stored` deliberately,
+ * and reading those tests should not require also tracking which renders
+ * produced a new object.
  */
 
 import { act, renderHook, waitFor } from "@testing-library/react";
@@ -119,7 +121,81 @@ const renderWithStored = (initial: StoredProp, canEdit = true) =>
     { initialProps: { value: initial } },
   );
 
+/**
+ * A caller that rebuilds `stored` on every render, which is what SCRUM-389 is
+ * about. Deliberately *not* frozen or hoisted: a new object with the same
+ * values, every time it is called.
+ */
+const freshStored = (): StoredGroupPreferences => ({
+  groupNotes: "Leaves from Ruggles at 7:45",
+  groupMusicPreference: "Podcasts",
+  groupConversationStyle: "Light chat",
+});
+
+/**
+ * Enough renders for anything legitimate - a mount, a StrictMode remount, and
+ * a couple of state settles - and far short of a loop. The limit is enforced
+ * from inside the render function rather than asserted afterwards, because a
+ * loop here does not fail: it climbs memory for ninety seconds and then aborts
+ * the whole worker on the V8 heap limit, with a native stack and no test name.
+ * Throwing on the 25th render turns that into a normal failure in
+ * milliseconds.
+ */
+const RENDER_LIMIT = 25;
+
+const renderCounting = (getStored: () => StoredGroupPreferences) => {
+  let renders = 0;
+
+  const view = renderHook(() => {
+    renders += 1;
+    if (renders > RENDER_LIMIT) {
+      throw new Error(
+        `useGroupDetails re-rendered more than ${RENDER_LIMIT} times without ` +
+          `settling. The sync effect is feeding itself: it applied a new ` +
+          `details object, which re-rendered the caller, which built a new ` +
+          `stored object, which re-ran the effect. See SCRUM-389.`,
+      );
+    }
+    return useGroupDetails({ stored: getStored(), canEdit: true });
+  });
+
+  return { ...view, renderCount: () => renders };
+};
+
 describe("useGroupDetails", () => {
+  describe("a `stored` that is rebuilt on every render", () => {
+    it("settles instead of re-rendering forever", () => {
+      const { result, renderCount } = renderCounting(freshStored);
+
+      // The values still arrive - terminating by ignoring `stored` would pass
+      // a render-count assertion and be a worse bug than the loop.
+      expect(result.current.details).toEqual({
+        notes: "Leaves from Ruggles at 7:45",
+        musicPreference: "Podcasts",
+        conversationStyle: "Light chat",
+      });
+      expect(renderCount()).toBeLessThanOrEqual(RENDER_LIMIT);
+    });
+
+    it("settles when the driver has typed and `stored` then arrives", () => {
+      const { result, renderCount } = renderCounting(freshStored);
+
+      act(() => {
+        result.current.setDetails({
+          notes: "typed over the stored value",
+          musicPreference: "",
+          conversationStyle: "",
+        });
+      });
+
+      // Server data still wins on the next sync - that is existing behaviour
+      // and this ticket does not change it. What must not happen is the two
+      // taking turns forever.
+      expect(result.current.details.notes).toBe("Leaves from Ruggles at 7:45");
+      expect(renderCount()).toBeLessThanOrEqual(RENDER_LIMIT);
+    });
+  });
+
   describe("reading stored preferences", () => {
     it("resolves the stored columns on the first render, before any effect", () => {
       const { result } = renderHook(() =>
@@ -178,6 +254,26 @@ describe("useGroupDetails", () => {
       rerender({ value: null });
 
       expect(result.current.details).toEqual(DEFAULT_GROUP_DETAILS);
+    });
+
+    it("leaves a loaded form alone if `stored` goes back to not-loaded", () => {
+      const { result, rerender } = renderWithStored(STORED);
+
+      expect(result.current.details.notes).toBe("Leaves from Ruggles at 7:45");
+
+      // A query whose `data` returns to `undefined` - reset, garbage-collected,
+      // or a remount against a cold cache. "Not loaded" is not an instruction
+      // to empty the form, and `resolveGroupDetails(undefined)` returns the
+      // defaults, so without the early return this wipes it.
+      //
+      // Added because a mutation survived: deleting the `stored === undefined`
+      // guard outright left all 43 tests green. The two tests above only
+      // exercise `undefined -> undefined`, where `[stored]` never changes and
+      // the effect never re-runs, so neither of them touches the guard. This
+      // is the transition that does.
+      rerender({ value: undefined });
+
+      expect(result.current.details.notes).toBe("Leaves from Ruggles at 7:45");
     });
   });
 

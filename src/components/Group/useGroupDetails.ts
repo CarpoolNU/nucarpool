@@ -4,6 +4,7 @@ import { trpc } from "../../utils/trpc";
 import {
   GroupDetails,
   StoredGroupPreferences,
+  detailsEqual,
   resolveGroupDetails,
   trimDetails,
 } from "./groupDetails";
@@ -41,10 +42,49 @@ export const useGroupDetails = ({ stored, canEdit }: UseGroupDetailsArgs) => {
   );
   const [isSaving, setIsSaving] = useState(false);
 
+  /*
+   * Sync the form from storage, and do it without feeding itself.
+   *
+   * `stored !== undefined` is the "not loaded yet" guard: `undefined` means the
+   * query has not answered and the form must be left alone, while `null` is a
+   * real answer - loaded, nothing there - and does reset it. Collapsing the two
+   * into `if (stored)` would leave a stale form after the row went away.
+   *
+   * The `detailsEqual` bail-out is SCRUM-389, and it is not an optimisation.
+   * `resolveGroupDetails` returns a new object every call, so a plain
+   * `setDetails(next)` is always a state change and always a render. That is
+   * harmless while `stored` keeps its identity - which is why this went
+   * unnoticed: both call sites in `GroupPage.tsx` pass React Query data
+   * straight through, and structural sharing keeps that reference stable. Give
+   * the hook a caller that builds the object instead, and the two take turns
+   * forever: effect writes a new details object, caller re-renders, caller
+   * builds a new `stored`, `[stored]` changes, effect runs again. React's "too
+   * many re-renders" guard does not cover an effect-driven cycle, so there is
+   * no error - just a tab climbing memory until it dies.
+   *
+   * Returning `prev` unchanged stops that at the first repeat, because React
+   * bails out of a `useState` update that produces the identical reference.
+   *
+   * **What this does not change: server data still wins on every sync.** The
+   * comparison is between the resolved stored value and whatever the form
+   * currently holds, so if the driver has typed, the two differ and the typing
+   * is replaced - exactly as before. Only a redundant apply is skipped.
+   * Keying the effect on the individual stored values instead would go
+   * further, and narrow the window in which a new `stored` reference can
+   * discard in-progress typing to one where the stored values genuinely
+   * changed. That is a behaviour change rather than a fix, and no reachable
+   * path to that clobber has actually been demonstrated - `GroupPage`'s two
+   * call sites pass query data, and React Query's structural sharing keeps a
+   * sub-object's reference when its contents are unchanged. Left alone
+   * deliberately.
+   */
   useEffect(() => {
-    if (stored !== undefined) {
-      setDetails(resolveGroupDetails(stored));
+    if (stored === undefined) {
+      return;
     }
+
+    const next = resolveGroupDetails(stored);
+    setDetails((prev) => (detailsEqual(prev, next) ? prev : next));
   }, [stored]);
 
   // `mutateAsync`, not `mutate`. The old code did `await mutate(...)` and then

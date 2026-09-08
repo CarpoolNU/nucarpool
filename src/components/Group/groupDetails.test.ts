@@ -4,6 +4,7 @@ import {
   GroupDetails,
   NOTES_MAX_LENGTH,
   conversationStyleOptions,
+  detailsEqual,
   hasAnyDetail,
   musicPreferenceOptions,
   normalizeDetails,
@@ -247,5 +248,75 @@ describe("normalizeDetails and hasAnyDetail", () => {
 
   it("treats whitespace-only input as no detail at all", () => {
     expect(hasAnyDetail(details({ notes: "  " }))).toBe(false);
+  });
+});
+
+/**
+ * The comparison `useGroupDetails`'s sync effect bails out on (SCRUM-389).
+ *
+ * Its job is narrow: answer whether two `GroupDetails` carry the same values,
+ * so that resolving the same stored row twice is not a state change. The
+ * interesting cases are the ones where being wrong is invisible - a difference
+ * in exactly one field, which a comparison that forgot that field would report
+ * as equal, and which would then never reach the form.
+ */
+describe("detailsEqual", () => {
+  const full: GroupDetails = {
+    notes: "Leaves from Ruggles at 7:45",
+    musicPreference: "Podcasts",
+    conversationStyle: "Light chat",
+  };
+
+  it("is true for two separately built objects with the same values", () => {
+    // The whole point: `===` on the objects is false here, and this must not
+    // be. `resolveGroupDetails` returns a fresh object every call.
+    expect({ ...full }).not.toBe(full);
+    expect(detailsEqual({ ...full }, full)).toBe(true);
+  });
+
+  it("is true for the same reference", () => {
+    expect(detailsEqual(full, full)).toBe(true);
+  });
+
+  it("is true for two empty defaults", () => {
+    expect(detailsEqual(details(), DEFAULT_GROUP_DETAILS)).toBe(true);
+  });
+
+  it.each(Object.keys(full) as (keyof GroupDetails)[])(
+    "is false when only %s differs",
+    (field) => {
+      expect(detailsEqual(full, { ...full, [field]: "something else" })).toBe(
+        false,
+      );
+    },
+  );
+
+  it("is false when a field is cleared rather than changed", () => {
+    // Clearing the notes is a real edit and must sync. An `||`-style
+    // comparison that treated "" as "no value" would miss it.
+    expect(detailsEqual(full, { ...full, notes: "" })).toBe(false);
+  });
+
+  it("does not trim or normalise before comparing", () => {
+    // Deliberate. `resolveGroupDetails` has already normalised both sides by
+    // the time the effect compares them, so trimming here would only hide a
+    // difference between a normalised value and an un-normalised one - which
+    // is a bug worth seeing rather than smoothing over.
+    expect(detailsEqual(full, { ...full, notes: `${full.notes} ` })).toBe(
+      false,
+    );
+  });
+
+  it("compares every field of GroupDetails, not a subset", () => {
+    // The guard against the quiet version of SCRUM-389: a field left out of
+    // the comparison is a field whose changes never reach the form.
+    // `COMPARED_FIELDS` is `Record<keyof GroupDetails, true>` so omitting one
+    // fails `tsc`, and this asserts the runtime half of the same thing.
+    const fields = Object.keys(DEFAULT_GROUP_DETAILS) as (keyof GroupDetails)[];
+
+    for (const field of fields) {
+      expect(detailsEqual(full, { ...full, [field]: "changed" })).toBe(false);
+    }
+    expect(fields).toHaveLength(3);
   });
 });

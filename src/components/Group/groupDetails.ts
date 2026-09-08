@@ -98,6 +98,43 @@ export const trimDetails = (details: GroupDetails): GroupDetails => ({
 export const hasAnyDetail = (details: GroupDetails): boolean =>
   Object.values(normalizeDetails(details)).some((value) => value !== "");
 
+/**
+ * The fields `detailsEqual` compares, as a `Record` over every key of
+ * `GroupDetails`.
+ *
+ * The indirection buys one thing, and it is worth four lines. A comparison
+ * written as `a.notes === b.notes && ...` silently ignores a fourth field
+ * added to `GroupDetails` later - and silently ignoring a field here means the
+ * effect in `useGroupDetails` treats a change to it as "no change" and never
+ * puts it in the form, which is a quieter version of the bug this comparison
+ * exists to fix. `Record<keyof GroupDetails, true>` makes that a compile error
+ * instead: adding `smokingPreference` to the type without adding it below
+ * fails `tsc`.
+ *
+ * `normalizeDetails` and `trimDetails` get the same protection for free,
+ * because they return a `GroupDetails` literal and a missing property is an
+ * error. A predicate returning `boolean` has no such check, so it needs this.
+ */
+const COMPARED_FIELDS: Record<keyof GroupDetails, true> = {
+  notes: true,
+  musicPreference: true,
+  conversationStyle: true,
+};
+
+/**
+ * Whether two sets of details carry the same values.
+ *
+ * `resolveGroupDetails` builds a new object on every call, so no caller can
+ * compare two of its results with `===`. `useGroupDetails` has to: its sync
+ * effect writes the resolved value into state, and without a value comparison
+ * every resolve is a state change and every state change is a render - which
+ * is the loop SCRUM-389 fixes.
+ */
+export const detailsEqual = (a: GroupDetails, b: GroupDetails): boolean =>
+  (Object.keys(COMPARED_FIELDS) as (keyof GroupDetails)[]).every(
+    (field) => a[field] === b[field],
+  );
+
 export const parseGroupDetails = (message?: string | null): GroupDetails => {
   if (!message) {
     return DEFAULT_GROUP_DETAILS;
