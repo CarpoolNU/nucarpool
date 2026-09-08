@@ -115,11 +115,11 @@ in [`src/server/db/seatIntegrity.test.ts`](../src/server/db/seatIntegrity.test.t
 
 ### Not operational scripts
 
-| File                                               | What it is                                                                |
-| -------------------------------------------------- | ------------------------------------------------------------------------- |
-| [`check-env-contract.js`](./check-env-contract.js) | CI: `yarn check:env`, and the source of the placeholder build environment |
-| [`check-page-routes.js`](./check-page-routes.js)   | CI: `yarn check:routes` and the `build` job's manifest assertion          |
-| [`emailtemplate.py`](./emailtemplate.py)           | **Mutates AWS.** Creates and updates the SES templates the app sends      |
+| File                                               | What it is                                                                                         |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| [`check-env-contract.js`](./check-env-contract.js) | CI: `yarn check:env` and `yarn check:amplify`, and the source of the placeholder build environment |
+| [`check-page-routes.js`](./check-page-routes.js)   | CI: `yarn check:routes` and the `build` job's manifest assertion                                   |
+| [`emailtemplate.py`](./emailtemplate.py)           | **Mutates AWS.** Creates and updates the SES templates the app sends                               |
 
 `*.test.ts` files next to each script cover the argument parsing and the pure
 planning half, and run in `yarn test`. A passing suite says nothing about what

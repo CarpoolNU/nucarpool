@@ -559,7 +559,7 @@ no Node of its own:
 | [`tsc.yml`](../.github/workflows/tsc.yml)                   | PR + push to `main`                | `yarn tsc`                                                                                                      |
 | [`test.yml`](../.github/workflows/test.yml)                 | PR + push to `main`                | `yarn test` (Jest)                                                                                              |
 | [`build.yml`](../.github/workflows/build.yml)               | PR + push to `main`                | `prisma generate`, then `yarn build` against placeholder env values                                             |
-| [`env-contract.yml`](../.github/workflows/env-contract.yml) | PR + push to `main`                | `node scripts/check-env-contract.js`                                                                            |
+| [`env-contract.yml`](../.github/workflows/env-contract.yml) | PR + push to `main`                | `node scripts/check-env-contract.js`, then the same script with `--amplify`                                     |
 | [`schema.yml`](../.github/workflows/schema.yml)             | PR + push to `main`                | `prisma validate`, then `prisma migrate diff --from-migrations` against a throwaway MySQL 8.0 service container |
 | [`format.yml`](../.github/workflows/format.yml)             | PR + push to `main`                | `yarn check:format` (`prettier --check .`)                                                                      |
 | [`auto-comment.yml`](../.github/workflows/auto-comment.yml) | PR touching `prisma/schema.prisma` | comments a reminder to open a PlanetScale deploy request before merging                                         |
@@ -579,6 +579,14 @@ no Node of its own:
   can never notice that a newly required variable was left out of `.env.example`. The check
   derives the required names from [`src/utils/env/`](../src/utils/env/) and fails when the
   template does not document them. Run it locally with `yarn check:env`.
+- The same job then runs `--amplify`, which checks the **other** contract: whether
+  [`amplify.yml`](../amplify.yml)'s `env | grep` patterns carry every required variable into
+  `.env.production`, which is what the deployed server reads. A variable set in the Amplify
+  console reaches the build shell for free and the runtime only if it is copied, so a required
+  variable could be documented, built against, and still absent in production — which is
+  precisely what happened to `S3_BUCKET_NAME` (SCRUM-385). Every required variable is carried
+  today and the exemption list is empty; an entry added to it has to state why the variable
+  need not reach the runtime. Run it locally with `yarn check:amplify`.
 - `--max-warnings=0` on lint is load-bearing: several rules that matter here, notably
   `react-hooks/exhaustive-deps`, are warnings rather than errors and would otherwise never
   fail the check.
