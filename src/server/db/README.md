@@ -37,7 +37,21 @@ Two columns on `CarpoolSearch` store a moment without a zone, so the convention 
 
 **Schedule times — `startTime` / `endTime` (`DateTime? @db.Time(0)`)**
 
-A time of day in **UTC**, with no date attached. `user.edit` parses the ISO string the client sends and Prisma writes the UTC time of day out of it, so a student picking 9:00 AM in Boston is stored as `14:00:00`.
+A time of day in **UTC**, with no date attached, resolved against a **fixed anchor date**. `user.edit` parses the ISO string the client sends and Prisma writes the UTC time of day out of it, so a student picking 9:00 AM in Boston is stored as `14:00:00` — in **either season**.
+
+**The anchor is the whole contract, because Boston has two offsets.** `America/New_York` is UTC-5 in winter and UTC-4 under daylight saving, so "9:00 AM in Boston" only names a UTC time once you name a date too. Reading always named one — Prisma returns the column as `1970-01-01T<hh:mm>Z`, so the zone resolves on 1 January 1970, always EST. Writing used to name a different one: the picker handed over an instant on _the day the user saved_, so a July save stored 9:00 AM as `13:00` where January stored it as `14:00`. The two halves disagreed for the roughly two-thirds of the year DST covers, and the error landed on matching rather than only on display — `minutesApart` measured two identical local schedules as 60 minutes apart, worth 0.15 of a total match weight of 1.0. SCRUM-373.
+
+Both directions now go through [`scheduleTime.ts`](../../utils/scheduleTime.ts) and both pin `SCHEDULE_ANCHOR_DATE`:
+
+| Direction | Helper                 | What it does                                                          |
+| --------- | ---------------------- | --------------------------------------------------------------------- |
+| write     | `toStoredScheduleTime` | reads the **wall clock** off the picker and rebuilds it at the anchor |
+| read      | `toPickerScheduleTime` | the stored instant as a Boston wall clock, for antd                   |
+| display   | `formatScheduleTime`   | the same conversion, formatted                                        |
+
+Reading the wall clock rather than the instant is what makes the write side date-independent: whichever date antd anchored the picker on is discarded, so a first-time pick and an edit store the same value, and a student onboarding from California stores the schedule they typed rather than one shifted three hours.
+
+**Rows written under DST before that fix are still an hour early**, and cannot be identified from the row: `13:00` is a correct winter 8:00 AM and an incorrect summer 9:00 AM, and nothing records which. `CarpoolSearch.dateModified` moves on any profile save, so it is an upper bound rather than a record. **SCRUM-374** holds that repair and the decision behind it; do not infer a blanket `+1 hour` from this section, which would break every correctly-stored winter row.
 
 Render with [`formatScheduleTime`](../../utils/scheduleTime.ts), which converts to `America/New_York`. Every schedule time in the UI goes through that one helper — do not format these columns inline. `UserCard` and `ConnectModal` each used to carry a copy that reinterpreted the value as UTC when the Boston hour fell between 01:00 and 04:59, which was a guess about rows predating the standardisation on UTC and mislabelled genuine early shifts.
 
