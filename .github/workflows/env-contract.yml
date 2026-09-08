@@ -47,3 +47,17 @@ jobs:
       # job stays fast and keeps reporting even when installation is broken.
       - name: check .env.example against the app's env contract
         run: node scripts/check-env-contract.js
+      # The second contract, and the one that decides what production actually
+      # gets. A variable set in the Amplify console reaches the build shell for
+      # free, but only reaches the deployed server if amplify.yml copies it
+      # into .env.production - so a required variable can be documented, built
+      # against, and still absent at runtime. That is what happened to
+      # `S3_BUCKET_NAME`: required, defaulted in code, matched by none of the
+      # grep patterns, so the build resolved the console value into the CSP
+      # while the runtime fell back to the default bucket (SCRUM-385).
+      #
+      # A separate step rather than folded into the one above, for the same
+      # reason this job is separate from `build`: two contracts, two failures,
+      # each legible on its own.
+      - name: check amplify.yml against the app's env contract
+        run: node scripts/check-env-contract.js --amplify
