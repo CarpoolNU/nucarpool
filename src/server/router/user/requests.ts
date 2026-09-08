@@ -562,6 +562,76 @@ export const requestsRouter = router({
         });
       }
 
+      // Two people who are currently carpooling together may not delete the
+      // request that carries their conversation.
+      //
+      // This is the mirror of the guard `create` holds a few hundred lines
+      // above - the same question, asked on the way out instead of the way in -
+      // and the two procedures used to disagree about it. `create` refuses a
+      // request between current group members with CONFLICT; `delete` checked
+      // participation and nothing else, so a pair in an active carpool could
+      // destroy their entire thread, and after SCRUM-295 made this delete the
+      // conversation and its messages rather than orphaning them, destroy it
+      // permanently.
+      //
+      // **SCRUM-362 already fixed this in the UI, and that fix is not this
+      // one.** It answered the product question - the "Leave Conversation"
+      // button was wrong, so it was removed - and `messageHeaderControls`
+      // returns `{ kind: "none" }` for a pair in the same group. That guard is
+      // correct and stays. What it cannot do is stop a direct call, a stale
+      // cached bundle, or the next caller to reuse this procedure, and until
+      // now it was the only thing standing between an active carpool and
+      // irreversible loss of their messages.
+      //
+      // The condition is deliberately `ACCEPTED` **and** grouped, not
+      // `ACCEPTED` alone. A pair who once carpooled and have since parted must
+      // still be able to clear the row: `connectAction` reads it to decide
+      // whether Connect is offered, `create`'s reopen branch acts on it, and
+      // SCRUM-353 and SCRUM-354 both worked to make that state escapable.
+      // Refusing on status alone would strand every one of those.
+      //
+      // A PENDING decline or withdrawal is untouched and does not even pay for
+      // the query - which is why the read sits inside this branch. That path is
+      // the common one, it is what SCRUM-295 is about, and nothing of value is
+      // lost when a request nobody accepted goes away.
+      if (invitation.status === RequestStatus.ACCEPTED) {
+        const searches = await ctx.prisma.carpoolSearch.findMany({
+          where: {
+            userId: { in: [invitation.fromUserId, invitation.toUserId] },
+          },
+          select: { userId: true, carpoolId: true },
+        });
+
+        const fromGroup = searches.find(
+          (s) => s.userId === invitation.fromUserId,
+        )?.carpoolId;
+        const toGroup = searches.find(
+          (s) => s.userId === invitation.toUserId,
+        )?.carpoolId;
+
+        // `fromGroup &&` covers null and undefined together: a user with no
+        // `carpoolSearch` row at all reads as undefined here, and two people
+        // who are both ungrouped are not in the same group. The equality then
+        // forces `toGroup` to the same non-null value, so this cannot fire on
+        // two nulls. Same shape as `create`'s `callerGroup && callerGroup ===
+        // targetGroup`, on purpose.
+        if (fromGroup && fromGroup === toGroup) {
+          // CONFLICT rather than FORBIDDEN, matching `membershipConflict` in
+          // `groups.ts`: the input is well formed and the caller is entitled
+          // to ask, but the current state of the data says no. It is also in
+          // `NON_RETRYABLE_CODES` in `src/utils/trpc.ts`, so the client shows
+          // it instead of retrying three times and reporting the third
+          // failure.
+          throw new TRPCError({
+            code: "CONFLICT",
+            message:
+              "You are carpooling with this user, so this conversation " +
+              "cannot be deleted. Leave the carpool from the Group page " +
+              "first.",
+          });
+        }
+      }
+
       // The conversation goes with the request, in one transaction.
       //
       // The cascade in the schema points the other way: `Request` holds the
