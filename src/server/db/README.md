@@ -552,15 +552,23 @@ paths, not two, which matters because they do not all use the same link:
   that same column, so it never reaches a badge.
 
 That split matters: "no request owns this row" and "nothing can read this row"
-are two different questions, and `findOrphanConversationIds` only asks the
-first. Both were asked
-of production, read-only, on 2026-09-03: **0** orphans were still pointed at by
-a live request through `conversationId`, and all **620** fail both links. The
-two answers coincide today, because no current write path can link a
+are two different questions. `findOrphanConversationIds` now asks **both** —
+a conversation is an orphan only when no live request reaches it by either
+`Conversation.requestId` or `Request.conversationId` (SCRUM-364). Both were
+asked of production, read-only, on 2026-09-03: **0** orphans were still pointed
+at by a live request through `conversationId`, and all **620** fail both links.
+The two answers coincided there, because no current write path can link a
 conversation to a request other than the one it was keyed on — but the schema
-does not enforce it, since `Request.conversationId` is not unique. That is why
-the cleanup script re-checks both links before each delete, and why SCRUM-364
-tracks aligning the predicate with that check.
+does not enforce it, since `Request.conversationId` is not unique, so the
+predicate cannot rely on the coincidence. It is now the same definition the
+cleanup script re-checks immediately before each delete, which is the point:
+the plan and the action can no longer disagree, so a rescue at delete time
+means the database changed under the run rather than that the two predicates
+differ.
+
+Getting this wrong would not merely have spared or destroyed the wrong row.
+`Request.conversation` declares `onDelete: Cascade`, so deleting a conversation
+that a live request points at would take that **request** with it.
 
 So the cost was not a broken feature. It was private message content persisting
 indefinitely with no route to it and no deletion path, plus two problems that
@@ -568,6 +576,31 @@ do not self-correct: `admin.getDashboardStats` counts orphans in both
 `conversation.count()` and its `message.groupBy`, so the dashboard's
 conversation figure and messages-per-conversation average drift permanently
 upward, and the dead rows keep costing PlanetScale row reads.
+
+### The 620 are retained, by decision
+
+**SCRUM-365 decided to keep the backlog rather than delete it:** the 620
+conversations and their 1,258 messages stay, and the decision is revisited only
+if they cause a problem. Recorded here because that is where the deciding
+ticket said to record it, and because the alternative — rediscovering the
+question from the row count — is how it got asked the first time.
+
+What accepting that means, stated so nobody has to re-derive it:
+
+- The admin dashboard's conversation total and its messages-per-conversation
+  average read high, permanently, by 620 rows and 1,258 messages. That
+  distortion is **accepted**, not tracked as a defect.
+- 1,258 messages of attributable personal data remain — `message.userId` is
+  `NOT NULL` and a live foreign key, so each one still identifies its author —
+  with no read path, no correction path and no erasure path. Related:
+  SCRUM-311, which is why a `User` cannot be deleted at all.
+- Nothing produces new ones. `requests.delete` removes the conversation with
+  the request, so `cleanup-orphan-conversations.ts` reporting a number **above**
+  620 would mean that fix had regressed. That is now the script's job: it is a
+  monitoring instrument, not a pending action.
+
+Reversing the decision needs a new one that supersedes SCRUM-365 — not an
+`--apply` run on the strength of this paragraph.
 
 ### How it is maintained
 

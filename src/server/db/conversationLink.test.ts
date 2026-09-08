@@ -130,12 +130,23 @@ describe("findOrCreateConversation — no conversation yet", () => {
 
 /**
  * The other half of the link problem: not a conversation missing
- * from a request, but a conversation whose request is gone.
+ * from a request, but a conversation nothing reaches.
+ *
+ * The predicate tests *both* links, because the relationship is stored twice
+ * and either copy is enough to make a conversation readable. `requests.me` and
+ * the unread count reach one through `Request.conversationId`, so a row whose
+ * own `requestId` is dead can still be rendered. These cases pin that the
+ * second link is honoured, which is what SCRUM-364 closed.
  */
 describe("findOrphanConversationIds", () => {
   const conversation = (id: string, requestId: string) => ({ id, requestId });
+  /** A live request row, optionally pointing back at a conversation. */
+  const live = (id: string, conversationId: string | null = null) => ({
+    id,
+    conversationId,
+  });
 
-  it("selects exactly the conversations whose request is gone", () => {
+  it("selects exactly the conversations no live request reaches", () => {
     const conversations = [
       conversation("c-live", "r-live"),
       conversation("c-dead", "r-dead"),
@@ -143,14 +154,60 @@ describe("findOrphanConversationIds", () => {
     ];
 
     expect(
-      findOrphanConversationIds(conversations, ["r-live", "r-live-2"]),
+      findOrphanConversationIds(conversations, [
+        live("r-live"),
+        live("r-live-2"),
+      ]),
     ).toEqual(["c-dead"]);
   });
 
   it("returns nothing when every conversation has its request", () => {
     expect(
-      findOrphanConversationIds([conversation("c", "r")], ["r", "r-other"]),
+      findOrphanConversationIds(
+        [conversation("c", "r")],
+        [live("r"), live("r-other")],
+      ),
     ).toEqual([]);
+  });
+
+  /**
+   * The cross-linked row: dead by `Conversation.requestId`, alive by
+   * `Request.conversationId`. Nothing writes this state today, but the schema
+   * permits it — the column is not unique and `Conversation.request` is a
+   * `Request[]` — and calling it an orphan would plan the deletion of a thread
+   * `requests.me` still renders. Worse, `Request.conversation` declares
+   * `onDelete: Cascade`, so deleting it would take the live request too.
+   */
+  it("spares a conversation a live request still points at", () => {
+    expect(
+      findOrphanConversationIds(
+        [conversation("c-crosslinked", "r-gone")],
+        [live("r-other", "c-crosslinked")],
+      ),
+    ).toEqual([]);
+  });
+
+  it("still selects a row whose only referrer is itself gone", () => {
+    // The same shape as above with the referring request removed, so the
+    // previous case is passing for the cross-link and not by accident.
+    expect(
+      findOrphanConversationIds(
+        [conversation("c-crosslinked", "r-gone")],
+        [live("r-other", "c-something-else")],
+      ),
+    ).toEqual(["c-crosslinked"]);
+  });
+
+  it("ignores a null conversationId rather than matching on it", () => {
+    // 462 of 477 requests on production-derived staging predate the
+    // Conversation model and hold NULL here. Collecting those nulls into the
+    // claimed set would make every conversation look reachable.
+    expect(
+      findOrphanConversationIds(
+        [conversation("c-dead", "r-dead")],
+        [live("r-live", null), live("r-live-2", null)],
+      ),
+    ).toEqual(["c-dead"]);
   });
 
   it("treats every conversation as an orphan when no requests remain", () => {
@@ -165,15 +222,15 @@ describe("findOrphanConversationIds", () => {
   });
 
   it("returns nothing for an empty table", () => {
-    expect(findOrphanConversationIds([], ["r"])).toEqual([]);
+    expect(findOrphanConversationIds([], [live("r")])).toEqual([]);
   });
 
   it("is not confused by a request id that matches a conversation id", () => {
     // The two id spaces are separate cuids, but the set arithmetic must key
     // on `requestId` rather than on `id` for the right reason, not by luck.
-    expect(findOrphanConversationIds([conversation("x", "y")], ["x"])).toEqual([
-      "x",
-    ]);
+    expect(
+      findOrphanConversationIds([conversation("x", "y")], [live("x")]),
+    ).toEqual(["x"]);
   });
 
   /**
@@ -185,12 +242,12 @@ describe("findOrphanConversationIds", () => {
       conversation("c-live", "r-live"),
       conversation("c-dead", "r-dead"),
     ];
-    const live = ["r-live"];
+    const requests = [live("r-live", "c-live")];
 
-    const orphans = new Set(findOrphanConversationIds(conversations, live));
+    const orphans = new Set(findOrphanConversationIds(conversations, requests));
     const survivors = conversations.filter((row) => !orphans.has(row.id));
 
-    expect(findOrphanConversationIds(survivors, live)).toEqual([]);
+    expect(findOrphanConversationIds(survivors, requests)).toEqual([]);
   });
 });
 

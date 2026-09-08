@@ -33,6 +33,12 @@ All six are dry-run by default, refuse to proceed past a `--max` ceiling
 (default 500), and update or delete one row at a time by primary key so a
 partial run leaves a consistent database. Re-running any of them is a no-op.
 
+`cleanup-orphan-conversations` additionally takes `--limit N` and `--older-than
+YYYY-MM-DD`, which narrow what a run acts on so a population larger than the
+ceiling can be retired in tranches instead of by raising it. It is also the only
+one that logs every row it deletes before deleting it, because it is the only
+one that destroys message content.
+
 | Script                                                                               | What it does                                                                                 |
 | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
 | [`backfill-group-preferences.ts`](./backfill-group-preferences.ts)                   | Moves the legacy `GROUP_DETAILS_V1:` blob out of `group_message` into the three real columns |
@@ -133,18 +139,18 @@ A zero outstanding count therefore means _"nothing left to do"_, **not**
 _"it was run"_ — a script that never had candidates and a script applied
 successfully look identical.
 
-| Script                                | local | staging             | production           | Last verified | By            |
-| ------------------------------------- | ----- | ------------------- | -------------------- | ------------- | ------------- |
-| `backfill-group-preferences`          | —     | **3 outstanding**⁴  | **unknown**⁴         | 2026-09-03    | SCRUM-287     |
-| `backfill-request-status`             | —     | 0 outstanding       | **unknown**          | 2026-08-31    | initial audit |
-| `cleanup-orphan-locations`            | —     | 0 outstanding       | **unknown**          | 2026-08-31    | initial audit |
-| `check-self-requests`                 | —     | 0 findings          | **unknown**          | 2026-08-31    | initial audit |
-| `check-driverless-groups`             | —     | **1 finding**       | **unknown**          | 2026-08-31    | initial audit |
-| `check-profile-coordinates`           | —     | 0 findings¹         | **unknown**          | 2026-08-31    | initial audit |
-| `check-seat-counts`                   | —     | **1 finding**²      | **unknown**          | 2026-09-02    | SCRUM-348     |
-| `repair-seat-residue`                 | —     | **2 outstanding**   | **unknown**          | 2026-09-02    | SCRUM-348     |
-| `cleanup-orphan-conversations`        | —     | **11 outstanding**³ | **620 outstanding**³ | 2026-09-03    | SCRUM-295     |
-| `backfill-profile-picture-timestamps` | —     | **1,298 null**⁵     | **unknown**⁵         | 2026-09-03    | SCRUM-366     |
+| Script                                | local | staging             | production        | Last verified | By            |
+| ------------------------------------- | ----- | ------------------- | ----------------- | ------------- | ------------- |
+| `backfill-group-preferences`          | —     | **3 outstanding**⁴  | **unknown**⁴      | 2026-09-03    | SCRUM-287     |
+| `backfill-request-status`             | —     | 0 outstanding       | **unknown**       | 2026-08-31    | initial audit |
+| `cleanup-orphan-locations`            | —     | 0 outstanding       | **unknown**       | 2026-08-31    | initial audit |
+| `check-self-requests`                 | —     | 0 findings          | **unknown**       | 2026-08-31    | initial audit |
+| `check-driverless-groups`             | —     | **1 finding**       | **unknown**       | 2026-08-31    | initial audit |
+| `check-profile-coordinates`           | —     | 0 findings¹         | **unknown**       | 2026-08-31    | initial audit |
+| `check-seat-counts`                   | —     | **1 finding**²      | **unknown**       | 2026-09-02    | SCRUM-348     |
+| `repair-seat-residue`                 | —     | **2 outstanding**   | **unknown**       | 2026-09-02    | SCRUM-348     |
+| `cleanup-orphan-conversations`        | —     | **11 outstanding**³ | **620 retained**³ | 2026-09-03    | SCRUM-295     |
+| `backfill-profile-picture-timestamps` | —     | **1,298 null**⁵     | **unknown**⁵      | 2026-09-03    | SCRUM-366     |
 
 ¹ 521 rider searches sit at `(0, 0)`, but none belongs to an onboarded user, so
 the script does not count them.
@@ -162,14 +168,26 @@ nothing modified.
 **Both request links were checked on the same date, also read-only:** **0** of
 the 620 were still pointed at by a live request through `Request.conversationId`,
 and all **620** fail that link _and_ `Conversation.requestId`. The distinction
-matters because the outstanding count uses the `Conversation.requestId`
-predicate only, while `requests.me` and the unread badge read a conversation
-through the other column — so the two questions could in principle disagree.
+matters because `requests.me` and the unread badge read a conversation through
+`Request.conversationId` while `getConversationMessages` reads it through
+`Conversation.requestId` — so the two questions could in principle disagree.
 Here they do not, which makes all 620 **confirmed unreachable**. The queries are
 below, under
 [Re-checking without running the scripts](#re-checking-without-running-the-scripts).
-SCRUM-364 tracks aligning the script's plan with its own pre-delete re-check,
-which already tests both links.
+
+**The script's own predicate now tests both links** (SCRUM-364), so the count it
+reports and the set it would act on are the same definition its pre-delete
+re-check applies. The figure above was measured with the older one-link
+predicate, which was an upper bound; for this population the two agree exactly.
+
+**The 620 are retained by decision, not queued for deletion.** SCRUM-365 chose
+to keep them and to revisit only if they cause a problem; the reasoning and what
+accepting it entails are recorded in
+[the db README](../src/server/db/README.md#the-620-are-retained-by-decision).
+The run-state cell says `retained` rather than `outstanding` for that reason —
+this row is no longer a pending action. What it is now is a **regression
+check**: the population cannot grow while `requests.delete` is correct, so a dry
+run reporting more than 620 means SCRUM-295 has regressed.
 
 ⁴ Re-measured read-only on 2026-09-03 for SCRUM-287, which cannot start until
 this row reads zero everywhere. Staging still has **3** un-migrated rows, and
@@ -237,11 +255,25 @@ sampling difference: of the conversations that ever carried a thread, almost all
 of the production population is orphaned. Treat the other two scripts' staging
 figures with the same suspicion.
 
-**620 exceeds the default `--max` of 500, so `--apply` will refuse** with exit
-code 2 until the ceiling is raised explicitly (`--apply --max 700`). The dry run
-reports normally. That is the guard working: 1,258 messages should not be
-deleted by a command indistinguishable from the one that would delete eleven
-rows.
+**620 exceeds the default `--max` of 500, so a bare `--apply` refuses** with
+exit code 2. The dry run reports normally. That is the guard working: 1,258
+messages should not be deleted by a command indistinguishable from the one that
+would delete eleven rows.
+
+**The route through it is `--limit`, not `--max`.** `--apply --limit 400` acts
+on the oldest 400 candidates and reports the rest as deferred, so a population
+larger than the ceiling can be retired in tranches without ever raising it
+(SCRUM-364). `--apply --max 700` would restore precisely the single
+indistinguishable command the ceiling exists to prevent. `--older-than
+YYYY-MM-DD` narrows by creation date instead, as a UTC midnight, comparing
+strictly so two successive tranches cannot overlap on the boundary day.
+
+Note the residual weakness in that design: `--max` bounds what a run _acts on_,
+so a predicate error that flagged the whole table would still be visible in the
+candidate total the report prints, but a small enough `--limit` would delete
+that many rows anyway. The per-candidate log is what would show it — which is
+why `--apply` now prints every conversation and its message count immediately
+before deleting it.
 
 **No `--apply` has been run anywhere**, and the seat figures on the two rows
 above were produced by direct SQL rather than by running their scripts. The conditions are the same, so the numbers should hold,
@@ -339,13 +371,15 @@ unsuffixed variables can be deleted from `emailParams.ts`.
    every user-facing path — verified on **both** request links, see footnote 3
    — so they are pure retention risk: private message content nobody can read
    and nobody can delete. They also inflate `admin.getDashboardStats`'s
-   conversation count and messages-per-conversation average permanently until
-   removed. Deleting them destroys 1,258 real messages, which is why the dry
-   run prints per-candidate counts and why `--apply` refuses until `--max` is
-   raised past 620. **Raising it is not the intended route** — SCRUM-364 adds a
-   subset option so the population can be retired in tranches beneath the
-   existing ceiling, and SCRUM-365 holds the decision about whether to delete
-   at all.
+   conversation count and messages-per-conversation average permanently.
+   **SCRUM-365 decided to retain them** and to revisit only if they cause a
+   problem, so the dashboard distortion is accepted rather than tracked as a
+   defect — see
+   [the db README](../src/server/db/README.md#the-620-are-retained-by-decision).
+   Should that be reversed, SCRUM-364 has since added `--limit` and
+   `--older-than` so the population can be retired in tranches beneath the
+   existing `--max` ceiling; raising `--max` past 620 is still not the intended
+   route. Until then this row is a regression check, not a queue.
 
 ### Re-checking without running the scripts
 
