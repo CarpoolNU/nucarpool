@@ -134,7 +134,15 @@ describe("profileChanges", () => {
       "detects a start-date change from $from to $to",
       ({ a, b }) => {
         // Both are the first of a month, which is the collision itself.
-        expect(a.getDate()).toBe(b.getDate());
+        //
+        // `getUTCDate`, not `getDate`. The dates are built in UTC, and
+        // `test.yml` runs the whole suite a second time under
+        // `NUCARPOOL_TEST_TZ=America/New_York` - where a local accessor reads
+        // 2026-01-01Z as the 31st and 2026-03-01Z as the 28th, and this line
+        // fails while the assertion it introduces still passes. A test about
+        // the difference between a day-of-month and an instant has no business
+        // depending on the reader's zone.
+        expect(a.getUTCDate()).toBe(b.getUTCDate());
         expect(
           profileChanges(form({ coopStartDate: b }), {
             ...user,
