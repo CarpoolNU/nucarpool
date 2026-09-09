@@ -1,8 +1,10 @@
 import { initTRPC } from "@trpc/server";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { appRouter } from "./index";
+import { createContext } from "./context";
 import type { Context } from "./context";
 import { UNEXPECTED_ERROR_MESSAGE, maskUnexpectedError } from "./errorMasking";
+import { newRequestId } from "./requestId";
 
 /**
  * Masking unexpected server errors on the way to the browser (SCRUM-388).
@@ -89,6 +91,44 @@ describe("maskUnexpectedError", () => {
     expect(masked.message).toBe(UNEXPECTED_ERROR_MESSAGE);
   });
 
+  it("appends the reference when the request has one", () => {
+    const masked = maskUnexpectedError(
+      shapeFor(PRISMA_LEAK),
+      "INTERNAL_SERVER_ERROR",
+      "production",
+      "a1b2c3d4",
+    );
+
+    expect(masked.message).toBe(
+      `${UNEXPECTED_ERROR_MESSAGE} Reference: a1b2c3d4`,
+    );
+    expect(masked.message).not.toContain("prisma");
+  });
+
+  it("omits the reference when the request has none", () => {
+    // `createContext` throwing is the real case: tRPC then calls both error
+    // callbacks with `ctx` undefined, so there is no id to quote. Inventing
+    // one would give the user a reference that appears in no log line.
+    const masked = maskUnexpectedError(
+      shapeFor(PRISMA_LEAK),
+      "INTERNAL_SERVER_ERROR",
+      "production",
+      undefined,
+    );
+
+    expect(masked.message).toBe(UNEXPECTED_ERROR_MESSAGE);
+    expect(masked.message).not.toContain("Reference");
+  });
+
+  it("does not attach a reference to a deliberate refusal", () => {
+    // A refusal is not a fault, so there is nothing to look up.
+    const refusal = shapeFor("You are already in a carpool group.");
+
+    expect(
+      maskUnexpectedError(refusal, "CONFLICT", "production", "a1b2c3d4"),
+    ).toBe(refusal);
+  });
+
   it("returns the very same object when not masking", () => {
     // Not just an equal one: the default formatter is identity, and staying
     // identity for every other code keeps this change provably narrow.
@@ -110,6 +150,42 @@ describe("maskUnexpectedError", () => {
  * So this goes through `fetchRequestHandler` and reads the response body, which
  * is the same path `src/pages/api/trpc/[trpc].ts` serves.
  */
+describe("newRequestId", () => {
+  it("is eight hex characters, short enough to read aloud", () => {
+    expect(newRequestId()).toMatch(/^[0-9a-f]{8}$/);
+  });
+
+  it("differs between requests", () => {
+    const ids = new Set(Array.from({ length: 500 }, newRequestId));
+
+    // Collisions are possible at 4 bytes and acceptable - see requestId.ts -
+    // but a generator returning a constant would fail this outright.
+    expect(ids.size).toBeGreaterThan(490);
+  });
+
+  it("carries nothing from the request", () => {
+    // Not a user id, a session id or a timestamp. The masking this supports
+    // exists so the client learns nothing about the fault, and the reference
+    // must not undo that.
+    const id = newRequestId();
+
+    expect(id).not.toMatch(/\d{10,}/);
+    expect(Number.isNaN(Number(id)) || id.length === 8).toBe(true);
+  });
+});
+
+describe("createContext supplies the reference", () => {
+  // The link the wire tests below cannot cover, because they inject their own
+  // context: that the real one actually carries an id for every request.
+  it("puts a fresh id on every context", async () => {
+    const first = await createContext();
+    const second = await createContext();
+
+    expect(first.requestId).toMatch(/^[0-9a-f]{8}$/);
+    expect(second.requestId).not.toBe(first.requestId);
+  });
+});
+
 describe("the error formatter is wired into appRouter", () => {
   const respond = async (context: Partial<Context>) => {
     const response = await fetchRequestHandler({
@@ -151,6 +227,59 @@ describe("the error formatter is wired into appRouter", () => {
     expect(body.error.json.data.stack).toBeUndefined();
     // And the code the retry policy reads is still the real one.
     expect(body.error.json.data.code).toBe("INTERNAL_SERVER_ERROR");
+  });
+
+  it("gives the client the same reference the log records", async () => {
+    // The whole point of SCRUM-400. Neither half is useful alone: a reference
+    // the user can quote that appears in no log line, or a log line with an id
+    // the user was never told. This asserts they are the identical value, and
+    // that it came from the context rather than being generated twice.
+    const logged: unknown[] = [];
+    const requestId = newRequestId();
+
+    const response = await fetchRequestHandler({
+      endpoint: "/api/trpc",
+      req: new Request("http://localhost/api/trpc/user.me?input=%7B%7D"),
+      router: appRouter,
+      createContext: () =>
+        ({
+          requestId,
+          session: sessionFor("alice"),
+          prisma: {
+            user: { findUnique: () => Promise.reject(new Error(PRISMA_LEAK)) },
+          },
+        }) as unknown as Context,
+      // The same shape `[trpc].ts` uses to read it.
+      onError: ({ ctx }) => logged.push(ctx?.requestId),
+    });
+    const body = await response.json();
+
+    expect(logged).toEqual([requestId]);
+    expect(body.error.json.message).toBe(
+      `${UNEXPECTED_ERROR_MESSAGE} Reference: ${requestId}`,
+    );
+    // Still nothing of the fault itself, which is what the reference replaces.
+    expect(JSON.stringify(body)).not.toContain("prisma.user.update");
+  });
+
+  it("omits the reference when context creation itself failed", async () => {
+    // tRPC calls both callbacks with `ctx` undefined here, so there is no id
+    // on either side. Verified against tRPC 11.18.0 rather than assumed.
+    const seen: unknown[] = [];
+
+    const response = await fetchRequestHandler({
+      endpoint: "/api/trpc",
+      req: new Request("http://localhost/api/trpc/user.me?input=%7B%7D"),
+      router: appRouter,
+      createContext: () => {
+        throw new Error("context exploded");
+      },
+      onError: ({ ctx }) => seen.push(ctx?.requestId ?? "none"),
+    });
+    const body = await response.json();
+
+    expect(seen).toEqual(["none"]);
+    expect(body.error.json.message).not.toContain("Reference");
   });
 
   it("keeps the message and the stack in development", async () => {

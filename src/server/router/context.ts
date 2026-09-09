@@ -5,6 +5,7 @@ import { getServerSession } from "next-auth";
 import { authOptions as nextAuthOptions } from "../../pages/api/auth/[...nextauth]";
 import { prisma } from "../db/client";
 import { sesClient } from "../ses";
+import { newRequestId } from "./requestId";
 
 export const createContext = async (
   opts?: trpcNext.CreateNextContextOptions,
@@ -21,6 +22,13 @@ export const createContext = async (
     session,
     prisma,
     sesClient,
+    /**
+     * Random reference for this request, used only if it fails. Generated here
+     * rather than in either error callback so that `onError` and
+     * `errorFormatter` report the same value without depending on the order
+     * tRPC invokes them (SCRUM-400).
+     */
+    requestId: newRequestId(),
   };
 };
 
