@@ -97,32 +97,35 @@ export type ViewRoutePlan = {
   addsDestinationMarker: boolean;
 
   /**
-   * The id of a previously added destination pin that should be removed first,
-   * or `null`.
+   * **Removed in SCRUM-391**, along with the `markedDestinationUserId` input it
+   * was computed from: `removesDestinationMarkerFor`, naming the one previously
+   * added pin to take off first.
    *
-   * A pin added by `updateCompanyLocation` is a named source and layer
-   * (`other-user-<id>-company-source`), and `clearMarkers` in `viewRoute.ts`
-   * does not remove those - it clears the popup/marker list and any
-   * `*-text-layer`. So whoever adds a pin has to remember it in order to take
-   * it away, which is the entire reason the page carried `tempOtherUser`.
+   * That field existed because pin removal was keyed by identity - a pin is a
+   * named layer, so you could only remove one you had remembered adding - and
+   * this doc argued against the alternative: "Only ever names the one
+   * remembered pin, never a sweep of every `other-user-*` layer.
+   * `onViewGroupRoute` puts a pin on every group member, and a sweep here would
+   * erase them."
    *
-   * The rule is: drop the remembered pin unless we are about to draw a pin for
-   * that same user again. That covers both cases the old `shouldRemoveMarker`
-   * spelled out - a different user was clicked, or the remembered user has
-   * since appeared in `geoJsonUsers` and no longer needs a pin of their own.
+   * That was right about the danger and wrong about the remedy. The pins it was
+   * protecting were the ones nothing *ever* removed, which is SCRUM-391 - they
+   * outlived the route they belonged to, the tab they were drawn on, and the
+   * session. `clearOtherUserMarkers` now sweeps them at the *start* of both
+   * handlers, before either draws its own, so the group preview re-adds every
+   * member immediately after and no pin it owns is ever the one erased.
    *
-   * Only ever names the one remembered pin, never a sweep of every
-   * `other-user-*` layer. `onViewGroupRoute` puts a pin on every group member,
-   * and a sweep here would erase them.
+   * With the sweep there is no remembered pin left to name, so the field, the
+   * page`s `destinationMarker` ref and `removeDestinationMarker` all went with
+   * it. Recorded here rather than deleted silently because the argument above
+   * is the one a future reader is most likely to re-derive.
    */
-  removesDestinationMarkerFor: string | null;
 };
 
 export const planViewRoute = ({
   clickedUserId,
   selectedUserId,
   isClickedUserOnMap,
-  markedDestinationUserId,
 }: {
   clickedUserId: string;
   /**
@@ -136,24 +139,13 @@ export const planViewRoute = ({
   selectedUserId: string | null;
   /** Whether `geoJsonUsers.features` currently carries the clicked user. */
   isClickedUserOnMap: boolean;
-  /** The user whose destination pin the page last added, if any. */
-  markedDestinationUserId: string | null;
 }): ViewRoutePlan => {
   const isInRequestContext =
     Boolean(selectedUserId) && selectedUserId === clickedUserId;
 
-  const addsDestinationMarker = isInRequestContext || !isClickedUserOnMap;
-
-  const keepsMarkedDestination =
-    addsDestinationMarker && markedDestinationUserId === clickedUserId;
-
   return {
     isInRequestContext,
     selectsClickedUser: !isInRequestContext,
-    addsDestinationMarker,
-    removesDestinationMarkerFor:
-      markedDestinationUserId !== null && !keepsMarkedDestination
-        ? markedDestinationUserId
-        : null,
+    addsDestinationMarker: isInRequestContext || !isClickedUserOnMap,
   };
 };

@@ -8,7 +8,6 @@ const plan = (overrides: Partial<Parameters<typeof planViewRoute>[0]> = {}) =>
     clickedUserId: CLICKED,
     selectedUserId: null,
     isClickedUserOnMap: false,
-    markedDestinationUserId: null,
     ...overrides,
   });
 
@@ -167,57 +166,15 @@ describe("planViewRoute", () => {
     });
   });
 
-  describe("removing the pin left over from a previous click", () => {
-    it("removes nothing when no pin is remembered", () => {
-      expect(plan().removesDestinationMarkerFor).toBeNull();
-    });
-
-    it("removes another user's pin", () => {
-      expect(
-        plan({ markedDestinationUserId: OTHER }).removesDestinationMarkerFor,
-      ).toBe(OTHER);
-    });
-
-    it("keeps the pin when the same user is clicked again", () => {
-      expect(
-        plan({ markedDestinationUserId: CLICKED, isClickedUserOnMap: false })
-          .removesDestinationMarkerFor,
-      ).toBeNull();
-    });
-
-    it("removes the remembered user's own pin once the map starts plotting them", () => {
-      // What `isPrevOtherUserInGeoList` was reaching for: the pin is now a
-      // duplicate of their cluster point, so it goes.
-      expect(
-        plan({ markedDestinationUserId: CLICKED, isClickedUserOnMap: true })
-          .removesDestinationMarkerFor,
-      ).toBe(CLICKED);
-    });
-
-    it("keeps a request-context pin on a re-click even when they are on the map", () => {
-      expect(
-        plan({
-          markedDestinationUserId: CLICKED,
-          isClickedUserOnMap: true,
-          selectedUserId: CLICKED,
-        }).removesDestinationMarkerFor,
-      ).toBeNull();
-    });
-
-    it("never names the clicked user's pin for removal while also adding it", () => {
-      for (const isClickedUserOnMap of [true, false]) {
-        for (const selectedUserId of [null, "", OTHER, CLICKED]) {
-          const result = plan({
-            isClickedUserOnMap,
-            selectedUserId,
-            markedDestinationUserId: CLICKED,
-          });
-
-          if (result.addsDestinationMarker) {
-            expect(result.removesDestinationMarkerFor).not.toBe(CLICKED);
-          }
-        }
-      }
-    });
-  });
+  /**
+   * The `removesDestinationMarkerFor` block was here until SCRUM-391 removed
+   * the field, along with the remembered-pin bookkeeping it drove.
+   *
+   * Nothing replaces it *in this file*, because the plan no longer decides
+   * removal - `clearOtherUserMarkers` sweeps every `other-user-*` layer at the
+   * top of the handler, so there is no pin to name. What those tests were
+   * protecting has moved: that the sweep takes the right layers and spares the
+   * rest is `clearOtherUserMarkers.test.ts`, and that the pin this click adds
+   * survives the sweep that precedes it is `viewRouteClick.test.ts`.
+   */
 });
