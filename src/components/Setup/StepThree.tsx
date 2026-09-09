@@ -10,6 +10,7 @@ import { ErrorDisplay, Note } from "../../styles/profile";
 import { EntryLabel } from "../EntryLabel";
 import { DatePicker } from "antd";
 import dayjs, { Dayjs } from "dayjs";
+import { handleMonthPickerChange } from "../../utils/dateUtils";
 import useIsMobile from "../../utils/useIsMobile";
 import SelectDays from "../Schedule/SelectDays";
 import SelectTimeRange from "../Schedule/SelectTimeRange";
@@ -101,9 +102,7 @@ const StepThree = ({
             <DatePicker<Dayjs>
               id="coopStartDate"
               picker="month"
-              onChange={(date: Dayjs | null, dateString) =>
-                setValue("coopStartDate", date ? date.toDate() : null)
-              }
+              onChange={handleMonthPickerChange("coopStartDate", setValue)}
               format="YYYY-MM"
               inputReadOnly={true}
               className={`${isMobile ? "h-10 text-base" : "h-12 text-lg"} w-full rounded-md border border-gray-200 p-2`}
@@ -120,9 +119,7 @@ const StepThree = ({
             <DatePicker<Dayjs>
               id="coopEndDate"
               picker="month"
-              onChange={(date: Dayjs | null, dateString) =>
-                setValue("coopEndDate", date ? date.toDate() : null)
-              }
+              onChange={handleMonthPickerChange("coopEndDate", setValue)}
               format="YYYY-MM"
               inputReadOnly={true}
               className={`${isMobile ? "h-10 text-base" : "h-12 text-lg"} w-full rounded-md border border-gray-200 p-2`}
