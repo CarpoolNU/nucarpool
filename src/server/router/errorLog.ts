@@ -33,12 +33,18 @@
  * fault and never its contents, exactly as before — this is a formatting
  * change, and the tests assert the field set is unchanged.
  *
- * It is also not the error reporter. That decision is a product and
- * data-handling one and is still open (SCRUM-400 AC 5/6). This is the shape
- * whichever reporter is chosen would consume, and it is worth having either
- * way: if a reporter is adopted these are the fields it receives, and if none
- * is, the existing sink becomes queryable instead of staying six lines of
- * `util.inspect`.
+ * **`console` is the decided sink, not a placeholder.** SCRUM-400 offered a
+ * third-party error reporter and closed on its own AC 6 — the correlation id
+ * and this line — without adopting one. Two reasons, both recorded on that
+ * ticket: a reporter is another third-party processor of data from an
+ * application holding real student addresses, and SCRUM-402 established that
+ * nobody has yet confirmed where the deployed server's output is read, which
+ * would be the wrong problem to solve by adding a vendor.
+ *
+ * So do not read `console.error` here as an unfinished thought. What is
+ * genuinely still missing is **aggregation** — a fault affecting many users
+ * looks identical to one affecting a single user — and that is SCRUM-403,
+ * which wants SCRUM-402 answered first.
  */
 
 /**

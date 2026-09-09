@@ -13,10 +13,9 @@ export default trpcNext.createNextApiHandler({
       // filename here is also a URL, so a rule kept in this file is a rule
       // nothing checks. This is the HTTP edge; that is the decision.
       //
-      // Still `console`, deliberately. Routing it to a real error *reporter*
-      // is the open half of SCRUM-400 (AC 5/6) and is a product and
-      // data-handling decision, not a technical one. `formatServerError`'s
-      // one-line JSON is the shape whichever reporter is chosen would consume.
+      // `console` is the decided sink — SCRUM-400 closed on its AC 6 without
+      // adopting a third-party reporter, deliberately. The reasoning lives
+      // with the log format in `errorLog.ts`.
       logServerError({ error, path, type, ctx });
     }
   },
