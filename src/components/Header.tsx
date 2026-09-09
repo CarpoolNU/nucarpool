@@ -4,7 +4,6 @@ import React, {
   useContext,
   useState,
   useEffect,
-  useRef,
 } from "react";
 import styled from "styled-components";
 import DropDownMenu from "./DropDownMenu";
@@ -14,11 +13,8 @@ import { trpc } from "../utils/trpc";
 import { UserContext } from "../utils/userContext";
 import { useRouter } from "next/router";
 import Spinner from "./Spinner";
-import { notificationChannel } from "../utils/pusherChannels";
-import {
-  acquirePusherClient,
-  releasePusherClient,
-} from "../utils/pusherClient";
+import { unreadBadge } from "../utils/messages/unreadBadge";
+import { useUnreadNotifications } from "../utils/messages/useUnreadNotifications";
 import { PublicUser } from "../utils/types";
 import useIsMobile from "../utils/useIsMobile";
 import { planMobileNav, type NavTab } from "../utils/nav/mobileNavPlan";
@@ -162,9 +158,19 @@ const Header = (props: HeaderProps) => {
   const user = useContext(UserContext);
   const router = useRouter();
 
-  const [currentunreadMessagesCount, setCurrentunreadMessagesCount] =
-    useState(0);
   const [displayGroup, setDisplayGroup] = useState<boolean>(false);
+
+  /**
+   * The badge, from the server count alone.
+   *
+   * There used to be a second local count beside it, incremented on each Pusher
+   * notification, which the badge *preferred* — so five unread messages plus
+   * one notification displayed `1`, and reading a thread from the map panel
+   * could not clear it because only a Requests-tab click reset the local
+   * counter (SCRUM-383). `useUnreadNotifications` invalidates the query
+   * instead, so there is one number and it is the true one.
+   */
+  const badge = unreadBadge(unreadMessagesCount);
 
   // One shared definition, rather than a private `<= 768` check plus an optional
   // prop that let a caller disagree with it. `index.tsx` passed `isMobile={true}`
@@ -174,52 +180,13 @@ const Header = (props: HeaderProps) => {
   // navigation and no usable header.
   const isMobile = useIsMobile();
 
-  // `props.data` is an object literal rebuilt by `Home` on every render — every
-  // filter change, query settle, map event and hover — so depending on it made
-  // the subscription effect below tear down and re-run continuously, opening a
-  // fresh WebSocket each time. Holding the setter in a ref lets that
-  // effect depend on the user id alone.
-  const setSidebarRef = useRef(props.data?.setSidebar);
-  useEffect(() => {
-    setSidebarRef.current = props.data?.setSidebar;
-  }, [props.data?.setSidebar]);
-
-  useEffect(() => {
-    const userId = user?.id;
-    if (!userId) return;
-
-    // Shared client, created on first acquire and disconnected when the last
-    // holder releases it. Private channel: Pusher will not join it
-    // until /api/pusher/auth signs the subscription for this session.
-    const pusher = acquirePusherClient();
-
-    const channelName = notificationChannel(userId);
-    const messageChannel = pusher.subscribe(channelName);
-
-    // Authorization is a new failure mode; without this it would fail silently
-    // and look like the unread badge had simply stopped working.
-    messageChannel.bind("pusher:subscription_error", (status: unknown) => {
-      console.error(`Could not subscribe to ${channelName}`, status);
-    });
-
-    messageChannel.bind("sendNotification", () => {
-      // The setter is used to *read* the current sidebar without changing it —
-      // the updater returns `prev` untouched.
-      setSidebarRef.current?.((prev) => {
-        if (prev !== "requests") {
-          setCurrentunreadMessagesCount((count) => count + 1);
-        }
-        return prev;
-      });
-    });
-
-    return () => {
-      messageChannel.unbind("sendNotification");
-      messageChannel.unbind("pusher:subscription_error");
-      pusher.unsubscribe(channelName);
-      releasePusherClient();
-    };
-  }, [user?.id]);
+  // The Pusher subscription that keeps the count above honest. It lived here
+  // as an inline effect, along with a `setSidebarRef` whose only remaining
+  // purpose was to let its notification handler read the sidebar out of a state
+  // setter; the handler no longer reads the sidebar at all, so both are gone.
+  // The reason that ref existed is preserved in the hook, which still depends
+  // on the user id alone.
+  useUnreadNotifications(user?.id);
 
   const renderClassName = (sidebarValue: string, sidebarText: string) => {
     if (sidebarValue == "explore" && sidebarText == "explore") {
@@ -307,9 +274,10 @@ const Header = (props: HeaderProps) => {
             props.data.setSidebar(plan.tab);
           }
         });
-        if (plan.tab === "requests") {
-          setCurrentunreadMessagesCount(0);
-        }
+        // Opening the Requests tab used to zero the local counter, which was
+        // the only way to stop it overriding the server count. Nothing to zero
+        // now: the badge already shows what the server says, and a thread the
+        // user actually reads is marked read by `MessageContent`.
         return;
 
       case "openProfile":
@@ -387,12 +355,15 @@ const Header = (props: HeaderProps) => {
      * not the old branch** - leaving the profile page without consulting
      * `checkChanges` is exactly the defect SCRUM-384 fixed. Route it through
      * `planMobileNav`'s equivalent rather than restoring a hard navigation.
+     *
+     * It is now a plain forward to `setSidebar` — SCRUM-383 removed the
+     * `setCurrentunreadMessagesCount(0)` that fired on the Requests tab, since
+     * there is no longer a local counter for a tab click to reset. Kept as a
+     * named function rather than inlined because it is the one place a future
+     * guard would be added, which is what the warning above is about.
      */
     const handleSidebarChange = (option: HeaderOptions) => {
       setSidebar(option);
-      if (option === "requests") {
-        setCurrentunreadMessagesCount(0);
-      }
     };
 
     return (
@@ -414,12 +385,10 @@ const Header = (props: HeaderProps) => {
           className={`${renderClassName(sidebarValue, "requests")} relative`}
         >
           Requests
-          {(unreadMessagesCount !== 0 || currentunreadMessagesCount !== 0) && (
+          {badge.show && (
             <span className="absolute top-0 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-white">
               <span className="text-northeastern-red text-xs font-bold">
-                {currentunreadMessagesCount !== 0
-                  ? currentunreadMessagesCount
-                  : unreadMessagesCount}
+                {badge.count}
               </span>
             </span>
           )}
@@ -464,7 +433,7 @@ const Header = (props: HeaderProps) => {
         id: "requests",
         icon: <HiOutlineChatAlt2 />,
         label: "Requests",
-        badge: unreadMessagesCount !== 0 || currentunreadMessagesCount !== 0,
+        badge: badge.show,
         testId: "requests-sidebar",
       },
       {
@@ -520,9 +489,7 @@ const Header = (props: HeaderProps) => {
                     fontSize: "12px",
                   }}
                 >
-                  {currentunreadMessagesCount !== 0
-                    ? currentunreadMessagesCount
-                    : unreadMessagesCount}
+                  {badge.count}
                 </span>
               )}
               <span style={{ fontSize: "12px", fontWeight: "500" }}>
