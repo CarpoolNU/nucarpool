@@ -174,9 +174,6 @@ const Header = (props: HeaderProps) => {
   // navigation and no usable header.
   const isMobile = useIsMobile();
 
-  // Track if user is coming from profile page
-  const isComingFromProfile = useRef(false);
-
   // `props.data` is an object literal rebuilt by `Home` on every render — every
   // filter change, query settle, map event and hover — so depending on it made
   // the subscription effect below tear down and re-run continuously, opening a
@@ -256,9 +253,6 @@ const Header = (props: HeaderProps) => {
   };
 
   const handleMapClick = async () => {
-    // Note if we're on profile
-    isComingFromProfile.current = props.profile === true;
-
     if (props.checkChanges) {
       await props.checkChanges(async () => {
         setIsLoading(true);
@@ -319,9 +313,6 @@ const Header = (props: HeaderProps) => {
         return;
 
       case "openProfile":
-        // Note we're going to profile
-        isComingFromProfile.current = false;
-
         setIsLoading(true);
         router.push("/profile").finally(() => {
           setIsLoading(false);
@@ -378,19 +369,29 @@ const Header = (props: HeaderProps) => {
       );
     }
 
+    /**
+     * The desktop tab buttons. A sidebar swap, nothing more.
+     *
+     * This used to begin by asking whether it was leaving the profile page and,
+     * if so, do a full page load - **a branch that could not execute**
+     * (SCRUM-401). `handleSidebarChange` only exists inside
+     * `renderSidebarOptions`, which renders only when `props.data` is supplied,
+     * and the sole caller that supplies it is `pages/index.tsx` at route `/`.
+     * So `props.profile` was always undefined and `router.pathname` always `/`.
+     *
+     * It read like a third way off the profile page, and SCRUM-384 had to
+     * enumerate every `<Header>` usage to prove it was not one. Its comment
+     * also said "don't force reload" directly above a full page load.
+     *
+     * **If a page ever passes both `data` and `profile`, this needs the guard,
+     * not the old branch** - leaving the profile page without consulting
+     * `checkChanges` is exactly the defect SCRUM-384 fixed. Route it through
+     * `planMobileNav`'s equivalent rather than restoring a hard navigation.
+     */
     const handleSidebarChange = (option: HeaderOptions) => {
-      // Check if we're coming from profile page
-      const comingFromProfile =
-        props.profile === true || router.pathname.includes("/profile");
-
-      if (comingFromProfile) {
-        // Simplify navigation from profile page - don't force reload
-        window.location.href = `/?tab=${option}`;
-      } else {
-        setSidebar(option);
-        if (option === "requests") {
-          setCurrentunreadMessagesCount(0);
-        }
+      setSidebar(option);
+      if (option === "requests") {
+        setCurrentunreadMessagesCount(0);
       }
     };
 
