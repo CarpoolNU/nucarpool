@@ -1,8 +1,7 @@
-import { CarpoolGroup, PrismaClient, Role, User } from "@prisma/client";
+import { PrismaClient, Role } from "@prisma/client";
 import { range } from "lodash";
 import Random from "random-seed";
 import { generateUser } from "../src/utils/recommendation";
-import { timeEnd } from "console";
 import {
   assertSeedTargetIsLocal,
   SEED_OVERRIDE_ENV,
@@ -483,25 +482,6 @@ const genRandomUsers = async (
   }
 
   return users;
-};
-
-/**
- * Updates the favorites of the user associated with the given ID.
- *
- * @param userId id for the user we're updating.
- * @param ids the ids to add to the current user
- */
-const addFavorites = async (userId: string, ids: string[]) => {
-  await prisma.user.update({
-    where: {
-      id: userId,
-    },
-    data: {
-      favorites: {
-        connect: ids.map((id) => ({ id })),
-      },
-    },
-  });
 };
 
 /**

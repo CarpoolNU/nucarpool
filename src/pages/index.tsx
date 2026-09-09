@@ -18,19 +18,8 @@ import _, { debounce } from "lodash";
 import { SidebarPage } from "../components/Sidebar/Sidebar";
 import { QueryError } from "../components/QueryError";
 import { toQueryState } from "../utils/queryState";
-import type {
-  PublicUser,
-  EnhancedPublicUser,
-  Request,
-  User,
-} from "../utils/types";
-import {
-  CarpoolAddress,
-  CarpoolFeature,
-  FiltersState,
-  GeoJsonUsers,
-} from "../utils/types";
-import { Role } from "@prisma/client";
+import type { PublicUser, EnhancedPublicUser, User } from "../utils/types";
+import { CarpoolAddress, CarpoolFeature, FiltersState } from "../utils/types";
 import {
   useGetDirections,
   viewRoute,

@@ -1,5 +1,3 @@
-import mapboxgl from "mapbox-gl";
-
 /**
  * Takes every *other* user's pin off the map — icon, label, source and image.
  *

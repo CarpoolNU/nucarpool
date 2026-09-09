@@ -1,4 +1,4 @@
-import { bool, envsafe, makeValidator, str } from "envsafe";
+import { envsafe, makeValidator, str } from "envsafe";
 
 /**
  * Which deployment this build is. The values are an allow-list rather than a

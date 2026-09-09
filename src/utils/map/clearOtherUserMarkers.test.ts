@@ -8,7 +8,6 @@
  * source the app creates that is *not* another user's pin.
  */
 
-import type mapboxgl from "mapbox-gl";
 import clearOtherUserMarkers from "./clearOtherUserMarkers";
 
 const A = "clyt9e0x40000ld19lfjt6tqy";

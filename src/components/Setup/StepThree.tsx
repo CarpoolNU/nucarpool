@@ -3,13 +3,12 @@ import {
   UseFormWatch,
   FieldErrors,
   Control,
-  Controller,
   UseFormSetValue,
 } from "react-hook-form";
 import { ErrorDisplay, Note } from "../../styles/profile";
 import { EntryLabel } from "../EntryLabel";
 import { DatePicker } from "antd";
-import dayjs, { Dayjs } from "dayjs";
+import { Dayjs } from "dayjs";
 import { handleMonthPickerChange } from "../../utils/dateUtils";
 import useIsMobile from "../../utils/useIsMobile";
 import SelectDays from "../Schedule/SelectDays";

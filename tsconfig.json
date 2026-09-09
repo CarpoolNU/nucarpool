@@ -41,7 +41,36 @@
      * produced.
      */
     "types": ["jest", "node"],
-    "rootDir": "."
+    "rootDir": ".",
+
+    /*
+     * An unused import used to pass every check this project runs, and that is
+     * not merely untidy — a dead import is a false statement about what a file
+     * depends on. `AccountSection.tsx` imported `handleMonthChange` and stopped
+     * calling it in February 2025, which made the file read as though the
+     * profile had adopted the UTC date fix. It had not. SCRUM-381 was written
+     * on that assumption and got its analysis wrong; SCRUM-393, the live data
+     * bug behind it, stayed invisible for eighteen months. SCRUM-394.
+     *
+     * `noUnusedLocals` here rather than `@typescript-eslint/no-unused-vars`,
+     * reversing what SCRUM-394 first proposed, for two reasons:
+     *
+     *   - **Coverage.** `yarn lint` globs `src/**` only, so ESLint never sees
+     *     `prisma/` or `scripts/`. Four of the 59 findings cleared alongside
+     *     this were in `prisma/seed.ts`, including an unused *function*. This
+     *     `include` covers every compiled file.
+     *   - **No new plugin.** The rule needs `@typescript-eslint` registered in
+     *     `.eslintrc.json`; this needs nothing, and `yarn tsc` is already a CI
+     *     job.
+     *
+     * `noUnusedParameters` is deliberately **off**. It is a different question:
+     * an unused parameter is usually a signature the caller dictates - a React
+     * prop, an event handler's second argument, `clearMarkers(_map)` in
+     * `viewRoute.ts` - and forcing every one of those to be renamed or deleted
+     * would trade a real check for a stream of noise. `noUnusedLocals` does not
+     * look at parameters at all, which is why no `^_` escape hatch is needed.
+     */
+    "noUnusedLocals": true
   },
   "include": [
     "next-env.d.ts",

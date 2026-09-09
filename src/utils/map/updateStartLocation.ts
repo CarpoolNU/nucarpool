@@ -1,5 +1,3 @@
-import mapboxgl from "mapbox-gl";
-import { GeoJSON } from "geojson";
 import { Role } from "@prisma/client";
 import { PublicUser } from "../types";
 import DriverStart from "../../../public/driver-start.png";

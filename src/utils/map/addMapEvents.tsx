@@ -1,4 +1,4 @@
-import mapboxgl, {
+import {
   GeoJSONSource,
   Map,
   MapLayerMouseEvent,

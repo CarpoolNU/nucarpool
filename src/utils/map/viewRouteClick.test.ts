@@ -1,4 +1,3 @@
-import type mapboxgl from "mapbox-gl";
 import { Permission, Role, Status } from "@prisma/client";
 import type { FeatureCollection } from "geojson";
 import type { CarpoolAddress, GeoJsonUsers, PublicUser, User } from "../types";

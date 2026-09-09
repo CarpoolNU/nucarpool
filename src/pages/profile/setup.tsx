@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { GetServerSidePropsContext, NextPage } from "next";
@@ -8,7 +8,7 @@ import { useSession } from "next-auth/react";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../api/auth/[...nextauth]";
 import { trpc } from "../../utils/trpc";
-import { CarpoolAddress, OnboardingFormInputs } from "../../utils/types";
+import { OnboardingFormInputs } from "../../utils/types";
 import {
   onboardSchema,
   profileDefaultValues,
@@ -23,11 +23,7 @@ import StepThree from "../../components/Setup/StepThree";
 import { SetupContainer } from "../../components/Setup/SetupContainer";
 import StepFour from "../../components/Setup/StepFour";
 import { Role } from "@prisma/client";
-import {
-  trackFTUECompletion,
-  trackFTUEStep,
-  trackProfileCompletion,
-} from "../../utils/mixpanel";
+import { trackFTUECompletion, trackFTUEStep } from "../../utils/mixpanel";
 import { useUploadFile } from "../../utils/profile/useUploadFile";
 import { useAddressSelection } from "../../utils/useAddressSelection";
 import {

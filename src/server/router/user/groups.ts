@@ -2,13 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { router, protectedRouter } from "../createRouter";
 import _ from "lodash";
-import {
-  Role,
-  CarpoolGroup,
-  RequestStatus,
-  Status,
-  User,
-} from "@prisma/client";
+import { Role, RequestStatus, Status } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import { convertCarpoolSearchToPublicWithExactHome } from "../../publicUser";
 import {

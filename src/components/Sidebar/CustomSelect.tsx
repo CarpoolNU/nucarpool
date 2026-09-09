@@ -1,7 +1,6 @@
 import { Listbox, Transition } from "@headlessui/react";
 import { FaChevronDown } from "react-icons/fa";
 import React, { Fragment } from "react";
-import { FaCheck } from "react-icons/fa6";
 
 interface Option<T> {
   value: T;

@@ -1,10 +1,9 @@
-import mapboxgl, { MapLayerMouseEvent } from "mapbox-gl";
+import { MapLayerMouseEvent } from "mapbox-gl";
 import BlueEnd from "../../../public/user-dest.png";
 import BlueDriverEnd from "../../../public/user-dest-driver.png";
 import RedDriverEnd from "../../../public/driver-dest.png";
 import OrangeRiderEnd from "../../../public/rider-dest.png";
 import { Role } from "@prisma/client";
-import { GeoJSON } from "geojson";
 import { PublicUser } from "../types";
 import { getPointClickHandler } from "./handlers";
 
