@@ -347,7 +347,13 @@ const Home: NextPage<any> = () => {
    */
   const onViewGroupRoute = useCallback(
     (driver: PublicUser, riders: PublicUser[]) => {
-      if (!user) return;
+      // Narrows `user` for the call below; `runViewGroupRoute` makes the same
+      // check against the map. Logged rather than returned silently, which is
+      // what the handler did before it was extracted.
+      if (!user) {
+        console.error("Map or user not available for group route viewing");
+        return;
+      }
 
       runViewGroupRoute({
         user,
