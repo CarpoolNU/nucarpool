@@ -45,14 +45,25 @@
 # envsafe contract, so its strict `grep` is the *only* thing that would notice
 # the variable disappearing from the console. Leave it strict.
 #
-# Do not make a line tolerant to get a red build green. Check first whether the
-# variable is optional in `src/utils/env/{browser,server}.ts`; if it is not, the
-# missing value is the bug.
+# **All of that is now checked, not just documented** (SCRUM-398).
+# `check-env-contract.js --amplify` classifies each variable by whether its
+# envsafe validator carries a `default:`, and then requires each command's
+# strictness to match what it covers:
+#
+#   - covers a required variable  -> must be strict
+#   - covers only optional ones   -> must be tolerant
+#   - covers nothing in the contract -> unconstrained (`NEXTAUTH_URL`)
+#
+# So do not make a line tolerant to get a red build green: if the pattern
+# covers a required variable the check will reject it, and the missing value is
+# the bug. Adding a variable with a code default no longer installs a tripwire
+# either - the check will tell you the command needs `|| true`.
 # ---------------------------------------------------------------------------
 #
 # **`node scripts/check-env-contract.js --amplify` checks these patterns
 # against the app's real environment contract** and the `env-contract` CI job
-# runs it, so a newly required variable can no longer be missing here. Before
+# runs it, so a newly required variable can no longer be missing here, and
+# since SCRUM-398 a command's strictness has to match what it covers. Before
 # that existed, `S3_BUCKET_NAME` was: treated as required by that check, absent
 # from every pattern, and carrying a code default, so the build resolved the
 # console value into the CSP and `images.remotePatterns` while the runtime
