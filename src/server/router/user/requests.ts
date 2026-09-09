@@ -594,7 +594,26 @@ export const requestsRouter = router({
       // the query - which is why the read sits inside this branch. That path is
       // the common one, it is what SCRUM-295 is about, and nothing of value is
       // lost when a request nobody accepted goes away.
-      if (invitation.status === RequestStatus.ACCEPTED) {
+      //
+      // **A self-request is exempt, because the comparison degenerates for
+      // one.** With `fromUserId === toUserId` the guard below compares a user's
+      // group against their own, so it matches whenever they are in any group
+      // at all, and the CONFLICT tells them to leave a carpool they really are
+      // in before they can clear a request that is not real. That is not a
+      // carpool worth protecting: there is one person, and the "conversation"
+      // is their own words to themselves.
+      //
+      // Two of these exist in production (SCRUM-409), one of them ACCEPTED and
+      // its owner in a group, so the row is unclearable for them today.
+      // `requests.create` has refused new self-requests for some time, so this
+      // branch goes dormant once `scripts/cleanup-self-requests.ts` has run -
+      // it is here so the affected user is not stranded in the meantime, and so
+      // the degenerate comparison cannot resurface if one is ever created
+      // again.
+      if (
+        invitation.status === RequestStatus.ACCEPTED &&
+        invitation.fromUserId !== invitation.toUserId
+      ) {
         const searches = await ctx.prisma.carpoolSearch.findMany({
           where: {
             userId: { in: [invitation.fromUserId, invitation.toUserId] },

@@ -8,18 +8,22 @@
  * rejects them, which makes this a one-off check of what already exists rather
  * than something to run on a schedule.
  *
- * **Read-only. This script deletes nothing.**
+ * **Read-only. This script deletes nothing**, and that stays true: keeping the
+ * four `check-*` scripts uniformly read-only is worth more than saving a file.
  *
- * That is deliberate. Its sibling `cleanup-orphan-locations.ts` does support
- * `--apply`, because orphaned Locations accumulated on every address change
- * since the feature existed and the population is unbounded. Here the expected
- * count is zero: producing one takes a deliberate API call. Shipping a
- * destructive tool for an expected-empty set is worse than not having it, so if
- * anything does turn up, remove it by hand using the report below.
+ * **The repair now lives in `cleanup-self-requests.ts`.** This header used to
+ * say the expected count was zero and that anything turning up should be
+ * removed by hand — reasonable while the set was empty, and it is not: SCRUM-392
+ * found **2** rows in production on 2026-09-09, against 0 on staging. Two rows
+ * are still few enough to remove by hand and that is exactly the argument for
+ * not doing it by hand, because an ad-hoc delete leaves no dry run, no
+ * per-row log and no run-state entry.
  *
- * Removal is three deletes, not one. `user.requests.delete` removes only the
- * `Request` row, so deleting a self-request that way strands its `Conversation`
- * and the initial `Message` — hence the counts printed per row.
+ * Removal is three deletes, not one — the request, its conversation, and the
+ * messages inside it — which is why the counts below are printed per row.
+ * `user.requests.delete` has done all three in one transaction since SCRUM-295;
+ * before that it removed only the `Request` row and stranded the other two,
+ * which is where production's 620 orphan conversations came from.
  *
  * `relationMode = "prisma"` means MySQL cannot compare two columns for us
  * through a relation filter, and Prisma 4's field references are not relied on
@@ -30,6 +34,7 @@
  *   npx ts-node scripts/check-self-requests.ts
  *
  * Exits 0 when there are none, 1 when there are, so it can gate a follow-up.
+ * Today it exits 1 against production, and will until the cleanup has run.
  */
 
 import { PrismaClient } from "@prisma/client";
@@ -90,9 +95,9 @@ const main = async () => {
     }
 
     console.log(
-      `\n✖ Remove each of these by deleting its messages, then its ` +
-        `conversation, then the request — in that order. Deleting only the ` +
-        `request leaves the other two behind.`,
+      `\n✖ Remove these with scripts/cleanup-self-requests.ts, which deletes ` +
+        `each request together with its conversation and messages in one ` +
+        `transaction. It is a dry run unless given --apply.`,
     );
     process.exitCode = 1;
   } finally {

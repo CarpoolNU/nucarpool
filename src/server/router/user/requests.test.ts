@@ -1212,6 +1212,84 @@ describe("user.requests.delete — not while still carpooling together", () => {
       caller.user.requests.delete({ invitationId: "req-1" }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
+
+  /**
+   * SCRUM-409. Two of these exist in production, one ACCEPTED and its owner in
+   * a real group of two.
+   *
+   * The guard compares the two parties' groups, and for a self-request that is
+   * one user against themselves - so it matched whenever they were in any group
+   * at all, and told them to leave a carpool they really are in before they
+   * could clear a request that is not real. There is no pair here to protect
+   * and no thread between two people: the "conversation" is the user's own
+   * opening message to themselves.
+   *
+   * `requests.create` refuses new self-requests, so this pins behaviour for the
+   * rows that already exist - and stops the degenerate comparison returning if
+   * one is ever created again.
+   */
+  const selfRequest = (membership: Record<string, string | null>) =>
+    buildRequestsDb(
+      [
+        requestRow("req-self", USER_A, USER_A, {
+          status: RequestStatus.ACCEPTED,
+          conversationId: "conversation-req-self",
+        }),
+      ],
+      membership,
+    );
+
+  it("lets the owner clear an accepted self-request while in a group", async () => {
+    const db = selfRequest({ [USER_A]: "group-1", [USER_B]: "group-1" });
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await expect(
+      caller.user.requests.delete({ invitationId: "req-self" }),
+    ).resolves.not.toThrow();
+
+    expect(db.rows()).toEqual([]);
+    expect(db.conversations()).toEqual([]);
+  });
+
+  it("takes the self-request's conversation and messages with it", async () => {
+    // The whole point of deleting through this path rather than by hand: the
+    // conversation and its messages go in the same transaction, which is what
+    // SCRUM-295 fixed and what stops this becoming another orphan.
+    const db = selfRequest({ [USER_A]: "group-1" });
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await caller.user.requests.delete({ invitationId: "req-self" });
+
+    expect(db.conversationDeleteMany).toHaveBeenCalled();
+    expect(db.messageDeleteMany).toHaveBeenCalled();
+  });
+
+  it("clears a self-request from an ungrouped user too", async () => {
+    // This case already worked - with no group the comparison was false - so
+    // it is here to prove the exemption did not narrow anything.
+    const db = selfRequest({ [USER_A]: null });
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await expect(
+      caller.user.requests.delete({ invitationId: "req-self" }),
+    ).resolves.not.toThrow();
+
+    expect(db.rows()).toEqual([]);
+  });
+
+  it("still refuses a genuine pair in the same group", async () => {
+    // The exemption is keyed on the two ids being equal, so it must not soften
+    // the guard for anybody else. This is the case the guard exists for.
+    const db = acceptedPair(grouped());
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await expect(
+      caller.user.requests.delete({ invitationId: "req-1" }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+
+    expect(db.conversationDeleteMany).not.toHaveBeenCalled();
+    expect(db.messageDeleteMany).not.toHaveBeenCalled();
+  });
 });
 
 describe("user.requests — authentication gate", () => {
