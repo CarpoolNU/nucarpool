@@ -1,4 +1,3 @@
-import mapboxgl from "mapbox-gl";
 import { CarpoolAddress, GeoJsonUsers, PublicUser, User } from "../types";
 import { viewRoute } from "./viewRoute";
 import clearOtherUserMarkers from "./clearOtherUserMarkers";

@@ -2,7 +2,6 @@ import React, { useEffect, useCallback, useState } from "react";
 import { useSession } from "next-auth/react";
 import { trpc } from "../utils/trpc";
 import { toast } from "react-toastify/unstyled";
-import { useRouter } from "next/router";
 
 import { driver } from "driver.js";
 import "driver.js/dist/driver.css";
@@ -14,7 +13,6 @@ interface WelcomeTutorialProps {
 
 const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
   const { data: session, update } = useSession();
-  const router = useRouter();
   const [isCompleting, setIsCompleting] = useState(false);
   // Use the exact same mobile detection as the main page
   const isMobile = useIsMobile();

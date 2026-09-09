@@ -13,7 +13,6 @@
  * function read as though it cleans up.
  */
 
-import type mapboxgl from "mapbox-gl";
 import { Permission, Role, Status } from "@prisma/client";
 import type { PublicUser, User } from "../types";
 import { runViewGroupRoute } from "./groupRouteClick";

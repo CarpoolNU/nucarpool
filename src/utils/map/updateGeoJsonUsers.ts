@@ -1,5 +1,4 @@
 import { GeoJsonUsers } from "../types";
-import mapboxgl from "mapbox-gl";
 import addClusters from "./addClusters";
 import { Map } from "mapbox-gl";
 

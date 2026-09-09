@@ -1,6 +1,5 @@
 import { Permission, RequestStatus, Role } from "@prisma/client";
 import { Status } from "@prisma/client";
-import { Feature } from "geojson";
 import type { AppRouter } from "../server/router";
 import { inferRouterOutputs } from "@trpc/server";
 

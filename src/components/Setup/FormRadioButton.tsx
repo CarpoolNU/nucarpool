@@ -1,5 +1,4 @@
-import { ComponentPropsWithoutRef } from "react";
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { FieldError } from "react-hook-form";
 
 type RadioProps<T extends string | number> = {

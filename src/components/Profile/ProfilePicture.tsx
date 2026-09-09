@@ -1,4 +1,4 @@
-import React, { useState, useCallback, ReactNode } from "react";
+import React, { useState, useCallback } from "react";
 import Image from "next/image";
 import Cropper, { Area, Point } from "react-easy-crop";
 import { AiOutlineUser } from "react-icons/ai";

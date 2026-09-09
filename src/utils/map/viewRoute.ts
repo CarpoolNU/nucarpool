@@ -1,21 +1,12 @@
 import mapboxgl from "mapbox-gl";
-import {
-  CarpoolAddress,
-  CarpoolFeature,
-  DirectionsResponse,
-  PublicUser,
-  User,
-} from "../types";
+import { DirectionsResponse, PublicUser, User } from "../types";
 import { trpc } from "../trpc";
-import { SetStateAction, useEffect } from "react";
+import { useEffect } from "react";
 import { toast } from "react-toastify/unstyled";
 import polyline from "@mapbox/polyline";
-import { GeoJSON, LineString } from "geojson";
 import { StaticImageData } from "next/image";
 import DriverStart from "../../../public/driver-start.png";
 import RiderStart from "../../../public/rider-start.png";
-import DriverEnd from "../../../public/driver-dest.png";
-import RiderEnd from "../../../public/rider-dest.png";
 
 const previousMarkers: (mapboxgl.Marker | mapboxgl.Popup)[] = [];
 

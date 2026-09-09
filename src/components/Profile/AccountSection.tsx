@@ -2,7 +2,6 @@ import useIsMobile from "../../utils/useIsMobile";
 import { ErrorDisplay, Note, ProfileHeader } from "../../styles/profile";
 import { Role, Status } from "@prisma/client";
 import { EntryLabel } from "../EntryLabel";
-import { TextField } from "../TextField";
 import {
   Control,
   Controller,

@@ -4,7 +4,6 @@ import user from "../../../public/user.png";
 import car from "../../../public/car.png";
 import checkbox from "../../../public/checkbox.png";
 import useIsMobile from "../../utils/useIsMobile";
-import { useRouter } from "next/router";
 type ProfileSidebarProps = {
   option: "user" | "carpool" | "account";
   setOption: React.Dispatch<

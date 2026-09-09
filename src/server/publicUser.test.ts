@@ -1,4 +1,4 @@
-import { Permission, RequestStatus, Role, Status } from "@prisma/client";
+import { RequestStatus, Role, Status } from "@prisma/client";
 import type { CarpoolSearch, Location } from "@prisma/client";
 import {
   convertCarpoolSearchToPublic,

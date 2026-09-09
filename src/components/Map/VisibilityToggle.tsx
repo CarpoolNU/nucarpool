@@ -1,5 +1,4 @@
 import React, { useState, useEffect, CSSProperties } from "react";
-import mapboxgl from "mapbox-gl";
 interface VisibilityToggleProps {
   map: mapboxgl.Map | undefined;
   className?: string;

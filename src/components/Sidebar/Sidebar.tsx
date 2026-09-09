@@ -7,12 +7,8 @@ import {
   PublicUser,
   User,
 } from "../../utils/types";
-import mapboxgl from "mapbox-gl";
-import { viewRoute } from "../../utils/map/viewRoute";
 import { HeaderOptions } from "../Header";
-import { trpc } from "../../utils/trpc";
 import _ from "lodash";
-import { Request } from "@prisma/client";
 import React from "react";
 import { QueryState } from "../../utils/queryState";
 

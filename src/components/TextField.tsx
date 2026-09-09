@@ -2,7 +2,7 @@ import * as React from "react";
 import { FieldError } from "react-hook-form";
 import { ErrorDisplay } from "../styles/profile";
 import { classNames } from "../utils/classNames";
-import { ReactNode, useRef } from "react";
+import { ReactNode } from "react";
 
 type TextFieldOwnProps = {
   label?: string;

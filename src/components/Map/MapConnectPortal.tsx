@@ -1,7 +1,6 @@
 import { EnhancedPublicUser, PublicUser, User } from "../../utils/types";
 import { ConnectCard } from "../UserCards/ConnectCard";
 import { Dialog } from "@headlessui/react";
-import { useRef } from "react";
 
 interface ConnectPortalProps {
   otherUsers: PublicUser[] | null;
