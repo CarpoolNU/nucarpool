@@ -658,8 +658,29 @@ ticket, because filing rather than repairing is SCRUM-392's stated policy.
    asks for an overlapping window, which an inverted range satisfies for nobody,
    so those users see an empty map and appear on nobody else's — with no error
    and no log line. SCRUM-302 added the validation and was not retroactive.
-   Swapping the two dates is the obvious repair and is a guess: the row says the
-   intent was not recorded, not which end is wrong. **SCRUM-407.**
+   **SCRUM-407**, and **the repair policy is decided: ask, do not guess.**
+
+   Swapping the two dates is the obvious repair and it is a guess. An inverted
+   pair says the user's intent was not recorded correctly; it does not say
+   _which_ of the two values is wrong. Swapping asserts both are right and only
+   the order is wrong — plausible, unverifiable, and it would write 47 rows of
+   invented intent that then look exactly like values a user chose. So there is
+   **no repair script for this row, deliberately**, and none should be added.
+
+   What SCRUM-407 shipped instead: the profile page detects an inverted stored
+   range **on load**, routes to the Account tab, flags the end-date field and
+   raises a non-dismissing toast naming the consequence. The machinery to show
+   it already existed — `AccountSection` renders the error and `onError` routes
+   a failed save — but the form is `mode: "onChange"` and never validated on
+   mount, so nothing surfaced until the user changed a field or pressed Save.
+   Neither is likely when the only symptom is an empty map.
+
+   **This does not clear the 47**, and the cell above will keep reporting them.
+   It converts a silent defect into a visible one for each user who opens their
+   profile, and a user who never returns keeps their row. That is the accepted
+   trade: a stale row costs nobody anything, and a fabricated one is a value the
+   product will treat as real. Re-measure rather than assuming a trend.
+
 7. **`check-profile-coordinates` reports 626 rows on production and 521 on
    staging, of which 47 and 0 are actionable.** It flags `(0, 0)` coordinates on
    any non-`VIEWER` search without asking whether the user finished onboarding,
