@@ -731,3 +731,97 @@ it when you run this.
   one, which was 462 of 477 rows on staging. Those are repaired lazily by
   `findOrCreateConversation` on the first write that needs a conversation,
   never backfilled.
+
+## Account deletion
+
+**There is no delete-my-account feature, and that is a decision rather than an
+omission** (SCRUM-311). Nothing needs fixing to allow one, and the schema
+should not be changed to make one possible without revisiting the decision
+first. This section exists so the next person does not rediscover the cascade
+question and assume it is a bug.
+
+### What the schema does today, and why it matches the decision
+
+`User` has six incoming relations. Three cascade and three restrict:
+
+| Relation                              | On user delete      |
+| ------------------------------------- | ------------------- |
+| `Account.user`                        | `Cascade`           |
+| `Session.user`                        | `Cascade`           |
+| `CarpoolSearch.user`                  | `Cascade`           |
+| `Request.fromUser` / `Request.toUser` | emulated `Restrict` |
+| `Message.User`                        | emulated `Restrict` |
+
+`relationMode = "prisma"` makes `Restrict` the default when no `onDelete` is
+declared, and Prisma enforces it in application code rather than the database.
+So deleting a user who has ever sent a request or a message — every real user —
+fails. **Under this decision that is the correct behaviour**, and the absent
+`onDelete` is doing useful work: it is what stops an accidental delete from
+taking message history with it.
+
+### The favourites relation is not part of this question
+
+`User.favorites` / `User.favoritedBy` is the implicit `Favorites` many-to-many.
+It looks like a fourth relation missing a cascade and it is not one: Prisma
+**refuses** to compile a referential action on an implicit many-to-many at all.
+Adding one produces
+
+```
+error: Error validating: Referential actions on implicit many-to-many relations are not supported
+```
+
+Prisma owns that join table and clears its rows itself, which is why
+[`prisma/seed.ts`](../../../prisma/seed.ts) was able to delete a
+`clearConnections()` pass that issued roughly 4,900 `favorites.disconnect`
+writes before every seed. Do not add those back, and do not count this relation
+among the ones that block a delete.
+
+### The seed's delete order is load-bearing
+
+`deleteAllData` in [`prisma/seed.ts`](../../../prisma/seed.ts) removes rows
+child-first and finishes with `user`. That order is what lets it succeed against
+emulated `Restrict` — it is not stylistic, and reordering it or collapsing it
+into fewer calls will break seeding.
+
+### The refusal is enforced, not just written down
+
+[`authAdapter.ts`](../authAdapter.ts) overrides `deleteUser` to throw a message
+naming this decision. `PrismaAdapter` supplies a working-looking `deleteUser`,
+and inheriting it left the auth route carrying an account-deletion primitive
+that could not work. Nothing calls it — NextAuth core does not delete users on
+any ordinary flow — but an explicit refusal is better than an opaque
+referential-action error surfacing years later.
+
+### If the decision is ever reversed
+
+The cascade is the easy part. The hard part is the product question SCRUM-311
+asked and this decision sidesteps: **what happens to messages a counterpart
+also participated in.** A conversation is shared, so deleting one party's
+messages edits the other party's history. Delete, anonymise or retain are all
+defensible and the choice is not a schema detail.
+
+Work through, in order:
+
+1. Decide the message question above. Nothing else can be settled first.
+2. Set referential actions on the three restricting relations to match, with a
+   migration committed under `prisma/migrations/` **and** a PlanetScale deploy
+   request — [two separate things](#changing-the-schema).
+3. Remove the `deleteUser` refusal in [`authAdapter.ts`](../authAdapter.ts) and
+   its tests.
+4. Add the deletion procedure transactionally, and delete the S3
+   profile-picture object too — the row going away does not remove the object,
+   and `profile-pictures/{env}/{userId}` is keyed on an id that would no longer
+   resolve.
+5. Consider group membership and `CarpoolGroup`, which the original ticket did
+   not enumerate.
+
+### Removing one person's data is a different question
+
+Declining the _feature_ is not the same as having no way to honour a removal
+request. This application stores home coordinates, company addresses and
+private messages for real students, and a request to erase them would currently
+have to be served by hand with no script and no recorded procedure. That gap is
+**SCRUM-404** — an operational mechanism, not a user-facing feature, and
+deliberately not solved by the decision recorded here. It carries the same
+shared-conversation question, which is why the two are separate tickets rather
+than one.
