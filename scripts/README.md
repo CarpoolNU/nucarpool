@@ -280,14 +280,29 @@ above were produced by direct SQL rather than by running their scripts. The cond
 but a dry run has not confirmed them and **no `--apply` has been run anywhere**.
 Run the dry run before the apply rather than trusting this cell.
 
-**Production is unmeasured for every row but one, and not for lack of trying.**
-Read queries against the PlanetScale `main` branch return `403 Permission
-denied` with the credentials available here — **schema metadata for `main` is
-readable, only row data is not**, which is enough to confirm a column exists but
-never how many rows need fixing — so these cells cannot be filled
-from this repository. `cleanup-orphan-conversations` is the exception: it was
-measured read-only through DBeaver on 2026-09-03, which is the route that
-works.
+**Production is unmeasured for every row but one — but no longer because it
+cannot be read.** That was the finding here on 2026-08-31, recorded as a flat
+`403 Permission denied`, and it holds only for the **PlanetScale MCP server**:
+its token still refuses row data on the production branch while returning schema
+metadata, so a column can be confirmed to exist but never counted. The `pscale`
+**CLI** authenticates as a different identity, and that one does read
+production:
+
+```
+pscale sql nucarpool main --org devashishsood18 --role reader \
+  --format json --query "SELECT COUNT(*) FROM carpool_search"
+```
+
+`.claude/hooks/pscale-guard.sh` names that exact form as the sanctioned way to
+read production, and denies the write roles, the local-proxy command and every
+write shape aimed at the production branch. It is the route the SCRUM-380
+measurement below used on 2026-09-09. `cleanup-orphan-conversations` was
+measured a different way again, read-only through DBeaver on 2026-09-03.
+
+**The cells above were not re-measured when this was discovered.** SCRUM-380 was
+the active ticket, and re-running eight scripts' predicates against production is
+its own piece of work — **SCRUM-392**, rather than folded into that change. Read
+each `unknown` as "not yet asked", not as "unanswerable".
 
 `backfill-profile-picture-timestamps` is the one row DBeaver would **not**
 settle either. Its question is "which users have an object in S3 but no
@@ -298,6 +313,68 @@ footnote 5. That row needs the script's own dry run, run somewhere with
 **Every other production cell above is an open question, not a zero** — and the
 11-versus-620 gap on the row that _has_ been measured is the reason to treat
 them that way.
+
+### SCRUM-380 — driver seat counts on production, measured before the fix
+
+Not a script, and deliberately recorded here anyway: SCRUM-380 made a read-only
+production measurement a **blocking** acceptance criterion, for a reason that
+generalises to any data defect fixed at the source. The profile form was
+rewriting a full driver's `seats_avail` from `0` to `1` whenever the page
+loaded, and the fix stops new rows being produced — but nothing records how an
+existing `1` got there, so once the effect is gone an affected row is
+indistinguishable from a driver who genuinely has one seat free. Measure first
+or lose the population.
+
+Taken on **2026-09-09** against PlanetScale `main` through the CLI reader role
+above. Nothing was modified, and no repair was designed or run.
+
+`carpool_search` rows with `role = 'DRIVER'`, by seat count and group membership:
+
+| `seats_avail` | in a group | no group | total  |
+| ------------- | ---------- | -------- | ------ |
+| 0             | 12         | 21       | 33     |
+| **1**         | **12**     | **30**   | **42** |
+| 2             | 13         | 11       | 24     |
+| 3             | 8          | 25       | 33     |
+| 4             | 3          | 36       | 39     |
+| 5             | 0          | 3        | 3      |
+| 6             | 0          | 1        | 1      |
+
+Group sizes for the grouped drivers at `0` and `1`, which is the second half of
+what the ticket asked for:
+
+| `seats_avail` | group members | of which riders | rows |
+| ------------- | ------------- | --------------- | ---- |
+| 0             | 2             | 1               | 5    |
+| 0             | 3             | 2               | 4    |
+| 0             | 4             | 3               | 1    |
+| 0             | 5             | 4               | 2    |
+| 1             | 2             | 1               | 7    |
+| 1             | 3             | 2               | 4    |
+| 1             | 5             | 4               | 1    |
+
+**42 DRIVER rows sit at `1`, and that is an upper bound on the damage, not a
+count of it.** It is the whole population the defect could have produced; a
+driver who entered `1` and has never filled up is in it too. The measurement
+cannot separate them, and this is the point the ticket makes about capacity
+never being stored: for a grouped driver the implied original capacity is
+`riders + seats_avail`, which for all twelve grouped rows at `1` comes to 2, 3
+or 5 — every one inside `MAX_SEATS_AVAILABLE`, so no row is out of range and
+none is self-evidently corrupt.
+
+Two things worth reading off it anyway. **No production row is outside
+`[0, 6]`** — the `-1` residue that SCRUM-348 found on staging has no counterpart
+on `main`. And **six non-DRIVER rows carry a non-zero count** (one VIEWER at 2,
+three at 3, two at 4), which is why the fix normalises `seatAvail` for every
+non-driver at the submit boundary rather than only for `RIDER`: the load-time
+effect it removes had been quietly doing that job.
+
+**No repair is planned, and none should be written from these figures.**
+Capacity is not stored, so the original value cannot be recovered, and inventing
+one upward would over-subscribe a real car — the argument `seatIntegrity.ts`
+already makes for clamping negatives to `0` rather than guessing. Any remedy is
+a separate ticket and a product decision; the honest one is likely to ask
+affected drivers to re-enter their seat count.
 
 ### `emailtemplate.py` — a republish is outstanding
 

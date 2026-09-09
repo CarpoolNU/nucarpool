@@ -149,16 +149,7 @@ const Index: NextPage = () => {
       // a save refetches, and the form must show what was stored.
     }
   }, [reset, user]);
-  const role = watch("role");
 
-  useEffect(() => {
-    const seatAvail = watch("seatAvail");
-    if (role === Role.DRIVER && (seatAvail ?? 0) <= 0) {
-      setValue("seatAvail", 1);
-    } else if (role !== Role.DRIVER) {
-      setValue("seatAvail", 0);
-    }
-  }, [setValue, watch, role]);
   const checkForChanges = async () => {
     const formValues = watch();
 
@@ -227,7 +218,14 @@ const Index: NextPage = () => {
       companyCoordLat: companyAddressHook.selectedAddress.center[1],
       startCoordLng: startAddressHook.selectedAddress.center[0],
       startCoordLat: startAddressHook.selectedAddress.center[1],
-      seatAvail: values.role === "RIDER" ? 0 : (values.seatAvail ?? 0),
+      // Only a driver has seats. This used to be enforced on load, by the
+      // `role` effect that also corrupted a full driver's `0` (SCRUM-380);
+      // normalising at the submit boundary keeps the "non-driver stores 0"
+      // outcome without the form rewriting stored data behind the user. It
+      // tests DRIVER rather than RIDER because VIEWER needs zeroing too - the
+      // old `=== "RIDER"` check let a viewer persist a stale count, and rows
+      // carrying one exist.
+      seatAvail: values.role === Role.DRIVER ? (values.seatAvail ?? 0) : 0,
       startStreet:
         startAddressHook.selectedAddress.street || user?.startStreet || "",
       startCity: startAddressHook.selectedAddress.city || user?.startCity || "",

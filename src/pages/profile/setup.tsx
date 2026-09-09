@@ -145,15 +145,6 @@ const Setup: NextPage = () => {
   }, [initialLoad, reset, user]);
   const role = watch("role");
 
-  useEffect(() => {
-    const seatAvail = watch("seatAvail");
-    if (role === Role.DRIVER && (seatAvail ?? 0) <= 0) {
-      setValue("seatAvail", 1);
-    } else if (role !== Role.DRIVER) {
-      setValue("seatAvail", 0);
-    }
-  }, [setValue, watch, role]);
-
   /**
    * Reports the address steps whose coordinates never resolved.
    *
@@ -195,7 +186,11 @@ const Setup: NextPage = () => {
       companyCoordLat: companyAddressHook.selectedAddress.center[1],
       startCoordLng: startAddressHook.selectedAddress.center[0],
       startCoordLat: startAddressHook.selectedAddress.center[1],
-      seatAvail: values.role === "RIDER" ? 0 : (values.seatAvail ?? 1),
+      // Only a driver has seats - see the matching note in `profile/index.tsx`.
+      // The `?? 1` is unreachable for a DRIVER, because `handleNextStep`
+      // refuses to leave step 1 without a positive count, and is kept as the
+      // same backstop it has always been.
+      seatAvail: values.role === Role.DRIVER ? (values.seatAvail ?? 1) : 0,
       startStreet: startAddressHook.selectedAddress.street || "",
       startCity: startAddressHook.selectedAddress.city || "",
       startState: startAddressHook.selectedAddress.state || "",
@@ -371,6 +366,7 @@ const Setup: NextPage = () => {
               errors={errors}
               register={register}
               watch={watch}
+              setValue={setValue}
             />
           )}
           {step === 2 && (
