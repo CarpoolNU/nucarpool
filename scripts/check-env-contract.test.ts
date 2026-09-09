@@ -5,8 +5,12 @@ import {
   MIN_EXPECTED_AMPLIFY_PATTERNS,
   amplifyCoverage,
   amplifyGrepPatterns,
+  commandTolerance,
+  envsafeOptionsAt,
+  isOptional,
   matchingPatterns,
   parseGrepPatterns,
+  strictnessIssues,
 } from "./check-env-contract";
 
 /**
@@ -299,6 +303,227 @@ describe("amplifyCoverage", () => {
   });
 });
 
+describe("isOptional", () => {
+  // `default:` applies in every NODE_ENV; `devDefault:` does not apply under
+  // the NODE_ENV=production that `next build` sets. Conflating them is what
+  // SCRUM-398 is about, in both directions.
+  it("treats a default: as optional", () => {
+    expect(isOptional('{ input: process.env.X, default: "y" }')).toBe(true);
+  });
+
+  it("does not treat a devDefault: as optional", () => {
+    expect(isOptional('{ input: process.env.X, devDefault: "y" }')).toBe(false);
+  });
+
+  it("does not mistake devDefault for default by substring", () => {
+    // `default` is a substring of `devDefault` in lowercase only; the test is
+    // case-sensitive, and this pins that rather than leaving it to luck.
+    expect(isOptional("{ devDefault: 1 }")).toBe(false);
+    expect(isOptional("{ myDefault: 1 }")).toBe(false);
+  });
+
+  it("treats a validator with neither as required", () => {
+    expect(isOptional("{ input: process.env.X }")).toBe(false);
+  });
+
+  it("finds default: wherever it sits in the options", () => {
+    expect(isOptional("{\n  default: A,\n  input: process.env.X,\n}")).toBe(
+      true,
+    );
+  });
+});
+
+describe("envsafeOptionsAt", () => {
+  const src = [
+    "export const serverEnv = envsafe({",
+    "  DATABASE_URL: str({",
+    "    input: process.env.DATABASE_URL,",
+    "  }),",
+    "  S3_BUCKET_NAME: str({",
+    "    input: process.env.S3_BUCKET_NAME,",
+    "    default: DEFAULT_S3_BUCKET_NAME,",
+    "  }),",
+    "});",
+  ].join("\n");
+
+  const optionsFor = (name: string) =>
+    envsafeOptionsAt(src, src.indexOf(`process.env.${name}`));
+
+  it("returns the validator's own options, not the envsafe object", () => {
+    const options = optionsFor("S3_BUCKET_NAME");
+    expect(options).toContain("default: DEFAULT_S3_BUCKET_NAME");
+    // The neighbouring entry must not bleed in, or every variable in the file
+    // would inherit the first default that appears anywhere.
+    expect(options).not.toContain("DATABASE_URL");
+  });
+
+  it("classifies neighbouring entries independently", () => {
+    expect(isOptional(optionsFor("S3_BUCKET_NAME") as string)).toBe(true);
+    expect(isOptional(optionsFor("DATABASE_URL") as string)).toBe(false);
+  });
+
+  it("returns null when there is no enclosing brace pair", () => {
+    // The caller fails on this rather than guessing - see contractVars().
+    expect(envsafeOptionsAt("process.env.X", 0)).toBeNull();
+  });
+});
+
+describe("commandTolerance", () => {
+  it("reads a bare command as strict", () => {
+    expect(commandTolerance(command("ACCESS"))).toEqual({ tolerant: false });
+  });
+
+  it("reads a trailing || true as tolerant", () => {
+    expect(commandTolerance(`${command("S3_")} || true`)).toEqual({
+      tolerant: true,
+    });
+  });
+
+  it("reads the || : spelling as tolerant", () => {
+    expect(commandTolerance(`${command("S3_")} || :`)).toEqual({
+      tolerant: true,
+    });
+  });
+
+  it("refuses to guess at an unrecognised suffix", () => {
+    const { tolerant, error } = commandTolerance(
+      `${command("S3_")} || echo oops`,
+    );
+    expect(tolerant).toBe(false);
+    expect(error).toMatch(/cannot tell whether/);
+  });
+
+  it("does not mistake the redirect target for a suffix", () => {
+    // `.env.production` follows the `>>`, so a naive scan for anything after
+    // the redirect would report it as an unrecognised suffix.
+    expect(commandTolerance(command("DATABASE")).error).toBeUndefined();
+  });
+});
+
+describe("amplifyGrepPatterns records strictness per command", () => {
+  it("marks each command tolerant or strict", () => {
+    const spec = [
+      "      commands:",
+      `        ${command("DATABASE")}`,
+      `        ${command("S3_")} || true`,
+    ].join("\n");
+
+    const { entries } = amplifyGrepPatterns(spec);
+    expect(entries).toEqual([
+      { line: 2, patterns: ["DATABASE"], tolerant: false },
+      { line: 3, patterns: ["S3_"], tolerant: true },
+    ]);
+  });
+
+  it("reports an unreadable suffix as a malformed command", () => {
+    const spec = [
+      "      commands:",
+      `        ${command("S3_")} || echo oops`,
+    ].join("\n");
+
+    const { errors } = amplifyGrepPatterns(spec);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain("amplify.yml:2");
+  });
+});
+
+describe("strictnessIssues", () => {
+  const entry = (
+    patterns: string[],
+    tolerant: boolean,
+    line = 1,
+  ): { line: number; patterns: string[]; tolerant: boolean } => ({
+    line,
+    patterns,
+    tolerant,
+  });
+
+  it("rejects a strict command covering only optional variables", () => {
+    // SCRUM-397 exactly: grep exits 1 when no S3_* is set, and Amplify fails
+    // the build. This is the assertion that would have caught it.
+    const issues = strictnessIssues(
+      [entry(["S3_"], false)],
+      ["DATABASE_URL"],
+      ["S3_BUCKET_NAME", "S3_REGION"],
+    );
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toContain("only optional");
+    expect(issues[0]).toContain("S3_BUCKET_NAME");
+  });
+
+  it("accepts a tolerant command covering only optional variables", () => {
+    expect(
+      strictnessIssues(
+        [entry(["S3_"], true)],
+        ["DATABASE_URL"],
+        ["S3_BUCKET_NAME"],
+      ),
+    ).toEqual([]);
+  });
+
+  it("rejects a tolerant command covering a required variable", () => {
+    // The other direction: silencing a genuinely missing secret.
+    const issues = strictnessIssues(
+      [entry(["DATABASE"], true)],
+      ["DATABASE_URL"],
+      [],
+    );
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toContain("must not end in");
+  });
+
+  it("accepts a strict command covering a required variable", () => {
+    expect(
+      strictnessIssues([entry(["DATABASE"], false)], ["DATABASE_URL"], []),
+    ).toEqual([]);
+  });
+
+  it("treats a mixed pattern by its required half", () => {
+    // `REGION` covers REGION_AWS (required) and S3_REGION (optional). One
+    // required variable is enough to make the command strict, because its
+    // absence should still stop the deploy.
+    expect(
+      strictnessIssues(
+        [entry(["REGION"], false)],
+        ["REGION_AWS"],
+        ["S3_REGION"],
+      ),
+    ).toEqual([]);
+
+    const tolerated = strictnessIssues(
+      [entry(["REGION"], true)],
+      ["REGION_AWS"],
+      ["S3_REGION"],
+    );
+    expect(tolerated).toHaveLength(1);
+  });
+
+  it("leaves a pattern matching no contract variable alone", () => {
+    // `NEXTAUTH_URL` is read by NextAuth rather than envsafe, so this script
+    // has no basis to judge it. Forcing either strictness would be a guess.
+    expect(
+      strictnessIssues(
+        [entry(["NEXTAUTH_URL"], false), entry(["NEXTAUTH_URL"], true, 2)],
+        ["DATABASE_URL"],
+        ["S3_BUCKET_NAME"],
+      ),
+    ).toEqual([]);
+  });
+
+  it("reports the line number of the offending command", () => {
+    const issues = strictnessIssues(
+      [entry(["DATABASE"], false), entry(["S3_"], false, 7)],
+      ["DATABASE_URL"],
+      ["S3_BUCKET_NAME"],
+    );
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toContain("amplify.yml:7");
+  });
+});
+
 describe("the real amplify.yml", () => {
   const real = fs.readFileSync(
     path.join(__dirname, "..", "amplify.yml"),
@@ -326,6 +551,17 @@ describe("the real amplify.yml", () => {
     const { patterns } = amplifyGrepPatterns(real);
     expect(matchingPatterns("S3_BUCKET_NAME", patterns)).not.toEqual([]);
     expect(matchingPatterns("S3_REGION", patterns)).not.toEqual([]);
+  });
+
+  it("makes the S3_ command tolerant and every other one strict", () => {
+    // The shape SCRUM-397 settled on, pinned so it cannot quietly revert:
+    // `S3_` covers only defaulted variables and must survive matching
+    // nothing, and no other command may borrow the same fallback.
+    const { entries } = amplifyGrepPatterns(real);
+    const tolerant = entries.filter((e) => e.tolerant);
+
+    expect(tolerant).toHaveLength(1);
+    expect(tolerant[0].patterns).toEqual(["S3_"]);
   });
 
   it("carries NEXT_PUBLIC_* rather than relying on build-time inlining", () => {
