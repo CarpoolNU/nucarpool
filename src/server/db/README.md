@@ -63,9 +63,11 @@ Boston is hardcoded because the product is Northeastern co-op students; a schedu
 
 A calendar day, taken by Prisma from the **UTC** date of whatever `Date` it is handed. Build these with [`lastDayOfMonthUTC`](../../utils/dateUtils.ts) rather than `new Date(year, month, 0)`: the local-time form stored the previous day for anyone at a positive UTC offset, because local midnight is the day before in UTC.
 
+**Never write a picker value straight to the form.** Both controls go through a handler that calls `lastDayOfMonthUTC` — `handleMonthChange` for the filter panel's `<input type="month">`, `handleMonthPickerChange` for the profile's antd `DatePicker`. SCRUM-393 is what happens otherwise: the profile swapped to the antd picker in February 2025 and wrote `date.toDate()` directly, which is local midnight on the _first_ of the month. That broke both rules at once — the UTC one above, so a user east of Greenwich stored the previous month; and the last-day convention below, so `dateOverlapFilter` was comparing a first-of-month profile value against a last-of-month filter value and dropping exact matches from full-overlap searches. It went unnoticed for eighteen months partly because this paragraph said the rule and the file still imported the helper it had stopped calling.
+
 **The range has to run forwards.** A reversed one was stored as submitted and then failed silently at match time: `dateOverlapFilter`'s full-overlap branch asks for `startDate <= theirs AND endDate >= theirs`, which no candidate can satisfy once the two are crossed, so the user disappeared from every full-overlap search with nothing to say why, and the partial-overlap negation behaved arbitrarily. `user.edit` and [`onboardSchema`](../../utils/profile/zodSchema.ts) both refuse `endDate < startDate` now, through the shared [`isReversedCoopRange`](../../utils/dateUtils.ts).
 
-**Equality is allowed**, and has to be: both pickers are month-granularity and `handleMonthChange` stores the _last day_ of the month chosen, so a one-month co-op is the same date twice.
+**Equality is allowed**, and has to be: both pickers are month-granularity and both store the _last day_ of the month chosen, so a one-month co-op is the same date twice.
 
 ## Coordinates
 

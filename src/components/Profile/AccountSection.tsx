@@ -12,7 +12,10 @@ import {
   UseFormWatch,
 } from "react-hook-form";
 import { OnboardingFormInputs } from "../../utils/types";
-import { formatDateToMonth, handleMonthChange } from "../../utils/dateUtils";
+import {
+  formatDateToMonth,
+  handleMonthPickerChange,
+} from "../../utils/dateUtils";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import { Switch } from "@mui/material";
 import { DatePicker } from "antd";
@@ -131,9 +134,7 @@ const AccountSection = ({
                   "YYYY/MM",
                 ),
               })}
-              onChange={(date: Dayjs | null, dateString) =>
-                setValue("coopStartDate", date ? date.toDate() : null)
-              }
+              onChange={handleMonthPickerChange("coopStartDate", setValue)}
               format="YYYY-MM"
               className="h-14 w-full rounded-md border border-gray-200 p-2 text-lg"
             />
@@ -156,9 +157,7 @@ const AccountSection = ({
                   "YYYY/MM",
                 ),
               })}
-              onChange={(date: Dayjs | null, dateString) =>
-                setValue("coopEndDate", date ? date.toDate() : null)
-              }
+              onChange={handleMonthPickerChange("coopEndDate", setValue)}
               format="YYYY-MM"
               className="h-14 w-full rounded-md border border-gray-200 p-2 text-lg"
             />

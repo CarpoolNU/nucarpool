@@ -1,5 +1,6 @@
 import React from "react";
 import { UseFormSetValue } from "react-hook-form";
+import type { Dayjs } from "dayjs";
 import { OnboardingFormInputs } from "./types";
 
 /**
@@ -32,6 +33,62 @@ const handleMonthChange =
   ) =>
   (event: React.ChangeEvent<HTMLInputElement>): void => {
     const lastDay = lastDayOfMonthUTC(event.target.value);
+
+    if (!lastDay) {
+      return;
+    }
+
+    setValue(field, lastDay, { shouldValidate: true });
+  };
+
+/**
+ * The same thing for the profile's antd month picker, which hands back a
+ * `Dayjs` rather than a change event.
+ *
+ * **This is the SCRUM-393 fix.** Commit 6930f6f (2025-02-23) swapped the
+ * profile's `<input type="month">` for `DatePicker picker="month"` and wrote
+ * the new value straight through:
+ *
+ * ```ts
+ * onChange={(date) => setValue("coopStartDate", date ? date.toDate() : null)}
+ * ```
+ *
+ * `date.toDate()` is **local** midnight on the first of the month, and
+ * `startDate`/`endDate` are `@db.Date`, so Prisma keeps the UTC day. East of
+ * UTC that day is the one before — and the day before the first of a month is
+ * in the *previous month*. A Berlin user choosing a January–June co-op had
+ * December–May stored, and the profile then showed them December.
+ *
+ * That is precisely the defect `lastDayOfMonthUTC` was written to fix, quoted
+ * in its own docstring above. The swap dropped the call and left the import
+ * behind, which is why `AccountSection.tsx` reads as though it were still
+ * handled.
+ *
+ * Two things it restores, not one. The offset bug is the visible half; the
+ * other is the **convention**. `src/server/db/README.md` records these columns
+ * as holding the *last* day of the month chosen, and `dateOverlapFilter`
+ * compares a candidate's stored dates against filter values that
+ * `handleMonthChange` still builds that way. Storing the first instead skews
+ * every comparison by up to a month: under full overlap, a candidate whose
+ * co-op is exactly the range you asked for fails `endDate >= yours` and drops
+ * out of the results. Both halves come from the same missing call.
+ *
+ * The month is read off the `Dayjs` in **local** time, deliberately: the user
+ * picked it from a local calendar, so those are the year and month they meant.
+ * `lastDayOfMonthUTC` then builds the day in UTC, which is the whole point.
+ */
+const handleMonthPickerChange =
+  (
+    field: "coopStartDate" | "coopEndDate",
+    setValue: UseFormSetValue<OnboardingFormInputs>,
+  ) =>
+  (date: Dayjs | null): void => {
+    if (!date) {
+      setValue(field, null, { shouldValidate: true });
+      return;
+    }
+
+    const lastDay = lastDayOfMonthUTC(date.format("YYYY-MM"));
 
     if (!lastDay) {
       return;
@@ -87,6 +144,7 @@ const isReversedCoopRange = (
 
 export {
   handleMonthChange,
+  handleMonthPickerChange,
   formatDateToMonth,
   lastDayOfMonthUTC,
   isReversedCoopRange,
