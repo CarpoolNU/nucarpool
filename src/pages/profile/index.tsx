@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { FieldErrors, SubmitHandler, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { GetServerSidePropsContext, NextPage } from "next";
@@ -152,26 +152,65 @@ const Index: NextPage = () => {
   }, [reset, user]);
 
   /**
+   * Where the header wanted to go, held until the user answers the modal.
+   *
+   * A ref rather than state because nothing renders from it, and because
+   * `handleSaveChanges` reads it after an `await` - a state value captured in
+   * that closure would be the one from before the save (SCRUM-384).
+   */
+  const proceedRef = useRef<(() => void | Promise<void>) | null>(null);
+
+  /** Runs the header's navigation, or the map fallback if it supplied none. */
+  const proceedToDestination = async () => {
+    const proceed = proceedRef.current;
+    proceedRef.current = null;
+
+    if (proceed) {
+      await proceed();
+      return;
+    }
+
+    await router.push("/");
+  };
+
+  /**
    * Offers the unsaved-changes modal on the way out, or leaves if there is
    * nothing to lose.
    *
    * The comparison lives in `utils/profile/hasProfileChanges.ts` - see the
    * header there for SCRUM-381, which is what happens when fourteen of these
    * are chained inline and two of them are wrong.
+   *
+   * `proceed` is the navigation the header wanted to perform. It arrives as a
+   * callback rather than a destination so that the mobile path's full page
+   * load - SCRUM-171 - stays in `Header` where its reason is written down.
+   * Absent, the map is the destination, which is what the desktop button
+   * asked for before this took an argument (SCRUM-384).
    */
-  const checkForChanges = async () => {
+  const checkForChanges = async (proceed?: () => void | Promise<void>) => {
+    proceedRef.current = proceed ?? null;
+
     if (hasProfileChanges(watch(), user)) {
       setShowModal(true);
     } else {
       setIsLoading(true);
-      await router.push("/");
+      await proceedToDestination();
       setIsLoading(false);
     }
   };
   const onContinue = async () => {
     setIsLoading(true);
-    await router.push("/");
+    await proceedToDestination();
     setIsLoading(false);
+    setShowModal(false);
+  };
+
+  /**
+   * Cancel. Drops the pending destination too - otherwise the next navigation
+   * that supplies none would inherit this one.
+   */
+  const onDismissModal = () => {
+    proceedRef.current = null;
     setShowModal(false);
   };
 
@@ -326,7 +365,7 @@ const Index: NextPage = () => {
     <div className="relative h-screen w-screen select-none">
       {showModal && (
         <UnsavedModal
-          onClose={() => setShowModal(false)}
+          onClose={onDismissModal}
           onContinue={onContinue}
           onSave={handleSaveChanges}
         />
