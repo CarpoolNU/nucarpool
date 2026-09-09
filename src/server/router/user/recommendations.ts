@@ -14,12 +14,12 @@ export const recommendationsRouter = router({
       z.object({
         sort: z.string(),
         filters: z.object({
-          days: z.number(), /// 0 for any, 1 for exact
+          days: z.number(), // 0 any, 1 exact, 2 flex
           daysWorking: z.string(),
           flexDays: z.number(),
-          startDistance: z.number(), // max 20, greater = any
+          startDistance: z.number(), // miles, 0-20; 20 means any
           endDistance: z.number(),
-          startTime: z.number(), // max = 4 hours, greater = any
+          startTime: z.number(), // hours of deviation, 0-4; 4 means any (a maximum)
           endTime: z.number(),
           startDate: z.date(),
           endDate: z.date(),

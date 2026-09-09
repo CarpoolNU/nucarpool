@@ -38,9 +38,27 @@ const ExploreSidebar = (props: ExploreSidebarProps) => {
     "recommendations",
   );
   const [filtersOpen, setFiltersOpen] = useState(false);
+  /**
+   * Which filters differ from their defaults. Drives the "filters active"
+   * indicator and which panel sections start open.
+   *
+   * `flexDays` and `daysWorking` were missing (SCRUM-386) and are **gated on
+   * the mode**, which is not a detail: `defaultFilters.daysWorking` is frozen
+   * at `""` while `filters.daysWorking` is seeded from the signed-in user's own
+   * days once `user.me` resolves. A bare `!==` would therefore report the day
+   * filter as active on first load for every non-VIEWER, who has touched
+   * nothing. Gated, they contribute only when a mode is selected — and with
+   * `days === 0` neither value affects the results at all.
+   */
   const getActiveFilters = () => {
     return {
       days: props.defaultFilters.days !== props.filters.days,
+      flexDays:
+        props.filters.days === 2 &&
+        props.defaultFilters.flexDays !== props.filters.flexDays,
+      daysWorking:
+        props.filters.days !== 0 &&
+        props.defaultFilters.daysWorking !== props.filters.daysWorking,
       dateOverlap:
         props.defaultFilters.dateOverlap !== props.filters.dateOverlap,
       startTime: props.defaultFilters.startTime !== props.filters.startTime,

@@ -439,6 +439,99 @@ describe("calculateScore", () => {
       ).toBe(true);
     });
 
+    /**
+     * The empty-selection edge, which was the user-visible half of SCRUM-386.
+     *
+     * `days === 1` with no days selected was already asserted to exclude
+     * nobody, further down in "identity and pathological inputs". `days === 2`
+     * was never tested and did the **opposite**: `bothUsersDays` is 0 with
+     * nothing selected, which is below any `flexDays`, so every candidate was
+     * rejected. Choosing "Flex days" before picking days — a natural order,
+     * and the only order available to a VIEWER, who never gets `daysWorking`
+     * seeded — returned an empty list and an empty map with nothing to
+     * explain it.
+     *
+     * Both modes are inert now, which is the rule the day *score* has followed
+     * since the NaN fix: with no days requested there is no overlap to measure.
+     */
+    describe("with no days selected", () => {
+      it.each(["", "0,0,0,0,0,0,0"])(
+        "excludes nobody in Flex mode when daysWorking is %p",
+        (daysWorking) => {
+          expect(
+            isMatch(rider(), driver({ daysWorking: MON_TUE }), {
+              days: 2,
+              flexDays: 1,
+              daysWorking,
+            }),
+          ).toBe(true);
+        },
+      );
+
+      it("excludes nobody in Flex mode however high flexDays is", () => {
+        // There is no cap to compare against, so no value of `flexDays` should
+        // be able to reject. The panel clamps it to 1, but the routers accept
+        // any number.
+        for (const flexDays of [1, 3, 7, 99]) {
+          expect(
+            isMatch(rider(), driver(), { days: 2, flexDays, daysWorking: "" }),
+          ).toBe(true);
+        }
+      });
+
+      it("excludes nobody in Exact mode", () => {
+        // Unchanged behaviour, restated here beside its Flex counterpart so
+        // the pair is visible in one place.
+        expect(
+          isMatch(rider(), driver({ daysWorking: MON_TUE }), {
+            days: 1,
+            daysWorking: "",
+          }),
+        ).toBe(true);
+      });
+
+      it("still applies the other filters", () => {
+        // Inert means "the day filter imposes nothing", not "nothing is
+        // filtered". A distant candidate must still be rejected.
+        expect(
+          isMatch(rider(), driver({ home: milesNorth(30) }), {
+            days: 2,
+            flexDays: 1,
+            daysWorking: "",
+            startDistance: 5,
+          }),
+        ).toBe(false);
+      });
+
+      it("leaves the day component out of the score rather than penalising it", () => {
+        // Two candidates sharing different numbers of days are indistinguishable
+        // when no days were requested, because there is nothing to share.
+        const monTue = score(rider(), driver({ daysWorking: MON_TUE }), {
+          days: 2,
+          flexDays: 1,
+          daysWorking: "",
+        });
+        const weekdays = score(rider(), driver({ daysWorking: WEEKDAYS }), {
+          days: 2,
+          flexDays: 1,
+          daysWorking: "",
+        });
+
+        expect(monTue).toBe(weekdays);
+      });
+    });
+
+    it("is unchanged for a mode value the routers would accept but the panel cannot send", () => {
+      // `days: z.number()` has no enum, so 3 is reachable. It constrains
+      // nothing, which is the same as Any - not "reject everyone".
+      expect(
+        isMatch(rider(), driver({ daysWorking: "0,0,0,0,0,0,1" }), {
+          days: 3,
+          daysWorking: WEEKDAYS,
+        }),
+      ).toBe(true);
+    });
+
     it("scores fewer shared days worse than more shared days", () => {
       const twoShared = score(rider(), driver({ daysWorking: MON_TUE }));
       const fourShared = score(rider(), driver({ daysWorking: MON_TO_THU }));
