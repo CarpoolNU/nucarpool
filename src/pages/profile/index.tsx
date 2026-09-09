@@ -19,6 +19,7 @@ import Spinner from "../../components/Spinner";
 import { Role } from "@prisma/client";
 import { trackProfileCompletion } from "../../utils/mixpanel";
 import { useUploadFile } from "../../utils/profile/useUploadFile";
+import { hasProfileChanges } from "../../utils/profile/hasProfileChanges";
 import { useAddressSelection } from "../../utils/useAddressSelection";
 import {
   updateUser,
@@ -150,28 +151,16 @@ const Index: NextPage = () => {
     }
   }, [reset, user]);
 
+  /**
+   * Offers the unsaved-changes modal on the way out, or leaves if there is
+   * nothing to lose.
+   *
+   * The comparison lives in `utils/profile/hasProfileChanges.ts` - see the
+   * header there for SCRUM-381, which is what happens when fourteen of these
+   * are chained inline and two of them are wrong.
+   */
   const checkForChanges = async () => {
-    const formValues = watch();
-
-    const hasChanges =
-      formValues.role !== user?.role ||
-      formValues.seatAvail !== user?.seatAvail ||
-      formValues.status !== user?.status ||
-      formValues.companyName !== user?.companyName ||
-      formValues.companyAddress !== user?.companyAddress ||
-      formValues.startAddress !== user?.startAddress ||
-      formValues.preferredName !== user?.preferredName ||
-      formValues.pronouns !== user?.pronouns ||
-      (formValues.daysWorking ?? []).some(
-        (day, index) => day !== (user?.daysWorking.split(",")[index] === "1"),
-      ) ||
-      formValues.startTime?.getTime() !== user?.startTime?.getTime() ||
-      formValues.endTime?.getTime() !== user?.endTime?.getTime() ||
-      formValues.coopStartDate?.getDate() !== user?.coopStartDate?.getDate() ||
-      formValues.coopEndDate?.getDate() !== user?.coopEndDate?.getDate() ||
-      formValues.bio !== user?.bio;
-
-    if (hasChanges) {
+    if (hasProfileChanges(watch(), user)) {
       setShowModal(true);
     } else {
       setIsLoading(true);
