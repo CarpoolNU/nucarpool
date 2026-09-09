@@ -20,6 +20,7 @@ import { Role } from "@prisma/client";
 import { trackProfileCompletion } from "../../utils/mixpanel";
 import { useUploadFile } from "../../utils/profile/useUploadFile";
 import { hasProfileChanges } from "../../utils/profile/hasProfileChanges";
+import { planCoopRangeNotice } from "../../utils/profile/coopRangeNotice";
 import { useAddressSelection } from "../../utils/useAddressSelection";
 import {
   updateUser,
@@ -69,6 +70,17 @@ export async function getServerSideProps(context: GetServerSidePropsContext) {
 const Index: NextPage = () => {
   const router = useRouter();
   const [option, setOption] = useState<"user" | "carpool" | "account">("user");
+
+  /**
+   * Whether this mount has already told the user their co-op range is
+   * backwards.
+   *
+   * A ref rather than state because nothing renders from it, and because the
+   * effect that reads it re-runs on every `user` change — including the
+   * refetch after a save. Without the latch, someone who fixed a different
+   * field first would be pulled back to the Account tab on each round trip.
+   */
+  const coopRangeNoticeShown = useRef(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -119,6 +131,7 @@ const Index: NextPage = () => {
     watch,
     handleSubmit,
     reset,
+    trigger,
     control,
   } = useForm<OnboardingFormInputs>({
     mode: "onChange",
@@ -148,8 +161,30 @@ const Index: NextPage = () => {
       });
       // Deliberately re-runs on every `user` change rather than only the first:
       // a save refetches, and the form must show what was stored.
+
+      // A stored co-op range that runs backwards makes this user invisible in
+      // matching, and the form is `mode: "onChange"` — so nothing would say so
+      // until they changed a field or pressed Save. Neither is likely when the
+      // only symptom is an empty explore map. `planCoopRangeNotice` decides;
+      // the latch is here because the effect above re-runs on every refetch.
+      const notice = planCoopRangeNotice({
+        coopStartDate: user.coopStartDate,
+        coopEndDate: user.coopEndDate,
+        alreadyShown: coopRangeNoticeShown.current,
+      });
+
+      if (notice) {
+        coopRangeNoticeShown.current = true;
+        setOption(notice.tab);
+        // `trigger` on the one field rather than the whole form: with a zod
+        // resolver this still runs the entire schema, but surfaces only this
+        // field's issue — so a user carrying some other incomplete state does
+        // not get it thrown at them on open as well.
+        void trigger(notice.field);
+        toast.error(notice.message, { autoClose: false });
+      }
     }
-  }, [reset, user]);
+  }, [reset, trigger, user]);
 
   /**
    * Where the header wanted to go, held until the user answers the modal.
