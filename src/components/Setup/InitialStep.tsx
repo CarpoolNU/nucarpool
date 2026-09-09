@@ -10,12 +10,14 @@ import { TextField } from "../TextField";
 import useIsMobile from "../../utils/useIsMobile";
 
 import FormRadioButton from "./FormRadioButton";
+import { registerRoleWithSeatDefault } from "../../utils/profile/roleSeatDefault";
 interface InitialStepProps {
   handleNextStep: () => void;
   step: number;
   register: UseFormRegister<OnboardingFormInputs>;
   errors: FieldErrors<OnboardingFormInputs>;
   watch: UseFormWatch<OnboardingFormInputs>;
+  setValue: UseFormSetValue<OnboardingFormInputs>;
 }
 
 const InitialStep = ({
@@ -24,8 +26,14 @@ const InitialStep = ({
   register,
   errors,
   watch,
+  setValue,
 }: InitialStepProps) => {
   const isMobile = useIsMobile();
+
+  // Carries the seat coercion that used to sit in a `role` effect on the page.
+  // See `roleSeatDefault.ts`: only a user-initiated switch may rewrite
+  // `seatAvail`, because populating the form is not a role change. SCRUM-380.
+  const roleField = registerRoleWithSeatDefault({ register, watch, setValue });
 
   return (
     <div className="flex flex-col items-center select-none">
@@ -74,7 +82,7 @@ const InitialStep = ({
                 role={Role.VIEWER}
                 value={Role.VIEWER}
                 currentlySelected={watch("role")}
-                {...register("role")}
+                {...roleField}
               />
             )}
             <FormRadioButton
@@ -84,7 +92,7 @@ const InitialStep = ({
               role={Role.RIDER}
               value={Role.RIDER}
               currentlySelected={watch("role")}
-              {...register("role")}
+              {...roleField}
             />
             <FormRadioButton
               label="Driver"
@@ -93,7 +101,7 @@ const InitialStep = ({
               role={Role.DRIVER}
               value={Role.DRIVER}
               currentlySelected={watch("role")}
-              {...register("role")}
+              {...roleField}
             />
           </div>
           <p

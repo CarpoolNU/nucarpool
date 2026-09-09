@@ -15,6 +15,7 @@ import ProfilePicture from "./ProfilePicture";
 import useIsMobile from "../../utils/useIsMobile";
 import { signOut } from "next-auth/react";
 import { PROFILE_TEXT_MAX_LENGTH } from "../../utils/textLimits";
+import { registerRoleWithSeatDefault } from "../../utils/profile/roleSeatDefault";
 
 interface UserSectionProps {
   register: UseFormRegister<OnboardingFormInputs>;
@@ -38,6 +39,11 @@ const UserSection = ({
 }: UserSectionProps) => {
   const isMobile = useIsMobile();
   const isViewer = watch("role") === Role.VIEWER;
+
+  // Carries the seat coercion that used to sit in a `role` effect on the page.
+  // See `roleSeatDefault.ts`: only a user-initiated switch may rewrite
+  // `seatAvail`, because populating the form is not a role change. SCRUM-380.
+  const roleField = registerRoleWithSeatDefault({ register, watch, setValue });
 
   // A driver in a carpool group cannot change role until they leave it -
   // dropping the group's only driver leaves it unmanageable for everyone in
@@ -81,7 +87,7 @@ const UserSection = ({
             value={Role.VIEWER}
             currentlySelected={watch("role")}
             disabled={lockedToDriver}
-            {...register("role")}
+            {...roleField}
           />
           <Radio
             label="Rider"
@@ -91,7 +97,7 @@ const UserSection = ({
             value={Role.RIDER}
             currentlySelected={watch("role")}
             disabled={lockedToDriver}
-            {...register("role")}
+            {...roleField}
           />
           <Radio
             label="Driver"
@@ -100,7 +106,7 @@ const UserSection = ({
             role={Role.DRIVER}
             value={Role.DRIVER}
             currentlySelected={watch("role")}
-            {...register("role")}
+            {...roleField}
           />
         </div>
 
