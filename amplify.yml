@@ -21,13 +21,45 @@
 # would silently *reduce* coverage: `SECRET_ACCESS_KEY_AWS` is matched by
 # `ACCESS` in the middle of the name, not at the start, and so are two others.
 #
+# ---------------------------------------------------------------------------
+# Exit codes: why one of these lines ends in `|| true`
+#
+# `grep` exits **1** when nothing matches, and Amplify fails the build on any
+# non-zero exit from a build command. So a pattern matching no variable in the
+# container does not produce an empty append - it stops the deploy, before
+# `next build` has run, with nothing in the log but "Command failed with exit
+# code 1" under the offending pattern.
+#
+# That is the right outcome for a pattern covering a variable the app requires,
+# and it is redundant there anyway: console variables reach the build shell, and
+# `next build` imports the envsafe modules, so a missing required variable
+# already fails the build with a message naming it. These lines exist to
+# propagate values to the *runtime*, not to validate them.
+#
+# It is the wrong outcome for a family that is legitimately absent. Two
+# variables are optional - `S3_BUCKET_NAME` and `S3_REGION`, which default in
+# `server.ts` - and `S3_` is the only pattern covering the first of them, so
+# that one line tolerates a no-match and no other line does.
+#
+# `NEXTAUTH_URL` is the one to be careful with: it matches no variable in the
+# envsafe contract, so its strict `grep` is the *only* thing that would notice
+# the variable disappearing from the console. Leave it strict.
+#
+# Do not make a line tolerant to get a red build green. Check first whether the
+# variable is optional in `src/utils/env/{browser,server}.ts`; if it is not, the
+# missing value is the bug.
+# ---------------------------------------------------------------------------
+#
 # **`node scripts/check-env-contract.js --amplify` checks these patterns
 # against the app's real environment contract** and the `env-contract` CI job
 # runs it, so a newly required variable can no longer be missing here. Before
-# that existed, `S3_BUCKET_NAME` was: required, absent from every pattern, and
-# carrying a code default, so the build resolved the console value into the CSP
-# and `images.remotePatterns` while the runtime silently fell back to
-# `carpoolnubucket` (SCRUM-385).
+# that existed, `S3_BUCKET_NAME` was: treated as required by that check, absent
+# from every pattern, and carrying a code default, so the build resolved the
+# console value into the CSP and `images.remotePatterns` while the runtime
+# silently fell back to `carpoolnubucket` (SCRUM-385). The check derives its
+# list from every `process.env.X` in the env modules, so it cannot tell a
+# defaulted variable from a mandatory one - which is how the pattern it asked
+# for came to be a strict one.
 #
 # **This block is required, not belt-and-braces, and must not be deleted.** AWS
 # documents it as the supported way to do this: "a Next.js server component
@@ -102,7 +134,12 @@ frontend:
         - env | grep -e NEXTAUTH_SECRET >> .env.production
         - env | grep -e NEXT_PUBLIC_ >> .env.production
         - env | grep -e REGION >> .env.production
-        - env | grep -e S3_ >> .env.production
+        # The one tolerant line. `S3_BUCKET_NAME` and `S3_REGION` are
+        # optional - both default in `server.ts` to the values this deployment
+        # already uses - so no `S3_*` variable need exist, and `grep` exits 1
+        # when none does, which failed the whole build. See "Exit codes" above
+        # before copying `|| true` onto any other line here.
+        - env | grep -e S3_ >> .env.production || true
         - env | grep -e SECRET >> .env.production
         - env | grep -e AZURE >> .env.production
         - env | grep -e PUSHER >> .env.production
