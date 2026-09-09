@@ -1,4 +1,5 @@
 import { toast } from "react-toastify/unstyled";
+import { toScheduleTimeInput } from "../scheduleTime";
 import { NextRouter } from "next/router";
 import { trpc } from "../trpc";
 import { UserInfo } from "../types";
@@ -42,8 +43,12 @@ export const updateUser = async ({
     preferredName: userInfo.preferredName || sessionName,
     pronouns: userInfo.pronouns,
     daysWorking: daysWorkingParsed,
-    startTime: userInfo.startTime?.toISOString(),
-    endTime: userInfo.endTime?.toISOString(),
+    // `?.toISOString()` here collapsed a cleared time into `undefined`, which
+    // the server then read as "leave it alone" - so clearing a schedule never
+    // left the browser. `toScheduleTimeInput` keeps `null` distinct
+    // (SCRUM-387).
+    startTime: toScheduleTimeInput(userInfo.startTime),
+    endTime: toScheduleTimeInput(userInfo.endTime),
     bio: userInfo.bio,
     coopStartDate: userInfo.coopStartDate!,
     coopEndDate: userInfo.coopEndDate!,
