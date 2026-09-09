@@ -1,6 +1,7 @@
 import { CarpoolSearch, Location } from "@prisma/client";
 import _ from "lodash";
 import { hasSeatAvailable } from "./carpoolSeats";
+import { dayMatchApplies } from "./filters/dayMatch";
 
 /** Type for storing recommendation scores associated with a particular user */
 export type Recommendation = {
@@ -26,16 +27,38 @@ const weights = {
   overlap: 0.1,
 };
 
+/**
+ * The filter cutoffs `calculateScore` applies.
+ *
+ * **Each range below is the slider's range, and the top of it means "any".**
+ * The comments used to disagree with both the UI and the routers — `startTime`
+ * claimed a 3-hour maximum against a 0-4 slider, and the distance pair said 19
+ * where the slider says 20 (SCRUM-386). The tests below the comparison are
+ * `inputs.startTime < 4` and `inputs.startDistance < 20`, so the top value is
+ * not a constraint that happens to be loose: it is switched off entirely.
+ */
 export type FInputs = {
-  startDistance: number; // max 19, greater = any
+  /** Miles, 0-20. 20 means any. */
+  startDistance: number;
   endDistance: number;
-  startTime: number; // max = 3 hours (180min), greater = any
+  /** Hours of deviation, 0-4. 4 means any. It is a **maximum**. */
+  startTime: number;
   endTime: number;
-  days: number; /// 0 for any, 1 for exact
-  flexDays: number; // minimum # of days to match
+  /** 0 any, 1 exact, 2 flex. */
+  days: number;
+  /**
+   * Minimum shared days, for `days === 2`. At least 1, and no more than
+   * `daysWorking` selects — see `clampFlexDays`.
+   */
+  flexDays: number;
   startDate: Date;
   endDate: Date;
-  dateOverlap: number; // 0 any, 1 partial, 2 full
+  /** 0 any, 1 partial, 2 full. */
+  dateOverlap: number;
+  /**
+   * The days the filter asks for, comma-separated, `"1"` for selected. **Empty
+   * or all-zero means the day filter does not apply** — see `dayMatchApplies`.
+   */
   daysWorking: string;
 };
 
@@ -254,12 +277,26 @@ export const calculateScore = (
       }
     }
 
+    // With no days selected the day filter means nothing, so it constrains
+    // nothing — see `dayMatchApplies`. `days === 1` already behaved this way
+    // and the suite pins it; `days === 2` was the one mode left out, and it did
+    // the opposite: `bothUsersDays` of 0 is below any `flexDays`, so selecting
+    // "Flex days" before picking days rejected every candidate and produced an
+    // empty map with nothing to explain it (SCRUM-386).
+    const dayFilterApplies = dayMatchApplies(
+      inputs.days,
+      daysHelper.currentUserDays,
+    );
+
     if (
       (startDistance > inputs.startDistance && inputs.startDistance < 20) ||
       (endDistance > inputs.endDistance && inputs.endDistance < 20) ||
-      (inputs.days == 1 &&
+      (dayFilterApplies &&
+        inputs.days === 1 &&
         daysHelper.bothUsersDays !== daysHelper.currentUserDays) ||
-      (inputs.days === 2 && daysHelper.bothUsersDays < inputs.flexDays)
+      (dayFilterApplies &&
+        inputs.days === 2 &&
+        daysHelper.bothUsersDays < inputs.flexDays)
     ) {
       return undefined;
     }

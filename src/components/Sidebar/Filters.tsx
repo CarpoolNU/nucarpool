@@ -3,6 +3,13 @@ import { FaMinus, FaPlus } from "react-icons/fa6";
 import { FaTimes } from "react-icons/fa";
 import Checkbox from "@mui/material/Checkbox";
 import { FiltersState } from "../../utils/types";
+import {
+  clampFlexDays,
+  countSelectedDays,
+  dayMatchApplies,
+  parseSelectedDays,
+  toggleSelectedDay,
+} from "../../utils/filters/dayMatch";
 import { formatDateToMonth, lastDayOfMonthUTC } from "../../utils/dateUtils";
 import { TextField } from "../TextField";
 import StaticDayBox from "./StaticDayBox";
@@ -62,7 +69,11 @@ const Filters = ({
   const [checkedOpen, setCheckedOpen] = useState(
     activeFilters.favorites || activeFilters.messaged,
   );
-  const [daysMatchOpen, setDaysMatchOpen] = useState(activeFilters.days);
+  // Every field the section owns, the way `distanceOpen` and `startTimeOpen`
+  // already cover both of theirs.
+  const [daysMatchOpen, setDaysMatchOpen] = useState(
+    activeFilters.days || activeFilters.flexDays || activeFilters.daysWorking,
+  );
   const [startTimeOpen, setStartTimeOpen] = useState(
     activeFilters.startTime || activeFilters.endTime,
   );
@@ -106,17 +117,31 @@ const Filters = ({
 
   const toggleDaySelection = (index: number) => {
     setFilters((prev) => {
-      const daysArray = prev.daysWorking.split(",").map((day) => day === "1");
-      daysArray[index] = !daysArray[index];
+      const daysWorking = toggleSelectedDay(prev.daysWorking, index);
+
       return {
         ...prev,
-        daysWorking: daysArray.map((day) => (day ? "1" : "0")).join(","),
+        daysWorking,
+        // Re-clamped here, which is the only place the selected count can
+        // change while the panel is open. Doing it in state rather than at
+        // render is what keeps the number shown and the number sent identical:
+        // unchecking days down to two used to leave `flexDays` at five in
+        // state, displaying `2` and scoring `5`.
+        flexDays: clampFlexDays(prev.flexDays, countSelectedDays(daysWorking)),
       };
     });
   };
-  const selectedDaysCount = filters.daysWorking
-    .split(",")
-    .filter((day) => day === "1").length;
+  // Always seven booleans, so every checkbox stays controlled. The raw
+  // `split(",")` gave `undefined` for six of them whenever no days were
+  // selected, which is the initial state here and permanent for a VIEWER.
+  const selectedDays = parseSelectedDays(filters.daysWorking);
+  const selectedDaysCount = countSelectedDays(filters.daysWorking);
+  // A mode is chosen but there is nothing for a candidate to match, so the
+  // filter is inert - the same rule `calculateScore` now applies. The panel
+  // says so rather than returning a silently unfiltered or empty list.
+  const dayModeChosen = filters.days === 1 || filters.days === 2;
+  const dayFilterInert =
+    dayModeChosen && !dayMatchApplies(filters.days, selectedDaysCount);
   const getMonthInputClassName = (date: Date, dateOverlap: number) => {
     return `${
       date.toLocaleString("default", { month: "long" }).length > 7 &&
@@ -303,7 +328,10 @@ const Filters = ({
             </button>
           </div>
 
-          {filters.days === 1 || filters.days === 2 ? (
+          {/* The day checkboxes exist only once a mode is chosen, which is why
+              disabling the mode buttons until a day is checked - the fix
+              SCRUM-386 proposed - would have deadlocked the panel. */}
+          {dayModeChosen ? (
             <>
               <div className="mx-4 flex flex-col gap-2">
                 <div className="mt-4 flex justify-between">
@@ -311,18 +339,23 @@ const Filters = ({
                     <Checkbox
                       key={day + index.toString()}
                       sx={{ padding: 0 }}
-                      checked={
-                        filters.daysWorking.split(",").map((d) => d === "1")[
-                          index
-                        ]
-                      }
+                      checked={selectedDays[index]}
                       onChange={() => toggleDaySelection(index)}
                       checkedIcon={<StaticDayBox day={day} isSelected={true} />}
                       icon={<StaticDayBox day={day} isSelected={false} />}
                     />
                   ))}
                 </div>
-                {filters.days === 1 ? (
+                {dayFilterInert ? (
+                  <p
+                    className="w-full text-xs"
+                    style={{ color: "#BCA7A7" }}
+                    data-testid="day-filter-inert"
+                  >
+                    (?) Select at least one carpool day. Until you do, this
+                    filter is not narrowing your results.
+                  </p>
+                ) : filters.days === 1 ? (
                   <p className="w-full text-xs" style={{ color: "#BCA7A7" }}>
                     (?) Exact days only shows users carpooling during the
                     selected carpool days.
@@ -335,27 +368,24 @@ const Filters = ({
                   <input
                     type="number"
                     min="1"
-                    max={selectedDaysCount}
-                    value={
-                      filters.flexDays > selectedDaysCount
-                        ? selectedDaysCount
-                        : filters.flexDays
-                    }
+                    // Never below the `min`: with no days selected this was
+                    // `max=0` against `min=1`, a range no value satisfies.
+                    max={Math.max(1, selectedDaysCount)}
+                    // The value in state, not a clamp applied on the way to
+                    // the screen. The old expression showed `0` with no days
+                    // selected while `1` was what got sent and scored, which
+                    // made the empty result set impossible to diagnose.
+                    value={filters.flexDays}
                     onChange={(e) => {
-                      const newFlexDays = Math.max(
-                        1,
-                        Math.min(
-                          selectedDaysCount,
+                      setFilters((prevFilters) => ({
+                        ...prevFilters,
+                        flexDays: clampFlexDays(
                           parseInt(e.target.value, 10),
+                          selectedDaysCount,
                         ),
-                      );
-                      if (!isNaN(newFlexDays)) {
-                        setFilters((prevFilters) => ({
-                          ...prevFilters,
-                          flexDays: newFlexDays,
-                        }));
-                      }
+                      }));
                     }}
+                    data-testid="flex-days"
                     className="focus:ring-northeastern-red flex h-10 w-14 rounded-full border-2 border-gray-300 p-2 text-center focus:border-transparent focus:ring-2"
                   />
                   <p
@@ -377,8 +407,11 @@ const Filters = ({
         toggleOpen={() => setStartTimeOpen(!startTimeOpen)}
       >
         <div className="mt-3">
+          {/* "Min" until SCRUM-386. `calculateScore` rejects when
+              `startTime > inputs.startTime * 60` — a maximum, exactly like the
+              end-time control four labels below, which always said so. */}
           <label className="mb-2 block">
-            Min deviation in start time (hours)
+            Max deviation in start time (hours)
           </label>
           <div className="flex flex-col items-center gap-3">
             <input
