@@ -226,7 +226,7 @@ Nothing scans. The query is driven from the caller's **own** `request` rows and 
 
 The composite `message(userId, isRead)` is worse than useless: the predicate is `userId != ?`, a negation, and no B-tree index range-scans a negation. The optimiser agrees: `message_userId_idx` appears in that row's `possible_keys` and is rejected in favour of `PRIMARY`. **That index exists only because `relationMode = "prisma"` requires one on every relation scalar field** — no query filters messages by author equality — so do not read its presence as evidence that indexing `userId` would help, and do not drop it either.
 
-**Production, from PlanetScale Insights** (August 2026; Insights is readable where direct production queries return `403`):
+**Production, from PlanetScale Insights** (August 2026). Insights is the right source for these regardless of access: it reports what real calls actually did, which no `EXPLAIN` reproduces. The note that once stood here — that direct production queries return `403` — was true only of the PlanetScale MCP server's token; the `pscale` CLI reader role reads production, and [`scripts/README.md`](../../../scripts/README.md#production-is-readable-and-now-measured) is where that route is written down (SCRUM-392):
 
 |                         | rows read per call | time per call | p50     | p99      | tables | `EXPLAIN` rows |
 | ----------------------- | ------------------ | ------------- | ------- | -------- | ------ | -------------- |

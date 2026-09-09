@@ -98,7 +98,9 @@ rather than its current size, so the plan is worth reading against a local
 database while the timings are not. For production numbers, PlanetScale
 Insights is the authority and needs no script at all — that is where the
 figures in [the db README](../src/server/db/README.md#the-unread-badge-the-measurement-and-why-no-index-was-added)
-came from, because direct production reads return `403` (see below).
+came from. Direct production reads through the MCP server return `403`, but the
+CLI reader role does not — see
+[Production is readable, and now measured](#production-is-readable-and-now-measured).
 
 The four `check-*` scripts exit `0` when clean and `1` when not, so they can
 gate a follow-up. **None of them has an `--apply`, and that is a decision
@@ -127,9 +129,11 @@ a script would do to a real database.
 
 ## Run-state record
 
-**No record of past runs existed before this file.** The rows below are what
-could be established on 2026-08-31, and they are deliberately split into two
-different questions, because only one of them is answerable from a database:
+**No record of past runs existed before this file.** The rows below were first
+established on 2026-08-31 and every production figure in them was taken on
+2026-09-09, once the route that reads production was found. They are deliberately
+split into two different questions, because only one of them is answerable from a
+database:
 
 - **"Has it been run?"** — unknowable retrospectively. Nothing recorded it.
 - **"Does it still have work to do?"** — checkable, and the question that
@@ -139,31 +143,71 @@ A zero outstanding count therefore means _"nothing left to do"_, **not**
 _"it was run"_ — a script that never had candidates and a script applied
 successfully look identical.
 
-| Script                                | local | staging             | production          | Last verified | By            |
-| ------------------------------------- | ----- | ------------------- | ------------------- | ------------- | ------------- |
-| `backfill-group-preferences`          | —     | **3 outstanding**⁴  | **12 outstanding**⁴ | 2026-09-09    | SCRUM-287     |
-| `backfill-request-status`             | —     | 0 outstanding       | **unknown**         | 2026-08-31    | initial audit |
-| `cleanup-orphan-locations`            | —     | 0 outstanding       | **unknown**         | 2026-08-31    | initial audit |
-| `check-self-requests`                 | —     | 0 findings          | **unknown**         | 2026-08-31    | initial audit |
-| `check-driverless-groups`             | —     | **1 finding**       | **unknown**         | 2026-08-31    | initial audit |
-| `check-profile-coordinates`           | —     | 0 findings¹         | **unknown**         | 2026-08-31    | initial audit |
-| `check-seat-counts`                   | —     | **1 finding**²      | **unknown**         | 2026-09-02    | SCRUM-348     |
-| `repair-seat-residue`                 | —     | **2 outstanding**   | **unknown**         | 2026-09-02    | SCRUM-348     |
-| `cleanup-orphan-conversations`        | —     | **11 outstanding**³ | **620 retained**³   | 2026-09-03    | SCRUM-295     |
-| `backfill-profile-picture-timestamps` | —     | **1,298 null**⁵     | **unknown**⁵        | 2026-09-03    | SCRUM-366     |
+| Script                                | local | staging             | production          | Last verified | By        |
+| ------------------------------------- | ----- | ------------------- | ------------------- | ------------- | --------- |
+| `backfill-group-preferences`          | —     | **3 outstanding**⁴  | **12 outstanding**⁴ | 2026-09-09    | SCRUM-287 |
+| `backfill-request-status`             | —     | 0 outstanding       | 0 outstanding⁶      | 2026-09-09    | SCRUM-392 |
+| `cleanup-orphan-locations`            | —     | 0 outstanding       | **90 outstanding**⁶ | 2026-09-09    | SCRUM-392 |
+| `check-self-requests`                 | —     | 0 findings          | **2 findings**⁶     | 2026-09-09    | SCRUM-392 |
+| `check-driverless-groups`             | —     | **1 finding**       | **18 findings**⁶    | 2026-09-09    | SCRUM-392 |
+| `check-profile-coordinates`           | —     | **521 findings**¹   | **626 findings**¹   | 2026-09-09    | SCRUM-392 |
+| `check-seat-counts`                   | —     | **1 finding**²      | 0 findings⁶         | 2026-09-09    | SCRUM-392 |
+| `repair-seat-residue`                 | —     | **2 outstanding**   | **3 outstanding**²  | 2026-09-09    | SCRUM-392 |
+| `cleanup-orphan-conversations`        | —     | **11 outstanding**³ | **620 retained**³   | 2026-09-09    | SCRUM-392 |
+| `backfill-profile-picture-timestamps` | —     | **1,298 null**⁵     | **4,322 null**⁵     | 2026-09-09    | SCRUM-392 |
 
-¹ 521 rider searches sit at `(0, 0)`, but none belongs to an onboarded user, so
-the script does not count them.
+**Every production figure above was taken on 2026-09-09 for SCRUM-392**, through
+the CLI reader route described [below](#production-is-readable-and-now-measured),
+read-only and as aggregate counts. Footnote 6 records the one way they fall short
+of what that ticket asked for.
+
+¹ **This cell used to read `0 findings` on staging, and that was wrong.** The
+note said 521 rider searches sit at `(0, 0)` but none belongs to an onboarded
+user, "so the script does not count them". The premise is true and the
+conclusion is not: `check-profile-coordinates` filters on `role !== VIEWER`, not
+on onboarding, and it never has — `git log -p --follow` over the file returns no
+mention of `is_onboarded`. All 521 are `RIDER`, so the script reports all 521.
+
+Both branches, and the split that matters:
+
+|                                                       | staging | production |
+| ----------------------------------------------------- | ------- | ---------- |
+| Rows the script reports                               | **521** | **626**    |
+| …belonging to an onboarded user                       | **0**   | **47**     |
+| `(0, 0)` on a non-`VIEWER` search, never onboarded    | 521     | 579        |
+| Reversed co-op range                                  | 0       | 47         |
+| Coordinates out of range, or a missing `location` row | 0       | 0          |
+
+So the actionable production population is **47 searches with an inverted co-op
+range**, 40 of them `ACTIVE`, and the other 579 are abandoned sign-ups that were
+never in matching to begin with. Two tickets: **SCRUM-407** for the 47, and
+**SCRUM-408** for the script reporting the 579 alongside them and exiting `1` on
+the total.
 
 ² One `carpool_search` row at `seats_avail = -1`, DRIVER and ACTIVE. The
 `repair-seat-residue` row is that same seat row plus one member-less `group`
 row, which is the finding `check-driverless-groups` reports as "empty" — the
 two scripts see the same group from different sides.
 
+**Production splits the two halves apart.** Its seat counts are clean —
+`MIN = 0`, `MAX = 6`, zero out of range across 4,098 rows, confirming the
+incidental SCRUM-380 measurement — so the whole of its `repair-seat-residue`
+figure is the other half: **3 member-less `group` rows** and no seat row at all.
+Those three are the easy case of SCRUM-406: nothing points at them, so deleting
+them affects nobody.
+
 ³ Staging: 11 orphan conversations holding **25 messages**. Production:
 **620 conversations holding 1,258 messages**, every one of the 620 non-empty,
 the largest holding 28 — measured read-only through DBeaver on 2026-09-03, with
 nothing modified.
+
+**Re-verified on 2026-09-09 through the CLI reader route, and the figures are
+identical**: 620 conversations failing both links, holding 1,258 messages, out of
+3,717 conversations in total. Two things follow. The regression check this row
+exists for **passes** — the population has not grown, so `requests.delete`
+remains correct. And two independent routes, taken six days apart by different
+tools, agree exactly, which is the strongest evidence available here that the
+reader role sees the same database DBeaver did.
 
 **Both request links were checked on the same date, also read-only:** **0** of
 the 620 were still pointed at by a live request through `Request.conversationId`,
@@ -252,8 +296,8 @@ SCRUM-366, which is the contract half and cannot start until this row is clear.
 metadata, and on `staging`, where a query against the column succeeds. So the
 deploy request has happened and precondition 1 of SCRUM-366 holds.
 
-**Staging: 1,298 user rows, 1,298 null, 0 recorded.** Read-only, nothing
-modified.
+**Staging: 1,298 user rows, 1,298 null, 0 recorded. Production: 4,323 user rows,
+4,322 null, 1 recorded.** Read-only, nothing modified.
 
 Two things that cell is not. It is **not an outstanding count** — it is an upper
 bound on one. The script only writes a row that has an object at
@@ -263,10 +307,30 @@ uploaded a picture, so the number of rows it would actually fill is smaller and
 `s3:ListBucket`, which is why this is the one script here that reads AWS, and
 why its dry run — not this cell — is what SCRUM-366's precondition asks for.
 
-It is also **not evidence about the deployed build**. `0 recorded` is equally
-consistent with "Amplify has not shipped the SCRUM-276 build to staging" and
-with "it has, and nobody has uploaded a picture since"; the two are
-indistinguishable from here. That is precondition 3, and it is unverified.
+It is also **not evidence about the deployed build — on staging.** `0 recorded`
+is equally consistent with "Amplify has not shipped the SCRUM-276 build to
+staging" and with "it has, and nobody has uploaded a picture since"; the two are
+indistinguishable from here. That is precondition 3, and on staging it is
+unverified.
+
+**Production's single non-null row settles it there, and it is the only positive
+control any of these cells has produced.** Exactly two things write
+`profile_picture_updated_at`: the upload mutation at
+[`src/server/router/user.ts:528`](../src/server/router/user.ts), and this script
+— which has never been run anywhere. So that row was written by a deployed build
+containing SCRUM-276, and **precondition 3 of SCRUM-366 holds on production**.
+
+**It reaches further than its own ticket.** SCRUM-276's implementation commit is
+`89c835e` (2026-09-03), and SCRUM-253's is `dff0212` (2026-08-27), which
+`git merge-base --is-ancestor` confirms is an ancestor of it. A build containing
+the later commit contains the earlier one, so **precondition 3 of SCRUM-287 holds
+too** — the production build knows about `group_notes` and its two siblings. That
+is a bound on the deployed commit rather than a reading of it; SCRUM-405 is the
+ticket for publishing the commit directly instead of inferring it from a column.
+
+Note the asymmetry that makes this work. A non-null value proves a build shipped;
+a null one proves nothing, which is why the same reasoning fails on
+`carpool_search.group_notes`, where production is 0 of 4,098.
 
 Nothing is broken in the meantime — `getPresignedDownloadUrl` falls back to the
 S3 `HeadObject` for any null row, exactly the behaviour that preceded the
@@ -304,13 +368,47 @@ above were produced by direct SQL rather than by running their scripts. The cond
 but a dry run has not confirmed them and **no `--apply` has been run anywhere**.
 Run the dry run before the apply rather than trusting this cell.
 
-**Production is unmeasured for every row but one — but no longer because it
-cannot be read.** That was the finding here on 2026-08-31, recorded as a flat
-`403 Permission denied`, and it holds only for the **PlanetScale MCP server**:
-its token still refuses row data on the production branch while returning schema
-metadata, so a column can be confirmed to exist but never counted. The `pscale`
-**CLI** authenticates as a different identity, and that one does read
-production:
+⁶ **These figures came from SQL, not from the scripts' own dry runs, and that is
+a real difference.** SCRUM-392 asked for the dry runs. A dry run needs a Prisma
+client pointed at production, which needs a connection string this repository
+does not hold, and the one route that would produce one —
+`pscale connect`, opening a local proxy — is denied against `main` by
+`.claude/hooks/pscale-guard.sh`. So the queries under
+[Re-checking without running the scripts](#re-checking-without-running-the-scripts)
+were used instead, extended where a script's candidate set is narrower than its
+predicate.
+
+Where that could matter, and what was done about it:
+
+- **`backfill-group-preferences`** is the case this file already warned about: it
+  skips a row whose legacy value parses to nothing, so "rows matching" and "rows
+  it would write" differ by design. Both were measured — 12 and 11 — rather than
+  one standing in for the other.
+- **`check-driverless-groups`** reports three categories, and the query here
+  covers all three: 15 driverless, 3 empty, 0 solo. The old staging cell counted
+  only what the script called a finding, which is the same total.
+- **`check-profile-coordinates`** applies four conditions per row, and a row can
+  match more than one; the cell is a distinct row count, not their sum. See
+  footnote 1.
+- **`cleanup-orphan-locations`, `check-self-requests`, `check-seat-counts`,
+  `backfill-request-status`** each have one predicate and no separate candidate
+  step, so the two cannot disagree.
+
+The gap that remains is that nobody has watched these scripts run against
+production. A predicate error shared between a script and the SQL written from it
+would survive both. Treat the cells as measured rather than as verified, and run
+the dry run before any `--apply`.
+
+### Production is readable, and now measured
+
+**Every production cell above carries a figure, as of 2026-09-09.** Getting
+there took correcting a claim this file made for nine days: that production row
+data could not be read at all. That was the finding on 2026-08-31, recorded as a
+flat `403 Permission denied`, and it holds only for the **PlanetScale MCP
+server** — its token still refuses row data on the production branch while
+returning schema metadata, so a column can be confirmed to exist but never
+counted. The `pscale` **CLI** authenticates as a different identity, and that one
+does read production:
 
 ```
 pscale sql nucarpool main --org devashishsood18 --role reader \
@@ -320,23 +418,39 @@ pscale sql nucarpool main --org devashishsood18 --role reader \
 `.claude/hooks/pscale-guard.sh` names that exact form as the sanctioned way to
 read production, and denies the write roles, the local-proxy command and every
 write shape aimed at the production branch. It is the route the SCRUM-380
-measurement below used on 2026-09-09. `cleanup-orphan-conversations` was
-measured a different way again, read-only through DBeaver on 2026-09-03.
+measurement below used on 2026-09-09, and the route every production figure in
+the table came from. `cleanup-orphan-conversations` was measured a different way
+again — read-only through DBeaver on 2026-09-03 — and re-measured through this
+route on 2026-09-09, to the same numbers.
 
-**The cells above were not re-measured when this was discovered.** SCRUM-380 was
-the active ticket, and re-running eight scripts' predicates against production is
-its own piece of work — **SCRUM-392**, rather than folded into that change. Read
-each `unknown` as "not yet asked", not as "unanswerable".
+**What the eight new figures changed.** Four cells that read `unknown` turned out
+to be clean, and four did not:
 
-`backfill-profile-picture-timestamps` is the one row DBeaver would **not**
-settle either. Its question is "which users have an object in S3 but no
-timestamp", and no amount of database access answers the first half — see
-footnote 5. That row needs the script's own dry run, run somewhere with
-`s3:ListBucket`.
+| Script                                | production                                               | filed as                              |
+| ------------------------------------- | -------------------------------------------------------- | ------------------------------------- |
+| `backfill-request-status`             | 0                                                        | —                                     |
+| `check-seat-counts`                   | 0                                                        | —                                     |
+| `cleanup-orphan-locations`            | 90 orphan `location` rows                                | no ticket; the script owns the repair |
+| `check-self-requests`                 | 2 self-requests                                          | SCRUM-409                             |
+| `check-driverless-groups`             | 15 driverless + 3 empty groups, 33 members stranded      | SCRUM-406                             |
+| `check-profile-coordinates`           | 47 inverted co-op ranges on onboarded users, 40 `ACTIVE` | SCRUM-407                             |
+| `repair-seat-residue`                 | 3 member-less groups, no bad seat row                    | SCRUM-406                             |
+| `backfill-profile-picture-timestamps` | 4,322 of 4,323 null — an upper bound, not a count        | needs `s3:ListBucket`                 |
 
-**Every other production cell above is an open question, not a zero** — and the
-11-versus-620 gap on the row that _has_ been measured is the reason to treat
-them that way.
+**Staging predicted none of it.** Its figures for those four are 0, 0, 1 and 2.
+The 11-versus-620 gap on `cleanup-orphan-conversations` was already the standing
+warning; the driverless-group row is the same lesson again, at 0 versus 15.
+
+`backfill-profile-picture-timestamps` is the one row no database access settles.
+Its question is "which users have an object in S3 but no timestamp", and no
+amount of SQL answers the first half — see footnote 5. That row needs the
+script's own dry run, run somewhere with `s3:ListBucket`.
+
+**No production cell above is an open question any more**, which is the whole
+point of this section — but four of them turned out to be a number rather than a
+zero, and that is why the 11-versus-620 gap was worth taking seriously. A cell
+that reads `0` now means the query was asked and answered on that date, not that
+nobody looked.
 
 ### SCRUM-380 — driver seat counts on production, measured before the fix
 
@@ -442,7 +556,11 @@ unsuffixed variables can be deleted from `emailParams.ts`.
 | staging     | **no**      | —    | —   |
 | production  | **no**      | —    | —   |
 
-### Four findings worth acting on
+### Findings worth acting on
+
+Four of these were known from staging. Four more came out of the 2026-09-09
+production measurement and exist only there — numbered 5 to 8, each with its own
+ticket, because filing rather than repairing is SCRUM-392's stated policy.
 
 1. **`backfill-group-preferences` is not finished anywhere — 3 rows on staging
    and 12 on production**, confirmed by direct read rather than inferred. Not
@@ -482,7 +600,41 @@ unsuffixed variables can be deleted from `emailParams.ts`.
    Should that be reversed, SCRUM-364 has since added `--limit` and
    `--older-than` so the population can be retired in tranches beneath the
    existing `--max` ceiling; raising `--max` past 620 is still not the intended
-   route. Until then this row is a regression check, not a queue.
+   route. Until then this row is a regression check, not a queue. **Re-measured
+   on 2026-09-09 through the CLI reader route: still exactly 620 and 1,258, so
+   the regression check passes.**
+5. **15 of 66 production groups have no driver, and 33 members are in one.**
+   Staging has none, so this has never been seen before. The group cannot be
+   dissolved, handed over or added to by anyone, because the driver is the only
+   member with group management. Both causes are fixed and neither was
+   retroactive — SCRUM-289 and SCRUM-291. **No repair is obviously correct**,
+   which is why `check-driverless-groups` ships without an `--apply`: promoting a
+   member puts someone in charge of a car they may not own, and dissolving
+   removes a carpool people may still be using. **SCRUM-406.** The 3 empty groups
+   in the same count are the easy half — nothing points at them.
+6. **47 production searches store a co-op range that ends before it starts, 40 of
+   them `ACTIVE`.** Every one belongs to an onboarded user. The matching query
+   asks for an overlapping window, which an inverted range satisfies for nobody,
+   so those users see an empty map and appear on nobody else's — with no error
+   and no log line. SCRUM-302 added the validation and was not retroactive.
+   Swapping the two dates is the obvious repair and is a guess: the row says the
+   intent was not recorded, not which end is wrong. **SCRUM-407.**
+7. **`check-profile-coordinates` reports 626 rows on production and 521 on
+   staging, of which 47 and 0 are actionable.** It flags `(0, 0)` coordinates on
+   any non-`VIEWER` search without asking whether the user finished onboarding,
+   so abandoned sign-ups dominate the output and the script's exit code is
+   permanently `1` — a gate that gates nothing. This is also what made footnote 1
+   and this table wrong about staging for nine days. **SCRUM-408.**
+8. **2 production `request` rows have the same user on both ends.** Residue from
+   before `requests.create` grew its explicit self-request guard; the ordinary
+   duplicate check cannot catch one, because both halves of its `OR` match the
+   same row. Small, and the deletion is not trivial — a request deleted without
+   its conversation is exactly how the 620 in finding 4 came about.
+   **SCRUM-409.**
+
+**And one production figure that needed no ticket: 90 orphan `location` rows.**
+`cleanup-orphan-locations` already owns that repair, its dry run is the next
+step, and the run-state row above is the record. Staging has none.
 
 ### Re-checking without running the scripts
 
