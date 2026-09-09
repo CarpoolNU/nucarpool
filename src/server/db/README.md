@@ -89,6 +89,27 @@ npx ts-node scripts/check-profile-coordinates.ts
 
 It is read-only and has no `--apply`, deliberately: a lost coordinate cannot be re-derived without re-geocoding an address string that may itself be empty, and only the student knows which way round their own co-op runs. There is no correct value to write, so the remedy is to ask the affected users to re-save their profile — which the boundary now validates. A `VIEWER` at `(0, 0)` is not reported, since that is expected.
 
+## What Prisma logs
+
+`client.ts` builds the client with **event-based** logging — `{ emit: "event", level }` — and attaches its own `$on` handlers, rather than passing plain level strings. Level strings are Prisma's _stdout_ mode: the client formats its own message and prints it, and nothing in the application can intervene. Since [`[trpc].ts`](../../pages/api/trpc/%5Btrpc%5D.ts) deliberately redacts the tRPC error payload in production, having a second route out of the same request under no policy at all made that control read as complete when it was not (SCRUM-399).
+
+[`prismaLog.ts`](prismaLog.ts) holds the policy. In production a log line is `{ target, message }` with the message reduced to the failure reason; outside production the raw message passes through, so local debugging keeps the code frame pointing at the offending line.
+
+**What that route actually disclosed, measured against Prisma 4.16.2 rather than assumed.** SCRUM-399 was filed suspecting query parameters — "addresses and emails" — since a Prisma error quotes the values that caused it. Probed in both stdout and event mode with a `where: { id: "SENTINEL_VALUE" }`:
+
+| Question                        | Answer                                                                                                                                                                 |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Are argument values logged?     | **No.** The sentinel appeared in no output, in either mode. The suspicion the ticket was filed on was wrong.                                                           |
+| Is the `log:` config the route? | **Yes.** `log: []` produces no output at all, so this is not something Prisma does unconditionally.                                                                    |
+| What is logged?                 | The rendered invocation, plus — only where Prisma can resolve the original source — an absolute path and an excerpt of the app's own code. Then the reason.            |
+| Which does production get?      | The **frameless** spelling. Prisma cannot read original sources out of bundled `next build` output, so production leaked the model and method, not the path or source. |
+
+That last row is why the invocation line has two spellings, `invocation in` and `invocation:`, and why `PREAMBLE` in `prismaLog.ts` matches both. Matching only the frame-bearing one passes every test written from a local payload and still leaks in production; it is the one mistake this area invites.
+
+`target` is kept in every environment — `user.findUnique` for a request error, `quaint::pooled` for an engine one. It names the same model and method the stripped invocation line did, which is a deliberate departure from the ticket's "no rendered invocation in production": it is the single field that makes a line actionable, and it holds no argument, path or source.
+
+**`query` logging is not enabled, and that is the channel that would log parameters.** Turning it on writes every statement with its arguments to the process output, outside this policy. Do not enable it in a deployed environment.
+
 ## Text lengths
 
 MySQL runs in strict mode, so a value wider than its column makes the write **throw**, not truncate. Prisma surfaces that as `P2000` and tRPC turns it into an `INTERNAL_SERVER_ERROR` — a 500 for what is really a validation problem, raised after the UI has already accepted the text. Every Zod input that writes free text to a bounded column therefore carries a `.max()` matching that column.
