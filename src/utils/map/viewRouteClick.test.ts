@@ -2,13 +2,9 @@ import type mapboxgl from "mapbox-gl";
 import { Permission, Role, Status } from "@prisma/client";
 import type { FeatureCollection } from "geojson";
 import type { CarpoolAddress, GeoJsonUsers, PublicUser, User } from "../types";
-import {
-  DestinationMarkerRef,
-  removeDestinationMarker,
-  runViewRouteClick,
-} from "./viewRouteClick";
+import { runViewRouteClick } from "./viewRouteClick";
 import { viewRoute } from "./viewRoute";
-import clearRiderStartMarkers from "./clearRiderStartMarkers";
+import clearOtherUserMarkers from "./clearOtherUserMarkers";
 import updateCompanyLocation from "./updateCompanyLocation";
 import updateUserLocation from "./updateUserLocation";
 
@@ -26,7 +22,7 @@ import updateUserLocation from "./updateUserLocation";
 jest.mock("./viewRoute", () => ({
   viewRoute: jest.fn(),
 }));
-jest.mock("./clearRiderStartMarkers", () => ({
+jest.mock("./clearOtherUserMarkers", () => ({
   __esModule: true,
   default: jest.fn(),
 }));
@@ -149,7 +145,6 @@ type RunArgs = Parameters<typeof runViewRouteClick>[0];
 const run = (overrides: Partial<RunArgs> = {}) => {
   const setOtherUser = jest.fn();
   const setPoints = jest.fn();
-  const destinationMarker: DestinationMarkerRef = { current: null };
 
   runViewRouteClick({
     user: buildUser(),
@@ -160,13 +155,12 @@ const run = (overrides: Partial<RunArgs> = {}) => {
     startAddressSelected: NO_ADDRESS,
     companyAddressSelected: NO_ADDRESS,
     isMobile: false,
-    destinationMarker,
     setOtherUser,
     setPoints,
     ...overrides,
   });
 
-  return { setOtherUser, setPoints, destinationMarker };
+  return { setOtherUser, setPoints };
 };
 
 /** The `updateCompanyLocation` calls that add or remove another user's pin. */
@@ -252,14 +246,11 @@ describe("runViewRouteClick", () => {
     });
 
     it("gives them a destination pin, which nothing used to do", () => {
-      const { destinationMarker } = run({
-        geoJsonUsers: geoJsonWith(OTHER_ID),
-      });
+      run({ geoJsonUsers: geoJsonWith(OTHER_ID) });
 
       expect(destinationPinCalls()).toEqual([
         { userId: CLICKED_ID, removed: false },
       ]);
-      expect(destinationMarker.current?.id).toBe(CLICKED_ID);
     });
 
     it("does not clear the selection it just made", () => {
@@ -289,12 +280,9 @@ describe("runViewRouteClick", () => {
     });
 
     it("adds no pin, because the cluster layer already draws them there", () => {
-      const { destinationMarker } = run({
-        geoJsonUsers: geoJsonWith(CLICKED_ID),
-      });
+      run({ geoJsonUsers: geoJsonWith(CLICKED_ID) });
 
       expect(destinationPinCalls()).toEqual([]);
-      expect(destinationMarker.current).toBeNull();
     });
   });
 
@@ -305,13 +293,12 @@ describe("runViewRouteClick", () => {
    */
   describe("request context", () => {
     it("draws the route and pins the counterpart", () => {
-      const { destinationMarker } = run({ selectedUserId: CLICKED_ID });
+      run({ selectedUserId: CLICKED_ID });
 
       expect(viewRoute).toHaveBeenCalledTimes(1);
       expect(destinationPinCalls()).toEqual([
         { userId: CLICKED_ID, removed: false },
       ]);
-      expect(destinationMarker.current?.id).toBe(CLICKED_ID);
     });
 
     it("leaves the page's otherUser state alone", () => {
@@ -332,44 +319,52 @@ describe("runViewRouteClick", () => {
     });
   });
 
-  describe("the pin left over from a previous click", () => {
-    const previous = buildPublicUser({ id: OTHER_ID, name: "Previous" });
+  /**
+   * What SCRUM-391 changed. This block used to drive the remembered-pin ref
+   * through its cases - a different user clicked, the same user re-clicked, the
+   * remembered user appearing on the map - because removal was keyed by
+   * identity and each case named a different pin.
+   *
+   * There is nothing to remember now. Every `other-user-*` layer goes at the
+   * top of the handler, so the only question left is the one below: that the
+   * sweep runs, and that it runs *before* this handler draws, not after.
+   */
+  describe("clearing what the previous view left behind", () => {
+    it("sweeps every other user's pin first", () => {
+      run();
 
-    it("comes off before the new one goes on", () => {
-      const destinationMarker: DestinationMarkerRef = { current: previous };
-
-      run({ destinationMarker });
-
-      expect(destinationPinCalls()).toEqual([
-        { userId: OTHER_ID, removed: true },
-        { userId: CLICKED_ID, removed: false },
-      ]);
-      expect(destinationMarker.current?.id).toBe(CLICKED_ID);
+      expect(clearOtherUserMarkers).toHaveBeenCalledWith(map);
+      expect(clearOtherUserMarkers).toHaveBeenCalledTimes(1);
     });
 
-    it("survives a second click on the same user", () => {
-      const destinationMarker: DestinationMarkerRef = {
-        current: buildPublicUser(),
-      };
+    it("sweeps before adding this click's own pin, never after", () => {
+      // The ordering is the acceptance criterion most easily broken by a later
+      // edit: a sweep that ran afterwards would take off the pin this handler
+      // just drew, trading a stale overlay for an empty one. Asserted through
+      // invocation order rather than by reading the function top to bottom.
+      run({ geoJsonUsers: geoJsonWith(OTHER_ID) });
 
-      run({ destinationMarker });
+      const sweptAt = jest.mocked(clearOtherUserMarkers).mock
+        .invocationCallOrder[0]!;
+      const pinnedAt = jest
+        .mocked(updateCompanyLocation)
+        .mock.calls.map((call, index) => ({ call, index }))
+        .filter(({ call }) => call[6] === false)
+        .map(
+          ({ index }) =>
+            jest.mocked(updateCompanyLocation).mock.invocationCallOrder[index]!,
+        );
 
-      expect(destinationPinCalls()).toEqual([
-        { userId: CLICKED_ID, removed: false },
-      ]);
+      expect(pinnedAt).toHaveLength(1);
+      expect(sweptAt).toBeLessThan(pinnedAt[0]!);
     });
 
-    it("comes off once the map starts plotting that user itself", () => {
-      const destinationMarker: DestinationMarkerRef = {
-        current: buildPublicUser(),
-      };
+    it("removes no pin by name, having swept them all", () => {
+      // `updateCompanyLocation(..., remove: true)` was the old removal call.
+      // Nothing should reach for it now.
+      run({ geoJsonUsers: geoJsonWith(OTHER_ID) });
 
-      run({ destinationMarker, geoJsonUsers: geoJsonWith(CLICKED_ID) });
-
-      expect(destinationPinCalls()).toEqual([
-        { userId: CLICKED_ID, removed: true },
-      ]);
-      expect(destinationMarker.current).toBeNull();
+      expect(destinationPinCalls().filter((call) => call.removed)).toEqual([]);
     });
   });
 
@@ -379,12 +374,12 @@ describe("runViewRouteClick", () => {
       // is the `?? false` in the module defending against a payload that
       // violates them. Falling the other way would silently withhold the pin
       // from everyone.
-      const { destinationMarker } = run({
-        geoJsonUsers: { type: "FeatureCollection" } as GeoJsonUsers,
-      });
+      run({ geoJsonUsers: { type: "FeatureCollection" } as GeoJsonUsers });
 
       expect(viewRoute).toHaveBeenCalledTimes(1);
-      expect(destinationMarker.current?.id).toBe(CLICKED_ID);
+      expect(destinationPinCalls()).toEqual([
+        { userId: CLICKED_ID, removed: false },
+      ]);
     });
 
     it("does nothing without a map", () => {
@@ -393,7 +388,7 @@ describe("runViewRouteClick", () => {
       expect(viewRoute).not.toHaveBeenCalled();
       expect(setOtherUser).not.toHaveBeenCalled();
       expect(setPoints).not.toHaveBeenCalled();
-      expect(clearRiderStartMarkers).not.toHaveBeenCalled();
+      expect(clearOtherUserMarkers).not.toHaveBeenCalled();
     });
 
     it("does nothing before the map's user list has loaded", () => {
@@ -431,12 +426,6 @@ describe("runViewRouteClick", () => {
       expect(setOtherUser).toHaveBeenCalledWith(
         expect.objectContaining({ id: CLICKED_ID }),
       );
-    });
-
-    it("clears the group route's rider start markers first", () => {
-      run();
-
-      expect(clearRiderStartMarkers).toHaveBeenCalledWith(map);
     });
   });
 
@@ -533,42 +522,5 @@ describe("runViewRouteClick", () => {
         jest.mocked(viewRoute).mock.calls[0]![0].userCoord,
       ).toBeUndefined();
     });
-  });
-});
-
-describe("removeDestinationMarker", () => {
-  const marked = buildPublicUser({ id: OTHER_ID });
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  it("takes the remembered pin off and forgets it", () => {
-    const destinationMarker: DestinationMarkerRef = { current: marked };
-
-    removeDestinationMarker(map, destinationMarker);
-
-    expect(destinationPinCalls()).toEqual([
-      { userId: OTHER_ID, removed: true },
-    ]);
-    expect(destinationMarker.current).toBeNull();
-  });
-
-  it("does nothing when no pin is remembered", () => {
-    const destinationMarker: DestinationMarkerRef = { current: null };
-
-    removeDestinationMarker(map, destinationMarker);
-
-    expect(updateCompanyLocation).not.toHaveBeenCalled();
-  });
-
-  it("keeps remembering the pin when there is no map to remove it from", () => {
-    // Forgetting it here would strand the layer on a map that still exists.
-    const destinationMarker: DestinationMarkerRef = { current: marked };
-
-    removeDestinationMarker(undefined, destinationMarker);
-
-    expect(updateCompanyLocation).not.toHaveBeenCalled();
-    expect(destinationMarker.current).toBe(marked);
   });
 });

@@ -35,7 +35,6 @@ import {
   useGetDirections,
   viewRoute,
   clearDirections,
-  clearMarkers,
 } from "../utils/map/viewRoute";
 import { MapConnectPortal } from "../components/Map/MapConnectPortal";
 import useSearch from "../utils/search";
@@ -51,11 +50,9 @@ import MessagePanel from "../components/Messages/MessagePanel";
 import InactiveBlocker from "../components/Map/InactiveBlocker";
 import updateGeoJsonUsers from "../utils/map/updateGeoJsonUsers";
 import useIsMobile from "../utils/useIsMobile";
-import updateStartLocation from "../utils/map/updateStartLocation";
-import {
-  removeDestinationMarker,
-  runViewRouteClick,
-} from "../utils/map/viewRouteClick";
+import { runViewRouteClick } from "../utils/map/viewRouteClick";
+import { runViewGroupRoute } from "../utils/map/groupRouteClick";
+import clearOtherUserMarkers from "../utils/map/clearOtherUserMarkers";
 import { isValidCoordinates } from "../utils/map/coordinates";
 
 mapboxgl.accessToken = browserEnv.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
@@ -107,17 +104,6 @@ const Home: NextPage<any> = () => {
     favorites: false,
     messaged: false,
   };
-  /**
-   * The one destination pin the page has put on the map for a clicked user.
-   *
-   * Was `tempOtherUser` plus `tempOtherUserMarkerActive` state until
-   * SCRUM-379. `DestinationMarkerRef` in `utils/map/viewRouteClick.ts` records
-   * why it has to be a ref: the two effects below both listed that state in
-   * their dependency arrays *and* reset it in their bodies, which is an effect
-   * that retriggers itself. It only ever stayed shut because the sole line that
-   * set the state sat in a branch that could not be reached.
-   */
-  const destinationMarker = useRef<PublicUser | null>(null);
   const [defaultFilters] = useState<FiltersState>(initialFilters);
   const [filters, setFilters] = useState<FiltersState>(initialFilters);
   const [sort, setSort] = useState<string>("any");
@@ -325,16 +311,6 @@ const Home: NextPage<any> = () => {
   const enhancedFavs = favorites.map(extendPublicUser);
 
   /**
-   * Takes the page's one destination pin off the map.
-   *
-   * Wrapped here rather than called inline so the two effects below can share
-   * it and still satisfy `react-hooks/exhaustive-deps`.
-   */
-  const removeMarkedDestination = useCallback(() => {
-    removeDestinationMarker(mapState, destinationMarker);
-  }, [mapState]);
-
-  /**
    * **View Route.** The body lives in `utils/map/viewRouteClick.ts` - see the
    * header there for why, and `viewRoutePlan.ts` for the branch decision it
    * used to get wrong.
@@ -350,7 +326,6 @@ const Home: NextPage<any> = () => {
         startAddressSelected,
         companyAddressSelected,
         isMobile,
-        destinationMarker,
         setOtherUser,
         setPoints,
       });
@@ -365,210 +340,28 @@ const Home: NextPage<any> = () => {
     ],
   );
 
+  /**
+   * **Preview Group Route.** The body lives in `utils/map/groupRouteClick.ts` -
+   * see the header there for why, and `groupRouteWaypoints.ts` for the pickup
+   * and dropoff ordering it used to hold inline.
+   */
   const onViewGroupRoute = useCallback(
     (driver: PublicUser, riders: PublicUser[]) => {
-      if (!mapState || !user) {
+      // Narrows `user` for the call below; `runViewGroupRoute` makes the same
+      // check against the map. Logged rather than returned silently, which is
+      // what the handler did before it was extracted.
+      if (!user) {
         console.error("Map or user not available for group route viewing");
         return;
       }
 
-      // clear existing routes first
-      clearDirections(mapState);
-      clearMarkers(mapState);
-
-      // helper function to calculate straight-line distance
-      const calculateDistance = (
-        coord1: [number, number],
-        coord2: [number, number],
-      ): number => {
-        const [lng1, lat1] = coord1;
-        const [lng2, lat2] = coord2;
-        return Math.sqrt(Math.pow(lng2 - lng1, 2) + Math.pow(lat2 - lat1, 2));
-      };
-
-      // create optimized waypoints using constraint-aware nearest neighbor
-      const waypoints: [number, number][] = [
-        [driver.startCoordLng, driver.startCoordLat], // driver start
-      ];
-
-      let currentLocation: [number, number] = [
-        driver.startCoordLng,
-        driver.startCoordLat,
-      ];
-      const remainingPickups = new Set(riders.map((rider) => rider.id));
-      const pickedUpRiders = new Set<string>(); // track which riders are in car
-
-      // map for quick rider lookup
-      const riderMap = new Map(riders.map((rider) => [rider.id, rider]));
-
-      while (remainingPickups.size > 0 || pickedUpRiders.size > 0) {
-        // find all candidate points we can visit next
-        const candidatePoints: Array<{
-          type: "pickup" | "dropoff";
-          riderId: string;
-          coordinates: [number, number];
-          distance: number;
-        }> = [];
-
-        // add all remaining pickups as candidates
-        remainingPickups.forEach((riderId) => {
-          const rider = riderMap.get(riderId)!;
-          const distance = calculateDistance(currentLocation, [
-            rider.startCoordLng,
-            rider.startCoordLat,
-          ]);
-          candidatePoints.push({
-            type: "pickup",
-            riderId,
-            coordinates: [rider.startCoordLng, rider.startCoordLat],
-            distance,
-          });
-        });
-
-        // add dropoffs only for riders already picked up
-        pickedUpRiders.forEach((riderId) => {
-          const rider = riderMap.get(riderId)!;
-          const distance = calculateDistance(currentLocation, [
-            rider.companyCoordLng,
-            rider.companyCoordLat,
-          ]);
-          candidatePoints.push({
-            type: "dropoff",
-            riderId,
-            coordinates: [rider.companyCoordLng, rider.companyCoordLat],
-            distance,
-          });
-        });
-
-        // sort candidates by distance
-        candidatePoints.sort((a, b) => a.distance - b.distance);
-
-        // The nearest candidate is always the valid one, so take it. Every
-        // candidate above is already legal by construction: a pickup is only
-        // offered for a rider not yet collected, and a dropoff only for one
-        // already in the car. This replaced a loop whose `if`/`else` branches
-        // were identical and both broke on the first element, so it selected
-        // `candidatePoints[0]` while reading as a constraint check.
-        const chosenCandidate = candidatePoints[0];
-
-        if (!chosenCandidate) break;
-
-        // add chosen point to waypoints
-        waypoints.push(chosenCandidate.coordinates);
-        currentLocation = chosenCandidate.coordinates;
-
-        // update state based on chosen point
-        if (chosenCandidate.type === "pickup") {
-          remainingPickups.delete(chosenCandidate.riderId);
-          pickedUpRiders.add(chosenCandidate.riderId);
-        } else {
-          // dropoff
-          pickedUpRiders.delete(chosenCandidate.riderId);
-        }
-      }
-
-      // end route at driver destination
-      waypoints.push([driver.companyCoordLng, driver.companyCoordLat]);
-
-      // set points for the directions query
-      setPoints(waypoints);
-
-      // MARKER MANAGEMENT - Show markers for ALL group members
-      if (user.role !== "VIEWER") {
-        updateUserLocation(mapState, user.startCoordLng, user.startCoordLat);
-        updateCompanyLocation(
-          mapState,
-          user.companyCoordLng,
-          user.companyCoordLat,
-          user.role,
-          user.id,
-          user,
-          true,
-        );
-      }
-
-      // driver's markers (if driver is not current user)
-      if (driver.id !== user.id) {
-        const driverName = driver.preferredName || driver.name || "Driver";
-
-        // driver's start location
-        updateStartLocation(
-          mapState,
-          driver.startCoordLng,
-          driver.startCoordLat,
-          driver.role,
-          driver.id,
-          driver,
-          false,
-          false,
-          `${driverName} Start`,
-        );
-
-        // driver's company location
-        updateCompanyLocation(
-          mapState,
-          driver.companyCoordLng,
-          driver.companyCoordLat,
-          driver.role,
-          driver.id,
-          driver,
-          false,
-          false,
-          `${driverName} Dest.`,
-        );
-      }
-
-      // each rider's markers (if rider is not current user)
-      riders.forEach((rider, index) => {
-        if (rider.id !== user.id) {
-          const riderName =
-            rider.preferredName || rider.name || `Rider ${index + 1}`;
-
-          // rider's start location
-          updateStartLocation(
-            mapState,
-            rider.startCoordLng,
-            rider.startCoordLat,
-            rider.role,
-            rider.id,
-            rider,
-            false,
-            false,
-            `${riderName} Start`,
-          );
-
-          // rider's company location
-          updateCompanyLocation(
-            mapState,
-            rider.companyCoordLng,
-            rider.companyCoordLat,
-            rider.role,
-            rider.id,
-            rider,
-            false,
-            false,
-            `${riderName} Dest.`,
-          );
-        }
+      runViewGroupRoute({
+        user,
+        driver,
+        riders,
+        map: mapState,
+        setPoints,
       });
-
-      // fit map to show all group members' locations
-      const allCoords = [
-        [driver.startCoordLng, driver.startCoordLat],
-        [driver.companyCoordLng, driver.companyCoordLat],
-        ...riders.map((rider) => [rider.startCoordLng, rider.startCoordLat]),
-        ...riders.map((rider) => [
-          rider.companyCoordLng,
-          rider.companyCoordLat,
-        ]),
-      ];
-
-      const bounds = new mapboxgl.LngLatBounds();
-      allCoords.forEach((coord) => {
-        bounds.extend([coord[0], coord[1]]);
-      });
-
-      mapState.fitBounds(bounds, { padding: 50 });
     },
     [mapState, user],
   );
@@ -722,15 +515,17 @@ const Home: NextPage<any> = () => {
     setOtherUser(null);
     // Reset collapsed state when switching tabs
     setIsSidebarCollapsed(false);
-    // Changing tab drops the pin along with the route it belonged to. This
-    // block existed before SCRUM-379 and could never run - the state it tested
-    // was only ever set from an unreachable branch - so a pin genuinely did
-    // survive a tab change. It no longer does.
-    removeMarkedDestination();
+    // Changing tab drops every other user's pin along with the route they
+    // belonged to. This block existed before SCRUM-379 and could never run -
+    // the state it tested was only ever set from an unreachable branch - so a
+    // pin genuinely did survive a tab change. SCRUM-379 fixed that for the one
+    // pin the page was tracking; the sweep covers the group preview's too,
+    // which were never tracked at all.
     if (mapState) {
+      clearOtherUserMarkers(mapState);
       clearDirections(mapState);
     }
-  }, [sidebarType, mapState, removeMarkedDestination]);
+  }, [sidebarType, mapState]);
 
   // initial route rendering
   useEffect(() => {
@@ -781,10 +576,10 @@ const Home: NextPage<any> = () => {
         };
       }
 
-      // About to draw the viewer's own route, so any other user's destination
-      // pin is now orphaned - `viewRoute` has already cleared their start
-      // marker and destination popup, but not this layer.
-      removeMarkedDestination();
+      // About to draw the viewer's own route, so every other user's pin is now
+      // orphaned - `viewRoute` clears their popup and marker, but those are the
+      // other system and it leaves these layers standing.
+      clearOtherUserMarkers(mapState);
       const viewProps = {
         user,
         otherUser: undefined,
@@ -808,7 +603,6 @@ const Home: NextPage<any> = () => {
     startAddressSelected,
     user,
     isMobile,
-    removeMarkedDestination,
   ]);
   useSearch({
     value: companyAddress,

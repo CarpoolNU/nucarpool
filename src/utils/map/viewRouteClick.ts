@@ -1,7 +1,7 @@
 import mapboxgl from "mapbox-gl";
 import { CarpoolAddress, GeoJsonUsers, PublicUser, User } from "../types";
 import { viewRoute } from "./viewRoute";
-import clearRiderStartMarkers from "./clearRiderStartMarkers";
+import clearOtherUserMarkers from "./clearOtherUserMarkers";
 import updateCompanyLocation from "./updateCompanyLocation";
 import updateUserLocation from "./updateUserLocation";
 import { isValidCoordinates } from "./coordinates";
@@ -26,62 +26,23 @@ import { planViewRoute } from "./viewRoutePlan";
  */
 
 /**
- * The one destination pin this module has put on the map, remembered so that it
- * can be taken off again.
+ * SCRUM-379's `DestinationMarkerRef` and `removeDestinationMarker` **were
+ * here, and SCRUM-391 removed them.**
  *
- * A `ref` and not React state, and that is the fix to the second half of
- * SCRUM-379. The page used to hold this in `tempOtherUser` /
- * `tempOtherUserMarkerActive`, and **both the `sidebarType` effect and the
- * initial-route effect listed them as dependencies while also resetting them in
- * their bodies.** An effect that depends on state it writes re-runs itself;
- * that pair was a live loop held shut only by the fact that the state could
- * never change, because the only code that set it was the unreachable branch.
- * Fixing the branch alone would have released it.
+ * They existed because pin removal was keyed by identity: a pin is a named
+ * layer, so the only way to take one off was to have remembered whose it was.
+ * One pin at a time was the model, and it worked for this handler - but
+ * `onViewGroupRoute` adds a pin per group member and remembered none, so its
+ * pins were never removed by anything. Extending the ref to a set would have
+ * kept the bookkeeping, and a bookkeeping slip here shows up as a stray pin
+ * nobody traces back.
  *
- * Nothing renders from this value - it exists purely to name a Mapbox layer for
- * removal - so a ref is the honest container, and a ref cannot appear in a
- * dependency array at all. The loop is gone structurally rather than by
- * arranging the arrays carefully.
- *
- * Typed as the minimal shape rather than `MutableRefObject` so a test can pass
- * `{ current: null }`.
+ * `clearOtherUserMarkers` asks the map which layers exist instead, which cannot
+ * forget one. With it running at the top of this function there is no
+ * remembered pin left to remove, so the ref, the remover, the page's
+ * `destinationMarker` and `ViewRoutePlan.removesDestinationMarkerFor` all went
+ * together.
  */
-export type DestinationMarkerRef = { current: PublicUser | null };
-
-/**
- * Takes the remembered destination pin off the map, if there is one.
- *
- * `updateCompanyLocation` with `remove: true` is how a pin comes off: it owns
- * the `other-user-<id>-company-*` source, layer, text layer and image, and
- * `clearMarkers` in `viewRoute.ts` clears none of those.
- *
- * Leaves the ref alone when there is no map, matching the old
- * `if (... && mapState)` guard - the pin is still on a map that exists
- * somewhere, and forgetting it would strand the layer permanently.
- */
-export const removeDestinationMarker = (
-  map: mapboxgl.Map | undefined,
-  destinationMarker: DestinationMarkerRef,
-): void => {
-  const marked = destinationMarker.current;
-
-  if (!marked || !map) {
-    return;
-  }
-
-  updateCompanyLocation(
-    map,
-    marked.companyCoordLng,
-    marked.companyCoordLat,
-    marked.role,
-    marked.id,
-    marked,
-    false,
-    true,
-  );
-
-  destinationMarker.current = null;
-};
 
 export const runViewRouteClick = ({
   user,
@@ -92,7 +53,6 @@ export const runViewRouteClick = ({
   startAddressSelected,
   companyAddressSelected,
   isMobile,
-  destinationMarker,
   setOtherUser,
   setPoints,
 }: {
@@ -104,13 +64,16 @@ export const runViewRouteClick = ({
   startAddressSelected: CarpoolAddress;
   companyAddressSelected: CarpoolAddress;
   isMobile: boolean;
-  destinationMarker: DestinationMarkerRef;
   setOtherUser: (value: PublicUser | null) => void;
   setPoints: (value: [number, number][]) => void;
 }): void => {
-  // clear rider start markers from group route when viewing individual routes
+  // Take off every pin the previous view left - the group preview's markers for
+  // each member, and this handler's own pin from the last click. SCRUM-391:
+  // before the sweep, only the rider *start* markers were cleared here, so the
+  // group's destination pins stayed behind an individual route with nothing
+  // explaining them.
   if (map) {
-    clearRiderStartMarkers(map);
+    clearOtherUserMarkers(map);
   }
 
   // add null checks for required objects
@@ -133,7 +96,6 @@ export const runViewRouteClick = ({
     clickedUserId: clickedUser.id,
     selectedUserId,
     isClickedUserOnMap,
-    markedDestinationUserId: destinationMarker.current?.id ?? null,
   });
 
   if (plan.selectsClickedUser) {
@@ -194,10 +156,6 @@ export const runViewRouteClick = ({
     );
   }
 
-  if (plan.removesDestinationMarkerFor) {
-    removeDestinationMarker(map, destinationMarker);
-  }
-
   if (plan.addsDestinationMarker) {
     updateCompanyLocation(
       map,
@@ -209,11 +167,6 @@ export const runViewRouteClick = ({
       false,
       false,
     );
-    // Request-context pins are remembered too, which they were not before.
-    // Nothing tracked them, so switching between two conversations left the
-    // first person's pin on the map with no route attached to it, and changing
-    // tab left it there for good. One pin at a time is the model either way.
-    destinationMarker.current = clickedUser;
   }
 
   const viewProps = {

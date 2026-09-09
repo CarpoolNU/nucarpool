@@ -38,32 +38,29 @@ const invalidCoordFields = (
     )
     .map(([name]) => name);
 
-// Updated clearMarkers to also remove text label layers created by updateStartLocation and updateCompanyLocation
-export const clearMarkers = (map?: mapboxgl.Map) => {
-  // Clear the original popup/marker system
+/**
+ * Clears the popup and `mapboxgl.Marker` system - and **only** that system.
+ *
+ * It used to also sweep every layer whose id contained `-text-layer`, which is
+ * the asymmetry SCRUM-391 removed. A pin drawn by `updateCompanyLocation` or
+ * `updateStartLocation` is two layers over one source: the icon and its label.
+ * Sweeping the label and leaving the icon left an *unlabelled* pin, which is
+ * the worst of the two states - a stale overlay reads as stale, but a pin with
+ * no name reads as a destination nobody can account for.
+ *
+ * The label belongs to the pin, so it is created and destroyed with it, by
+ * `clearOtherUserMarkers`. This function owns the older popup/marker list; that
+ * one owns the layer system. Two systems, two owners, neither reaching into the
+ * other - SCRUM-185 is where merging them lives.
+ *
+ * The `map` parameter is kept because both callers have one to hand and a
+ * signature change would ripple further than the fix; it is now unused.
+ */
+export const clearMarkers = (_map?: mapboxgl.Map) => {
   previousMarkers.forEach((element) => {
     element.remove();
   });
   previousMarkers.length = 0;
-
-  // clear text label layers created by the custom label system
-  if (map) {
-    const layers = map.getStyle().layers;
-    if (layers) {
-      // find and remove all text layers that match our naming pattern
-      layers.forEach((layer) => {
-        if (layer.id.includes("-text-layer")) {
-          try {
-            if (map.getLayer(layer.id)) {
-              map.removeLayer(layer.id);
-            }
-          } catch (e) {
-            console.warn(`Could not remove layer ${layer.id}:`, e);
-          }
-        }
-      });
-    }
-  }
 };
 
 export const clearDirections = (map: mapboxgl.Map) => {
