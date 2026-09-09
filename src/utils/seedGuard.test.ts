@@ -2,16 +2,22 @@ import {
   assertSeedTargetIsLocal,
   describeBlockedSeed,
   evaluateSeedTarget,
-  isOverrideEnabled,
   normalizeHostname,
-  SEED_OVERRIDE_ENV,
   SeedGuardError,
 } from "./seedGuard";
 
-// A realistic PlanetScale-shaped connection string. The password is fictional;
-// the point of these tests is that the guard never reaches it.
+// Realistic PlanetScale-shaped connection strings. The passwords are fictional;
+// the point of these tests is that the guard never reaches them.
+//
+// Both branches are named explicitly rather than left to a generic "remote"
+// case. They are the two hosts this guard exists to refuse, and a test that
+// says so by name is the one a reader checks for (SCRUM-410).
 const REMOTE_URL =
   "mysql://user:not-a-real-password@aws.connect.psdb.cloud/nucarpool?sslaccept=strict";
+const PLANETSCALE_MAIN_URL =
+  "mysql://main-user:not-a-real-password@aws.connect.psdb.cloud/nucarpool?sslaccept=strict";
+const PLANETSCALE_STAGING_URL =
+  "mysql://staging-user:not-a-real-password@aws.connect.psdb.cloud/nucarpool-staging?sslaccept=strict";
 const LOCAL_URL = "mysql://root:password@localhost:3306/nucoop";
 
 describe("normalizeHostname", () => {
@@ -30,22 +36,6 @@ describe("normalizeHostname", () => {
   it("does not treat a lone bracket as an IPv6 literal", () => {
     expect(normalizeHostname("[")).toBe("[");
   });
-});
-
-describe("isOverrideEnabled", () => {
-  it.each(["1", "true", "TRUE", " true "])(
-    "treats %p as opting in",
-    (value) => {
-      expect(isOverrideEnabled(value)).toBe(true);
-    },
-  );
-
-  it.each([undefined, "", "0", "false", "no", "yes", "please"])(
-    "does not treat %p as opting in",
-    (value) => {
-      expect(isOverrideEnabled(value)).toBe(false);
-    },
-  );
 });
 
 describe("evaluateSeedTarget", () => {
@@ -131,40 +121,67 @@ describe("evaluateSeedTarget", () => {
         reason: "empty-hostname",
       });
     });
-
-    it("does not let the override authorise an unidentifiable target", () => {
-      expect(evaluateSeedTarget(undefined, "1").allowed).toBe(false);
-      expect(evaluateSeedTarget("not a url", "1").allowed).toBe(false);
-    });
   });
 
-  describe("the override", () => {
-    it("permits a remote host when explicitly enabled", () => {
-      expect(evaluateSeedTarget(REMOTE_URL, "1")).toEqual({
-        allowed: true,
+  /**
+   * SCRUM-410 removed `SEED_ALLOW_REMOTE`, which turned the refusal below off
+   * for any host — production included. These pin that no argument brings it
+   * back: `evaluateSeedTarget` now takes one parameter, and the only route to
+   * `allowed: true` is membership of `LOCAL_HOSTNAMES`.
+   */
+  describe("the two hosts this exists to refuse", () => {
+    it("blocks PlanetScale main", () => {
+      expect(evaluateSeedTarget(PLANETSCALE_MAIN_URL)).toEqual({
+        allowed: false,
         hostname: "aws.connect.psdb.cloud",
-        reason: "override",
+        reason: "remote-host",
       });
     });
 
-    it("still blocks when set to a value that is not an opt-in", () => {
-      expect(evaluateSeedTarget(REMOTE_URL, "0").allowed).toBe(false);
-      expect(evaluateSeedTarget(REMOTE_URL, "false").allowed).toBe(false);
-      expect(evaluateSeedTarget(REMOTE_URL, "").allowed).toBe(false);
+    it("blocks PlanetScale staging", () => {
+      expect(evaluateSeedTarget(PLANETSCALE_STAGING_URL)).toEqual({
+        allowed: false,
+        hostname: "aws.connect.psdb.cloud",
+        reason: "remote-host",
+      });
     });
 
-    it("is not needed for a local host, and is not reported for one", () => {
-      expect(evaluateSeedTarget(LOCAL_URL, "1").reason).toBe("local-host");
+    it("blocks an arbitrary remote host", () => {
+      expect(
+        evaluateSeedTarget("mysql://u:p@db.internal.example.com:3306/app")
+          .allowed,
+      ).toBe(false);
+    });
+
+    it("has no second argument that could permit one", () => {
+      // A stale caller passing the old override value must not compile, and if
+      // it somehow reaches here at runtime it must change nothing.
+      const call = evaluateSeedTarget as (
+        url: string | undefined,
+        legacyOverride?: string,
+      ) => ReturnType<typeof evaluateSeedTarget>;
+
+      for (const value of ["1", "true", "TRUE", " true "]) {
+        expect(call(PLANETSCALE_MAIN_URL, value).allowed).toBe(false);
+      }
     });
   });
 });
 
 describe("describeBlockedSeed", () => {
-  it("names the refused host and how to override deliberately", () => {
+  it("names the refused host and what would have been destroyed", () => {
     const message = describeBlockedSeed(evaluateSeedTarget(REMOTE_URL));
     expect(message).toContain("aws.connect.psdb.cloud");
-    expect(message).toContain(SEED_OVERRIDE_ENV);
     expect(message).toContain("DELETES");
+  });
+
+  it("offers no way to proceed against the refused host", () => {
+    // The message used to end with `SEED_ALLOW_REMOTE=1 yarn seed`. Advertising
+    // an escape hatch in the refusal is how one gets used; there is no longer
+    // one to advertise, and the text must not imply otherwise.
+    const message = describeBlockedSeed(evaluateSeedTarget(REMOTE_URL));
+    expect(message).not.toContain("SEED_ALLOW_REMOTE");
+    expect(message).toContain("There is no override");
   });
 
   // The connection string holds credentials, so it must never be echoed.
@@ -177,7 +194,7 @@ describe("describeBlockedSeed", () => {
   it("explains a missing DATABASE_URL without inventing a host", () => {
     const message = describeBlockedSeed(evaluateSeedTarget(undefined));
     expect(message).toContain("DATABASE_URL is not set");
-    expect(message).not.toContain(SEED_OVERRIDE_ENV);
+    expect(message).not.toContain("SEED_ALLOW_REMOTE");
   });
 
   it("refuses to describe an allowed decision", () => {
@@ -207,13 +224,15 @@ describe("assertSeedTargetIsLocal", () => {
     }
   });
 
-  it("reads the override from the environment it is given", () => {
-    expect(
+  it("ignores the removed override variable in the environment", () => {
+    // A developer's shell, a .env, or a stale CI job may still carry it. It
+    // must be inert rather than authoritative.
+    expect(() =>
       assertSeedTargetIsLocal({
-        DATABASE_URL: REMOTE_URL,
-        [SEED_OVERRIDE_ENV]: "1",
-      }).reason,
-    ).toBe("override");
+        DATABASE_URL: PLANETSCALE_MAIN_URL,
+        SEED_ALLOW_REMOTE: "1",
+      }),
+    ).toThrow(SeedGuardError);
   });
 
   it("throws when the environment has no DATABASE_URL at all", () => {

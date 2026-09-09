@@ -17,12 +17,14 @@
  * the same string as `DATABASE_URL`, or that resolves to the same database on
  * the same host and port.
  *
- * **There is deliberately no override.** `seedGuard.ts` has
- * `SEED_ALLOW_REMOTE` because seeding a shared branch is something a human
- * might one day legitimately need. Truncating one never is. An escape hatch
- * here would be set once, in a workflow file, by someone in a hurry — and then
- * it would be permanent and invisible. If a target is refused, the answer is
- * to change the target.
+ * **There is deliberately no override**, and `seedGuard.ts` no longer has one
+ * either. It used to: `SEED_ALLOW_REMOTE` existed on the argument that seeding
+ * a shared branch was something a human might one day legitimately need, and
+ * this comment cited it as the deliberate difference between the two guards.
+ * Nothing ever set it, and it would have permitted production, so SCRUM-410
+ * removed it — the two modules now agree. An escape hatch of that kind gets set
+ * once, in a workflow file, by someone in a hurry, and is then permanent and
+ * invisible. If a target is refused, the answer is to change the target.
  *
  * Like `seedGuard.ts` this module is dependency-free and side-effect-free, so
  * the whole rule set is unit tested with no database and no Prisma client —

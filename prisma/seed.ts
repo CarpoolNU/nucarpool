@@ -4,7 +4,7 @@ import Random from "random-seed";
 import { generateUser } from "../src/utils/recommendation";
 import {
   assertSeedTargetIsLocal,
-  SEED_OVERRIDE_ENV,
+  SeedEnvironment,
   SeedGuardError,
 } from "../src/utils/seedGuard";
 import {
@@ -15,14 +15,44 @@ import {
 const prisma = new PrismaClient();
 
 /**
- * Every table the seed writes to, in an order safe to delete in: rows that
- * reference another table go first.
+ * Every table the seed writes to, in an order safe to delete in.
  *
- * `conversation` is included because it was previously missed. Under
- * `relationMode = "prisma"` there is no database-level foreign key, so orphaned
- * conversations simply survived a re-seed pointing at deleted requests — and
- * since `Conversation.requestId` is `@unique`, a later request reusing an id
- * would collide with one of those ghosts.
+ * **The order is proved from `schema.prisma`, not assumed.** `relationMode =
+ * "prisma"` means MySQL enforces no foreign key at all: every referential
+ * action is emulated by Prisma Client, so an order that would merely be
+ * inefficient under real constraints can here throw, or silently leave rows
+ * behind. Three facts decide it, and each is a `@relation` in the schema:
+ *
+ *   1. **A required relation with no `onDelete` is `Restrict`, and Prisma
+ *      enforces it.** `Request.fromUser` / `toUser` and `Message.User` are
+ *      required relations to `User` with no action declared, and
+ *      `CarpoolSearch.homeLocation` / `companyLocation` are required relations
+ *      to `Location`. So `user` cannot go before `request` and `message`, and
+ *      `location` cannot go before `carpoolSearch`. Reversing either pair does
+ *      not orphan rows — it fails the run.
+ *   2. **`Conversation` cascades outward, not inward.** The foreign key lives
+ *      on `Request.conversationId` with `onDelete: Cascade`, and on
+ *      `Message.conversationId` likewise. `Conversation.requestId` is a bare
+ *      `@unique` *scalar* with no `@relation` behind it — nothing enforces it
+ *      in either direction. That is why `conversation` sits after the two
+ *      tables that point at it: by then both cascades are no-ops over empty
+ *      tables, so what gets deleted is exactly what this list says.
+ *   3. **`CarpoolSearch.carpool` is optional**, so its default action is
+ *      `SetNull`. Deleting `carpoolGroup` first would emit a wave of
+ *      `UPDATE`s on rows that are about to be deleted anyway; deleting
+ *      `carpoolSearch` first makes it a no-op.
+ *
+ * `conversation` is in the list because it was once missed. With no
+ * database-level foreign key, orphaned conversations simply survived a re-seed
+ * pointing at deleted requests — and since `Conversation.requestId` is
+ * `@unique`, a later request reusing an id would collide with one of those
+ * ghosts. That is the same defect class as the 620 orphan conversations
+ * SCRUM-295 found in production.
+ *
+ * **This tuple is the only source of truth.** {@link deletableModels} is typed
+ * `Record<SeededModel, …>`, so a name added here without a delegate — or a
+ * delegate without a name — is a compile error rather than a silent drift
+ * between a documented order and an executed one.
  */
 export const SEED_DELETE_ORDER = [
   "request",
@@ -34,21 +64,92 @@ export const SEED_DELETE_ORDER = [
   "user",
 ] as const;
 
+export type SeededModel = (typeof SEED_DELETE_ORDER)[number];
+
+/** The one method {@link deleteAllData} needs from a Prisma model delegate. */
+type Deletable = { deleteMany: (args: object) => Promise<{ count: number }> };
+
+/**
+ * The subset of `PrismaClient` the destructive half touches.
+ *
+ * Narrowed to an interface rather than taking `PrismaClient` so the tests can
+ * pass a recording fake and prove that a refused target reaches **zero**
+ * deletes. That property is the whole point of the guard, and it is not
+ * provable against a real client without a database to point it at.
+ */
+export type SeedDeleteClient = Record<SeededModel, Deletable> & {
+  $executeRawUnsafe: (query: string) => Promise<number>;
+};
+
+/**
+ * Maps each name in {@link SEED_DELETE_ORDER} to the delegate that deletes it.
+ *
+ * The `Record<SeededModel, …>` annotation is what makes the two lists one:
+ * TypeScript requires every member of the tuple to appear here, and rejects any
+ * key that is not one.
+ */
+const deletableModels = (
+  client: SeedDeleteClient,
+): Record<SeededModel, Deletable> => ({
+  request: client.request,
+  message: client.message,
+  conversation: client.conversation,
+  carpoolSearch: client.carpoolSearch,
+  location: client.location,
+  carpoolGroup: client.carpoolGroup,
+  user: client.user,
+});
+
+/**
+ * The implicit many-to-many join table behind `User.favorites` /
+ * `favoritedBy`.
+ *
+ * Prisma owns this table and generates no model for it, so it cannot appear in
+ * {@link SEED_DELETE_ORDER} and there is no `prisma._favorites` to call. It is
+ * cleared with one statement instead.
+ *
+ * **Why not rely on the emulated cascade.** Prisma may well remove the join
+ * rows when the users on either end are deleted — but "may well" is the
+ * problem, and no test in this repository can settle it, because the suite runs
+ * on mocks and would only be asserting what the mock does. The failure mode if
+ * it does not is specific and silent: the seed recreates users with the *same*
+ * ids (`"0"`–`"69"`), so surviving join rows re-attach to the next seed's users
+ * and favourites accumulate across runs. `requests.delete` deletes its messages
+ * explicitly for exactly this reason — two explicit statements need no
+ * assumption about what the client did.
+ */
+const FAVORITES_JOIN_TABLE = "_Favorites";
+
 /**
  * Deletes every row the seed is responsible for.
  *
- * This replaces the previous `clearConnections()` pass, which ran immediately
- * before this and issued roughly 4,900 no-op `favorites.disconnect` writes
- * against rows that were about to be deleted anyway.
+ * **Guarded independently of `main()`.** The entry point checks the target
+ * before doing anything, and that is not enough on its own: this function is
+ * exported, so an import, a future script, or a refactor that stops going
+ * through `main()` would otherwise reach seven unconditional `deleteMany`
+ * calls against whatever `DATABASE_URL` names. The check is cheap and runs
+ * before the first statement, so the destructive primitive is safe by itself
+ * rather than by convention (SCRUM-410).
+ *
+ * This also replaces the previous `clearConnections()` pass, which ran
+ * immediately before it and issued roughly 4,900 no-op `favorites.disconnect`
+ * writes against rows that were about to be deleted anyway.
  */
-export const deleteAllData = async () => {
-  await prisma.request.deleteMany({});
-  await prisma.message.deleteMany({});
-  await prisma.conversation.deleteMany({});
-  await prisma.carpoolSearch.deleteMany({});
-  await prisma.location.deleteMany({});
-  await prisma.carpoolGroup.deleteMany({});
-  await prisma.user.deleteMany({});
+export const deleteAllData = async (
+  client: SeedDeleteClient = prisma,
+  env: SeedEnvironment = process.env,
+) => {
+  // First statement, before any delegate is touched. A refusal throws
+  // SeedGuardError and nothing below runs.
+  assertSeedTargetIsLocal(env);
+
+  // Before `user`, since every join row references two of them.
+  await client.$executeRawUnsafe(`DELETE FROM \`${FAVORITES_JOIN_TABLE}\``);
+
+  const delegates = deletableModels(client);
+  for (const model of SEED_DELETE_ORDER) {
+    await delegates[model].deleteMany({});
+  }
 };
 
 /**
@@ -177,6 +278,16 @@ const pickConnections = (
 };
 
 /**
+ * How many groups the fixture builds, and how many members each gets.
+ *
+ * Named because the post-seed check has to know what to expect, and a literal
+ * `10` in the loop plus a literal `[0..9]` in the `createMany` beside it were
+ * two places to change and one to forget.
+ */
+const SEED_GROUP_COUNT = 10;
+const SEED_GROUP_SIZE = 4;
+
+/**
  * Generates favorites between users in our database.
  */
 const generateGroups = async (
@@ -185,14 +296,14 @@ const generateGroups = async (
   const userToGroupMap = new Map<string, string>();
   const groups: string[][] = [];
   let i = 0;
-  for (let j = 0; j < 10; j++) {
-    for (let k = 0; k < 4; k++) {
+  for (let j = 0; j < SEED_GROUP_COUNT; j++) {
+    for (let k = 0; k < SEED_GROUP_SIZE; k++) {
       (groups[j] ??= []).push(userIds[i]);
       i++;
     }
   }
   await prisma.carpoolGroup.createMany({
-    data: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((idx) => ({
+    data: range(SEED_GROUP_COUNT).map((idx) => ({
       id: idx.toString(),
       message: "hello",
     })),
@@ -381,6 +492,14 @@ const createUserData = async (resolveAddress: AddressResolver) => {
       );
     }
   }
+
+  // Returned so `main` can check the result against what was asked for, rather
+  // than against a number written down twice.
+  return {
+    users: usersData.length,
+    groups: SEED_GROUP_COUNT,
+    ...SEED_EXPECTATION,
+  } satisfies SeedExpectation;
 };
 
 /**
@@ -485,26 +604,305 @@ const genRandomUsers = async (
 };
 
 /**
+ * The rows the integrity check reads, in the shape it needs them.
+ *
+ * Deliberately a plain data structure rather than a client: the checking is
+ * pure, so it can be exercised on hand-built inconsistent fixtures without a
+ * database — which is the only way to test that the checks actually fail.
+ */
+export type SeedSnapshot = {
+  users: readonly { id: string }[];
+  requests: readonly {
+    id: string;
+    fromUserId: string;
+    toUserId: string;
+    conversationId: string | null;
+  }[];
+  conversations: readonly { id: string; requestId: string }[];
+  messages: readonly { id: string; conversationId: string; userId: string }[];
+  searches: readonly {
+    id: string;
+    userId: string;
+    homeLocationId: string;
+    companyLocationId: string;
+    carpoolId: string | null;
+  }[];
+  locations: readonly { id: string }[];
+  groups: readonly { id: string }[];
+};
+
+/** What the fixture is supposed to produce, per seeded user. */
+export type SeedExpectation = {
+  users: number;
+  groups: number;
+  /** Messages written per request: an opening message and one reply. */
+  messagesPerRequest: number;
+  /** Locations per user: home and company. */
+  locationsPerUser: number;
+};
+
+export const SEED_EXPECTATION: Omit<SeedExpectation, "users" | "groups"> = {
+  messagesPerRequest: 2,
+  locationsPerUser: 2,
+};
+
+/**
+ * Every invariant the seeded graph is supposed to hold, as a list of problems.
+ *
+ * **Why this exists at all.** `relationMode = "prisma"` means the database
+ * enforces nothing: a request may point at a conversation that was never
+ * created, a message may outlive its thread, and MySQL will not object. The
+ * seed builds a two-way request/conversation/message graph by hand
+ * (`seedRequestWithConversation`), and until now nothing checked the result.
+ * Production already carries 620 orphan conversations from precisely this class
+ * of mistake, found six months after the fact — a local fixture that reproduces
+ * it silently is not a good place to develop the fix.
+ *
+ * Read-only and pure. It reports; the caller decides to throw.
+ */
+export const checkSeedIntegrity = (
+  snapshot: SeedSnapshot,
+  expected: SeedExpectation,
+): string[] => {
+  const problems: string[] = [];
+
+  const userIds = new Set(snapshot.users.map((row) => row.id));
+  const requestIds = new Set(snapshot.requests.map((row) => row.id));
+  const conversationIds = new Set(snapshot.conversations.map((row) => row.id));
+  const locationIds = new Set(snapshot.locations.map((row) => row.id));
+  const groupIds = new Set(snapshot.groups.map((row) => row.id));
+
+  const count = (actual: number, want: number, what: string) => {
+    if (actual !== want) {
+      problems.push(`expected ${want} ${what}, found ${actual}`);
+    }
+  };
+
+  count(snapshot.users.length, expected.users, "user rows");
+  count(snapshot.groups.length, expected.groups, "group rows");
+  count(snapshot.requests.length, expected.users, "request rows");
+  count(snapshot.conversations.length, expected.users, "conversation rows");
+  count(
+    snapshot.messages.length,
+    expected.users * expected.messagesPerRequest,
+    "message rows",
+  );
+  count(snapshot.searches.length, expected.users, "carpool_search rows");
+  count(
+    snapshot.locations.length,
+    expected.users * expected.locationsPerUser,
+    "location rows",
+  );
+
+  // A self-request is the defect `requests.create` refuses and production still
+  // carries two of (SCRUM-409). `pickConnection` is supposed to make one
+  // impossible; this proves it did rather than assuming the loop is correct.
+  for (const request of snapshot.requests) {
+    if (request.fromUserId === request.toUserId) {
+      problems.push(`request ${request.id} has the same user on both ends`);
+    }
+    if (!userIds.has(request.fromUserId) || !userIds.has(request.toUserId)) {
+      problems.push(
+        `request ${request.id} references a user that was not seeded`,
+      );
+    }
+    // Both links, because both are read: `requests.me` and the unread count go
+    // through `Request.conversationId`, `getConversationMessages` through
+    // `Conversation.requestId`. One of the two being right is not enough.
+    if (request.conversationId === null) {
+      problems.push(
+        `request ${request.id} was not back-linked to its conversation`,
+      );
+    } else if (!conversationIds.has(request.conversationId)) {
+      problems.push(
+        `request ${request.id} points at a conversation that does not exist`,
+      );
+    }
+  }
+
+  const conversationsByRequest = new Map(
+    snapshot.conversations.map((row) => [row.requestId, row]),
+  );
+  for (const request of snapshot.requests) {
+    const conversation = conversationsByRequest.get(request.id);
+    if (!conversation) {
+      problems.push(`request ${request.id} has no conversation keyed to it`);
+    } else if (request.conversationId !== conversation.id) {
+      problems.push(
+        `request ${request.id} and conversation ${conversation.id} disagree about their link`,
+      );
+    }
+  }
+
+  for (const conversation of snapshot.conversations) {
+    if (!requestIds.has(conversation.requestId)) {
+      problems.push(
+        `conversation ${conversation.id} is orphaned — its request does not exist`,
+      );
+    }
+  }
+
+  for (const message of snapshot.messages) {
+    if (!conversationIds.has(message.conversationId)) {
+      problems.push(
+        `message ${message.id} is orphaned — its conversation does not exist`,
+      );
+    }
+    if (!userIds.has(message.userId)) {
+      problems.push(
+        `message ${message.id} was written by a user that was not seeded`,
+      );
+    }
+  }
+
+  const referencedLocations = new Set<string>();
+  for (const search of snapshot.searches) {
+    if (!userIds.has(search.userId)) {
+      problems.push(
+        `carpool_search ${search.id} is orphaned — its user does not exist`,
+      );
+    }
+    for (const [slot, id] of [
+      ["home", search.homeLocationId],
+      ["company", search.companyLocationId],
+    ] as const) {
+      referencedLocations.add(id);
+      if (!locationIds.has(id)) {
+        problems.push(
+          `carpool_search ${search.id} points at a missing ${slot} location`,
+        );
+      }
+    }
+    if (search.carpoolId !== null && !groupIds.has(search.carpoolId)) {
+      problems.push(
+        `carpool_search ${search.id} points at a group that does not exist`,
+      );
+    }
+  }
+
+  // The seed creates a fresh pair per user and reuses none, so every location
+  // it wrote must be referenced. An unreferenced one is the residue
+  // `cleanup-orphan-locations.ts` exists to delete in production.
+  for (const location of snapshot.locations) {
+    if (!referencedLocations.has(location.id)) {
+      problems.push(
+        `location ${location.id} is orphaned — no carpool_search points at it`,
+      );
+    }
+  }
+
+  return problems;
+};
+
+/** Thrown when the seeded data does not satisfy its own invariants. */
+export class SeedIntegrityError extends Error {
+  readonly problems: readonly string[];
+
+  constructor(problems: readonly string[]) {
+    super(
+      [
+        `Seed completed but produced ${problems.length} inconsistency(ies):`,
+        "",
+        ...problems.map((problem) => `  - ${problem}`),
+        "",
+        "The data is local, so this is safe to investigate and re-run. It means",
+        "the seed fixture is wrong, not that the database is.",
+      ].join("\n"),
+    );
+    this.name = "SeedIntegrityError";
+    this.problems = problems;
+  }
+}
+
+/**
+ * Reads the seeded rows back and throws if they are inconsistent.
+ *
+ * Read-only: it issues seven `findMany` calls and nothing else. A failure here
+ * means the fixture is wrong; the local database is left as it is so the
+ * problem can be inspected.
+ */
+export const validateSeededData = async (expected: SeedExpectation) => {
+  const [
+    users,
+    requests,
+    conversations,
+    messages,
+    searches,
+    locations,
+    groups,
+  ] = await Promise.all([
+    prisma.user.findMany({ select: { id: true } }),
+    prisma.request.findMany({
+      select: {
+        id: true,
+        fromUserId: true,
+        toUserId: true,
+        conversationId: true,
+      },
+    }),
+    prisma.conversation.findMany({ select: { id: true, requestId: true } }),
+    prisma.message.findMany({
+      select: { id: true, conversationId: true, userId: true },
+    }),
+    prisma.carpoolSearch.findMany({
+      select: {
+        id: true,
+        userId: true,
+        homeLocationId: true,
+        companyLocationId: true,
+        carpoolId: true,
+      },
+    }),
+    prisma.location.findMany({ select: { id: true } }),
+    prisma.carpoolGroup.findMany({ select: { id: true } }),
+  ]);
+
+  const problems = checkSeedIntegrity(
+    { users, requests, conversations, messages, searches, locations, groups },
+    expected,
+  );
+
+  if (problems.length > 0) {
+    throw new SeedIntegrityError(problems);
+  }
+
+  console.log(
+    `Verified ${users.length} users, ${requests.length} requests, ` +
+      `${messages.length} messages, ${searches.length} searches and ` +
+      `${locations.length} locations are internally consistent.`,
+  );
+};
+
+/**
  * Populates our database with fake data.
  */
 const main = async () => {
   // First statement in the script. createUserData() wipes every table in
-  // SEED_DELETE_ORDER, and it is reached by `yarn seed`, by `yarn build:preview`,
-  // and by a database reset during `yarn db:schema`. Refuse anything that is not
-  // a local database before doing any work.
+  // SEED_DELETE_ORDER, and it is reached by `yarn seed`, by a bare
+  // `prisma db seed`, and by a database reset during `yarn db:schema` or
+  // `prisma migrate reset`. Refuse anything that is not a local database before
+  // doing any work.
+  //
+  // `deleteAllData` asserts this again for itself. The duplication is the point:
+  // this call makes the refusal happen before the several seconds of address
+  // generation that precede the first delete, and that one makes the primitive
+  // safe no matter who calls it.
   const target = assertSeedTargetIsLocal();
 
-  if (target.reason === "override") {
-    console.warn(
-      `WARNING: ${SEED_OVERRIDE_ENV} is set. Seeding the NON-LOCAL host "${target.hostname}" and deleting its existing rows.`,
-    );
-  } else {
-    console.log(
-      `Seeding "${target.hostname}". Existing rows will be deleted first.`,
-    );
-  }
+  console.log(
+    [
+      `Target:  ${target.hostname} (local)`,
+      `Action:  DELETING every existing row in ${SEED_DELETE_ORDER.join(", ")}`,
+      `         and ${FAVORITES_JOIN_TABLE}, then inserting generated data.`,
+      "",
+    ].join("\n"),
+  );
 
-  await createUserData(createAddressResolver());
+  const expectation = await createUserData(createAddressResolver());
+
+  await validateSeededData(expectation);
+
+  console.log(`Seeded ${target.hostname}.`);
 };
 
 // Only run when executed as a script (`prisma db seed` runs `ts-node
@@ -515,7 +913,7 @@ if (require.main === module) {
     .catch((e) => {
       // A guard refusal is an expected, self-explanatory message rather than a
       // crash, so print it without a stack trace that would bury the reason.
-      if (e instanceof SeedGuardError) {
+      if (e instanceof SeedGuardError || e instanceof SeedIntegrityError) {
         console.error(e.message);
       } else {
         console.error(e);
