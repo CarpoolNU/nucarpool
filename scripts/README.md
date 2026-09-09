@@ -139,18 +139,18 @@ A zero outstanding count therefore means _"nothing left to do"_, **not**
 _"it was run"_ — a script that never had candidates and a script applied
 successfully look identical.
 
-| Script                                | local | staging             | production        | Last verified | By            |
-| ------------------------------------- | ----- | ------------------- | ----------------- | ------------- | ------------- |
-| `backfill-group-preferences`          | —     | **3 outstanding**⁴  | **unknown**⁴      | 2026-09-03    | SCRUM-287     |
-| `backfill-request-status`             | —     | 0 outstanding       | **unknown**       | 2026-08-31    | initial audit |
-| `cleanup-orphan-locations`            | —     | 0 outstanding       | **unknown**       | 2026-08-31    | initial audit |
-| `check-self-requests`                 | —     | 0 findings          | **unknown**       | 2026-08-31    | initial audit |
-| `check-driverless-groups`             | —     | **1 finding**       | **unknown**       | 2026-08-31    | initial audit |
-| `check-profile-coordinates`           | —     | 0 findings¹         | **unknown**       | 2026-08-31    | initial audit |
-| `check-seat-counts`                   | —     | **1 finding**²      | **unknown**       | 2026-09-02    | SCRUM-348     |
-| `repair-seat-residue`                 | —     | **2 outstanding**   | **unknown**       | 2026-09-02    | SCRUM-348     |
-| `cleanup-orphan-conversations`        | —     | **11 outstanding**³ | **620 retained**³ | 2026-09-03    | SCRUM-295     |
-| `backfill-profile-picture-timestamps` | —     | **1,298 null**⁵     | **unknown**⁵      | 2026-09-03    | SCRUM-366     |
+| Script                                | local | staging             | production          | Last verified | By            |
+| ------------------------------------- | ----- | ------------------- | ------------------- | ------------- | ------------- |
+| `backfill-group-preferences`          | —     | **3 outstanding**⁴  | **12 outstanding**⁴ | 2026-09-09    | SCRUM-287     |
+| `backfill-request-status`             | —     | 0 outstanding       | **unknown**         | 2026-08-31    | initial audit |
+| `cleanup-orphan-locations`            | —     | 0 outstanding       | **unknown**         | 2026-08-31    | initial audit |
+| `check-self-requests`                 | —     | 0 findings          | **unknown**         | 2026-08-31    | initial audit |
+| `check-driverless-groups`             | —     | **1 finding**       | **unknown**         | 2026-08-31    | initial audit |
+| `check-profile-coordinates`           | —     | 0 findings¹         | **unknown**         | 2026-08-31    | initial audit |
+| `check-seat-counts`                   | —     | **1 finding**²      | **unknown**         | 2026-09-02    | SCRUM-348     |
+| `repair-seat-residue`                 | —     | **2 outstanding**   | **unknown**         | 2026-09-02    | SCRUM-348     |
+| `cleanup-orphan-conversations`        | —     | **11 outstanding**³ | **620 retained**³   | 2026-09-03    | SCRUM-295     |
+| `backfill-profile-picture-timestamps` | —     | **1,298 null**⁵     | **unknown**⁵        | 2026-09-03    | SCRUM-366     |
 
 ¹ 521 rider searches sit at `(0, 0)`, but none belongs to an onboarded user, so
 the script does not count them.
@@ -189,14 +189,14 @@ this row is no longer a pending action. What it is now is a **regression
 check**: the population cannot grow while `requests.delete` is correct, so a dry
 run reporting more than 620 means SCRUM-295 has regressed.
 
-⁴ Re-measured read-only on 2026-09-03 for SCRUM-287, which cannot start until
-this row reads zero everywhere. Staging still has **3** un-migrated rows, and
-all three carry a **plain-text** legacy message rather than a
-`GROUP_DETAILS_V1:` blob — none encoded, none blank. `parseGroupDetails` maps
-plain text to `notes`, so `hasAnyDetail` is true for all three and the backfill
-would write all three. **Dropping `carpool_search.group_message` today would
-lose three drivers' notes**, which confirms finding 1 below rather than
-softening it.
+⁴ Re-measured read-only for SCRUM-287, which cannot start until this row reads
+zero everywhere: staging on 2026-09-03, production on 2026-09-09. Staging still
+has **3** un-migrated rows, and all three carry a **plain-text** legacy message
+rather than a `GROUP_DETAILS_V1:` blob — none encoded, none blank.
+`parseGroupDetails` maps plain text to `notes`, so `hasAnyDetail` is true for
+all three and the backfill would write all three. **Dropping
+`carpool_search.group_message` today would lose three drivers' notes on
+staging**, which confirms finding 1 below rather than softening it.
 
 Two counts, and this table records the first: the SQL below counts _un-migrated
 rows with a legacy message_, while the script additionally reports how many
@@ -205,17 +205,41 @@ not in general — a row whose blob parses to nothing is deliberately skipped an
 stays in the first count forever — so the script's own dry run, not this cell,
 is what SCRUM-287's precondition asks for.
 
-Production is still `unknown` and could not be measured: data queries against
-`main` return 403 (below). **Schema metadata for `main` is readable, though, and
-that settles a different question** — `carpool_search` there carries
+**Production is no longer `unknown`, and it is four times staging.** The 403
+that left this cell unmeasured belongs to the PlanetScale MCP server alone; the
+CLI reader role below reads production, and on **2026-09-09** it counted **12**
+un-migrated rows holding a legacy message — **11** with content, **1** blank,
+and again **none** in the `GROUP_DETAILS_V1:` encoding. The backfill would
+therefore write eleven production rows, so the drop would lose **eleven**
+drivers' notes there on top of staging's three. Precondition 2 fails on both
+branches, and now with a number on each.
+
+**Four of those eleven are longer than `group_notes` accepts** — the longest at
+1,152 characters against a 90-character column. That is not a reason to delay
+the backfill: `parseGroupDetails` clamps to 90 on the way out, so no driver has
+ever been shown more than the first 90 characters of a legacy message, and the
+backfill writes exactly what the fallback already resolves to. What it does mean
+is that the **stored** remainder is discarded when the backfill runs and gone
+for good once the column is dropped. Worth knowing before the Deploy Request
+rather than after it.
+
+**Precondition 1 held already, from a different source.** Schema metadata for
+`main` was readable even while row data was not: `carpool_search` there carries
 `group_notes`, `group_music_preference` and `group_conversation_style` alongside
 the legacy `group_message`, so the SCRUM-253 schema _is_ deployed to production.
-Precondition 1 of SCRUM-287 holds; precondition 2 is the open one.
 
-Separately, `group` on staging holds 11 rows, of which **1 has a non-blank
-`message`**. Nothing reads that column — `resolveGroupDetails` only ever reads
-`carpool_search.group_message` — so that value is already unreachable from the
-app, and the backfill never touches it by design. Worth knowing before
+**Precondition 3 stays unverified, and these counts cannot settle it.** Not one
+`carpool_search` row on either branch has any of the three new columns set — 0
+of 4,098 on production, 0 of 1,298 on staging. That reads the same whether
+Amplify has never deployed the SCRUM-253 build or has deployed it and no driver
+has saved group preferences since, because only 12 rows in 4,098 ever carried a
+group message at all. Confirm the deploy directly; this table cannot.
+
+Separately, the second column SCRUM-287 drops: `group` holds 11 rows on staging
+with **1 non-blank `message`**, and 66 rows on production with **4**. Nothing
+reads that column — `resolveGroupDetails` only ever reads
+`carpool_search.group_message` — so those values are already unreachable from
+the app, and the backfill never touches them by design. Worth knowing before
 SCRUM-287 drops the column: it destroys a copy nothing can read, not a
 preference a driver can see.
 
@@ -420,15 +444,17 @@ unsuffixed variables can be deleted from `emailParams.ts`.
 
 ### Four findings worth acting on
 
-1. **`backfill-group-preferences` is not finished on staging — 3 rows**, and as
-   of 2026-09-03 that is confirmed by direct read rather than inferred: all
-   three hold plain-text legacy messages, which `parseGroupDetails` turns into
-   notes, so the backfill would write all three. This blocks dropping
-   `carpool_search.group_message` (SCRUM-287), which is only safe once the
-   backfill has been applied _everywhere_. While those rows exist,
-   `resolveGroupDetails`'s legacy fallback is the only thing keeping their
-   preferences readable, so dropping the column would lose data. The production
-   count remains unmeasured — see footnote 4.
+1. **`backfill-group-preferences` is not finished anywhere — 3 rows on staging
+   and 12 on production**, confirmed by direct read rather than inferred. Not
+   one of the fifteen is in the `GROUP_DETAILS_V1:` encoding; every one that
+   holds anything holds plain text, which `parseGroupDetails` turns into notes.
+   So the backfill would write all three on staging and eleven of the twelve on
+   production, the twelfth being blank. This blocks dropping `carpool_search.group_message`
+   (SCRUM-287), which is only safe once the backfill has been applied
+   _everywhere_. While those rows exist, `resolveGroupDetails`'s legacy fallback
+   is the only thing keeping their preferences readable, so dropping the column
+   would lose data. **Production was the larger number, as it was for finding 4**
+   — see footnote 4.
 2. **One driverless `CarpoolGroup` on staging.** Expected rather than alarming:
    the guards against it are not retroactive, which is why the check exists.
    Worth a look, and there is no automatic repair by design.
