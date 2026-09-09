@@ -8,6 +8,8 @@ import {
   SCHEDULE_TIMEZONE,
   toPickerScheduleTime,
   toStoredScheduleTime,
+  toScheduleTimeInput,
+  fromScheduleTimeInput,
 } from "./scheduleTime";
 
 dayjs.extend(utc);
@@ -203,6 +205,66 @@ describe("toPickerScheduleTime", () => {
  * the schedule, and the stored value is unchanged. Before the fix, doing that
  * during DST shifted the time by an hour every single time.
  */
+describe("toScheduleTimeInput", () => {
+  // Three states the wire has to keep apart, because Prisma reads `undefined`
+  // in an `update` as "omit this field" (SCRUM-387).
+  it("sends undefined when the field was not part of the edit", () => {
+    expect(toScheduleTimeInput(undefined)).toBeUndefined();
+  });
+
+  it("sends null when the user cleared the pick", () => {
+    // The defect: `?.toISOString()` turned this into `undefined`, so the
+    // intent to clear was discarded before the request left the browser.
+    expect(toScheduleTimeInput(null)).toBeNull();
+  });
+
+  it("sends the instant as ISO when a time is set", () => {
+    const time = new Date("1970-01-01T14:00:00.000Z");
+
+    expect(toScheduleTimeInput(time)).toBe("1970-01-01T14:00:00.000Z");
+  });
+});
+
+describe("fromScheduleTimeInput", () => {
+  it("keeps undefined as undefined, so Prisma omits the column", () => {
+    // Not null: this is the "leave the stored value alone" case, which every
+    // caller that is not editing the schedule relies on.
+    expect(fromScheduleTimeInput(undefined)).toBeUndefined();
+  });
+
+  it("maps an explicit null to null, which is what writes NULL", () => {
+    expect(fromScheduleTimeInput(null)).toBeNull();
+  });
+
+  it("parses an ISO string to the same instant", () => {
+    expect(fromScheduleTimeInput("1970-01-01T14:00:00.000Z")).toEqual(
+      new Date("1970-01-01T14:00:00.000Z"),
+    );
+  });
+
+  it("treats an empty string as cleared", () => {
+    // Not an Invalid Date. A form that submits "" means the same thing a
+    // cleared picker does.
+    expect(fromScheduleTimeInput("")).toBeNull();
+  });
+
+  it("maps an unparseable string to null rather than an Invalid Date", () => {
+    // An `Invalid Date` reaches MySQL and fails the write long after the UI
+    // reported success, which is the failure mode this avoids.
+    expect(fromScheduleTimeInput("not a time")).toBeNull();
+  });
+
+  it("round-trips what toScheduleTimeInput produces, for all three states", () => {
+    const time = new Date("1970-01-01T09:30:00.000Z");
+
+    expect(
+      fromScheduleTimeInput(toScheduleTimeInput(undefined)),
+    ).toBeUndefined();
+    expect(fromScheduleTimeInput(toScheduleTimeInput(null))).toBeNull();
+    expect(fromScheduleTimeInput(toScheduleTimeInput(time))).toEqual(time);
+  });
+});
+
 describe("the schedule time round trip", () => {
   it("survives being loaded into the picker and saved again", () => {
     for (const hour of [0, 7, 9, 14, 17, 22, 23]) {

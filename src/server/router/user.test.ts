@@ -901,6 +901,132 @@ describe("user.edit — Location ownership", () => {
  * MySQL runs in strict mode, so an oversized value failed the whole profile
  * save inside Prisma rather than being refused at the boundary.
  */
+/**
+ * Clearing a schedule time (SCRUM-387).
+ *
+ * `startTime`/`endTime` are nullable columns with a `NO_SCHEDULE_TIME`
+ * placeholder in the display layer, and no code path could write `NULL` to
+ * them. The input was `z.optional(z.string())` and the conversion was a truthy
+ * ternary, so a cleared time became `undefined` - which **Prisma reads in an
+ * `update` as "omit this field"**. A VIEWER emptying their schedule got a
+ * success toast and kept the old values.
+ *
+ * These assertions are about the *payload handed to Prisma*, not the return
+ * value, and deliberately so: the mock accepts `undefined` as readily as
+ * `null`, so a test that only checked the result would pass either way.
+ */
+describe("user.edit — a schedule time can be cleared", () => {
+  /**
+   * An existing `CarpoolSearch` for the caller, so `user.edit` takes its
+   * `update` path. With no seeded search it would `create` instead, and
+   * `create` has no "omit this field" semantics to test - the whole point here
+   * is what `update` receives.
+   */
+  const withExistingSearch = () =>
+    buildEditDb(
+      [
+        {
+          id: "loc-mine-home",
+          street: "Huntington Ave",
+          city: "Boston",
+          state: "Massachusetts",
+          streetAddress: "Huntington Ave, Boston, Massachusetts",
+          coordLng: -71.1,
+          coordLat: 42.31,
+        },
+        {
+          id: "loc-mine-company",
+          street: "Congress St",
+          city: "Boston",
+          state: "Massachusetts",
+          streetAddress: "Congress St, Boston, Massachusetts",
+          coordLng: -71.05,
+          coordLat: 42.36,
+        },
+      ],
+      [
+        {
+          id: "search-mine",
+          userId: SESSION_USER,
+          homeLocationId: "loc-mine-home",
+          companyLocationId: "loc-mine-company",
+          startTime: new Date("1970-01-01T13:00:00.000Z"),
+          endTime: new Date("1970-01-01T22:00:00.000Z"),
+        },
+      ],
+    );
+
+  const dataFor = (db: ReturnType<typeof buildEditDb>) =>
+    db.prisma.carpoolSearch.update.mock.calls[0][0].data;
+
+  it("writes null when a VIEWER clears both times", async () => {
+    const db = withExistingSearch();
+    const caller = editCallerFor(SESSION_USER, db);
+
+    await caller.user.edit(
+      editInput({ role: Role.VIEWER, startTime: null, endTime: null }),
+    );
+
+    const data = dataFor(db);
+    expect(data.startTime).toBeNull();
+    expect(data.endTime).toBeNull();
+  });
+
+  it("omits the field entirely when a time is not supplied", async () => {
+    // The `undefined` path has to keep working: the column is genuinely
+    // optional, and every caller not editing the schedule sends nothing.
+    // `toHaveProperty` is the assertion that distinguishes absent from null -
+    // `data.startTime === undefined` would pass for either.
+    const db = withExistingSearch();
+    const caller = editCallerFor(SESSION_USER, db);
+
+    await caller.user.edit(editInput({ role: Role.VIEWER }));
+
+    const data = dataFor(db);
+    expect(data.startTime).toBeUndefined();
+    expect(data.endTime).toBeUndefined();
+  });
+
+  it("stores the parsed instant when a time is supplied", async () => {
+    const db = withExistingSearch();
+    const caller = editCallerFor(SESSION_USER, db);
+
+    await caller.user.edit(
+      editInput({ startTime: "1970-01-01T14:00:00.000Z" }),
+    );
+
+    expect(dataFor(db).startTime).toEqual(new Date("1970-01-01T14:00:00.000Z"));
+  });
+
+  it("refuses a non-VIEWER clearing a time, writing nothing", async () => {
+    // `onboardSchema` already refuses this in the form; enforced here so a
+    // stale or hand-rolled client gets the same answer. The recorded decision
+    // for this ticket: only a VIEWER may have no schedule.
+    for (const field of ["startTime", "endTime"] as const) {
+      const db = buildEditDb();
+      const caller = editCallerFor(SESSION_USER, db);
+
+      await expect(
+        caller.user.edit(editInput({ role: Role.DRIVER, [field]: null })),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+      expect(db.prisma.carpoolSearch.update).not.toHaveBeenCalled();
+      expect(db.prisma.carpoolSearch.create).not.toHaveBeenCalled();
+    }
+  });
+
+  it("still lets a non-VIEWER omit the times", async () => {
+    // The refusal must be about an explicit null, not about absence, or every
+    // save that does not touch the schedule would start failing.
+    const db = buildEditDb();
+    const caller = editCallerFor(SESSION_USER, db);
+
+    await expect(
+      caller.user.edit(editInput({ role: Role.DRIVER })),
+    ).resolves.not.toThrow();
+  });
+});
+
 describe("user.edit — profile text is bounded by its columns", () => {
   const fields = ["bio", "preferredName", "pronouns", "companyName"] as const;
   const atLimit = "a".repeat(PROFILE_TEXT_MAX_LENGTH);

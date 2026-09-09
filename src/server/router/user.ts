@@ -31,6 +31,10 @@ import {
   unresolvedAddressFields,
 } from "../../utils/coordinates";
 import {
+  SCHEDULE_TIME_REQUIRED_MESSAGE,
+  fromScheduleTimeInput,
+} from "../../utils/scheduleTime";
+import {
   COOP_DATE_ORDER_MESSAGE,
   isReversedCoopRange,
 } from "../../utils/dateUtils";
@@ -167,8 +171,12 @@ export const userRouter = router({
           pronouns: z.string().max(PROFILE_TEXT_MAX_LENGTH),
           isOnboarded: z.boolean(),
           daysWorking: z.string(),
-          startTime: z.optional(z.string()),
-          endTime: z.optional(z.string()),
+          // Nullable as well as optional, and the two mean different things:
+          // omitted leaves the column alone, explicit `null` clears it.
+          // Without `.nullable()` a cleared schedule was unexpressible
+          // (SCRUM-387).
+          startTime: z.string().nullable().optional(),
+          endTime: z.string().nullable().optional(),
           coopStartDate: z.date().nullable(),
           coopEndDate: z.date().nullable(),
           bio: z.string().max(PROFILE_TEXT_MAX_LENGTH),
@@ -195,6 +203,25 @@ export const userRouter = router({
             });
           }
 
+          // Clearing a schedule is a VIEWER's privilege, which is what
+          // `onboardSchema` already tells the form. Enforced here too so a
+          // stale or hand-rolled client cannot reach a state the UI refuses.
+          //
+          // Only an *explicit* null is refused. Omitting the field is still
+          // "leave it as it is", which is what every caller that is not editing
+          // the schedule sends.
+          if (data.role !== Role.VIEWER) {
+            for (const field of ["startTime", "endTime"] as const) {
+              if (data[field] === null) {
+                ctx.addIssue({
+                  code: z.ZodIssueCode.custom,
+                  path: [field],
+                  message: SCHEDULE_TIME_REQUIRED_MESSAGE,
+                });
+              }
+            }
+          }
+
           // `(0, 0)` is in range but is the "no address picked yet" sentinel
           // from `useAddressSelection`, not a place anyone lives. A VIEWER is
           // exempt: they have no Locations, and `user.me` already reports
@@ -213,12 +240,12 @@ export const userRouter = router({
         }),
     )
     .mutation(async ({ input, ctx }) => {
-      const startTimeDate = input.startTime
-        ? new Date(Date.parse(input.startTime))
-        : undefined;
-      const endTimeDate = input.endTime
-        ? new Date(Date.parse(input.endTime))
-        : undefined;
+      // `fromScheduleTimeInput` keeps `undefined` and `null` apart, which the
+      // truthy ternary here did not: it mapped both to `undefined`, and Prisma
+      // reads that in an `update` as "omit this field". So a cleared schedule
+      // was silently discarded (SCRUM-387).
+      const startTimeDate = fromScheduleTimeInput(input.startTime);
+      const endTimeDate = fromScheduleTimeInput(input.endTime);
 
       const id = ctx.session.user?.id;
       if (!id) {

@@ -150,3 +150,60 @@ export const toStoredScheduleTime = (
 export const toPickerScheduleTime = (
   stored: Date | null | undefined,
 ): Dayjs | null => toScheduleZone(stored);
+
+/**
+ * Message shown when a non-VIEWER tries to save without a schedule.
+ *
+ * Mirrors what `onboardSchema` already tells the form, so a hand-rolled client
+ * gets the same answer as the UI - see the note on `user.edit`'s `superRefine`.
+ */
+export const SCHEDULE_TIME_REQUIRED_MESSAGE =
+  "A schedule is required unless you are browsing as a viewer";
+
+/**
+ * A schedule time on its way to `user.edit`, preserving the difference between
+ * "not supplied" and "clear it".
+ *
+ * `startTime: userInfo.startTime?.toISOString()` collapsed the two, because
+ * optional chaining on `null` yields `undefined`. The form models a cleared
+ * pick as `null` - `toStoredScheduleTime` returns it - so the user's intent to
+ * clear was discarded before the request left the browser, and Prisma then
+ * read the `undefined` on the server as "leave this column alone" (SCRUM-387).
+ *
+ * Three states, all meaningful:
+ *
+ *  - `undefined` -> the field was not part of this edit; leave it alone.
+ *  - `null` -> the user cleared it; write `NULL`.
+ *  - a `Date` -> the picked time, as ISO.
+ */
+export const toScheduleTimeInput = (
+  time: Date | null | undefined,
+): string | null | undefined => (time === null ? null : time?.toISOString());
+
+/**
+ * The server side of the same three states, on the way into Prisma.
+ *
+ * The distinction is not cosmetic: **Prisma treats `undefined` in an `update`
+ * as "omit this field"**, so returning `undefined` for a cleared time is what
+ * made clearing impossible. `null` is what actually writes `NULL`.
+ *
+ * An unparseable string yields `null` rather than an `Invalid Date`, which
+ * MySQL would reject at write time with a `P2000`-style failure well after the
+ * UI reported success. The input is `z.string()`, so this is the malformed
+ * rather than the missing case.
+ */
+export const fromScheduleTimeInput = (
+  value: string | null | undefined,
+): Date | null | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null || value === "") {
+    return null;
+  }
+
+  const parsed = new Date(Date.parse(value));
+
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
