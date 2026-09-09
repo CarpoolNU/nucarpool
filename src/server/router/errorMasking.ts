@@ -13,9 +13,9 @@ import type { TRPCError } from "@trpc/server";
  * invocation…". One half of the request was hardened and the other was open,
  * which made the protection read as complete when it was not (SCRUM-388).
  *
- * Deliberately says no more than the toast wrapping it already does. There is
- * no reference code to quote because nothing correlates a client message with
- * a log line yet — see the note on that in `maskUnexpectedError`.
+ * Deliberately says no more than the toast wrapping it already does. A
+ * per-request reference is appended when one is available, so the user has
+ * something to quote and the log line can be found — see `requestId.ts`.
  */
 export const UNEXPECTED_ERROR_MESSAGE =
   "Something went wrong. Please try again.";
@@ -52,25 +52,37 @@ type ErrorShapeLike = { message: string };
  * untouched, because the retry policy reads `error.data.code` and must behave
  * identically.
  *
- * A correlation id shared between this message and the server log was
- * considered and not done: `onError` and `errorFormatter` are separate
- * callbacks, so threading one id through both means depending on the order
- * tRPC happens to invoke them. The honest version of that is the structured
- * error reporter `[trpc].ts` already names as an open follow-up.
+ * `requestId` is what makes the masked message diagnosable (SCRUM-400). It is
+ * read from the tRPC context rather than generated here, because
+ * `[trpc].ts`'s `onError` has to log the *same* value: both callbacks receive
+ * the context, so neither depends on the other running first. (`onError` does
+ * in fact run first, but nothing here relies on that.)
+ *
+ * It is optional because there is one case where no id exists: if
+ * `createContext` itself throws, tRPC calls both callbacks with `ctx`
+ * undefined. The message then omits the reference rather than inventing one,
+ * and `[trpc].ts` records that it had none.
  *
  * @param shape the error shape tRPC built, returned unchanged when not masking
  * @param code the error's tRPC code
  * @param nodeEnv injectable so a test never has to mutate `process.env`;
  *   anything other than `development` masks, so an unset value fails safe
+ * @param requestId the reference to quote, when the request has one
  */
 export function maskUnexpectedError<TShape extends ErrorShapeLike>(
   shape: TShape,
   code: TRPCError["code"],
   nodeEnv: string | undefined = process.env.NODE_ENV,
+  requestId?: string,
 ): TShape {
   if (code !== "INTERNAL_SERVER_ERROR" || nodeEnv === "development") {
     return shape;
   }
 
-  return { ...shape, message: UNEXPECTED_ERROR_MESSAGE };
+  return {
+    ...shape,
+    message: requestId
+      ? `${UNEXPECTED_ERROR_MESSAGE} Reference: ${requestId}`
+      : UNEXPECTED_ERROR_MESSAGE,
+  };
 }

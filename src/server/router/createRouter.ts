@@ -34,7 +34,13 @@ const t = initTRPC.context<Context>().create({
    * Note this runs on the HTTP path only. `appRouter.createCaller` throws the
    * original `TRPCError`, so the router tests still assert real messages.
    */
-  errorFormatter: ({ shape, error }) => maskUnexpectedError(shape, error.code),
+  errorFormatter: ({ shape, error, ctx }) =>
+    maskUnexpectedError(
+      shape,
+      error.code,
+      process.env.NODE_ENV,
+      ctx?.requestId,
+    ),
 });
 
 export const router = t.router;
