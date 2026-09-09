@@ -1,31 +1,11 @@
 import NextAuth from "next-auth";
-import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { NextAuthOptions } from "next-auth";
 import { prisma } from "../../../server/db/client";
 import { serverEnv } from "../../../utils/env/server";
 import AzureADProvider from "next-auth/providers/azure-ad";
 import GoogleProvider from "next-auth/providers/google";
-import { Adapter } from "next-auth/adapters";
-import { Prisma } from "@prisma/client";
 import { isSignInAllowed } from "../../../server/authSignIn";
-
-const CustomPrismaAdapter = (p: typeof prisma): Adapter => {
-  return {
-    ...PrismaAdapter(p),
-    createUser: async (data: Prisma.UserCreateInput) => {
-      const user = await p.user.create({
-        data: {
-          ...data,
-          image: null,
-        },
-      });
-      return {
-        ...user,
-        email: user.email || "",
-      };
-    },
-  };
-};
+import { createAuthAdapter } from "../../../server/authAdapter";
 
 export const authOptions: NextAuthOptions = {
   callbacks: {
@@ -75,7 +55,7 @@ export const authOptions: NextAuthOptions = {
       }
     },
   },
-  adapter: CustomPrismaAdapter(prisma),
+  adapter: createAuthAdapter(prisma),
 
   // Google is a staging-only provider: production is Northeastern SSO only.
   // Read through the validated environment rather than `process.env` so an
