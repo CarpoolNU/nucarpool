@@ -89,13 +89,11 @@ DATABASE_URL points at the non-local host "aws.connect.psdb.cloud".
 
 Allowed hosts are `localhost`, `127.0.0.1`, `::1`, `0.0.0.0`, `mysql` and `mysql-on-docker`. The guard fails closed — a missing or unparseable `DATABASE_URL` is refused rather than assumed local — and compares the hostname only, so a password containing `localhost` cannot fake a match. To extend the list, edit `LOCAL_HOSTNAMES` in that file.
 
-If you genuinely need to seed a non-local database, opt in for that single command:
+**There is no way to seed a non-local database.** No flag, no environment variable. `SEED_ALLOW_REMOTE=1` used to do it and was removed in SCRUM-410: nothing in the repository set it, and it permitted any host including production, where a run deletes every user, group, message, request, location and carpool search with no way for the app to undo it. If you believe you need it, the answer is a different `DATABASE_URL`.
 
-```bash
-SEED_ALLOW_REMOTE=1 yarn seed
-```
+The check runs twice, on purpose. `main()` calls it first so a mistake is caught before the script spends several seconds generating addresses, and `deleteAllData()` asserts it again for itself — so a future refactor that stops going through `main()`, or an import that calls the helper directly, still cannot delete anything remote.
 
-Think carefully before you do. Against staging or production this deletes every user, group, message, request, location and carpool search, and the app cannot undo it.
+After seeding, the script reads its own output back and fails if the generated data is inconsistent — no self-requests, no orphan conversations, messages, searches or locations, both sides of every request/conversation link present, and the expected row counts. `relationMode = "prisma"` means the database enforces none of that, so a broken fixture would otherwise look like a successful seed.
 
 ## Environment Variables
 

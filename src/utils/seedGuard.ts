@@ -1,20 +1,29 @@
 /**
  * Safety guard for the destructive seed script.
  *
- * `prisma/seed.ts` deletes every row from six tables before inserting generated
- * data, and it writes to whatever `DATABASE_URL` points at. Three commands reach
- * it — `yarn seed`, `yarn build:preview`, and a database reset during
- * `yarn db:schema`, because Prisma runs the configured seed command after a
- * reset. The check therefore lives in the script itself rather than in any one
- * command, so no invocation path can skip it.
+ * `prisma/seed.ts` deletes every row from seven tables before inserting generated
+ * data, and it writes to whatever `DATABASE_URL` points at. Every path reaches
+ * the same entry point — `yarn seed`, a bare `prisma db seed`, and a database
+ * reset during `yarn db:schema` or `prisma migrate reset`, because Prisma runs
+ * the configured seed command after a reset. The check therefore lives in the
+ * script itself rather than in any one command, so no invocation path can skip
+ * it. (A `yarn build:preview` script used to be a fourth; it was deleted for
+ * force-pushing the schema and re-seeding, and the note here outlived it.)
+ *
+ * **There is no override, and that is the design.** `SEED_ALLOW_REMOTE=1` used
+ * to turn the remote-host refusal off for any host, production included, on the
+ * argument that seeding a shared branch was something a human might one day
+ * legitimately need. Nothing in this repository ever set it, the one plausible
+ * consumer was the deleted `build:preview`, and `CLAUDE.md` had already reduced
+ * it to "must never be set to make something work" — which is a deletion
+ * waiting to happen rather than a feature. A single environment variable
+ * standing between a shell history entry and an unrecoverable production wipe
+ * is not a trade worth keeping (SCRUM-410).
  *
  * This module is deliberately dependency-free and side-effect-free so it can be
  * unit tested without a database or a Prisma client. It is tooling, not
  * application code — nothing under `src/pages` or `src/server` should import it.
  */
-
-/** Environment variable that deliberately permits seeding a non-local host. */
-export const SEED_OVERRIDE_ENV = "SEED_ALLOW_REMOTE";
 
 /**
  * Hosts the seed script may wipe. Default deny: anything absent from this set is
@@ -32,16 +41,19 @@ export const LOCAL_HOSTNAMES: ReadonlySet<string> = new Set([
   "mysql-on-docker",
 ]);
 
-/** Values of {@link SEED_OVERRIDE_ENV} that count as opting in. */
-const OVERRIDE_ENABLED_VALUES: ReadonlySet<string> = new Set(["1", "true"]);
-
 export type SeedBlockReason =
   "missing-url" | "unparseable-url" | "empty-hostname" | "remote-host";
 
+/**
+ * `reason` is a single-member union rather than a bare marker, deliberately:
+ * there was a second member (`"override"`) and callers switched on it. Keeping
+ * the shape makes adding another way to say yes a visible, reviewed change to
+ * this type rather than a quiet extra branch.
+ */
 export type AllowedSeedTarget = {
   allowed: true;
   hostname: string;
-  reason: "local-host" | "override";
+  reason: "local-host";
 };
 
 export type SeedTargetDecision =
@@ -60,20 +72,13 @@ export function normalizeHostname(hostname: string): string {
   return unbracketed.toLowerCase();
 }
 
-/** True only for an explicit, recognised opt-in value. */
-export function isOverrideEnabled(value: string | undefined): boolean {
-  return (
-    value !== undefined &&
-    OVERRIDE_ENABLED_VALUES.has(value.trim().toLowerCase())
-  );
-}
-
 /**
  * Decides whether the seed script may run against `databaseUrl`.
  *
  * Fails closed: a missing or unparseable connection string is refused rather
- * than assumed local, and the override only ever relaxes the *remote host*
- * decision — it cannot authorise a target we were unable to identify.
+ * than assumed local. There is exactly one way for this to return `allowed` —
+ * a hostname in {@link LOCAL_HOSTNAMES} — and it takes no second argument that
+ * could change that answer.
  *
  * Only the hostname is compared. Credentials cannot smuggle a match, because
  * `mysql://localhost:pw@evil.example.com/db` parses to hostname
@@ -81,7 +86,6 @@ export function isOverrideEnabled(value: string | undefined): boolean {
  */
 export function evaluateSeedTarget(
   databaseUrl: string | undefined,
-  overrideValue?: string,
 ): SeedTargetDecision {
   if (databaseUrl === undefined || databaseUrl.trim() === "") {
     return { allowed: false, hostname: null, reason: "missing-url" };
@@ -103,10 +107,6 @@ export function evaluateSeedTarget(
     return { allowed: true, hostname, reason: "local-host" };
   }
 
-  if (isOverrideEnabled(overrideValue)) {
-    return { allowed: true, hostname, reason: "override" };
-  }
-
   return { allowed: false, hostname, reason: "remote-host" };
 }
 
@@ -121,9 +121,10 @@ export function describeBlockedSeed(decision: SeedTargetDecision): string {
 
   const allowed = [...LOCAL_HOSTNAMES].join(", ");
   const consequence = [
-    "prisma/seed.ts DELETES every row from request, carpool_search, location,",
-    "group, message and user before inserting generated data. Against a shared",
-    "database this destroys real user data and is not recoverable from the app.",
+    "prisma/seed.ts DELETES every row from request, message, conversation,",
+    "carpool_search, location, group and user before inserting generated data.",
+    "Against a shared database this destroys real user data and is not",
+    "recoverable from the app.",
   ].join("\n");
 
   const headline: Record<SeedBlockReason, string> = {
@@ -135,14 +136,16 @@ export function describeBlockedSeed(decision: SeedTargetDecision): string {
     "remote-host": `DATABASE_URL points at the non-local host "${decision.hostname}".`,
   };
 
+  // No remedy names a way to proceed against this host, because there is not
+  // one. The only fix offered is pointing DATABASE_URL somewhere local.
   const remedy =
     decision.reason === "remote-host"
       ? [
           `Allowed hosts: ${allowed}`,
           "",
           "If this should have been your local Docker MySQL, correct DATABASE_URL and",
-          "re-run. If you genuinely intend to seed this host, opt in for that one",
-          `command: ${SEED_OVERRIDE_ENV}=1 yarn seed`,
+          "re-run. There is no override: seeding a non-local database is not",
+          "supported by any flag or environment variable.",
         ].join("\n")
       : [
           `Set DATABASE_URL to your local database before seeding. Allowed hosts: ${allowed}`,
@@ -184,7 +187,7 @@ export type SeedEnvironment = Readonly<Record<string, string | undefined>>;
 export function assertSeedTargetIsLocal(
   env: SeedEnvironment = process.env,
 ): AllowedSeedTarget {
-  const decision = evaluateSeedTarget(env.DATABASE_URL, env[SEED_OVERRIDE_ENV]);
+  const decision = evaluateSeedTarget(env.DATABASE_URL);
   if (!decision.allowed) {
     throw new SeedGuardError(decision);
   }

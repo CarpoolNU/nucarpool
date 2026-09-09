@@ -348,7 +348,7 @@ yarn test:db
 
 ### It will not touch anything else, and cannot be told to
 
-Two independent locks, and neither has an override. That is the deliberate difference from [`seedGuard.ts`](../../utils/seedGuard.ts), which has `SEED_ALLOW_REMOTE` because seeding a shared branch is something a human might one day legitimately need. Truncating one never is, and an escape hatch here would be set once in a workflow file and then be permanent.
+Two independent locks, and neither has an override. [`seedGuard.ts`](../../utils/seedGuard.ts) no longer has one either — it used to carry `SEED_ALLOW_REMOTE`, on the argument that seeding a shared branch was something a human might one day legitimately need, and this paragraph cited that as the deliberate difference between the two. Nothing in the repository ever set it and it would have permitted production, so SCRUM-410 removed it. The rule is now the same on both sides: an escape hatch gets set once in a workflow file and is then permanent.
 
 **The connection string**, checked by [`testDatabaseGuard.ts`](../../utils/testDatabaseGuard.ts). Twelve rules, refused in this order: the variable is set; it is not the same string as `DATABASE_URL`; it parses; the scheme is `mysql:`; there is a hostname; that hostname is in `seedGuard.ts`'s `LOCAL_HOSTNAMES`; a database is named; the name percent-decodes; the decoded name is only `[A-Za-z0-9_-]`; it contains none of `prod`, `stag`, `live`, `main`; one of its `_`/`-` separated words is exactly `test`; and it does not address the same host, port and database as `DATABASE_URL`.
 
