@@ -56,12 +56,15 @@ and reports zero rather than failing, so confirm that variable as well as
 `DATABASE_URL`. It writes `LastModified` from the S3 listing rather than
 `now()`, because the column is meant to say when the picture last changed.
 
-**`cleanup-orphan-conversations` is the only script here that destroys message
-content** — words two people typed to each other, which nothing can read any
-more. Its dry run prints the message count per candidate for that reason; read
-those numbers before `--apply`. Deleting is the privacy-respecting answer
-rather than a tidy-up, but it is irreversible. See
+**Two scripts here destroy message content**, and they are not the same
+decision. `cleanup-orphan-conversations` deletes words two people typed to each
+other that nothing can read any more — the privacy-respecting answer rather than
+a tidy-up, and irreversible. See
 [Conversation ownership](../src/server/db/README.md#conversation-ownership).
+`cleanup-self-requests` deletes a user's own opening message to themselves: on
+production that is three characters in one row and an empty string in the other,
+measured rather than assumed. Both print the message count per candidate before
+deleting, so read those numbers before `--apply`.
 
 `repair-seat-residue` is the only one whose prefix is neither `backfill-` nor
 `cleanup-`, because it both writes a column and deletes a row and neither verb
@@ -104,12 +107,14 @@ CLI reader role does not — see
 
 The four `check-*` scripts exit `0` when clean and `1` when not, so they can
 gate a follow-up. **None of them has an `--apply`, and that is a decision
-rather than an omission.** For the first three there is no single correct
-repair, and only the affected user knows which one they want. For
-`check-seat-counts` there is one — clamp into range — but keeping `check-*`
-uniformly read-only is worth more than saving a file, so the repair lives in
-`repair-seat-residue.ts` and this script stays safe to point anywhere. They
-report and stop.
+rather than an omission.** For `check-driverless-groups` and
+`check-profile-coordinates` there is no single correct repair, and only the
+affected user knows which one they want. For the other two there is one, and it
+lives in a sibling rather than in the check: clamping a seat count into range is
+`repair-seat-residue.ts`, and deleting a self-request is
+`cleanup-self-requests.ts`. Keeping `check-*` uniformly read-only is worth more
+than saving a file — it is what makes every one of them safe to point at
+production. They report and stop.
 
 `check-seat-counts` has no `*.test.ts` of its own because it has no argument
 parsing and no planning half: the selection is `findOutOfRangeSeatRows`, tested
@@ -155,6 +160,7 @@ successfully look identical.
 | `repair-seat-residue`                 | —     | **2 outstanding**   | **3 outstanding**²  | 2026-09-09    | SCRUM-392 |
 | `cleanup-orphan-conversations`        | —     | **11 outstanding**³ | **620 retained**³   | 2026-09-09    | SCRUM-392 |
 | `backfill-profile-picture-timestamps` | —     | **1,298 null**⁵     | **4,322 null**⁵     | 2026-09-09    | SCRUM-392 |
+| `cleanup-self-requests`               | —     | 0 outstanding       | **2 outstanding**⁷  | 2026-09-09    | SCRUM-409 |
 
 **Every production figure above was taken on 2026-09-09 for SCRUM-392**, through
 the CLI reader route described [below](#production-is-readable-and-now-measured),
@@ -399,6 +405,41 @@ production. A predicate error shared between a script and the SQL written from i
 would survive both. Treat the cells as measured rather than as verified, and run
 the dry run before any `--apply`.
 
+⁷ New in SCRUM-409, and it shares its predicate with `check-self-requests` —
+`findSelfRequestIds`, imported rather than restated — so the two cannot disagree
+about what a self-request is. The cell is therefore the same 2 rows that check
+reports, seen from the side that would delete them.
+
+**What those two rows hold**, measured read-only on 2026-09-09 as lengths rather
+than content, because this is what `--apply` destroys:
+
+|       | created    | status   | conversation | messages  | message length |
+| ----- | ---------- | -------- | ------------ | --------- | -------------- |
+| row 1 | 2026-02-18 | PENDING  | yes          | 1, unread | 3 characters   |
+| row 2 | 2026-04-15 | ACCEPTED | yes          | 1, unread | 0 characters   |
+
+Both messages were written the same day as their request, which is
+`requests.create` storing its opening message, and both were written by the user
+to themselves. So this deletes three characters of one person's own text and an
+empty string — a different decision from `cleanup-orphan-conversations` and its
+1,258 messages between two people, which is why the two are separate scripts
+rather than one with a flag.
+
+Neither row inflates the unread badge, despite both messages being unread:
+`getUnreadMessageCount` filters `userId: { not: caller }`, so a message the
+caller wrote is never counted. What they do reach is `requests.me`, which
+returns the same row in **both** `sentRequests` and `receivedRequests` — so each
+of these two users sees a request from themselves in both lists.
+
+**Row 2 could not be cleared by its owner**, which is the reason a script exists
+rather than a nudge. `requests.delete` refuses an ACCEPTED request when both
+parties share a group, and for a self-request that compares a user against
+themselves — it matched whenever they were in any group at all, and their group
+is real and healthy: two members, one driver. The CONFLICT told them to leave a
+carpool they are actually in before they could clear a request that is not.
+SCRUM-409 exempts a self-request from that guard, so the row is clearable
+through the product now as well as by this script.
+
 ### Production is readable, and now measured
 
 **Every production cell above carries a figure, as of 2026-09-09.** Getting
@@ -628,9 +669,12 @@ ticket, because filing rather than repairing is SCRUM-392's stated policy.
 8. **2 production `request` rows have the same user on both ends.** Residue from
    before `requests.create` grew its explicit self-request guard; the ordinary
    duplicate check cannot catch one, because both halves of its `OR` match the
-   same row. Small, and the deletion is not trivial — a request deleted without
-   its conversation is exactly how the 620 in finding 4 came about.
-   **SCRUM-409.**
+   same row. **SCRUM-409**, and now characterised: each carries a conversation
+   holding one unread message the user wrote to themselves, three characters in
+   one and empty in the other. `cleanup-self-requests.ts` is the repair and has
+   not been run. The finding worth carrying forward is the second one — the
+   ACCEPTED row was **unclearable by its owner**, because `requests.delete`'s
+   same-group guard compares a user against themselves. See footnote 7.
 
 **And one production figure that needed no ticket: 90 orphan `location` rows.**
 `cleanup-orphan-locations` already owns that repair, its dry run is the next
@@ -663,8 +707,14 @@ WHERE NOT EXISTS (
   WHERE cs.homeLocationId = l.id OR cs.companyLocationId = l.id
 );
 
--- check-self-requests
+-- check-self-requests, and cleanup-self-requests: the same predicate
 SELECT COUNT(*) FROM request WHERE fromUserId = toUserId;
+
+-- what deleting them would take with it, without reading any message content
+SELECT COUNT(*) FROM message m
+JOIN conversation c ON c.id = m.conversationId
+JOIN request r ON r.id = c.requestId
+WHERE r.fromUserId = r.toUserId;
 
 -- check-driverless-groups
 SELECT COUNT(*) FROM `group` g WHERE NOT EXISTS (
