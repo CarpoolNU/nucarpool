@@ -235,7 +235,12 @@ The composite `message(userId, isRead)` is worse than useless: the predicate is 
 
 **The part that was real is already fixed.** Removing the counterpart-role predicate — done for a correctness reason, not a performance one — deleted both `DEPENDENT SUBQUERY` blocks from the plan. That matters more than the row counts: a dependent subquery is re-evaluated once per candidate outer row rather than once, so it multiplies where the rest of the plan adds. The four `IN` levels the ticket described are now two, the `user` and `carpool_search` joins are gone, and the SQL text sent per call fell from 1776 to 896 bytes.
 
-The badge also runs about once per session rather than once per navigation: [`trpc.ts`](../../utils/trpc.ts) sets `refetchOnMount: false` and `refetchOnWindowFocus: false` globally, and the only other trigger is [`MessageContent`](../../components/Messages/MessageContent.tsx) invalidating it after marking a thread read.
+The badge does not refetch on navigation: [`trpc.ts`](../../utils/trpc.ts) sets `refetchOnMount: false` and `refetchOnWindowFocus: false` globally. It has **two** invalidation triggers, and both are deliberate:
+
+- [`MessageContent`](../../components/Messages/MessageContent.tsx), after marking a thread read — the count has to fall when the user reads their mail;
+- [`useUnreadNotifications`](../../utils/messages/useUnreadNotifications.ts), on each incoming Pusher `sendNotification` — the count has to rise when mail arrives.
+
+The second was added by SCRUM-383 and **it is a real increase in call volume**: roughly once per session before, now once per message received. That was the accepted trade. `Header` previously incremented a local counter instead, to save the query, and the badge then displayed that counter _in place of_ the server's count — so five unread messages plus one notification read `1`, and a thread read from the map panel could never clear it. At 10.9 rows read and ~3.18 ms per call against a per-caller indexed plan, one query per message received is cheap; a notification badge that lies is not. Revisit only if the thresholds below are crossed.
 
 **When to revisit, and with which index.** Re-run [`scripts/measure-unread-count.ts`](../../../scripts/measure-unread-count.ts), which prints the plan, the generated SQL and a verdict. Act if either holds:
 
