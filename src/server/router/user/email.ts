@@ -6,6 +6,14 @@ import { browserEnv } from "../../../utils/env/browser";
 import { SendTemplatedEmailCommand } from "@aws-sdk/client-ses";
 import { RequestStatus } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
+// The preview is the connect message itself, so it is bounded by the column
+// that message is written to and by nothing else. This used to be a local
+// constant of 250, mirroring a number ConnectModal hardcoded before SCRUM-231
+// replaced it with this one; the server was left three days behind, and a
+// 251-255 character message created its request and then failed to notify
+// anyone (SCRUM-382). The bound itself still matters — the preview reaches an
+// SES template — so this is a change of source, not a removal.
+import { MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
 
 /**
  * Notification email.
@@ -54,9 +62,6 @@ const REQUEST_NOTIFICATION_MAX_AGE_MS = 5 * 60 * 1000;
  */
 const REQUEST_NOTIFICATION_WINDOW_MS = 60 * 60 * 1000;
 const REQUEST_NOTIFICATIONS_PER_WINDOW = 10;
-
-/** Longest request preview accepted; mirrors the 250-char cap in ConnectModal. */
-const MAX_PREVIEW_LENGTH = 250;
 
 type Party = { id: string; name: string; email: string };
 
@@ -195,7 +200,7 @@ export const emailsRouter = router({
       z
         .object({
           requestId: z.string(),
-          messagePreview: z.string().max(MAX_PREVIEW_LENGTH),
+          messagePreview: z.string().max(MESSAGE_MAX_LENGTH),
         })
         .strict(),
     )

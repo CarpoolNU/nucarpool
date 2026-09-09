@@ -112,6 +112,8 @@ An unannotated `String` on MySQL is `VARCHAR(191)`, which is why so many of thes
 
 The values live in [`textLimits.ts`](../../utils/textLimits.ts) so the form, the tRPC input and the column cannot drift apart. Add a `.max()` there and reference it; do not write the number inline.
 
+One input bounds a column's width without writing to it: `emails.sendRequestNotification`'s `messagePreview` is the connect message itself, forwarded to an SES template, so it carries `MESSAGE_MAX_LENGTH` too. It held its own `250` until SCRUM-382 — five short of the textarea beside it — which is exactly the drift this module exists to prevent, so bound against the constant even where the value is not being stored.
+
 ### The two group-message columns are legacy
 
 Group ride preferences used to be one `GROUP_DETAILS_V1:{…json…}` blob, written into `group.message` _and_ mirrored into `carpool_search.group_message`. That was replaced with the three real columns above, owned by the driver's own `CarpoolSearch`.

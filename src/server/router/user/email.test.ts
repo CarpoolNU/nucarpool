@@ -339,13 +339,31 @@ describe("user.emails.sendRequestNotification — participants only, addresses f
     expect(db.ses).not.toHaveBeenCalled();
   });
 
+  it("accepts a preview as long as the column the message is written to", async () => {
+    // 255 is `MESSAGE_MAX_LENGTH`, the width of `message.content`. The numbers
+    // are written out rather than imported so this pins the boundary instead
+    // of restating whatever the constant happens to say.
+    const { caller, db } = callerFor(sessionFor(ALICE));
+
+    await caller.user.emails.sendRequestNotification({
+      requestId: REQUEST_ID,
+      messagePreview: "x".repeat(255),
+    });
+
+    expect(db.ses).toHaveBeenCalledTimes(1);
+  });
+
   it("caps the preview length rather than relaying an unbounded body", async () => {
+    // This asserted 251 until SCRUM-382: the server capped the preview at 250
+    // while ConnectModal's textarea and counter allowed 255, so a message in
+    // that window created its request and then failed to notify the recipient.
+    // The cap is now `MESSAGE_MAX_LENGTH`, so 256 is the first rejected length.
     const { caller, db } = callerFor(sessionFor(ALICE));
 
     await expect(
       caller.user.emails.sendRequestNotification({
         requestId: REQUEST_ID,
-        messagePreview: "x".repeat(251),
+        messagePreview: "x".repeat(256),
       }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
 
