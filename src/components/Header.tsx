@@ -21,6 +21,7 @@ import {
 } from "../utils/pusherClient";
 import { PublicUser } from "../utils/types";
 import useIsMobile from "../utils/useIsMobile";
+import { planMobileNav, type NavTab } from "../utils/nav/mobileNavPlan";
 import {
   HiOutlineMap,
   HiOutlineChatAlt2,
@@ -133,11 +134,25 @@ interface HeaderProps {
   admin?: boolean;
   signIn?: boolean;
   profile?: boolean;
-  checkChanges?: () => void;
+  /**
+   * The profile page's unsaved-changes guard. Given the navigation the header
+   * wants to perform, it either runs it immediately or shows `UnsavedModal`
+   * and runs it after the user decides (SCRUM-384).
+   *
+   * Taking the navigation as a callback rather than a destination string keeps
+   * SCRUM-171's full page load here, where the reason for it is documented,
+   * instead of teaching the profile page when to bypass the router.
+   */
+  checkChanges?: (proceed: () => void | Promise<void>) => void | Promise<void>;
   onViewGroupRoute?: (driver: PublicUser, riders: PublicUser[]) => void;
 }
 
-export type HeaderOptions = "explore" | "requests" | "mygroup";
+/**
+ * Unchanged for every importer; the union itself now lives beside
+ * `planMobileNav`, so the plan and the header cannot disagree about what a tab
+ * is.
+ */
+export type HeaderOptions = NavTab;
 
 const Header = (props: HeaderProps) => {
   const [isLoading, setIsLoading] = useState(false);
@@ -245,7 +260,11 @@ const Header = (props: HeaderProps) => {
     isComingFromProfile.current = props.profile === true;
 
     if (props.checkChanges) {
-      await props.checkChanges();
+      await props.checkChanges(async () => {
+        setIsLoading(true);
+        await router.push("/");
+        setIsLoading(false);
+      });
     } else {
       // explicit navigation
       setIsLoading(true);
@@ -255,43 +274,62 @@ const Header = (props: HeaderProps) => {
   };
 
   const handleMobileNavClick = (option: string) => {
+    // Set before the guard runs, and harmless there: `renderMobileNav` pins
+    // the highlight to "profile" whenever the route is the profile page, so a
+    // cancelled modal cannot leave a tab lit that was never reached.
     setActiveNav(option);
 
-    // Check if coming from profile
-    const comingFromProfile = router.pathname.includes("/profile");
+    const plan = planMobileNav({
+      option,
+      pathname: router.pathname,
+      hasUnsavedGuard: props.checkChanges !== undefined,
+    });
 
-    if (option === "explore" || option === "requests" || option === "mygroup") {
+    // The full page load SCRUM-171 needs. Kept identical, and deliberately not
+    // run until the guard below has had its say.
+    const leaveProfile = (href: string) => {
       setIsLoading(true);
+      // Don't use timeout - let the browser handle the navigation naturally
+      window.location.href = href;
+    };
 
-      if (comingFromProfile) {
-        // For real mobile devices, we need to ensure navigation completes
-        // before attempting reload
-        window.location.href = `/?tab=${option}`;
-        // Don't use timeout - let the browser handle the navigation naturally
-      } else {
-        router
-          .push({
-            pathname: "/",
-            query: { tab: option },
-          })
-          .finally(() => {
-            setIsLoading(false);
-            if (props.data?.setSidebar) {
-              props.data.setSidebar(option as HeaderOptions);
-            }
-          });
-        if (option === "requests") {
+    switch (plan.kind) {
+      case "guard":
+        // `setIsLoading` is *not* set here: the modal is rendered by the
+        // profile page, and raising the header's spinner first would cover it
+        // and stay up if the user cancels.
+        void props.checkChanges?.(() => leaveProfile(plan.href));
+        return;
+
+      case "hardNavigate":
+        leaveProfile(plan.href);
+        return;
+
+      case "switchTab":
+        setIsLoading(true);
+        router.push({ pathname: "/", query: { tab: plan.tab } }).finally(() => {
+          setIsLoading(false);
+          if (props.data?.setSidebar) {
+            props.data.setSidebar(plan.tab);
+          }
+        });
+        if (plan.tab === "requests") {
           setCurrentunreadMessagesCount(0);
         }
-      }
-    } else if (option === "profile") {
-      // Note we're going to profile
-      isComingFromProfile.current = false;
+        return;
 
-      setIsLoading(true);
-      router.push("/profile").finally(() => {
-        setIsLoading(false);
-      });
+      case "openProfile":
+        // Note we're going to profile
+        isComingFromProfile.current = false;
+
+        setIsLoading(true);
+        router.push("/profile").finally(() => {
+          setIsLoading(false);
+        });
+        return;
+
+      case "ignore":
+        return;
     }
   };
 
