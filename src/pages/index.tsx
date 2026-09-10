@@ -912,17 +912,20 @@ const Home: NextPage<any> = () => {
               >
                 {user.role === "VIEWER" && viewerBox}
                 {!isMobile && <MapLegend role={user.role} />}
-                {!isMobile && (
-                  <MapConnectPortal
-                    otherUsers={popupUsers}
-                    extendUser={extendPublicUser}
-                    onViewRouteClick={onViewRouteClick}
-                    onViewRequest={handleUserSelect}
-                    onClose={() => {
-                      setPopupUsers(null);
-                    }}
-                  />
-                )}
+                {/* Ungated as of SCRUM-414 item 2. The map's click handlers
+                    always ran and always set `popupUsers`; with this behind
+                    `!isMobile` a phone tap set state that nothing read and
+                    nothing could clear again. The component picks its own
+                    presentation per viewport. */}
+                <MapConnectPortal
+                  otherUsers={popupUsers}
+                  extendUser={extendPublicUser}
+                  onViewRouteClick={onViewRouteClick}
+                  onViewRequest={handleUserSelect}
+                  onClose={() => {
+                    setPopupUsers(null);
+                  }}
+                />
                 {user.status === "INACTIVE" && user.role !== "VIEWER" && (
                   <InactiveBlocker />
                 )}
