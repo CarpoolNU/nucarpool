@@ -43,6 +43,7 @@ import { runViewRouteClick } from "../utils/map/viewRouteClick";
 import { runViewGroupRoute } from "../utils/map/groupRouteClick";
 import clearOtherUserMarkers from "../utils/map/clearOtherUserMarkers";
 import { isValidCoordinates } from "../utils/map/coordinates";
+import { MobileBanner } from "../components/MobileBanner";
 import {
   planExploreSidebar,
   type ExploreSidebarView,
@@ -642,25 +643,6 @@ const Home: NextPage<any> = () => {
   });
   useGetDirections({ points: points, map: mapState! });
 
-  // Create a mobile banner component that will be added to the DOM
-  const MobileBanner = () => {
-    if (!isMobile) return null;
-
-    return (
-      <div
-        className="absolute top-0 right-0 left-0 z-[9999] bg-yellow-100 px-4 py-1 text-center text-xs text-black"
-        style={{
-          width: "100%",
-          position: "fixed",
-          top: 0,
-          zIndex: 9999,
-        }}
-      >
-        For the full experience, try using CarpoolNU on desktop
-      </div>
-    );
-  };
-
   // A failed `user.me` used to leave `data` undefined behind this spinner
   // forever, which was indistinguishable from the app being down and offered
   // nothing to do about it.
@@ -743,7 +725,10 @@ const Home: NextPage<any> = () => {
           <title>CarpoolNU</title>
         </Head>
 
-        {/* Always render the banner outside of other containers */}
+        {/* Always render the banner outside of other containers. It hides
+            itself below the mobile breakpoint; it used to be declared inside
+            this component's render body, which remounted it on every render
+            of this page rather than updating it (SCRUM-415). */}
         <MobileBanner />
 
         {/* Tutorial overlay for first-time users */}
