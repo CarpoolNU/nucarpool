@@ -11,18 +11,29 @@
  * **Read this before trusting a green run on anything about mobile.**
  *
  * jsdom does not do layout and does not evaluate CSS. What that rules out is
- * most of what "mobile is broken" usually means:
+ * most of what "mobile is broken" usually means. Each of the following was
+ * measured in this jsdom rather than assumed:
  *
- *  - **No geometry.** Every element reports zero width, zero height and a
- *    zero-sized bounding box. jsdom cannot tell you that a 60px fixed bar
- *    overlaps an element positioned 48px from the bottom, which is the whole
- *    of SCRUM-412.
- *  - **No media queries.** A `desktop:` utility is inert here. `window.matchMedia`
- *    is not implemented at all, so a component that used it instead of
- *    `useIsMobile` would not work in these tests without a polyfill. Setting
- *    the width below only affects code that reads `window.innerWidth`.
- *  - **No units, no `env()`.** `100dvh`, `100vh` and
- *    `env(safe-area-inset-bottom)` are strings that never resolve. Safe-area
+ *  - **No geometry.** A div with an explicit `width: 200px; height: 100px`
+ *    still reports `getBoundingClientRect()` of all zeros and `offsetHeight`
+ *    of `0`. jsdom cannot tell you that a 60px fixed bar overlaps an element
+ *    positioned 48px from the bottom, which is the whole of SCRUM-412.
+ *  - **`getComputedStyle` is the trap, not the escape hatch.** For that same
+ *    div it returns `height: "100px"` — it echoes the declared value back and
+ *    computes nothing. It looks like a measurement and is not one, which
+ *    makes it more dangerous than the honest zeros above. Do not reach for it
+ *    to assert layout.
+ *  - **No media queries.** A `desktop:` utility is inert here, and
+ *    `window.matchMedia` is `undefined` — not stubbed, absent. A component
+ *    written against it instead of `useIsMobile` would throw in these tests
+ *    without a polyfill. Setting the width below only reaches code that reads
+ *    `window.innerWidth`.
+ *  - **No units, and `env()` is actively mangled.** `getComputedStyle` on
+ *    `height: 100dvh` returns the literal string `"100dvh"`, unresolved. And
+ *    jsdom's CSS parser *rewrites* `calc(60px + env(safe-area-inset-bottom,
+ *    0px))` into `calc(60px + env(0px * , * safe-area-inset-bottom))` — the
+ *    fallback and the variable swap places. So an assertion on a style string
+ *    containing `env()` tests jsdom's parser, not the app. Safe-area
  *    behaviour needs a physical device with a home indicator; nothing in this
  *    repository can assert it.
  *  - **No paint order.** `z-index` is not computed, so "the sheet covers the
