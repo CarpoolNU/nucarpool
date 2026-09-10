@@ -6,14 +6,60 @@ const {
 
 /** @type {import('tailwindcss').Config} */
 /**
+ * The theme and the screens. **Not the scan surface** - and this file used to
+ * look as though it controlled that too (SCRUM-419).
+ *
+ * A `content` array restricting the class scan to `src/pages` and
+ * `src/components` stood at the top of this object and had no effect
+ * whatsoever. Tailwind v4 is reached through the `@import` in
+ * `src/styles/globals.css`, which turns on automatic source detection, and that
+ * supersedes the legacy key this config carries in through `@config`. It was
+ * deleted rather than corrected, because a key that reads as configuration and
+ * configures nothing is worse than no key at all: two separate sessions
+ * reasoned from it and reached a false conclusion, one of them writing that
+ * conclusion into source comments before a build probe caught it.
+ *
+ * The boundary actually in force is **the whole repository, minus whatever
+ * `.gitignore` excludes**, and it is not limited to JavaScript and TypeScript.
+ * Established by building with single-use probe utilities rather than inferred
+ * from documentation: probes placed in `src/utils`, at the repository root, in
+ * `scripts/` and inside a markdown file under `docs/` were every one of them
+ * emitted, while one inside the build directory was not.
+ *
+ * Two consequences, both of which have already cost time:
+ *
+ *  - **Naming a utility in prose emits that utility.** A code comment, a
+ *    markdown document, or this docblock will do it. So "utility X no longer
+ *    appears in the compiled CSS" is not a usable acceptance criterion unless
+ *    nothing in the repository mentions X - including the sentence explaining
+ *    why it was removed. SCRUM-412 wrote that criterion and was defeated by its
+ *    own comment.
+ *  - **There is no configured restriction to design against.** SCRUM-413 shaped
+ *    a helper partly on the strength of the deleted key's promise.
+ *
+ * Narrowing the scan for real is possible - `@source` in `globals.css` - and is
+ * deliberately **not** done here. It is a separate change because deleting an
+ * inert key is provably a no-op and narrowing a scan is not: bundled together,
+ * a diff of the compiled stylesheets could no longer say which change caused
+ * what.
+ *
+ * The weight it would save was measured rather than left as a guess. Building
+ * with detection narrowed to the two directories the deleted key named drops
+ * **8 utilities and 601 bytes** from the larger stylesheet before compression -
+ * around 0.8% - and none of the 8 is used in any markup. Four come from the
+ * comments in this very file, one from a comment in `breakpoints.js`, one from
+ * an animation *value* rather than any prose at all, and two are ordinary
+ * English words that happen to also be utility names, emitted because those
+ * words appear in unrelated comments elsewhere in the repository.
+ *
+ * So the case for narrowing is not weight. It is that it would make "utility X
+ * is gone from the CSS" a checkable claim again, which is the thing this
+ * currently costs.
+ *
  * TODO: add theme to follow the branding rules of Northeastern
  * https://brand.northeastern.edu/visual-design/typography/
  */
 module.exports = {
-  content: [
-    "./src/pages/**/*.{js,ts,jsx,tsx}",
-    "./src/components/**/*.{js,ts,jsx,tsx}",
-  ],
   theme: {
     extend: {
       /**
@@ -107,6 +153,10 @@ module.exports = {
     },
     // NOTE: this overrides Tailwind's default screens rather than extending
     // them, so `sm` here is 576px and not the stock 640px.
+    // This key is load-bearing, which is the distinction worth holding onto
+    // after reading this file's docblock: the theme and the screens here do
+    // reach Tailwind through `@config`. It was only the scan boundary that
+    // never did.
     // Keep these ascending. Tailwind emits the media queries in the order they
     // are declared, so a larger screen listed before a smaller one loses the
     // cascade wherever both set the same property. `breakpoints.test.ts` asserts

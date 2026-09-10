@@ -30,12 +30,12 @@
  *
  * It also keeps to the existing convention that Tailwind classes sit with the
  * markup - no file under `src/utils/` names one. That is a convention and not
- * a constraint: `tailwind.config.js` still declares a `content` array limited
- * to `./src/pages/**` and `./src/components/**`, but Tailwind v4 ignores it in
- * favour of scanning the whole repository minus `.gitignore`, so a class named
- * here would in fact be emitted. Verified by building with a probe class in
- * this directory rather than inferred from the config, which reads as though
- * the opposite were true. Filed as SCRUM-419.
+ * a constraint: Tailwind v4 scans the whole repository minus `.gitignore`, so a
+ * class named here would in fact be emitted. `tailwind.config.js` used to carry
+ * a `content` array that read as though it restricted this, which is where the
+ * false belief came from; SCRUM-419 deleted it, since it never had any effect.
+ * Verified by building with a probe class in this directory rather than
+ * inferred from the config.
  *
  * Same shape as `nav/mobileNavPlan.ts` and `map/viewRoutePlan.ts`, and for the
  * same reason SCRUM-379 gave: `index.tsx` is ~918 lines behind Mapbox,
