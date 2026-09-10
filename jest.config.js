@@ -85,6 +85,20 @@ module.exports = {
       // this project: the node suites have no DOM for `toBeInTheDocument` to
       // talk about.
       setupFilesAfterEnv: ["<rootDir>/jest.setup.dom.ts"],
+
+      // Static image imports resolve to a stub instead of being handed to
+      // `ts-jest`, which cannot parse a PNG and throws at *load* time - taking
+      // the whole suite out of the run rather than failing it. See
+      // `src/testing/staticImageStub.js`; SCRUM-414 hit this on the first
+      // component test to reach `UserCard`.
+      //
+      // Scoped to this project deliberately. Only components import images, so
+      // a `.test.ts` in the node project reaching one is a mistake worth
+      // failing loudly rather than papering over.
+      moduleNameMapper: {
+        "\\.(png|jpe?g|gif|webp|avif|svg|ico)$":
+          "<rootDir>/src/testing/staticImageStub.js",
+      },
     },
   ],
 };

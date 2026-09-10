@@ -90,20 +90,54 @@ const ExploreSidebar = (props: ExploreSidebarProps) => {
     { value: "distance", label: "Distance" },
     { value: "time", label: "Time" },
   ];
+
+  /**
+   * Whether the controls that act on the *list* belong on screen.
+   *
+   * False only in the mobile detail state, where `index.tsx` shrinks the sheet
+   * to 320px and `SidebarContent` filters the list down to the one selected
+   * card: a Recommendations/Favorites switch and a sort control have nothing to
+   * act on there, and would crowd out the card they sit above.
+   *
+   * `isMobile` is part of the condition rather than redundant with it, even
+   * though `mobileSelectedUser` is only ever *set* from the mobile activation
+   * path. Nothing clears it when the viewport crosses the breakpoint, so after
+   * expanding a card and rotating to a desktop width it is still set - and
+   * without the `isMobile` term the desktop layout would lose these controls to
+   * a state it cannot itself produce or escape. That stale value is a
+   * pre-existing defect and is left alone here; this keeps it from becoming a
+   * desktop regression.
+   */
+  const showListControls = !(isMobile && props.mobileSelectedUser !== null);
+
   return (
     <div
       className="z-10 flex h-full flex-shrink-0 flex-col bg-white text-left"
       data-testid="explore-sidebar"
     >
       <div className={`flex-row px-5 ${isMobile ? "py-0" : "py-3"}`}>
-        {!isMobile && (
+        {/* Recommendations / Favorites.
+         *
+         * Rendered on both layouts. This was `!isMobile`, and it holds the only
+         * `setCurOption("favorites")` call - so on mobile `curOption` was pinned
+         * to `"recommendations"` for the component's lifetime and `props.favs`
+         * could never be rendered. The favourite star on each card is not gated,
+         * so favouriting was a write with no matching read: a mobile user could
+         * save a match and had no way to see what they had saved (SCRUM-414).
+         *
+         * `isMobile` here now only picks a type scale. At `text-xl` the two
+         * labels are wider than a 375px column minus this row's `px-5`, so the
+         * mobile size is load-bearing rather than cosmetic. */}
+        {showListControls && (
           <div className="flex justify-center gap-3">
             <button
-              className={
+              className={`rounded-xl p-2 font-semibold ${
+                isMobile ? "text-base" : "text-xl"
+              } ${
                 curOption === "recommendations"
-                  ? "bg-northeastern-red rounded-xl p-2 text-xl font-semibold text-white"
-                  : "rounded-xl p-2 text-xl font-semibold text-black"
-              }
+                  ? "bg-northeastern-red text-white"
+                  : "text-black"
+              }`}
               onClick={() => {
                 setCurOption("recommendations");
               }}
@@ -111,11 +145,13 @@ const ExploreSidebar = (props: ExploreSidebarProps) => {
               Recommendations
             </button>
             <button
-              className={
+              className={`rounded-xl p-2 font-semibold ${
+                isMobile ? "text-base" : "text-xl"
+              } ${
                 curOption === "favorites"
-                  ? "bg-northeastern-red rounded-xl p-2 text-xl font-semibold text-white"
-                  : "rounded-xl p-2 text-xl font-semibold text-black"
-              }
+                  ? "bg-northeastern-red text-white"
+                  : "text-black"
+              }`}
               onClick={() => {
                 setCurOption("favorites");
                 setFiltersOpen(false);
@@ -126,11 +162,26 @@ const ExploreSidebar = (props: ExploreSidebarProps) => {
           </div>
         )}
 
-        {!filtersOpen &&
+        {/* Sort and the filter button, likewise no longer `!isMobile`. This
+         * block holds the only `setFiltersOpen(true)` call site, which is what
+         * made all 617 lines of `Filters` unreachable on mobile rather than
+         * merely cramped - the panel itself sets no width and flows into a
+         * narrow column unchanged.
+         *
+         * The three remaining conditions are deliberate and unrelated to
+         * viewport: `!filtersOpen` swaps this row out for the panel,
+         * `!props.disabled` hides it from a VIEWER who cannot act on results,
+         * and `curOption === "recommendations"` reflects that neither sort nor
+         * filters apply to the favourites list. */}
+        {showListControls &&
+          !filtersOpen &&
           !props.disabled &&
-          curOption === "recommendations" &&
-          !isMobile && (
-            <div className="relative mx-4 mt-6 flex items-center justify-between">
+          curOption === "recommendations" && (
+            <div
+              className={`relative flex items-center justify-between ${
+                isMobile ? "mt-2" : "mx-4 mt-6"
+              }`}
+            >
               <CustomSelect
                 value={props.sort}
                 onChange={props.setSort}
