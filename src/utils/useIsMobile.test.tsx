@@ -22,35 +22,22 @@
  * survived the mutation, and it is gone.
  */
 
-import { act, renderHook } from "@testing-library/react";
+import { renderHook } from "@testing-library/react";
 import useIsMobile from "./useIsMobile";
 import { MOBILE_BREAKPOINT_PX } from "./breakpoints";
+import {
+  resizeViewportTo as resize,
+  restoreViewportAfterEach,
+  setViewportWidth,
+} from "../testing/viewport";
 
 /**
- * jsdom reports `innerWidth: 1024` and never changes it, so the viewport has
- * to be written directly. `defineProperty` rather than assignment because the
- * DOM types declare it readonly, and jsdom leaves it configurable.
+ * The viewport technique this file used to carry inline now lives in
+ * `testing/viewport.ts`, which also documents what jsdom can and cannot tell
+ * you about a mobile layout (SCRUM-416). It was copied into two other files
+ * before it was shared.
  */
-const setViewportWidth = (width: number) => {
-  Object.defineProperty(window, "innerWidth", {
-    value: width,
-    writable: true,
-    configurable: true,
-  });
-};
-
-const resize = (width: number) => {
-  act(() => {
-    setViewportWidth(width);
-    window.dispatchEvent(new Event("resize"));
-  });
-};
-
-const originalWidth = window.innerWidth;
-
-afterEach(() => {
-  setViewportWidth(originalWidth);
-});
+restoreViewportAfterEach();
 
 describe("useIsMobile", () => {
   it("reports the viewport it mounted into, not its initial false", () => {

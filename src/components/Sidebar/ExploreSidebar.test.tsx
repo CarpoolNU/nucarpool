@@ -3,7 +3,12 @@ import userEvent from "@testing-library/user-event";
 import ExploreSidebar from "./ExploreSidebar";
 import { FiltersState } from "../../utils/types";
 import { QueryState } from "../../utils/queryState";
-import { MOBILE_BREAKPOINT_PX } from "../../utils/breakpoints";
+import {
+  DESKTOP_WIDTH,
+  MOBILE_WIDTH,
+  restoreViewportAfterEach,
+  setViewportWidth,
+} from "../../testing/viewport";
 
 /**
  * Reachability of the Explore list controls at a mobile viewport (SCRUM-414).
@@ -70,24 +75,7 @@ const BASE: FiltersState = {
 
 const READY: QueryState = { status: "ready", retry: () => undefined };
 
-/**
- * jsdom reports `innerWidth: 1024` and never changes it, so the viewport has to
- * be written directly — the same technique, and the same reason, as
- * `useIsMobile.test.tsx`. `defineProperty` rather than assignment because the
- * DOM types declare it readonly and jsdom leaves it configurable.
- */
-const setViewportWidth = (width: number) => {
-  Object.defineProperty(window, "innerWidth", {
-    value: width,
-    writable: true,
-    configurable: true,
-  });
-};
-
-/** Strictly below the breakpoint: `isMobileWidth` is `width < BREAKPOINT`. */
-const MOBILE_WIDTH = MOBILE_BREAKPOINT_PX - 1;
-/** At the breakpoint the `desktop:` utilities apply, so this is the low end. */
-const DESKTOP_WIDTH = MOBILE_BREAKPOINT_PX;
+restoreViewportAfterEach();
 
 const renderSidebar = (
   overrides: { disabled?: boolean; mobileSelectedUser?: string | null } = {},
