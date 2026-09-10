@@ -41,23 +41,6 @@ import {
  * assertable too.
  */
 
-/**
- * `src/utils/mixpanel.ts` calls `mixpanel.init(...)` with `track_pageview: true`
- * at module scope, so merely importing it starts analytics — and `UserCard`
- * imports it transitively for `trackViewRoute`. Left alone the suite emits a
- * pageview and a page of debug logging on every run. Mocked here to keep this
- * file hermetic; the module-scope initialization itself is out of this ticket's
- * scope and is filed separately.
- */
-jest.mock("../../utils/mixpanel", () => ({
-  trackEvent: jest.fn(),
-  trackFTUECompletion: jest.fn(),
-  trackFTUEStep: jest.fn(),
-  trackProfileCompletion: jest.fn(),
-  trackViewRoute: jest.fn(),
-  trackRequestResponse: jest.fn(),
-}));
-
 const BASE: FiltersState = {
   days: 0,
   flexDays: 1,

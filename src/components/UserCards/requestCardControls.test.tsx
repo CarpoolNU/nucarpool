@@ -40,12 +40,6 @@ import {
  * asserted: exactly one control, named for what it does.
  */
 
-/** `mixpanel.init` runs at module scope; see SCRUM-417. */
-jest.mock("../../utils/mixpanel", () => ({
-  trackEvent: jest.fn(),
-  trackViewRoute: jest.fn(),
-}));
-
 jest.mock("../../utils/trpc", () => ({
   trpc: {
     useUtils: () => ({

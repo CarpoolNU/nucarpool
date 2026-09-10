@@ -95,9 +95,22 @@ module.exports = {
       // Scoped to this project deliberately. Only components import images, so
       // a `.test.ts` in the node project reaching one is a mistake worth
       // failing loudly rather than papering over.
+      //
+      // `mixpanel-browser` likewise, for a different failure: `utils/mixpanel`
+      // calls `init` at module scope, so any component that tracks an event
+      // starts an analytics session merely by being imported - and `UserCard`
+      // does, which covers most of the card and sidebar tree. That cost one
+      // affected suite ~7.5s in queued events, `debug` logging and two
+      // `indexedDB is not supported` errors. It made no network requests;
+      // see the stub, which records how that was measured.
+      //
+      // The third-party module is stubbed rather than our own wrapper so that
+      // `utils/mixpanel` loads for real and its exports cannot drift from a
+      // hand-maintained fake (SCRUM-417).
       moduleNameMapper: {
         "\\.(png|jpe?g|gif|webp|avif|svg|ico)$":
           "<rootDir>/src/testing/staticImageStub.js",
+        "^mixpanel-browser$": "<rootDir>/src/testing/mixpanelBrowserStub.js",
       },
     },
   ],
