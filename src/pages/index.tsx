@@ -46,6 +46,7 @@ import { isValidCoordinates } from "../utils/map/coordinates";
 import { MobileBanner } from "../components/MobileBanner";
 import {
   planExploreSidebar,
+  resolveMobileSelectedUser,
   type ExploreSidebarView,
 } from "../utils/explore/exploreSidebarView";
 
@@ -132,10 +133,21 @@ const Home: NextPage<any> = () => {
   const [mapStateLoaded, setMapStateLoaded] = useState(false);
   const isMobile: boolean = useIsMobile();
   // const [mobileSidebarExpanded, setMobileSidebarExpanded] = useState<boolean>(false);
-  const [mobileSelectedUserID, setmobileSelectedUserID] = useState<
-    string | null
-  >(null);
+  const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  /**
+   * The expanded card, masked to null on desktop (SCRUM-418).
+   *
+   * `expandedUserId` above is the raw state and is deliberately awkward to
+   * reach for: it is only correct on a mobile viewport, and every read below
+   * goes through this instead. `resolveMobileSelectedUser` carries the reason,
+   * and why it is derived here rather than cleared by an effect.
+   */
+  const mobileSelectedUserID = resolveMobileSelectedUser({
+    isMobile,
+    expandedUserId,
+  });
 
   useEffect(() => {
     const handler = debounce(() => {
@@ -399,7 +411,7 @@ const Home: NextPage<any> = () => {
   const handleMobileSidebarExpand = useCallback(
     (userId?: string) => {
       if (userId) {
-        setmobileSelectedUserID(userId);
+        setExpandedUserId(userId);
         setIsSidebarCollapsed(false); // Expand when viewing details
         const allUsers = [
           ...enhancedRecs,
@@ -413,7 +425,7 @@ const Home: NextPage<any> = () => {
           onViewRouteClick(user, selectedPublicUser);
         }
       } else {
-        setmobileSelectedUserID(null);
+        setExpandedUserId(null);
       }
     },
     [
@@ -425,7 +437,7 @@ const Home: NextPage<any> = () => {
       mapState,
       mapStateLoaded,
       onViewRouteClick,
-      setmobileSelectedUserID,
+      setExpandedUserId,
     ],
   );
 
@@ -808,7 +820,7 @@ const Home: NextPage<any> = () => {
                   : `absolute left-0 z-20 w-full overflow-y-auto rounded-t-3xl border-2 border-black bg-white shadow-lg transition-all duration-300 ${MOBILE_SIDEBAR_CLASSES[sidebarView]}`
               }
             >
-              {isMobile && mobileSelectedUserID !== null && (
+              {mobileSelectedUserID !== null && (
                 <div className="flex-shrink-0 border-b border-gray-200 bg-gray-50 px-3 py-2">
                   <button
                     onClick={() => handleMobileSidebarExpand()}
@@ -921,7 +933,7 @@ const Home: NextPage<any> = () => {
                   onClick={() => {
                     setSidebarType("mygroup");
                     setIsSidebarCollapsed(false);
-                    setmobileSelectedUserID(null);
+                    setExpandedUserId(null);
                   }}
                   className="bottom-above-mobile-nav absolute left-1/2 z-30 flex -translate-x-1/2 transform items-center gap-1 rounded-full border border-gray-300 bg-white/90 px-4 py-2 text-sm font-medium shadow-md transition-colors hover:bg-white"
                   aria-label="Group Details"

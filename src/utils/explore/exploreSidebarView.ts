@@ -107,3 +107,57 @@ export function planExploreSidebar({
 
   return isCollapsed ? "collapsed" : "expanded";
 }
+
+/**
+ * The expanded card, as every consumer should read it (SCRUM-418).
+ *
+ * `index.tsx` holds one piece of state for "a single card's details are
+ * showing". It is written only by the mobile activation path and cleared only
+ * by the mobile Back button, so **nothing used to clear it when the viewport
+ * crossed the breakpoint**: expand a card on a phone, rotate to landscape, and
+ * the value is still set while the desktop layout is on screen - a layout with
+ * no Back button, because that control sits inside a mobile-only branch. The
+ * only ways out were switching sidebar tabs, whose effect resets it as a side
+ * effect, or going back to a narrow viewport to find the Back button again.
+ *
+ * That never became a visible bug, because both consumers happened to carry a
+ * defensive `isMobile` term. The cost was that the value could not be read on
+ * its own without being wrong and nothing said so at the point of use:
+ * SCRUM-414 discovered it while adding a third consumer and had to write
+ * `!(isMobile && selected !== null)` plus a test to hold the workaround in
+ * place. This function is that rule, stated once, so the next consumer
+ * inherits it instead of rediscovering it.
+ *
+ * **Derived rather than an effect**, which is where this departs from the
+ * ticket's proposed fix. `useEffect(() => { if (!isMobile) clear(); })` runs
+ * *after* the render that flipped the viewport, so there is one committed
+ * frame in which the layout is the desktop one and the value is still set.
+ * With the defensive terms removed - which is the rest of this ticket - that
+ * frame *is* the bug, briefly: a desktop sidebar filtered to one card. The
+ * acceptance criterion is that the value is null whenever `isMobile` is false,
+ * and only a derived value can actually promise that. It is also the same
+ * conclusion SCRUM-413 reached about the sidebar's visibility twenty lines up,
+ * for the same reason: derived state cannot lose a race.
+ *
+ * One behavioural consequence worth naming: because the raw state survives
+ * underneath, rotating to landscape and back restores the expanded card rather
+ * than dropping the user at the top of the list. An effect would have
+ * discarded it permanently. Restoring what the user was looking at is the
+ * better of the two, but it is a choice and not a side effect of the
+ * technique.
+ *
+ * @param isMobile from `useIsMobile`, the same source `planExploreSidebar`
+ *   takes it from
+ * @param expandedUserId the raw state in the page - the id the mobile
+ *   activation path last wrote. Callers should pass this straight through and
+ *   read only the return value.
+ */
+export function resolveMobileSelectedUser({
+  isMobile,
+  expandedUserId,
+}: {
+  isMobile: boolean;
+  expandedUserId: string | null;
+}): string | null {
+  return isMobile ? expandedUserId : null;
+}

@@ -159,9 +159,9 @@ describe("the mobile detail state", () => {
 
   /**
    * `mobileSelectedUser` is the one case where the list controls are correctly
-   * absent: `index.tsx` shrinks the sheet to 320px and `SidebarContent` filters
-   * the list to the single selected card, so a list switch and a sort control
-   * have nothing to act on and would crowd out the card above them.
+   * absent: `index.tsx` shrinks the sheet and `SidebarContent` filters the
+   * list to the single selected card, so a list switch and a sort control have
+   * nothing to act on and would crowd out the card above them.
    */
   it("hides the list controls while a single card is expanded", () => {
     renderSidebar({ mobileSelectedUser: "some-user-id" });
@@ -188,25 +188,22 @@ describe("the mobile detail state", () => {
     ).toBeInTheDocument();
   });
 
-  /**
-   * Nothing clears `mobileSelectedUser` when the viewport crosses the
-   * breakpoint, so a card expanded on a phone leaves it set at desktop width.
-   * The detail state is a mobile construct and the desktop layout has no way to
-   * produce or leave it, so the controls must survive the transition — which is
-   * why the gate carries an `isMobile` term rather than testing
-   * `mobileSelectedUser` alone.
+  /*
+   * A third test stood here until SCRUM-418, named "keeps the controls at
+   * desktop width even with a stale expanded card". It rendered this component
+   * at a desktop width with `mobileSelectedUser` set and asserted the controls
+   * survived, pinning the `isMobile` term the gate carried for exactly that
+   * reason.
+   *
+   * It is gone because the premise is gone, not because the behaviour stopped
+   * mattering. `index.tsx` derives the prop through
+   * `resolveMobileSelectedUser`, so a desktop render cannot receive a non-null
+   * value any more - the test's own setup is now unreachable, and it would
+   * fail, correctly, against the simplified gate. Replacing it with a version
+   * that expects the controls to *disappear* would only be asserting that this
+   * component obeys its props.
+   *
+   * The invariant it used to defend locally is enforced at the source and
+   * tested in `utils/explore/exploreSidebarView.test.ts`.
    */
-  it("keeps the controls at desktop width even with a stale expanded card", () => {
-    setViewportWidth(DESKTOP_WIDTH);
-
-    renderSidebar({ mobileSelectedUser: "some-user-id" });
-
-    expect(
-      screen.getByRole("button", { name: "Favorites" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Open filters" }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Sort by/ })).toBeInTheDocument();
-  });
 });

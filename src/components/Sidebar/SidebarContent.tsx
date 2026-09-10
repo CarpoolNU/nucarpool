@@ -14,7 +14,6 @@ import {
   getLatestMessageForRequest,
 } from "../../utils/latestMessage";
 import { UserContext } from "../../utils/userContext";
-import useIsMobile from "../../utils/useIsMobile";
 import { QueryState } from "../../utils/queryState";
 import { QueryError } from "../QueryError";
 import { viewerModeHidesCards } from "./viewerAccess";
@@ -186,7 +185,6 @@ const renderUserCard = (
 
 export const SidebarContent = (props: SidebarContentProps) => {
   const user = useContext(UserContext);
-  const isMobile = useIsMobile();
   if (!user) return null;
 
   const sortedUserCards = props.userCardList
@@ -210,12 +208,20 @@ export const SidebarContent = (props: SidebarContentProps) => {
       return b.latestActivityDate.getTime() - a.latestActivityDate.getTime();
     });
 
-  const filteredSortedUserCards =
-    isMobile && props.mobileSelectedUser
-      ? sortedUserCards.filter(
-          ({ otherUser }) => otherUser.id === props.mobileSelectedUser,
-        )
-      : sortedUserCards;
+  /**
+   * The mobile detail state shows one card, so the list collapses to it.
+   *
+   * `isMobile &&` stood in front of this until SCRUM-418, defending against a
+   * `mobileSelectedUser` that outlived the viewport that produced it. The page
+   * derives the value through `resolveMobileSelectedUser` now, so a non-null
+   * value implies a mobile viewport and this component no longer needs to know
+   * the viewport at all - which is why `useIsMobile` is gone from it.
+   */
+  const filteredSortedUserCards = props.mobileSelectedUser
+    ? sortedUserCards.filter(
+        ({ otherUser }) => otherUser.id === props.mobileSelectedUser,
+      )
+    : sortedUserCards;
 
   const renderedUserCards = filteredSortedUserCards.map(
     ({ otherUser, isUnread, latestMessage }) =>
@@ -236,7 +242,7 @@ export const SidebarContent = (props: SidebarContentProps) => {
   return (
     <div className="relative h-full px-3.5">
       <div
-        className={`relative h-full ${isMobile && props.mobileSelectedUser === null ? "overflow-y-scroll" : isMobile && props.mobileSelectedUser !== null ? "overflow-hidden" : "overflow-y-scroll"} scrollbar scrollbar-thumb-busy-red scrollbar-track-rounded-full scrollbar-thumb-rounded-full scrollbar-track-stone-100 pb-32`}
+        className={`relative h-full ${props.mobileSelectedUser ? "overflow-hidden" : "overflow-y-scroll"} scrollbar scrollbar-thumb-busy-red scrollbar-track-rounded-full scrollbar-thumb-rounded-full scrollbar-track-stone-100 pb-32`}
       >
         {/* Order matters. Viewer mode comes first because it is a role, not a
             load result - a VIEWER has no use for a retry on a list they cannot
