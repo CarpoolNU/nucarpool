@@ -1,10 +1,5 @@
 import { useContext } from "react";
-import {
-  EnhancedPublicUser,
-  Message,
-  PublicUser,
-  User,
-} from "../../utils/types";
+import { EnhancedPublicUser, Message } from "../../utils/types";
 import { UserContext } from "../../utils/userContext";
 import { requestUnavailableExplanation } from "../../utils/roleCompatibility";
 import { UserCard } from "./UserCard";
@@ -12,7 +7,6 @@ import React from "react";
 
 interface SentCardProps {
   otherUser: EnhancedPublicUser;
-  onViewRouteClick: (user: User, otherUser: PublicUser) => void;
   onClick: () => void;
   selectedUser: EnhancedPublicUser | null;
   isUnread: boolean;

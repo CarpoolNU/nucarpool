@@ -135,7 +135,6 @@ const renderUserCard = (
           <SentCard
             key={otherUser.id}
             otherUser={otherUser}
-            onViewRouteClick={onViewRouteClick}
             onClick={handleClick}
             selectedUser={selectedUser}
             isUnread={isUnread}
@@ -149,7 +148,6 @@ const renderUserCard = (
           <ReceivedCard
             key={otherUser.id}
             otherUser={otherUser}
-            onViewRouteClick={onViewRouteClick}
             onClick={handleClick}
             selectedUser={selectedUser}
             isUnread={isUnread}
@@ -163,7 +161,6 @@ const renderUserCard = (
           <ReceivedCard
             key={otherUser.id}
             otherUser={otherUser}
-            onViewRouteClick={onViewRouteClick}
             onClick={handleClick}
             selectedUser={selectedUser}
             isUnread={isUnread}
@@ -175,7 +172,6 @@ const renderUserCard = (
           <SentCard
             key={otherUser.id}
             otherUser={otherUser}
-            onViewRouteClick={onViewRouteClick}
             onClick={handleClick}
             selectedUser={selectedUser}
             isUnread={isUnread}
