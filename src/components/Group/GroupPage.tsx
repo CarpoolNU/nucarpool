@@ -1,5 +1,6 @@
 import { Dialog } from "@headlessui/react";
-import { useContext, useState } from "react";
+import { useCallback, useContext, useEffect, useState } from "react";
+import { FaTimes } from "react-icons/fa";
 import { GroupMembers } from "./GroupMemberCard";
 import { trpc } from "../../utils/trpc";
 import { UserContext } from "../../utils/userContext";
@@ -229,10 +230,50 @@ export const GroupPage = (props: GroupPageProps) => {
   const curUser = useContext(UserContext);
   const isMobile = useIsMobile();
 
-  const onClose = () => {
+  // Destructured out here, not read as `props.onClose` inside the callback
+  // below, because depending on `props` would rebuild the callback whenever
+  // *any* prop changes - which is the fix `react-hooks/exhaustive-deps` names,
+  // and CI runs eslint with `--max-warnings=0`.
+  const { onClose: requestClose } = props;
+
+  // Memoized because the Escape handler below depends on it: rebuilt every
+  // render, it would tear down and re-add the key listener on each one. Note
+  // the caller passes an inline arrow (`Header` renders
+  // `onClose={() => setDisplayGroup(false)}`), so this bounds the churn rather
+  // than removing it - the listener is correct either way.
+  const onClose = useCallback(() => {
     setIsOpen(false);
-    props.onClose();
-  };
+    requestClose();
+  }, [requestClose]);
+
+  /**
+   * Escape closes the mobile screen.
+   *
+   * The desktop branch gets this from Headless UI's `Dialog`, which the mobile
+   * branch deliberately does not use. `Dialog` would also bring a focus trap,
+   * and a trap is wrong here: the bottom navigation is `z-index: 100` against
+   * this screen's `z-50`, so it stays visible *and* tappable on top of it.
+   * Trapping focus would let a pointer reach the navigation while the keyboard
+   * could not, which is a worse state than no trap at all. This is a
+   * full-screen view with live navigation over it, not a modal, so it gets the
+   * one dismissal behaviour it was missing rather than the whole modal
+   * contract.
+   *
+   * Declared above the `!curUser` early return - hooks cannot sit after a
+   * conditional return.
+   */
+  useEffect(() => {
+    if (!isMobile) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isMobile, onClose]);
 
   if (!curUser) {
     return <Spinner />;
@@ -254,8 +295,38 @@ export const GroupPage = (props: GroupPageProps) => {
     return (
       <div className="fixed inset-0 z-50 bg-white">
         <div className="flex h-full flex-col bg-gray-50">
-          <div className="mt-6 flex items-center justify-center border-b border-gray-200 bg-white px-4 py-3 shadow-xs">
-            <h1 className="text-lg font-semibold text-gray-900">My Group</h1>
+          <div className="mt-6 flex items-center border-b border-gray-200 bg-white px-4 py-3 shadow-xs">
+            {/* The way out. This header held the title alone, so the only exit
+             * from My Group on a phone was tapping a different navigation tab -
+             * the desktop branch has dismissed on backdrop click and Escape all
+             * along, from `Dialog`.
+             *
+             * `FaTimes` and "Close" rather than a back chevron, matching the
+             * filter panel: this dismisses an overlay sitting on the map, it
+             * does not navigate anywhere, and the tab bar underneath is what
+             * actually moves between screens. */}
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close My Group"
+              className="focus-visible:outline-northeastern-red p-3 text-gray-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+            >
+              <FaTimes size={20} aria-hidden="true" />
+            </button>
+            <h1 className="flex-1 text-center text-lg font-semibold text-gray-900">
+              My Group
+            </h1>
+            {/* Balances the button so the title stays centred, which
+             * `justify-center` did for free when the button did not exist.
+             *
+             * `w-11` is 44px, matching the button exactly: `p-3` either side of
+             * a 20px glyph. The padding is sized for a touch target rather than
+             * for the glyph - at the icon's own size this would be a 20px
+             * target, well under the 44px guideline. No negative margin pulling
+             * the button outward, deliberately: that would make it consume less
+             * of the flex line than the spacer reserves and push the title
+             * off-centre by the difference. */}
+            <span className="w-11" aria-hidden="true" />
           </div>
           <div className="flex-1 overflow-auto">{body("mobile")}</div>
         </div>
