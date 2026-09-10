@@ -2,7 +2,6 @@ import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import type { GetServerSidePropsContext, NextPage } from "next";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { RiFocus3Line } from "react-icons/ri";
 import addMapEvents from "../utils/map/addMapEvents";
 import Head from "next/head";
 import { trpc } from "../utils/trpc";
@@ -30,6 +29,7 @@ import useSearch from "../utils/search";
 import AddressCombobox from "../components/Map/AddressCombobox";
 import updateUserLocation from "../utils/map/updateUserLocation";
 import { MapLegend } from "../components/Map/MapLegend";
+import { RecentreButton } from "../components/Map/RecentreButton";
 import Image from "next/image";
 import BlueSquare from "../../public/user-dest.png";
 import BlueCircle from "../../public/blue-circle.png";
@@ -876,21 +876,18 @@ const Home: NextPage<any> = () => {
               )}
             </div>
 
-            {!isMobile && (
-              <button
-                type="button"
-                className="absolute right-[8px] bottom-[150px] z-10 flex h-8 w-8 items-center justify-center rounded-md border-2 border-solid border-gray-300 bg-white shadow-xs hover:bg-gray-200"
-                aria-label="Recentre the map on your workplace"
-                onClick={() =>
-                  mapState?.flyTo({
-                    center: [user.companyCoordLng, user.companyCoordLat],
-                    essential: true,
-                  })
-                }
-              >
-                <RiFocus3Line aria-hidden="true" />
-              </button>
-            )}
+            {/* Reachable on mobile as of SCRUM-414 item 3, and lifted into
+                its own component so that reachability is assertable - see its
+                docblock for why the mobile placement is not from the phase 1
+                tokens. */}
+            <RecentreButton
+              onRecentre={() =>
+                mapState?.flyTo({
+                  center: [user.companyCoordLng, user.companyCoordLat],
+                  essential: true,
+                })
+              }
+            />
             <div className="relative flex-auto">
               {/* Message Panel */}
               {selectedUser && (
@@ -911,18 +908,25 @@ const Home: NextPage<any> = () => {
                 className="pointer-events-auto relative z-0 h-full w-full flex-auto"
               >
                 {user.role === "VIEWER" && viewerBox}
-                {!isMobile && <MapLegend role={user.role} />}
-                {!isMobile && (
-                  <MapConnectPortal
-                    otherUsers={popupUsers}
-                    extendUser={extendPublicUser}
-                    onViewRouteClick={onViewRouteClick}
-                    onViewRequest={handleUserSelect}
-                    onClose={() => {
-                      setPopupUsers(null);
-                    }}
-                  />
-                )}
+                {/* Ungated as of SCRUM-414 item 3. On mobile it moves to
+                    the top of the map and starts collapsed - the bottom is
+                    claimed by the navigation, the explore sheet and Mapbox's
+                    own controls. The component owns that decision. */}
+                <MapLegend role={user.role} />
+                {/* Ungated as of SCRUM-414 item 2. The map's click handlers
+                    always ran and always set `popupUsers`; with this behind
+                    `!isMobile` a phone tap set state that nothing read and
+                    nothing could clear again. The component picks its own
+                    presentation per viewport. */}
+                <MapConnectPortal
+                  otherUsers={popupUsers}
+                  extendUser={extendPublicUser}
+                  onViewRouteClick={onViewRouteClick}
+                  onViewRequest={handleUserSelect}
+                  onClose={() => {
+                    setPopupUsers(null);
+                  }}
+                />
                 {user.status === "INACTIVE" && user.role !== "VIEWER" && (
                   <InactiveBlocker />
                 )}
