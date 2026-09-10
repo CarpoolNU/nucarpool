@@ -25,9 +25,14 @@ import {
  *
  * *Not covered:* whether the bar is 24px tall, whether it sits above the map,
  * or whether the offsets that compensate for it are correct. jsdom does not
- * lay out - see `src/testing/viewport.ts` for what that rules out. The 4px
- * discrepancy between its rendered height and the explore page's `mt-5`
- * compensation is recorded on SCRUM-415 and is not assertable here.
+ * lay out - see `src/testing/viewport.ts` for what that rules out.
+ *
+ * The 4px discrepancy this used to record - the bar measuring 24px against a
+ * 20px allowance on the explore row - was closed by SCRUM-411's final
+ * reconciliation, and both sites now reserve 24px. Still not assertable here,
+ * and still worth a look on a device: the numbers are resolved from the built
+ * stylesheet, which proves what the rules say and nothing about where the bar
+ * lands.
  */
 
 restoreViewportAfterEach();

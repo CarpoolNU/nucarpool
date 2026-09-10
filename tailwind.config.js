@@ -88,12 +88,21 @@ module.exports = {
          * The explore page's main row on mobile: the viewport, less the
          * navigation, less the fixed banner this row is pushed down by.
          *
-         * `1.25rem` is that banner allowance and matches the row's own `mt-5`.
-         * It is deliberately not a token: SCRUM-415 deletes the banner
-         * outright, and giving a thing about to be removed its own name in the
-         * design system would be work done twice.
+         * `1.5rem` is that banner allowance, and it must stay equal to the top
+         * margin the row carries in `index.tsx`. It was `1.25rem` until
+         * SCRUM-411's final reconciliation, which is 20px against a banner
+         * that measures 24px - so the fixed bar overlapped the first 4px of
+         * the row. Both figures come from the built stylesheet rather than from
+         * the class names: the banner is a 12px font on a 1/0.75 line height,
+         * 16px, plus 4px of padding either side.
+         *
+         * Deliberately not a token, which is unchanged reasoning from
+         * SCRUM-412: the banner is still scheduled for removal, and giving a
+         * thing about to be deleted its own name in the design system would be
+         * work done twice. The two sites are instead cross-referenced, here
+         * and there.
          */
-        "mobile-row": `calc(100% - 1.25rem - ${MOBILE_NAV_SPACE})`,
+        "mobile-row": `calc(100% - 1.5rem - ${MOBILE_NAV_SPACE})`,
         /**
          * The expanded explore sheet. `5.5rem` is the strip of map left visible
          * above it, which is what the previous `calc(100% - 8.5rem)` encoded
