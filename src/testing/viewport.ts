@@ -38,6 +38,14 @@
  *    repository can assert it.
  *  - **No paint order.** `z-index` is not computed, so "the sheet covers the
  *    message panel" is not observable — only "the sheet is in the tree".
+ *  - **No honest server render, so no hydration mismatch.** jsdom always
+ *    provides a `window`, so `renderToString` here is not a faithful server:
+ *    a component guarding on `typeof window` takes its *client* branch and
+ *    the SSR-versus-client divergence that produces a real mismatch never
+ *    arises. `useIsMobile.test.tsx` does hydrate a subtree deliberately, to
+ *    pin which snapshot `useSyncExternalStore` starts from (SCRUM-420) — but
+ *    "no hydration warning on a real page" is not assertable from here at
+ *    all, and needs a browser console.
  *
  * So what these tests *can* assert is **reachability and wiring**: whether a
  * control exists in the tree at a given width, and what happens when it is
