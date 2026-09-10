@@ -760,7 +760,16 @@ const Home: NextPage<any> = () => {
             />
           )}
           {/* `h-mobile-row` is the viewport less the navigation and less the
-              banner this row is pushed down by - see `tailwind.config.js`. The
+              banner this row is pushed down by - see `tailwind.config.js`.
+
+              The top margin was one step short until SCRUM-411's final
+              reconciliation: the banner measures 24px and the margin reserved
+              20px, so the fixed bar overlapped the first 4px of this row. Both
+              numbers are resolved from the built stylesheet rather than read
+              off the class names - the banner is a 12px font on a 1/0.75 line
+              height, which is 16px, plus 4px of padding either side. The
+              matching allowance inside the height token had to move with it.
+              The
               desktop `h-[91.5%]` is left alone deliberately: its 8.5% reserves
               the *top* header, a different quantity from the bottom navigation
               and outside SCRUM-412. On mobile that reservation meant nothing at
@@ -769,7 +778,7 @@ const Home: NextPage<any> = () => {
               viewport height (~694px) and drifted either side of it. */}
           <div
             className={`flex overflow-hidden ${
-              isMobile ? "h-mobile-row mt-5" : "h-[91.5%]"
+              isMobile ? "h-mobile-row mt-6" : "h-[91.5%]"
             }`}
           >
             {/* Shown exactly when the sheet is in a state this handle can
