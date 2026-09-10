@@ -54,6 +54,28 @@ jest.mock("next/router", () => ({
 }));
 
 /**
+ * The presigned-URL query behind `DropDownMenu`'s avatar, as a spy.
+ *
+ * This is SCRUM-420's regression test, and it replaces a `useProfileImage`
+ * mock that used to sit lower in this file. That mock was needed by the
+ * *mobile* tests, which was the tell: `useIsMobile` started at
+ * `useState(false)` and corrected itself in an effect, so the first render
+ * pass on a phone was the *desktop* tree - `DropDownMenu` mounted and fired
+ * this query once per mobile page load before being thrown away.
+ *
+ * Deleting the mock is what the ticket asked for, but on its own it is a weak
+ * test: it failed because the mock was missing, so making the `trpc` mock
+ * complete would have made it pass again with the bug still present. Spying on
+ * the query instead asserts the thing that was actually wrong - that the
+ * request happens at all - and it stays meaningful now that the query resolves.
+ */
+const presignedUrlQuery = jest.fn(() => ({
+  data: undefined,
+  error: null,
+  isLoading: false,
+}));
+
+/**
  * The unread count drives the Requests badge. Returned as `undefined` so
  * `unreadBadge` produces a hidden badge — the badge is `useUnreadNotifications`
  * and `unreadBadge`'s subject, both of which have their own suites, and it is
@@ -67,6 +89,13 @@ jest.mock("../utils/trpc", () => ({
       },
       groups: { me: { useQuery: () => ({ data: undefined }) } },
       me: { useQuery: () => ({ data: undefined }) },
+      /*
+       * Reached through an arrow so the spy is read when the query runs rather
+       * than when this factory is invoked - `jest.mock` is hoisted above the
+       * `const` above, so naming it directly here would be a TDZ error. The
+       * `useRouter` mock above depends on the same lazy read.
+       */
+      getPresignedDownloadUrl: { useQuery: () => presignedUrlQuery() },
     },
   },
 }));
@@ -88,25 +117,15 @@ jest.mock("next-auth/react", () => ({
   signOut: jest.fn(),
 }));
 
-/**
- * `DropDownMenu`'s avatar resolves through a presigned-URL query.
- *
- * Needed even by the *mobile* tests, and that is the interesting part rather
- * than an inconvenience. `useIsMobile` starts at `useState(false)` and
- * corrects itself in an effect, so the first render pass on a phone is the
- * *desktop* tree: `DropDownMenu` mounts and fires this query once on every
- * mobile page load before being thrown away. A real cost, not a test
- * artefact - filed as **SCRUM-420**, which was found from this mock being
- * necessary.
- *
- * Deleting this mock is that ticket's regression test. It fails today.
- */
-jest.mock("../utils/useProfileImage", () => ({
-  __esModule: true,
-  default: () => ({ profileImageUrl: null, isLoading: false }),
-}));
-
 restoreViewportAfterEach();
+
+/*
+ * `clearMocks` is not configured for this project, so the spy accumulates
+ * across the tests in this file unless it is reset per test.
+ */
+beforeEach(() => {
+  presignedUrlQuery.mockClear();
+});
 
 const VIEWER = {
   id: "viewer-1",
@@ -174,6 +193,19 @@ describe("Header navigation at a mobile viewport", () => {
 
     expect(desktopBrand()).not.toBeInTheDocument();
   });
+
+  it("never mounts the desktop-only avatar query (SCRUM-420)", () => {
+    // Not "the desktop header is absent from the final tree", which the test
+    // above already covers and which passed while the bug was live. This
+    // asserts nothing desktop-only *ever mounted*, by watching the one side
+    // effect such a mount produces.
+    //
+    // It fails against `useState(false)` plus a mount effect, where the query
+    // is called during the discarded first pass.
+    renderHeader();
+
+    expect(presignedUrlQuery).not.toHaveBeenCalled();
+  });
 });
 
 describe("Header navigation at a desktop viewport", () => {
@@ -191,6 +223,16 @@ describe("Header navigation at a desktop viewport", () => {
     renderHeader();
 
     expect(bottomNav()).not.toBeInTheDocument();
+  });
+
+  it("does mount the avatar query here", () => {
+    // The control for the assertion above. Without this, a spy that could
+    // never be called for some unrelated reason - a renamed procedure, a
+    // `DropDownMenu` that stopped requesting an avatar - would make the mobile
+    // test pass vacuously and look like a fix.
+    renderHeader();
+
+    expect(presignedUrlQuery).toHaveBeenCalled();
   });
 });
 
