@@ -1,6 +1,8 @@
 import {
   DESKTOP_SCREEN_NAME,
   MOBILE_BREAKPOINT_PX,
+  MOBILE_NAV_HEIGHT_PX,
+  MOBILE_NAV_SPACE,
   isMobileWidth,
 } from "./breakpoints";
 
@@ -9,6 +11,8 @@ import {
 const tailwindConfig = require("../../tailwind.config.js");
 
 const screens: Record<string, string> = tailwindConfig.theme.screens;
+const spacing: Record<string, string> = tailwindConfig.theme.extend.spacing;
+const height: Record<string, string> = tailwindConfig.theme.extend.height;
 
 /**
  * The app used to decide "is mobile" twice, at 640 in `useIsMobile`
@@ -86,6 +90,81 @@ describe("isMobileWidth", () => {
   it("still treats phone widths as mobile", () => {
     for (const width of [320, 375, 390, 414, 430, 576, 639]) {
       expect(isMobileWidth(width)).toBe(true);
+    }
+  });
+});
+
+/**
+ * The mobile navigation's height (SCRUM-412).
+ *
+ * The defect these guard is the same one the breakpoint had, in a second
+ * quantity: `MobileNav` declared no height, so the bar measured whatever its
+ * children summed to, and three files each hard-coded a different guess at it -
+ * 48px for the explore sheet, 64px for the profile content, 64px for floating
+ * controls, against a bar that rendered at about 59px. Nothing connected any of
+ * them, so all four could be edited independently and none would fail.
+ *
+ * These tests hold the connection rather than the values. What matters is that
+ * the Tailwind offsets are *derived from* `MOBILE_NAV_HEIGHT_PX` - a test that
+ * restated `60px` would pass with the derivation removed, which is exactly the
+ * failure mode being guarded against.
+ */
+describe("the shared mobile navigation height", () => {
+  it("is a whole number of pixels", () => {
+    expect(Number.isInteger(MOBILE_NAV_HEIGHT_PX)).toBe(true);
+    expect(MOBILE_NAV_HEIGHT_PX).toBeGreaterThan(0);
+  });
+
+  it("reserves the home-indicator inset on top of the bar itself", () => {
+    expect(MOBILE_NAV_SPACE).toContain(`${MOBILE_NAV_HEIGHT_PX}px`);
+    expect(MOBILE_NAV_SPACE).toContain("env(safe-area-inset-bottom");
+  });
+
+  /**
+   * `env()` with no fallback resolves to nothing where the variable is unknown,
+   * which invalidates the whole `calc()` and drops the declaration - so the
+   * offset would collapse to zero rather than merely losing the inset. The
+   * fallback is the difference between degrading and breaking.
+   */
+  it("gives env() a fallback, so an unknown inset costs the inset and not the offset", () => {
+    expect(MOBILE_NAV_SPACE).toContain("env(safe-area-inset-bottom, 0px)");
+  });
+
+  it("is what the Tailwind offsets are built from", () => {
+    expect(spacing["mobile-nav"]).toBe(MOBILE_NAV_SPACE);
+    expect(spacing["above-mobile-nav"]).toContain(MOBILE_NAV_SPACE);
+    expect(height["mobile-row"]).toContain(MOBILE_NAV_SPACE);
+    expect(height["mobile-sheet"]).toContain(MOBILE_NAV_SPACE);
+  });
+
+  /**
+   * The two offsets encode the two intents the old hard-coded numbers
+   * conflated: flush against the bar, versus clear of it. Reading `48` or `64`
+   * told you nothing about which was meant, and the difference between them was
+   * not deliberate.
+   */
+  it("distinguishes flush-with the bar from clear-of it", () => {
+    expect(spacing["above-mobile-nav"]).not.toBe(spacing["mobile-nav"]);
+    expect(spacing["above-mobile-nav"]).toMatch(/\+\s*0\.5rem/);
+  });
+
+  /**
+   * Every one of these is a `calc()` over a percentage and an `env()`, so a
+   * stray `px` suffix or a missing operator produces CSS that is silently
+   * dropped rather than CSS that fails loudly. Balanced parentheses is the
+   * cheapest check that catches the common way of getting that wrong.
+   */
+  it("emits balanced calc() expressions", () => {
+    for (const value of [
+      spacing["mobile-nav"],
+      spacing["above-mobile-nav"],
+      height["mobile-row"],
+      height["mobile-sheet"],
+    ]) {
+      expect(value).toBeDefined();
+      const opens = (value!.match(/\(/g) ?? []).length;
+      const closes = (value!.match(/\)/g) ?? []).length;
+      expect(opens).toBe(closes);
     }
   });
 });

@@ -31,6 +31,25 @@ export function MyApp({
   return (
     <>
       <Head>
+        {/* The app's one viewport declaration, and the only place it should be
+            set. `index.tsx` used to carry its own copy; every other page fell
+            back to the bare `width=device-width` that Next's `defaultHead()`
+            supplies, so no page was unviewported but no single place owned the
+            tag either - and `viewport-fit` has to be set somewhere that covers
+            all of them.
+
+            `viewport-fit=cover` is what makes `env(safe-area-inset-*)` resolve
+            to anything but zero. Without it the insets the mobile navigation
+            now reserves would read as `0px` on the devices that have a home
+            indicator, which is exactly where they matter.
+
+            No `user-scalable=no` and no `maximum-scale`: SCRUM-254 removed
+            disabled pinch-zoom as an accessibility defect, and either of those
+            would reintroduce it. */}
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1, viewport-fit=cover"
+        />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" />
       </Head>

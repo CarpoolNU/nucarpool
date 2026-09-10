@@ -17,6 +17,9 @@ import { unreadBadge } from "../utils/messages/unreadBadge";
 import { useUnreadNotifications } from "../utils/messages/useUnreadNotifications";
 import { PublicUser } from "../utils/types";
 import useIsMobile from "../utils/useIsMobile";
+// The same module `useIsMobile` and `tailwind.config.js` read, so the bar's own
+// height and the space every caller reserves for it have one definition.
+import { MOBILE_NAV_SPACE } from "../utils/breakpoints";
 import { planMobileNav, type NavTab } from "../utils/nav/mobileNavPlan";
 import {
   HiOutlineMap,
@@ -42,16 +45,36 @@ const HeaderDiv = styled.div`
   }
 `;
 
+/**
+ * The mobile bottom navigation.
+ *
+ * `height` and `padding-bottom` are the load-bearing pair, and they are the
+ * point of SCRUM-412. This used to declare no height, so the bar was whatever
+ * its children summed to and three other files each guessed at that number -
+ * disagreeing with it and with each other. The height now comes from
+ * `MOBILE_NAV_SPACE`, which every one of those callers also reads, so the value
+ * cannot drift from what they reserve for it.
+ *
+ * Both properties are needed, not either one. `MOBILE_NAV_SPACE` is
+ * `60px + safe-area-inset-bottom`, and Tailwind's preflight makes this
+ * `border-box`, so `padding-bottom` of the same inset leaves exactly 60px of
+ * content box for the items while the bar itself still covers the home
+ * indicator. Setting the height alone would push the icons *into* the
+ * indicator; setting the padding alone would grow the bar past what callers
+ * subtract.
+ */
 const MobileNav = styled.div`
   position: fixed;
   bottom: 0;
   left: 0;
   width: 100%;
+  height: ${MOBILE_NAV_SPACE};
   display: flex;
   justify-content: space-around;
   align-items: center;
   background-color: #e6e6e6;
   padding: 0px 0;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   box-shadow: 0px -2px 6px rgba(0, 0, 0, 0.15);
   z-index: 100;
   border-top: 1px solid #d1d1d1;

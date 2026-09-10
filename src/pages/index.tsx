@@ -701,9 +701,10 @@ const Home: NextPage<any> = () => {
   return (
     <>
       <UserContext.Provider value={user}>
+        {/* The viewport meta this used to carry now lives in `_app.tsx`, which
+            covers every page and is where `viewport-fit=cover` has to go. */}
         <Head>
           <title>CarpoolNU</title>
-          <meta name="viewport" content="width=device-width, initial-scale=1" />
         </Head>
 
         {/* Always render the banner outside of other containers */}
@@ -725,8 +726,18 @@ const Home: NextPage<any> = () => {
               onViewGroupRoute={onViewGroupRoute}
             />
           )}
+          {/* `h-mobile-row` is the viewport less the navigation and less the
+              banner this row is pushed down by - see `tailwind.config.js`. The
+              desktop `h-[91.5%]` is left alone deliberately: its 8.5% reserves
+              the *top* header, a different quantity from the bottom navigation
+              and outside SCRUM-412. On mobile that reservation meant nothing at
+              all, because the header renders as the bottom bar instead, so 8.5%
+              of viewport height happened to equal the bar at exactly one
+              viewport height (~694px) and drifted either side of it. */}
           <div
-            className={`flex h-[91.5%] overflow-hidden ${isMobile ? "mt-5" : ""}`}
+            className={`flex overflow-hidden ${
+              isMobile ? "h-mobile-row mt-5" : "h-[91.5%]"
+            }`}
           >
             {isMobile &&
               (sidebarType === "explore" || sidebarType === "requests") &&
@@ -740,7 +751,7 @@ const Home: NextPage<any> = () => {
                   }
                   className={`focus-visible:outline-northeastern-red absolute left-1/2 z-30 -translate-x-1/2 transform cursor-pointer transition-all duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
                     isSidebarCollapsed
-                      ? "bottom-16"
+                      ? "bottom-above-mobile-nav"
                       : "bottom-[calc(100%-6rem)]"
                   }`}
                   style={{ padding: "12px 0" }}
@@ -754,10 +765,10 @@ const Home: NextPage<any> = () => {
                 isMobile
                   ? `absolute left-0 z-20 w-full overflow-y-auto rounded-t-3xl border-2 border-black bg-white shadow-lg transition-all duration-300 ${
                       mobileSelectedUserID !== null
-                        ? "bottom-12 h-[320px]"
+                        ? "bottom-mobile-nav h-[320px]"
                         : isSidebarCollapsed
-                          ? "pointer-events-none bottom-12 h-0 opacity-0"
-                          : "bottom-12 h-[calc(100%-8.5rem)]"
+                          ? "bottom-mobile-nav pointer-events-none h-0 opacity-0"
+                          : "bottom-mobile-nav h-mobile-sheet"
                     }`
                   : "relative w-[25rem]"
               }`}
@@ -877,7 +888,7 @@ const Home: NextPage<any> = () => {
                     setIsSidebarCollapsed(false);
                     setmobileSelectedUserID(null);
                   }}
-                  className="absolute bottom-16 left-1/2 z-30 flex -translate-x-1/2 transform items-center gap-1 rounded-full border border-gray-300 bg-white/90 px-4 py-2 text-sm font-medium shadow-md transition-colors hover:bg-white"
+                  className="bottom-above-mobile-nav absolute left-1/2 z-30 flex -translate-x-1/2 transform items-center gap-1 rounded-full border border-gray-300 bg-white/90 px-4 py-2 text-sm font-medium shadow-md transition-colors hover:bg-white"
                   aria-label="Group Details"
                 >
                   <svg
