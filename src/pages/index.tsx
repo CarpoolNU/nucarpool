@@ -774,12 +774,28 @@ const Home: NextPage<any> = () => {
                   aria-label={
                     isSidebarCollapsed ? "Show the list" : "Hide the list"
                   }
-                  className={`focus-visible:outline-northeastern-red absolute left-1/2 z-30 -translate-x-1/2 transform cursor-pointer transition-all duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
+                  /* `py-4.5` is the tap target, not decoration (SCRUM-421).
+                     The visible bar is `h-2`, so 4.5 + 2 + 4.5 = 11 spacing
+                     units = 44px at this scale - the size Apple's HIG and
+                     WCAG 2.5.5 ask of a touch control. It was 12px of inline
+                     padding, giving 32px: enough for WCAG 2.5.8 at AA, short
+                     of the guideline this control should meet as the primary
+                     way to show and hide the list on a phone.
+
+                     Kept on the spacing scale rather than an arbitrary
+                     pixel value so the whole control stays proportional if
+                     `--spacing` ever changes: the bar and its target are then
+                     still 2 and 11 units. The arbitrary form is deliberately
+                     not spelled out here - Tailwind scans this file for
+                     class-like strings and would emit whichever one a comment
+                     names (SCRUM-419). Do not shrink this to make the
+                     handle look smaller - shrink the `h-2` span instead, and
+                     leave the padding to hold the target open. */
+                  className={`focus-visible:outline-northeastern-red absolute left-1/2 z-30 -translate-x-1/2 transform cursor-pointer py-4.5 transition-all duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
                     isSidebarCollapsed
                       ? "bottom-above-mobile-nav"
                       : "bottom-[calc(100%-6rem)]"
                   }`}
-                  style={{ padding: "12px 0" }}
                 >
                   <span className="block h-2 w-20 rounded-full bg-gray-500 shadow-xs transition-colors hover:bg-gray-600"></span>
                 </button>
