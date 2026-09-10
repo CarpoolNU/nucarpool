@@ -1,0 +1,169 @@
+import {
+  planExploreSidebar,
+  type ExploreSidebarView,
+} from "./exploreSidebarView";
+
+/**
+ * The explore sidebar's visibility decision (SCRUM-413).
+ *
+ * The defect was not a wrong value, it was that three mechanisms wrote the
+ * same DOM node's class list and two of them were invisible to React. That is
+ * not directly testable here and does not need to be: once the imperative
+ * calls are gone the property that matters is that the view is a *function of
+ * state*, so no re-render can disagree with it. These tests pin that function.
+ *
+ * `mobileNavPlan.test.ts` is the shape being followed - and like that suite,
+ * as much of this is about what must not change as about what must.
+ */
+
+const view = (
+  overrides: Partial<Parameters<typeof planExploreSidebar>[0]> = {},
+): ExploreSidebarView =>
+  planExploreSidebar({
+    isMobile: true,
+    hasOpenConversation: false,
+    isDetailOpen: false,
+    isCollapsed: false,
+    ...overrides,
+  });
+
+/** Every combination of the three mobile inputs, for the sweeps below. */
+const mobileStates = [false, true].flatMap((hasOpenConversation) =>
+  [false, true].flatMap((isDetailOpen) =>
+    [false, true].map((isCollapsed) => ({
+      hasOpenConversation,
+      isDetailOpen,
+      isCollapsed,
+    })),
+  ),
+);
+
+describe("planExploreSidebar - an open conversation", () => {
+  it("takes the sidebar out of layout", () => {
+    // The whole ticket. This is what a `useEffect` reaching for
+    // `classList.add("hidden")` was trying and failing to achieve.
+    expect(view({ hasOpenConversation: true })).toBe("hidden");
+  });
+
+  it("stays hidden when the collapse handle is toggled", () => {
+    // The user-facing regression, stated as directly as it can be. Toggling
+    // the handle re-rendered the sidebar with a different `className`, React
+    // reassigned the whole attribute, and the imperatively added `hidden` went
+    // with it - the effect would not re-fire, because `selectedUser` had not
+    // changed. Both values below must be "hidden"; before the fix the second
+    // state produced a visible card list over the open conversation.
+    expect(view({ hasOpenConversation: true, isCollapsed: false })).toBe(
+      "hidden",
+    );
+    expect(view({ hasOpenConversation: true, isCollapsed: true })).toBe(
+      "hidden",
+    );
+  });
+
+  it("outranks a detail view", () => {
+    // `display: none` beat every other class in the old expression whatever
+    // order they appeared in. Preserved deliberately.
+    expect(view({ hasOpenConversation: true, isDetailOpen: true })).toBe(
+      "hidden",
+    );
+  });
+
+  it("hides regardless of the other two inputs", () => {
+    for (const state of mobileStates.filter((s) => s.hasOpenConversation)) {
+      expect(view(state)).toBe("hidden");
+    }
+  });
+
+  it("releases the sidebar again once the conversation closes", () => {
+    // The effect's `else` branch, which did work - so it must keep working.
+    expect(view({ hasOpenConversation: false })).toBe("expanded");
+  });
+});
+
+describe("planExploreSidebar - the states that already worked", () => {
+  it("expands to the full list sheet by default", () => {
+    expect(view()).toBe("expanded");
+  });
+
+  it("collapses when the handle is closed", () => {
+    expect(view({ isCollapsed: true })).toBe("collapsed");
+  });
+
+  it("shows a detail view when a card is selected", () => {
+    expect(view({ isDetailOpen: true })).toBe("detail");
+  });
+
+  it("prefers the detail view over the collapsed state", () => {
+    // Matches the order of the original ternary chain: `mobileSelectedUserID`
+    // was tested before `isSidebarCollapsed`.
+    expect(view({ isDetailOpen: true, isCollapsed: true })).toBe("detail");
+  });
+});
+
+describe("planExploreSidebar - desktop", () => {
+  it("is a static column", () => {
+    expect(view({ isMobile: false })).toBe("desktop");
+  });
+
+  it("ignores every mobile input", () => {
+    // "Desktop behaviour is unchanged" as an assertion rather than a claim.
+    // The old code gated each `classList` call on `isMobile` independently,
+    // so this invariant lived in three places at once.
+    for (const state of mobileStates) {
+      expect(view({ ...state, isMobile: false })).toBe("desktop");
+    }
+  });
+
+  it("never returns a mobile view, and never returns desktop on mobile", () => {
+    for (const state of mobileStates) {
+      expect(view({ ...state, isMobile: false })).toBe("desktop");
+      expect(view({ ...state, isMobile: true })).not.toBe("desktop");
+    }
+  });
+});
+
+describe("planExploreSidebar - totality", () => {
+  it("returns a known view for every reachable state", () => {
+    const known: ExploreSidebarView[] = [
+      "desktop",
+      "hidden",
+      "detail",
+      "collapsed",
+      "expanded",
+    ];
+
+    for (const isMobile of [false, true]) {
+      for (const state of mobileStates) {
+        expect(known).toContain(view({ ...state, isMobile }));
+      }
+    }
+  });
+
+  it("reaches all five views", () => {
+    // A view nothing can produce is a class the page carries for no reason.
+    const reached = new Set<ExploreSidebarView>();
+    for (const isMobile of [false, true]) {
+      for (const state of mobileStates) {
+        reached.add(view({ ...state, isMobile }));
+      }
+    }
+    expect([...reached].sort()).toEqual([
+      "collapsed",
+      "desktop",
+      "detail",
+      "expanded",
+      "hidden",
+    ]);
+  });
+
+  it("depends on nothing but its inputs", () => {
+    // The property that replaces the effect: called twice with equal state it
+    // gives equal answers, so a re-render cannot disagree with it. An
+    // imperative `classList` call could, and did.
+    for (const isMobile of [false, true]) {
+      for (const state of mobileStates) {
+        expect(view({ ...state, isMobile })).toBe(view({ ...state, isMobile }));
+      }
+    }
+  });
+});
