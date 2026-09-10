@@ -1,4 +1,4 @@
-import { EnhancedPublicUser, PublicUser, User } from "../../utils/types";
+import { EnhancedPublicUser } from "../../utils/types";
 import { UserCard } from "./UserCard";
 import { useContext } from "react";
 import { UserContext } from "../../utils/userContext";
@@ -8,7 +8,6 @@ import React from "react";
 
 interface ReceivedCardProps {
   otherUser: EnhancedPublicUser;
-  onViewRouteClick: (user: User, otherUser: PublicUser) => void;
   onClick: () => void;
   selectedUser: EnhancedPublicUser | null;
   isUnread: boolean;
