@@ -38,16 +38,6 @@ import {
  */
 
 /**
- * `src/utils/mixpanel.ts` calls `mixpanel.init(...)` at module scope, so
- * importing it starts analytics and logs a page of debug output per run.
- * Mocked for the same reason `ExploreSidebar.test.tsx` mocks it.
- */
-jest.mock("../../utils/mixpanel", () => ({
-  trackEvent: jest.fn(),
-  trackViewRoute: jest.fn(),
-}));
-
-/**
  * `UserCard` favourites through a mutation and reads `trpc.useUtils()`. The
  * subject here is which handler the card is given, so the client is mocked as
  * a shape rather than driven through a real provider — the precedent is

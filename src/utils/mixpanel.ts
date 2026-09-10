@@ -1,11 +1,23 @@
 import mixpanel from "mixpanel-browser";
 import { browserEnv } from "./env/browser";
 
+/**
+ * No local "is the token set" check, and that is not an oversight
+ * (SCRUM-417). There used to be one here that threw at module scope, and it
+ * was **unreachable**: `browserEnv` declares this variable with `str({ input })`
+ * and no default, so `envsafe` rejects a missing or empty value when
+ * `env/browser.ts` is imported - which is the line above. The token is a
+ * non-empty string by the time it is read here, or nothing got this far.
+ *
+ * A second check could therefore only ever fire in a world where the first
+ * already had, while adding an import-time failure mode of its own.
+ *
+ * Note what this does *not* change: a missing token still stops the app at
+ * import, from `envsafe`. Making Mixpanel genuinely optional is a different
+ * decision - it would mean relaxing the env contract, which `check:env` and
+ * `amplify.yml` also encode.
+ */
 const mixpanelToken = browserEnv.NEXT_PUBLIC_MIXPANEL_PROJECT_TOKEN;
-
-if (!mixpanelToken) {
-  throw new Error("NEXT_PUBLIC_MIXPANEL_PROJECT_TOKEN is not defined");
-}
 
 mixpanel.init(mixpanelToken, {
   debug: process.env.NODE_ENV !== "production",
