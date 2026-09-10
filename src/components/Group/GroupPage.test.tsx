@@ -4,7 +4,12 @@ import { Role } from "@prisma/client";
 import { GroupPage } from "./GroupPage";
 import { UserContext } from "../../utils/userContext";
 import { User } from "../../utils/types";
-import { MOBILE_BREAKPOINT_PX } from "../../utils/breakpoints";
+import {
+  DESKTOP_WIDTH,
+  MOBILE_WIDTH,
+  restoreViewportAfterEach,
+  setViewportWidth,
+} from "../../testing/viewport";
 import { DEFAULT_GROUP_DETAILS } from "./groupDetails";
 
 /**
@@ -58,16 +63,7 @@ jest.mock("./useGroupDetails", () => ({
   }),
 }));
 
-const setViewportWidth = (width: number) => {
-  Object.defineProperty(window, "innerWidth", {
-    value: width,
-    writable: true,
-    configurable: true,
-  });
-};
-
-/** Strictly below the breakpoint: `isMobileWidth` is `width < BREAKPOINT`. */
-const MOBILE_WIDTH = MOBILE_BREAKPOINT_PX - 1;
+restoreViewportAfterEach();
 
 /**
  * A RIDER with no `carpoolId`, which routes to `NoGroupSection` - the lightest
@@ -162,7 +158,7 @@ describe("My Group on mobile", () => {
 
 describe("My Group on desktop", () => {
   beforeEach(() => {
-    setViewportWidth(MOBILE_BREAKPOINT_PX);
+    setViewportWidth(DESKTOP_WIDTH);
   });
 
   /**
