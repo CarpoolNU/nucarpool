@@ -204,13 +204,61 @@ describe("Discovery card activation on desktop", () => {
     expect(labels).not.toContain("");
   });
 
-  it("does not offer the mobile condensed Connect", () => {
-    // `mobileSelectedUser` is page state, not viewport state, so it can be
-    // non-null on desktop after a resize. The gate has to test both.
-    renderCard({ mobileSelectedUser: OTHER_USER.id });
+  /*
+   * A test stood here until SCRUM-418, named "does not offer the mobile
+   * condensed Connect". It rendered at a desktop width with
+   * `mobileSelectedUser` set and asserted the condensed Connect stayed away,
+   * pinning the `isMobile` term the gate carried because page state could
+   * outlive the viewport that produced it.
+   *
+   * Its setup is now unreachable: `index.tsx` derives the prop through
+   * `resolveMobileSelectedUser`, so a desktop render never receives a non-null
+   * value. What is left of the desktop contract - two visibly labelled
+   * controls and no full-card overlay - is the test above, and the invariant
+   * itself is tested in `utils/explore/exploreSidebarView.test.ts`.
+   */
+});
 
+describe("Discovery card with no selection prop at all", () => {
+  /**
+   * `MapConnectPortal` renders this card without `mobileSelectedUser`, so the
+   * prop is `undefined` there rather than `null` - and both reads used to test
+   * `!== null`, which `undefined` satisfies. A card that had never been told
+   * about any selection therefore claimed to *be* the selection.
+   *
+   * That was masked rather than harmless: the portal sits behind a
+   * desktop-only branch in `index.tsx`, and the reads carried an `isMobile`
+   * term, so the wrong answer was only ever reached on a viewport where the
+   * term suppressed it. SCRUM-418 removes that term, so the masking goes with
+   * it - and SCRUM-414's remaining map-pin work is what puts this card on a
+   * mobile viewport for real.
+   *
+   * Rendered at a mobile width for that reason: on desktop the old code and
+   * the new code agree, so a desktop version of this test would pass against
+   * the bug.
+   */
+  it("is not treated as the expanded card", () => {
+    setViewportWidth(MOBILE_WIDTH);
+
+    render(
+      <UserContext.Provider value={VIEWER}>
+        <ConnectCard
+          otherUser={OTHER_USER}
+          onViewRouteClick={() => undefined}
+          onViewRequest={() => undefined}
+        />
+      </UserContext.Provider>,
+    );
+
+    // The condensed detail layout's own action, which belongs to the one
+    // expanded card and would be a second Connect control on this one.
     expect(
       screen.queryByRole("button", { name: "Connect!" }),
     ).not.toBeInTheDocument();
+
+    // And the full layout is intact. `UserCard` drops the schedule and seats
+    // rows when condensed, so their presence is what distinguishes "not the
+    // expanded card" from "expanded but missing a button".
+    expect(screen.getByText("Seats Available:")).toBeInTheDocument();
   });
 });

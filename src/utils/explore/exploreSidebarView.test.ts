@@ -1,5 +1,6 @@
 import {
   planExploreSidebar,
+  resolveMobileSelectedUser,
   type ExploreSidebarView,
 } from "./exploreSidebarView";
 
@@ -164,6 +165,63 @@ describe("planExploreSidebar - totality", () => {
       for (const state of mobileStates) {
         expect(view({ ...state, isMobile })).toBe(view({ ...state, isMobile }));
       }
+    }
+  });
+});
+
+/**
+ * The expanded card's viewport masking (SCRUM-418).
+ *
+ * The ticket asked for a jsdom test that crosses the breakpoint mid-render and
+ * asserts the expanded state does not survive it, because it proposed clearing
+ * the state from an effect - and an effect on a state transition can only be
+ * checked by driving the transition. Deriving the value instead removes the
+ * transition, so there is nothing to drive: the function has two boolean
+ * branches and both are covered below, which is stronger than a resize test
+ * rather than a substitute for one.
+ *
+ * Two things this deliberately does not claim. It says nothing about the
+ * desktop sidebar *looking* right after a rotation - jsdom does no layout, and
+ * `src/testing/viewport.ts` sets out what that rules out. And it cannot prove
+ * `index.tsx` actually routes its reads through here; that is a property of a
+ * 1300-line page behind Mapbox and NextAuth, and the guard against it is that
+ * the raw state is named `expandedUserId`, so a read of `mobileSelectedUserID`
+ * that bypassed this would not compile.
+ */
+describe("resolveMobileSelectedUser", () => {
+  const EXPANDED = "user-42";
+
+  it("passes the expanded card through on mobile", () => {
+    expect(
+      resolveMobileSelectedUser({ isMobile: true, expandedUserId: EXPANDED }),
+    ).toBe(EXPANDED);
+  });
+
+  it("reports no expanded card on desktop, however the state was left", () => {
+    // The whole ticket. The raw state survives a breakpoint crossing because
+    // nothing writes to it on the way out, so this is the read that has to
+    // lie about it - and consumers now rely on that, having given up their own
+    // defensive checks.
+    expect(
+      resolveMobileSelectedUser({ isMobile: false, expandedUserId: EXPANDED }),
+    ).toBeNull();
+  });
+
+  it("is null on desktop even with nothing expanded", () => {
+    // Guards against a mutation that returns `expandedUserId` unconditionally:
+    // that passes the mobile case above and the null-state case here, and only
+    // the stale-state case catches it. Stated so the trio reads as complete.
+    expect(
+      resolveMobileSelectedUser({ isMobile: false, expandedUserId: null }),
+    ).toBeNull();
+  });
+
+  it("never invents a selection", () => {
+    // Both viewports, so a hard-coded id fails in one of them.
+    for (const isMobile of [false, true]) {
+      expect(
+        resolveMobileSelectedUser({ isMobile, expandedUserId: null }),
+      ).toBeNull();
     }
   });
 });

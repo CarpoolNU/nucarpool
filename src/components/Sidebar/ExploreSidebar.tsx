@@ -95,20 +95,20 @@ const ExploreSidebar = (props: ExploreSidebarProps) => {
    * Whether the controls that act on the *list* belong on screen.
    *
    * False only in the mobile detail state, where `index.tsx` shrinks the sheet
-   * to 320px and `SidebarContent` filters the list down to the one selected
-   * card: a Recommendations/Favorites switch and a sort control have nothing to
-   * act on there, and would crowd out the card they sit above.
+   * and `SidebarContent` filters the list down to the one selected card: a
+   * Recommendations/Favorites switch and a sort control have nothing to act on
+   * there, and would crowd out the card they sit above.
    *
-   * `isMobile` is part of the condition rather than redundant with it, even
-   * though `mobileSelectedUser` is only ever *set* from the mobile activation
-   * path. Nothing clears it when the viewport crosses the breakpoint, so after
-   * expanding a card and rotating to a desktop width it is still set - and
-   * without the `isMobile` term the desktop layout would lose these controls to
-   * a state it cannot itself produce or escape. That stale value is a
-   * pre-existing defect and is left alone here; this keeps it from becoming a
-   * desktop regression.
+   * This carried an `isMobile` term until SCRUM-418. Nothing cleared
+   * `mobileSelectedUser` when the viewport crossed the breakpoint, so a card
+   * expanded on a phone left it set at desktop width - and reading it alone
+   * would have cost the desktop layout these controls over a state it can
+   * neither produce nor escape. The page now derives the value through
+   * `resolveMobileSelectedUser`, which is null whenever the viewport is not
+   * mobile, so a non-null value here already implies mobile and the term was
+   * doing nothing.
    */
-  const showListControls = !(isMobile && props.mobileSelectedUser !== null);
+  const showListControls = props.mobileSelectedUser === null;
 
   return (
     <div
