@@ -1,0 +1,109 @@
+/**
+ * Which of its five states the explore page's sidebar is in.
+ *
+ * Lifted out of `index.tsx` because visibility there had **three** owners
+ * operating on the same DOM node, two of them not React-aware (SCRUM-413):
+ * the `className` template literal, a `useEffect` calling
+ * `sidebarRef.current.classList.add("hidden")`, and `handleUserSelect` calling
+ * `.classList.remove("hidden")`. Both imperative calls tested the same
+ * condition the effect did, and neither could work:
+ *
+ *  - the `remove` in `handleUserSelect` was dead on arrival. It ran during the
+ *    same interaction that made `selectedUser` non-null, so the effect added
+ *    `hidden` straight back afterwards. It read like a deliberate override and
+ *    did nothing.
+ *  - the `add` was silently wiped. React assigns the whole `class` attribute
+ *    when its computed value changes rather than merging, so any re-render
+ *    that touched the sidebar's `className` - toggling the collapse handle was
+ *    the easy route - dropped `hidden`. The effect did not re-apply it, because
+ *    its `[selectedUser, isMobile]` dependencies had not changed, so the card
+ *    list stayed on top of the open conversation until the user changed tabs.
+ *
+ * The fix is not a better effect, it is having one owner: the state goes in,
+ * a view comes out, and the page maps that view to classes React alone writes.
+ *
+ * **This returns a view, not a `className`.** The precedence between the four
+ * states is what was broken and is what deserves a test; the classes that
+ * express them are presentation. A test pinning `"bottom-mobile-nav
+ * h-mobile-sheet"` would fail on any restyle while proving nothing about the
+ * bug, and the union gives the page exhaustiveness checking for free.
+ *
+ * It also keeps to the existing convention that Tailwind classes sit with the
+ * markup - no file under `src/utils/` names one. That is a convention and not
+ * a constraint: `tailwind.config.js` still declares a `content` array limited
+ * to `./src/pages/**` and `./src/components/**`, but Tailwind v4 ignores it in
+ * favour of scanning the whole repository minus `.gitignore`, so a class named
+ * here would in fact be emitted. Verified by building with a probe class in
+ * this directory rather than inferred from the config, which reads as though
+ * the opposite were true. Filed as SCRUM-419.
+ *
+ * Same shape as `nav/mobileNavPlan.ts` and `map/viewRoutePlan.ts`, and for the
+ * same reason SCRUM-379 gave: `index.tsx` is ~918 lines behind Mapbox,
+ * NextAuth and a dozen tRPC queries, so a rule living inside it is a rule
+ * nothing checks.
+ */
+
+/**
+ * `hidden` and `collapsed` are **not** the same thing, which is half of why
+ * this was confusing to read in place. `hidden` is Tailwind's `display: none` -
+ * the sheet leaves layout entirely, which is what it must do to stop covering
+ * an open conversation. `collapsed` keeps the box and animates it to zero
+ * height (`h-0 opacity-0 pointer-events-none`), which is what the collapse
+ * handle wants. Naming them separately is what stops the next reader assuming
+ * one can stand in for the other.
+ */
+export type ExploreSidebarView =
+  /** Not mobile. A static column in the flow; none of the states below apply. */
+  | "desktop"
+  /** A conversation is open. Out of layout, so the message panel is reachable. */
+  | "hidden"
+  /** One card's details, in a short fixed-height sheet. */
+  | "detail"
+  /** Collapsed by the handle: still in layout, animated to nothing. */
+  | "collapsed"
+  /** The full list sheet, the mobile default. */
+  | "expanded";
+
+/**
+ * @param isMobile from `useIsMobile`, which shares its breakpoint with the
+ *   `desktop:` screen via `utils/breakpoints.js`
+ * @param hasOpenConversation whether the message panel is up - `selectedUser`
+ *   in the page. This is the input the imperative `classList` calls existed to
+ *   serve and the only one this ticket adds to the `className`'s own inputs.
+ * @param isDetailOpen whether a single card's details are showing -
+ *   `mobileSelectedUserID`
+ * @param isCollapsed the collapse handle's state - `isSidebarCollapsed`
+ */
+export function planExploreSidebar({
+  isMobile,
+  hasOpenConversation,
+  isDetailOpen,
+  isCollapsed,
+}: {
+  isMobile: boolean;
+  hasOpenConversation: boolean;
+  isDetailOpen: boolean;
+  isCollapsed: boolean;
+}): ExploreSidebarView {
+  // Desktop first, and every branch below is therefore mobile-only. The old
+  // code gated each `classList` call on `isMobile` separately; getting that
+  // wrong in one place was all it took to reach the desktop layout.
+  if (!isMobile) {
+    return "desktop";
+  }
+
+  // Highest precedence, matching what `display: none` did in practice: it beat
+  // every other class in the expression regardless of the order they appeared.
+  if (hasOpenConversation) {
+    return "hidden";
+  }
+
+  // Before `isCollapsed`, preserving the existing ternary's order. Opening a
+  // detail view also sets `isCollapsed` false, so the two rarely coincide -
+  // but when they do, the details are what the user just asked for.
+  if (isDetailOpen) {
+    return "detail";
+  }
+
+  return isCollapsed ? "collapsed" : "expanded";
+}

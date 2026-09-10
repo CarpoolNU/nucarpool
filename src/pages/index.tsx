@@ -43,6 +43,10 @@ import { runViewRouteClick } from "../utils/map/viewRouteClick";
 import { runViewGroupRoute } from "../utils/map/groupRouteClick";
 import clearOtherUserMarkers from "../utils/map/clearOtherUserMarkers";
 import { isValidCoordinates } from "../utils/map/coordinates";
+import {
+  planExploreSidebar,
+  type ExploreSidebarView,
+} from "../utils/explore/exploreSidebarView";
 
 mapboxgl.accessToken = browserEnv.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
 
@@ -74,6 +78,31 @@ export async function getServerSideProps(context: GetServerSidePropsContext) {
     props: {},
   };
 }
+
+/**
+ * The mobile sheet's classes, one entry per view `planExploreSidebar` can
+ * return for a mobile viewport. `Exclude<..., "desktop">` is what makes this
+ * exhaustive: adding a view without giving it classes is a type error rather
+ * than a sheet that renders with no position or height.
+ *
+ * These live beside the markup rather than beside the decision because that is
+ * where every other Tailwind class in this repository lives, and because the
+ * decision is worth testing while the styling is not.
+ *
+ * `hidden` deliberately carries no offset or height. It is `display: none`, so
+ * the sheet is out of layout entirely and the message panel underneath is
+ * reachable; `collapsed` is the other thing, keeping the box and animating it
+ * to nothing for the collapse handle.
+ */
+const MOBILE_SIDEBAR_CLASSES: Record<
+  Exclude<ExploreSidebarView, "desktop">,
+  string
+> = {
+  hidden: "hidden",
+  detail: "bottom-mobile-nav h-[320px]",
+  collapsed: "bottom-mobile-nav pointer-events-none h-0 opacity-0",
+  expanded: "bottom-mobile-nav h-mobile-sheet",
+};
 
 const Home: NextPage<any> = () => {
   const { data: session } = useSession();
@@ -187,9 +216,6 @@ const Home: NextPage<any> = () => {
     setSelectedUserId(userId);
     if (userId !== "") {
       setOtherUser(null);
-      if (sidebarRef.current) {
-        sidebarRef.current.classList.remove("hidden");
-      }
     }
   };
 
@@ -276,15 +302,25 @@ const Home: NextPage<any> = () => {
     return null;
   }, [selectedUserId, requests, extendPublicUser]);
 
-  useEffect(() => {
-    if (isMobile && sidebarRef.current) {
-      if (selectedUser) {
-        sidebarRef.current.classList.add("hidden");
-      } else {
-        sidebarRef.current.classList.remove("hidden");
-      }
-    }
-  }, [selectedUser, isMobile]);
+  /**
+   * The sidebar's single visibility owner (SCRUM-413).
+   *
+   * A `useEffect` stood here and imperatively added the `hidden` class to the
+   * sidebar node when a conversation opened, reaching through its ref.
+   * React assigns the whole `class` attribute rather than merging, so the next
+   * re-render that changed this sidebar's `className` - toggling the collapse
+   * handle was the easy route - dropped `hidden`, and the effect did not
+   * re-apply it because its `[selectedUser, isMobile]` dependencies had not
+   * changed. The card list ended up over the open conversation and stayed
+   * there. Derived state cannot lose that race; the precedence between the
+   * four states is tested in `exploreSidebarView.test.ts`.
+   */
+  const sidebarView = planExploreSidebar({
+    isMobile,
+    hasOpenConversation: selectedUser !== null,
+    isDetailOpen: mobileSelectedUserID !== null,
+    isCollapsed: isSidebarCollapsed,
+  });
 
   const sidebarRef = useRef<HTMLDivElement>(null);
   const lastScrollTop = useRef<number>(0);
@@ -739,9 +775,13 @@ const Home: NextPage<any> = () => {
               isMobile ? "h-mobile-row mt-5" : "h-[91.5%]"
             }`}
           >
-            {isMobile &&
-              (sidebarType === "explore" || sidebarType === "requests") &&
-              mobileSelectedUserID === null && (
+            {/* Shown exactly when the sheet is in a state this handle can
+                toggle. That is the same condition as before for `isMobile` and
+                the detail view, and newly excludes an open conversation: the
+                handle used to sit there over the message panel toggling a
+                sheet the user could not see. */}
+            {(sidebarView === "collapsed" || sidebarView === "expanded") &&
+              (sidebarType === "explore" || sidebarType === "requests") && (
                 <button
                   type="button"
                   onClick={handleSidebarToggle}
@@ -761,17 +801,11 @@ const Home: NextPage<any> = () => {
               )}
             <div
               ref={sidebarRef}
-              className={`${
-                isMobile
-                  ? `absolute left-0 z-20 w-full overflow-y-auto rounded-t-3xl border-2 border-black bg-white shadow-lg transition-all duration-300 ${
-                      mobileSelectedUserID !== null
-                        ? "bottom-mobile-nav h-[320px]"
-                        : isSidebarCollapsed
-                          ? "bottom-mobile-nav pointer-events-none h-0 opacity-0"
-                          : "bottom-mobile-nav h-mobile-sheet"
-                    }`
-                  : "relative w-[25rem]"
-              }`}
+              className={
+                sidebarView === "desktop"
+                  ? "relative w-[25rem]"
+                  : `absolute left-0 z-20 w-full overflow-y-auto rounded-t-3xl border-2 border-black bg-white shadow-lg transition-all duration-300 ${MOBILE_SIDEBAR_CLASSES[sidebarView]}`
+              }
             >
               {isMobile && mobileSelectedUserID !== null && (
                 <div className="flex-shrink-0 border-b border-gray-200 bg-gray-50 px-3 py-2">
