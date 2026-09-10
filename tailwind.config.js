@@ -1,6 +1,7 @@
 const {
   MOBILE_BREAKPOINT_PX,
   DESKTOP_SCREEN_NAME,
+  MOBILE_NAV_SPACE,
 } = require("./src/utils/breakpoints");
 
 /** @type {import('tailwindcss').Config} */
@@ -15,6 +16,46 @@ module.exports = {
   ],
   theme: {
     extend: {
+      /**
+       * Offsets measured against the mobile bottom navigation, all derived from
+       * the one constant in `src/utils/breakpoints.js` that `MobileNav` itself
+       * takes its height from. Composed here, in JavaScript, rather than left
+       * to `calc()` in arbitrary values at each call site: this config reaches
+       * Tailwind v4 through `@config`, so its theme values are not guaranteed
+       * to be emitted as CSS custom properties, and a `calc()` composed against
+       * a variable that does not exist fails silently.
+       *
+       * The two names encode the two intents the old hard-coded values were
+       * conflating. `bottom-12` (48px) was used for the explore sheet, which
+       * sits flush against the nav; `bottom-16` (64px) for floating controls,
+       * which want clearance above it. Reading either number told you nothing
+       * about which was meant.
+       */
+      spacing: {
+        /** Flush with the top edge of the navigation. */
+        "mobile-nav": MOBILE_NAV_SPACE,
+        /** Clear of the navigation, with a small gap. */
+        "above-mobile-nav": `calc(${MOBILE_NAV_SPACE} + 0.5rem)`,
+      },
+      height: {
+        /**
+         * The explore page's main row on mobile: the viewport, less the
+         * navigation, less the fixed banner this row is pushed down by.
+         *
+         * `1.25rem` is that banner allowance and matches the row's own `mt-5`.
+         * It is deliberately not a token: SCRUM-415 deletes the banner
+         * outright, and giving a thing about to be removed its own name in the
+         * design system would be work done twice.
+         */
+        "mobile-row": `calc(100% - 1.25rem - ${MOBILE_NAV_SPACE})`,
+        /**
+         * The expanded explore sheet. `5.5rem` is the strip of map left visible
+         * above it, which is what the previous `calc(100% - 8.5rem)` encoded
+         * once its own nav assumption is factored out - 8.5rem was 88px of map
+         * plus the 48px the nav was then assumed to be.
+         */
+        "mobile-sheet": `calc(100% - 5.5rem - ${MOBILE_NAV_SPACE})`,
+      },
       colors: {
         "northeastern-red": "#C8102E",
         "light-red": "#FFE6E6",

@@ -10,7 +10,22 @@
 
 #__next {
   width: 100vw;
-  height: 100vh;
+
+  /* `100vh` on a mobile browser is the *large* viewport height - what the page
+     would measure with the URL bar and toolbar retracted - so the bottom of the
+     app sat behind that chrome whenever it was showing. `100dvh` tracks the
+     viewport as the chrome comes and goes, which is what this always meant.
+     Desktop is unaffected: the two units are equal where there is no dynamic
+     browser chrome.
+
+     No `height: 100vh` fallback line, and that is deliberate rather than an
+     oversight. It was written first and the build removed it: Lightning CSS
+     minifies against Tailwind v4's browser baseline (Safari 16.4+, Chrome 111+,
+     Firefox 128+), every one of which supports `dvh` - it has been available
+     since Safari 15.4 and Chrome 108 - so the fallback is unreachable code.
+     Any browser that can render the rest of this stylesheet understands the
+     unit. */
+  height: 100dvh;
 }
 
 .custom-marker-popup .mapboxgl-popup-content {

@@ -414,8 +414,20 @@ const Index: NextPage = () => {
         </div>
       )}
 
+      {/* `bottom-mobile-nav` below replaces a hard-coded 64px bottom offset,
+          which was this file's own guess at the navigation's height and
+          disagreed with both the bar itself and the explore page's guess of
+          48px. The old class name is spelled out in words rather than written
+          here, because Tailwind scans this file for class-like strings and
+          would emit the retired utility again from the comment describing its
+          removal - which also puts a false hit in front of anyone grepping for
+          remaining uses.
+
+          `top-[6rem]` stays: it clears the profile tab strip above, which is a
+          different component and a different quantity - see the note on
+          SCRUM-412. */}
       {isMobile ? (
-        <div className="absolute top-[6rem] right-0 bottom-16 left-0 overflow-y-auto">
+        <div className="bottom-mobile-nav absolute top-[6rem] right-0 left-0 overflow-y-auto">
           <div className="px-8 pt-6 pb-24">
             {option === "user" ? (
               <UserSection
