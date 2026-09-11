@@ -167,6 +167,23 @@ Two things are deliberately still true and worth knowing:
 - **Nothing applies migration files to a shared database.** No step runs `prisma migrate deploy`; schema promotion is a PlanetScale Deploy Request. See [the db README](src/server/db/README.md#what-migrations-are-for-here-and-what-they-are-not).
 - **Server-side tRPC calls resolve their origin from `NEXTAUTH_URL`**, falling back to `http://localhost:3000`. Nothing takes that path today, because `ssr: false` is set in [`src/utils/trpc.ts`](src/utils/trpc.ts) and every page query is a client-side hook. **Enabling SSR makes it live**, so confirm `NEXTAUTH_URL` is set in every deployed environment first — see [`getBaseUrl`](src/utils/getBaseUrl.ts).
 
+### Which commit is deployed
+
+`GET /api/version` returns the build identity of whatever is running, so "has this change shipped?" is answerable without console access:
+
+```bash
+curl -s https://<host>/api/version
+{"commit":"0f1e2d3…","branch":"main","jobId":"42","environment":"production"}
+```
+
+`commit` is the SHA Amplify built, and `git branch --contains <sha>` or `git log -1 <sha>` resolves it locally. `jobId` is the build number, for finding that job in the Amplify console.
+
+**Read this before completing an expand/contract migration.** Dropping a column or deleting a backfill script is irreversible, and the precondition is always "no running code touches it any more". Two tickets — [SCRUM-287](https://carpoolnu.atlassian.net/browse/SCRUM-287) and [SCRUM-366](https://carpoolnu.atlassian.net/browse/SCRUM-366) — stalled because that could not be established: both tried to infer the deploy from row data, and zero rows turned out to be equally consistent with "not deployed" and with "deployed, and nobody has used the feature since". Check the commit instead.
+
+The route is unauthenticated, which is safe by virtue of what it returns rather than who asks: a commit SHA and branch name from a public repository, a build number, and `NEXT_PUBLIC_ENV`, which is compiled into the client bundle regardless. It exposes nothing else, and [`src/server/versionEndpoint.test.ts`](src/server/versionEndpoint.test.ts) asserts the exact key set so it cannot quietly grow a config field. It also sends `Cache-Control: no-store` — CloudFront sits in front of Amplify, and a cached answer would report the previous build across precisely the deploy boundary being checked.
+
+Outside Amplify — local `yarn dev`, and the CI build — every field reads `unknown`. The three variables come from Amplify's build container, and [`amplify.yml`](amplify.yml) copies them into `.env.production` by exact name; the comment there explains why a `AWS_` prefix match would be a mistake.
+
 ## Content Security Policy
 
 The app sends security headers on every route from [`next.config.js`](next.config.js), pinned by [`next.config.test.ts`](next.config.test.ts). All of them enforce immediately except the Content Security Policy, which is deliberately still **report-only**: it has never been exercised in a browser against the map, chat and profile-picture upload, so enforcing it blind could break Mapbox's workers or a third-party origin in production.
