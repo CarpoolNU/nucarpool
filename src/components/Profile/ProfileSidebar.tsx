@@ -43,6 +43,18 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
     it showed, which is what `ProfileSidebar.test.tsx` asserts on.
   */
 
+  /*
+    The three icons in each branch are decorative, and their `alt` is empty for
+    that reason. An image's alt text contributes to the accessible name of the
+    control containing it, and every button here already carries its own
+    visible text. They used to read `alt="user"`, `alt="car"` and
+    `alt="checkbox"`, so each button announced itself as "user User Profile",
+    "car Carpool Details" or "checkbox Account Status" - the last of which
+    names a widget role these controls do not have. An empty `alt` is what
+    marks an image presentational, which leaves the button's name as its label
+    and nothing else. `SendBar` is the same decision on its send icon.
+  */
+
   if (isMobile) {
     return (
       <div className="w-full bg-white shadow-md">
@@ -52,7 +64,8 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
             onClick={() => setOption("user")}
           >
             <div className="relative mb-1 h-8 w-8">
-              <Image src={user} alt="user" fill className="object-contain" />
+              {/* Decorative: alt stays empty. */}
+              <Image src={user} alt="" fill className="object-contain" />
             </div>
             <span>Profile</span>
           </button>
@@ -62,7 +75,8 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
             onClick={() => setOption("carpool")}
           >
             <div className="relative mb-1 h-8 w-8">
-              <Image src={car} alt="car" fill className="object-contain" />
+              {/* Decorative: alt stays empty. */}
+              <Image src={car} alt="" fill className="object-contain" />
             </div>
             <span>Carpool</span>
           </button>
@@ -72,12 +86,8 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
             onClick={() => setOption("account")}
           >
             <div className="relative mb-1 h-8 w-8">
-              <Image
-                src={checkbox}
-                alt="checkbox"
-                fill
-                className="object-contain"
-              />
+              {/* Decorative: alt stays empty. */}
+              <Image src={checkbox} alt="" fill className="object-contain" />
             </div>
             <span>Account</span>
           </button>
@@ -104,7 +114,8 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
             }`}
           >
             <div className="relative flex justify-center">
-              <Image src={user} alt="user" />
+              {/* Decorative: alt stays empty. */}
+              <Image src={user} alt="" />
             </div>
           </div>
           User Profile
@@ -124,7 +135,8 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
             }`}
           >
             <div className="relative flex justify-center">
-              <Image src={car} alt="car" />
+              {/* Decorative: alt stays empty. */}
+              <Image src={car} alt="" />
             </div>
           </div>
           Carpool Details
@@ -145,7 +157,8 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
             }`}
           >
             <div className="relative flex justify-center">
-              <Image src={checkbox} alt="checkbox" />
+              {/* Decorative: alt stays empty. */}
+              <Image src={checkbox} alt="" />
             </div>
           </div>
           Account Status
