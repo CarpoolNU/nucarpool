@@ -3,6 +3,7 @@ import {
   resolveMobileSelectedUser,
   type ExploreSidebarView,
 } from "./exploreSidebarView";
+import type { SheetDetent } from "./sheetDetents";
 
 /**
  * The explore sidebar's visibility decision.
@@ -15,6 +16,12 @@ import {
  *
  * `mobileNavPlan.test.ts` is the shape being followed - and like that suite,
  * as much of this is about what must not change as about what must.
+ *
+ * The `isCollapsed` boolean became a three-valued `detent` when the sheet
+ * gained a draggable `half` position, so every sweep below runs over three
+ * detents rather than two. The cases that existed before are unchanged in
+ * meaning: `detent: "collapsed"` is the old `isCollapsed: true`, and
+ * `"expanded"` the old `false`.
  */
 
 const view = (
@@ -24,17 +31,20 @@ const view = (
     isMobile: true,
     hasOpenConversation: false,
     isDetailOpen: false,
-    isCollapsed: false,
+    detent: "expanded",
     ...overrides,
   });
+
+/** The sheet's three resting positions, swept wherever the old suite swept two. */
+const detents: SheetDetent[] = ["collapsed", "half", "expanded"];
 
 /** Every combination of the three mobile inputs, for the sweeps below. */
 const mobileStates = [false, true].flatMap((hasOpenConversation) =>
   [false, true].flatMap((isDetailOpen) =>
-    [false, true].map((isCollapsed) => ({
+    detents.map((detent) => ({
       hasOpenConversation,
       isDetailOpen,
-      isCollapsed,
+      detent,
     })),
   ),
 );
@@ -53,12 +63,9 @@ describe("planExploreSidebar - an open conversation", () => {
     // with it - the effect would not re-fire, because `selectedUser` had not
     // changed. Both values below must be "hidden"; before the fix the second
     // state produced a visible card list over the open conversation.
-    expect(view({ hasOpenConversation: true, isCollapsed: false })).toBe(
-      "hidden",
-    );
-    expect(view({ hasOpenConversation: true, isCollapsed: true })).toBe(
-      "hidden",
-    );
+    for (const detent of detents) {
+      expect(view({ hasOpenConversation: true, detent })).toBe("hidden");
+    }
   });
 
   it("outranks a detail view", () => {
@@ -87,17 +94,27 @@ describe("planExploreSidebar - the states that already worked", () => {
   });
 
   it("collapses when the handle is closed", () => {
-    expect(view({ isCollapsed: true })).toBe("collapsed");
+    expect(view({ detent: "collapsed" })).toBe("collapsed");
+  });
+
+  it("renders the half sheet a drag can land on", () => {
+    // The detent the drag gesture exists for. It has no other route in: a tap
+    // goes straight between `collapsed` and `expanded`.
+    expect(view({ detent: "half" })).toBe("half");
   });
 
   it("shows a detail view when a card is selected", () => {
     expect(view({ isDetailOpen: true })).toBe("detail");
   });
 
-  it("prefers the detail view over the collapsed state", () => {
+  it("prefers the detail view over the sheet's own detent", () => {
     // Matches the order of the original ternary chain: `mobileSelectedUserID`
-    // was tested before `isSidebarCollapsed`.
-    expect(view({ isDetailOpen: true, isCollapsed: true })).toBe("detail");
+    // was tested before `isSidebarCollapsed`. Swept across all three detents,
+    // because `half` is reachable while a detail view opens - a drag to half
+    // and then a tap on a card - and the details are still what was asked for.
+    for (const detent of detents) {
+      expect(view({ isDetailOpen: true, detent })).toBe("detail");
+    }
   });
 });
 
@@ -130,6 +147,7 @@ describe("planExploreSidebar - totality", () => {
       "hidden",
       "detail",
       "collapsed",
+      "half",
       "expanded",
     ];
 
@@ -140,7 +158,7 @@ describe("planExploreSidebar - totality", () => {
     }
   });
 
-  it("reaches all five views", () => {
+  it("reaches all six views", () => {
     // A view nothing can produce is a class the page carries for no reason.
     const reached = new Set<ExploreSidebarView>();
     for (const isMobile of [false, true]) {
@@ -153,6 +171,7 @@ describe("planExploreSidebar - totality", () => {
       "desktop",
       "detail",
       "expanded",
+      "half",
       "hidden",
     ]);
   });

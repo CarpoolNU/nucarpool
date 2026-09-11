@@ -28,6 +28,16 @@
  *    device; nothing here can assert it.
  *  - **No paint order.** `z-index` is not computed, so "the sheet covers the
  *    panel" is not observable -- only "the sheet is in the tree".
+ *  - **No `PointerEvent`, and the failure is silent.** `typeof
+ *    window.PointerEvent` is `"undefined"` in jsdom 26, so
+ *    `fireEvent.pointerDown(el, { clientY: 300 })` falls back to a bare
+ *    `Event` and **drops `clientY`**. A drag test written that way computes
+ *    `NaN`, writes a height the DOM discards, and still passes several of its
+ *    assertions. Construct a `MouseEvent` named `pointerdown` instead -- React
+ *    dispatches by event name -- and define `pointerId` onto the instance.
+ *    `useSheetDrag.test.tsx` carries the helper. `touch-action` is likewise
+ *    unimplemented, so "the browser does not claim this gesture" is not
+ *    assertable here at all.
  *
  * So these tests can assert **reachability and wiring**: whether a control
  * exists at a given width, and what happens when it is activated. That is not

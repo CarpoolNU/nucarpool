@@ -49,6 +49,11 @@ import {
   resolveMobileSelectedUser,
   type ExploreSidebarView,
 } from "../utils/explore/exploreSidebarView";
+import {
+  toggleSheetDetent,
+  type SheetDetent,
+} from "../utils/explore/sheetDetents";
+import { useSheetDrag } from "../utils/explore/useSheetDrag";
 
 mapboxgl.accessToken = browserEnv.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
 
@@ -103,7 +108,29 @@ const MOBILE_SIDEBAR_CLASSES: Record<
   hidden: "hidden",
   detail: "bottom-mobile-nav h-[320px]",
   collapsed: "bottom-mobile-nav pointer-events-none h-0 opacity-0",
+  half: "bottom-mobile-nav h-mobile-sheet-half",
   expanded: "bottom-mobile-nav h-mobile-sheet",
+};
+
+/**
+ * Where the drag handle rests, one entry per view that renders it.
+ *
+ * Exhaustive over the same three detents `SheetDetent` names, so a detent
+ * added without a position for its handle is a type error here as well as in
+ * the height map above - the pill is the only thing that moves the sheet, and
+ * leaving it at the wrong height would strand it over the map or under the
+ * navigation.
+ *
+ * `expanded` and `half` both sit the pill's clearance above their sheet's top
+ * edge, composed from one figure in `tailwind.config.js`; `collapsed` has no
+ * sheet to sit above, so it clears the navigation instead. While a drag is in
+ * flight none of these apply: `useSheetDrag` writes the handle's `bottom`
+ * directly so it can ride the edge between detents.
+ */
+const HANDLE_POSITION_CLASSES: Record<SheetDetent, string> = {
+  collapsed: "bottom-above-mobile-nav",
+  half: "bottom-half-sheet-handle",
+  expanded: "bottom-sheet-handle",
 };
 
 const Home: NextPage<any> = () => {
@@ -134,7 +161,22 @@ const Home: NextPage<any> = () => {
   const isMobile: boolean = useIsMobile();
   // const [mobileSidebarExpanded, setMobileSidebarExpanded] = useState<boolean>(false);
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  /**
+   * Where the explore sheet is resting. A tap toggles it, a drag on the handle
+   * snaps it - see `utils/explore/sheetDetents.ts`.
+   *
+   * One value rather than the `isSidebarCollapsed` boolean it replaces,
+   * because there are now three positions and two booleans could encode a
+   * fourth that does not exist.
+   */
+  const [sheetDetent, setSheetDetent] = useState<SheetDetent>("expanded");
+
+  /**
+   * The one thing most readers of the detent want to know. `half` reads as
+   * open, so the handle offers to hide the list from it exactly as it does
+   * from `expanded`.
+   */
+  const isSheetCollapsed = sheetDetent === "collapsed";
 
   /**
    * The expanded card, masked to null on desktop.
@@ -332,7 +374,7 @@ const Home: NextPage<any> = () => {
     isMobile,
     hasOpenConversation: selectedUser !== null,
     isDetailOpen: mobileSelectedUserID !== null,
-    isCollapsed: isSidebarCollapsed,
+    detent: sheetDetent,
   });
 
   const sidebarRef = useRef<HTMLDivElement>(null);
@@ -404,15 +446,38 @@ const Home: NextPage<any> = () => {
     [mapState, user],
   );
 
+  /**
+   * The tap path, unchanged in behaviour: the sheet goes between collapsed and
+   * fully expanded, and `half` is reachable only by dragging. The updater form
+   * rather than a read of the current value, because the handle's click can
+   * arrive in the same tick as a drag's release.
+   */
   const handleSidebarToggle = () => {
-    setIsSidebarCollapsed(!isSidebarCollapsed);
+    setSheetDetent(toggleSheetDetent);
   };
+
+  /**
+   * The drag gesture on the handle.
+   *
+   * The pill is drawn as a grabber - the standard "drag me" affordance on both
+   * mobile platforms - and until this hook existed it only answered a tap,
+   * which is what the product owner reported. The tap path is passed in
+   * unchanged and still runs; the hook suppresses it only for the click that
+   * follows a real drag, which would otherwise collapse a sheet the user had
+   * just released at `half`.
+   */
+  const sheetDrag = useSheetDrag({
+    sheetRef: sidebarRef,
+    view: sidebarView,
+    onDetentChange: setSheetDetent,
+    onTap: handleSidebarToggle,
+  });
 
   const handleMobileSidebarExpand = useCallback(
     (userId?: string) => {
       if (userId) {
         setExpandedUserId(userId);
-        setIsSidebarCollapsed(false); // Expand when viewing details
+        setSheetDetent("expanded"); // Expand when viewing details
         const allUsers = [
           ...enhancedRecs,
           ...enhancedFavs,
@@ -551,8 +616,8 @@ const Home: NextPage<any> = () => {
     setSelectedUserId(null);
     // Clear other user and related route data when sidebar type changes
     setOtherUser(null);
-    // Reset collapsed state when switching tabs
-    setIsSidebarCollapsed(false);
+    // Reset the sheet's position when switching tabs
+    setSheetDetent("expanded");
     // Changing tab drops every other user's pin along with the route they
     // belonged to. This block predates the extraction and could never run -
     // the state it tested was only ever set from an unreachable branch - so a
@@ -786,14 +851,16 @@ const Home: NextPage<any> = () => {
                 the detail view, and newly excludes an open conversation: the
                 handle used to sit there over the message panel toggling a
                 sheet the user could not see. */}
-            {(sidebarView === "collapsed" || sidebarView === "expanded") &&
+            {(sidebarView === "collapsed" ||
+              sidebarView === "half" ||
+              sidebarView === "expanded") &&
               (sidebarType === "explore" || sidebarType === "requests") && (
                 <button
                   type="button"
-                  onClick={handleSidebarToggle}
-                  aria-expanded={!isSidebarCollapsed}
+                  {...sheetDrag.handleProps}
+                  aria-expanded={!isSheetCollapsed}
                   aria-label={
-                    isSidebarCollapsed ? "Show the list" : "Hide the list"
+                    isSheetCollapsed ? "Show the list" : "Hide the list"
                   }
                   /* `py-4.5` is the tap target, not decoration.
                      The visible bar is `h-2`, so 4.5 + 2 + 4.5 = 11 spacing
@@ -811,22 +878,52 @@ const Home: NextPage<any> = () => {
                      class-like strings and would emit whichever one a comment
                      names. Do not shrink this to make the
                      handle look smaller - shrink the `h-2` span instead, and
-                     leave the padding to hold the target open. */
-                  className={`focus-visible:outline-northeastern-red absolute left-1/2 z-30 -translate-x-1/2 transform cursor-pointer py-4.5 transition-all duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
-                    isSidebarCollapsed
-                      ? "bottom-above-mobile-nav"
-                      : "bottom-[calc(100%-6rem)]"
-                  }`}
+                     leave the padding to hold the target open.
+
+                     `touch-none` is `touch-action: none`, and it is what lets
+                     the drag exist: without it the browser claims a vertical
+                     swipe as a scroll before any handler sees it. It is scoped
+                     to the handle, so the list inside the sheet scrolls as it
+                     always did.
+
+                     The transition is dropped while a drag is in flight -
+                     `useSheetDrag` writes `bottom` on every pointer move, and
+                     a 300ms ease on that would leave the pill trailing the
+                     thumb. `group` is here for the pill's press state
+                     below. */
+                  className={`group focus-visible:outline-northeastern-red absolute left-1/2 z-30 -translate-x-1/2 transform cursor-pointer touch-none py-4.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
+                    sheetDrag.isDragging ? "" : "transition-all duration-300"
+                  } ${HANDLE_POSITION_CLASSES[sheetDetent]}`}
                 >
-                  <span className="block h-2 w-20 rounded-full bg-gray-500 shadow-xs transition-colors hover:bg-gray-600"></span>
+                  {/* `group-active` rather than `hover`, which was the bug's
+                      smaller half: a hover style applied by a tap persists on
+                      iOS Safari until the next tap elsewhere, so the pill
+                      stayed darkened and read as still-pressed. `:active`
+                      clears on release, works for a mouse as well as a finger,
+                      and - taken from the group rather than the span - covers
+                      the whole 44px target rather than only the visible
+                      8px. It also darkens for the duration of a drag, which
+                      is the feedback a gesture wants. */}
+                  <span className="block h-2 w-20 rounded-full bg-gray-500 shadow-xs transition-colors group-active:bg-gray-600"></span>
                 </button>
               )}
+            {/* While a drag is in flight the sheet gets neither a height
+                class nor a transition: `useSheetDrag` writes `style.height`
+                on every pointer move, and an animation towards a detent the
+                gesture has already left would fight it. Dropping
+                `MOBILE_SIDEBAR_CLASSES` also drops `collapsed`'s `opacity-0`
+                and `pointer-events-none`, so a sheet dragged open from
+                collapsed is visible on the way up rather than at the end. */}
             <div
               ref={sidebarRef}
               className={
                 sidebarView === "desktop"
                   ? "relative w-[25rem]"
-                  : `absolute left-0 z-20 w-full overflow-y-auto rounded-t-3xl border-2 border-black bg-white shadow-lg transition-all duration-300 ${MOBILE_SIDEBAR_CLASSES[sidebarView]}`
+                  : `absolute left-0 z-20 w-full overflow-y-auto rounded-t-3xl border-2 border-black bg-white shadow-lg ${
+                      sheetDrag.isDragging
+                        ? "bottom-mobile-nav"
+                        : `transition-all duration-300 ${MOBILE_SIDEBAR_CLASSES[sidebarView]}`
+                    }`
               }
             >
               {mobileSelectedUserID !== null && (
@@ -879,7 +976,7 @@ const Home: NextPage<any> = () => {
                   handleMobileExpand={handleMobileSidebarExpand}
                   onViewGroupRoute={onViewGroupRoute}
                   collapseSidebar={(collapsed) =>
-                    setIsSidebarCollapsed(collapsed)
+                    setSheetDetent(collapsed ? "collapsed" : "expanded")
                   }
                 />
               )}
@@ -941,11 +1038,11 @@ const Home: NextPage<any> = () => {
                 )}
               </div>
               {/* Mobile: show reopen button when sidebar collapsed and user is on My Group page, to bring back My Group */}
-              {isMobile && isSidebarCollapsed && sidebarType === "mygroup" && (
+              {isMobile && isSheetCollapsed && sidebarType === "mygroup" && (
                 <button
                   onClick={() => {
                     setSidebarType("mygroup");
-                    setIsSidebarCollapsed(false);
+                    setSheetDetent("expanded");
                     setExpandedUserId(null);
                   }}
                   className="bottom-above-mobile-nav absolute left-1/2 z-30 flex -translate-x-1/2 transform items-center gap-1 rounded-full border border-gray-300 bg-white/90 px-4 py-2 text-sm font-medium shadow-md transition-colors hover:bg-white"
