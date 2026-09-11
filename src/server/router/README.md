@@ -38,56 +38,37 @@ Procedures that touch a specific record therefore carry their own ownership chec
 
 ## Writing a procedure
 
-Inputs are validated with [Zod](https://zod.dev/). Current shape:
+Inputs are validated with [Zod](https://zod.dev/). Use `.query()` for reads, `.mutation()` for writes, and throw `TRPCError` for failures.
 
 ```typescript
-export const favoritesRouter = router({
-  edit: protectedRouter
-    .input(
-      z
-        .object({
-          favoriteId: z.string(),
-          add: z.boolean(),
-        })
-        .strict(),
-    )
-    .mutation(async ({ ctx, input }) => {
-      const userId = ctx.session.user?.id;
+edit: protectedRouter
+  .input(z.object({ favoriteId: z.string(), add: z.boolean() }).strict())
+  .mutation(async ({ ctx, input }) => {
+    const userId = ctx.session.user?.id;
+    if (!userId) throw new TRPCError({ code: "UNAUTHORIZED" });
 
-      if (!userId) {
-        throw new TRPCError({
-          code: "UNAUTHORIZED",
-          message: "User not authenticated.",
-        });
-      }
-
-      await ctx.prisma.user.update({
-        where: {
-          id: userId,
+    await ctx.prisma.user.update({
+      where: { id: userId },            // from the session, never the input
+      data: {
+        favorites: {
+          [input.add ? "connect" : "disconnect"]: { id: input.favoriteId },
         },
-        data: {
-          favorites: {
-            [input.add ? "connect" : "disconnect"]: { id: input.favoriteId },
-          },
-        },
-      });
-    }),
-});
+      },
+    });
+  }),
 ```
 
-Use `.query()` for reads and `.mutation()` for writes, and throw `TRPCError` for failures.
+### Derive the acting user from the session
 
-### Deriving identity — read the acting user from the session
-
-Note what the input above does **not** contain: the id of the user being edited. That is deliberate.
+Note what that input does **not** contain: the id of the user being edited.
 
 - **Never take the acting user's id from the client.** `where: { id: input.userId }` lets the caller choose whose row is written; `where: { id: ctx.session.user.id }` does not.
 - **`.strict()` makes the removal stick.** Without it, a client that still sends `userId` is silently ignored rather than rejected, and the field can quietly creep back into the resolver later.
 - **Ids the client does supply still need checking.** `favoriteId` is safe because it names who is favorited, not whose list is written. When an input names a record the caller may not own — a group, request, or conversation — load it first, confirm the session user is a party to it, and `throw new TRPCError({ code: "FORBIDDEN" })` otherwise.
 
-This is not hypothetical. `favorites.edit` shipped without the first of these and let any signed-in user rewrite anyone else's favorites; a full-repository audit then found the same class of gap in the requests, messages, groups, and email routers.
+This is not hypothetical: `favorites.edit` shipped without the first of these and let any signed-in user rewrite anyone else's favorites. An audit then found the same class of gap in the requests, messages, groups and email routers.
 
-Where a router's rules are more than "the caller owns the row", they are written down next to the code rather than here, so they cannot drift from it. Two of these exist:
+Where a router's rules are more than "the caller owns the row", they live next to the code so they cannot drift from it:
 
 - The carpool group rules — who may delete a group, evict a rider, or edit the group message — are tabulated at the top of [`user/groups.ts`](./user/groups.ts).
 - `getPresignedDownloadUrl` is the one procedure that deliberately serves **any** user's data to **any** signed-in caller: a profile picture is uploaded to be seen by strangers, and avatars render on the map and in recommendations where no relationship exists yet. The reasoning is at the input schema in [`user.ts`](./user.ts). Read it before copying the pattern — it is an exception, not a precedent.

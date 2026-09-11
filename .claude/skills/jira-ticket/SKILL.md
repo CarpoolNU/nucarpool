@@ -5,81 +5,54 @@ description: Execute a NUCarpool engineering ticket through the Jira-first workf
 
 # Executing a NUCarpool engineering ticket
 
-You own the work **through PR readiness**. The human owns the **merge**. Creating a PR is not
-the finish line.
+You own the work **through PR readiness**. The human owns the **merge**.
 
 ## Where truth lives — read, don't restate
 
-| Source                                                                        | Authority                                                                  |
-| ----------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| [`CLAUDE.md`](../../../CLAUDE.md)                                             | Permanent project rules, safety boundaries, commands, architecture gotchas |
-| [`.claude/settings.json`](../../settings.json)                                | Tool permissions (allow / ask / deny) — the only permission authority      |
-| Jira issue                                                                    | Live requirements and acceptance criteria                                  |
-| Repository + READMEs                                                          | How the code actually works today                                          |
-| Confluence (space `CNCS`)                                                     | Deeper architecture, infra, deployment, process, product history           |
-| [`docs/AI_DEVELOPMENT_WORKFLOW.md`](../../../docs/AI_DEVELOPMENT_WORKFLOW.md) | The workflow in full, and **the issue format**, priority scale and labels  |
+| Source                                                                        | Authority                                                               |
+| ----------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| [`CLAUDE.md`](../../../CLAUDE.md)                                             | Project rules, safety boundaries, commands, architecture gotchas        |
+| [`.claude/settings.json`](../../settings.json)                                | Tool permissions — the only permission authority                        |
+| Jira issue                                                                    | Live requirements and acceptance criteria                               |
+| Repository + READMEs                                                          | How the code actually works today                                       |
+| [`docs/AI_DEVELOPMENT_WORKFLOW.md`](../../../docs/AI_DEVELOPMENT_WORKFLOW.md) | The workflow in full, and the **authoritative issue format** and labels |
+| Confluence (space `CNCS`)                                                     | Architecture, infra, deployment, process, product history               |
 
-Do not copy the tech stack, data model, environment variables, or permission lists into your
-reasoning output — consult them where they live.
+Do not copy the tech stack, data model, or permission lists into your reasoning — consult them where they live.
 
 ## 0. Read what the request authorizes
 
-Filing a ticket and fixing a problem are different acts. Decide which the user asked for
-**before** you touch anything, because it determines ticket status.
+Decide this **before** touching anything, because it determines ticket status.
 
-| Request               | Example                                                           | You do                                                                                                                                  |
-| --------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| **Find / audit only** | "find problems in the messaging system", "audit this for bugs"    | Investigate. File or reference issues. Leave new ones in `To Do`. **Do not start fixing.** Keep auditing, then report.                  |
-| **Find and fix**      | "find problems and fix them", "audit X and resolve what you find" | Investigate. Establish the issue. Make it active, move it to `In Progress` when work actually starts, run the pipeline to PR readiness. |
-| **Explicit ticket**   | "work on SCRUM-220"                                               | Retrieve it, `In Progress` when work starts, run the pipeline.                                                                          |
+| Request               | Example                                 | You do                                                                           |
+| --------------------- | --------------------------------------- | -------------------------------------------------------------------------------- |
+| **Find / audit only** | "find problems in the messaging system" | Investigate, file or reference issues, leave new ones in `To Do`. **No fixing.** |
+| **Find and fix**      | "audit X and resolve what you find"     | Investigate, establish the issue, run the pipeline.                              |
+| **Explicit ticket**   | "work on SCRUM-220"                     | Retrieve it and run the pipeline.                                                |
 
-Absent explicit authorization to fix, assume **find only**. "Find" is not "fix" — an audit that
-silently starts changing code has exceeded its mandate.
+Absent explicit authorization to fix, assume **find only**. An audit that silently starts changing code has exceeded its mandate.
 
-## 1. Establish the Jira issue — always first
+## 1. Establish the Jira issue
 
-No implementation begins as an anonymous, untracked change.
+No implementation begins as an untracked change.
 
-- **Given a key** (`SCRUM-###`): retrieve it before acting. Read the description and
-  acceptance criteria. If it is thin, reconstruct scope from the repo — never invent it. Ask
-  when a genuine ambiguity would change the work.
-- **No key given**, and the request is meaningful project work: **search Jira first** with a
-  couple of phrasings. Use an existing issue if one matches; otherwise create one describing
-  the goal, then proceed. Write it in the
-  [issue format](../../../docs/AI_DEVELOPMENT_WORKFLOW.md#issue-format) — nine sections, a
-  `Priority`, labels, and the `Database Risk` block — rather than copying the shape of an
-  older ticket.
-- **Trivial actions** — answering a question, reading code, a one-line typo, exploratory
-  investigation — do not need a ticket. Use judgment; do not manufacture bureaucracy.
+- **Given a key**: retrieve it and read the acceptance criteria before acting. If it is thin, reconstruct scope from the repo — never invent it. Ask when a genuine ambiguity would change the work.
+- **No key**, and the work is meaningful: search Jira with a couple of phrasings first. Use an existing issue if one matches; otherwise create one in the documented format.
+- **Trivial actions** — a question, reading code, a one-line typo — need no ticket.
 
 ## 2. Transition to In Progress
 
-Once you begin real investigation, implementation, or documentation work, transition the issue
-to `In Progress`. Creating or merely reading a ticket does not move it.
-
-**Resolve every transition by workflow status name, never a hard-coded transition ID.** Fetch
-the issue's available transitions and match on the name — IDs are project configuration and
-can change.
+Once real investigation or implementation starts. Creating or reading a ticket does not move it. **Resolve transitions by status name, never a hard-coded ID.**
 
 ## 3. Investigate before editing
 
-Ticket → repository → _then_ decide whether outside knowledge is needed.
-
-Read the code and the relevant READMEs first. Reach for Confluence **only** when the task needs
-knowledge the repo does not contain — architecture, infrastructure, deployment, operational
-procedure, team process, or product history. Fetch the specific pages, not whole spaces.
-
-Confluence can be stale. Verify any technical claim against the current code; where they
-disagree, the code wins.
+Ticket → repository → _then_ decide whether outside knowledge is needed. Reach for Confluence only when the task needs something the repo does not contain, and fetch specific pages. Confluence can be stale; where it disagrees with the code, the code wins.
 
 ## 4. Feature branch
 
-Before switching branches, inspect the working tree. Identify pre-existing changes that are
-not yours. **Never discard them, and never silently include them in your commit.** Name them
-in your report.
+Inspect the working tree first. Identify pre-existing changes that are not yours: **never discard them, and never silently include them in your commit.** Name them in your report.
 
-Branch off a freshly fetched `origin/main`. Reuse the existing branch if the ticket is already
-underway on one.
+Branch off a freshly fetched `origin/main`, or reuse the ticket's existing branch.
 
 ## 5. Implement
 
@@ -87,73 +60,43 @@ Stay inside the ticket. Match the conventions of the file you are editing.
 
 ## 6. Validate
 
-Run what the change warrants — normally `yarn lint` and `yarn tsc`, plus `yarn test` where
-relevant, and any task-specific checks (for docs: formatting, link and anchor resolution, a
-secrets scan).
+Normally `yarn lint` and `yarn tsc`, plus `yarn test` where relevant, and any task-specific checks.
 
-**Report test results honestly.** The suite is 53 files covering pure logic, the tRPC
-routers' authorization and ownership checks, and the ops scripts' planning halves. It runs
-entirely on mocks: no React rendering, no browser, no real database. A passing `yarn test`
-therefore says nothing about components or pages, so never present it as coverage of
-anything you did not actually test.
+**Report test results honestly.** The suite runs entirely on mocks — no browser, no real database — and React-layer coverage is thin. A passing `yarn test` is not coverage of anything you did not actually test. See [docs/testing.md](../../../docs/testing.md).
 
-Failure caused by your change → fix it and revalidate. Failure that is unrelated → the
-discovered-issue workflow below; do not expand scope.
+A failure caused by your change → fix and revalidate. An unrelated failure → the discovered-issue workflow; do not expand scope.
 
 ## 7. Self-review before staging
 
-Read the complete diff and check:
+Read the complete diff and confirm: every change belongs to this ticket; no unrelated file crept in; no secrets, credentials, `.env` values or personal paths; nothing dangerous introduced; the work actually satisfies the acceptance criteria.
 
-- every change belongs to this ticket
-- no unrelated file crept in
-- no secrets, credentials, tokens, `.env` values, personal paths, or machine-specific data
-- nothing dangerous or unintended was introduced
-- the work actually satisfies the acceptance criteria
-
-If criteria remain unmet, say so plainly. Do not claim completion you have not reached.
+If criteria remain unmet, say so plainly.
 
 ## 8. Stage and commit
 
-**Run `git rev-parse --abbrev-ref HEAD` immediately before committing.** If it returns `main`
-or `staging`, stop and say so.
+**Run `git rev-parse --abbrev-ref HEAD` immediately before committing.** If it returns `main` or `staging`, stop and say so.
 
-Stage explicit paths only. Never `git add .`, `git add -A`, `git add --all`, `git commit -a`,
-or `git commit -am` — the working tree may hold changes that must stay out.
-
-Inspect `git diff --cached` before committing. Write a concise message that references the
-Jira key and explains _why_, not just _what_.
+Stage explicit paths only — never `git add .`, `-A`, `--all`, `commit -a` or `-am`. Inspect `git diff --cached`, then write a message referencing the Jira key that explains _why_.
 
 ## 9. Push
 
-**Verify the branch again immediately before pushing.** Push only the feature branch. Never
-push `main` or `staging`. Never force-push.
+**Verify the branch again immediately before pushing.** Feature branch only. Never force-push.
 
 ## 10. Create or update the PR
 
-Target `main`. If a PR already exists for the branch, **update it rather than opening a
-duplicate**.
+Target `main`. If a PR already exists for the branch, **update it rather than opening a duplicate**.
 
-Include: the Jira link, purpose, relevant acceptance criteria, major changes, validation
-performed, known limitations and risks, related issues discovered during the work, and an
-explicit note about any pre-existing changes deliberately excluded.
+Include the Jira link, purpose, relevant acceptance criteria, major changes, validation performed, known limitations and risks, issues discovered during the work, and an explicit note about any pre-existing changes deliberately excluded.
 
 ## 11. Transition to Code Review
 
-**Only after confirming the branch is pushed and the PR actually exists.** Verify, then
-transition to `Code Review` and comment on the issue with:
-
-- the PR link
-- a concise summary of what changed
-- validation performed
-- any Jira issues discovered during the work
+**Only after confirming the branch is pushed and the PR exists.** Then comment on the issue with the PR link, a concise summary, the validation performed, and anything discovered.
 
 No PR means no `Code Review`.
 
 ## 12. Own the PR until it is ready
 
-PR creation is not the endpoint. Inspect the PR's files, final diff, base and head branches,
-and checks. Confirm it contains only intended changes, and verify acceptance criteria against
-what actually shipped.
+Inspect the PR's files, final diff, base and head branches, and checks. Confirm it contains only intended changes and verify acceptance criteria against what shipped.
 
 When a check fails **because of this ticket**:
 
@@ -161,104 +104,38 @@ When a check fails **because of this ticket**:
 diagnose → fix → validate → review diff → stage targeted → commit → push SAME branch → re-check
 ```
 
-Never open a second PR to fix the first. Repeat while it is reasonably productive. If checks
-are still running, wait for them rather than declaring readiness early.
-
-Unrelated failure → discovered-issue workflow, and do not pull the fix into this PR. If an
-unrelated failure genuinely blocks review-readiness, use `Blocked`.
+Never open a second PR to fix the first. If checks are still running, wait rather than declaring readiness early. An unrelated failure goes to the discovered-issue workflow and does not join this PR.
 
 ## Stop conditions
 
 Stop in exactly one of two states, and report which:
 
-**A. Review-ready PR** — intended work present, unrelated changes absent, validation passing,
-checks understood, acceptance criteria satisfied or gaps explicitly reported, Jira in
-`Code Review` with the PR link attached.
+**A. Review-ready PR** — intended work present, unrelated changes absent, validation passing, checks understood, acceptance criteria satisfied or gaps explicitly reported, Jira in `Code Review` with the PR link attached.
 
-**B. Genuinely blocked** — Jira in `Blocked` and accurately explaining the situation.
+**B. Genuinely blocked** — Jira in `Blocked`, accurately explaining what is blocking and what is needed.
 
 Then stop. The human reviews and merges.
 
-## Discovered-issue workflow
+## Discovered issues
 
-When you find a new actionable problem:
+1. Part of the active ticket? Handle it in scope.
+2. If not, **do not scope-creep the PR.** Search Jira first, with more than one phrasing.
+3. Match → reference it. No match → create it in the documented format, with `path:line` evidence and the ticket you were on.
+4. **Leave it in `To Do`.** Filing is not starting.
+5. Return to the original task.
 
-1. Is it part of the active ticket? If yes, handle it in scope.
-2. If not — **do not scope-creep the current PR.** Search Jira first, with more than one
-   phrasing if the wording is uncertain.
-3. Match found → reference it.
-4. No match → create an issue **in this session**, in the
-   [issue format](../../../docs/AI_DEVELOPMENT_WORKFLOW.md#issue-format): the evidence you have
-   with `path:line` references, the `Risk` and `Database Risk` blocks, acceptance criteria, and
-   the ticket you were on when you found it.
-5. **Leave the new issue in `To Do`** (see the status rule below).
-6. Return to the original task.
+**File before the session ends.** Chat, a report and a PR description are not the board; once the session ends the transcript is the only record. If told not to write to Jira, say so, name the finding, and file it when the restriction lifts.
 
-Do not file trivial observations, speculation, duplicates, or anything the active ticket
-already covers.
+Only when the request explicitly authorized find-and-fix may a discovered ticket become the active work item — and then state the scope change out loud and keep it a separate PR unless the problems are genuinely inseparable.
 
-**File before the session ends.** Reporting a finding in chat, in a report, or in a PR
-description does not satisfy this — none of those is the board, and once the session ends the
-transcript is the only record. An unrecorded finding is indistinguishable from one that was
-never found.
-
-**If you have been told not to write to Jira** — a read-only audit, an investigate-only scope —
-say so, name the finding in your report, and file it the moment that restriction lifts. Follow
-the instruction; do not quietly drop the finding. It is deferred with an explicit owner.
-
-### Status of a discovered ticket
-
-**A newly discovered ticket defaults to `To Do`.** It moves to `In Progress` only when **both**
-hold:
-
-1. the request authorizes working on the discovered problem ("find and fix", "resolve",
-   "implement", "work on"), **and**
-2. you actually begin work on that ticket.
-
-Never move it merely because it was discovered, was created, looks important, or is worth
-fixing later. **Creating a ticket is not starting work.** Status must describe reality, and a
-board full of `In Progress` tickets nobody is touching tells the team nothing.
-
-### Switching the active ticket
-
-Default: file it, leave it `To Do`, finish the ticket you are on.
-
-Only when the request explicitly authorized find-and-fix may a discovered ticket become the
-active work item — and then:
-
-- establish the Jira issue first
-- **state the scope change out loud**; never switch silently
-- keep it a separate PR unless the two problems are genuinely inseparable
-
-Prefer one issue to one coherent PR. Never quietly bundle unrelated fixes into one PR — a
-reviewer cannot approve half a diff.
-
-## Blocked
-
-`Blocked` is an exception state, not a slower `In Progress`. Use it only when useful progress
-genuinely cannot continue: missing access, an external dependency, a required human or team
-decision, unavailable required information, or a comparable blocker.
-
-Investigate first. If the answer is discoverable in the repo, Jira, Confluence, or git
-history, that is research — do the research. Do not use `Blocked` for ordinary uncertainty.
-
-When blocking: transition to `Blocked` and comment with **what is blocking the work** and
-**what is needed to resume**. When it clears, transition back to `In Progress` and continue.
+Do not file trivial observations, speculation, or duplicates.
 
 ## Never
 
-- merge a PR — not `gh pr merge`, not a GitHub API mutation, not the web UI
+- merge a PR — not `gh pr merge`, not the API, not the web UI
 - push or commit to `main` or `staging`
 - force-push, or bypass branch protection
 - transition an issue to `Done` — that follows the human merge
 - work around the permission system
 
-## Permissions
-
-[`.claude/settings.json`](../../settings.json) is the source of truth and is deliberately
-restrictive. Read-only inspection generally runs freely; pushes, PR writes, and Jira and
-Confluence writes prompt; merges and destructive database commands are denied.
-
-When an action needs approval, request it normally and wait. A declined prompt means _don't_ —
-adjust the approach; never reach for another route to the same effect. Never weaken, bypass,
-or edit permissions to make a task easier.
+When an action needs approval, request it and wait. A declined prompt means _don't_ — adjust the approach rather than reaching for another route to the same effect.
