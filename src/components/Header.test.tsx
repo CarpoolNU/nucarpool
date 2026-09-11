@@ -185,6 +185,47 @@ describe("Header navigation at a mobile viewport", () => {
     }
   });
 
+  it("underlines the active tab and only the active tab (SCRUM-424)", () => {
+    // `renderHeader` passes `sidebarValue: "explore"`, so that is the tab
+    // carrying `$active`.
+    renderHeader();
+
+    /*
+     * The `$active` prop's entire visual effect, and the reason the prop
+     * cannot simply be deleted to silence React's non-boolean-attribute
+     * warning (SCRUM-424).
+     *
+     * This is the assertion that catches the half-done rename. Prefixing the
+     * declaration and the call site but leaving the template reading
+     * `props.active` makes the interpolation `undefined` for every item - no
+     * warning, because nothing is forwarded any more, and no underline
+     * either. `Header.console.test.tsx` passes against that; this does not.
+     *
+     * `getComputedStyle` is load-bearing here in a way `testing/viewport.ts`
+     * warns it usually is not. Its caveat is about *inline* styles, where it
+     * echoes the declared string back uncomputed. These values come from a
+     * stylesheet styled-components injects, and jsdom does resolve that
+     * cascade - it parsed `#000` into `rgb(0, 0, 0)` and `transparent` into
+     * `rgba(0, 0, 0, 0)`, which is real work rather than an echo. It is still
+     * not layout: this says the rule applies, not that four pixels are
+     * painted anywhere.
+     */
+    const borderOf = (testId: string) =>
+      getComputedStyle(screen.getByTestId(testId)).borderBottom;
+
+    expect(borderOf("explore-sidebar")).toBe("4px solid rgb(0, 0, 0)");
+
+    // Transparent rather than absent: the width is declared on every item so
+    // that gaining the underline does not shift the row by four pixels.
+    for (const inactive of [
+      "requests-sidebar",
+      "mygroup-sidebar",
+      "profile-sidebar",
+    ]) {
+      expect(borderOf(inactive)).toBe("4px solid rgba(0, 0, 0, 0)");
+    }
+  });
+
   it("does not also render the desktop header", () => {
     // The other half of the original defect. Rendering both is what left the
     // 640-768 band with no usable header, and it is invisible to a test that
