@@ -43,9 +43,15 @@ Concurrent sessions each get their own checkout under `.claude/worktrees/`, so o
 ```bash
 claude --worktree <task-name>   # creates the worktree, copies .env per .worktreeinclude
 ./scripts/wt-bootstrap.sh       # dependencies, Prisma client, husky hooks
+                                # work, open the PR, get it merged
+./scripts/wt-cleanup.sh <task-name>   # removes the worktree and the local branch
 ```
 
-Then work normally. [`wt-bootstrap.sh`](scripts/wt-bootstrap.sh) is idempotent and refuses to run on `main`, on `staging`, or in the primary checkout.
+[`wt-bootstrap.sh`](scripts/wt-bootstrap.sh) is idempotent and refuses to run on `main`, on `staging`, or in the primary checkout.
+
+[`wt-cleanup.sh`](scripts/wt-cleanup.sh) is the teardown half, and it refuses rather than guesses. It removes the worktree and deletes its local branch only when the target is a registered worktree one level under `.claude/worktrees/`, is not the primary checkout or the worktree you are running from, holds a branch other than `main` or `staging`, has no modified or untracked files, and has every one of its commits already reachable from `origin/main`. Run it from the primary checkout; `git fetch origin` first, since it never fetches and a stale `origin/main` only makes it refuse more.
+
+Both removals are the plain non-force commands, so git's own refusals are the last line of defence — it never runs `git worktree remove --force`, `git branch -D`, `reset --hard`, `clean` or `rm -rf`. A squash or rebase merge leaves the branch's commits off `origin/main`, so it will refuse a branch whose pull request really did merge; the refusal prints the PR state and the commits at stake and leaves the decision to you. The remote is never touched, and the worktree's own `.env` and `node_modules` go with the directory — both are per-worktree copies, and the primary checkout's originals are untouched.
 
 Three things stay shared and are not per-worktree: run `yarn db:start` only from the primary checkout, because the container name and port are fixed; only one worktree at a time can hold port 3000 for `yarn dev`; and `yarn test:db` needs a `TEST_DATABASE_URL` naming a database no other worktree uses, since the harness truncates every table and does not lock against a concurrent run.
 
