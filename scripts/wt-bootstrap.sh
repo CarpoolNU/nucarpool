@@ -10,7 +10,12 @@
 #     cd .claude/worktrees/<name>
 #     ./scripts/wt-bootstrap.sh
 #
-# It is idempotent - re-running it on a prepared worktree does nothing.
+# It is idempotent - re-running it on a prepared worktree does nothing, which
+# it establishes by fingerprint rather than by guessing from the primary
+# checkout. Dependencies and the generated Prisma client each record what they
+# were built from, in `scripts/wt-state.sh`; re-running compares against those
+# stamps. The first run after that mechanism was introduced regenerates once,
+# because a worktree prepared before it has no stamp to check.
 #
 # What it deliberately does NOT do: create or remove worktrees, start or stop
 # Docker, touch `.env`, create databases, or run `git push`/`commit`/`fetch`.
@@ -33,6 +38,16 @@ common_dir=$(abspath "$(git rev-parse --git-common-dir)")
 [ "$git_dir" != "$common_dir" ] || die "this is the primary worktree. Run it from .claude/worktrees/<name> instead."
 
 worktree_root=$(git rev-parse --show-toplevel)
+
+# Sourced before the `cd` so it is found relative to this script rather than to
+# wherever it was invoked from. Holds the generated-state reconciliation shared
+# with wt-recycle.sh, so a bootstrap and a recycle cannot disagree about
+# whether the same directory is up to date.
+script_dir=$(abspath "$(dirname "$0")")
+[ -f "$script_dir/wt-state.sh" ] ||
+  die "cannot find wt-state.sh beside this script (looked in $script_dir)."
+. "$script_dir/wt-state.sh"
+
 cd "$worktree_root"
 
 # The first entry `git worktree list --porcelain` prints is always the primary
@@ -81,41 +96,29 @@ else
   yarn install --frozen-lockfile
 fi
 
-# A clone reflects the primary's lockfile at the moment it was taken, so a
-# branch that changes dependencies has to reconcile.
-if ! cmp -s package.json "$primary/package.json" || ! cmp -s yarn.lock "$primary/yarn.lock"; then
-  step "dependency manifest differs from the primary checkout"
-  yarn install --frozen-lockfile
-fi
+# A clone reflects the primary checkout's tree at the moment it was taken, so a
+# branch whose manifests differ has to reconcile. That is decided by
+# fingerprint rather than by comparing against the primary: the primary is one
+# branch's state among many and has no authority over what this worktree needs.
+wt_reconcile_dependencies
 
 # ------------------------------------------------------------- prisma client
 #
 # The generated client lives in node_modules/.prisma/client, so a clone carries
-# the primary's. That is correct until this branch changes the schema.
+# whichever client the primary checkout had - and, now, the fingerprint of the
+# schema that produced it.
+#
+# This used to compare this worktree's `prisma/schema.prisma` against the
+# *primary checkout's* copy, which is a statement about two working trees and
+# not about the generated client (SCRUM-448). The primary may be on another
+# branch, dirty, or itself never generated, so the comparison could report a
+# match while the client was built from something else entirely.
 step "prisma client"
-if ! cmp -s prisma/schema.prisma "$primary/prisma/schema.prisma"; then
-  note "schema.prisma differs from the primary checkout; regenerating."
-  yarn prisma generate
-elif [ -d node_modules/.prisma/client ]; then
-  note "generated client present and the schema matches the primary checkout."
-else
-  note "no generated client; generating."
-  yarn prisma generate
-fi
+wt_reconcile_prisma_client
 
 # --------------------------------------------------------------------- husky
-#
-# `.husky/_` is generated and gitignored, and `core.hooksPath` is relative, so
-# it resolves per worktree. Without it git finds no hooks directory and skips
-# the pre-commit formatter silently. `yarn prepare` is the repository's own
-# husky invocation, so this follows whatever husky version is installed.
 step "git hooks"
-if [ -d .husky/_ ]; then
-  note "husky hooks already generated."
-else
-  yarn prepare
-  note "regenerated .husky/_"
-fi
+wt_reconcile_husky
 
 # ----------------------------------------------------------------------- env
 #

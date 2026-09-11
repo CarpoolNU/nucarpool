@@ -10,10 +10,20 @@ You own the work **through PR readiness**. The human owns the **merge**.
 ## One ticket, one session
 
 ```
-one Jira ticket → one worktree → one session → one PR → stop
+one ticket
+  → one isolated worktree SLOT
+  → one FRESH Claude session
+  → one PR
+  → STOP SESSION
+```
+
+```
+one ticket != one permanent worktree directory
 ```
 
 This conversation belongs to **one** ticket. Finish it, report, and stop. A different ticket is a different session, started fresh.
+
+**The slot is reused; the session is not.** `.claude/worktrees/scrum` and `.claude/worktrees/infra` are long-lived directories that hold one ticket at a time and many tickets in sequence — a human recycles them between tickets. That is not licence to run a second ticket here. The directory persisting says nothing about the conversation.
 
 The reason is mechanical rather than stylistic: every turn re-sends the entire conversation, so a second ticket in this session pays to re-send the first one's whole history on every turn it takes — and the window fills until it has to be compacted, which loses detail from work you already did. The cost grows with the square of the session's length, and the quality falls.
 
@@ -60,17 +70,34 @@ Ticket → repository → _then_ decide whether outside knowledge is needed. Rea
 
 ## 4. Workspace, then branch
 
-Concurrent sessions share one repository, so a branch switch in the primary checkout moves another session's HEAD. Establish where you are **before** editing anything — `git rev-parse --abbrev-ref HEAD`, `git status --short` and `git worktree list` are how you tell:
+Concurrent sessions share one repository, so a branch switch in the primary checkout moves another session's HEAD. Establish where you are **before** editing anything:
 
-- **Already in this ticket's own worktree under `.claude/worktrees/`** — verify it and carry on. Do not create a second one, and never nest one inside it.
-- **Not in a task worktree** — get one, then run `./scripts/wt-bootstrap.sh` inside it. The [README](../../../README.md#working-in-a-worktree) has the commands.
-- **In the primary checkout, or on a branch carrying changes that are not yours** — **report the mismatch and stop.** Never move, stash, reset, clean, switch away from or commit another session's work. Ask for a session in the right workspace instead.
+```bash
+pwd
+git rev-parse --abbrev-ref HEAD
+git status --short
+git worktree list
+```
 
-Inspect the working tree first. Identify pre-existing changes that are not yours: **never discard them, and never silently include them in your commit.** Name them in your report.
+**Orient on the branch, not the directory.** A task worktree used to name its ticket — `.claude/worktrees/scrum-443` was self-describing. A reusable slot does not: `.claude/worktrees/scrum` could be on any ticket, or on the last one. The path tells you which _kind_ of workspace you are in; only the branch tells you which _ticket_ it holds.
+
+| Where you are                       | Branch                             | Do this                                                               |
+| ----------------------------------- | ---------------------------------- | --------------------------------------------------------------------- |
+| A reusable slot (`scrum`, `infra`)  | this ticket's branch               | **Continue.** Verify, then work.                                      |
+| A reusable slot                     | at `origin/main`, freshly prepared | **Proceed.** Create this ticket's branch off a fetched `origin/main`. |
+| A reusable slot                     | **another ticket's branch**        | **Report the mismatch and stop.**                                     |
+| A task worktree for this ticket     | this ticket's branch               | **Continue.**                                                         |
+| **Another session's task worktree** | anything                           | **Report the mismatch and stop.**                                     |
+| **The primary checkout**            | anything                           | **Report the mismatch and stop.**                                     |
+| Not in a worktree at all            | —                                  | Get one, then run `./scripts/wt-bootstrap.sh` inside it.              |
+
+**A wrong branch in the right slot is a stop, not a fix.** Do not switch it, and do not recycle the slot to make room — that is the human's call between tickets, and the previous ticket's PR may not be merged yet. Say which branch you found and which you expected, and ask for a session in a correctly prepared workspace.
+
+Never move, stash, reset, clean, switch away from or commit another session's work. Inspect the working tree first and identify pre-existing changes that are not yours: **never discard them, and never silently include them in your commit.** Name them in your report.
 
 Branch off a freshly fetched `origin/main`, or reuse the ticket's existing branch.
 
-Teardown is not yours. After the human merges, they run `./scripts/wt-cleanup.sh <task>` from the primary checkout. Never remove your own worktree.
+**Teardown and recycling are not yours.** After the human merges, they release the workspace — `git worktree unlock` plus `./scripts/wt-recycle.sh <slot> <next-branch>` for a slot, or `./scripts/wt-cleanup.sh <task>` for a task worktree. Never recycle your own slot, delete your own branch, or remove your own worktree. The [README](../../../README.md#working-in-a-worktree) has the commands and explains why the lock is the ownership gate.
 
 ## 5. Implement
 
@@ -157,7 +184,8 @@ Do not file trivial observations, speculation, or duplicates.
 - force-push, or bypass branch protection
 - transition an issue to `Done` — that follows the human merge
 - begin a second ticket in this conversation — a new ticket is a new session
-- remove your own worktree, or disturb a workspace holding another session's work
+- remove your own worktree, recycle your own slot, or delete your own branch
+- disturb a workspace holding another session's work, including switching a slot's branch
 - work around the permission system
 
 When an action needs approval, request it and wait. A declined prompt means _don't_ — adjust the approach rather than reaching for another route to the same effect.

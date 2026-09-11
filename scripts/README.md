@@ -68,6 +68,31 @@ The `check-*` scripts exit `0` when clean and `1` when not, so they can gate a f
 
 `*.test.ts` files next to each script cover argument parsing and the pure planning half, and run in `yarn test`. **A passing suite says nothing about what a script would do to a real database.**
 
+## Worktree scripts
+
+These three touch git and the filesystem, never a database, and none of them is dry-run — they are shell rather than `ts-node` because they run before `node_modules` necessarily exists. The [README](../README.md#working-in-a-worktree) has the workflow they belong to.
+
+| Script                                 | What it does                                                                      |
+| -------------------------------------- | --------------------------------------------------------------------------------- |
+| [`wt-bootstrap.sh`](./wt-bootstrap.sh) | Prepares a worktree: dependencies, the generated Prisma client, husky hooks       |
+| [`wt-recycle.sh`](./wt-recycle.sh)     | Points a reusable slot (`scrum`, `infra`) at a new branch, keeping its warm state |
+| [`wt-cleanup.sh`](./wt-cleanup.sh)     | Retires a task-specific worktree and deletes its local branch                     |
+| [`wt-state.sh`](./wt-state.sh)         | Sourced, not run. The generated-state fingerprints the other two share            |
+
+```bash
+./scripts/wt-bootstrap.sh                          # from inside the new worktree
+./scripts/wt-recycle.sh scrum <next-branch-name>   # from the primary checkout
+./scripts/wt-cleanup.sh <task-name>                # from the primary checkout
+```
+
+**All three refuse rather than guess, and none of them can be overridden.** There is no `--yes`, no `--force`, and no environment variable that skips a check — an escape hatch of that kind gets set once, in a wrapper, by someone in a hurry, and is then permanent and invisible. `seedGuard.ts` lost its `SEED_ALLOW_REMOTE` for the same reason. Every git mutation is the plain non-force command, so git's own refusals are the last line of defence: none of them runs `git branch -D`, `git worktree remove --force`, `git reset --hard`, `git clean` or a force push, and none touches a remote branch or the shared stash.
+
+`wt-recycle.sh` is the one that deletes a branch, so its ordering is the thing to preserve on any edit: it validates, fetches, re-validates against the fresh refs, and then **switches to the new branch before deleting the old one**. If the switch fails nothing has changed; if the delete fails the slot is recycled and the old branch is still there. Neither outcome can make a reachable commit unreachable. The human gate is `git worktree lock` — a locked slot is refused, so recycling takes a deliberate `git worktree unlock` first.
+
+`wt-state.sh` exists because `node_modules` and `node_modules/.prisma/client` are generated from sources that change under them and neither records what it was built from. It stamps each with a `git hash-object --no-filters` fingerprint of its source, inside the ignored directory itself, so freshness is a fact about the artefact rather than a guess from the primary checkout. `wt-bootstrap.sh` used to compare against the primary's `schema.prisma`, which could report a client as current when it was generated from something else entirely (SCRUM-448).
+
+`wt-recycle.test.ts` and `wt-state.test.ts` run in `yarn test` and drive the real scripts against disposable git repositories under `os.tmpdir()`, with `yarn` shadowed by a fake that records its arguments. **No test here runs against this repository or any remote.**
+
 ## Run-state record
 
 Two different questions, and only one of them is answerable from a database:
