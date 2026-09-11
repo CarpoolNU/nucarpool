@@ -120,5 +120,21 @@ module.exports = {
   // that it does not need any. They run through `yarn test:db`, whose
   // `jest.integration.config.js` overrides this list precisely because
   // spreading it would make the integration config ignore its own tests.
-  testPathIgnorePatterns: ["/node_modules/", "/\\.next/", "\\.db\\.test\\.ts$"],
+  // "<rootDir>/\\.claude/worktrees/" keeps one checkout's run out of another's.
+  // `.claude/worktrees/` holds a linked git worktree per concurrent session, so
+  // a second checkout of this repository sits inside this one and its copy of
+  // every suite is collected from here. Jest does not read `.gitignore`, so the
+  // entry there does not cover it.
+  //
+  // The `<rootDir>` prefix is load-bearing. These patterns match the absolute
+  // path, and inside a worktree every path contains `/.claude/worktrees/` - so
+  // an unanchored pattern would ignore that worktree's own tests and Jest would
+  // exit "no tests found" rather than fail. Anchored, it resolves to this
+  // checkout's own directory and matches only worktrees nested below it.
+  testPathIgnorePatterns: [
+    "/node_modules/",
+    "/\\.next/",
+    "<rootDir>/\\.claude/worktrees/",
+    "\\.db\\.test\\.ts$",
+  ],
 };
