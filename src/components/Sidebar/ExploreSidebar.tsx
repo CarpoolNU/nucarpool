@@ -99,14 +99,14 @@ const ExploreSidebar = (props: ExploreSidebarProps) => {
    * Recommendations/Favorites switch and a sort control have nothing to act on
    * there, and would crowd out the card they sit above.
    *
-   * This carried an `isMobile` term until. Nothing cleared
-   * `mobileSelectedUser` when the viewport crossed the breakpoint, so a card
-   * expanded on a phone left it set at desktop width - and reading it alone
-   * would have cost the desktop layout these controls over a state it can
-   * neither produce nor escape. The page now derives the value through
-   * `resolveMobileSelectedUser`, which is null whenever the viewport is not
-   * mobile, so a non-null value here already implies mobile and the term was
-   * doing nothing.
+   * This carried an `isMobile` term until the page started deriving the value
+   * it reads. Nothing cleared `mobileSelectedUser` when the viewport crossed
+   * the breakpoint, so a card expanded on a phone left it set at desktop
+   * width - and reading it alone would have cost the desktop layout these
+   * controls over a state it can neither produce nor escape. The page now
+   * derives the value through `resolveMobileSelectedUser`, which is null
+   * whenever the viewport is not mobile, so a non-null value here already
+   * implies mobile and the term was doing nothing.
    */
   const showListControls = props.mobileSelectedUser === null;
 

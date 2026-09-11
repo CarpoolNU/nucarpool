@@ -10,7 +10,9 @@ import type { DeployEnv } from "../utils/env/browser";
  * constructed without an `hd` hint. Any Google account on the internet could
  * therefore create a staging user — in front of a database holding 1,298 real
  * people's names, addresses, home locations and message history, copied from
- * production by.
+ * production deliberately — a one-off task turned on PlanetScale's data
+ * branching and moved the rows across. Staging is not a fixture set; it is the
+ * real records in a weaker place.
  *
  * Kept out of `src/pages/api/auth/` deliberately. Under `src/pages/` a filename
  * is also a route, so a co-located test would be compiled and served as one —

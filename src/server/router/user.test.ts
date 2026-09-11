@@ -575,7 +575,7 @@ type SearchRow = {
   /** Only the group guard reads these. */
   role?: Role;
   carpoolId?: string | null;
-  /** Written by `user.edit`, and asserted on for. */
+  /** Written by `user.edit`, and asserted on by the schedule-time tests. */
   startTime?: Date | null;
   endTime?: Date | null;
 };

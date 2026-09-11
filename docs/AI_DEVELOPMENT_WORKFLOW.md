@@ -156,6 +156,38 @@ Resolve transitions by workflow status **name**, never a hard-coded transition I
 
 **CI failure scope.** A failure caused by _this_ change gets diagnosed, fixed and pushed to the **same** branch — never a second PR to fix the first. A failure exposing an _unrelated_ problem goes through the discovered-issue workflow below and does not get pulled into the current PR.
 
+### Rewriting many comments at once
+
+A sweep that deletes a reference from hundreds of comments can leave a sentence
+standing on the word that introduced whatever it deleted — `until.`, `by.`,
+`exists for.` The reader is told that something happened "until" and never told
+what. **No test can see this**, which is why one such sweep put thirteen of
+them on `main`.
+
+**This is deliberately not a CI gate.** A word-list scan for comment lines
+ending in a preposition was measured against this repository: 69 hits, 66 of
+them legitimate English (`what this script is for.`, `worth asking about.`),
+and it still missed a third of the real cases because those broke mid-line
+rather than at the end of one. A check with that signal-to-noise ratio gets
+switched off, and then it protects nothing.
+
+Two things to run by hand instead, after any bulk comment edit.
+
+A triage grep, narrowed to words that cannot end a sentence. Expect a couple of
+legitimate hits and read them:
+
+```bash
+grep -rnE '(//|\*|#).* (until|by|because|into|than|via)\.' src scripts .github
+```
+
+And the exact check, which only works while the sweep is still identifiable as
+a commit: compare each removed line with the line that replaced it. A line
+**reworded** to stand on its own is the goal; a line **byte-identical to its
+predecessor minus the reference** is where a fact used to be and no longer is.
+That comparison is what found all thirteen, including the ones no grep pattern
+reached — and it also proves the rest of the sweep clean, which a word list
+cannot.
+
 ## Discovered-issue workflow
 
 **How you ask determines what happens:**

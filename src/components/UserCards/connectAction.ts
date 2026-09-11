@@ -103,7 +103,7 @@ export const connectAction = ({
   // the state of a request between them, and the card is already showing this
   // very sentence as its notice — the button must not contradict it.
   //
-  // This branch exists for. `favorites.me` no longer hides a
+  // This branch exists because `favorites.me` no longer hides a
   // favourite whose role changed or whose search was paused, so a Connect
   // button can now sit on a card for someone the pair can never carpool with.
   // Without this, pressing it would open the modal and `requests.create` would

@@ -381,7 +381,8 @@ export const emailsRouter = router({
    * Replay is therefore still possible, but the checks above bound it to
    * requests genuinely accepted with the caller as their recipient, which is a
    * real relationship rather than an unbounded set. That is a large reduction
-   * and not a cap; the per-user cap across `user.emails.*` is.
+   * and not a cap; a per-user cap across `user.emails.*` does not exist yet
+   * and is tracked separately.
    */
   sendAcceptanceNotification: protectedRouter
     .input(z.object({ requestId: z.string() }).strict())
