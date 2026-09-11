@@ -84,7 +84,16 @@ const MobileNav = styled.div`
 // div it was unreachable by keyboard. Tailwind's preflight already
 // makes buttons inherit font and drop their border, but this is styled-
 // components, so the resets are stated here.
-const MobileNavItem = styled.button<{ active: boolean }>`
+//
+// `$active`, not `active`: the `$` marks the prop *transient*, so
+// styled-components v6 consumes it for the template below and does not forward
+// it to the <button>. Without it React receives `active={true}` as a DOM
+// attribute, declines to write it, and logs "Received `true` for a non-boolean
+// attribute `active`" (SCRUM-424). Worth knowing if you go looking for that
+// warning: React caches it per attribute name at module scope, so it appears
+// **once per page load** and never again - not once per element and not once
+// per render, which is why `Header.console.test.tsx` has to be its own file.
+const MobileNavItem = styled.button<{ $active: boolean }>`
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -95,7 +104,7 @@ const MobileNavItem = styled.button<{ active: boolean }>`
   color: inherit;
   font: inherit;
   border-bottom: ${(props) =>
-    props.active ? "4px solid #000" : "4px solid transparent"};
+    props.$active ? "4px solid #000" : "4px solid transparent"};
   cursor: pointer;
 
   &:focus-visible {
@@ -479,7 +488,7 @@ const Header = (props: HeaderProps) => {
           <MobileNavItem
             key={item.id}
             type="button"
-            active={currentActiveTab === item.id}
+            $active={currentActiveTab === item.id}
             aria-current={currentActiveTab === item.id ? "page" : undefined}
             onClick={() => {
               handleMobileNavClick(item.id);
