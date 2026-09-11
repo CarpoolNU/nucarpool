@@ -111,6 +111,7 @@ const renderHeader = (
     isMutating?: boolean;
     onAccept?: () => void;
     onReject?: () => void;
+    onClose?: () => void;
   } = {},
 ) =>
   render(
@@ -119,7 +120,7 @@ const renderHeader = (
         selectedUser={over.selectedUser ?? otherUser()}
         onAccept={over.onAccept ?? (() => undefined)}
         onReject={over.onReject ?? (() => undefined)}
-        onClose={() => undefined}
+        onClose={over.onClose ?? (() => undefined)}
         groupId={over.groupId ?? null}
         isMutating={over.isMutating ?? false}
       />
@@ -256,5 +257,83 @@ describe("Conversation header controls on desktop", () => {
     });
 
     expect(buttonNames()).toEqual([CLOSE]);
+  });
+});
+
+/**
+ * The mobile back control.
+ *
+ * It was a bare 24px SVG in a button with no padding, so the icon was the
+ * whole tap target — a third of the 44px Apple's HIG and WCAG 2.5.5 ask for,
+ * on the *only* control that leaves a conversation on a phone. The padding
+ * that fixes it is a class, and **jsdom cannot see it**: no layout is
+ * performed, so every element measures zero whatever its declared size, and
+ * `getComputedStyle` resolves no Tailwind class. See `testing/viewport.ts`.
+ *
+ * So nothing here measures anything. What these hold instead is everything
+ * about the control that a class change could break by accident: that it is
+ * still a real `button`, still carries its accessible name, still calls
+ * `onClose`, and is still reachable from the keyboard. The size itself is a
+ * device check, and the compiled stylesheet is the other half of the evidence.
+ */
+describe("The mobile back control", () => {
+  beforeEach(() => {
+    setViewportWidth(MOBILE_WIDTH);
+  });
+
+  it("is a real button carrying its own accessible name", () => {
+    // `aria-label` is the only source: the control has no text, and the arrow
+    // is `aria-hidden`. A div with an onClick would satisfy a click test and
+    // fail this one.
+    renderHeader();
+
+    const back = screen.getByRole("button", { name: BACK });
+    expect(back.tagName).toBe("BUTTON");
+    expect(back).toHaveAttribute("type", "button");
+  });
+
+  it("leaves the conversation when tapped", () => {
+    const onClose = jest.fn();
+    renderHeader({ onClose });
+
+    screen.getByRole("button", { name: BACK }).click();
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("is reachable and operable from the keyboard", async () => {
+    // Free with a real `button`, and the point is that it stays free: the
+    // padding is on the button itself rather than on a wrapper, so the focus
+    // ring and the Enter/Space handling belong to the thing with the target.
+    const onClose = jest.fn();
+    renderHeader({ onClose });
+
+    await userEvent.tab();
+    expect(screen.getByRole("button", { name: BACK })).toHaveFocus();
+
+    await userEvent.keyboard("{Enter}");
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("is the only way out on mobile, which is why its target matters", () => {
+    // The desktop `×` is below the early return. If that ever changes, the
+    // back arrow stops being load-bearing and this whole ticket's premise
+    // needs revisiting - so assert the premise rather than assume it.
+    renderHeader();
+
+    expect(screen.getByRole("button", { name: BACK })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: CLOSE }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("is absent on desktop, where the close control takes over", () => {
+    setViewportWidth(DESKTOP_WIDTH);
+    renderHeader();
+
+    expect(
+      screen.queryByRole("button", { name: BACK }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: CLOSE })).toBeInTheDocument();
   });
 });

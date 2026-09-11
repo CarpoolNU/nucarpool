@@ -209,7 +209,34 @@ const MessageHeader = ({
         <div className="relative flex items-center py-4">
           <button
             type="button"
-            className="absolute left-4 text-gray-600"
+            /* The padding is the tap target, not decoration.
+               The arrow stays `h-6`, so 2.5 + 6 + 2.5 = 11 spacing units =
+               44px - the size Apple's HIG and WCAG 2.5.5 ask of a touch
+               control, and the figure the explore sheet's handle, the map
+               recentre control and the map legend already use. It was a bare
+               24px icon in a button with no padding, which made the icon the
+               whole target. This is the only way out of a conversation on a
+               phone: the desktop header's close control is in the branch
+               below, which mobile returns before reaching.
+
+               `left-1.5` rather than the four units it sat at before, so the
+               arrow does not move: 1.5 + 2.5 = 4, the offset it had when the
+               button was only the icon. The target grows outwards from where
+               the user already aims instead of pushing the arrow 10px
+               inboard, and the 44px box ends up nearer the screen edge, where
+               the thumb is. The old offset is deliberately not spelled out as
+               a class here - Tailwind scans this file for class-like strings
+               and would emit whichever one a comment names, and nothing uses
+               that one any more.
+
+               `flex` keeps that arithmetic exact: an inline SVG contributes a
+               line box, so without it the height is the icon plus whatever
+               leading the font adds rather than icon plus padding.
+
+               Do not trade the padding away to make the arrow look smaller -
+               shrink the `h-6` span and leave the padding holding the target
+               open. */
+            className="absolute left-1.5 flex items-center justify-center p-2.5 text-gray-600"
             onClick={handleClose}
             aria-label="Back to conversations"
           >
