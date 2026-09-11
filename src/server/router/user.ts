@@ -173,8 +173,7 @@ export const userRouter = router({
           daysWorking: z.string(),
           // Nullable as well as optional, and the two mean different things:
           // omitted leaves the column alone, explicit `null` clears it.
-          // Without `.nullable()` a cleared schedule was unexpressible
-          // (SCRUM-387).
+          // Without `.nullable()` a cleared schedule is unexpressible.
           startTime: z.string().nullable().optional(),
           endTime: z.string().nullable().optional(),
           coopStartDate: z.date().nullable(),
@@ -243,7 +242,7 @@ export const userRouter = router({
       // `fromScheduleTimeInput` keeps `undefined` and `null` apart, which the
       // truthy ternary here did not: it mapped both to `undefined`, and Prisma
       // reads that in an `update` as "omit this field". So a cleared schedule
-      // was silently discarded (SCRUM-387).
+      // was silently discarded.
       const startTimeDate = fromScheduleTimeInput(input.startTime);
       const endTimeDate = fromScheduleTimeInput(input.endTime);
 
@@ -463,7 +462,7 @@ export const userRouter = router({
         });
       }
       try {
-        // The whole of SCRUM-276. A primary-key lookup on an already-open
+        // the whole point. A primary-key lookup on an already-open
         // connection replaces an S3 `HeadObject` over the network, for every
         // user whose picture state has been recorded.
         //
@@ -501,7 +500,7 @@ export const userRouter = router({
    * signature. Writing the column when the URL is *issued* would therefore mark
    * pictures present that do not exist, and `getPresignedDownloadUrl` would
    * then sign URLs for missing objects and show broken images — the exact
-   * failure the rejected alternative in SCRUM-276 was rejected for.
+   * failure the rejected alternative design was rejected for.
    *
    * So the client calls this after its PUT returns `ok`, and only then.
    *

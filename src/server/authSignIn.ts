@@ -10,7 +10,7 @@ import type { DeployEnv } from "../utils/env/browser";
  * constructed without an `hd` hint. Any Google account on the internet could
  * therefore create a staging user — in front of a database holding 1,298 real
  * people's names, addresses, home locations and message history, copied from
- * production by SCRUM-74.
+ * production by.
  *
  * Kept out of `src/pages/api/auth/` deliberately. Under `src/pages/` a filename
  * is also a route, so a co-located test would be compiled and served as one —
@@ -51,7 +51,7 @@ export const INSTITUTIONAL_EMAIL_DOMAINS = [
  *
  * Tightening this to the specific tester addresses, or to addresses that
  * already exist in the database, is a strictly better control and needs a list
- * this repository should not carry. See SCRUM-344 for that decision.
+ * this repository should not carry.
  */
 export const STAGING_GUEST_EMAIL_DOMAINS = ["gmail.com"] as const;
 

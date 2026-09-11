@@ -12,8 +12,8 @@ interface EntryLabelProps {
  * `$error`, not `error`: the `$` marks the prop transient, so styled-components
  * v6 consumes it for the template below and does not forward it to the <label>.
  * Without it React receives `error={true}` as a DOM attribute, declines to
- * write it, and logs "Received `true` for a non-boolean attribute `error`"
- * (SCRUM-425). Same defect SCRUM-424 fixed in `Header`'s `MobileNavItem`;
+ * write it, and logs "Received `true` for a non-boolean attribute `error`".
+ * same defect fixed in `Header`'s `MobileNavItem`;
  * these two were the repository's only typed styled components, and both had
  * it. See CLAUDE.md's conventions section, which now states the rule.
  *

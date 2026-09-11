@@ -4,7 +4,7 @@ import { acquirePusherClient, releasePusherClient } from "../pusherClient";
 import { useUnreadNotifications } from "./useUnreadNotifications";
 
 /**
- * The unread-count notification subscription (SCRUM-383).
+ * The unread-count notification subscription.
  *
  * This effect lived inside `Header`, where nothing could reach it: the
  * component needs a router, a tRPC client, a portal and a `GroupPage` to
@@ -115,7 +115,7 @@ describe("useUnreadNotifications — subscribing", () => {
   });
 
   it("does not re-subscribe when the user id is unchanged", () => {
-    // SCRUM-383's acceptance criterion, and the churn fix this hook inherited.
+    // that change's acceptance criterion, and the churn fix this hook inherited.
     // `Header` used to depend on `props.data` — an object literal `Home`
     // rebuilds on every filter change, query settle, map event and hover — so
     // the effect tore down and re-ran continuously and opened a fresh

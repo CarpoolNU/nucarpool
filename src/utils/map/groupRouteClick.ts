@@ -10,7 +10,7 @@ import { planGroupWaypoints } from "./groupRouteWaypoints";
 /**
  * **Preview Group Route**, lifted out of `pages/index.tsx`.
  *
- * The extraction is SCRUM-391's, and for the reason SCRUM-379 gives for
+ * The extraction follows the reason given for
  * `viewRouteClick.ts`: the defect fixed here — every group member's destination
  * pin staying on the map for the rest of the session — was unreachable by any
  * test while the handler was a closure inside a 1300-line page. A pin that is
@@ -46,7 +46,7 @@ export const runViewGroupRoute = ({
   }
 
   // Clear the previous preview before drawing this one. `clearOtherUserMarkers`
-  // is the SCRUM-391 fix: it takes off every group member's pin from the last
+  // is the fix: it takes off every group member's pin from the last
   // preview, and the individual View Route pin, both of which used to survive.
   clearDirections(map);
   clearMarkers(map);

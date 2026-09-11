@@ -114,8 +114,8 @@ module.exports = {
   // artifact rather than on source - a confusing failure that CI never sees,
   // because every CI job starts from a clean checkout.
   //
-  // "\\.db\\.test\\.ts$" keeps the database-backed suite out of the default one
-  // (SCRUM-263). Those files need a real MySQL, so collecting them there would
+  // "\\.db\\.test\\.ts$" keeps the database-backed suite out of the default one.
+  // Those files need a real MySQL, so collecting them there would
   // make `yarn test` fail without Docker - and that suite's whole value is
   // that it does not need any. They run through `yarn test:db`, whose
   // `jest.integration.config.js` overrides this list precisely because

@@ -9,8 +9,8 @@
  *
  * A local counter incremented on each Pusher `sendNotification` therefore
  * replaced the real number rather than adding to it, so a user with five
- * unread messages who received a sixth saw the badge change from `5` to `1`
- * (SCRUM-383). The local counter is gone: the server count is the only source,
+ * unread messages who received a sixth saw the badge change from `5` to `1`.
+ * The local counter is gone: the server count is the only source,
  * and a notification invalidates it — see
  * [`useUnreadNotifications`](./useUnreadNotifications.ts).
  *

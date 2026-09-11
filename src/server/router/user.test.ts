@@ -65,7 +65,7 @@ const sessionFor = (id: string): Session => ({
 
 /**
  * `getPresignedDownloadUrl` reads `User.profilePictureUpdatedAt` to decide
- * whether it can skip S3 (SCRUM-276), so the caller needs a `user.findUnique`.
+ * whether it can skip S3, so the caller needs a `user.findUnique`.
  *
  * The default is `null`, which is deliberately the *fallback* path: every row
  * that predates the column has it, so that is what production mostly looks
@@ -229,7 +229,7 @@ describe("user.getPresignedDownloadUrl", () => {
  * `src/utils/uploadToS3.signature.test.ts`.
  */
 /**
- * SCRUM-276: the recorded picture timestamp replaces the S3 `HeadObject`.
+ * the recorded picture timestamp replaces the S3 `HeadObject`.
  *
  * `HeadObject` was the entire AWS cost of rendering an avatar - `getSignedUrl`
  * is a local HMAC and calls nothing - so the acceptance criterion is literally
@@ -307,7 +307,7 @@ describe("user.getPresignedDownloadUrl — recorded picture state", () => {
   });
 
   it("still resolves { url: null } rather than undefined on the signing path", async () => {
-    // The SCRUM-242 cacheability contract has to survive the new branch: a
+    // The cacheability contract has to survive the new branch: a
     // signing failure is a successful lookup that found nothing renderable.
     mockUserFindUnique.mockResolvedValue({
       profilePictureUpdatedAt: new Date("2026-09-03T12:00:00Z"),
@@ -575,7 +575,7 @@ type SearchRow = {
   /** Only the group guard reads these. */
   role?: Role;
   carpoolId?: string | null;
-  /** Written by `user.edit`, and asserted on for SCRUM-373. */
+  /** Written by `user.edit`, and asserted on for. */
   startTime?: Date | null;
   endTime?: Date | null;
 };
@@ -902,7 +902,7 @@ describe("user.edit — Location ownership", () => {
  * save inside Prisma rather than being refused at the boundary.
  */
 /**
- * Clearing a schedule time (SCRUM-387).
+ * Clearing a schedule time.
  *
  * `startTime`/`endTime` are nullable columns with a `NO_SCHEDULE_TIME`
  * placeholder in the display layer, and no code path could write `NULL` to
@@ -1536,7 +1536,7 @@ describe("user.edit — a driver in a group cannot change role", () => {
 });
 
 /**
- * The server half of SCRUM-373's contract: `user.edit` stores the schedule time
+ * The server half of the fix's contract: `user.edit` stores the schedule time
  * the client sent and does not reinterpret it.
  *
  * The offset can only be chosen where the wall clock is known, which is the

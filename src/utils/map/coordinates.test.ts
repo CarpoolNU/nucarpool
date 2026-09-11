@@ -2,7 +2,7 @@ import { isValidCoordinates } from "./coordinates";
 
 /**
  * Pins the behaviour of a validator that was moved out of `pages/index.tsx` in
- * SCRUM-379 so `viewRouteClick.ts` could share it. A move is exactly when a
+ * an earlier extraction so `viewRouteClick.ts` could share it. A move is exactly when a
  * guard's edges are worth stating: nothing else would notice if one shifted.
  */
 describe("isValidCoordinates", () => {

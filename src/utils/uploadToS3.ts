@@ -106,7 +106,7 @@ function profileImageKey(fileName: string): string {
  * Signs a GET URL without asking S3 whether the object is there.
  *
  * **This makes no network call.** `getSignedUrl` is a local HMAC computation,
- * which is the fact SCRUM-276 turns on: once
+ * which is the fact the timestamp column turns on: once
  * `User.profilePictureUpdatedAt` says a picture exists, the `HeadObject` below
  * is pure cost and this is all that is needed.
  *

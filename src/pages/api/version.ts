@@ -3,7 +3,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { readBuildInfo, type BuildInfo } from "../../server/buildInfo";
 
 /**
- * Which commit this deployment was built from (SCRUM-405).
+ * Which commit this deployment was built from.
  *
  * ```
  * curl -s https://<host>/api/version

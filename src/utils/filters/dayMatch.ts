@@ -2,7 +2,7 @@
  * The day-match filter's rules, in one place for both sides of it.
  *
  * The Explore panel and `calculateScore` were written against each other by
- * hand, with no shared definition, and drifted in four ways (SCRUM-386). The
+ * hand, with no shared definition, and drifted in four ways. The
  * worst was that **"Flex days" with no days selected excluded every
  * candidate**: the scorer rejects when `bothUsersDays < flexDays`, and with
  * nothing checked `bothUsersDays` is 0 while `flexDays` is at least 1. The

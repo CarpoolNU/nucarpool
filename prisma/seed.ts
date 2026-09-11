@@ -47,7 +47,7 @@ const prisma = new PrismaClient();
  * pointing at deleted requests — and since `Conversation.requestId` is
  * `@unique`, a later request reusing an id would collide with one of those
  * ghosts. That is the same defect class as the 620 orphan conversations
- * SCRUM-295 found in production.
+ * found in production.
  *
  * **This tuple is the only source of truth.** {@link deletableModels} is typed
  * `Record<SeededModel, …>`, so a name added here without a delegate — or a
@@ -129,7 +129,7 @@ const FAVORITES_JOIN_TABLE = "_Favorites";
  * through `main()` would otherwise reach seven unconditional `deleteMany`
  * calls against whatever `DATABASE_URL` names. The check is cheap and runs
  * before the first statement, so the destructive primitive is safe by itself
- * rather than by convention (SCRUM-410).
+ * rather than by convention.
  *
  * This also replaces the previous `clearConnections()` pass, which ran
  * immediately before it and issued roughly 4,900 no-op `favorites.disconnect`
@@ -695,7 +695,7 @@ export const checkSeedIntegrity = (
   );
 
   // A self-request is the defect `requests.create` refuses and production still
-  // carries two of (SCRUM-409). `pickConnection` is supposed to make one
+  // carries two of them. `pickConnection` is supposed to make one
   // impossible; this proves it did rather than assuming the loop is correct.
   for (const request of snapshot.requests) {
     if (request.fromUserId === request.toUserId) {

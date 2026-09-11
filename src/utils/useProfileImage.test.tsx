@@ -1,6 +1,5 @@
 /**
- * That a hydration pass React throws away does not cost a network request
- * (SCRUM-423).
+ * That a hydration pass React throws away does not cost a network request.
  *
  * `Header` branches on `useIsMobile`, and React reads `getServerSnapshot`
  * during hydration as well as on the server - so a `Header` that is already in

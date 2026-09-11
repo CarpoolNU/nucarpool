@@ -28,7 +28,7 @@ export const MAP_RESULT_LIMIT = 150;
  *
  * A VIEWER is exempt from `MAP_RESULT_LIMIT`, and the comment here used to say
  * only that this was "pre-existing behaviour" — which read as an oversight
- * nobody had chosen. SCRUM-346 asked whether it was intended. It is, for a
+ * nobody had chosen. Whether it was intended was asked. It is, for a
  * reason worth writing down, because the obvious tidy-up of treating every role
  * alike would quietly break VIEWER browsing.
  *
@@ -51,10 +51,10 @@ export const MAP_RESULT_LIMIT = 150;
  *
  * The cost is a larger payload, and it is not free: a VIEWER receives about 751
  * `PublicUser` records where every other role receives 150 — roughly 5x — and
- * that grows with the platform until it meets `CANDIDATE_LIMIT` (SCRUM-345).
+ * that grows with the platform until it meets `CANDIDATE_LIMIT`.
  * Each record carries a name, pronouns, bio, "City, State" home, coarsened home
  * coordinates and the employer's street address. It no longer carries an email
- * address; SCRUM-292 removed that. With 13 active onboarded VIEWERs the
+ * address; that was removed. With 13 active onboarded VIEWERs the
  * exposure is small today, which is what makes this a decision to revisit
  * rather than an incident.
  *

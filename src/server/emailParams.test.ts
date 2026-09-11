@@ -270,7 +270,7 @@ describe("generateEmailParams HTML escaping", () => {
  * part reads its own variables: the `HtmlPart` the escaped `...Html` set, the
  * `TextPart` the raw `...Plain` set. The unsuffixed set is the previous
  * generation, still emitted so that a template not yet republished keeps
- * working. See the note above `escapeHtmlText` and SCRUM-360.
+ * working. See the note above `escapeHtmlText` and.
  */
 describe("escapeHtmlAttribute", () => {
   it("agrees with escapeHtmlText on input carrying no quotes", () => {

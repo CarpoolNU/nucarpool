@@ -57,8 +57,8 @@ type UserCardBaseProps = {
    *
    * The Requests tab passes one because a request whose two parties can no
    * longer carpool stays in the list, so the card has to say why rather than
-   * disappear. Favourites now do the same: SCRUM-351 stopped `favorites.me`
-   * filtering by role and status, since hiding those entries also hid the only
+   * disappear. Favourites now do the same: `favorites.me` no longer
+   * filters by role and status, since hiding those entries also hid the only
    * un-favourite star. Recommendations still never need it - the scorer only
    * ever offers a compatible, ACTIVE person.
    */
@@ -87,7 +87,7 @@ export type UserCardProps = UserCardBaseProps & CardActivation;
  * The `disabled:` pair matches the mobile Connect button's existing
  * `disabled:bg-gray-300`, so the two say the same thing. Without them the
  * button kept its full red while being inert, which mattered once favourites
- * started carrying entries the reader cannot connect with (SCRUM-351): a card
+ * started carrying entries the reader cannot connect with: a card
  * whose notice explains they are unavailable must not also show a live-looking
  * Connect. It applies equally to the two reader-side conditions that could
  * already disable this button - Viewer mode and the reader's own paused search
@@ -183,8 +183,8 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
           <Image
             src={profileImageUrl}
             // The same value as the heading below and the activation button's
-            // `aria-label`. SCRUM-279 found this announcing a name Viewer mode
-            // was hiding on screen; SCRUM-323 removed the hiding, so all three
+            // `aria-label`. An audit found this announcing a name Viewer mode
+            // was hiding on screen; the hiding is gone, so all three
             // read `preferredName` and there is nothing left to diverge.
             alt={`${props.otherUser.preferredName}'s Profile Image`}
             width={56}

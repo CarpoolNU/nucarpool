@@ -25,10 +25,10 @@ import type { TransactionClient } from "./client";
  * **A null link is a legitimate state, not corruption.** The `Conversation`
  * model arrived in migration `20240910182030_conversationmodel`; every request
  * older than it has `conversationId = NULL`, which was 462 of 477 rows on
- * production-derived staging when SCRUM-350 was filed. Those rows are repaired
+ * production-derived staging when this was measured. Those rows are repaired
  * lazily, on the first write that needs a conversation, rather than backfilled
  * — 462 empty conversations would be rows nobody reads, and would add to the
- * orphan problem SCRUM-295 covers.
+ * orphan problem described in the database README.
  *
  * **Callers must already be inside a transaction.** The parameter type says so:
  * `TransactionClient` is a `PrismaClient` minus `$transaction`, so this cannot
@@ -118,7 +118,7 @@ export const conversationsToDeleteWith = (request: {
  * `conversation.count()` and `message.groupBy` both include them, which is why
  * the dashboard's conversation figure and its messages-per-conversation average
  * drift upward and cannot be reconciled afterwards. That distortion is accepted
- * for now: the 620 are retained by decision (SCRUM-365), not pending deletion.
+ * for now: the 620 are retained by decision, not pending deletion.
  *
  * Nothing creates these any more — `requests.delete` removes the conversation
  * with the request — but every decline, withdrawal and "Leave Conversation"

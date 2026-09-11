@@ -83,7 +83,7 @@ describe("calculateScore", () => {
         matches: false,
       },
       {
-        // SCRUM-348. The guard tested `=== 0`, so this row scored as available
+        // The guard tested `=== 0`, so this row scored as available
         // and was offered — while `reserveSeat` refused every acceptance,
         // because it has always tested `> 0`.
         name: "a rider is not matched with a driver whose seat count went negative",
@@ -440,7 +440,7 @@ describe("calculateScore", () => {
     });
 
     /**
-     * The empty-selection edge, which was the user-visible half of SCRUM-386.
+     * The empty-selection edge, which was the user-visible half of the fix.
      *
      * `days === 1` with no days selected was already asserted to exclude
      * nobody, further down in "identity and pathological inputs". `days === 2`
@@ -1156,10 +1156,10 @@ describe("time filtering across midnight", () => {
 });
 
 /**
- * SCRUM-373, measured where it cost the product rather than where it was
- * written.
+ * The daylight-saving defect, measured where it cost the product rather than
+ * where it was written.
  *
- * `minutesApart` was never wrong here — SCRUM-297 made it sound. What was wrong
+ * `minutesApart` was never wrong here; the midnight wrap made it sound. What was wrong
  * were its *inputs*: the write path resolved Boston's UTC offset from the day
  * the user saved, so one wall-clock time had two stored forms. Two students with
  * identical 9-to-5 schedules came out 60 minutes apart if one onboarded in
@@ -1218,7 +1218,7 @@ describe("minutesApart across the seasons a schedule was entered in", () => {
     ).toBe(90);
   });
 
-  it("keeps the midnight wrap SCRUM-297 fixed", () => {
+  it("keeps the midnight wrap correct", () => {
     // 7:30 PM and 8:30 PM, entered in different seasons.
     expect(
       minutesApart(savedOn(WINTER, "19:30"), savedOn(SUMMER, "20:30")),

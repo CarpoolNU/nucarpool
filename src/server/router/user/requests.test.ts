@@ -73,7 +73,7 @@ const buildRequestsDb = (
   emails: Record<string, string | null> = {},
   /**
    * userId -> seatsAvail. `create` deliberately does not read this — see the
-   * SCRUM-361 block at the bottom of this file — so it exists only so that
+   * seat-count block at the bottom of this file — so it exists only so that
    * absence can be asserted rather than assumed. Last in the list, and
    * defaulted, because the parameters here are positional: inserting it
    * earlier silently turned two `emails` arguments into seat counts.
@@ -87,7 +87,7 @@ const buildRequestsDb = (
   // A seeded request that claims a conversation gets one, so that
   // `conversation.findUnique({ where: { requestId } })` can find it. Without
   // this the map started empty and the lookup missed for a request whose
-  // `conversationId` was set — which would make the SCRUM-350 tests below pass
+  // `conversationId` was set — which would make the link tests below pass
   // for the wrong reason, reporting a repaired link where the real database
   // would have found the conversation already there.
   const conversations = new Map<string, { id: string; requestId: string }>(
@@ -484,7 +484,7 @@ describe("user.requests.create — the duplicate guard still holds", () => {
 });
 
 /**
- * SCRUM-349: a double-clicked Send must not build the pair two of everything.
+ * a double-clicked Send must not build the pair two of everything.
  *
  * The duplicate-guard tests above all *seed* an existing row, so they prove the
  * guard reads correctly — but none of them ever ran `create` twice, which is
@@ -503,7 +503,7 @@ describe("user.requests.create — the duplicate guard still holds", () => {
  * transaction narrows the window but does not close it, because MySQL will not
  * lock rows a non-locking SELECT did not find. The control that removes the
  * realistic path is the in-flight guard on `ConnectModal`'s Send button, which
- * still has no component test pinning it - possible since SCRUM-377, not
+ * still has no component test pinning it - possible, not
  * written. See "One request per
  * pair" in `src/server/db/README.md` for why no unique constraint was added.
  */
@@ -664,7 +664,7 @@ describe("user.requests.create — an accepted request is reopened, not duplicat
 });
 
 /**
- * SCRUM-350: reopening a request with no conversation used to destroy the
+ * reopening a request with no conversation used to destroy the
  * message.
  *
  * The reopen branch wrote the message only `if (input.message &&
@@ -1025,11 +1025,11 @@ describe("user.requests.delete — only a participant may clear a request", () =
 
 describe("user.requests.delete — not while still carpooling together", () => {
   /**
-   * The server half of SCRUM-362, which fixed only the client half.
+   * The server half of the fix, which fixed only the client half.
    *
    * That ticket removed the "Leave Conversation" button, because a pair in an
    * active carpool pressing it deleted their accepted request and with it -
-   * after SCRUM-295 - the conversation and every message, permanently and with
+   * the conversation and every message, permanently and with
    * no route to recovery. The button is gone; the procedure was never guarded,
    * so a direct call, a stale bundle or the next caller to reuse `delete`
    * could still do it. `create` has refused the same pair with CONFLICT for
@@ -1151,7 +1151,7 @@ describe("user.requests.delete — not while still carpooling together", () => {
   });
 
   it("allows deletion when neither user is in a group", async () => {
-    // The pair who carpooled and have since parted. SCRUM-353 and SCRUM-354
+    // The pair who carpooled and have since parted. Earlier work
     // both worked to make this row clearable, which is why the guard is
     // ACCEPTED *and* grouped rather than ACCEPTED alone.
     const db = acceptedPair({ [USER_A]: null, [USER_B]: null });
@@ -1181,7 +1181,7 @@ describe("user.requests.delete — not while still carpooling together", () => {
   it("still withdraws a PENDING request between two users who share a group", async () => {
     // Reachable through the reopen path, and it must stay withdrawable: a
     // request nobody accepted carries no history worth protecting, and
-    // SCRUM-295's behaviour for PENDING is unchanged by this ticket. The guard
+    // that change's behaviour for PENDING is unchanged by this ticket. The guard
     // is keyed on status first, so this does not even issue the group query.
     const db = buildRequestsDb(
       [
@@ -1214,7 +1214,7 @@ describe("user.requests.delete — not while still carpooling together", () => {
   });
 
   /**
-   * SCRUM-409. Two of these exist in production, one ACCEPTED and its owner in
+   * Two of these exist in production, one ACCEPTED and its owner in
    * a real group of two.
    *
    * The guard compares the two parties' groups, and for a self-request that is
@@ -1254,7 +1254,7 @@ describe("user.requests.delete — not while still carpooling together", () => {
   it("takes the self-request's conversation and messages with it", async () => {
     // The whole point of deleting through this path rather than by hand: the
     // conversation and its messages go in the same transaction, which is what
-    // SCRUM-295 fixed and what stops this becoming another orphan.
+    // was fixed and what stops this becoming another orphan.
     const db = selfRequest({ [USER_A]: "group-1" });
     const { caller } = callerFor(sessionFor(USER_A), db);
 
@@ -1519,7 +1519,7 @@ describe("user.requests.create — both people must be reachable", () => {
  * the list that now shows the same request.
  */
 /**
- * A home `Location` for the SCRUM-368 tests, which are the only ones that care
+ * A home `Location` for the disclosure tests, which are the only ones that care
  * where anybody lives.
  *
  * Five decimal places deliberately, so that coarsening to two is unmistakable
@@ -1547,7 +1547,7 @@ const searchRow = (
     status?: Status;
     carpoolId?: string | null;
     /**
-     * Left null by default, which is what every test predating SCRUM-368
+     * Left null by default, which is what every older test
      * expects: they assert on which requests come back, never on where their
      * counterparts live.
      */
@@ -1597,7 +1597,7 @@ const buildRequestsMeDb = (
   roles: Record<string, Role>,
   statuses: Record<string, Status> = {},
   /**
-   * userId -> home coordinate, for the SCRUM-368 disclosure tests. Last in the
+   * userId -> home coordinate, for the disclosure tests. Last in the
    * list and defaulted for the reason `buildRequestsDb` records above: these
    * parameters are positional, so a new one inserted earlier silently reads
    * some other test's argument.
@@ -1605,7 +1605,7 @@ const buildRequestsMeDb = (
   homes: Record<string, { coordLng: number; coordLat: number }> = {},
   /**
    * Users with no `CarpoolSearch` row at all — someone who never finished
-   * onboarding. Distinct from an INACTIVE search, and after SCRUM-369 the only
+   * onboarding. Distinct from an INACTIVE search, and now the only
    * thing the resolver's null checks still cover. Positional and last, for the
    * reason recorded above.
    */
@@ -1640,7 +1640,7 @@ const buildRequestsMeDb = (
     // than a hard-coded one. It used to exclude INACTIVE unconditionally,
     // mirroring the `status: { not: "INACTIVE" }` the resolver then had — which
     // meant the double produced the filtered result whether or not the query
-    // asked for it, and SCRUM-369's removal of that filter would have passed
+    // asked for it, and that change's removal of that filter would have passed
     // every test in this file unnoticed.
     const excluded: Status | undefined = where?.status?.not;
 
@@ -1796,12 +1796,12 @@ describe("user.requests.me - an existing request survives a role change", () => 
   /**
    * This case used to assert the opposite — that an INACTIVE counterpart was
    * dropped — and was written to stop the role fix being read as covering
-   * status too. SCRUM-369 established that it should never have been the
+   * status too. It was established that this should never have been the
    * exception: pausing a search is something any user can do from their own
    * profile, and the moment either party did, the request vanished from both
    * Requests tabs while `create`'s duplicate guard went on refusing every
    * retry with CONFLICT. Neither party could withdraw it, decline it or
-   * replace it until the other reactivated. It is the same dead end SCRUM-296
+   * replace it until the other reactivated. It is the same dead end earlier work
    * closed for roles, one filter away in the same function.
    */
   it("returns a sent request whose counterpart has paused their search", async () => {
@@ -2025,7 +2025,7 @@ describe("user.requests.me - what it asks the database for", () => {
 });
 
 /**
- * SCRUM-361: the server stays permissive, deliberately.
+ * the server stays permissive, deliberately.
  *
  * A rider could reach a full driver's card through favourites or a stale list
  * and send a request `reserveSeat` would refuse at every acceptance. The fix
@@ -2057,7 +2057,7 @@ describe("user.requests.create — a full driver is not refused here", () => {
   });
 
   it("writes it for a negative count too", async () => {
-    // The SCRUM-348 row. Uniform with 0 here, as everywhere else.
+    // The negative-seat row. Uniform with 0 here, as everywhere else.
     const db = buildRequestsDb([], {}, {}, { [USER_B]: -1 });
     const { caller } = callerFor(sessionFor(USER_A), db);
 
@@ -2249,7 +2249,7 @@ describe("user.requests.delete — the conversation goes with it", () => {
 });
 
 /**
- * SCRUM-368 — what `requests.me` discloses about the *other* person.
+ * What `requests.me` discloses about the *other* person.
  *
  * Both counterpart projections used the exact-home converter unconditionally,
  * so a request the caller had created a moment earlier released that person's
@@ -2263,7 +2263,7 @@ describe("user.requests.delete — the conversation goes with it", () => {
  * applying it to the right half of each pair.
  *
  * Read alongside "an existing request survives a role change" above: that pins
- * which requests are returned, and SCRUM-296 and SCRUM-316 both closed dead
+ * which requests are returned, and earlier work closed dead
  * ends caused by requests disappearing from this list. Nothing here removes a
  * request — the fix narrows disclosure, never visibility.
  */

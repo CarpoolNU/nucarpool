@@ -252,7 +252,7 @@ describe("normalizeDetails and hasAnyDetail", () => {
 });
 
 /**
- * The comparison `useGroupDetails`'s sync effect bails out on (SCRUM-389).
+ * The comparison `useGroupDetails`'s sync effect bails out on.
  *
  * Its job is narrow: answer whether two `GroupDetails` carry the same values,
  * so that resolving the same stored row twice is not a state change. The
@@ -308,7 +308,7 @@ describe("detailsEqual", () => {
   });
 
   it("compares every field of GroupDetails, not a subset", () => {
-    // The guard against the quiet version of SCRUM-389: a field left out of
+    // The guard against the quiet version of that loop: a field left out of
     // the comparison is a field whose changes never reach the form.
     // `COMPARED_FIELDS` is `Record<keyof GroupDetails, true>` so omitting one
     // fails `tsc`, and this asserts the runtime half of the same thing.

@@ -7,7 +7,7 @@ import { UNEXPECTED_ERROR_MESSAGE, maskUnexpectedError } from "./errorMasking";
 import { newRequestId } from "./requestId";
 
 /**
- * Masking unexpected server errors on the way to the browser (SCRUM-388).
+ * Masking unexpected server errors on the way to the browser.
  *
  * `[trpc].ts` keeps error contents out of production logs; the same payload was
  * going to the client untouched, because `initTRPC` had no `errorFormatter` and
@@ -16,7 +16,7 @@ import { newRequestId } from "./requestId";
  *
  * The property that has to survive is the *opposite* one: every deliberate
  * refusal in this codebase is shown to the user as written, and several fixes
- * (SCRUM-294, SCRUM-354, SCRUM-296) depended on that. So the tests below are as
+ * depended on that. So the tests below are as
  * much about what is *not* masked as what is.
  */
 
@@ -66,7 +66,7 @@ describe("maskUnexpectedError", () => {
     "CONFLICT",
   ] as const)("keeps the message of a deliberate %s", (code) => {
     // Every intentional refusal uses one of these, and the UI displays them
-    // verbatim. Masking any of them would undo SCRUM-294/354/296.
+    // verbatim. Masking any of them would undo deliberate product decisions.
     const refusal = shapeFor("You are already in a carpool group.");
 
     expect(maskUnexpectedError(refusal, code, "production")).toBe(refusal);
@@ -230,7 +230,7 @@ describe("the error formatter is wired into appRouter", () => {
   });
 
   it("gives the client the same reference the log records", async () => {
-    // The whole point of SCRUM-400. Neither half is useful alone: a reference
+    // The whole point. Neither half is useful alone: a reference
     // the user can quote that appears in no log line, or a log line with an id
     // the user was never told. This asserts they are the identical value, and
     // that it came from the context rather than being generated twice.

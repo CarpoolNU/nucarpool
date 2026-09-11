@@ -32,7 +32,7 @@ export const NO_SEATS_MESSAGE =
  * one: a negative count, which the read path reads as "has space" and the
  * write path as "does not".
  *
- * SCRUM-229 stopped new negatives (the compare-and-swap above), but rows the
+ * The compare-and-swap above stopped new negatives, but rows the
  * old accounting had already corrupted stayed, and one belonged to an ACTIVE
  * driver. That driver was recommended to riders as having room and then
  * refused every acceptance with NO_SEATS_MESSAGE — a message naming
@@ -79,11 +79,11 @@ export const isSeatCountInRange = (seats: number) =>
  * refused a reader-driver with no space, and this is the mirror image nothing
  * covered. A rider reaching a full driver's card could send a request that
  * `reserveSeat` would refuse for as long as the driver stayed full, and neither
- * party was told why. SCRUM-361.
+ * party was told why.
  *
  * The card can only be reached two ways, both of them ordinary: a favourite
  * who filled up since being starred (`favorites.me` returns them deliberately,
- * so the un-favourite star survives — SCRUM-351), or a list that went stale
+ * so the un-favourite star survives), or a list that went stale
  * between the query and the click. Discovery itself excludes full drivers.
  *
  * Copy, rather than a bare boolean, because this is shown twice: as the card's

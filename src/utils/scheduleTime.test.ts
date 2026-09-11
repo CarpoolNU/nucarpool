@@ -38,7 +38,7 @@ const pickedOn = (day: string, wallClock: string) =>
 describe("formatScheduleTime", () => {
   it("renders a stored UTC time in Boston local time", () => {
     // 14:00 UTC is 9:00 AM in Boston at the anchor date's offset, which is now
-    // the offset the write path uses too, in every season (SCRUM-373).
+    // the offset the write path uses too, in every season.
     expect(formatScheduleTime(storedAt(14))).toBe("9:00 AM");
     expect(formatScheduleTime(storedAt(22))).toBe("5:00 PM");
   });
@@ -101,7 +101,7 @@ describe("formatScheduleTime", () => {
 });
 
 /**
- * SCRUM-373. The write path used to resolve Boston's offset from whatever date
+ * The write path used to resolve Boston's offset from whatever date
  * the picker happened to be anchored on, while the read path always resolved it
  * on `SCHEDULE_ANCHOR_DATE`. These pin the property that closes the gap: what
  * gets stored depends on the digits the user picked and on nothing else.
@@ -146,7 +146,7 @@ describe("toStoredScheduleTime", () => {
   });
 
   /**
-   * The compounding half of SCRUM-373: antd anchors a fresh pick on today and
+   * The compounding half of the fix: antd anchors a fresh pick on today and
    * an edit on the date of the existing value, so the same user performing the
    * same action stored two different times. Reading the wall clock makes the
    * anchor date irrelevant, which is also why this no longer depends on an
@@ -207,7 +207,7 @@ describe("toPickerScheduleTime", () => {
  */
 describe("toScheduleTimeInput", () => {
   // Three states the wire has to keep apart, because Prisma reads `undefined`
-  // in an `update` as "omit this field" (SCRUM-387).
+  // in an `update` as "omit this field".
   it("sends undefined when the field was not part of the edit", () => {
     expect(toScheduleTimeInput(undefined)).toBeUndefined();
   });

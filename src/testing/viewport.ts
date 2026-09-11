@@ -1,68 +1,38 @@
 /**
- * Rendering a component test at a mobile viewport (SCRUM-416).
+ * Rendering a component test at a mobile viewport.
  *
- * Three files had each re-derived the same `Object.defineProperty` incantation
- * before this existed — `useIsMobile.test.tsx`, `ExploreSidebar.test.tsx` and
- * `GroupPage.test.tsx` — with the reason for it written out twice and the
- * cleanup present in only one of them. This is that technique, once.
+ * jsdom reports a fixed `innerWidth` and never changes it, so the viewport has
+ * to be written with `Object.defineProperty`. Three suites had each re-derived
+ * that before this existed, with cleanup in only one.
  *
  * ---
  *
- * **Read this before trusting a green run on anything about mobile.**
+ * **Read this before trusting a green run on anything about mobile.** jsdom
+ * does no layout and evaluates no CSS. Each of the following was measured here
+ * rather than assumed:
  *
- * jsdom does not do layout and does not evaluate CSS. What that rules out is
- * most of what "mobile is broken" usually means. Each of the following was
- * measured in this jsdom rather than assumed:
- *
- *  - **No geometry.** A div with an explicit `width: 200px; height: 100px`
- *    still reports `getBoundingClientRect()` of all zeros and `offsetHeight`
- *    of `0`. jsdom cannot tell you that a 60px fixed bar overlaps an element
- *    positioned 48px from the bottom, which is the whole of SCRUM-412.
- *  - **`getComputedStyle` is the trap, not the escape hatch.** For that same
- *    div it returns `height: "100px"` — it echoes the declared value back and
- *    computes nothing. It looks like a measurement and is not one, which
- *    makes it more dangerous than the honest zeros above. Do not reach for it
- *    to assert layout.
- *  - **No media queries.** A `desktop:` utility is inert here, and
- *    `window.matchMedia` is `undefined` — not stubbed, absent. A component
- *    written against it instead of `useIsMobile` would throw in these tests
- *    without a polyfill. Setting the width below only reaches code that reads
+ *  - **No geometry.** An element with an explicit width and height still
+ *    reports `getBoundingClientRect()` of all zeros and `offsetHeight` of `0`.
+ *    jsdom cannot tell you that a fixed bar overlaps anything.
+ *  - **`getComputedStyle` is the trap, not the escape hatch.** For an *inline*
+ *    style it echoes the declared value back and computes nothing, which looks
+ *    like a measurement and is not one. It *does* resolve a stylesheet
+ *    styled-components injects, which is a real capability.
+ *  - **No media queries.** A `desktop:` utility is inert, and `matchMedia` is
+ *    **absent** rather than stubbed, so a component written against it would
+ *    throw here. Setting the width below only reaches code reading
  *    `window.innerWidth`.
- *  - **No units, and `env()` is actively mangled.** `getComputedStyle` on
- *    `height: 100dvh` returns the literal string `"100dvh"`, unresolved. And
- *    jsdom's CSS parser *rewrites* `calc(60px + env(safe-area-inset-bottom,
- *    0px))` into `calc(60px + env(0px * , * safe-area-inset-bottom))` — the
- *    fallback and the variable swap places. So an assertion on a style string
- *    containing `env()` tests jsdom's parser, not the app. Safe-area
- *    behaviour needs a physical device with a home indicator; nothing in this
- *    repository can assert it.
+ *  - **No units, and `env()` is mangled.** `100dvh` stays unresolved, and
+ *    jsdom's parser rewrites `calc(60px + env(safe-area-inset-bottom, 0px))`
+ *    with the fallback and variable swapped. Safe-area behaviour needs a real
+ *    device; nothing here can assert it.
  *  - **No paint order.** `z-index` is not computed, so "the sheet covers the
- *    message panel" is not observable — only "the sheet is in the tree".
- *  - **No honest server render, so no hydration mismatch.** jsdom always
- *    provides a `window`, so `renderToString` here is not a faithful server:
- *    a component guarding on `typeof window` takes its *client* branch and
- *    the SSR-versus-client divergence that produces a real mismatch never
- *    arises. `useIsMobile.test.tsx` does hydrate a subtree deliberately, to
- *    pin which snapshot `useSyncExternalStore` starts from (SCRUM-420) — but
- *    "no hydration warning on a real page" is not assertable from here at
- *    all, and needs a browser console.
+ *    panel" is not observable -- only "the sheet is in the tree".
  *
- * So what these tests *can* assert is **reachability and wiring**: whether a
- * control exists in the tree at a given width, and what happens when it is
- * activated. That is exactly the class of defect phase 3 of the audit was —
- * controls that rendered on desktop and simply did not exist on mobile — and
- * it is worth guarding. It is not layout coverage, and a green `yarn test`
- * must not be read as any.
- *
- * The layout half needs a real browser at two viewports. That is SCRUM-264's
- * Playwright scope, extended by this ticket to require both a mobile and a
- * desktop viewport.
- *
- * ---
- *
- * One more thing that catches people out: `test.yml` runs Jest **twice**, under
- * `UTC` and `America/New_York`. A local `yarn test` covers only the first, so a
- * date-dependent assertion can pass locally and fail in CI.
+ * So these tests can assert **reachability and wiring**: whether a control
+ * exists at a given width, and what happens when it is activated. That is not
+ * layout coverage, and a green `yarn test` must not be read as any. See
+ * `docs/testing.md`, which also covers the two-timezone CI run.
  */
 
 import { act } from "@testing-library/react";

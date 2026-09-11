@@ -1,14 +1,14 @@
 import { ACCOUNT_DELETION_UNSUPPORTED, createAuthAdapter } from "./authAdapter";
 
 /**
- * The NextAuth adapter (SCRUM-311).
+ * The NextAuth adapter.
  *
  * This was an object literal inside `src/pages/api/auth/[...nextauth].ts`,
  * where no test could reach it — a filename under `src/pages/` is also a
  * route, so a co-located test would be compiled and served as one. Moving it
  * beside `authSignIn.ts` is the pattern that file's own comment describes.
  *
- * Two behaviours are pinned. `deleteUser` refusing is what SCRUM-311 decided;
+ * Two behaviours are pinned. `deleteUser` refusing is a product decision;
  * `createUser` discarding the provider's `image` was already load-bearing and
  * had no test at all, which is the more valuable half of doing this.
  */
@@ -51,7 +51,7 @@ describe("createAuthAdapter — deleteUser", () => {
 
     await expect(
       createAuthAdapter(client).deleteUser!("user-1"),
-    ).rejects.toThrow(/SCRUM-311/);
+    ).rejects.toThrow(/no delete-my-account feature/);
     expect(ACCOUNT_DELETION_UNSUPPORTED).toContain("db/README.md");
   });
 

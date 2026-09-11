@@ -14,7 +14,7 @@ import {
 } from "./check-env-contract";
 
 /**
- * The `--amplify` half of the environment-contract check (SCRUM-385).
+ * The `--amplify` half of the environment-contract check.
  *
  * `amplify.yml` is the deployed contract and `.env.example` is the
  * developer-facing one. Only the second was ever checked, so `S3_BUCKET_NAME`
@@ -306,7 +306,7 @@ describe("amplifyCoverage", () => {
 describe("isOptional", () => {
   // `default:` applies in every NODE_ENV; `devDefault:` does not apply under
   // the NODE_ENV=production that `next build` sets. Conflating them is what
-  // SCRUM-398 is about, in both directions.
+  // this distinguishes, in both directions.
   it("treats a default: as optional", () => {
     expect(isOptional('{ input: process.env.X, default: "y" }')).toBe(true);
   });
@@ -439,7 +439,7 @@ describe("strictnessIssues", () => {
   });
 
   it("rejects a strict command covering only optional variables", () => {
-    // SCRUM-397 exactly: grep exits 1 when no S3_* is set, and Amplify fails
+    // The outage exactly: grep exits 1 when no S3_* is set, and Amplify fails
     // the build. This is the assertion that would have caught it.
     const issues = strictnessIssues(
       [entry(["S3_"], false)],
@@ -554,7 +554,7 @@ describe("the real amplify.yml", () => {
   });
 
   it("makes the S3_ command tolerant and every other one strict", () => {
-    // The shape SCRUM-397 settled on, pinned so it cannot quietly revert:
+    // The shape settled on afterwards, pinned so it cannot quietly revert:
     // `S3_` covers only defaulted variables and must survive matching
     // nothing, and no other command may borrow the same fallback.
     const { entries } = amplifyGrepPatterns(real);

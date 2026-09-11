@@ -62,13 +62,12 @@ credential model. The only way to make production deployment impossible for the
 agent is to withhold `create_deploy_request` entirely.
 
 `require_approval_for_deploy` **cannot be enabled in this organization and must
-not be relied on as a control.** Do not propose it as the remaining gate. It was
-`false` as of 2026-08-27, and 24 of the first 25 deploy requests reached
-production with `approved=false`. The compensating control is the withheld
-permission above, plus the local guard.
+not be relied on as a control** — do not propose it as the remaining gate. It has
+been observed `false` with deploy requests reaching production unapproved. The
+compensating control is the withheld permission above, plus the local guard.
 
-A schema change therefore reaches production like this: the agent validates it
-on `staging`, then hands off. A human opens and ships the deploy request.
+So a schema change reaches production like this: the agent validates it on
+`staging`, then hands off. A human opens and ships the deploy request.
 
 ### Branch creation
 
@@ -97,17 +96,15 @@ branch, and prefer `staging` for schema work.
   | `PLANETSCALE_ORG`              | `devashishsood18`    | `pscale` CLI — a service token has no active org |
   | `PLANETSCALE_API_TOKEN`        | the token **secret** | MCP `Authorization: Bearer`                      |
 
-- Never pass a token inline as a command-line flag. The CLI reads the variables
-  above natively, so flags are never necessary; passing one swaps the agent's
-  identity and writes the secret into the transcript. The guard denies it.
-- The MCP entry stores the literal string `${PLANETSCALE_API_TOKEN}` in its
-  Authorization header, never the resolved secret, so no credential is written
-  to `~/.claude.json`. If Claude Code warns `Missing environment variables:
-PLANETSCALE_API_TOKEN`, the variable has not reached the Claude Code process
-  and MCP may be falling back to a stored OAuth grant — fix that before trusting
-  any boundary below.
-- Under service-token auth PlanetScale blocks every `pscale service-token`
-  subcommand outright, so the agent identity cannot inspect or mint tokens.
+- **Never pass a token inline as a command-line flag.** The CLI reads the
+  variables above natively, so a flag is never necessary; passing one swaps the
+  agent's identity and writes the secret into the transcript. The guard denies it.
+- The MCP entry stores the literal string `${PLANETSCALE_API_TOKEN}`, never the
+  resolved secret, so no credential reaches `~/.claude.json`. A `Missing
+environment variables: PLANETSCALE_API_TOKEN` warning means MCP may be falling
+  back to a stored OAuth grant — **fix that before trusting any boundary below.**
+- Service-token auth blocks every `pscale service-token` subcommand, so the agent
+  identity cannot inspect or mint tokens.
 - The token's granted accesses are, in full:
   - Organization: `read_organization`
   - Database: `read_database`, `read_branch`, `read_deploy_request`,

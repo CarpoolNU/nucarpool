@@ -43,7 +43,7 @@ export function MyApp({
             now reserves would read as `0px` on the devices that have a home
             indicator, which is exactly where they matter.
 
-            No `user-scalable=no` and no `maximum-scale`: SCRUM-254 removed
+            No `user-scalable=no` and no `maximum-scale`: an audit removed
             disabled pinch-zoom as an accessibility defect, and either of those
             would reintroduce it. */}
         <meta

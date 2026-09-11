@@ -126,7 +126,7 @@ export const carpoolUnavailableExplanation = (
  * used to drop any request whose counterpart's search was INACTIVE, which left
  * the pair with no card, no Withdraw control, and a duplicate guard in
  * `requests.create` that still answered every retry with CONFLICT — the status
- * half of the dead end SCRUM-296 closed for roles, one filter away in the same
+ * half of the dead end closed for roles, one filter away in the same
  * function.
  *
  * Status is answered before role for the same reason it is in

@@ -9,7 +9,7 @@ import type { SignInAttempt } from "./authSignIn";
 /**
  * The staging sign-in gate.
  *
- * These cases are the reason SCRUM-344 exists: before this module there was no
+ * These cases are the reason this module exists: before it there was no
  * `signIn` callback anywhere, so every assertion below described behaviour the
  * app did not have. The two that matter most are "a Google account on an
  * unlisted domain is refused in staging" and "Azure AD is unaffected" — the

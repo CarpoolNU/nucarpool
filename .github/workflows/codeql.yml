@@ -72,7 +72,7 @@ jobs:
           # It is not incidental, generated or vendored: it creates the SES
           # templates the app sends, reads AWS credentials out of the
           # environment, and composes HTML from user-controlled values, and it
-          # was last changed by SCRUM-360. One file is a thin reason to run a
+          # was last changed by. One file is a thin reason to run a
           # language; that file is the wrong one to stop scanning.
           - language: python
             build-mode: none

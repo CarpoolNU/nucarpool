@@ -1,7 +1,7 @@
 import { isNavTab, planMobileNav, tabHref } from "./mobileNavPlan";
 
 /**
- * The mobile bottom navigation's decision (SCRUM-384).
+ * The mobile bottom navigation's decision.
  *
  * The defect: leaving the profile page went straight to a full page load, so
  * every unsaved form value went with it and `UnsavedModal` could not appear on
@@ -11,7 +11,7 @@ import { isNavTab, planMobileNav, tabHref } from "./mobileNavPlan";
  * These tests are as much about what must *not* change. Two behaviours are
  * load-bearing and easy to break while fixing the first:
  *
- *  - the full page load itself, which is SCRUM-171's fix for "can't switch
+ *  - the full page load itself, which is that change's fix for "can't switch
  *    from profile to explore/requests on a real phone"; and
  *  - immediate navigation from pages that supply no guard, which is every page
  *    except the profile one.
@@ -55,7 +55,7 @@ describe("planMobileNav — leaving the profile page", () => {
   });
 
   it("keeps the full page load rather than a client-side push", () => {
-    // SCRUM-171. Both profile plans must be href-carrying, because a router
+    // Both profile plans must be href-carrying, because a router
     // push here did not work on real devices.
     for (const guard of [true, false]) {
       const plan = from("/profile", guard)("mygroup");

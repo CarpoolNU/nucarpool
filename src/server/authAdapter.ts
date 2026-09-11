@@ -23,7 +23,7 @@ type AppPrismaClient = (typeof import("./db/client"))["prisma"];
  */
 export const ACCOUNT_DELETION_UNSUPPORTED =
   "Account deletion is not supported. NUCarpool has no delete-my-account " +
-  "feature by decision (SCRUM-311); see the Account deletion section of " +
+  "feature by decision; see the Account deletion section of " +
   "src/server/db/README.md before adding one.";
 
 /**
@@ -41,8 +41,8 @@ export const ACCOUNT_DELETION_UNSUPPORTED =
  * they default to emulated `Restrict` and the delete fails for any user who
  * has ever sent a request or a message — which is every real user.
  *
- * SCRUM-311 asked whether account deletion is a product requirement and the
- * answer recorded there is **no**. So the schema is not being changed to allow
+ * Whether account deletion is a product requirement was asked, and the
+ * recorded answer is **no**. So the schema is not being changed to allow
  * it, and this refusal is what keeps the code honest about that: an explicit
  * message naming the decision, rather than an opaque referential-action error
  * from Prisma at some later date. Reversing the decision means reading the

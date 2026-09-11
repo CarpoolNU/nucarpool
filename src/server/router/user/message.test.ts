@@ -865,7 +865,7 @@ describe("getUnreadMessageCount - the badge and the Requests tab agree", () => {
  * straight into `id: { in: ... }`, so how large an `IN` list MySQL had to parse
  * and plan was the caller's choice. Ownership is enforced separately and is not
  * what changed; these pin the bound, and the last case pins that the bound did
- * not eat the ownership predicate on the way in. See SCRUM-372.
+ * not eat the ownership predicate on the way in.
  */
 describe("markMessagesAsRead — the id list is bounded", () => {
   /** A double for just this procedure: nothing else here calls `updateMany`. */
@@ -984,7 +984,7 @@ describe("markMessagesAsRead — the id list is bounded", () => {
   });
 
   it("still scopes the write to conversations the caller is a party to", async () => {
-    // SCRUM-222's predicate, asserted here because this ticket touches the
+    // that change's predicate, asserted here because this ticket touches the
     // input that feeds it and must leave the `where` clause alone. Note it does
     // not depend on the array: an id the caller does not own matches nothing.
     const { caller, db } = markReadCallerFor(SENDER);

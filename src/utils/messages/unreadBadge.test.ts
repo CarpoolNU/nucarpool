@@ -1,7 +1,7 @@
 import { unreadBadge } from "./unreadBadge";
 
 /**
- * The unread badge's displayed value (SCRUM-383).
+ * The unread badge's displayed value.
  *
  * The ticket asked for the badge's value as a pure function of "the server
  * count and whatever live state survives", and noted that if the local counter

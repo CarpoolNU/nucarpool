@@ -33,7 +33,7 @@ const invalidCoordFields = (
  * Clears the popup and `mapboxgl.Marker` system - and **only** that system.
  *
  * It used to also sweep every layer whose id contained `-text-layer`, which is
- * the asymmetry SCRUM-391 removed. A pin drawn by `updateCompanyLocation` or
+ * an asymmetry that has been removed. A pin drawn by `updateCompanyLocation` or
  * `updateStartLocation` is two layers over one source: the icon and its label.
  * Sweeping the label and leaving the icon left an *unlabelled* pin, which is
  * the worst of the two states - a stale overlay reads as stale, but a pin with
@@ -42,7 +42,7 @@ const invalidCoordFields = (
  * The label belongs to the pin, so it is created and destroyed with it, by
  * `clearOtherUserMarkers`. This function owns the older popup/marker list; that
  * one owns the layer system. Two systems, two owners, neither reaching into the
- * other - SCRUM-185 is where merging them lives.
+ * other; merging them is tracked separately.
  *
  * The `map` parameter is kept because both callers have one to hand and a
  * signature change would ripple further than the fix; it is now unused.

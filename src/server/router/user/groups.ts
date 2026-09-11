@@ -48,7 +48,7 @@ import {
  * check depends on is still there afterwards — which is also what lets
  * `markRequestAccepted` run inside the same transaction as the membership. The
  * cost of keeping it is that a resolved row is indistinguishable from a live
- * invitation unless `status` is read, which is exactly what SCRUM-353 fixed.
+ * invitation unless `status` is read, which is exactly what was fixed.
  */
 
 /** Just the Prisma surface these helpers touch, so they are easy to test. */
@@ -139,7 +139,7 @@ const requireGroupDriver = async (
  * constraint — a request may travel either way — direction relative to the
  * *caller* is.
  *
- * **The request must also still be outstanding.** SCRUM-347 established *who*
+ * **The request must also still be outstanding.** Established elsewhere is *who*
  * may accept; this is *how long* an acceptance stays valid, and the answer is
  * "until it is used". `markRequestAccepted` resolves the row rather than
  * deleting it, so an `ACCEPTED` request outlives the group it created — and
@@ -246,7 +246,7 @@ const markRequestAccepted = async (
  *
  * The filter is imported rather than spelled `{ gt: 0 }` here so that this and
  * the candidate query cannot drift apart again. They already had: this side
- * refused a negative count while the read path advertised it. SCRUM-348.
+ * refused a negative count while the read path advertised it.
  */
 const reserveSeat = async (prisma: PrismaClientLike, driverUserId: string) => {
   const reserved = await prisma.carpoolSearch.updateMany({
@@ -466,7 +466,7 @@ export const groupsRouter = router({
         }
 
         // Pausing a search is the status half of the same problem the two role
-        // checks above solve, and it arrived the same way: SCRUM-369 stopped
+        // checks above solve, and it arrived the same way:
         // `requests.me` hiding a request whose counterpart had paused, so the
         // Accept button now appears for those as well. Nothing here read
         // `status` before, and the roles in such a pair usually still fit — a
@@ -648,7 +648,7 @@ export const groupsRouter = router({
         // a *rider* takes when accepting the request of a driver who already
         // has a group, so without it a paused driver still gains riders — the
         // `create` equivalent is inside the transaction with the two role
-        // checks. See SCRUM-369.
+        // checks.
         if (driverMembership.status === Status.INACTIVE) {
           throw forbidden(
             "That driver has paused their carpool search, so nobody can join " +

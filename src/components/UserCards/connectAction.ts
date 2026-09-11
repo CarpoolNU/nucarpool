@@ -25,7 +25,7 @@ import {
  * told to go somewhere that could not help them, about a request nobody had to
  * answer.
  *
- * SCRUM-353 is what makes this load-bearing rather than merely untidy. The
+ * The server contract is what makes this load-bearing rather than untidy. The
  * server now requires a **pending** request before it will build a group, and
  * `requests.create` reopens a resolved row to `PENDING` — rewriting the
  * direction so whoever asks now is the sender. That is the entire recovery
@@ -38,7 +38,7 @@ import {
  * Extracted as a pure function rather than left inline for the reason
  * `viewerAccess.ts` gives: a rule deciding what a user can reach belongs
  * somewhere a test can state it directly, rather than being inferred from a
- * rendered card. Before SCRUM-377 there was no other option; now it is a
+ * rendered card. There was once no other option; now it is a
  * preference, and still the right one here.
  */
 
@@ -103,7 +103,7 @@ export const connectAction = ({
   // the state of a request between them, and the card is already showing this
   // very sentence as its notice — the button must not contradict it.
   //
-  // This branch exists for SCRUM-351. `favorites.me` no longer hides a
+  // This branch exists for. `favorites.me` no longer hides a
   // favourite whose role changed or whose search was paused, so a Connect
   // button can now sit on a card for someone the pair can never carpool with.
   // Without this, pressing it would open the modal and `requests.create` would
@@ -117,7 +117,7 @@ export const connectAction = ({
   //
   // Scoped to what the *other* person's role and status make impossible. A
   // reader who is themselves a VIEWER is deliberately excluded: that is not
-  // SCRUM-351's defect, this function has never refused on it, and the UI
+  // that change's defect, this function has never refused on it, and the UI
   // already disables both Connect buttons for a VIEWER. `ConnectCard` still
   // shows them the notice, because `carpoolUnavailableExplanation` answers the
   // reader's own Viewer mode first - it is the card that explains, and this
@@ -145,7 +145,7 @@ export const connectAction = ({
     return { kind: "blocked", message: outgoingPending(preferredName) };
   }
 
-  // SCRUM-348 made that decision: non-positive is unavailable, via the
+  // The decision: non-positive is unavailable, via the
   // `hasSeatAvailable` predicate `reserveSeat` already used. A driver at a
   // negative count is now told they have no space instead of being sent to a
   // modal whose acceptance the server refuses.
@@ -163,7 +163,7 @@ export const connectAction = ({
 
   // And the mirror: a rider pressing Connect on a driver who has filled up.
   // Nothing refused this, so the request was written and then refused by
-  // `reserveSeat` at every acceptance — SCRUM-361.
+  // `reserveSeat` at every acceptance.
   //
   // Deliberately *here* rather than folded into the
   // `carpoolUnavailableExplanation` block above, which would have been one

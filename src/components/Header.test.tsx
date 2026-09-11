@@ -12,7 +12,7 @@ import {
 } from "../testing/viewport";
 
 /**
- * Which navigation the header renders, at each viewport (SCRUM-416).
+ * Which navigation the header renders, at each viewport.
  *
  * This is the gate the 640-vs-768 defect lived in. `useIsMobile` used 640 and
  * `Header` used a private 768, so every viewport between them got the desktop
@@ -56,7 +56,7 @@ jest.mock("next/router", () => ({
 /**
  * The presigned-URL query behind `DropDownMenu`'s avatar, as a spy.
  *
- * This is SCRUM-420's regression test, and it replaces a `useProfileImage`
+ * This is that change's regression test, and it replaces a `useProfileImage`
  * mock that used to sit lower in this file. That mock was needed by the
  * *mobile* tests, which was the tell: `useIsMobile` started at
  * `useState(false)` and corrected itself in an effect, so the first render
@@ -185,7 +185,7 @@ describe("Header navigation at a mobile viewport", () => {
     }
   });
 
-  it("underlines the active tab and only the active tab (SCRUM-424)", () => {
+  it("underlines the active tab and only the active tab", () => {
     // `renderHeader` passes `sidebarValue: "explore"`, so that is the tab
     // carrying `$active`.
     renderHeader();
@@ -193,7 +193,7 @@ describe("Header navigation at a mobile viewport", () => {
     /*
      * The `$active` prop's entire visual effect, and the reason the prop
      * cannot simply be deleted to silence React's non-boolean-attribute
-     * warning (SCRUM-424).
+     * warning.
      *
      * This is the assertion that catches the half-done rename. Prefixing the
      * declaration and the call site but leaving the template reading
@@ -235,7 +235,7 @@ describe("Header navigation at a mobile viewport", () => {
     expect(desktopBrand()).not.toBeInTheDocument();
   });
 
-  it("never mounts the desktop-only avatar query (SCRUM-420)", () => {
+  it("never mounts the desktop-only avatar query", () => {
     // Not "the desktop header is absent from the final tree", which the test
     // above already covers and which passed while the bug was live. This
     // asserts nothing desktop-only *ever mounted*, by watching the one side

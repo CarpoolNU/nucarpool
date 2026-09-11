@@ -11,7 +11,7 @@ import {
 } from "../../testing/viewport";
 
 /**
- * Reachability of the Explore list controls at a mobile viewport (SCRUM-414).
+ * Reachability of the Explore list controls at a mobile viewport.
  *
  * Three controls were wrapped in `!isMobile` with no mobile equivalent behind
  * them, so on a phone they did not exist:
@@ -189,7 +189,7 @@ describe("the mobile detail state", () => {
   });
 
   /*
-   * A third test stood here until SCRUM-418, named "keeps the controls at
+   * A third test stood here once, named "keeps the controls at
    * desktop width even with a stale expanded card". It rendered this component
    * at a desktop width with `mobileSelectedUser` set and asserted the controls
    * survived, pinning the `isMobile` term the gate carried for exactly that

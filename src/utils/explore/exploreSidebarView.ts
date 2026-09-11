@@ -2,7 +2,7 @@
  * Which of its five states the explore page's sidebar is in.
  *
  * Lifted out of `index.tsx` because visibility there had **three** owners
- * operating on the same DOM node, two of them not React-aware (SCRUM-413):
+ * operating on the same DOM node, two of them not React-aware:
  * the `className` template literal, a `useEffect` calling
  * `sidebarRef.current.classList.add("hidden")`, and `handleUserSelect` calling
  * `.classList.remove("hidden")`. Both imperative calls tested the same
@@ -33,12 +33,12 @@
  * a constraint: Tailwind v4 scans the whole repository minus `.gitignore`, so a
  * class named here would in fact be emitted. `tailwind.config.js` used to carry
  * a `content` array that read as though it restricted this, which is where the
- * false belief came from; SCRUM-419 deleted it, since it never had any effect.
+ * false belief came from; it was deleted, since it never had any effect.
  * Verified by building with a probe class in this directory rather than
  * inferred from the config.
  *
  * Same shape as `nav/mobileNavPlan.ts` and `map/viewRoutePlan.ts`, and for the
- * same reason SCRUM-379 gave: `index.tsx` is ~918 lines behind Mapbox,
+ * same reason: `index.tsx` is ~918 lines behind Mapbox,
  * NextAuth and a dozen tRPC queries, so a rule living inside it is a rule
  * nothing checks.
  */
@@ -109,7 +109,7 @@ export function planExploreSidebar({
 }
 
 /**
- * The expanded card, as every consumer should read it (SCRUM-418).
+ * The expanded card, as every consumer should read it.
  *
  * `index.tsx` holds one piece of state for "a single card's details are
  * showing". It is written only by the mobile activation path and cleared only
@@ -123,7 +123,7 @@ export function planExploreSidebar({
  * That never became a visible bug, because both consumers happened to carry a
  * defensive `isMobile` term. The cost was that the value could not be read on
  * its own without being wrong and nothing said so at the point of use:
- * SCRUM-414 discovered it while adding a third consumer and had to write
+ * it was discovered while adding a third consumer, which had to write
  * `!(isMobile && selected !== null)` plus a test to hold the workaround in
  * place. This function is that rule, stated once, so the next consumer
  * inherits it instead of rediscovering it.
@@ -136,7 +136,7 @@ export function planExploreSidebar({
  * frame *is* the bug, briefly: a desktop sidebar filtered to one card. The
  * acceptance criterion is that the value is null whenever `isMobile` is false,
  * and only a derived value can actually promise that. It is also the same
- * conclusion SCRUM-413 reached about the sidebar's visibility twenty lines up,
+ * conclusion reached about the sidebar's visibility twenty lines up,
  * for the same reason: derived state cannot lose a race.
  *
  * One behavioural consequence worth naming: because the raw state survives

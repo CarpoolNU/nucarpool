@@ -47,7 +47,7 @@ describe("lastDayOfMonthUTC", () => {
 });
 
 /**
- * The profile's antd month picker (SCRUM-393).
+ * The profile's antd month picker.
  *
  * The picker hands back a `Dayjs` in the user's **local** zone. Before this
  * handler existed both profile paths wrote `date.toDate()` straight into the
@@ -130,7 +130,7 @@ describe("handleMonthPickerChange", () => {
     // dates against filter values that `handleMonthChange` builds as the last
     // of the month, so a first-of-month profile value fails `endDate >= yours`
     // under full overlap for a co-op that is an exact match. Both halves of
-    // SCRUM-393 come from the same missing call.
+    // the defect come from the same missing call.
     const { stored, setValue } = capture();
 
     handleMonthPickerChange("coopEndDate", setValue)(picked("2026-06"));

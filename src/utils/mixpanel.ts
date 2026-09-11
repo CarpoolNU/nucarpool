@@ -2,8 +2,8 @@ import mixpanel from "mixpanel-browser";
 import { browserEnv } from "./env/browser";
 
 /**
- * No local "is the token set" check, and that is not an oversight
- * (SCRUM-417). There used to be one here that threw at module scope, and it
+ * No local "is the token set" check, and that is not an oversight.
+ * There used to be one here that threw at module scope, and it
  * was **unreachable**: `browserEnv` declares this variable with `str({ input })`
  * and no default, so `envsafe` rejects a missing or empty value when
  * `env/browser.ts` is imported - which is the line above. The token is a

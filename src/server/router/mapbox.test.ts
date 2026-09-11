@@ -221,7 +221,7 @@ describe("geoJsonUserList — how many points each role receives", () => {
    *
    * Nothing covered this before, so the obvious tidy-up — treating every role
    * alike — would have looked like a cleanup and passed CI. It is a deliberate
-   * decision (SCRUM-346): the map ranks by distance from the reader's own
+   * decision: the map ranks by distance from the reader's own
    * stored coordinates, a VIEWER is allowed not to have any, and the address
    * they actually browse by is picked in the browser and never sent here. So
    * there is no meaningful "nearest 150" to take for them. `limitMapResults`

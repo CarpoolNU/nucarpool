@@ -190,7 +190,7 @@ export const requestsRouter = router({
     // home coordinate and their own address, which they already have; the two
     // converters exist to decide what is disclosed about *somebody else*.
     //
-    // The counterpart is the one that has to be earned, and until SCRUM-368 it
+    // The counterpart is the one that has to be earned, and it once
     // was not: both projections were unconditionally the exact-home converter,
     // so a request the caller had created themselves a moment earlier released
     // the other person's precise home coordinate and Northeastern address.
@@ -200,7 +200,7 @@ export const requestsRouter = router({
     // the rule and says why `ACCEPTED` is the line.
     //
     // Note what did *not* change: every request either party has is still
-    // returned. SCRUM-296 and SCRUM-316 both closed dead ends caused by
+    // returned. Earlier work closed dead ends caused by
     // requests disappearing from this list, so the fix narrows disclosure
     // rather than visibility.
     const sent = user.sentRequests.map((req) => {
@@ -254,12 +254,12 @@ export const requestsRouter = router({
     // request vanished from both Requests tabs while `create`'s duplicate
     // guard — which reads only `Request.status` — went on refusing every retry
     // with `CONFLICT`. Neither party could withdraw it, decline it or replace
-    // it until the other reactivated. SCRUM-369.
+    // it until the other reactivated.
     //
     // `requestUnavailableExplanation` is what the card shows on those
     // requests, and `validateRequestAcceptance` plus the status checks in
     // `groups.create`/`groups.edit` are what stop one being accepted — the
-    // same division of labour SCRUM-296 settled on for roles.
+    // same division of labour settled on for roles.
     //
     // What the null check covers now is a genuine absence: a counterpart with
     // no `CarpoolSearch` at all, who never finished onboarding. There is no
@@ -570,11 +570,11 @@ export const requestsRouter = router({
       // and the two procedures used to disagree about it. `create` refuses a
       // request between current group members with CONFLICT; `delete` checked
       // participation and nothing else, so a pair in an active carpool could
-      // destroy their entire thread, and after SCRUM-295 made this delete the
+      // destroy their entire thread, and now that this deletes the
       // conversation and its messages rather than orphaning them, destroy it
       // permanently.
       //
-      // **SCRUM-362 already fixed this in the UI, and that fix is not this
+      // **The UI already fixes this, and that fix is not this
       // one.** It answered the product question - the "Leave Conversation"
       // button was wrong, so it was removed - and `messageHeaderControls`
       // returns `{ kind: "none" }` for a pair in the same group. That guard is
@@ -587,12 +587,12 @@ export const requestsRouter = router({
       // `ACCEPTED` alone. A pair who once carpooled and have since parted must
       // still be able to clear the row: `connectAction` reads it to decide
       // whether Connect is offered, `create`'s reopen branch acts on it, and
-      // SCRUM-353 and SCRUM-354 both worked to make that state escapable.
+      // Earlier work made that state escapable.
       // Refusing on status alone would strand every one of those.
       //
       // A PENDING decline or withdrawal is untouched and does not even pay for
       // the query - which is why the read sits inside this branch. That path is
-      // the common one, it is what SCRUM-295 is about, and nothing of value is
+      // the common one, it is the point, and nothing of value is
       // lost when a request nobody accepted goes away.
       //
       // **A self-request is exempt, because the comparison degenerates for
@@ -603,7 +603,7 @@ export const requestsRouter = router({
       // carpool worth protecting: there is one person, and the "conversation"
       // is their own words to themselves.
       //
-      // Two of these exist in production (SCRUM-409), one of them ACCEPTED and
+      // Two of these exist in production, one of them ACCEPTED and
       // its owner in a group, so the row is unclearable for them today.
       // `requests.create` has refused new self-requests for some time, so this
       // branch goes dormant once `scripts/cleanup-self-requests.ts` has run -
@@ -661,7 +661,7 @@ export const requestsRouter = router({
       // row that no longer existed. 620 of them in production, holding 1,258
       // real messages between them.
       //
-      // Deleting rather than preserving, decided on SCRUM-295: the thread is
+      // Deleting rather than preserving, decided on the thread is
       // already unreachable the instant the request row goes.
       // `getConversationMessages` looks the request up first and throws
       // NOT_FOUND without it, and the unread count joins through

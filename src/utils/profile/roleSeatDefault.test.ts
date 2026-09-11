@@ -1,5 +1,5 @@
 /**
- * The seat-count-on-role-change decision (SCRUM-380).
+ * The seat-count-on-role-change decision.
  *
  * The defect this pins is not a wrong value but a wrong *occasion*: the rule
  * was correct for a role switch and ran on form population as well, so opening
@@ -66,7 +66,7 @@ describe("seatAvailOnRoleChange", () => {
 
     it("replaces an out-of-range negative rather than keeping it", () => {
       // Not reachable from the input (`min="0"`), but a stored residue can be
-      // negative - SCRUM-348 - and a driver switching role should not carry it.
+      // negative, and a driver switching role should not carry it.
       expect(seatAvailOnRoleChange(Role.RIDER, Role.DRIVER, -1)).toBe(
         DEFAULT_DRIVER_SEATS,
       );

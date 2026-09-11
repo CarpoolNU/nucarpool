@@ -77,7 +77,7 @@ export const CANDIDATE_LIMIT_LOG_PREFIX = "[candidate-limit]";
  *
  * So the worst case is about **38% of the ceiling**, and reaching it needs the
  * matchable population to grow by roughly 165%. An earlier estimate of 64% on
- * SCRUM-345 counted every ACTIVE `carpool_search` row; the query also requires
+ * an earlier count included every ACTIVE `carpool_search` row; the query also requires
  * `user.isOnboarded` and a compatible role, and 521 of staging's rows are
  * un-onboarded signups sitting at the `(0, 0)` sentinel.
  *
@@ -291,7 +291,7 @@ export const buildCandidateWhere = ({
   // This was `not: 0`, to match a scorer that tested `=== 0` — the pair agreed
   // with each other and both admitted a negative count, so the one ACTIVE
   // driver at -1 was offered to riders and then refused every one of them.
-  // See SCRUM-348 and `hasSeatAvailable`.
+  // See `hasSeatAvailable`.
   if (currentSearch.role === Role.RIDER) {
     where.seatsAvail = SEAT_AVAILABLE_FILTER;
   }

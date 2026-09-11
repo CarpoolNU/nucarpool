@@ -330,7 +330,7 @@ const Filters = ({
 
           {/* The day checkboxes exist only once a mode is chosen, which is why
               disabling the mode buttons until a day is checked - the fix
-              SCRUM-386 proposed - would have deadlocked the panel. */}
+              once proposed - would have deadlocked the panel. */}
           {dayModeChosen ? (
             <>
               <div className="mx-4 flex flex-col gap-2">
@@ -407,7 +407,7 @@ const Filters = ({
         toggleOpen={() => setStartTimeOpen(!startTimeOpen)}
       >
         <div className="mt-3">
-          {/* "Min" until SCRUM-386. `calculateScore` rejects when
+          {/* "Min" until. `calculateScore` rejects when
               `startTime > inputs.startTime * 60` — a maximum, exactly like the
               end-time control four labels below, which always said so. */}
           <label className="mb-2 block">

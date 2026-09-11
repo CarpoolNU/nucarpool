@@ -1,5 +1,5 @@
 /**
- * That rendering `EntryLabel` with a validation error logs nothing (SCRUM-425).
+ * That rendering `EntryLabel` with a validation error logs nothing.
  *
  * `StyledLabel` was `styled.label<{ error?: boolean }>`. styled-components v6
  * forwards any prop without a `$` prefix to the underlying element, so React

@@ -4,7 +4,7 @@ import {
 } from "./coopRangeNotice";
 
 /**
- * The decision behind SCRUM-407's user-facing half.
+ * The decision behind that change's user-facing half.
  *
  * The value of these is mostly in what they prove the notice does *not* fire
  * for. It is deliberately narrower than "validate the form on mount", and the

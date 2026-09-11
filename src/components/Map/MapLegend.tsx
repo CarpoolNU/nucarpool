@@ -13,7 +13,7 @@ interface MapLegendProps {
 /**
  * What the pin colours mean.
  *
- * **Desktop-only until SCRUM-414 item 3**, which left the colour encoding
+ * **Previously desktop-only**, which left the colour encoding
  * unexplained on the platform where the map is most of the screen.
  *
  * Un-gating it as-is would not have worked: the panel is anchored to the

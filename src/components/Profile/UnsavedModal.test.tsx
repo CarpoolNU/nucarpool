@@ -1,11 +1,11 @@
 /**
- * The first component test in this repository (SCRUM-377).
+ * The first component test in this repository.
  *
  * `UnsavedModal` is deliberately the subject: it is three buttons and no
  * dependencies, so anything that fails here is the jsdom project's wiring
  * rather than the component. It is also the dialog behind the profile page's
- * unsaved-changes guard, which SCRUM-381 and SCRUM-384 both change - so the
- * assertions below are the baseline those tickets edit against, not throwaway
+ * unsaved-changes guard, which later work changes - so the
+ * assertions below are the baseline that work edits against, not throwaway
  * scaffolding.
  *
  * What this proves, beyond the component: the `jsdom` project picks up a

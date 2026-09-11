@@ -1,5 +1,5 @@
 /**
- * The role field's seat coercion, against a real `useForm` (SCRUM-380).
+ * The role field's seat coercion, against a real `useForm`.
  *
  * `roleSeatDefault.test.ts` pins the decision. This pins the *wiring*, which is
  * where the bug actually lived: the rule was always right, and an effect ran it

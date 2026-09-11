@@ -106,7 +106,7 @@ describe("roleMismatchExplanation", () => {
 });
 
 /**
- * SCRUM-351: the favourites-tab wording.
+ * the favourites-tab wording.
  *
  * `favorites.me` used to hide a favourite whose role matched the reader's, was
  * VIEWER, or whose search was INACTIVE — which took away the card and with it
@@ -221,8 +221,8 @@ describe("requestUnavailableExplanation", () => {
   });
 
   /**
-   * The case this function exists for. Before SCRUM-369 a request whose
-   * counterpart had paused was dropped by `requests.me` entirely, so the cards
+   * The case this function exists for. A request whose
+   * counterpart had paused used to be dropped by `requests.me` entirely, so the cards
    * never had to describe one; they called `roleMismatchExplanation`, which
    * knows nothing about status.
    *

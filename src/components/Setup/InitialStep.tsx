@@ -32,7 +32,7 @@ const InitialStep = ({
 
   // Carries the seat coercion that used to sit in a `role` effect on the page.
   // See `roleSeatDefault.ts`: only a user-initiated switch may rewrite
-  // `seatAvail`, because populating the form is not a role change. SCRUM-380.
+  // `seatAvail`, because populating the form is not a role change.
   const roleField = registerRoleWithSeatDefault({ register, watch, setValue });
 
   return (

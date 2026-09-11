@@ -100,7 +100,7 @@ describe("deleteAllData — the guard is on the primitive, not just the caller",
   });
 
   it("ignores the removed SEED_ALLOW_REMOTE override", async () => {
-    // A stale value in a shell or a .env must not reopen the path SCRUM-410
+    // A stale value in a shell or a .env must not reopen the path the removal
     // closed.
     const { client, deletes } = recordingClient();
 
@@ -245,7 +245,7 @@ describe("checkSeedIntegrity", () => {
   });
 
   it("catches an orphan conversation", () => {
-    // The exact defect class behind production's 620 (SCRUM-295).
+    // The exact defect class behind production's 620.
     const snapshot = consistent();
     snapshot.conversations.push({ id: "ghost", requestId: "gone" });
 

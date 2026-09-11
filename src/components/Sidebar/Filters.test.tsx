@@ -5,7 +5,7 @@ import Filters from "./Filters";
 import { FiltersState } from "../../utils/types";
 
 /**
- * The Explore filter panel (SCRUM-386).
+ * The Explore filter panel.
  *
  * The defect these exist for is a **display-versus-state split**: the
  * flex-days input's `value` was

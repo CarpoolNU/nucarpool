@@ -45,7 +45,7 @@ const handleMonthChange =
  * The same thing for the profile's antd month picker, which hands back a
  * `Dayjs` rather than a change event.
  *
- * **This is the SCRUM-393 fix.** Commit 6930f6f (2025-02-23) swapped the
+ * **This is the fix for that defect.** Commit 6930f6f (2025-02-23) swapped the
  * profile's `<input type="month">` for `DatePicker picker="month"` and wrote
  * the new value straight through:
  *

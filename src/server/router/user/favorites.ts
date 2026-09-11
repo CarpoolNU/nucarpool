@@ -84,7 +84,7 @@ export const favoritesRouter = router({
     // favourite who cannot be carpooled with today is an ordinary state rather
     // than one to hide. `carpoolUnavailableExplanation` is what the card shows
     // on those entries, and `connectAction` is what refuses to open the
-    // Connect modal for them - the same division SCRUM-296 settled on for
+    // Connect modal for them - the same division settled on for
     // requests.
     //
     // The converter is unchanged and must stay `convertCarpoolSearchToPublic`:

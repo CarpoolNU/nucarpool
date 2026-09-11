@@ -1,5 +1,5 @@
 /*
- * Stands in for `mixpanel-browser` in the jsdom test project (SCRUM-417).
+ * Stands in for `mixpanel-browser` in the jsdom test project.
  *
  * `src/utils/mixpanel.ts` calls `mixpanel.init(...)` at **module scope**, so
  * importing anything that tracks an event starts an analytics session as a

@@ -6,11 +6,11 @@ import { RequestStatus } from "@prisma/client";
  * Extracted from `MessageHeader` for the same reason `connectAction` was
  * extracted from `ConnectCard`: the rule is worth pinning where a test can
  * state it as a rule. When this was written the component was not reachable
- * from a test at all; SCRUM-377 added the jsdom project, so `MessageHeader`
+ * from a test at all; the jsdom project changed that, so `MessageHeader`
  * *could* now be rendered — but a table of states reads better as a table than
  * as a dozen renders, and the extraction stays.
  *
- * Three states, and the third is the point of SCRUM-362.
+ * Three states, and the third is the point.
  */
 export type HeaderControls =
   /** A request awaiting this reader's answer: Reject, and Accept unless the roles no longer fit. */
@@ -58,7 +58,7 @@ type ControlsInput = {
  * The role-compatibility case is deliberately *not* handled here. A pending
  * request whose parties can no longer carpool still offers Reject and
  * Withdraw, because clearing it is the way out and the absence of any route to
- * that was its own dead end (SCRUM-296). Only Accept is withheld, and
+ * that was its own dead end. Only Accept is withheld, and
  * `roleMismatchExplanation` is what decides that, in the component, next to
  * the copy it prints.
  */

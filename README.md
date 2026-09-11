@@ -1,225 +1,109 @@
 # NUCarpool
 
-NUCarpool is a web app that helps Northeastern University students find carpool partners while on co-op. Students sign in with their Northeastern account, enter their commute and work schedule, and pick a role — driver, rider, or viewer. The app ranks compatible students by how well their commute and schedule overlap, shows them on a map, and lets them connect, message each other, and form carpool groups.
+A web app that helps Northeastern University students find carpool partners while on co-op. Students sign in with their Northeastern account, enter their commute and work schedule, and pick a role — driver, rider, or viewer. The app ranks compatible students by how well their commute and schedule overlap, shows them on a map, and lets them connect, message each other, and form carpool groups.
 
-## Tech Stack
+## Tech stack
 
-- **Next.js** (Pages Router), **React**, and **TypeScript**
-- **tRPC** with **Zod** and **TanStack React Query** — typesafe API between the frontend and server
-- **Prisma** ORM on **MySQL**
-- **NextAuth** — Azure AD (Northeastern SSO); Google sign-in is added only when `NEXT_PUBLIC_ENV=staging`
-- **Mapbox GL JS** — map, geocoding, and routing
-- **Pusher** — real-time messaging
-- **AWS SES** for notification email, **AWS S3** for profile pictures
-- **Mixpanel** — analytics
-- **Tailwind CSS**, with Headless UI, MUI, Ant Design and styled-components — five UI systems coexist; use whichever the file you are editing already uses
-- **Docker Compose** — local MySQL
-- **Yarn** (Classic) — package manager
+| Area      | Choice                                                                     |
+| --------- | -------------------------------------------------------------------------- |
+| Framework | Next.js (**Pages Router**), React, TypeScript                              |
+| API       | tRPC + Zod + TanStack React Query — no REST layer                          |
+| Data      | Prisma ORM on MySQL (PlanetScale in deployed environments)                 |
+| Auth      | NextAuth with Azure AD (Northeastern SSO); Google added only on staging    |
+| Map       | Mapbox GL JS — map, geocoding, routing                                     |
+| Realtime  | Pusher — messaging and unread counts                                       |
+| AWS       | SES for notification email, S3 for profile pictures                        |
+| Styling   | Tailwind, plus Headless UI, MUI, Ant Design and styled-components          |
+| Tooling   | Yarn Classic (1.x), Docker Compose for local MySQL, Jest, ESLint, Prettier |
 
-## Getting Started
+Five UI systems coexist. Use whichever the file you are editing already uses; do not add a sixth.
 
-Requires Node 22 (the version in `.nvmrc`), Yarn 1.x, and Docker.
+## Running locally
+
+Requires **Node 22** (see [`.nvmrc`](.nvmrc)), Yarn 1.x, and Docker.
 
 ```bash
 git clone git@github.com:CarpoolNU/nucarpool.git
 cd nucarpool
 yarn install
+cp .env.example .env      # then fill in real values
+yarn db:start             # local MySQL 8.0 in Docker
+yarn db:schema            # apply migrations, regenerate the Prisma client
+yarn dev                  # http://localhost:3000
 ```
 
-Create a `.env` in the repository root by copying the example file, then fill in real values:
+Ask a maintainer for development credentials. `yarn startup` runs `yarn db:start` and `yarn dev` together.
 
-```bash
-cp .env.example .env
-```
+`yarn seed` loads about 70 generated users so the map and messaging have content. **It deletes every row first** — see [Dangerous commands](#dangerous-commands).
 
-Ask a maintainer for development credentials. The app validates these at startup and will not boot if one is missing.
+## Environment variables
 
-Then start the database, set up the schema, and run the app:
+[`.env.example`](.env.example) is the authoritative list, grouped by service with notes on which are optional. Validation runs at import time in [`src/utils/env/browser.ts`](src/utils/env/browser.ts) and [`src/utils/env/server.ts`](src/utils/env/server.ts), so a missing variable stops the app from starting rather than failing later.
 
-```bash
-yarn db:start     # local MySQL 8.0 in Docker
-yarn db:schema    # prisma migrate dev && prisma generate
-yarn seed         # optional: DELETES all rows, then inserts generated users
-yarn dev
-```
-
-The app runs at <http://localhost:3000>. `yarn startup` runs `yarn db:start` and `yarn dev` together.
-
-### Upgrading an existing local database
-
-The local container tracks MySQL 8.0 to match the major version PlanetScale serves. It was previously pinned to 5.7. On first start, 8.0 attempts an in-place upgrade of a 5.7 data directory — but that upgrade only succeeds if 5.7 shut down cleanly. If the container was ever force-stopped, InnoDB refuses (`Upgrade is not supported after a crash or shutdown with innodb_fast_shutdown = 2`) and the container exits 1.
-
-Chasing a clean-shutdown upgrade is not worth it for generated development data. If you set this project up before the version change, replace the data directory once:
-
-```bash
-yarn db:stop
-mv nucarpool-db-data nucarpool-db-data.mysql57-backup   # or delete it outright
-yarn db:start                                           # 8.0 initializes a fresh data directory
-yarn db:schema                                          # apply all migrations
-yarn seed                                               # optional: regenerate sample users
-```
-
-This discards your local rows. That is safe — the directory is gitignored, holds only generated development data, and `yarn seed` recreates it. Nothing on PlanetScale is affected. Once the new container is up, `rm -rf nucarpool-db-data.mysql57-backup` to reclaim the space.
-
-On Apple Silicon the container now runs natively rather than under x86 emulation, because 8.0 publishes an arm64 image and 5.7 did not.
-
-### Seeding resets your local data
-
-`yarn seed` is **not additive**. Before inserting anything, [`prisma/seed.ts`](prisma/seed.ts) deletes every row from `request`, `message`, `conversation`, `carpool_search`, `location`, `group` and `user`, then inserts about 70 generated users with fixed ids, 10 groups, and one request per user — each request with a conversation and a short two-sided message thread, so the messaging UI has something to render.
-
-Addresses are synthesised offline and deterministically, so seeding makes **no network calls and consumes no Mapbox quota**. Set `SEED_REVERSE_GEOCODE=1` to reverse geocode against Mapbox instead; results are cached per coordinate, and any failure falls back to a synthesised address.
-
-Two commands reach that script, not one:
-
-| Command          | How it seeds                                                                                          |
-| ---------------- | ----------------------------------------------------------------------------------------------------- |
-| `yarn seed`      | Directly                                                                                              |
-| `yarn db:schema` | Only if `prisma migrate dev` resets the database — **Prisma then runs the seed script automatically** |
-
-The second is the surprising one, because it is part of normal setup. To apply migrations without seeding, run `npx prisma migrate dev --skip-seed`; appending the flag to `yarn db:schema` does not work, because yarn passes it to `prisma generate` instead.
-
-Because the script writes to whatever `DATABASE_URL` points at, [`src/utils/seedGuard.ts`](src/utils/seedGuard.ts) checks the target host before the first delete and refuses anything that is not local:
-
-```
-Refusing to seed.
-
-DATABASE_URL points at the non-local host "aws.connect.psdb.cloud".
-...
-```
-
-Allowed hosts are `localhost`, `127.0.0.1`, `::1`, `0.0.0.0`, `mysql` and `mysql-on-docker`. The guard fails closed — a missing or unparseable `DATABASE_URL` is refused rather than assumed local — and compares the hostname only, so a password containing `localhost` cannot fake a match. To extend the list, edit `LOCAL_HOSTNAMES` in that file.
-
-**There is no way to seed a non-local database.** No flag, no environment variable. `SEED_ALLOW_REMOTE=1` used to do it and was removed in SCRUM-410: nothing in the repository set it, and it permitted any host including production, where a run deletes every user, group, message, request, location and carpool search with no way for the app to undo it. If you believe you need it, the answer is a different `DATABASE_URL`.
-
-The check runs twice, on purpose. `main()` calls it first so a mistake is caught before the script spends several seconds generating addresses, and `deleteAllData()` asserts it again for itself — so a future refactor that stops going through `main()`, or an import that calls the helper directly, still cannot delete anything remote.
-
-After seeding, the script reads its own output back and fails if the generated data is inconsistent — no self-requests, no orphan conversations, messages, searches or locations, both sides of every request/conversation link present, and the expected row counts. `relationMode = "prisma"` means the database enforces none of that, so a broken fixture would otherwise look like a successful seed.
-
-## Environment Variables
-
-[`.env.example`](.env.example) is the authoritative list. It documents every variable, grouped by service, with placeholder values and notes on which are optional. Copy it to `.env` and fill in real values — never commit them, and keep placeholders only in `.env.example` itself. `.env` is gitignored.
-
-Four things that commonly trip people up:
+Four things that reliably trip people up:
 
 - **AWS keys use suffixed names** — `ACCESS_KEY_ID_AWS`, `SECRET_ACCESS_KEY_AWS`, `REGION_AWS`. The standard `AWS_*` names fail validation.
-- **`MYSQL_*` are read only by Docker Compose**, to provision the container. The app reads `DATABASE_URL`, so the user, password, port, and database name inside it must match the container's.
-- **`NEXT_PUBLIC_*` variables are inlined into the client bundle** at build time and are therefore public. Everything else is server-only.
-- **`GOOGLE_*` are required even locally.** The Google sign-in button only appears when `NEXT_PUBLIC_ENV=staging`, but the variables are validated in every environment.
-- **`NEXT_PUBLIC_ENV` must be one of `production`, `staging`, or `development`** — anything else fails validation. It selects the auth providers and is written into every S3 profile-picture key (`profile-pictures/{env}/{userId}`), so changing it orphans existing uploads. Leaving it unset locally is fine: it defaults to `development`. A production build has no such default and fails without it.
+- **`MYSQL_*` is read only by Docker Compose** to provision the container. The app reads `DATABASE_URL`, so the credentials inside it must match the container's.
+- **`GOOGLE_*` is required even locally**, though the Google button only appears when `NEXT_PUBLIC_ENV=staging`.
+- **`NEXT_PUBLIC_ENV` must be `production`, `staging` or `development`.** It selects auth providers and is written into every S3 profile-picture key (`profile-pictures/{env}/{userId}`), so changing it orphans existing uploads. Unset locally it defaults to `development`; a production build has no default and fails without it.
 
-Validation runs at import time in [`src/utils/env/browser.ts`](src/utils/env/browser.ts) and [`src/utils/env/server.ts`](src/utils/env/server.ts), which is why a missing variable stops the app from starting rather than failing later.
+`NEXT_PUBLIC_*` values are inlined into the client bundle and are therefore public. Everything else is server-only.
 
-## Useful Commands
+## Commands
 
-| Command                          | Purpose                                               |
-| -------------------------------- | ----------------------------------------------------- |
-| `yarn dev`                       | Start the development server on port 3000             |
-| `yarn startup`                   | Start the local database, then the dev server         |
-| `yarn build`                     | Production build                                      |
-| `yarn lint`                      | Run ESLint                                            |
-| `yarn tsc`                       | Type check                                            |
-| `yarn test`                      | Run Jest (unit tests, mocks only — no database)       |
-| `yarn test:db`                   | Run the integration suite against `TEST_DATABASE_URL` |
-| `yarn db:start` / `yarn db:stop` | Start / stop the local MySQL container                |
-| `yarn db:schema`                 | Apply migrations and regenerate the Prisma client     |
-| `yarn seed`                      | **Wipes** the database, then inserts generated users  |
-| `yarn check:format`              | Prettier, check only — run before pushing             |
+| Command                          | Purpose                                             |
+| -------------------------------- | --------------------------------------------------- |
+| `yarn dev`                       | Development server on port 3000                     |
+| `yarn startup`                   | Local database, then the dev server                 |
+| `yarn build`                     | Production build                                    |
+| `yarn lint`                      | ESLint (`--max-warnings=0`)                         |
+| `yarn tsc`                       | Type check                                          |
+| `yarn test`                      | Jest — mocks only, no database                      |
+| `yarn test:db`                   | Integration suite against `TEST_DATABASE_URL`       |
+| `yarn check:format`              | Prettier, check only                                |
+| `yarn check:env`                 | `.env.example` covers every required variable       |
+| `yarn check:amplify`             | `amplify.yml` carries every variable to the runtime |
+| `yarn check:routes`              | No test file compiles into a page route             |
+| `yarn db:start` / `yarn db:stop` | Start / stop the local MySQL container              |
+| `yarn db:schema`                 | Apply migrations, regenerate the Prisma client      |
+| `yarn seed`                      | **Wipes** the database, then inserts sample users   |
 
-## Formatting and line endings
+CI runs `lint`, `tsc`, `test`, `build`, `env-contract`, `schema` and `format` on every pull request. `yarn lint` and `yarn tsc` are the two worth running before you push.
 
-`yarn check:format` runs `prettier --check .` and is a CI job, so a badly formatted file fails the build. A husky pre-commit hook runs `pretty-quick --staged`, which formats what you staged — but only what you staged, so a commit made with `--no-verify` can still fail the check.
+## Dangerous commands
 
-**Line endings are normalised to LF by [`.gitattributes`](.gitattributes)**, on every platform and whatever your `core.autocrlf` is set to. This matters because Prettier's `endOfLine` default is `lf`: without normalisation, a Windows checkout with `core.autocrlf=true` gets CRLF everywhere and `yarn check:format` fails on the entire repository — while CI passes, because the GitHub runner checks out LF.
+These destroy data. Confirm `DATABASE_URL` points at your local container before running any of them.
 
-**If you cloned before `.gitattributes` was added,** apply it to your existing working tree once:
+| Command          | What it does                                                                      |
+| ---------------- | --------------------------------------------------------------------------------- |
+| `yarn seed`      | Deletes every row in the app tables, then inserts generated users                 |
+| `yarn db:schema` | May prompt to reset the local database on drift — **and Prisma then seeds it**    |
+| `yarn test:db`   | Truncates every table in the database `TEST_DATABASE_URL` names, before each test |
 
-```bash
-git add --renormalize .
-git status          # expect no changes; commit them if there are any
-```
+Two guards make these safe by default, and **neither has an override**:
 
-That rewrites nothing unless your clone actually holds CRLF. To confirm where you stand:
+- [`seedGuard.ts`](src/utils/seedGuard.ts) refuses to seed any non-local host and fails closed on a missing or unparseable `DATABASE_URL`.
+- [`testDatabaseGuard.ts`](src/utils/testDatabaseGuard.ts) refuses a non-local host, a database whose name lacks a `test` word or contains `prod`/`stag`/`live`/`main`, and a `TEST_DATABASE_URL` pointing at the same database as `DATABASE_URL`.
 
-```bash
-git ls-files --eol | grep -v 'i/lf'   # expect only binaries, shown as -text
-```
+`yarn db:schema` is the surprising one, because it is part of normal setup: if `prisma migrate dev` resets the database, Prisma runs the seed script automatically. Use `npx prisma migrate dev --skip-seed` to avoid that — appending the flag to `yarn db:schema` does not work, because yarn passes it to `prisma generate`.
 
-**The app deploys on AWS Amplify Hosting.** [`amplify.yml`](amplify.yml) at the repository root is the build specification, and a file at that path **takes precedence over the build settings in the Amplify console** — so the repository is authoritative for how the app is built and what is deployed.
+Never run `prisma db push`, `prisma migrate reset`, or anything in [`scripts/`](scripts/) against a shared database without reading the docs below first.
 
-Its build phase writes the container's environment into `.env.production` (so `envsafe` can read it) and then ends in:
+## Formatting
 
-```
-yarn run build:${BUILD_ENV}
-```
+`yarn check:format` runs `prettier --check .` and is a CI job. A husky pre-commit hook runs `pretty-quick --staged`, which only covers staged files — so a commit made with `--no-verify` can still fail the check.
 
-`BUILD_ENV` is set **per branch in the Amplify console**, which means the script that actually runs cannot be determined from the repository. It resolves to one of these three, all equivalent apart from `NODE_ENV`:
+[`.gitattributes`](.gitattributes) normalises line endings to LF on every platform, because Prettier's `endOfLine` default is `lf` and a CRLF checkout otherwise fails the check across the whole repository. If you cloned before it existed, run `git add --renormalize .` once.
 
-| Script              | Command                                              |
-| ------------------- | ---------------------------------------------------- |
-| `build:main`        | `prisma generate && next build`                      |
-| `build:development` | `NODE_ENV=development prisma generate && next build` |
-| `build:production`  | `NODE_ENV=production prisma generate && next build`  |
+## Where to look next
 
-The `&&` is load-bearing: with a single `&`, `prisma generate` is backgrounded and its exit code discarded, so the build can compile against a stale client. And because the console selects the script by variable, **a `package.json` script is part of the deploy surface** — see [the db README](src/server/db/README.md#a-packagejson-script-is-part-of-the-deploy-surface).
+| Document                                                | Covers                                                               |
+| ------------------------------------------------------- | -------------------------------------------------------------------- |
+| [Database layer](src/server/db/README.md)               | Schema conventions, the PlanetScale workflow, data-model constraints |
+| [tRPC routers](src/server/router/README.md)             | Context, auth middleware, how to write a procedure                   |
+| [Testing](docs/testing.md)                              | The two Jest projects, what the suite does and does not prove        |
+| [Deployment](docs/deployment.md)                        | Amplify, the environment contract, CSP, checking what is live        |
+| [Operational scripts](scripts/README.md)                | Backfill, check and repair scripts — read before running any of them |
+| [Development workflow](docs/AI_DEVELOPMENT_WORKFLOW.md) | The Jira-first ticket lifecycle, branch safety, the issue format     |
 
-Two things are deliberately still true and worth knowing:
-
-- **Nothing applies migration files to a shared database.** No step runs `prisma migrate deploy`; schema promotion is a PlanetScale Deploy Request. See [the db README](src/server/db/README.md#what-migrations-are-for-here-and-what-they-are-not).
-- **Server-side tRPC calls resolve their origin from `NEXTAUTH_URL`**, falling back to `http://localhost:3000`. Nothing takes that path today, because `ssr: false` is set in [`src/utils/trpc.ts`](src/utils/trpc.ts) and every page query is a client-side hook. **Enabling SSR makes it live**, so confirm `NEXTAUTH_URL` is set in every deployed environment first — see [`getBaseUrl`](src/utils/getBaseUrl.ts).
-
-### Which commit is deployed
-
-`GET /api/version` returns the build identity of whatever is running, so "has this change shipped?" is answerable without console access:
-
-```bash
-curl -s https://<host>/api/version
-{"commit":"0f1e2d3…","branch":"main","jobId":"42","environment":"production"}
-```
-
-`commit` is the SHA Amplify built, and `git branch --contains <sha>` or `git log -1 <sha>` resolves it locally. `jobId` is the build number, for finding that job in the Amplify console.
-
-**Read this before completing an expand/contract migration.** Dropping a column or deleting a backfill script is irreversible, and the precondition is always "no running code touches it any more". Two tickets — [SCRUM-287](https://carpoolnu.atlassian.net/browse/SCRUM-287) and [SCRUM-366](https://carpoolnu.atlassian.net/browse/SCRUM-366) — stalled because that could not be established: both tried to infer the deploy from row data, and zero rows turned out to be equally consistent with "not deployed" and with "deployed, and nobody has used the feature since". Check the commit instead.
-
-The route is unauthenticated, which is safe by virtue of what it returns rather than who asks: a commit SHA and branch name from a public repository, a build number, and `NEXT_PUBLIC_ENV`, which is compiled into the client bundle regardless. It exposes nothing else, and [`src/server/versionEndpoint.test.ts`](src/server/versionEndpoint.test.ts) asserts the exact key set so it cannot quietly grow a config field. It also sends `Cache-Control: no-store` — CloudFront sits in front of Amplify, and a cached answer would report the previous build across precisely the deploy boundary being checked.
-
-Outside Amplify — local `yarn dev`, and the CI build — every field reads `unknown`. The three variables come from Amplify's build container, and [`amplify.yml`](amplify.yml) copies them into `.env.production` by exact name; the comment there explains why a `AWS_` prefix match would be a mistake.
-
-## Content Security Policy
-
-The app sends security headers on every route from [`next.config.js`](next.config.js), pinned by [`next.config.test.ts`](next.config.test.ts). All of them enforce immediately except the Content Security Policy, which is deliberately still **report-only**: it has never been exercised in a browser against the map, chat and profile-picture upload, so enforcing it blind could break Mapbox's workers or a third-party origin in production.
-
-Violations post to `/api/csp-report`, which logs one line per violation prefixed `[csp-report]`. Reading them:
-
-```
-[csp-report] {"documentUri":"https://…/","blockedUri":"https://…","effectiveDirective":"connect-src", …}
-```
-
-`effectiveDirective` is the directive that would have blocked the load, and `blockedUri` is what it would have blocked — together they say which line of the policy is too narrow. `sample` appears for inline script and style violations only.
-
-**What "clean enough to enforce" means.** Not zero reports — browser extensions inject scripts and styles into any page and generate violations the app cannot fix or prevent. The bar is that every violation traceable to the app's own code is resolved, having exercised all of sign-in, the map, chat, and a profile-picture upload on a deployed environment:
-
-- No violation whose `blockedUri` is a first-party path or an origin the app deliberately calls (`*.mapbox.com`, `*.pusher.com`, `*.mixpanel.com`, the S3 bucket, Google Fonts).
-- No `worker-src` or `child-src` violation — those mean the map is broken, not merely reported.
-- Remaining violations attributable to extensions, typically with a `blockedUri` of `chrome-extension:`, `moz-extension:` or `data:`.
-
-Enforcing is then a one-line change: rename the header from `Content-Security-Policy-Report-Only` to `Content-Security-Policy`. Exactly one test fails when you do — the one that pins report-only — and updating it is part of that change.
-
-**One gap was found and closed before that exercise, by reading the code rather than waiting for a report.** `useUploadFile` PUTs the profile picture straight to a presigned S3 URL with `fetch`, so the bucket is a `connect-src` target as well as an `img-src` one — and it was listed only as an image source. Enforcing the policy as it stood would have blocked every profile-picture upload, one of the four flows the gate exists to check. `connect-src` now names the bucket, and `next.config.test.ts` pins every fetch target the same way it already pinned every image host.
-
-The same audit found nothing else: the S3 upload is the **only** `fetch` to an external origin anywhere in browser-reachable code, everything else being same-origin tRPC. Mapbox, Pusher, Mixpanel and the Google font hosts were already covered, and the Azure AD sign-in redirect is a top-level navigation, which no directive here governs. That does not replace exercising a deployed environment — inline styles, extension noise and anything loaded by a dependency at runtime only show up in a real browser — but it removes the one failure the code could predict.
-
-**Residual weakness, which enforcement does not fix.** `script-src` keeps `'unsafe-inline'` and `'unsafe-eval'`: the Pages Router inlines the `__NEXT_DATA__` hydration payload, and mapbox-gl evaluates style expressions. An enforced policy carrying both still permits an injected inline script, so this buys protection against unexpected _origins_ rather than against XSS. Closing it needs per-request nonces and middleware to generate them — tracked separately.
-
-Two caveats worth knowing before relying on the reports. The rate limit is 100 reports per minute **per server instance**, so a serverless deployment's real ceiling scales with concurrency and reports beyond it are dropped (the count of drops is logged when the window rolls over, so loss is never silent). And Safari and Firefox only implement the deprecated `report-uri`, so the newer `report-to` path is effectively Chrome and Edge; the policy sends both.
-
-## Documentation
-
-This project is developed with a Jira workflow. Read the workflow guide before your first contribution — it covers conventions this README does not. The layer docs are worth reading before you edit the layer they describe.
-
-| Document                                                            | Covers                                                                                                                                                                                                                |
-| ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Claude Code development workflow](docs/AI_DEVELOPMENT_WORKFLOW.md) | Claude Code and Atlassian MCP setup, the Jira-first ticket lifecycle, the allow/ask/deny permission model, git and branch safety, CI behavior, and troubleshooting                                                    |
-| [`CLAUDE.md`](CLAUDE.md)                                            | The instructions Claude Code loads every session: commands, safety boundaries, architecture and data-model gotchas, and git policy. Useful even if you never run Claude Code — it documents the project, not the tool |
-| [tRPC routers](src/server/router/README.md)                         | Routers, per-request context, auth middleware, and how to write a procedure — read before adding or changing an endpoint                                                                                              |
-| [Database layer](src/server/db/README.md)                           | The Prisma client, schema conventions, and the migration workflow — read before touching `prisma/schema.prisma`                                                                                                       |
-| [Operational scripts](scripts/README.md)                            | The one-off backfill, check and measurement scripts, which of them write, and the record of what has been run in which environment — read before running anything in `scripts/`                                       |
+[`CLAUDE.md`](CLAUDE.md) holds the instructions Claude Code loads each session. It is agent configuration rather than project documentation; the docs above are the developer-facing versions.

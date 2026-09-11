@@ -51,7 +51,7 @@ type SearchRow = {
   role: Role;
   /**
    * Optional, and absent from most fixtures on purpose: a row that never sets
-   * it must behave exactly as an ACTIVE one, so the SCRUM-369 guards cannot
+   * it must behave exactly as an ACTIVE one, so the status guards cannot
    * quietly start refusing the hundred cases in this file that say nothing
    * about status.
    */
@@ -227,8 +227,8 @@ const buildGroupsDb = (opts?: {
   const request = {
     // Returns the direction and the live status, not just a hit.
     // `requireAcceptableRequest` reads `toUserId` to decide whether the caller
-    // is the person the request was addressed to (SCRUM-347) and `status` to
-    // decide whether the invitation is still unused (SCRUM-353). A mock that
+    // is the person the request was addressed to and `status` to
+    // decide whether the invitation is still unused. A mock that
     // answered with a bare id could not tell a legitimate accept from either a
     // self-accept or a replay of a spent request.
     //
@@ -717,8 +717,8 @@ describe("user.groups.create — only the two people involved", () => {
    * `invitation` is `[asker, asked]`. It defaults to the rider asking the
    * driver, because `requireAcceptableRequest` only lets the person a request
    * was *sent to* accept it — so which way the request points decides which of
-   * the two may create the group. Before SCRUM-347 the direction was
-   * irrelevant and every test here seeded the same one.
+   * the two may create the group. The direction used to be
+   * irrelevant, and every test here seeded the same one.
    */
   const freshPair = (invitation: RequestPair = [RIDER_1, DRIVER]) =>
     buildGroupsDb({
@@ -879,7 +879,7 @@ describe("accepting a request resolves it", () => {
     //
     // This case used to be written with the *sender* accepting — an OUTSIDER
     // who had asked the driver, calling `edit` themselves — and asserted that
-    // it succeeded. That was SCRUM-347: it pinned the self-accept as correct
+    // it succeeded. That was it pinned the self-accept as correct
     // behaviour, which is how the hole survived three rounds of group
     // authorization hardening. The refusal is now pinned below.
     const db = buildGroupsDb({ requests: [[DRIVER, OUTSIDER]] });
@@ -950,7 +950,7 @@ describe("accepting a request resolves it", () => {
 });
 
 /**
- * SCRUM-347: you cannot accept a request you sent yourself.
+ * you cannot accept a request you sent yourself.
  *
  * `requireAcceptableRequest` — `requireRequestBetween` as it was then — checked
  * only that *some* request existed between the pair, in either direction, with
@@ -1091,9 +1091,9 @@ describe("user.groups — only the person a request was sent to may accept it", 
 });
 
 /**
- * SCRUM-353: an invitation is spent once it is used.
+ * an invitation is spent once it is used.
  *
- * SCRUM-347 settled *who* may accept a request. This is *how long* the
+ * Who may accept a request is settled elsewhere. This is *how long* the
  * acceptance stays valid. `markRequestAccepted` resolves the row rather than
  * deleting it — deliberately, because `sendAcceptanceNotification` reads it and
  * the conversation hangs off its id — so an ACCEPTED request outlives the group
@@ -1595,7 +1595,7 @@ describe("seat accounting — normal joins and leaves", () => {
     await edit(OUTSIDER, true);
     await edit(OUTSIDER, false);
 
-    // Rejoining needs a fresh invitation now (SCRUM-353) — the one they used
+    // Rejoining needs a fresh invitation now — the one they used
     // on the way in is spent. This is what `requests.create`'s reopen branch
     // writes, and including it keeps the sequence a realistic one rather than
     // one the product would refuse.
@@ -2497,13 +2497,13 @@ describe("user.groups.create — legal states only", () => {
  *
  * The button is disabled while the first call is running, which cannot be
  * asserted here - this is a `.test.ts` in the `node` project, with no DOM. A
- * `.test.tsx` could assert it since SCRUM-377, and none does. What *can* be
+ * `.test.tsx` could assert it, and none does. What *can* be
  * asserted here, and is the half that matters if a click still slips through, is that
  * the second call is now a clean rejection: no second group, no second seat, no
  * membership moved. These replay the exact sequence rather than setting the
  * states up directly.
  *
- * **Which guard refuses moved in SCRUM-353, and the code with it.** The first
+ * **Which guard refuses has moved, and the code with it.** The first
  * accept resolves the request to ACCEPTED, so the second call is now stopped by
  * `requireAcceptableRequest` — the invitation is spent — before it ever reaches
  * the membership checks that used to answer CONFLICT. The state asserted below
@@ -2824,10 +2824,10 @@ describe("the rider slot holds a rider", () => {
 });
 
 /**
- * SCRUM-348: the two halves of one inconsistency, asserted together.
+ * the two halves of one inconsistency, asserted together.
  *
  * A driver at `seats_avail = -1` was a live, ACTIVE row in production-derived
- * data — the residue of the accounting SCRUM-229 fixed without repairing what
+ * data — the residue of accounting that was fixed without repairing what
  * it had already written. The write path refused it and the read path
  * advertised it, so the row was recommended to riders and then rejected every
  * one of them with a message naming the driver as having no space.
@@ -2959,7 +2959,7 @@ describe("a driver at a negative seat count", () => {
  * A paused search stops a group being built, on both slots.
  *
  * The status half of the two role checks above, and it arrived the same way.
- * SCRUM-369 stopped `user.requests.me` hiding a request whose counterpart had
+ * `user.requests.me` no longer hides a request whose counterpart has
  * paused their search — the dead end being that the request was invisible in
  * both Requests tabs while `requests.create`'s duplicate guard went on refusing
  * every retry with CONFLICT, so neither party could withdraw it — which put an

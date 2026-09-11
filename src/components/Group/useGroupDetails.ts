@@ -50,7 +50,7 @@ export const useGroupDetails = ({ stored, canEdit }: UseGroupDetailsArgs) => {
    * real answer - loaded, nothing there - and does reset it. Collapsing the two
    * into `if (stored)` would leave a stale form after the row went away.
    *
-   * The `detailsEqual` bail-out is SCRUM-389, and it is not an optimisation.
+   * The `detailsEqual` bail-out is not an optimisation.
    * `resolveGroupDetails` returns a new object every call, so a plain
    * `setDetails(next)` is always a state change and always a render. That is
    * harmless while `stored` keeps its identity - which is why this went

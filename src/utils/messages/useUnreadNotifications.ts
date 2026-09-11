@@ -8,7 +8,7 @@ import { acquirePusherClient, releasePusherClient } from "../pusherClient";
  *
  * This subscription lived inside `Header`, and what it did on an incoming
  * `sendNotification` was increment a local counter that the badge then
- * displayed *instead of* the server's count (SCRUM-383). It now invalidates
+ * displayed *instead of* the server's count. It now invalidates
  * `getUnreadMessageCount`, which is the mechanism
  * [`MessageContent`](../../components/Messages/MessageContent.tsx) already uses
  * after marking a thread read — so both directions go through one path and the

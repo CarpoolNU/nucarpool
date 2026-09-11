@@ -7,7 +7,7 @@ import { messageHeaderControls } from "./messageHeaderControls";
  * `MessageHeader` renders these, and the rule was extracted here so it could
  * be stated as a table — the way `connectAction` was extracted from
  * `ConnectCard`. When that happened the component was not reachable from a
- * test at all; since SCRUM-377 it is, and still has no suite of its own.
+ * test at all; it is, and still has no suite of its own.
  *
  * The case this exists for is the last block: a pair already carpooling
  * together get **no** control. That slot used to hold a "Leave Conversation"
@@ -41,7 +41,7 @@ describe("messageHeaderControls", () => {
   });
 
   it("prefers responding when both directions are somehow pending", () => {
-    // The duplicate-request state SCRUM-349 closed. Answering the request sent
+    // The duplicate-request state now closed. Answering the request sent
     // *to* you is the more useful of the two, and the header must pick one:
     // the two blocks used to be guarded by `!hasIncomingRequest` in the JSX,
     // and now the type makes it impossible to render both.
@@ -70,7 +70,7 @@ describe("messageHeaderControls", () => {
   });
 
   /**
-   * SCRUM-362. Every shape of "these two are carpooling together" resolves to
+   * Every shape of "these two are carpooling together" resolves to
    * a header with nothing in it that writes.
    */
   describe("a pair already in the same group", () => {

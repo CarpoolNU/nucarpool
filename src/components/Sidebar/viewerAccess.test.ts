@@ -12,7 +12,7 @@ import {
  *
  * The sidebar itself has no suite, so this is the only place the gate is
  * checked. It is a predicate rather than inline JSX for exactly that reason —
- * which before SCRUM-377 was the only way to check it at all.
+ * which was once the only way to check it at all.
  */
 
 const ALL_SUB_TYPES: SidebarSubType[] = [
@@ -94,7 +94,7 @@ describe("the predicates together", () => {
   });
 
   it("leaves favorites as the only non-request tab a VIEWER can see", () => {
-    // Worth pinning because it is the fact that decided SCRUM-323. Viewer mode
+    // Worth pinning because it is the fact that decided. Viewer mode
     // used to print a counterpart's role in place of their name on "discovery"
     // cards, and this is the whole of the surface that reached: recommendations
     // are replaced by copy, requests are relationships, so the rule only ever

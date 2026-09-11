@@ -255,7 +255,7 @@ describe("handleAcceptRequest — a refused acceptance", () => {
   });
 
   it("refuses a driver whose seat count went negative", async () => {
-    // SCRUM-348: `=== 0` let this through to `groups.edit`, which refused it
+    // `=== 0` let this through to `groups.edit`, which refused it
     // with the same sentence from the server. Refusing here means the driver
     // is told before the email and the conversation close are attempted.
     const { handleAcceptRequest } = handlers();
@@ -274,7 +274,7 @@ describe("handleAcceptRequest — a refused acceptance", () => {
   });
 
   it("tells a full driver the request is still theirs to accept later", async () => {
-    // SCRUM-361. New requests to a full driver are refused at the card now,
+    // New requests to a full driver are refused at the card now,
     // but a request already sent can only be explained — so this copy is the
     // whole of the fix for that population, and worth pinning.
     const { handleAcceptRequest } = handlers();
@@ -454,7 +454,7 @@ describe("handleAcceptRequest — the writes a real acceptance makes", () => {
 
 describe("handleRejectRequest", () => {
   /**
-   * SCRUM-362. Reject and Withdraw Request are two buttons on one handler, and
+   * Reject and Withdraw Request are two buttons on one handler, and
    * they used to share one sentence — so withdrawing your own request reported
    * that the *other* person's request to *you* had been deleted. Wrong person,
    * wrong direction, and a claim they had asked you when you had asked them.
@@ -609,7 +609,7 @@ describe("handleAcceptRequest - a pair who can no longer carpool", () => {
     expect(message).toContain("both drivers");
     // The seat refusal must not be what they hear: it is the role that is
     // wrong, and no seat count would fix it. Pinned against the current
-    // wording rather than the wording SCRUM-361 replaced, which would have
+    // wording rather than the wording it replaced, which would have
     // made this assertion vacuous.
     expect(message).not.toContain("no seats free");
   });

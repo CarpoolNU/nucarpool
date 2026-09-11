@@ -310,7 +310,7 @@ describe("buildCandidateWhere — role compatibility", () => {
     expect(result.role).toEqual({ in: [Role.DRIVER] });
     // The shared constant rather than a literal: `reserveSeat` decrements
     // under this same object, and spelling it out here is what let the two
-    // drift apart until SCRUM-348.
+    // drift apart until.
     expect(result.seatsAvail).toBe(SEAT_AVAILABLE_FILTER);
   });
 
@@ -388,8 +388,8 @@ describe("buildCandidateWhere — group, favorites, bounds", () => {
   });
 
   it("keeps discovery's role and status narrowing under the favorites filter", () => {
-    // SCRUM-351 asked whether the explore map's favorites filter should agree
-    // with the favorites *list* about who is included. It should not, and this
+    // Whether the explore map's favorites filter should agree
+    // with the favorites *list* about who is included was asked. It should not, and this
     // pins that.
     //
     // `favorites.me` stopped filtering by role and status, because hiding an
@@ -571,7 +571,7 @@ describe("candidateLimitWarning", () => {
    * mattered: `take` drops rows in cuid order, so the ones lost at the
    * boundary are arbitrary rather than the worst matches, and a user would
    * simply stop seeing matches that exist. These pin the signal that replaces
-   * the silence (SCRUM-345).
+   * the silence.
    */
   const args = { role: Role.RIDER, sort: "distance" };
 

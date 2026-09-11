@@ -1,7 +1,7 @@
 /**
  * The group route's pickup and dropoff ordering.
  *
- * Extracted from `pages/index.tsx` by SCRUM-391 so that it could be tested at
+ * Extracted from `pages/index.tsx` so that it could be tested at
  * all; the behaviour is unchanged. The constraint is what matters here — a
  * plain nearest neighbour over all four corners would happily drop a rider off
  * before collecting them, and nothing downstream would notice: Mapbox draws

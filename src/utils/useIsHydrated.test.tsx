@@ -1,5 +1,5 @@
 /**
- * Which renders `useIsHydrated` reports `false` for (SCRUM-423).
+ * Which renders `useIsHydrated` reports `false` for.
  *
  * The hook's value is only interesting *during* a render, so every test here
  * records it from inside a render function rather than reading a settled

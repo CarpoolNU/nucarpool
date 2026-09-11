@@ -221,7 +221,7 @@ describe("runViewRouteClick", () => {
   });
 
   /**
-   * SCRUM-379. Every case in here returned before `viewRoute` was reached.
+   * Every case in here returned before `viewRoute` was reached.
    *
    * `geoJsonUserList` excludes everyone you have a request with whenever the
    * `messaged` filter is false, which is the default, so this is the ordinary
@@ -319,7 +319,7 @@ describe("runViewRouteClick", () => {
   });
 
   /**
-   * What SCRUM-391 changed. This block used to drive the remembered-pin ref
+   * This block used to drive the remembered-pin ref
    * through its cases - a different user clicked, the same user re-clicked, the
    * remembered user appearing on the map - because removal was keyed by
    * identity and each case named a different pin.

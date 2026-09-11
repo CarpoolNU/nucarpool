@@ -10,8 +10,8 @@ import type { TransactionClient } from "./client";
  *
  * Two procedures need it and both got it wrong before sharing it:
  * `messages.sendMessage` discarded a first message on a request with no
- * conversation, and `requests.create`'s reopen branch did the same thing on
- * SCRUM-350. The repair is two statements in a fixed order against a link
+ * conversation, and `requests.create`'s reopen branch did the same thing on.
+ * The repair is two statements in a fixed order against a link
  * stored in two places, so it is worth pinning on its own rather than only
  * through the routers.
  *
@@ -136,7 +136,7 @@ describe("findOrCreateConversation — no conversation yet", () => {
  * and either copy is enough to make a conversation readable. `requests.me` and
  * the unread count reach one through `Request.conversationId`, so a row whose
  * own `requestId` is dead can still be rendered. These cases pin that the
- * second link is honoured, which is what SCRUM-364 closed.
+ * second link is honoured, which is what was closed.
  */
 describe("findOrphanConversationIds", () => {
   const conversation = (id: string, requestId: string) => ({ id, requestId });

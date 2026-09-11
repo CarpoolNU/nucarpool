@@ -1,5 +1,5 @@
 /**
- * The unsaved-changes rule (SCRUM-381).
+ * The unsaved-changes rule.
  *
  * Two of its fourteen comparisons used `getDate()` — the day of the month — on
  * the co-op dates. The profile's month controls are antd `DatePicker`s storing
@@ -9,7 +9,7 @@
  * with no modal and the edit was gone.
  *
  * The dates below are shaped like the real ones rather than like the ticket's:
- * SCRUM-381 assumed `lastDayOfMonthUTC` wrote these fields and predicted that
+ * the ticket assumed `lastDayOfMonthUTC` wrote these fields and predicted that
  * only months sharing a last day would collide. It writes the map *filters*,
  * not the profile, so the defect was total rather than partial. `coopMonth`
  * models what actually reaches the form.
@@ -94,7 +94,7 @@ describe("profileChanges", () => {
     /**
      * The regression. Every one of these compared equal under `getDate()`,
      * because both sides are the first of a month. The first three are the
-     * pairs SCRUM-381 named; February is included precisely because the ticket
+     * pairs the ticket named; February is included precisely because it
      * expected it to be *detected* and it was not.
      */
     const COLLIDING = [
@@ -301,7 +301,7 @@ describe("profileChanges", () => {
     });
 
     it("ignores stored working days beyond the form's array length", () => {
-      // Documented, not fixed - SCRUM-381 asked for this to be confirmed and
+      // Documented, not fixed - this was confirmed and
       // recorded. The form always produces seven booleans, so an eighth stored
       // day is unreachable; widening the comparison would change what the
       // modal does for input the form cannot make.

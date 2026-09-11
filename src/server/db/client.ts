@@ -29,7 +29,7 @@ export type PrismaOrTransaction = PrismaClient | TransactionClient;
  * with nothing able to intervene; meanwhile `[trpc].ts` was carefully redacting
  * the other route out of the same request. `emit: "event"` puts both under one
  * policy. See `prismaLog.ts` for what that route was measured to disclose —
- * notably *not* argument values, contrary to how SCRUM-399 was filed.
+ * notably *not* argument values, contrary to the common assumption.
  *
  * **An event level with no listener is silently dropped**, so the handlers
  * below are attached here, next to the construction, rather than by whoever

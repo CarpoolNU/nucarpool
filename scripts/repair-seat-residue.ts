@@ -1,5 +1,5 @@
 /**
- * Repair the two data defects SCRUM-229 and SCRUM-291 left behind: seat counts
+ * Repair the two data defects earlier bugs left behind: seat counts
  * outside `[0, MAX_SEATS_AVAILABLE]`, and `CarpoolGroup` rows with no members.
  *
  * Both code paths were fixed and neither fix was retroactive. `reserveSeat` is

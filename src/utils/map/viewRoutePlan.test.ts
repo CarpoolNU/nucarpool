@@ -158,7 +158,7 @@ describe("planViewRoute", () => {
 
     it("is added in request context even for a user on the map", () => {
       // Deliberately asymmetric - this is what the working path did before
-      // SCRUM-379, and MessagePanel's Map tab is the regression to protect.
+      // the extraction, and MessagePanel's Map tab is the regression to protect.
       expect(
         plan({ isClickedUserOnMap: true, selectedUserId: CLICKED })
           .addsDestinationMarker,
@@ -167,7 +167,7 @@ describe("planViewRoute", () => {
   });
 
   /**
-   * The `removesDestinationMarkerFor` block was here until SCRUM-391 removed
+   * The `removesDestinationMarkerFor` block was here until it removed
    * the field, along with the remembered-pin bookkeeping it drove.
    *
    * Nothing replaces it *in this file*, because the plan no longer decides

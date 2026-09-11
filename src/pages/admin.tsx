@@ -50,7 +50,7 @@ const Admin: NextPage<AdminProps> = ({ userPermission }) => {
   const [option, setOption] = useState<string>("management");
 
   /*
-   * Keeps `Header` out of this page's server HTML (SCRUM-423).
+   * Keeps `Header` out of this page's server HTML.
    *
    * `Header` branches on `useIsMobile`, and the server cannot know the device
    * - so it emits the desktop branch, and React reads the same server

@@ -1,5 +1,5 @@
 /**
- * The pin sweep (SCRUM-391).
+ * The pin sweep.
  *
  * **Removing too much is the likelier failure**, and the harder one to notice:
  * a leftover pin is visible, whereas a swept-away cluster layer looks like an
@@ -95,7 +95,7 @@ describe("clearOtherUserMarkers", () => {
     });
 
     it("takes the icon and its label together", () => {
-      // The specific asymmetry SCRUM-391 exists to remove: `clearMarkers` swept
+      // The specific asymmetry this removes: `clearMarkers` swept
       // `-text-layer` and left the icon, so a pin lost its name and stayed.
       const { map, layers } = buildMap({
         layers: [

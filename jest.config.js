@@ -1,51 +1,24 @@
 /*
- * For a detailed explanation regarding each configuration property, visit:
- * https://jestjs.io/docs/configuration
+ * Jest runs two projects, split by file extension:
  *
- * ---------------------------------------------------------------------------
- * `yarn test` runs two projects, split by file extension:
+ *   node   - `*.test.ts`   pure logic, the tRPC routers, the ops scripts
+ *   jsdom  - `*.test.tsx`  anything that renders or runs a hook
  *
- *   node   - `*.test.ts`   every existing suite: pure logic, the tRPC routers,
- *                          the ops scripts. No DOM, and none needed.
- *   jsdom  - `*.test.tsx`  components and hooks (SCRUM-377). Anything that
- *                          renders or runs an effect.
+ * The extension is the whole selector, so a file cannot land in the wrong
+ * project without also being the wrong kind of file. Two projects rather than
+ * jsdom everywhere: a jsdom environment is built per suite, and top-level jsdom
+ * would also hide bugs, since server code accidentally reading `window` would
+ * pass here and fail in production.
  *
- * Two projects rather than switching the whole suite to jsdom. The node
- * project runs 1684 tests in about 3.4 seconds; a jsdom environment is
- * constructed per suite and would slow all 67 of them down for no benefit,
- * since not one of them touches a DOM. The extension is the whole selector -
- * there is no directory to remember and no list to keep in sync, and a file
- * cannot end up in the wrong project without also being the wrong kind of
- * file.
+ * **The `testMatch` patterns below are exactly Jest's own default pair split
+ * down the `?(x)`.** That equality is deliberate and worth preserving on any
+ * edit: the dangerous failure mode of this file is not a failing test but a
+ * *missing* one, and a hand-written pattern narrower than the default drops
+ * suites silently. `foo.spec.ts` and the bare `test.ts` form are collected for
+ * that reason alone.
  *
- * Why this arrangement, and not the obvious ones:
- *
- *   - `testEnvironment: "jsdom"` at the top level. Slower for every suite, and
- *     it also hides real bugs: server code that accidentally reads `window`
- *     would pass here and fail in production.
- *   - A `@jest-environment jsdom` docblock per component test. Works, but the
- *     enforcement is a comment - forget it and the suite fails with
- *     `document is not defined`, which reads like a broken test rather than a
- *     missing pragma.
- *   - `testEnvironmentOptions` / a custom environment. Nothing here needs one.
- *
- * The `testMatch` patterns below are, together, exactly Jest's own default
- * pair split down the `?(x)` - `**\/__tests__\/**\/*.[jt]s?(x)` and
- * `**\/?(*.)+(spec|test).[tj]s?(x)` - with the `x` forms routed to jsdom and
- * the rest to node. That equality is the point and is worth preserving on any
- * edit: SCRUM-324 established that the dangerous failure mode of this file is
- * not a failing test but a *missing* one, and a hand-written pattern narrower
- * than the default drops suites silently. `foo.spec.ts` and the bare `test.ts`
- * form are collected here for that reason alone; the repository writes neither
- * today.
- *
- * `src/pages/` remains off limits to test files of *either* extension, and for
- * `.tsx` the risk is if anything higher - `pageExtensions` lists `tsx` first,
- * so `index.test.tsx` beside a page is the route `/index.test`.
- * `scripts/check-page-routes.js` matches on `(^|\.)(test|spec)\.` and covers
- * both. A component test for a page imports it from outside the directory;
- * `src/server/pusherAuthEndpoint.test.ts` is the pattern.
- * ---------------------------------------------------------------------------
+ * `src/pages/` is off limits to test files of either extension, because a
+ * filename there is also a route. See `docs/testing.md`.
  */
 
 /*
@@ -89,7 +62,7 @@ module.exports = {
       // Static image imports resolve to a stub instead of being handed to
       // `ts-jest`, which cannot parse a PNG and throws at *load* time - taking
       // the whole suite out of the run rather than failing it. See
-      // `src/testing/staticImageStub.js`; SCRUM-414 hit this on the first
+      // `src/testing/staticImageStub.js`. This first surfaced in the first
       // component test to reach `UserCard`.
       //
       // Scoped to this project deliberately. Only components import images, so
@@ -106,7 +79,7 @@ module.exports = {
       //
       // The third-party module is stubbed rather than our own wrapper so that
       // `utils/mixpanel` loads for real and its exports cannot drift from a
-      // hand-maintained fake (SCRUM-417).
+      // hand-maintained fake.
       moduleNameMapper: {
         "\\.(png|jpe?g|gif|webp|avif|svg|ico)$":
           "<rootDir>/src/testing/staticImageStub.js",

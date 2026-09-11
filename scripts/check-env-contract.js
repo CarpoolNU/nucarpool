@@ -17,7 +17,7 @@
  *   2. `--github-env` emits throwaway placeholder values for CI, so the build
  *      job can satisfy envsafe without any real credentials.
  *   3. `--amplify` verifies amplify.yml carries every required variable into
- *      the deployed runtime environment (SCRUM-385).
+ *      the deployed runtime environment.
  *
  * Keeping all three here is deliberate: the CI build placeholders, the
  * documentation check and the deploy-spec check read the same derived list, so
@@ -73,7 +73,7 @@ const ENV_PRODUCTION_FILE = ".env.production";
  * app has, because `src/utils/env/browser.ts` writes them literally. It would
  * stop being true for one read through a computed key - and an exemption whose
  * correctness depends on how a module happens to be written is exactly the
- * kind of implicit reasoning SCRUM-385 was filed about. A grep pattern costs
+ * kind of implicit reasoning this check exists to prevent. A grep pattern costs
  * one line and needs no argument.
  *
  * The mechanism stays for the case that genuinely needs it. An exemption here
@@ -145,8 +145,8 @@ function fail(message) {
  *
  * Returns null when no enclosing pair can be found. The caller treats that as
  * a hard failure rather than guessing a classification: guessing "required"
- * for a defaulted variable is exactly the bug this function exists to fix
- * (SCRUM-397), and guessing "optional" for a mandatory one would drop a
+ * for a defaulted variable is exactly the bug this function exists to fix,
+ * and guessing "optional" for a mandatory one would drop a
  * genuine deploy check.
  *
  * @param {string} src
@@ -220,7 +220,7 @@ function isOptional(options) {
  * a deployment that never sets it still works. That distinction used to be
  * invisible here - every `process.env.X` was reported as "required" - and
  * `--amplify` then demanded a strict grep pattern for a variable nobody had
- * set, which failed the production build (SCRUM-397/SCRUM-398).
+ * set, which failed the production build.
  *
  * @returns {Map<string, {module: string, optional: boolean}>}
  */
@@ -265,7 +265,7 @@ function contractVars() {
             `process.env.${name} in ${rel}, so it cannot be told whether the ` +
             `variable has a default. Refusing to guess: a defaulted variable ` +
             `reported as required is what broke the production build in ` +
-            `SCRUM-397. Either restore the ` +
+            `the past. Either restore the ` +
             `\`NAME: validator({ input: process.env.NAME, ... })\` shape or ` +
             `teach envsafeOptionsAt() the new one.`,
         );
@@ -408,7 +408,7 @@ function parseGrepPatterns(command) {
  * `grep` exits 1 when no line matches, and Amplify fails a build on any
  * non-zero exit, so a bare `env | grep -e X >> file` **stops the deploy** when
  * no variable matches `X`. A trailing `|| true` makes the absence a no-op
- * instead. That difference is the whole of SCRUM-397, so it is read here and
+ * instead. That difference is the whole point, so it is read here and
  * checked rather than left to whoever edits the spec next.
  *
  * Only the two idioms that plainly mean "ignore the failure" are recognised.
@@ -591,7 +591,7 @@ function amplifyCoverage(names, patterns, exemptions = AMPLIFY_EXEMPT) {
  *    thing amplify.yml's header asks the reader not to do.
  *  - Covers **only optional** variables -> must be tolerant. They may
  *    legitimately be absent, and a strict command turns that into a failed
- *    deploy. This is the rule that would have caught SCRUM-397.
+ *    deploy. This is the rule that would have caught the `S3_` outage.
  *  - Covers **nothing in the contract** -> unconstrained. `NEXTAUTH_URL` is
  *    the standing case: NextAuth reads it directly rather than through
  *    envsafe, so it is absent from the derived list, and its strict grep is
@@ -630,7 +630,7 @@ function strictnessIssues(entries, required, optional) {
         `amplify.yml:${entry.line} pattern(s) ${shown} cover only optional ` +
           `variable(s) ${optionalHit.join(", ")}, which a deployment need ` +
           `never set. grep then exits 1, and Amplify fails the build - this ` +
-          `is the SCRUM-397 outage. Append \`|| true\` to the command.`,
+          `is the outage this rule exists to prevent. Append \`|| true\` to the command.`,
       );
     }
   }
@@ -730,7 +730,7 @@ function checkAmplifySpec(contract, verbose) {
       const entry = contract.get(name);
       // An optional variable still has to be covered. If a deployment does set
       // one and no pattern carries it, the build resolves the console value
-      // and the runtime falls back to the code default - the SCRUM-385 split.
+      // and the runtime falls back to the code default - the two-contract split.
       const label = entry.optional
         ? ", optional: covered so a console override cannot be lost"
         : "";
@@ -743,7 +743,7 @@ function checkAmplifySpec(contract, verbose) {
         `  - add a grep pattern to amplify.yml covering it, or\n` +
         `  - add it to AMPLIFY_EXEMPT in this script with the reason it does ` +
         `not need to be there.\n` +
-        `Leaving it out silently is what SCRUM-385 was filed for: a variable ` +
+        `Leaving it out silently is the failure this check exists for: a variable ` +
         `with a code default resolves one way at build time and another at ` +
         `runtime, and nothing errors.`,
     );
@@ -811,7 +811,7 @@ function main() {
   // the defaults already have direct coverage in
   // `src/utils/env/s3Config.test.ts`, which asserts both the fallback and the
   // override. Changing the whole suite's environment to duplicate that is a
-  // bad trade (SCRUM-398).
+  // bad trade.
   if (args.includes("--github-env")) {
     for (const name of names) {
       const value = Object.prototype.hasOwnProperty.call(

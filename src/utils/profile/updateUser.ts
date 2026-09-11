@@ -45,8 +45,7 @@ export const updateUser = async ({
     daysWorking: daysWorkingParsed,
     // `?.toISOString()` here collapsed a cleared time into `undefined`, which
     // the server then read as "leave it alone" - so clearing a schedule never
-    // left the browser. `toScheduleTimeInput` keeps `null` distinct
-    // (SCRUM-387).
+    // left the browser. `toScheduleTimeInput` keeps `null` distinct.
     startTime: toScheduleTimeInput(userInfo.startTime),
     endTime: toScheduleTimeInput(userInfo.endTime),
     bio: userInfo.bio,

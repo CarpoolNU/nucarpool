@@ -1,9 +1,9 @@
 /**
- * Which build is running (SCRUM-405).
+ * Which build is running.
  *
  * The deployed app published no build identifier, so "has Amplify shipped the
  * commit containing change X?" had no answer short of asking someone with
- * console access. That is not a cosmetic gap: SCRUM-287 and SCRUM-366 both
+ * console access. That is not a cosmetic gap: two expand/contract tickets both
  * carry "the new code is deployed" as a blocking precondition on an
  * irreversible database change, and both stalled on it. The workaround
  * attempted in each was to infer the deploy from row data, and it failed the

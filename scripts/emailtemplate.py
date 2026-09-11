@@ -40,8 +40,7 @@ region_name=aws_region
 # republished keeps working, but no template here should use them any more.
 #
 # **Running this script mutates AWS.** The app deploy that emits the suffixed
-# variables must land first, and the run belongs in `README.md`'s record. See
-# SCRUM-360.
+# variables must land first, and the run belongs in `scripts/README.md`.
 templates = [
     {
         "TemplateName": "DriverRequestTemplate",

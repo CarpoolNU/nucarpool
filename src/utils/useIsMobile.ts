@@ -39,56 +39,35 @@ const getSnapshot = () => isMobileWidth(window.innerWidth);
 const getServerSnapshot = () => false;
 
 /**
- * The single source of "is this a mobile viewport". `Header` used to run its
- * own `<= 768` check, which disagreed with this one and produced a desktop
- * layout wearing the mobile navigation between the two values.
+ * The single source of "is this a mobile viewport".
  *
- * ---
+ * `Header` used to run its own `<= 768` check that disagreed with this one,
+ * producing a desktop layout wearing the mobile navigation between the two
+ * values. One definition, in `utils/breakpoints.js`.
  *
- * **Why `useSyncExternalStore` and not `useState` plus an effect** (SCRUM-420).
+ * **Why `useSyncExternalStore` and not `useState` plus an effect.** An effect
+ * runs *after* the render that scheduled it, so a `useState(false)` hook renders
+ * the desktop branch once on a phone and throws it away — and for `Header` that
+ * was not free, because the desktop branch mounts `DropDownMenu`, which fires an
+ * authenticated presigned-URL request for an avatar no mobile visitor sees.
+ * Reading `window.innerWidth` in a `useState` initialiser is the obvious fix and
+ * the wrong one: the server cannot produce that value, so it trades the wasted
+ * render for a hydration mismatch. This shape does not have to choose —
+ * `getServerSnapshot` keeps the server and hydration agreeing, `getSnapshot`
+ * makes any other first render correct.
  *
- * This hook used to be `useState(false)` corrected by a mount effect. An
- * effect runs *after* the render that scheduled it, so the first render pass
- * was unconditionally the desktop branch - on a phone, every consumer rendered
- * its desktop side once and threw it away. For `Header` that was not free: the
- * desktop branch mounts `DropDownMenu`, which calls `useProfileImage`, which
- * fires an authenticated presigned-URL request for an avatar that a mobile
- * visitor never sees.
+ * **What that does not buy.** React uses `getServerSnapshot` during *hydration*
+ * as well as on the server, so a component already in the server HTML still
+ * renders its desktop branch once before correcting. Probed under `hydrateRoot`
+ * at a mobile width the sequence is `[false, true]`; a fresh client mount is
+ * `[true]`. So this fixes any subtree that mounts after hydration and does not
+ * fix one that hydrates. `trpc` is configured `ssr: false`, so `/` and
+ * `/profile` return a spinner until `user.me` resolves and their `Header`
+ * mounts fresh; `/sign-in` never renders `DropDownMenu`. `/admin` was the
+ * exception and is now handled with `useIsHydrated` — see that module.
  *
- * Reading `window.innerWidth` in a `useState` initialiser is the obvious fix
- * and the wrong one - the server cannot produce that value, so it trades the
- * wasted render for a hydration mismatch. `useSyncExternalStore` is the shape
- * that does not have to choose: `getServerSnapshot` keeps the server and
- * hydration agreeing, and `getSnapshot` makes any other first render correct.
- *
- * **What that does and does not buy, measured rather than assumed.** React
- * uses `getServerSnapshot` during *hydration* as well as on the server, so a
- * component present in the server HTML still renders its desktop branch once
- * before correcting. Probed under `hydrateRoot` at a mobile width, the render
- * sequence is `[false, true]`; a fresh client mount is `[true]` from the
- * start. So this fixes any subtree that mounts after hydration and does not
- * fix one that hydrates.
- *
- * In this app that distinction lands well, because `trpc` is configured with
- * `ssr: false`: `/` and `/profile` both return a spinner until `user.me`
- * resolves, so their `Header` mounts fresh on the client and is correct on its
- * first render. `/sign-in` never renders `DropDownMenu` at all. `/admin` was
- * the exception - it rendered `Header` straight from `getServerSideProps`
- * props and so hydrated the desktop branch once.
- *
- * SCRUM-423 closed that, and **not** by teaching the server the device, which
- * is what the residue was originally expected to need. Two gates on
- * `useIsHydrated`, which marks the pass that hydration may discard:
- * `admin.tsx` holds `Header` back so it is no longer in that page's server
- * HTML at all, and `useProfileImage` holds its presigned-URL query back so
- * that any *future* consumer with the same shape costs nothing even before
- * anyone notices it has the shape. The second gate is the one that generalises
- * - this hook's contract is unchanged, and a hydrating subtree still gets one
- * desktop pass, which is what `useIsMobile.test.tsx` still pins.
- *
- * The flash half of SCRUM-420 is unverifiable here either way: jsdom does not
- * paint, so whether a discarded render reaches the screen needs a real device.
- * See `src/testing/viewport.ts`.
+ * Whether a discarded render reaches the screen needs a real device; jsdom does
+ * not paint. See `src/testing/viewport.ts`.
  */
 const useIsMobile = () =>
   useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);

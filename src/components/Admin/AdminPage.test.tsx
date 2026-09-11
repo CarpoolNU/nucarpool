@@ -1,5 +1,5 @@
 /**
- * That `/admin` keeps `Header` out of its server HTML (SCRUM-423).
+ * That `/admin` keeps `Header` out of its server HTML.
  *
  * `Header` branches on `useIsMobile`, and the server cannot know the device,
  * so it emits the desktop branch - and React reads that same server snapshot

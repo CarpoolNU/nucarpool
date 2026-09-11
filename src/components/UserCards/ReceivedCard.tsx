@@ -21,14 +21,14 @@ export const ReceivedCard = (props: ReceivedCardProps): React.JSX.Element => {
   //
   // `requestUnavailableExplanation` rather than `roleMismatchExplanation`,
   // because a counterpart who has paused their search now reaches this list
-  // too (SCRUM-369) and their role says nothing about why. A compatible pair
+  // too and their role says nothing about why. A compatible pair
   // where one has paused would otherwise get `null` here — a blank card with
   // no hint of why Accept refuses.
   //
   // `user` **can** be a VIEWER here: the Requests tab used to
   // render Viewer-mode copy in place of every card, which left a VIEWER unable
   // to withdraw a request they had sent. The name shows either way now -
-  // SCRUM-323 removed the Viewer-mode name withholding entirely, so the notice
+  // Viewer-mode name withholding was removed entirely, so the notice
   // below and the card's heading name the same person.
   const unavailable = user
     ? requestUnavailableExplanation(user.role, props.otherUser)

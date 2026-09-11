@@ -6,20 +6,20 @@
  * `window.location.href`, tearing the page down along with every unsaved form
  * value. `checkChanges` — the unsaved-changes guard the profile page hands to
  * `Header` — was consulted by the desktop map button and by nothing else, so
- * `UnsavedModal` could not appear on mobile at all (SCRUM-384).
+ * `UnsavedModal` could not appear on mobile at all.
  *
  * The decision is lifted out here for the same reason `viewRoutePlan.ts` was:
  * `Header` cannot be executed without a router, a tRPC client, a portal and a
  * `GroupPage`, so a rule living inside it is a rule nothing checks. This is
- * the shape SCRUM-379 established — a plan that decides, and a caller that
+ * the established shape — a plan that decides, and a caller that
  * carries it out.
  *
- * **The hard navigation is kept deliberately.** SCRUM-171 fixed "can't switch
+ * **The hard navigation is kept deliberately.** It fixed "can't switch
  * from profile to explore/requests on a real phone despite that it works on a
  * simulator" by replacing a client-side push with a full page load, and that
  * is load-bearing on real devices. A full load does defeat any client-side
  * guard — but only if it happens first. Asking the page *before* navigating
- * costs the guard nothing and leaves SCRUM-171's behaviour untouched, which is
+ * costs the guard nothing and leaves that change's behaviour untouched, which is
  * why no `beforeunload` fallback is needed.
  */
 
@@ -43,7 +43,7 @@ export const tabHref = (tab: NavTab): string => `/?tab=${tab}`;
 export type MobileNavPlan =
   /** Ask the page's unsaved-changes guard first; it navigates when ready. */
   | { kind: "guard"; href: string; tab: NavTab }
-  /** Leave the profile page with a full page load — SCRUM-171. */
+  /** Leave the profile page with a full page load. */
   | { kind: "hardNavigate"; href: string; tab: NavTab }
   /** Client-side tab switch, staying on the map page. */
   | { kind: "switchTab"; tab: NavTab }

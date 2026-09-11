@@ -75,7 +75,7 @@ export const ConnectCard = (props: ConnectCardProps): React.JSX.Element => {
   // Why this pair cannot carpool right now, or `null`.
   //
   // Always `null` on a recommendation card - the scorer only offers compatible,
-  // ACTIVE people - so this is in practice the favourites tab. SCRUM-351 stopped
+  // ACTIVE people - so this is in practice the favourites tab. A later change stopped
   // `favorites.me` hiding a favourite whose role changed or whose search was
   // paused, because hiding them removed the only un-favourite star there is.
   // They are shown explained instead: the notice says why, and the Connect
@@ -83,7 +83,7 @@ export const ConnectCard = (props: ConnectCardProps): React.JSX.Element => {
   // `connectAction` refuses the same case, which is what actually prevents a
   // request that could be sent but never accepted.
   //
-  // A driver who has filled up is the third reason, added by SCRUM-361 and
+  // A driver who has filled up is the third reason, added later and
   // asked last because it is the most temporary of the three: a role change or
   // a paused search says the pair cannot carpool at all right now, while no
   // free seats says only *not yet*. Composed here rather than inside
@@ -123,7 +123,7 @@ export const ConnectCard = (props: ConnectCardProps): React.JSX.Element => {
   /**
    * Whether this card is the one open in the mobile detail sheet.
    *
-   * Both reads below carried their own `isMobile` term until SCRUM-418,
+   * Both reads below carried their own `isMobile` term once,
    * defending against a `mobileSelectedUser` that outlived the viewport that
    * set it. The page derives that value through `resolveMobileSelectedUser`
    * now, so a non-null value implies a mobile viewport.
@@ -135,7 +135,7 @@ export const ConnectCard = (props: ConnectCardProps): React.JSX.Element => {
    * never been told about any selection. It was harmless only because the
    * `isMobile` term masked it: the portal is itself behind a desktop-only
    * branch in `index.tsx` today. Removing the mask without this would have
-   * turned a latent bug into a live one, and SCRUM-414's remaining map-pin
+   * turned a latent bug into a live one, and that change's remaining map-pin
    * work puts that portal on mobile.
    */
   const isExpandedDetail = Boolean(props.mobileSelectedUser);

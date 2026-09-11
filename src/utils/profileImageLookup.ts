@@ -9,7 +9,7 @@
  * broken image. On a cold cache an explore view paid up to 50 of them, and
  * `geoJsonUserList` can return 150 users.
  *
- * `User.profilePictureUpdatedAt` records the answer instead (SCRUM-276), so a
+ * `User.profilePictureUpdatedAt` records the answer instead, so a
  * user whose state is known costs a primary-key lookup on a warm connection
  * rather than an S3 API call.
  *
@@ -26,8 +26,7 @@
  * everyone else stays exactly as expensive as before until
  * `scripts/backfill-profile-picture-timestamps.ts` has run. Removing the
  * fallback is a separate contract step, once that script reports nothing to do
- * in every environment — the same sequence `group_message` follows in
- * SCRUM-253 / SCRUM-287.
+ * in every environment — the same sequence `group_message` follows.
  *
  * Kept as a pure function, away from the S3 client, for the reason every other
  * decision like it in this repository is: the suite runs on mocks with no

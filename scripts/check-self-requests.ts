@@ -13,7 +13,7 @@
  *
  * **The repair now lives in `cleanup-self-requests.ts`.** This header used to
  * say the expected count was zero and that anything turning up should be
- * removed by hand — reasonable while the set was empty, and it is not: SCRUM-392
+ * removed by hand — reasonable while the set was empty, and it is not: a later check
  * found **2** rows in production on 2026-09-09, against 0 on staging. Two rows
  * are still few enough to remove by hand and that is exactly the argument for
  * not doing it by hand, because an ad-hoc delete leaves no dry run, no
@@ -21,7 +21,7 @@
  *
  * Removal is three deletes, not one — the request, its conversation, and the
  * messages inside it — which is why the counts below are printed per row.
- * `user.requests.delete` has done all three in one transaction since SCRUM-295;
+ * `user.requests.delete` has done all three in one transaction;
  * before that it removed only the `Request` row and stranded the other two,
  * which is where production's 620 orphan conversations came from.
  *
