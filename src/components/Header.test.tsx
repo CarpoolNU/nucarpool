@@ -10,6 +10,7 @@ import {
   restoreViewportAfterEach,
   setViewportWidth,
 } from "../testing/viewport";
+import { DESKTOP_MEDIA_QUERY } from "../utils/breakpoints";
 
 /**
  * Which navigation the header renders, at each viewport.
@@ -300,5 +301,127 @@ describe("Header navigation across the boundary", () => {
 
     expect(desktopBrand()).toBeInTheDocument();
     expect(bottomNav()).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * Which width the header's own styling changes at.
+ *
+ * The navigation suites above cover the JavaScript half of the 640-vs-768
+ * defect. This is the CSS half, which outlived it: `HeaderDiv`, `Logo` and
+ * `SigninLogo` each kept a hand-written `@media (max-width: 768px)` after the
+ * constant moved to 640, so between the two widths the desktop header rendered
+ * with a phone's 20px padding and a 32px logo.
+ *
+ * This is an unusual thing to be able to assert. jsdom does no layout and
+ * **does not evaluate media queries** - `matchMedia` is absent entirely - so
+ * nothing here can say what 641px looks like. What it can do is read the
+ * stylesheet styled-components injects, which jsdom parses for real: the rules
+ * below come back from `document.styleSheets` grouped under their conditions.
+ * So these tests assert *which query guards which declarations*, never that a
+ * pixel was painted. The boundary itself is still a browser check at 639px and
+ * 641px. See `testing/viewport.ts`.
+ */
+describe("Header styling across the breakpoint", () => {
+  type StyledRule = { condition: string | null; css: string };
+
+  /**
+   * Every declaration block that targets this element, paired with the media
+   * condition guarding it - `null` for the unconditional base.
+   *
+   * Matched by the element's own generated class names rather than by reading
+   * the template, so a rule that moved between the base and the query is
+   * visible here and a renamed component is not. Duck-typed on
+   * `conditionText`/`selectorText` instead of `instanceof CSSMediaRule`,
+   * because those constructors are jsdom's and not worth depending on.
+   */
+  const rulesFor = (element: Element): StyledRule[] => {
+    const selectors = Array.from(element.classList).map((name) => `.${name}`);
+    const collected: StyledRule[] = [];
+
+    const visit = (rule: CSSRule, condition: string | null) => {
+      const asMedia = rule as CSSMediaRule;
+      if (typeof asMedia.conditionText === "string") {
+        for (const inner of Array.from(asMedia.cssRules)) {
+          visit(inner, asMedia.conditionText);
+        }
+        return;
+      }
+
+      const asStyle = rule as CSSStyleRule;
+      if (selectors.includes(asStyle.selectorText)) {
+        collected.push({ condition, css: asStyle.style.cssText });
+      }
+    };
+
+    for (const sheet of Array.from(document.styleSheets)) {
+      for (const rule of Array.from(sheet.cssRules)) {
+        visit(rule, null);
+      }
+    }
+
+    return collected;
+  };
+
+  const baseOf = (element: Element) =>
+    rulesFor(element)
+      .filter((rule) => rule.condition === null)
+      .map((rule) => rule.css)
+      .join(" ");
+
+  const desktopOf = (element: Element) =>
+    rulesFor(element)
+      .filter((rule) => rule.condition === DESKTOP_MEDIA_QUERY)
+      .map((rule) => rule.css)
+      .join(" ");
+
+  beforeEach(() => {
+    setViewportWidth(DESKTOP_WIDTH);
+  });
+
+  /**
+   * The assertion that fails if a `max-width: 768px` block comes back. Written
+   * as "no condition other than the shared one" rather than "no 768", because
+   * the constant is allowed to move and a second hand-written threshold is not.
+   */
+  it("guards the header's styling with the shared query and nothing else", () => {
+    renderHeader();
+    const logo = desktopBrand()!;
+
+    const conditions = [logo, logo.parentElement!].flatMap((element) =>
+      rulesFor(element)
+        .map((rule) => rule.condition)
+        .filter((condition): condition is string => condition !== null),
+    );
+
+    // Non-empty first: `rulesFor` returning nothing would satisfy every
+    // assertion below it and look like a pass.
+    expect(conditions.length).toBeGreaterThan(0);
+    expect(new Set(conditions)).toEqual(new Set([DESKTOP_MEDIA_QUERY]));
+  });
+
+  /**
+   * The inversion, as the declarations record it: mobile values unconditional,
+   * desktop values inside the query. The old templates had these the other way
+   * round, which is what put the boundary at the wrong width.
+   */
+  it("states the mobile logo as the base and the desktop logo in the query", () => {
+    renderHeader();
+    const logo = desktopBrand()!;
+
+    expect(baseOf(logo)).toContain("font-size: 32px");
+    expect(baseOf(logo)).toContain("height: 70px");
+
+    expect(desktopOf(logo)).toContain("font-size: 48px");
+    expect(desktopOf(logo)).toContain("height: 111px");
+    expect(desktopOf(logo)).toContain("line-height: 77px");
+  });
+
+  it("does the same with the header's padding", () => {
+    renderHeader();
+    const headerDiv = desktopBrand()!.parentElement!;
+
+    expect(baseOf(headerDiv)).toContain("padding: 0 20px");
+    expect(desktopOf(headerDiv)).toContain("padding: 0 40px");
   });
 });
