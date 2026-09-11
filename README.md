@@ -36,6 +36,19 @@ Ask a maintainer for development credentials. `yarn startup` runs `yarn db:start
 
 `yarn seed` loads about 70 generated users so the map and messaging have content. **It deletes every row first** — see [Dangerous commands](#dangerous-commands).
 
+### Working in a worktree
+
+Concurrent sessions each get their own checkout under `.claude/worktrees/`, so one session's branch switch cannot move another's HEAD.
+
+```bash
+claude --worktree <task-name>   # creates the worktree, copies .env per .worktreeinclude
+./scripts/wt-bootstrap.sh       # dependencies, Prisma client, husky hooks
+```
+
+Then work normally. [`wt-bootstrap.sh`](scripts/wt-bootstrap.sh) is idempotent and refuses to run on `main`, on `staging`, or in the primary checkout.
+
+Three things stay shared and are not per-worktree: run `yarn db:start` only from the primary checkout, because the container name and port are fixed; only one worktree at a time can hold port 3000 for `yarn dev`; and `yarn test:db` needs a `TEST_DATABASE_URL` naming a database no other worktree uses, since the harness truncates every table and does not lock against a concurrent run.
+
 ## Environment variables
 
 [`.env.example`](.env.example) is the authoritative list, grouped by service with notes on which are optional. Validation runs at import time in [`src/utils/env/browser.ts`](src/utils/env/browser.ts) and [`src/utils/env/server.ts`](src/utils/env/server.ts), so a missing variable stops the app from starting rather than failing later.
