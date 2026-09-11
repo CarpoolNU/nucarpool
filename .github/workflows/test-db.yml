@@ -1,0 +1,111 @@
+name: Database Tests
+
+# Trigger policy, shared by lint / tsc / test / build / env-contract:
+#   pull_request     - gates every PR before it can merge into main
+#   push to main     - catches anything that reaches main by another route
+# Deliberately not `on: [push]`: while a PR is open that runs every check twice,
+# once for the branch push and once for the pull_request event.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# `GITHUB_TOKEN` is scoped in the file rather than left to a repository setting.
+# Every scope not listed becomes `none`, and `contents: read` is all
+# `actions/checkout` needs - nothing here writes to the repository, comments, or
+# calls the API.
+permissions:
+  contents: read
+
+# One run per ref, and a superseded run is cancelled. Same keying as the sibling
+# jobs: a pull_request groups by ref so two pushes to one PR cancel the older
+# run, while a push to main keys on its own SHA so merge runs never queue behind
+# or cancel each other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test-db:
+    name: test-db
+    runs-on: ubuntu-latest
+
+    services:
+      # MySQL 8.0 matches the major version PlanetScale serves and the version
+      # docker-compose.yml runs locally, so migration history is exercised
+      # against equivalent behaviour rather than an approximation.
+      mysql:
+        image: mysql:8.0
+        env:
+          # A throwaway credential for a container that exists for the length of
+          # this job and is reachable only from it. This is not a secret and
+          # must not become one: a repository secret here would mean the
+          # integration suite could not be run by a fork or reproduced locally.
+          MYSQL_ROOT_PASSWORD: nucarpool
+          # The name is chosen to satisfy `testDatabaseGuard.ts`: one `_`
+          # separated word is exactly `test`, it holds none of the forbidden
+          # stems (`prod`, `stag`, `live`, `main`), and it is plain
+          # [A-Za-z0-9_-]. Renaming it means re-reading that guard first.
+          MYSQL_DATABASE: nucarpool_test
+        ports:
+          # Published to the runner so the suite connects to 127.0.0.1, which is
+          # in the guard's local-hostname allowlist. The service's own network
+          # alias (`mysql`) is in that allowlist too, but only jobs running in a
+          # container can resolve it, and this job runs directly on the runner.
+          - 3306:3306
+        # Without a health check the first step races the server's startup, and
+        # the failure surfaces as a connection error inside globalSetup rather
+        # than as a wait.
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pnucarpool"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+          --health-start-period=30s
+
+    env:
+      # Read by `src/utils/testDatabaseGuard.ts` and nothing else. The suite
+      # never falls back to `DATABASE_URL`.
+      #
+      # `DATABASE_URL` is deliberately *not* set at job level. Two of the
+      # guard's rules compare this target against the application's URL, and
+      # leaving it unset is the least surprising way to satisfy them. The test
+      # workers still see a `DATABASE_URL`, because `jest.setup.env.js` fills in
+      # the env contract's placeholders - that placeholder names the database
+      # `ci`, which is a different database on the same server, so the "not the
+      # same host, port and database" rule holds. Renaming either one to match
+      # the other would make the guard refuse, which is the safe direction.
+      TEST_DATABASE_URL: mysql://root:nucarpool@127.0.0.1:3306/nucarpool_test
+
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: install node
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: yarn
+      - run: yarn install --frozen-lockfile
+      # Explicit rather than relying on @prisma/client's postinstall, for the
+      # same reason build.yml makes it explicit: an install side effect that
+      # `--ignore-scripts` would silently remove is a bad thing to depend on.
+      # `prisma generate` needs no datasource URL, so this runs before any
+      # database is involved.
+      - name: generate prisma client
+        run: yarn prisma generate
+      # `globalSetup` approves the target, claims the database, runs
+      # `prisma migrate deploy` against it and truncates what it finds - so
+      # migration history is replayed on every run, which is half the value of
+      # this job. No --passWithNoTests: an empty run should fail rather than
+      # pass silently.
+      - run: yarn test:db
+      # The same suite again in a zone that is not UTC.
+      #
+      # This matters more here than it does for the mocked suite, which already
+      # runs twice for the same reason. `carpool_search` stores `@db.Time(0)`
+      # and `@db.Date` columns, so these tests assert on values that have been
+      # through MySQL and back - the layer where a zone assumption actually
+      # reaches a driver. Truncation runs before every test, so the second run
+      # starts from the same clean state as the first.
+      - run: yarn test:db
+        env:
+          NUCARPOOL_TEST_TZ: America/New_York

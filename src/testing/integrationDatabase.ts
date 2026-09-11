@@ -218,23 +218,38 @@ export const truncateAll = async (
 };
 
 export type ClaimOutcome =
-  | { claimed: true; reason: "empty-database" | "already-claimed" }
+  | {
+      claimed: true;
+      reason: "empty-database" | "already-claimed";
+      /**
+       * True when {@link MARKER_TABLE} is the only table in the database, so
+       * the schema is virgin as far as migration history is concerned.
+       *
+       * That happens on a database a previous run claimed and got no further
+       * with, and it has to be distinguished from a database that is merely
+       * ours, because `prisma migrate deploy` refuses a schema that is
+       * non-empty and carries no `_prisma_migrations`.
+       */
+      markerOnly: boolean;
+    }
   | { claimed: false; reason: "not-ours"; tables: string[] };
 
 /**
- * Claims the database for the harness, or refuses to use it.
+ * Decides whether the harness may use this database. **Reads only.**
  *
  * Three cases, and the middle one is the whole point:
  *
- *   - **empty** — no tables at all, so nothing can be lost. Claimed, and the
- *     marker is written so later runs recognise it.
+ *   - **empty** — no tables at all, so nothing can be lost. Adoptable.
  *   - **already claimed** — the marker is there. Ours.
  *   - **anything else** — tables that this harness did not create. Refused,
  *     naming what it found.
  *
- * Called *before* `prisma migrate deploy`, not after, because `migrate deploy`
- * is itself a write: running it first would have created eleven tables in
- * somebody else's database before anything noticed.
+ * Called *before* `prisma migrate deploy`, because `migrate deploy` is itself a
+ * write: running it first would have created eleven tables in somebody else's
+ * database before anything noticed. **Deciding is separate from marking for
+ * that reason**: the decision has to come before the first write, and the
+ * marker cannot be written until after `migrate deploy` — see
+ * {@link markIntegrationDatabase}.
  *
  * Note what this does **not** do: it never drops or empties anything to make a
  * database claimable. A refusal is for a human to resolve by choosing a
@@ -244,29 +259,74 @@ export const claimIntegrationDatabase = async (
   prisma: Pick<PrismaClient, "$queryRawUnsafe" | "$executeRawUnsafe">,
 ): Promise<ClaimOutcome> => {
   const tables = await discoverTables(prisma);
+  const markerOnly =
+    tables.length === 0 || (tables.length === 1 && tables[0] === MARKER_TABLE);
 
   if (tables.includes(MARKER_TABLE)) {
-    return { claimed: true, reason: "already-claimed" };
+    return { claimed: true, reason: "already-claimed", markerOnly };
   }
 
   if (tables.length > 0) {
     return { claimed: false, reason: "not-ours", tables };
   }
 
+  return { claimed: true, reason: "empty-database", markerOnly: true };
+};
+
+/**
+ * Writes the claim marker. Idempotent, and safe to call on every run.
+ *
+ * **Runs after `prisma migrate deploy`, not before.** `migrate deploy` raises
+ * P3005 on a database whose schema is not empty and which carries no
+ * `_prisma_migrations` — it cannot tell "one table a test harness just made"
+ * from "an existing production database somebody wants baselined". Creating the
+ * marker first therefore broke the one case that matters, a genuinely fresh
+ * database, and broke it permanently: the marker made the schema non-empty, the
+ * deploy failed, and every later run then took the already-claimed path into
+ * the same P3005. Nothing caught it because the suite had never completed a run
+ * anywhere.
+ *
+ * Safety is unaffected by the move. The *decision* still happens before the
+ * first write — {@link claimIntegrationDatabase} only reads — so a database
+ * that is not ours is refused exactly as before, before `migrate deploy`.
+ */
+export const markIntegrationDatabase = async (
+  prisma: Pick<PrismaClient, "$queryRawUnsafe" | "$executeRawUnsafe">,
+): Promise<void> => {
   // Static SQL, no interpolation: the name is a constant in this file.
   await prisma.$executeRawUnsafe(
-    `CREATE TABLE \`${MARKER_TABLE}\` (
+    `CREATE TABLE IF NOT EXISTS \`${MARKER_TABLE}\` (
        claimed_at DATETIME(3) NOT NULL,
        note VARCHAR(255) NOT NULL
      )`,
   );
+  // `marker_rows`, not `rows`: ROWS is a reserved word in MySQL 8.0 and an
+  // unquoted alias by that name is a syntax error.
+  const [existing] = await prisma.$queryRawUnsafe<
+    { marker_rows: bigint | number }[]
+  >(`SELECT COUNT(*) AS marker_rows FROM \`${MARKER_TABLE}\``);
+  if (Number(existing?.marker_rows ?? 0) > 0) {
+    return;
+  }
   await prisma.$executeRawUnsafe(
     `INSERT INTO \`${MARKER_TABLE}\` (claimed_at, note) VALUES (NOW(3), ?)`,
     "Claimed by the NUCarpool integration test harness. " +
       "Every table in this database is truncated between tests.",
   );
+};
 
-  return { claimed: true, reason: "empty-database" };
+/**
+ * Drops the claim marker, and only ever that.
+ *
+ * Used for one case: a database whose *only* table is the marker, left by a run
+ * that claimed it and then failed before migrating. The marker is this
+ * harness's own table, so dropping it is not destroying anyone's data — and it
+ * is what lets `migrate deploy` see the empty schema it requires.
+ */
+export const dropClaimMarker = async (
+  prisma: Pick<PrismaClient, "$executeRawUnsafe">,
+): Promise<void> => {
+  await prisma.$executeRawUnsafe(`DROP TABLE IF EXISTS \`${MARKER_TABLE}\``);
 };
 
 /** Explains a refused claim. Names tables, never a connection string. */
@@ -366,7 +426,17 @@ export const prepareIntegrationDatabase = async (): Promise<void> => {
     }
 
     // Only now, with the database known to be ours, is a write allowed.
+    //
+    // The marker has to go after `migrate deploy` rather than before it, and a
+    // marker left behind by an interrupted run has to go before it: either way
+    // `migrate deploy` has to meet a schema that is empty or already carries
+    // `_prisma_migrations`, or it raises P3005. See
+    // {@link markIntegrationDatabase}.
+    if (claim.markerOnly) {
+      await dropClaimMarker(prisma);
+    }
     applyIntegrationMigrations(target);
+    await markIntegrationDatabase(prisma);
 
     const truncated = await truncateAll(prisma);
     console.log(

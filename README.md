@@ -81,7 +81,7 @@ Four things that reliably trip people up:
 | `yarn db:schema`                 | Apply migrations, regenerate the Prisma client      |
 | `yarn seed`                      | **Wipes** the database, then inserts sample users   |
 
-CI runs `lint`, `tsc`, `test`, `build`, `env-contract`, `schema` and `format` on every pull request. `yarn lint` and `yarn tsc` are the two worth running before you push.
+CI runs `lint`, `tsc`, `test`, `test-db`, `build`, `env-contract`, `schema` and `format` on every pull request. `test-db` brings up its own MySQL, so the database suite is exercised whether or not you run it locally. `yarn lint` and `yarn tsc` are the two worth running before you push.
 
 ## Dangerous commands
 

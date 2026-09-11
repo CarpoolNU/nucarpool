@@ -6,6 +6,8 @@ import {
   describeApprovedTarget,
   describeRefusedClaim,
   discoverTables,
+  dropClaimMarker,
+  markIntegrationDatabase,
   truncateAll,
   type ApprovedTarget,
 } from "./integrationDatabase";
@@ -134,16 +136,18 @@ describe("truncateAll", () => {
 });
 
 describe("claimIntegrationDatabase", () => {
-  it("claims an empty database and marks it", async () => {
+  it("adopts an empty database, and writes nothing while deciding", async () => {
+    // The decision is read-only now. Marking is a separate step that has to
+    // wait until after `prisma migrate deploy` - see the marking tests below.
     const { client, statements } = buildRawClient([]);
 
     expect(await claimIntegrationDatabase(client)).toEqual({
       claimed: true,
       reason: "empty-database",
+      markerOnly: true,
     });
 
-    expect(statements()[0]).toContain(`CREATE TABLE \`${MARKER_TABLE}\``);
-    expect(statements()[1]).toContain(`INSERT INTO \`${MARKER_TABLE}\``);
+    expect(statements()).toEqual([]);
   });
 
   it("recognises a database it claimed before, and rewrites nothing", async () => {
@@ -156,6 +160,24 @@ describe("claimIntegrationDatabase", () => {
     expect(await claimIntegrationDatabase(client)).toEqual({
       claimed: true,
       reason: "already-claimed",
+      markerOnly: false,
+    });
+    expect(statements()).toEqual([]);
+  });
+
+  it("flags a database holding only the marker, which is the P3005 trap", async () => {
+    // Left by a run that claimed the database and then failed before
+    // migrating. It is ours, so it is claimable - but its schema is not empty
+    // and carries no `_prisma_migrations`, which is exactly what makes
+    // `prisma migrate deploy` raise P3005. Before `markerOnly` existed, that
+    // state was permanent: every later run took the already-claimed path
+    // straight back into the same failure.
+    const { client, statements } = buildRawClient([MARKER_TABLE]);
+
+    expect(await claimIntegrationDatabase(client)).toEqual({
+      claimed: true,
+      reason: "already-claimed",
+      markerOnly: true,
     });
     expect(statements()).toEqual([]);
   });
@@ -200,6 +222,73 @@ describe("claimIntegrationDatabase", () => {
       reason: "not-ours",
     });
     expect(statements()).toEqual([]);
+  });
+});
+
+describe("markIntegrationDatabase", () => {
+  /**
+   * The marking path reads a COUNT and then may write, so the table-listing
+   * stub above is the wrong shape for it: one `$queryRawUnsafe` here returns a
+   * count row rather than table names.
+   */
+  const buildMarkClient = (existingRows: number) => {
+    const client = {
+      $queryRawUnsafe: jest
+        .fn()
+        .mockResolvedValue([{ marker_rows: existingRows }]),
+      $executeRawUnsafe: jest.fn().mockResolvedValue(0),
+    };
+    return {
+      client: client as unknown as PrismaClient,
+      statements: () =>
+        client.$executeRawUnsafe.mock.calls.map((call) => String(call[0])),
+      queries: () =>
+        client.$queryRawUnsafe.mock.calls.map((call) => String(call[0])),
+    };
+  };
+
+  it("creates the marker table and records the claim", async () => {
+    const { client, statements } = buildMarkClient(0);
+
+    await markIntegrationDatabase(client);
+
+    expect(statements()[0]).toContain(
+      `CREATE TABLE IF NOT EXISTS \`${MARKER_TABLE}\``,
+    );
+    expect(statements()[1]).toContain(`INSERT INTO \`${MARKER_TABLE}\``);
+  });
+
+  it("is idempotent: a second run adds no second claim row", async () => {
+    const { client, statements } = buildMarkClient(1);
+
+    await markIntegrationDatabase(client);
+
+    expect(statements()).toEqual([
+      expect.stringContaining(`CREATE TABLE IF NOT EXISTS \`${MARKER_TABLE}\``),
+    ]);
+    expect(statements().join("\n")).not.toContain("INSERT INTO");
+  });
+
+  it("does not alias the count as `rows`, which MySQL 8 reserves", async () => {
+    // `SELECT COUNT(*) AS rows` is a syntax error on MySQL 8.0, and this
+    // statement only ever runs against a real server - so the fast suite is
+    // the only place that can hold the line on it.
+    const { client, queries } = buildMarkClient(0);
+
+    await markIntegrationDatabase(client);
+
+    expect(queries()[0]).toContain("AS marker_rows");
+    expect(queries()[0]).not.toMatch(/\bAS rows\b/);
+  });
+});
+
+describe("dropClaimMarker", () => {
+  it("drops the marker and nothing else", async () => {
+    const { client, statements } = buildRawClient([MARKER_TABLE]);
+
+    await dropClaimMarker(client);
+
+    expect(statements()).toEqual([`DROP TABLE IF EXISTS \`${MARKER_TABLE}\``]);
   });
 });
 

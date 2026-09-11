@@ -81,7 +81,9 @@ Static image imports and `mixpanel-browser` are stubbed for this project only. B
 
 `prisma migrate deploy` runs inside it, against that disposable database only. That is not a change to the PlanetScale workflow.
 
-As things stand the suite contains only the harness's own self-test, so **nothing about real queries is verified today**. See [the database docs](../src/server/db/README.md#integration-tests-against-a-real-database).
+The `test-db` CI job provisions a disposable MySQL 8.0 service container, applies migration history to it and runs this suite on every pull request, so it needs no Docker on your machine to be exercised. It runs twice there, in UTC and in `America/New_York`, for the same reason the mocked suite does — more so here, because `carpool_search` stores `@db.Time(0)` and `@db.Date` columns and these assertions have been through MySQL and back.
+
+What it covers beyond the harness's own self-test: `user.me`'s nested `include` across `user` → `carpool_search` → `location`, the field renames that shape crosses, and the referential actions `relationMode = "prisma"` emulates — including the one that matters, that a delete which bypasses Prisma does **not** cascade. See [the database docs](../src/server/db/README.md#integration-tests-against-a-real-database).
 
 ## Not covered at all
 
