@@ -169,6 +169,93 @@ describe("useProfileImage on a hydration pass that is discarded", () => {
   });
 });
 
+/** An avatar whose caller can withdraw its interest, like `MessageHeader`'s. */
+const GatedAvatar = ({ enabled }: { enabled: boolean }) => {
+  const { profileImageUrl, isLoading } = useProfileImage("other-1", {
+    enabled,
+  });
+  loadingByRender.push(isLoading);
+  return (
+    <span>{isLoading ? "placeholder" : (profileImageUrl ?? "fallback")}</span>
+  );
+};
+
+describe("useProfileImage when the caller says it will not render the result", () => {
+  /*
+   * `MessageHeader` calls this hook above an `if (ismobile)` branch that draws
+   * no avatar, so on a phone it used to fire an authenticated presigned-URL
+   * request - and an S3 HeadObject behind it - per conversation opened, for a
+   * picture nobody saw. Rules of hooks forbid not calling it, so the caller
+   * passes `enabled` instead.
+   */
+
+  it("fires no request", () => {
+    setViewportWidth(DESKTOP_WIDTH);
+    queryFn.mockClear();
+
+    render(withClient(<GatedAvatar enabled={false} />));
+
+    expect(queryFn).not.toHaveBeenCalled();
+  });
+
+  it("reports nothing rather than reporting loading forever", () => {
+    // The opt-out is a decision, not a pause. A caller that will never render
+    // the avatar is not waiting for anything, and a hook that claimed
+    // otherwise would leave a consumer that *did* render holding a permanent
+    // placeholder.
+    setViewportWidth(DESKTOP_WIDTH);
+    loadingByRender.length = 0;
+
+    render(withClient(<GatedAvatar enabled={false} />));
+
+    expect(loadingByRender).not.toContain(true);
+  });
+
+  it("flashes no fallback when the caller changes its mind", async () => {
+    /*
+     * A phone rotated to landscape with a conversation open: the gate flips
+     * false to true and the query enables with nothing cached.
+     *
+     * **This pins React Query's behaviour, not ours, and that is the point.**
+     * The flip looks like it should need the same `isPending` treatment the
+     * hydration deferral gets - enabled, no data, fetch started in an effect.
+     * It does not, because React Query computes an optimistic result for a
+     * query that is about to fetch, so the flip render already reports
+     * `fetching`. That is why the hook's second clause stays keyed on
+     * hydration alone. Written first with the widened clause and measured
+     * against both: this case passes either way, which is the evidence that
+     * widening it was unnecessary. If React Query ever drops that optimism,
+     * this fails and the clause has to grow.
+     *
+     * One client across both renders, because a fresh `QueryClient` would
+     * reset the cache and make this a first mount rather than a flip.
+     */
+    setViewportWidth(DESKTOP_WIDTH);
+    queryFn.mockClear();
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const gated = (enabled: boolean) => (
+      <QueryClientProvider client={client}>
+        <GatedAvatar enabled={enabled} />
+      </QueryClientProvider>
+    );
+
+    const { rerender } = render(gated(false));
+    loadingByRender.length = 0;
+
+    await act(async () => {
+      rerender(gated(true));
+    });
+
+    // Nothing between "the caller wants it" and "the URL is known" may report
+    // resolved. Asserted over every recorded pass, because the offending one
+    // is a single frame inside `act` and leaves no trace in the DOM.
+    expect(loadingByRender[0]).toBe(true);
+    expect(queryFn).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("useProfileImage on a fresh client mount", () => {
   it("starts its request on the first render, undeferred", () => {
     setViewportWidth(DESKTOP_WIDTH);

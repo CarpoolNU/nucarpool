@@ -197,11 +197,27 @@ const MessageHeader = ({
   const handleClose = () => {
     onClose("");
   };
+  /*
+    Only the desktop branch below draws an avatar, so only it pays for one.
+    Ungated, this fired an authenticated presigned-URL request - and an S3
+    `HeadObject` behind it - on every mobile conversation opened, for a picture
+    the mobile branch renders nowhere. `staleTime` made reopening the same
+    conversation free, so the waste was one round trip per distinct
+    conversation rather than per open.
+
+    The call cannot simply move inside the branch: rules of hooks forbid a
+    conditional call, and the two branches are one component because they do
+    share things - the request controls, the role-mismatch copy and the
+    mutation state. So the caller states what it will render instead, and
+    `MessageHeader.avatarRequest.test.tsx` watches the network layer to keep
+    that honest: a render-time spy cannot tell this fix from a no-op, because
+    it fires whether or not the query is enabled.
+  */
   const {
     profileImageUrl,
     imageLoadError,
     isLoading: isProfileImageLoading,
-  } = useProfileImage(selectedUser.id);
+  } = useProfileImage(selectedUser.id, { enabled: !ismobile });
 
   if (ismobile) {
     return (

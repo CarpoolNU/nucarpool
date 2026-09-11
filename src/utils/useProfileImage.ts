@@ -29,8 +29,19 @@ export const PRESIGNED_URL_CACHE_TIME_MS = 30 * 60 * 1000;
  * a 600ms timer after every mount, which doubled the load and still could not
  * refresh a picture uploaded later in the session. Invalidation is now
  * explicit and happens at the point of upload - see useInvalidateProfileImage.
+ *
+ * @param options.enabled pass `false` when the caller will not render the
+ *   result. The hook cannot work this out for itself, and the gate below is
+ *   not the same question: hydration answers "might this render be thrown
+ *   away", where this answers "will the value be read at all".
+ *   `MessageHeader` is why it exists - it calls the hook above an
+ *   `if (ismobile)` branch whose mobile side draws no avatar, so every mobile
+ *   conversation opened cost one authenticated presigned-URL request, and one
+ *   S3 `HeadObject` behind it, for a picture nobody saw. Rules of hooks forbid
+ *   the obvious alternative of not calling it, so the caller states the fact
+ *   instead.
  */
-const useProfileImage = (userId?: string) => {
+const useProfileImage = (userId?: string, options?: { enabled?: boolean }) => {
   /*
    * Holds the request back on a render that hydration may discard.
    *
@@ -51,13 +62,19 @@ const useProfileImage = (userId?: string) => {
    */
   const isHydrated = useIsHydrated();
 
+  /**
+   * Defaults to enabled, so every existing call site keeps the behaviour it
+   * had and the deferral above stays the only reason a request is held back.
+   */
+  const callerWantsIt = options?.enabled ?? true;
+
   const { data, error, isLoading, isPending } =
     trpc.user.getPresignedDownloadUrl.useQuery(
       { userId },
       {
         staleTime: PRESIGNED_URL_STALE_TIME_MS,
         gcTime: PRESIGNED_URL_CACHE_TIME_MS,
-        enabled: isHydrated,
+        enabled: isHydrated && callerWantsIt,
       },
     );
 
@@ -77,6 +94,21 @@ const useProfileImage = (userId?: string) => {
      * render this hook is trying to make cheap. `isPending` narrows it to the
      * case with no cached URL to serve: an avatar already in the cache is not
      * loading, deferred or not.
+     *
+     * **`enabled: false` deliberately does not extend this, and that was
+     * measured rather than assumed.** A caller flipping `enabled` back to true
+     * - a phone rotated to landscape with a conversation open - looked like it
+     * would need the same treatment, since the query enables with nothing
+     * cached and starts fetching in an effect. It does not: React Query
+     * computes an optimistic result for a query that is about to fetch, so
+     * that render already reports `fetching` and this flag is already true.
+     * The deferral is the only case where a held-back query reports idle,
+     * because there it is genuinely disabled. `useProfileImage.test.tsx` pins
+     * both halves.
+     *
+     * A caller that opted out is a different matter again: it is not waiting
+     * for anything, so it gets `false` rather than a placeholder it would hold
+     * forever.
      */
     isLoading: isLoading || (!isHydrated && isPending),
     /** True only when the request itself failed. */
