@@ -8,6 +8,7 @@ import UserManagement from "../components/Admin/UserManagement";
 import Spinner from "../components/Spinner";
 import { Permission } from "@prisma/client";
 import AdminData from "../components/Admin/AdminData";
+import useIsHydrated from "../utils/useIsHydrated";
 
 // One direct session lookup, not a self-directed HTTP round trip to
 // `/api/auth/session`. `getSession` from `next-auth/react` is the
@@ -47,9 +48,39 @@ interface AdminProps {
 
 const Admin: NextPage<AdminProps> = ({ userPermission }) => {
   const [option, setOption] = useState<string>("management");
+
+  /*
+   * Keeps `Header` out of this page's server HTML (SCRUM-423).
+   *
+   * `Header` branches on `useIsMobile`, and the server cannot know the device
+   * - so it emits the desktop branch, and React reads the same server
+   * snapshot again during hydration. Every other page that renders `Header`
+   * escapes this for free: `trpc` is configured `ssr: false`, so `/` and
+   * `/profile` return a spinner until `user.me` resolves and their `Header`
+   * mounts fresh on the client, correct from its first render. This page's
+   * `userPermission` arrives as a `getServerSideProps` prop rather than a
+   * query, so its `Header` is in the server HTML and hydrates the desktop
+   * branch once on a phone - mounting `DropDownMenu` behind the bottom
+   * navigation that then replaces it.
+   *
+   * Gating on `useIsHydrated` makes this page's `Header` behave like the
+   * others': absent from the server render, mounted on the client, correct on
+   * its first pass. The desktop header therefore never renders on a phone at
+   * all, rather than rendering once and being discarded.
+   *
+   * The cost is that the header arrives one render pass late for everyone,
+   * `/admin` being an internal, permission-gated, desktop-oriented tool. It
+   * is not gated on `userPermission` instead, which would look like the
+   * cheaper fix: `getServerSideProps` above redirects on a missing session and
+   * on `USER`, and `Permission` has no falsy member, so that value is never
+   * absent and the `<Spinner />` branch below is unreachable. Moving `Header`
+   * under it would leave it in the server HTML exactly as before.
+   */
+  const isHydrated = useIsHydrated();
+
   return (
     <div className="relative h-screen w-screen select-none">
-      <Header admin={true} />
+      {isHydrated && <Header admin={true} />}
       {!userPermission ? (
         <Spinner />
       ) : (

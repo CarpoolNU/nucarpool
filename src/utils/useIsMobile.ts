@@ -72,10 +72,19 @@ const getServerSnapshot = () => false;
  * In this app that distinction lands well, because `trpc` is configured with
  * `ssr: false`: `/` and `/profile` both return a spinner until `user.me`
  * resolves, so their `Header` mounts fresh on the client and is correct on its
- * first render. `/sign-in` never renders `DropDownMenu` at all. `/admin` is
- * the exception - it renders `Header` straight from `getServerSideProps` props
- * and so still hydrates the desktop branch once. Closing that needs the server
- * to know the device, which is a different mechanism - filed as SCRUM-423.
+ * first render. `/sign-in` never renders `DropDownMenu` at all. `/admin` was
+ * the exception - it rendered `Header` straight from `getServerSideProps`
+ * props and so hydrated the desktop branch once.
+ *
+ * SCRUM-423 closed that, and **not** by teaching the server the device, which
+ * is what the residue was originally expected to need. Two gates on
+ * `useIsHydrated`, which marks the pass that hydration may discard:
+ * `admin.tsx` holds `Header` back so it is no longer in that page's server
+ * HTML at all, and `useProfileImage` holds its presigned-URL query back so
+ * that any *future* consumer with the same shape costs nothing even before
+ * anyone notices it has the shape. The second gate is the one that generalises
+ * - this hook's contract is unchanged, and a hydrating subtree still gets one
+ * desktop pass, which is what `useIsMobile.test.tsx` still pins.
  *
  * The flash half of SCRUM-420 is unverifiable here either way: jsdom does not
  * paint, so whether a discarded render reaches the screen needs a real device.

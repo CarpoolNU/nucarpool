@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { trpc } from "./trpc";
+import useIsHydrated from "./useIsHydrated";
 
 /**
  * How long a presigned download URL may be served from the React Query cache
@@ -30,13 +31,35 @@ export const PRESIGNED_URL_CACHE_TIME_MS = 30 * 60 * 1000;
  * explicit and happens at the point of upload - see useInvalidateProfileImage.
  */
 const useProfileImage = (userId?: string) => {
-  const { data, error, isLoading } = trpc.user.getPresignedDownloadUrl.useQuery(
-    { userId },
-    {
-      staleTime: PRESIGNED_URL_STALE_TIME_MS,
-      gcTime: PRESIGNED_URL_CACHE_TIME_MS,
-    },
-  );
+  /*
+   * Holds the request back on a render that hydration may discard (SCRUM-423).
+   *
+   * `Header` branches on `useIsMobile`, and React reads `getServerSnapshot`
+   * during hydration as well as on the server - so a `Header` present in the
+   * server HTML renders its *desktop* branch once on a phone, mounting
+   * `DropDownMenu`, before correcting to the bottom navigation. React Query
+   * subscribes in a passive effect, which runs before React's corrective
+   * re-render, so that discarded mount really did fire an authenticated
+   * presigned-URL request for an avatar no mobile visitor ever sees - once per
+   * mobile load of `/admin`, the one page that renders `Header` straight from
+   * `getServerSideProps` props.
+   *
+   * `useIsHydrated` is `true` on the first render of a fresh client mount, so
+   * this costs the common case nothing: the explore page's avatars still start
+   * their requests on their first render. It is `false` only on the pass that
+   * could be hydration, which is the only pass that can be thrown away.
+   */
+  const isHydrated = useIsHydrated();
+
+  const { data, error, isLoading, isPending } =
+    trpc.user.getPresignedDownloadUrl.useQuery(
+      { userId },
+      {
+        staleTime: PRESIGNED_URL_STALE_TIME_MS,
+        gcTime: PRESIGNED_URL_CACHE_TIME_MS,
+        enabled: isHydrated,
+      },
+    );
 
   return {
     profileImageUrl: data?.url ?? null,
@@ -45,8 +68,17 @@ const useProfileImage = (userId?: string) => {
      * neutral placeholder rather than the "no picture" icon while this is set,
      * otherwise every avatar visibly flashes the fallback before its image
      * appears.
+     *
+     * The second clause is what keeps that promise across the deferral above.
+     * A disabled React Query observer is `pending` with a `fetchStatus` of
+     * `idle`, and `isLoading` is defined as pending *and* fetching - so it
+     * reads `false` while the query is merely held back, which would report
+     * "resolved, no picture" and flash the fallback icon for exactly the
+     * render this hook is trying to make cheap. `isPending` narrows it to the
+     * case with no cached URL to serve: an avatar already in the cache is not
+     * loading, deferred or not.
      */
-    isLoading,
+    isLoading: isLoading || (!isHydrated && isPending),
     /** True only when the request itself failed. */
     imageLoadError: !!error,
   };
