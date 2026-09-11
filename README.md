@@ -40,16 +40,25 @@ Ask a maintainer for development credentials. `yarn startup` runs `yarn db:start
 
 Concurrent sessions each get their own checkout under `.claude/worktrees/`, so one session's branch switch cannot move another's HEAD.
 
+**One ticket, one worktree, one session, one PR.** Give each ticket its own session and end that session when its PR is review-ready; start the next ticket in a fresh one. Every turn re-sends the whole conversation, so a second ticket in the same session pays to re-send the first one's history on every turn, and the context window fills until it has to be compacted — which costs money and loses detail from work already done.
+
 ```bash
 claude --worktree <task-name>   # creates the worktree, copies .env per .worktreeinclude
 ./scripts/wt-bootstrap.sh       # dependencies, Prisma client, husky hooks
-                                # work, open the PR, get it merged
+                                # investigate, implement, validate, open the PR
+                                # then end the session — it is done
+```
+
+After the human reviews and merges, retire the worktree from the primary checkout:
+
+```bash
+git fetch origin
 ./scripts/wt-cleanup.sh <task-name>   # removes the worktree and the local branch
 ```
 
 [`wt-bootstrap.sh`](scripts/wt-bootstrap.sh) is idempotent and refuses to run on `main`, on `staging`, or in the primary checkout.
 
-[`wt-cleanup.sh`](scripts/wt-cleanup.sh) is the teardown half, and it refuses rather than guesses. It removes the worktree and deletes its local branch only when the target is a registered worktree one level under `.claude/worktrees/`, is not the primary checkout or the worktree you are running from, holds a branch other than `main` or `staging`, has no modified or untracked files, and has every one of its commits already reachable from `origin/main`. Run it from the primary checkout; `git fetch origin` first, since it never fetches and a stale `origin/main` only makes it refuse more.
+[`wt-cleanup.sh`](scripts/wt-cleanup.sh) is the teardown half, and it refuses rather than guesses. It removes the worktree and deletes its local branch only when the target is a registered worktree one level under `.claude/worktrees/`, is not the primary checkout or the worktree you are running from, holds a branch other than `main` or `staging`, has no modified or untracked files, and has every one of its commits already reachable from `origin/main`. It never fetches, which is why the fetch above matters — a stale `origin/main` only ever makes it refuse more.
 
 Both removals are the plain non-force commands, so git's own refusals are the last line of defence — it never runs `git worktree remove --force`, `git branch -D`, `reset --hard`, `clean` or `rm -rf`. A squash or rebase merge leaves the branch's commits off `origin/main`, so it will refuse a branch whose pull request really did merge; the refusal prints the PR state and the commits at stake and leaves the decision to you. The remote is never touched, and the worktree's own `.env` and `node_modules` go with the directory — both are per-worktree copies, and the primary checkout's originals are untouched.
 

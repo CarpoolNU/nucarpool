@@ -130,7 +130,7 @@ Resolve transitions by workflow status **name**, never a hard-coded transition I
 ```
 1.  Jira first — get or create the issue            [To Do]
 2.  transition the issue                       → [In Progress]
-3.  git fetch origin && git switch -c <branch> origin/main
+3.  own worktree off a fetched origin/main  ← not a branch switch in the shared checkout
 4.  investigate: code + READMEs; Confluence only if needed
 5.  implement
 6.  yarn lint && yarn tsc            (yarn test where applicable)
@@ -147,9 +147,10 @@ Resolve transitions by workflow status **name**, never a hard-coded transition I
 16. failures from THIS change?  fix → validate → commit → push same branch → 14
     unrelated failure?          search Jira → reference/file → don't scope-creep
 17. verify acceptance criteria against what shipped
-18. report PR readiness + remaining risks → STOP
+18. report PR readiness + remaining risks → STOP, end the session
     (or → [Blocked] with what's blocking and what's needed)
 19. human reviews and merges, then sets     → [Done]
+20. human retires the worktree: ./scripts/wt-cleanup.sh <task>
 ```
 
 **The PR is not the finish line.** After it exists, inspect its checks, its final diff, and its base and head branches. Confirm it contains only the intended changes and that the acceptance criteria are actually met. Report unmet criteria rather than implying the work is clean.
