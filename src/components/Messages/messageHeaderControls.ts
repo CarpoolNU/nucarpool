@@ -6,9 +6,14 @@ import { RequestStatus } from "@prisma/client";
  * Extracted from `MessageHeader` for the same reason `connectAction` was
  * extracted from `ConnectCard`: the rule is worth pinning where a test can
  * state it as a rule. When this was written the component was not reachable
- * from a test at all; the jsdom project changed that, so `MessageHeader`
- * *could* now be rendered — but a table of states reads better as a table than
- * as a dozen renders, and the extraction stays.
+ * from a test at all; the jsdom project changed that, and `MessageHeader.test.tsx`
+ * now renders it at both viewports — but a table of states reads better as a
+ * table than as a dozen renders, and the extraction stays.
+ *
+ * The two are not alternatives, and the difference is worth stating: this
+ * table was right the whole time a mobile viewport rendered *none* of what it
+ * returns, because the component's mobile branch returned before reaching the
+ * controls. A rule test cannot see that; only a render can.
  *
  * Three states, and the third is the point.
  */
