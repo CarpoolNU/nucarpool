@@ -198,7 +198,9 @@ docker exec mysql-on-docker mysql -uroot -p"$MYSQL_ROOT_PASSWORD" \
 TEST_DATABASE_URL=mysql://root:<password>@127.0.0.1:3306/nucarpool_test
 ```
 
-`globalSetup` approves the target, claims the database, applies migration history and empties it. See [the testing docs](../../../docs/testing.md#the-database-suite) for the guards, the truncation contract and what the suite does and does not currently cover.
+`globalSetup` approves the target, claims the database, applies migration history and empties it — in that order, and the order is load-bearing: `prisma migrate deploy` raises P3005 on a schema that is not empty and carries no `_prisma_migrations`, so the claim marker is written _after_ the deploy rather than before it.
+
+You do not have to run this locally to have it run: the `test-db` CI job brings up its own MySQL 8.0 and runs the suite on every pull request. See [the testing docs](../../../docs/testing.md#the-database-suite) for the guards, the truncation contract and what the suite does and does not currently cover.
 
 Two points specific to this layer:
 

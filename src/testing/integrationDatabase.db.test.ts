@@ -142,6 +142,59 @@ describe("truncateAll", () => {
   });
 });
 
+describe("migration history", () => {
+  /*
+   * The assertion the harness most needed and did not have.
+   *
+   * `globalSetup` runs `prisma migrate deploy` before any of this, and for the
+   * whole of the harness's life that step failed with P3005 on a fresh
+   * database - the claim marker was created first, which left a non-empty
+   * schema carrying no `_prisma_migrations`. Nothing noticed, because the suite
+   * had never completed a run anywhere: the stub-based tests mock the deploy
+   * out, and this file could not run without a server.
+   *
+   * Replaying migration history on every run is half the point of the
+   * integration job, so "the schema arrived, and it arrived from the committed
+   * migrations" is worth asserting directly rather than inferring from a query
+   * happening to work.
+   */
+  it("has actually been applied, so the schema came from the committed migrations", async () => {
+    const tables = await discoverTables(prisma);
+
+    expect(tables).toContain("_prisma_migrations");
+  });
+
+  it("records every migration in prisma/migrations as applied", async () => {
+    const applied = await prisma.$queryRawUnsafe<
+      { applied_count: bigint | number }[]
+    >(
+      "SELECT COUNT(*) AS applied_count FROM `_prisma_migrations` " +
+        "WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL",
+    );
+
+    // Not compared against a hard-coded count: that would need editing with
+    // every new migration, and the property worth holding is "more than none",
+    // which is what a P3005 failure or an empty deploy would break.
+    expect(Number(applied[0].applied_count)).toBeGreaterThan(0);
+  });
+
+  it("built the application tables the schema declares", async () => {
+    const tables = await discoverTables(prisma);
+
+    // A representative spread rather than the full list, so adding a model
+    // does not fail this test: one NextAuth table, the two the data model's
+    // gotchas live on, and the implicit join table Prisma has no delegate for.
+    expect(tables).toEqual(
+      expect.arrayContaining([
+        "user",
+        "carpool_search",
+        "location",
+        "_Favorites",
+      ]),
+    );
+  });
+});
+
 describe("the claim marker", () => {
   it("is present, because globalSetup claimed this database", async () => {
     // If this is missing, `prepareIntegrationDatabase` did not run - which

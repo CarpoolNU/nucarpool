@@ -24,7 +24,7 @@ yarn db:start / yarn db:stop          # local MySQL 8.0 in Docker
 yarn db:schema                        # prisma migrate dev && prisma generate
 ```
 
-**Run `yarn lint` and `yarn tsc` before calling work done.** CI runs seven checks on every PR and on pushes to `main` — `lint`, `tsc`, `test`, `build`, `env-contract`, `schema`, `format` — on the Node version in [`.nvmrc`](.nvmrc). `build` runs a real `next build` and asserts no test file reached the route table; `env-contract` checks `.env.example` **and** `amplify.yml`, which are [two different contracts](docs/deployment.md#the-environment-contract); `schema` replays `prisma/migrations/` and fails if the result differs from `schema.prisma`.
+**Run `yarn lint` and `yarn tsc` before calling work done.** CI runs eight checks on every PR and on pushes to `main` — `lint`, `tsc`, `test`, `test-db`, `build`, `env-contract`, `schema`, `format` — on the Node version in [`.nvmrc`](.nvmrc). `test-db` runs the database suite against a disposable MySQL service container, applying `prisma/migrations/` to it first. `build` runs a real `next build` and asserts no test file reached the route table; `env-contract` checks `.env.example` **and** `amplify.yml`, which are [two different contracts](docs/deployment.md#the-environment-contract); `schema` replays `prisma/migrations/` and fails if the result differs from `schema.prisma`.
 
 **Never put a test file under [`src/pages/`](src/pages/)** — `pageExtensions` includes `.ts` and `.tsx`, so a filename there is also a URL. Test a route by importing it from outside the directory. See [docs/testing.md](docs/testing.md), which also covers the two Jest projects, the jsdom limitations, and why a green run proves less than it looks like.
 
