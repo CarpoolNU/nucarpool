@@ -1,4 +1,5 @@
 import {
+  DESKTOP_MEDIA_QUERY,
   DESKTOP_SCREEN_NAME,
   MOBILE_BREAKPOINT_PX,
   MOBILE_NAV_HEIGHT_PX,
@@ -66,6 +67,59 @@ describe("the shared mobile breakpoint", () => {
     expect(screens.md).toBe("834px");
     expect(screens.sm).not.toBe("640px");
     expect(screens.md).not.toBe("768px");
+  });
+});
+
+/**
+ * The boundary as CSS sees it, for the templates that cannot reach a `desktop:`
+ * utility.
+ *
+ * This is the half of the original defect the constant did not reach.
+ * `useIsMobile` and the Tailwind screen were unified on 640, but `Header` kept
+ * three hand-written `@media (max-width: 768px)` blocks, so between 640 and 768
+ * the desktop header rendered with the padding and logo size written for a
+ * phone. These tests guard the two ways that comes back: the query drifting
+ * from the constant, and the query being written in the direction that
+ * disagrees with `isMobileWidth` at the boundary itself.
+ */
+describe("the shared breakpoint as a media query", () => {
+  it("is built from the constant rather than restating it", () => {
+    expect(DESKTOP_MEDIA_QUERY).toContain(`${MOBILE_BREAKPOINT_PX}px`);
+  });
+
+  /**
+   * The direction is the whole point. `isMobileWidth` is strictly below the
+   * breakpoint, so at exactly 640 the desktop styling has to apply - which a
+   * `min-width: 640px` query gives for free and a `max-width: 640px` query gets
+   * wrong by one pixel. A template therefore states its mobile values as the
+   * base and overrides them inside this query; a `max-width` here would mean
+   * the inversion had been undone.
+   */
+  it("turns on at the breakpoint, not below it", () => {
+    expect(DESKTOP_MEDIA_QUERY).toBe(`(min-width: ${MOBILE_BREAKPOINT_PX}px)`);
+    expect(DESKTOP_MEDIA_QUERY).not.toContain("max-width");
+  });
+
+  /**
+   * The same query Tailwind emits for `desktop:`, so a styled-components
+   * template and a utility class change at the same width. Written against the
+   * screen rather than the constant because it is the *emitted CSS* that has to
+   * match, and the screen is what Tailwind emits from.
+   */
+  it("is the query the desktop screen emits", () => {
+    expect(DESKTOP_MEDIA_QUERY).toBe(
+      `(min-width: ${screens[DESKTOP_SCREEN_NAME]})`,
+    );
+  });
+
+  /**
+   * Interpolated straight after `@media`, so it has to carry its own
+   * parentheses. Without them the rule is invalid and styled-components drops
+   * the whole block silently - the failure mode is missing styling, not an
+   * error.
+   */
+  it("is usable as written directly after @media", () => {
+    expect(DESKTOP_MEDIA_QUERY).toMatch(/^\(.+\)$/);
   });
 });
 

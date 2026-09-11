@@ -108,18 +108,6 @@ const Admin: NextPage<AdminProps> = ({ userPermission }) => {
   const showMobileNotice = isHydrated && isMobile;
 
   return (
-    /*
-     * `h-full`, not `h-screen`. `globals.css` sets `#__next` to `100dvh`
-     * deliberately - `100vh` on a mobile browser is the height the page would
-     * have with the URL bar retracted, so a `100vh` box puts its own bottom
-     * edge behind the browser chrome. Inheriting the shell leaves one owner of
-     * that decision. `w-screen` is gone with it: `#__next` is already `100vw`,
-     * and `100vw` counts the scrollbar where `100%` does not.
-     *
-     * This line is the `/admin` half of SCRUM-433, taken here because the two
-     * tickets touch the same line and editing it twice is how they conflict.
-     * `/profile` is the other half and is deliberately untouched.
-     */
     <div className="relative h-full select-none">
       {isHydrated && <Header admin={true} />}
       {!userPermission ? (

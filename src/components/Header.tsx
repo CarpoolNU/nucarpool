@@ -18,8 +18,12 @@ import { useUnreadNotifications } from "../utils/messages/useUnreadNotifications
 import { PublicUser } from "../utils/types";
 import useIsMobile from "../utils/useIsMobile";
 // The same module `useIsMobile` and `tailwind.config.js` read, so the bar's own
-// height and the space every caller reserves for it have one definition.
-import { MOBILE_NAV_SPACE } from "../utils/breakpoints";
+// height, the space every caller reserves for it, and the width at which this
+// file stops being mobile all have one definition. The templates below each
+// wrote their own wider threshold until this import replaced it; the module's
+// docblock carries the rest of that story, including why the three queries
+// below are `min-width` and not their inverse.
+import { DESKTOP_MEDIA_QUERY, MOBILE_NAV_SPACE } from "../utils/breakpoints";
 import {
   activeMobileNavItem,
   planMobileNav,
@@ -38,14 +42,14 @@ const HeaderDiv = styled.div`
   align-items: center;
   justify-content: space-between;
   background-color: #c8102e;
-  padding: 0 40px;
+  padding: 0 20px;
   box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.25);
   height: 8.5%;
   width: 100%;
   z-index: 10;
 
-  @media (max-width: 768px) {
-    padding: 0 20px;
+  @media ${DESKTOP_MEDIA_QUERY} {
+    padding: 0 40px;
   }
 `;
 
@@ -119,30 +123,30 @@ const MobileNavItem = styled.button<{ $active: boolean }>`
 
 export const Logo = styled.h1`
   font-family: "Lato", sans-serif;
-  height: 111px;
+  height: 70px;
   font-style: normal;
   font-weight: 700;
-  font-size: 48px;
-  line-height: 77px;
+  font-size: 32px;
+  line-height: normal;
   display: flex;
   align-items: center;
   text-align: center;
   color: #f4f4f4;
 
-  @media (max-width: 768px) {
-    font-size: 32px;
-    height: 70px;
-    line-height: normal;
+  @media ${DESKTOP_MEDIA_QUERY} {
+    font-size: 48px;
+    height: 111px;
+    line-height: 77px;
   }
 `;
 
 export const SigninLogo = styled.h1`
   font-family: "Lato", sans-serif;
-  height: 111px;
+  height: 70px;
   font-style: normal;
   font-weight: 700;
-  font-size: 48px;
-  line-height: 77px;
+  font-size: 32px;
+  line-height: normal;
   display: flex;
   align-items: center;
   text-align: center;
@@ -150,10 +154,10 @@ export const SigninLogo = styled.h1`
   justify-content: center;
   width: 100%;
 
-  @media (max-width: 768px) {
-    font-size: 32px;
-    height: 70px;
-    line-height: normal;
+  @media ${DESKTOP_MEDIA_QUERY} {
+    font-size: 48px;
+    height: 111px;
+    line-height: 77px;
   }
 `;
 

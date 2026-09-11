@@ -33,6 +33,27 @@ const MOBILE_BREAKPOINT_PX = 640;
 const DESKTOP_SCREEN_NAME = "desktop";
 
 /**
+ * The same boundary as a media query, for CSS that cannot reach the `desktop:`
+ * screen - a styled-components template.
+ *
+ * `Header` held three hand-written `@media (max-width: 768px)` blocks after the
+ * JavaScript was unified on 640, so viewports between the two got the desktop
+ * header wearing mobile padding and a mobile logo. This exists so that a
+ * template states the boundary by reading it rather than by restating a number.
+ *
+ * A `min-width` query, and that direction is deliberate rather than a style
+ * preference. It matches `isMobileWidth`, which is strictly below the
+ * breakpoint, and the `desktop:` screen, which turns on at it - so a template
+ * declares its mobile values as the base and overrides them in here. Inverting
+ * a `max-width` block instead would need `max-width: 639.98px`, because a CSS
+ * range is inclusive at both ends and `max-width: 640px` would claim the
+ * breakpoint itself for mobile, disagreeing with the JavaScript by exactly one
+ * pixel - the fractional value is the tell that the query is fighting the
+ * constant's semantics.
+ */
+const DESKTOP_MEDIA_QUERY = `(min-width: ${MOBILE_BREAKPOINT_PX}px)`;
+
+/**
  * Split out from the hook so the boundary itself is testable without a DOM.
  * That was originally the only way to test it at all; the hook
  * has its own suite in `useIsMobile.test.tsx`, and this stays split because
@@ -87,6 +108,7 @@ const MOBILE_NAV_SPACE = `calc(${MOBILE_NAV_HEIGHT_PX}px + env(safe-area-inset-b
 module.exports = {
   MOBILE_BREAKPOINT_PX,
   DESKTOP_SCREEN_NAME,
+  DESKTOP_MEDIA_QUERY,
   isMobileWidth,
   MOBILE_NAV_HEIGHT_PX,
   MOBILE_NAV_SPACE,
