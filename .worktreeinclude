@@ -1,0 +1,19 @@
+# Untracked, gitignored files that Claude Code copies into a worktree it
+# creates (`claude --worktree <name>`). It copies rather than symlinks, and it
+# only ever considers files that are both untracked and ignored, so nothing
+# tracked can be affected from here.
+#
+# Deliberately just `.env`, and it should stay small:
+#
+#   - `node_modules` is expanded and copied file by file by this mechanism,
+#     which is the wrong tool for 622 packages. scripts/wt-bootstrap.sh clones
+#     it in one operation instead.
+#   - `.next` and `nucarpool-db-data/` are generated per checkout; a copy would
+#     be stale at best and, for the database directory, a second MySQL data
+#     directory nobody asked for.
+#   - `.env.production` is written by the Amplify build container from real
+#     deployment credentials. It must never exist on a developer machine, let
+#     alone be propagated into a worktree.
+#
+# This runs only when the worktree is first created, not when one is resumed.
+.env
