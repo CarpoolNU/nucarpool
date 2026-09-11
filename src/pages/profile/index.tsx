@@ -397,7 +397,7 @@ const Index: NextPage = () => {
     );
   }
   return (
-    <div className="relative h-screen w-screen select-none">
+    <div className="relative h-full select-none">
       {showModal && (
         <UnsavedModal
           onClose={onDismissModal}
