@@ -4,6 +4,30 @@ const {
   MOBILE_NAV_SPACE,
 } = require("./src/utils/breakpoints");
 
+/**
+ * The strip of map left visible above the expanded explore sheet.
+ *
+ * Hoisted out of the `h-mobile-sheet` token because the sheet now has a second
+ * open height and the handle has a rest position per height, so this figure is
+ * read by four tokens below. It was written out three times before that and
+ * would have been written out four.
+ */
+const MOBILE_SHEET_MAP_STRIP = "5.5rem";
+
+/**
+ * How far the handle's pill sits above the top edge of the sheet it belongs
+ * to.
+ *
+ * This is not a new number: the expanded handle was positioned with
+ * `bottom-[calc(100%-6rem)]`, and 6rem is exactly this map strip plus this
+ * 0.5rem. Naming it is what lets the half detent's handle be placed by the
+ * same rule rather than by a second hand-computed `calc()`.
+ */
+const MOBILE_SHEET_HANDLE_LIFT = "0.5rem";
+
+/** The expanded sheet's height, which the half detent is half of. */
+const MOBILE_SHEET_HEIGHT = `calc(100% - ${MOBILE_SHEET_MAP_STRIP} - ${MOBILE_NAV_SPACE})`;
+
 /*
  * **Tailwind v4 scans the whole repository for class names**, minus what
  * `.gitignore` excludes -- not just `src/`, and not just JS and TS. Automatic
@@ -47,6 +71,21 @@ module.exports = {
         "mobile-nav": MOBILE_NAV_SPACE,
         /** Clear of the navigation, with a small gap. */
         "above-mobile-nav": `calc(${MOBILE_NAV_SPACE} + 0.5rem)`,
+        /**
+         * The drag handle's rest position at each of the sheet's two open
+         * detents: the sheet's top edge, lifted by the pill's clearance.
+         *
+         * `bottom` percentages resolve against the containing block's height,
+         * and the handle shares the sheet's containing block, so `100%` means
+         * the same quantity in both - which is what makes composing these out
+         * of the height above correct rather than coincidental.
+         *
+         * `sheet-handle` is the value the page used to spell
+         * `calc(100% - 6rem)` inline. It resolves identically; it is expressed
+         * this way so that the two detents cannot drift apart.
+         */
+        "sheet-handle": `calc(100% - ${MOBILE_SHEET_MAP_STRIP} - ${MOBILE_SHEET_HANDLE_LIFT})`,
+        "half-sheet-handle": `calc(${MOBILE_NAV_SPACE} + (${MOBILE_SHEET_HEIGHT}) / 2 - ${MOBILE_SHEET_HANDLE_LIFT})`,
       },
       height: {
         /**
@@ -69,12 +108,24 @@ module.exports = {
          */
         "mobile-row": `calc(100% - 1.5rem - ${MOBILE_NAV_SPACE})`,
         /**
-         * The expanded explore sheet. `5.5rem` is the strip of map left visible
-         * above it, which is what the previous `calc(100% - 8.5rem)` encoded
-         * once its own nav assumption is factored out - 8.5rem was 88px of map
-         * plus the 48px the nav was then assumed to be.
+         * The expanded explore sheet. `MOBILE_SHEET_MAP_STRIP` is the strip of
+         * map left visible above it, which is what the previous
+         * `calc(100% - 8.5rem)` encoded once its own nav assumption is factored
+         * out - 8.5rem was 88px of map plus the 48px the nav was then assumed
+         * to be.
          */
-        "mobile-sheet": `calc(100% - 5.5rem - ${MOBILE_NAV_SPACE})`,
+        "mobile-sheet": MOBILE_SHEET_HEIGHT,
+        /**
+         * The detent a drag can land on, halfway up.
+         *
+         * Half of the expanded height rather than half the viewport, so the
+         * map strip and the navigation are reserved once and the two open
+         * detents stay in proportion on any device. The drag's own arithmetic
+         * uses the same fraction, but takes the pixels from measuring this
+         * element rather than from re-deriving the `calc()` - see
+         * `useSheetDrag`.
+         */
+        "mobile-sheet-half": `calc((${MOBILE_SHEET_HEIGHT}) / 2)`,
       },
       colors: {
         "northeastern-red": "#C8102E",

@@ -1,5 +1,5 @@
 /**
- * Which of its five states the explore page's sidebar is in.
+ * Which of its six states the explore page's sidebar is in.
  *
  * Lifted out of `index.tsx` because visibility there had **three** owners
  * operating on the same DOM node, two of them not React-aware:
@@ -22,7 +22,7 @@
  * The fix is not a better effect, it is having one owner: the state goes in,
  * a view comes out, and the page maps that view to classes React alone writes.
  *
- * **This returns a view, not a `className`.** The precedence between the four
+ * **This returns a view, not a `className`.** The precedence between the
  * states is what was broken and is what deserves a test; the classes that
  * express them are presentation. A test pinning `"bottom-mobile-nav
  * h-mobile-sheet"` would fail on any restyle while proving nothing about the
@@ -43,6 +43,8 @@
  * nothing checks.
  */
 
+import type { SheetDetent } from "./sheetDetents";
+
 /**
  * `hidden` and `collapsed` are **not** the same thing, which is half of why
  * this was confusing to read in place. `hidden` is Tailwind's `display: none` -
@@ -61,6 +63,14 @@ export type ExploreSidebarView =
   | "detail"
   /** Collapsed by the handle: still in layout, animated to nothing. */
   | "collapsed"
+  /**
+   * Half the expanded height. The detent a drag can land on, and the reason
+   * the handle's gesture is worth more than a slow tap - with only the two
+   * states either side of this one, every release gave you what a tap already
+   * gave you. Nothing but a drag produces it: a tap goes straight between
+   * `collapsed` and `expanded`, as it always did.
+   */
+  | "half"
   /** The full list sheet, the mobile default. */
   | "expanded";
 
@@ -72,18 +82,22 @@ export type ExploreSidebarView =
  *   serve and the only one this ticket adds to the `className`'s own inputs.
  * @param isDetailOpen whether a single card's details are showing -
  *   `mobileSelectedUserID`
- * @param isCollapsed the collapse handle's state - `isSidebarCollapsed`
+ * @param detent where the sheet is resting - `sheetDetent` in the page, which
+ *   a tap toggles and a drag snaps. The three detents are also three of this
+ *   function's views, so the last line returns it unchanged; that identity is
+ *   what keeps `MOBILE_SIDEBAR_CLASSES` exhaustive, since a detent added
+ *   without classes to render it stops the page compiling.
  */
 export function planExploreSidebar({
   isMobile,
   hasOpenConversation,
   isDetailOpen,
-  isCollapsed,
+  detent,
 }: {
   isMobile: boolean;
   hasOpenConversation: boolean;
   isDetailOpen: boolean;
-  isCollapsed: boolean;
+  detent: SheetDetent;
 }): ExploreSidebarView {
   // Desktop first, and every branch below is therefore mobile-only. The old
   // code gated each `classList` call on `isMobile` separately; getting that
@@ -98,14 +112,17 @@ export function planExploreSidebar({
     return "hidden";
   }
 
-  // Before `isCollapsed`, preserving the existing ternary's order. Opening a
-  // detail view also sets `isCollapsed` false, so the two rarely coincide -
-  // but when they do, the details are what the user just asked for.
+  // Before the detent, preserving the existing ternary's order. Opening a
+  // detail view also sets the detent to `expanded`, so the two rarely coincide
+  // - but when they do, the details are what the user just asked for.
   if (isDetailOpen) {
     return "detail";
   }
 
-  return isCollapsed ? "collapsed" : "expanded";
+  // The detents *are* views, one for one, so there is no mapping to get wrong
+  // here. This used to be `isCollapsed ? "collapsed" : "expanded"`, which is
+  // the same statement for the two detents that existed then.
+  return detent;
 }
 
 /**
