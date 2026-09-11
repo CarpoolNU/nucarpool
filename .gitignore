@@ -51,3 +51,10 @@ nucarpool-db-data/
 # which Claude Code writes itself when you approve a permission permanently,
 # are personal. Never commit them.
 .claude/settings.local.json
+
+# Linked git worktrees, one per concurrent session, so that two sessions sharing
+# this repository cannot move each other's HEAD. Create them with
+# `git worktree add --no-track -b <branch> .claude/worktrees/<name> origin/main`
+# — without --no-track the new branch tracks origin/main, which aims a later
+# bare `git push` at main. They are checkouts, not content. Never commit them.
+.claude/worktrees/
