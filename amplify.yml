@@ -154,6 +154,34 @@ frontend:
         - env | grep -e SECRET >> .env.production
         - env | grep -e AZURE >> .env.production
         - env | grep -e PUSHER >> .env.production
+        # Build identity, so the deployed app can say which commit it is
+        # (SCRUM-405). Amplify's build container sets these three; nothing
+        # else in this file carried them, so the information existed at build
+        # time and was thrown away - and "has the fix shipped?" had no answer
+        # short of console access. `pages/api/version.ts` serves them.
+        #
+        # Matched by exact name, NOT by a shared `AWS_` prefix, which would be
+        # the obvious way to write this in one line. The build container also
+        # holds the credentials Amplify itself runs with, and any of
+        # `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` or `AWS_SESSION_TOKEN`
+        # present there would be swept into `.env.production` by a prefix
+        # match - a file AWS's own documentation warns is readable by anyone
+        # with access to the deployment artifacts. Three narrow patterns
+        # cannot do that. Keep them narrow.
+        #
+        # Strict, with no `|| true`. Read "Exit codes" above before changing
+        # that: these are not optional-and-absent like `S3_`, they are set by
+        # Amplify on every build, so a no-match means Amplify stopped
+        # providing one and the strict `grep` is the only thing that would
+        # say so - the same argument that keeps `NEXTAUTH_URL` strict. They
+        # are outside the `envsafe` contract, so
+        # `check-env-contract.js --amplify` treats them as *unconstrained*
+        # and enforces neither choice; this comment is the record of why.
+        # The trade is that a deploy fails if AWS renames one. If that
+        # happens, the fix is to update the name here, not to add `|| true`.
+        - env | grep -e AWS_COMMIT_ID >> .env.production
+        - env | grep -e AWS_BRANCH >> .env.production
+        - env | grep -e AWS_JOB_ID >> .env.production
         - yarn run build:${BUILD_ENV}
 
   artifacts:
