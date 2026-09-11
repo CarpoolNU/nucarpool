@@ -89,3 +89,68 @@ export function planMobileNav({
     ? { kind: "guard", href, tab: option }
     : { kind: "hardNavigate", href, tab: option };
 }
+
+/**
+ * Which bottom-navigation item should be lit, or `null` when the current page
+ * is not one of them.
+ *
+ * Split out here for the same reason `planMobileNav` is: this used to be an
+ * inline ternary inside `renderMobileNav`, and one of its cases was wrong.
+ * `/admin` supplies no `data`, so the highlight fell through to `activeNav` —
+ * whose initial value is `"explore"` — and the bar claimed the user was on the
+ * map while they were looking at the admin dashboard. There is no fourth tab
+ * for `/admin` and there should not be one, so the honest answer is that none
+ * of them is current.
+ *
+ * `null` rather than a tab is therefore load-bearing: it is what lets the bar
+ * render with nothing selected, which is a state the ternary could not express.
+ */
+export type ActiveNavItem = NavTab | "profile" | null;
+
+/**
+ * @param pathname the current route. `includes` rather than equality, matching
+ *   `planMobileNav` — `/profile/setup` is the profile page.
+ * @param isAdmin the admin page's own `admin` prop. Taken from the caller
+ *   rather than sniffed off `pathname` because the page states it directly,
+ *   and a header told it is the admin header should agree with itself whatever
+ *   route it is mounted on.
+ * @param displayGroup whether the group modal is open, which the bar reflects
+ *   even though it is not a route.
+ * @param sidebarValue the map page's current sidebar, when it supplies one.
+ * @param lastTapped the header's own fallback for pages that supply no
+ *   `sidebarValue`.
+ */
+export function activeMobileNavItem({
+  pathname,
+  isAdmin,
+  displayGroup,
+  sidebarValue,
+  lastTapped,
+}: {
+  pathname: string;
+  isAdmin: boolean;
+  displayGroup: boolean;
+  sidebarValue?: string;
+  lastTapped: string;
+}): ActiveNavItem {
+  if (pathname.includes("/profile")) {
+    return "profile";
+  }
+
+  // Before the group modal, so that opening it on the admin page - which has
+  // no control that can - could not light a tab either.
+  if (isAdmin) {
+    return null;
+  }
+
+  if (displayGroup) {
+    return "mygroup";
+  }
+
+  const candidate = sidebarValue || lastTapped;
+
+  // The ternary compared this against each item's id and simply matched
+  // nothing when it was not a tab. Stated explicitly so the return type can
+  // be the three tabs rather than `string`.
+  return isNavTab(candidate) ? candidate : null;
+}

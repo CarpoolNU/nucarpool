@@ -8,7 +8,9 @@ import UserManagement from "../components/Admin/UserManagement";
 import Spinner from "../components/Spinner";
 import { Permission } from "@prisma/client";
 import AdminData from "../components/Admin/AdminData";
+import AdminMobileNotice from "../components/Admin/AdminMobileNotice";
 import useIsHydrated from "../utils/useIsHydrated";
+import useIsMobile from "../utils/useIsMobile";
 
 // One direct session lookup, not a self-directed HTTP round trip to
 // `/api/auth/session`. `getSession` from `next-auth/react` is the
@@ -78,11 +80,40 @@ const Admin: NextPage<AdminProps> = ({ userPermission }) => {
    */
   const isHydrated = useIsHydrated();
 
+  /*
+   * Which layout this page has, rather than which one the viewport wants.
+   *
+   * `useIsMobile` reports the real viewport on a fresh mount, but React uses
+   * its `getServerSnapshot` during *hydration* as well as on the server - and
+   * this page, alone among the pages with a `Header`, really is in the server
+   * HTML, because `userPermission` arrives as a `getServerSideProps` prop
+   * rather than a query behind `ssr: false`. So `isMobile` alone would be
+   * false for the hydration pass and the dashboard would render once on a
+   * phone before the notice replaced it.
+   *
+   * Gating on `isHydrated` does not remove that pass - nothing can, the server
+   * cannot know the device - it just makes this read the same way `Header`
+   * above it already does, and keeps the dashboard in the server HTML for
+   * desktop, which is what `AdminPage.test.tsx` asserts deliberately.
+   *
+   * The residual cost is that the hydration pass mounts `UserManagement`,
+   * whose `getAllUsers` query React Query subscribes to in a passive effect -
+   * which runs *before* React's corrective re-render, so the request goes out
+   * on a phone and its result is then discarded. Same shape as the wasted
+   * presigned-URL calls SCRUM-423 and SCRUM-437 removed, and tracked in
+   * SCRUM-452 rather than fixed here, because avoiding it means gating the
+   * query inside `UserManagement` instead of the layout in this file.
+   */
+  const isMobile = useIsMobile();
+  const showMobileNotice = isHydrated && isMobile;
+
   return (
     <div className="relative h-full select-none">
       {isHydrated && <Header admin={true} />}
       {!userPermission ? (
         <Spinner />
+      ) : showMobileNotice ? (
+        <AdminMobileNotice />
       ) : (
         <div className="relative flex h-[91.5%] w-full flex-row overflow-hidden">
           <div className="border-busy-red z-0 h-full max-w-[250px] min-w-[175px] flex-[1] border-r-4 bg-stone-100">
