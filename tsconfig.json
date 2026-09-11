@@ -50,7 +50,7 @@
      * calling it in February 2025, which made the file read as though the
      * profile had adopted the UTC date fix. It had not. SCRUM-381 was written
      * on that assumption and got its analysis wrong; SCRUM-393, the live data
-     * bug behind it, stayed invisible for eighteen months. SCRUM-394.
+     * bug behind it, stayed invisible for eighteen months..
      *
      * `noUnusedLocals` here rather than `@typescript-eslint/no-unused-vars`,
      * reversing what SCRUM-394 first proposed, for two reasons:

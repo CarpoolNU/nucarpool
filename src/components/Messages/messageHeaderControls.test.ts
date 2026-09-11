@@ -7,7 +7,7 @@ import { messageHeaderControls } from "./messageHeaderControls";
  * `MessageHeader` renders these, and the rule was extracted here so it could
  * be stated as a table — the way `connectAction` was extracted from
  * `ConnectCard`. When that happened the component was not reachable from a
- * test at all; since SCRUM-377 it is, and still has no suite of its own.
+ * test at all; it is, and still has no suite of its own.
  *
  * The case this exists for is the last block: a pair already carpooling
  * together get **no** control. That slot used to hold a "Leave Conversation"
@@ -70,7 +70,7 @@ describe("messageHeaderControls", () => {
   });
 
   /**
-   * SCRUM-362. Every shape of "these two are carpooling together" resolves to
+   * Every shape of "these two are carpooling together" resolves to
    * a header with nothing in it that writes.
    */
   describe("a pair already in the same group", () => {

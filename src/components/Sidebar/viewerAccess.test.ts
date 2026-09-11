@@ -94,7 +94,7 @@ describe("the predicates together", () => {
   });
 
   it("leaves favorites as the only non-request tab a VIEWER can see", () => {
-    // Worth pinning because it is the fact that decided SCRUM-323. Viewer mode
+    // Worth pinning because it is the fact that decided. Viewer mode
     // used to print a counterpart's role in place of their name on "discovery"
     // cards, and this is the whole of the surface that reached: recommendations
     // are replaced by copy, requests are relationships, so the rule only ever

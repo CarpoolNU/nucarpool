@@ -5,7 +5,7 @@
  * told to return. This one proves what MySQL actually does: whether a
  * `where`/`include`/`select` is even a valid query, whether the referential
  * actions that `relationMode = "prisma"` emulates behave as the schema says,
- * and whether a multi-step write really rolls back. SCRUM-263.
+ * and whether a multi-step write really rolls back..
  *
  * ## This is test infrastructure, not application code
  *
@@ -33,7 +33,7 @@
  * disposable database named by `TEST_DATABASE_URL`, and against nothing else.
  * That is deliberate and it is the point of the suite: building the schema from
  * the committed migration history is what makes the history itself testable,
- * and it is how `tutorial_completed` would have been caught (SCRUM-227).
+ * and it is how `tutorial_completed` would have been caught.
  *
  * **It does not mean this repository has adopted `prisma migrate deploy` for
  * shared environments.** PlanetScale is still changed by `prisma db push` to

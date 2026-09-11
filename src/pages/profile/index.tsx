@@ -191,7 +191,7 @@ const Index: NextPage = () => {
    *
    * A ref rather than state because nothing renders from it, and because
    * `handleSaveChanges` reads it after an `await` - a state value captured in
-   * that closure would be the one from before the save (SCRUM-384).
+   * that closure would be the one from before the save.
    */
   const proceedRef = useRef<(() => void | Promise<void>) | null>(null);
 
@@ -220,7 +220,7 @@ const Index: NextPage = () => {
    * callback rather than a destination so that the mobile path's full page
    * load - SCRUM-171 - stays in `Header` where its reason is written down.
    * Absent, the map is the destination, which is what the desktop button
-   * asked for before this took an argument (SCRUM-384).
+   * asked for before this took an argument.
    */
   const checkForChanges = async (proceed?: () => void | Promise<void>) => {
     proceedRef.current = proceed ?? null;
@@ -282,7 +282,7 @@ const Index: NextPage = () => {
       startCoordLng: startAddressHook.selectedAddress.center[0],
       startCoordLat: startAddressHook.selectedAddress.center[1],
       // Only a driver has seats. This used to be enforced on load, by the
-      // `role` effect that also corrupted a full driver's `0` (SCRUM-380);
+      // `role` effect that also corrupted a full driver's `0`;
       // normalising at the submit boundary keeps the "non-driver stores 0"
       // outcome without the form rewriting stored data behind the user. It
       // tests DRIVER rather than RIDER because VIEWER needs zeroing too - the

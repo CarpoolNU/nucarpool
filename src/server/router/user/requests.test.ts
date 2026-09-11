@@ -484,7 +484,7 @@ describe("user.requests.create — the duplicate guard still holds", () => {
 });
 
 /**
- * SCRUM-349: a double-clicked Send must not build the pair two of everything.
+ * a double-clicked Send must not build the pair two of everything.
  *
  * The duplicate-guard tests above all *seed* an existing row, so they prove the
  * guard reads correctly — but none of them ever ran `create` twice, which is
@@ -503,7 +503,7 @@ describe("user.requests.create — the duplicate guard still holds", () => {
  * transaction narrows the window but does not close it, because MySQL will not
  * lock rows a non-locking SELECT did not find. The control that removes the
  * realistic path is the in-flight guard on `ConnectModal`'s Send button, which
- * still has no component test pinning it - possible since SCRUM-377, not
+ * still has no component test pinning it - possible, not
  * written. See "One request per
  * pair" in `src/server/db/README.md` for why no unique constraint was added.
  */
@@ -664,7 +664,7 @@ describe("user.requests.create — an accepted request is reopened, not duplicat
 });
 
 /**
- * SCRUM-350: reopening a request with no conversation used to destroy the
+ * reopening a request with no conversation used to destroy the
  * message.
  *
  * The reopen branch wrote the message only `if (input.message &&
@@ -1025,7 +1025,7 @@ describe("user.requests.delete — only a participant may clear a request", () =
 
 describe("user.requests.delete — not while still carpooling together", () => {
   /**
-   * The server half of SCRUM-362, which fixed only the client half.
+   * The server half of the fix, which fixed only the client half.
    *
    * That ticket removed the "Leave Conversation" button, because a pair in an
    * active carpool pressing it deleted their accepted request and with it -
@@ -1181,7 +1181,7 @@ describe("user.requests.delete — not while still carpooling together", () => {
   it("still withdraws a PENDING request between two users who share a group", async () => {
     // Reachable through the reopen path, and it must stay withdrawable: a
     // request nobody accepted carries no history worth protecting, and
-    // SCRUM-295's behaviour for PENDING is unchanged by this ticket. The guard
+    // that change's behaviour for PENDING is unchanged by this ticket. The guard
     // is keyed on status first, so this does not even issue the group query.
     const db = buildRequestsDb(
       [
@@ -1214,7 +1214,7 @@ describe("user.requests.delete — not while still carpooling together", () => {
   });
 
   /**
-   * SCRUM-409. Two of these exist in production, one ACCEPTED and its owner in
+   * Two of these exist in production, one ACCEPTED and its owner in
    * a real group of two.
    *
    * The guard compares the two parties' groups, and for a self-request that is
@@ -1640,7 +1640,7 @@ const buildRequestsMeDb = (
     // than a hard-coded one. It used to exclude INACTIVE unconditionally,
     // mirroring the `status: { not: "INACTIVE" }` the resolver then had — which
     // meant the double produced the filtered result whether or not the query
-    // asked for it, and SCRUM-369's removal of that filter would have passed
+    // asked for it, and that change's removal of that filter would have passed
     // every test in this file unnoticed.
     const excluded: Status | undefined = where?.status?.not;
 
@@ -2025,7 +2025,7 @@ describe("user.requests.me - what it asks the database for", () => {
 });
 
 /**
- * SCRUM-361: the server stays permissive, deliberately.
+ * the server stays permissive, deliberately.
  *
  * A rider could reach a full driver's card through favourites or a stale list
  * and send a request `reserveSeat` would refuse at every acceptance. The fix

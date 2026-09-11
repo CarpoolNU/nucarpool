@@ -32,7 +32,7 @@ export const PRESIGNED_URL_CACHE_TIME_MS = 30 * 60 * 1000;
  */
 const useProfileImage = (userId?: string) => {
   /*
-   * Holds the request back on a render that hydration may discard (SCRUM-423).
+   * Holds the request back on a render that hydration may discard.
    *
    * `Header` branches on `useIsMobile`, and React reads `getServerSnapshot`
    * during hydration as well as on the server - so a `Header` present in the

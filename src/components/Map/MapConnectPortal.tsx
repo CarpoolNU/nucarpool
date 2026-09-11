@@ -49,7 +49,7 @@ export const MapConnectPortal = (props: ConnectPortalProps) => {
    * Where the panel sits.
    *
    * The mobile sheet stops at the top edge of the bottom navigation rather
-   * than at the bottom of the viewport. `bottom-mobile-nav` is SCRUM-412's
+   * than at the bottom of the viewport. `bottom-mobile-nav` is that change's
    * token for that height and already accounts for the home-indicator inset,
    * which matters because the navigation is `z-index: 100` against this
    * dialog's `z-50` - it would otherwise sit *over* the sheet, hiding whatever

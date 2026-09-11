@@ -60,7 +60,7 @@ import { SendTemplatedEmailCommandInput } from "@aws-sdk/client-ses";
  * redefining them as raw — would silently un-escape live email for however
  * long that gap lasts. They cost a few bytes, they keep the change revertible
  * without a second AWS mutation, and they can be deleted once a republish is
- * recorded in `scripts/README.md`. See SCRUM-360.
+ * recorded in `scripts/README.md`.
  */
 
 /** Escapes for HTML element text content. Not sufficient inside an attribute. */

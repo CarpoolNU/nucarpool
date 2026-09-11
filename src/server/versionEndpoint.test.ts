@@ -1,5 +1,5 @@
 /**
- * HTTP contract of the build-identity endpoint (SCRUM-405).
+ * HTTP contract of the build-identity endpoint.
  *
  * `buildInfo.test.ts` covers the value itself. This covers the route around
  * it: the method rule, the cache rule, and - the one that matters most - that
@@ -88,7 +88,7 @@ describe("GET /api/version", () => {
 
   it("exposes build identity and nothing else", () => {
     /*
-     * SCRUM-405's third acceptance criterion, asserted against the response
+     * that change's third acceptance criterion, asserted against the response
      * body rather than by reading the source. The risk this guards is not
      * today's code - it is the plausible future change that adds "just the
      * non-secret config" to a diagnostic endpoint nobody is watching.

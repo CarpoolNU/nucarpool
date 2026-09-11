@@ -1,5 +1,5 @@
 /**
- * Rendering a component test at a mobile viewport (SCRUM-416).
+ * Rendering a component test at a mobile viewport.
  *
  * Three files had each re-derived the same `Object.defineProperty` incantation
  * before this existed — `useIsMobile.test.tsx`, `ExploreSidebar.test.tsx` and
@@ -17,7 +17,7 @@
  *  - **No geometry.** A div with an explicit `width: 200px; height: 100px`
  *    still reports `getBoundingClientRect()` of all zeros and `offsetHeight`
  *    of `0`. jsdom cannot tell you that a 60px fixed bar overlaps an element
- *    positioned 48px from the bottom, which is the whole of SCRUM-412.
+ *    positioned 48px from the bottom, which is the whole point.
  *  - **`getComputedStyle` is the trap, not the escape hatch.** For that same
  *    div it returns `height: "100px"` — it echoes the declared value back and
  *    computes nothing. It looks like a measurement and is not one, which
@@ -43,7 +43,7 @@
  *    a component guarding on `typeof window` takes its *client* branch and
  *    the SSR-versus-client divergence that produces a real mismatch never
  *    arises. `useIsMobile.test.tsx` does hydrate a subtree deliberately, to
- *    pin which snapshot `useSyncExternalStore` starts from (SCRUM-420) — but
+ *    pin which snapshot `useSyncExternalStore` starts from — but
  *    "no hydration warning on a real page" is not assertable from here at
  *    all, and needs a browser console.
  *
@@ -54,7 +54,7 @@
  * it is worth guarding. It is not layout coverage, and a green `yarn test`
  * must not be read as any.
  *
- * The layout half needs a real browser at two viewports. That is SCRUM-264's
+ * The layout half needs a real browser at two viewports. That is that change's
  * Playwright scope, extended by this ticket to require both a mobile and a
  * desktop viewport.
  *

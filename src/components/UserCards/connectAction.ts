@@ -103,7 +103,7 @@ export const connectAction = ({
   // the state of a request between them, and the card is already showing this
   // very sentence as its notice — the button must not contradict it.
   //
-  // This branch exists for SCRUM-351. `favorites.me` no longer hides a
+  // This branch exists for. `favorites.me` no longer hides a
   // favourite whose role changed or whose search was paused, so a Connect
   // button can now sit on a card for someone the pair can never carpool with.
   // Without this, pressing it would open the modal and `requests.create` would
@@ -117,7 +117,7 @@ export const connectAction = ({
   //
   // Scoped to what the *other* person's role and status make impossible. A
   // reader who is themselves a VIEWER is deliberately excluded: that is not
-  // SCRUM-351's defect, this function has never refused on it, and the UI
+  // that change's defect, this function has never refused on it, and the UI
   // already disables both Connect buttons for a VIEWER. `ConnectCard` still
   // shows them the notice, because `carpoolUnavailableExplanation` answers the
   // reader's own Viewer mode first - it is the card that explains, and this
@@ -163,7 +163,7 @@ export const connectAction = ({
 
   // And the mirror: a rider pressing Connect on a driver who has filled up.
   // Nothing refused this, so the request was written and then refused by
-  // `reserveSeat` at every acceptance — SCRUM-361.
+  // `reserveSeat` at every acceptance.
   //
   // Deliberately *here* rather than folded into the
   // `carpoolUnavailableExplanation` block above, which would have been one

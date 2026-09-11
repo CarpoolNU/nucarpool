@@ -45,7 +45,7 @@ const getServerSnapshot = () => false;
  *
  * ---
  *
- * **Why `useSyncExternalStore` and not `useState` plus an effect** (SCRUM-420).
+ * **Why `useSyncExternalStore` and not `useState` plus an effect**.
  *
  * This hook used to be `useState(false)` corrected by a mount effect. An
  * effect runs *after* the render that scheduled it, so the first render pass
@@ -86,7 +86,7 @@ const getServerSnapshot = () => false;
  * - this hook's contract is unchanged, and a hydrating subtree still gets one
  * desktop pass, which is what `useIsMobile.test.tsx` still pins.
  *
- * The flash half of SCRUM-420 is unverifiable here either way: jsdom does not
+ * The flash half of the fix is unverifiable here either way: jsdom does not
  * paint, so whether a discarded render reaches the screen needs a real device.
  * See `src/testing/viewport.ts`.
  */

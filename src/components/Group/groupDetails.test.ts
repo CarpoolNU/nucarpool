@@ -252,7 +252,7 @@ describe("normalizeDetails and hasAnyDetail", () => {
 });
 
 /**
- * The comparison `useGroupDetails`'s sync effect bails out on (SCRUM-389).
+ * The comparison `useGroupDetails`'s sync effect bails out on.
  *
  * Its job is narrow: answer whether two `GroupDetails` carry the same values,
  * so that resolving the same stored row twice is not a state change. The

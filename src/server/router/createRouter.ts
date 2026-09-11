@@ -27,8 +27,8 @@ const t = initTRPC.context<Context>().create({
    * Without this, tRPC's default formatter (`({ shape }) => shape`) sent
    * `error.message` to the browser verbatim, including the rendered Prisma
    * invocation behind an unexpected fault - undoing the redaction that
-   * `src/pages/api/trpc/[trpc].ts` applies to the log for the same request
-   * (SCRUM-388). Only the message of an `INTERNAL_SERVER_ERROR` changes; see
+   * `src/pages/api/trpc/[trpc].ts` applies to the log for the same request.
+   * Only the message of an `INTERNAL_SERVER_ERROR` changes; see
    * `errorMasking.ts` for why masking is keyed on the code.
    *
    * Note this runs on the HTTP path only. `appRouter.createCaller` throws the

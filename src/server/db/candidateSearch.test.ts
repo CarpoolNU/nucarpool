@@ -310,7 +310,7 @@ describe("buildCandidateWhere — role compatibility", () => {
     expect(result.role).toEqual({ in: [Role.DRIVER] });
     // The shared constant rather than a literal: `reserveSeat` decrements
     // under this same object, and spelling it out here is what let the two
-    // drift apart until SCRUM-348.
+    // drift apart until.
     expect(result.seatsAvail).toBe(SEAT_AVAILABLE_FILTER);
   });
 
@@ -571,7 +571,7 @@ describe("candidateLimitWarning", () => {
    * mattered: `take` drops rows in cuid order, so the ones lost at the
    * boundary are arbitrary rather than the worst matches, and a user would
    * simply stop seeing matches that exist. These pin the signal that replaces
-   * the silence (SCRUM-345).
+   * the silence.
    */
   const args = { role: Role.RIDER, sort: "distance" };
 

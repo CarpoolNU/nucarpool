@@ -12,7 +12,7 @@ export const useUploadFile = (selectedFile: File | null) => {
   const uploadable = !!selectedFile && isUploadableProfileImage(selectedFile);
   // The server is not otherwise told the PUT happened - the client uploads
   // straight to S3 - so this is what records the picture's existence and lets
-  // `getPresignedDownloadUrl` skip its S3 HeadObject (SCRUM-276).
+  // `getPresignedDownloadUrl` skip its S3 HeadObject.
   const { mutateAsync: recordUpload } =
     trpc.user.recordProfilePictureUpload.useMutation();
 

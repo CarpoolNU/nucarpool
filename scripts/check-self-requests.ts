@@ -21,7 +21,7 @@
  *
  * Removal is three deletes, not one — the request, its conversation, and the
  * messages inside it — which is why the counts below are printed per row.
- * `user.requests.delete` has done all three in one transaction since SCRUM-295;
+ * `user.requests.delete` has done all three in one transaction;
  * before that it removed only the `Request` row and stranded the other two,
  * which is where production's 620 orphan conversations came from.
  *

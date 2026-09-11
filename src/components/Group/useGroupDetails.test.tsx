@@ -1,5 +1,5 @@
 /**
- * The group-details form hook (SCRUM-377).
+ * The group-details form hook.
  *
  * `groupDetails.test.ts` already covers the pure functions this hook calls -
  * `resolveGroupDetails`, `normalizeDetails`, `trimDetails`. What it cannot
@@ -17,7 +17,7 @@
  * required - before any `const` in this file is initialised - so anything it
  * closed over would be read in its temporal dead zone.
  *
- * **`stored` no longer has to be referentially stable** - SCRUM-389. It did
+ * **`stored` no longer has to be referentially stable** -. It did
  * when this file was written: the sync effect keyed on the identity of `stored`
  * and wrote a freshly built object into state, so a caller passing a new object
  * literal each render never converged, and `stored: freshStored()` inline in

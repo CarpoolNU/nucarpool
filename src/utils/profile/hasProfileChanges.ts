@@ -38,8 +38,8 @@ import { OnboardingFormInputs, User } from "../types";
  * never calls it. The profile's co-op dates have always come from the antd
  * picker, so the defect was total rather than partial.
  *
- * That dead import is filed as SCRUM-394, and the reason it matters is
- * SCRUM-393: the profile never adopted the UTC fix `lastDayOfMonthUTC` carries,
+ * That dead import is filed separately, and the reason it matters is
+ * the profile never adopted the UTC fix `lastDayOfMonthUTC` carries,
  * so east of UTC its picker stores the month *before* the one chosen. Both are
  * about the write; this file is only about detecting a change to it.
  *
@@ -141,7 +141,7 @@ export const profileChanges = (
   );
   add("startTime", differentInstant(formValues.startTime, user?.startTime));
   add("endTime", differentInstant(formValues.endTime, user?.endTime));
-  // The two that compared `getDate()`. SCRUM-381.
+  // The two that compared `getDate()`..
   add(
     "coopStartDate",
     differentInstant(formValues.coopStartDate, user?.coopStartDate),

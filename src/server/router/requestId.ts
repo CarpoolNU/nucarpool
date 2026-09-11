@@ -7,7 +7,7 @@ import { randomBytes } from "crypto";
  * SCRUM-388 stopped sending unexpected error messages to the browser, which
  * left a user with "Something went wrong. Please try again." and nothing to
  * quote, and whoever reads the log with no way to find that particular
- * failure among the rest. This is the thing both ends can name (SCRUM-400).
+ * failure among the rest. This is the thing both ends can name.
  *
  * **Deliberately carries no information.** Not a user id, not a session id,
  * not a timestamp, because the whole point of the masking it supports is that

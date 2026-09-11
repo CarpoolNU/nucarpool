@@ -11,7 +11,7 @@ import type { PrismaClient } from "@prisma/client";
 // constant of 250, mirroring a number ConnectModal hardcoded before SCRUM-231
 // replaced it with this one; the server was left three days behind, and a
 // 251-255 character message created its request and then failed to notify
-// anyone (SCRUM-382). The bound itself still matters — the preview reaches an
+// anyone. The bound itself still matters — the preview reaches an
 // SES template — so this is a change of source, not a removal.
 import { MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
 
@@ -381,7 +381,7 @@ export const emailsRouter = router({
    * Replay is therefore still possible, but the checks above bound it to
    * requests genuinely accepted with the caller as their recipient, which is a
    * real relationship rather than an unbounded set. That is a large reduction
-   * and not a cap; the per-user cap across `user.emails.*` is SCRUM-277.
+   * and not a cap; the per-user cap across `user.emails.*` is.
    */
   sendAcceptanceNotification: protectedRouter
     .input(z.object({ requestId: z.string() }).strict())

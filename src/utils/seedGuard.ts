@@ -18,7 +18,7 @@
  * it to "must never be set to make something work" — which is a deletion
  * waiting to happen rather than a feature. A single environment variable
  * standing between a shell history entry and an unrecoverable production wipe
- * is not a trade worth keeping (SCRUM-410).
+ * is not a trade worth keeping.
  *
  * This module is deliberately dependency-free and side-effect-free so it can be
  * unit tested without a database or a Prisma client. It is tooling, not

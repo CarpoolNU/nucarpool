@@ -20,7 +20,7 @@ import * as React from "react";
  * This component used to call `date.toDate()` on the way out and
  * `dayjs(value)` on the way in, which resolved Boston's UTC offset from two
  * different dates — the picker's own anchor going out, the browser's zone
- * coming in. That is SCRUM-373: a 9:00 AM saved in July stored an hour earlier
+ * coming in. That is a 9:00 AM saved in July stored an hour earlier
  * than the same 9:00 AM saved in January, and every DST-era schedule read back
  * an hour early. Going through the helpers pins both directions to
  * `SCHEDULE_ANCHOR_DATE`, so the round trip is exact and neither the season nor

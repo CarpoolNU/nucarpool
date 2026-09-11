@@ -10,7 +10,7 @@ import { planGroupWaypoints } from "./groupRouteWaypoints";
 /**
  * **Preview Group Route**, lifted out of `pages/index.tsx`.
  *
- * The extraction is SCRUM-391's, and for the reason SCRUM-379 gives for
+ * The extraction is that change's, and for the reason SCRUM-379 gives for
  * `viewRouteClick.ts`: the defect fixed here — every group member's destination
  * pin staying on the map for the rest of the session — was unreachable by any
  * test while the handler was a closure inside a 1300-line page. A pin that is

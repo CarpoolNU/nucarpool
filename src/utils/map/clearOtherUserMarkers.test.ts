@@ -1,5 +1,5 @@
 /**
- * The pin sweep (SCRUM-391).
+ * The pin sweep.
  *
  * **Removing too much is the likelier failure**, and the harder one to notice:
  * a leftover pin is visible, whereas a swept-away cluster layer looks like an

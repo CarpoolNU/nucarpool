@@ -89,7 +89,7 @@ const MobileNav = styled.div`
 // styled-components v6 consumes it for the template below and does not forward
 // it to the <button>. Without it React receives `active={true}` as a DOM
 // attribute, declines to write it, and logs "Received `true` for a non-boolean
-// attribute `active`" (SCRUM-424). Worth knowing if you go looking for that
+// attribute `active`". Worth knowing if you go looking for that
 // warning: React caches it per attribute name at module scope, so it appears
 // **once per page load** and never again - not once per element and not once
 // per render, which is why `Header.console.test.tsx` has to be its own file.
@@ -165,10 +165,10 @@ interface HeaderProps {
   /**
    * The profile page's unsaved-changes guard. Given the navigation the header
    * wants to perform, it either runs it immediately or shows `UnsavedModal`
-   * and runs it after the user decides (SCRUM-384).
+   * and runs it after the user decides.
    *
    * Taking the navigation as a callback rather than a destination string keeps
-   * SCRUM-171's full page load here, where the reason for it is documented,
+   * that change's full page load here, where the reason for it is documented,
    * instead of teaching the profile page when to bypass the router.
    */
   checkChanges?: (proceed: () => void | Promise<void>) => void | Promise<void>;
@@ -199,7 +199,7 @@ const Header = (props: HeaderProps) => {
    * notification, which the badge *preferred* — so five unread messages plus
    * one notification displayed `1`, and reading a thread from the map panel
    * could not clear it because only a Requests-tab click reset the local
-   * counter (SCRUM-383). `useUnreadNotifications` invalidates the query
+   * counter. `useUnreadNotifications` invalidates the query
    * instead, so there is one number and it is the true one.
    */
   const badge = unreadBadge(unreadMessagesCount);
@@ -373,8 +373,8 @@ const Header = (props: HeaderProps) => {
      * The desktop tab buttons. A sidebar swap, nothing more.
      *
      * This used to begin by asking whether it was leaving the profile page and,
-     * if so, do a full page load - **a branch that could not execute**
-     * (SCRUM-401). `handleSidebarChange` only exists inside
+     * if so, do a full page load - **a branch that could not execute**.
+     * `handleSidebarChange` only exists inside
      * `renderSidebarOptions`, which renders only when `props.data` is supplied,
      * and the sole caller that supplies it is `pages/index.tsx` at route `/`.
      * So `props.profile` was always undefined and `router.pathname` always `/`.

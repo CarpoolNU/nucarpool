@@ -1,7 +1,7 @@
 import { ACCOUNT_DELETION_UNSUPPORTED, createAuthAdapter } from "./authAdapter";
 
 /**
- * The NextAuth adapter (SCRUM-311).
+ * The NextAuth adapter.
  *
  * This was an object literal inside `src/pages/api/auth/[...nextauth].ts`,
  * where no test could reach it — a filename under `src/pages/` is also a

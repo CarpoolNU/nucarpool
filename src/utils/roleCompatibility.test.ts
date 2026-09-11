@@ -106,7 +106,7 @@ describe("roleMismatchExplanation", () => {
 });
 
 /**
- * SCRUM-351: the favourites-tab wording.
+ * the favourites-tab wording.
  *
  * `favorites.me` used to hide a favourite whose role matched the reader's, was
  * VIEWER, or whose search was INACTIVE — which took away the card and with it

@@ -10,7 +10,7 @@ import { RequestStatus } from "@prisma/client";
  * *could* now be rendered — but a table of states reads better as a table than
  * as a dozen renders, and the extraction stays.
  *
- * Three states, and the third is the point of SCRUM-362.
+ * Three states, and the third is the point.
  */
 export type HeaderControls =
   /** A request awaiting this reader's answer: Reject, and Accept unless the roles no longer fit. */
@@ -58,7 +58,7 @@ type ControlsInput = {
  * The role-compatibility case is deliberately *not* handled here. A pending
  * request whose parties can no longer carpool still offers Reject and
  * Withdraw, because clearing it is the way out and the absence of any route to
- * that was its own dead end (SCRUM-296). Only Accept is withheld, and
+ * that was its own dead end. Only Accept is withheld, and
  * `roleMismatchExplanation` is what decides that, in the component, next to
  * the copy it prints.
  */

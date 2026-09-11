@@ -95,7 +95,7 @@ export const formatScheduleTime = (time: Date | null | undefined): string => {
  * a full date, and which date that is varies: today for a first-time pick,
  * `SCHEDULE_ANCHOR_DATE` when editing a value that already exists. The instant
  * therefore encodes whichever offset that date happened to fall under, which is
- * the whole of SCRUM-373. Taking `.hour()` and `.minute()` — the digits the user
+ * the whole point. Taking `.hour()` and `.minute()` — the digits the user
  * actually saw in the input — and rebuilding them at the anchor discards that
  * date entirely.
  *
@@ -168,7 +168,7 @@ export const SCHEDULE_TIME_REQUIRED_MESSAGE =
  * optional chaining on `null` yields `undefined`. The form models a cleared
  * pick as `null` - `toStoredScheduleTime` returns it - so the user's intent to
  * clear was discarded before the request left the browser, and Prisma then
- * read the `undefined` on the server as "leave this column alone" (SCRUM-387).
+ * read the `undefined` on the server as "leave this column alone".
  *
  * Three states, all meaningful:
  *

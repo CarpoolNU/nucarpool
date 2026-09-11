@@ -4,7 +4,7 @@
  *
  * `check-self-requests.ts` finds them and stops. This is the repair half, and
  * it exists because the expected count stopped being zero: production holds
- * **2** of these, measured read-only on 2026-09-09 (SCRUM-392), against 0 on
+ * **2** of these, measured read-only on 2026-09-09, against 0 on
  * staging. That check's header argued against shipping a destructive tool for
  * an expected-empty set, which was the right call while the set was empty.
  *

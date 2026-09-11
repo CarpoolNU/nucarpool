@@ -7,7 +7,7 @@ const {
 /** @type {import('tailwindcss').Config} */
 /**
  * The theme and the screens. **Not the scan surface** - and this file used to
- * look as though it controlled that too (SCRUM-419).
+ * look as though it controlled that too.
  *
  * A `content` array restricting the class scan to `src/pages` and
  * `src/components` stood at the top of this object and had no effect
@@ -90,14 +90,14 @@ module.exports = {
          *
          * `1.5rem` is that banner allowance, and it must stay equal to the top
          * margin the row carries in `index.tsx`. It was `1.25rem` until
-         * SCRUM-411's final reconciliation, which is 20px against a banner
+         * that change's final reconciliation, which is 20px against a banner
          * that measures 24px - so the fixed bar overlapped the first 4px of
          * the row. Both figures come from the built stylesheet rather than from
          * the class names: the banner is a 12px font on a 1/0.75 line height,
          * 16px, plus 4px of padding either side.
          *
          * Deliberately not a token, which is unchanged reasoning from
-         * SCRUM-412: the banner is still scheduled for removal, and giving a
+         * the banner is still scheduled for removal, and giving a
          * thing about to be deleted its own name in the design system would be
          * work done twice. The two sites are instead cross-referenced, here
          * and there.

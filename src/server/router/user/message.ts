@@ -304,7 +304,7 @@ export const messageRouter = router({
       //
       // The find-or-create itself now lives in `findOrCreateConversation`,
       // shared with `requests.create`'s reopen branch — which had the same bug
-      // in the same shape and was fixed on SCRUM-350. Two hand-written copies
+      // in the same shape and was fixed on. Two hand-written copies
       // of a two-statement link repair that has already been got wrong twice
       // is the thing worth not having.
       //
@@ -377,7 +377,7 @@ export const messageRouter = router({
    * predicate below eliminates the rows either way, so nothing could be marked
    * read that the caller does not own; the cost was in planning a statement
    * that could not match, and in the packet size PlanetScale would have to
-   * accept. See SCRUM-372.
+   * accept.
    *
    * `.strict()` for the same reason the other hardened inputs have it: a
    * mistyped or re-added key should be a `BAD_REQUEST`, not silently dropped.

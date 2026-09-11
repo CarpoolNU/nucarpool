@@ -1,5 +1,5 @@
 /**
- * The first *effect* test in this repository (SCRUM-377).
+ * The first *effect* test in this repository.
  *
  * `isMobileWidth` has been unit tested since the breakpoint was unified, but
  * the hook around it never has - and its own source says why: "the hook needs
@@ -39,7 +39,7 @@ import {
 /**
  * The viewport technique this file used to carry inline now lives in
  * `testing/viewport.ts`, which also documents what jsdom can and cannot tell
- * you about a mobile layout (SCRUM-416). It was copied into two other files
+ * you about a mobile layout. It was copied into two other files
  * before it was shared.
  */
 restoreViewportAfterEach();
@@ -117,7 +117,7 @@ describe("useIsMobile", () => {
 
 /**
  * What the value is during the **first render pass**, rather than after
- * effects have flushed (SCRUM-420).
+ * effects have flushed.
  *
  * Every test above reads `result.current`, which Testing Library exposes only
  * once rendering has settled. That is exactly why the defect this describes
@@ -171,7 +171,7 @@ describe("useIsMobile during the first render", () => {
 });
 
 /**
- * The limit of the fix, pinned rather than described (SCRUM-420).
+ * The limit of the fix, pinned rather than described.
  *
  * React uses `getServerSnapshot` during **hydration** as well as during server
  * rendering, so a component that is already in the server HTML still renders

@@ -9,7 +9,7 @@
  * broken image. On a cold cache an explore view paid up to 50 of them, and
  * `geoJsonUserList` can return 150 users.
  *
- * `User.profilePictureUpdatedAt` records the answer instead (SCRUM-276), so a
+ * `User.profilePictureUpdatedAt` records the answer instead, so a
  * user whose state is known costs a primary-key lookup on a warm connection
  * rather than an S3 API call.
  *

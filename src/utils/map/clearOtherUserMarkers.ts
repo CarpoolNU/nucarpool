@@ -6,8 +6,8 @@
  * (`other-user-<id>-company-layer`), and the only way to remove one was to call
  * the same function back with `remove: true` — which meant you had to have
  * remembered whose pin it was. `onViewGroupRoute` adds a pin for every group
- * member and remembered none of them, so **nothing ever removed them**
- * (SCRUM-391). They survived an individual route being drawn over the top, a
+ * member and remembered none of them, so **nothing ever removed them**.
+ * They survived an individual route being drawn over the top, a
  * tab change, and every later group preview.
  *
  * The three functions that looked like cleanup each missed:

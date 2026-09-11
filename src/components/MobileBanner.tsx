@@ -3,7 +3,7 @@ import useIsMobile from "../utils/useIsMobile";
 /**
  * The fixed bar telling mobile users to try the desktop site.
  *
- * Moved out of `index.tsx` unchanged (SCRUM-415). It was declared **inside**
+ * Moved out of `index.tsx` unchanged. It was declared **inside**
  * `Home`'s render body, which meant React saw a brand-new component *type* on
  * every render of a 918-line page behind Mapbox, NextAuth and a dozen tRPC
  * queries. A new type is not a re-render, it is a remount: React tore the

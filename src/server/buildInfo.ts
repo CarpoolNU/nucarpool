@@ -1,5 +1,5 @@
 /**
- * Which build is running (SCRUM-405).
+ * Which build is running.
  *
  * The deployed app published no build identifier, so "has Amplify shipped the
  * commit containing change X?" had no answer short of asking someone with

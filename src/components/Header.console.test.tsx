@@ -1,5 +1,5 @@
 /**
- * That rendering the mobile header logs nothing (SCRUM-424).
+ * That rendering the mobile header logs nothing.
  *
  * `MobileNavItem` was `styled.button<{ active: boolean }>`. Under
  * styled-components v6 a prop without a `$` prefix is treated as a DOM prop and

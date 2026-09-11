@@ -221,7 +221,7 @@ describe("runViewRouteClick", () => {
   });
 
   /**
-   * SCRUM-379. Every case in here returned before `viewRoute` was reached.
+   * Every case in here returned before `viewRoute` was reached.
    *
    * `geoJsonUserList` excludes everyone you have a request with whenever the
    * `messaged` filter is false, which is the default, so this is the ordinary

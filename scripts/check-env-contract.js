@@ -17,7 +17,7 @@
  *   2. `--github-env` emits throwaway placeholder values for CI, so the build
  *      job can satisfy envsafe without any real credentials.
  *   3. `--amplify` verifies amplify.yml carries every required variable into
- *      the deployed runtime environment (SCRUM-385).
+ *      the deployed runtime environment.
  *
  * Keeping all three here is deliberate: the CI build placeholders, the
  * documentation check and the deploy-spec check read the same derived list, so
@@ -145,8 +145,8 @@ function fail(message) {
  *
  * Returns null when no enclosing pair can be found. The caller treats that as
  * a hard failure rather than guessing a classification: guessing "required"
- * for a defaulted variable is exactly the bug this function exists to fix
- * (SCRUM-397), and guessing "optional" for a mandatory one would drop a
+ * for a defaulted variable is exactly the bug this function exists to fix,
+ * and guessing "optional" for a mandatory one would drop a
  * genuine deploy check.
  *
  * @param {string} src
@@ -220,7 +220,7 @@ function isOptional(options) {
  * a deployment that never sets it still works. That distinction used to be
  * invisible here - every `process.env.X` was reported as "required" - and
  * `--amplify` then demanded a strict grep pattern for a variable nobody had
- * set, which failed the production build (SCRUM-397/SCRUM-398).
+ * set, which failed the production build.
  *
  * @returns {Map<string, {module: string, optional: boolean}>}
  */
@@ -408,7 +408,7 @@ function parseGrepPatterns(command) {
  * `grep` exits 1 when no line matches, and Amplify fails a build on any
  * non-zero exit, so a bare `env | grep -e X >> file` **stops the deploy** when
  * no variable matches `X`. A trailing `|| true` makes the absence a no-op
- * instead. That difference is the whole of SCRUM-397, so it is read here and
+ * instead. That difference is the whole point, so it is read here and
  * checked rather than left to whoever edits the spec next.
  *
  * Only the two idioms that plainly mean "ignore the failure" are recognised.
@@ -591,7 +591,7 @@ function amplifyCoverage(names, patterns, exemptions = AMPLIFY_EXEMPT) {
  *    thing amplify.yml's header asks the reader not to do.
  *  - Covers **only optional** variables -> must be tolerant. They may
  *    legitimately be absent, and a strict command turns that into a failed
- *    deploy. This is the rule that would have caught SCRUM-397.
+ *    deploy. This is the rule that would have caught the `S3_` outage.
  *  - Covers **nothing in the contract** -> unconstrained. `NEXTAUTH_URL` is
  *    the standing case: NextAuth reads it directly rather than through
  *    envsafe, so it is absent from the derived list, and its strict grep is
@@ -811,7 +811,7 @@ function main() {
   // the defaults already have direct coverage in
   // `src/utils/env/s3Config.test.ts`, which asserts both the fallback and the
   // override. Changing the whole suite's environment to duplicate that is a
-  // bad trade (SCRUM-398).
+  // bad trade.
   if (args.includes("--github-env")) {
     for (const name of names) {
       const value = Object.prototype.hasOwnProperty.call(

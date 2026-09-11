@@ -243,7 +243,7 @@ export const userRouter = router({
       // `fromScheduleTimeInput` keeps `undefined` and `null` apart, which the
       // truthy ternary here did not: it mapped both to `undefined`, and Prisma
       // reads that in an `update` as "omit this field". So a cleared schedule
-      // was silently discarded (SCRUM-387).
+      // was silently discarded.
       const startTimeDate = fromScheduleTimeInput(input.startTime);
       const endTimeDate = fromScheduleTimeInput(input.endTime);
 
@@ -463,7 +463,7 @@ export const userRouter = router({
         });
       }
       try {
-        // The whole of SCRUM-276. A primary-key lookup on an already-open
+        // the whole point. A primary-key lookup on an already-open
         // connection replaces an S3 `HeadObject` over the network, for every
         // user whose picture state has been recorded.
         //

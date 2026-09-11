@@ -22,7 +22,7 @@ const getServerSnapshot = () => false;
  *
  * ---
  *
- * **What this is for** (SCRUM-423).
+ * **What this is for**.
  *
  * `useIsMobile` reports the real viewport on its first render, but React uses
  * `getServerSnapshot` during *hydration* as well as on the server - so a

@@ -33,7 +33,7 @@ const weights = {
  * **Each range below is the slider's range, and the top of it means "any".**
  * The comments used to disagree with both the UI and the routers — `startTime`
  * claimed a 3-hour maximum against a 0-4 slider, and the distance pair said 19
- * where the slider says 20 (SCRUM-386). The tests below the comparison are
+ * where the slider says 20. The tests below the comparison are
  * `inputs.startTime < 4` and `inputs.startDistance < 20`, so the top value is
  * not a constraint that happens to be loose: it is switched off entirely.
  */
@@ -282,7 +282,7 @@ export const calculateScore = (
     // and the suite pins it; `days === 2` was the one mode left out, and it did
     // the opposite: `bothUsersDays` of 0 is below any `flexDays`, so selecting
     // "Flex days" before picking days rejected every candidate and produced an
-    // empty map with nothing to explain it (SCRUM-386).
+    // empty map with nothing to explain it.
     const dayFilterApplies = dayMatchApplies(
       inputs.days,
       daysHelper.currentUserDays,

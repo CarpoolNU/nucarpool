@@ -7,7 +7,7 @@
  *
  *   node   - `*.test.ts`   every existing suite: pure logic, the tRPC routers,
  *                          the ops scripts. No DOM, and none needed.
- *   jsdom  - `*.test.tsx`  components and hooks (SCRUM-377). Anything that
+ *   jsdom  - `*.test.tsx`  components and hooks. Anything that
  *                          renders or runs an effect.
  *
  * Two projects rather than switching the whole suite to jsdom. The node
@@ -106,7 +106,7 @@ module.exports = {
       //
       // The third-party module is stubbed rather than our own wrapper so that
       // `utils/mixpanel` loads for real and its exports cannot drift from a
-      // hand-maintained fake (SCRUM-417).
+      // hand-maintained fake.
       moduleNameMapper: {
         "\\.(png|jpe?g|gif|webp|avif|svg|ico)$":
           "<rootDir>/src/testing/staticImageStub.js",

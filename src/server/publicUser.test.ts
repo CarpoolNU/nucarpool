@@ -362,7 +362,7 @@ describe("email disclosure", () => {
 });
 
 /**
- * SCRUM-368. The disclosure rule above says "a counterpart", and `requests.me`
+ * The disclosure rule above says "a counterpart", and `requests.me`
  * used to read that as "anyone there is a request row with" — which any user
  * can create, about any other user, in one unanswered mutation. So the viewer
  * could manufacture the relationship that authorised the disclosure.

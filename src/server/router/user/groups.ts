@@ -246,7 +246,7 @@ const markRequestAccepted = async (
  *
  * The filter is imported rather than spelled `{ gt: 0 }` here so that this and
  * the candidate query cannot drift apart again. They already had: this side
- * refused a negative count while the read path advertised it. SCRUM-348.
+ * refused a negative count while the read path advertised it..
  */
 const reserveSeat = async (prisma: PrismaClientLike, driverUserId: string) => {
   const reserved = await prisma.carpoolSearch.updateMany({
@@ -648,7 +648,7 @@ export const groupsRouter = router({
         // a *rider* takes when accepting the request of a driver who already
         // has a group, so without it a paused driver still gains riders — the
         // `create` equivalent is inside the transaction with the two role
-        // checks. See SCRUM-369.
+        // checks.
         if (driverMembership.status === Status.INACTIVE) {
           throw forbidden(
             "That driver has paused their carpool search, so nobody can join " +

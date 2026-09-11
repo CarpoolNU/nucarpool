@@ -137,7 +137,7 @@ const Home: NextPage<any> = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   /**
-   * The expanded card, masked to null on desktop (SCRUM-418).
+   * The expanded card, masked to null on desktop.
    *
    * `expandedUserId` above is the raw state and is deliberately awkward to
    * reach for: it is only correct on a mobile viewport, and every read below
@@ -316,7 +316,7 @@ const Home: NextPage<any> = () => {
   }, [selectedUserId, requests, extendPublicUser]);
 
   /**
-   * The sidebar's single visibility owner (SCRUM-413).
+   * The sidebar's single visibility owner.
    *
    * A `useEffect` stood here and imperatively added the `hidden` class to the
    * sidebar node when a conversation opened, reaching through its ref.
@@ -795,7 +795,7 @@ const Home: NextPage<any> = () => {
                   aria-label={
                     isSidebarCollapsed ? "Show the list" : "Hide the list"
                   }
-                  /* `py-4.5` is the tap target, not decoration (SCRUM-421).
+                  /* `py-4.5` is the tap target, not decoration.
                      The visible bar is `h-2`, so 4.5 + 2 + 4.5 = 11 spacing
                      units = 44px at this scale - the size Apple's HIG and
                      WCAG 2.5.5 ask of a touch control. It was 12px of inline
@@ -885,7 +885,7 @@ const Home: NextPage<any> = () => {
               )}
             </div>
 
-            {/* Reachable on mobile as of SCRUM-414 item 3, and lifted into
+            {/* Reachable on mobile item 3, and lifted into
                 its own component so that reachability is assertable - see its
                 docblock for why the mobile placement is not from the phase 1
                 tokens. */}
@@ -917,12 +917,12 @@ const Home: NextPage<any> = () => {
                 className="pointer-events-auto relative z-0 h-full w-full flex-auto"
               >
                 {user.role === "VIEWER" && viewerBox}
-                {/* Ungated as of SCRUM-414 item 3. On mobile it moves to
+                {/* Ungated item 3. On mobile it moves to
                     the top of the map and starts collapsed - the bottom is
                     claimed by the navigation, the explore sheet and Mapbox's
                     own controls. The component owns that decision. */}
                 <MapLegend role={user.role} />
-                {/* Ungated as of SCRUM-414 item 2. The map's click handlers
+                {/* Ungated item 2. The map's click handlers
                     always ran and always set `popupUsers`; with this behind
                     `!isMobile` a phone tap set state that nothing read and
                     nothing could clear again. The component picks its own

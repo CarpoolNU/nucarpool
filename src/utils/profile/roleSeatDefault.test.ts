@@ -1,5 +1,5 @@
 /**
- * The seat-count-on-role-change decision (SCRUM-380).
+ * The seat-count-on-role-change decision.
  *
  * The defect this pins is not a wrong value but a wrong *occasion*: the rule
  * was correct for a role switch and ran on form population as well, so opening

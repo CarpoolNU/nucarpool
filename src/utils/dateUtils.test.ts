@@ -47,7 +47,7 @@ describe("lastDayOfMonthUTC", () => {
 });
 
 /**
- * The profile's antd month picker (SCRUM-393).
+ * The profile's antd month picker.
  *
  * The picker hands back a `Dayjs` in the user's **local** zone. Before this
  * handler existed both profile paths wrote `date.toDate()` straight into the

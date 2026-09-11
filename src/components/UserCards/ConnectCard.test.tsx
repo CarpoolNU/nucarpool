@@ -12,7 +12,7 @@ import {
 } from "../../testing/viewport";
 
 /**
- * How a discovery card is activated, at each viewport (SCRUM-416).
+ * How a discovery card is activated, at each viewport.
  *
  * `ConnectCard` is the one place in the app that deliberately hands a
  * *different* interaction to each platform rather than styling one two ways:
@@ -27,7 +27,7 @@ import {
  *    card, swallowing clicks meant for Connect and the favourite star. That
  *    regression has no visible symptom until someone tries to click something.
  *
- * Phase 4 (SCRUM-415) converts `isMobile` ternaries to `desktop:` classes, and
+ * Phase 4 converts `isMobile` ternaries to `desktop:` classes, and
  * a class cannot express "pass a different handler" — so this file exists
  * partly to make sure that conversion cannot quietly swallow the distinction.
  * It is the reason this ticket is sequenced before that one.
@@ -230,7 +230,7 @@ describe("Discovery card with no selection prop at all", () => {
    * desktop-only branch in `index.tsx`, and the reads carried an `isMobile`
    * term, so the wrong answer was only ever reached on a viewport where the
    * term suppressed it. SCRUM-418 removes that term, so the masking goes with
-   * it - and SCRUM-414's remaining map-pin work is what puts this card on a
+   * it - and that change's remaining map-pin work is what puts this card on a
    * mobile viewport for real.
    *
    * Rendered at a mobile width for that reason: on desktop the old code and

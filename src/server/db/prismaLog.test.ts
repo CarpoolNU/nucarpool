@@ -5,7 +5,7 @@ import {
 } from "./prismaLog";
 
 /**
- * Prisma's log policy (SCRUM-399).
+ * Prisma's log policy.
  *
  * The two messages below are **real payloads**, captured from `$on` against
  * the installed Prisma 4.16.2 rather than written from imagination. That

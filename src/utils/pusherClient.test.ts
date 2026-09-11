@@ -17,7 +17,7 @@
 // compile — with most of the errors reported against *this* file rather than
 // the new one. The `jest.mock` + `jest.resetModules()` + dynamic-`import()`
 // idiom is why no ordinary import already does the job: the module under test
-// must not be imported before its mock is registered. Keep it. See SCRUM-355.
+// must not be imported before its mock is registered. Keep it.
 export {};
 
 const mockDisconnect = jest.fn();

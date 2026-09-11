@@ -2,7 +2,7 @@ import { RequestStatus, Role, Status } from "@prisma/client";
 import { connectAction } from "./connectAction";
 
 /**
- * SCRUM-354: a spent request is not a pending one.
+ * a spent request is not a pending one.
  *
  * `handleConnect` tested a request's *presence*, so a resolved request
  * suppressed the Connect modal exactly as an outstanding one did — and told the
@@ -28,13 +28,13 @@ const action = (over: Partial<Parameters<typeof connectAction>[0]> = {}) => {
     viewerRole,
     seatAvail: 0,
     preferredName: "Sam",
-    // Whichever role *fits* the viewer, so the SCRUM-351 compatibility refusal
+    // Whichever role *fits* the viewer, so the role-compatibility refusal
     // stays out of the way of every case that is not about it. A test that
     // wants that refusal names `otherRole` itself.
     otherRole: viewerRole === Role.DRIVER ? Role.RIDER : Role.DRIVER,
-    // A counterpart with room, so SCRUM-361's refusal stays out of the way of
-    // every case that is not about it — the same reasoning as `otherRole`
-    // above. A test that wants that refusal names `otherSeatAvail` itself.
+    // A counterpart with room, so the seat-availability refusal stays out of
+    // the way of every case that is not about it — the same reasoning as
+    // `otherRole` above. A test that wants it names `otherSeatAvail` itself.
     otherSeatAvail: 2,
     otherStatus: Status.ACTIVE,
     ...over,
@@ -191,7 +191,7 @@ describe("connectAction — seat availability", () => {
 });
 
 /**
- * SCRUM-351: a favourite the reader cannot carpool with.
+ * a favourite the reader cannot carpool with.
  *
  * `favorites.me` used to drop any favourite whose role matched the reader's,
  * was VIEWER, or whose search was INACTIVE — which removed the card, and with
@@ -203,7 +203,7 @@ describe("connectAction — seat availability", () => {
  *
  * `ConnectCard` also disables the button and shows the same sentence as the
  * card's notice. Neither is asserted anywhere: rendering it has been possible
- * since SCRUM-377 added the jsdom project, but no `ConnectCard.test.tsx`
+ * added the jsdom project, but no `ConnectCard.test.tsx`
  * exists yet. This is the layer that is pinned.
  */
 describe("connectAction — a favourite who cannot be carpooled with", () => {
@@ -263,7 +263,7 @@ describe("connectAction — a favourite who cannot be carpooled with", () => {
 
   it("does not refuse on the reader's own Viewer mode", () => {
     // Deliberate boundary. This refusal is about what the *other* person's
-    // role and status make impossible, which is SCRUM-351's defect; the
+    // role and status make impossible, which is that change's defect; the
     // reader's own Viewer mode is not, this function has never refused on it,
     // and both Connect buttons are already `disabled` for a VIEWER. The card
     // still explains it - `carpoolUnavailableExplanation` answers the reader's
@@ -302,7 +302,7 @@ describe("connectAction — a favourite who cannot be carpooled with", () => {
 });
 
 /**
- * SCRUM-361: the mirror of the reader's own seat refusal.
+ * the mirror of the reader's own seat refusal.
  *
  * Discovery excludes a full driver, so this is the favourites tab and the
  * stale-list case. Without it a rider could send a request that `reserveSeat`

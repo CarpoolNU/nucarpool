@@ -1,5 +1,5 @@
 /**
- * `readBuildInfo`, the half of SCRUM-405 that is testable locally.
+ * `readBuildInfo`, the half of the fix that is testable locally.
  *
  * The endpoint's whole value comes from variables that only exist inside an
  * Amplify build container, so nothing here proves the deploy works - that

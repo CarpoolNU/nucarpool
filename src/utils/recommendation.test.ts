@@ -83,7 +83,7 @@ describe("calculateScore", () => {
         matches: false,
       },
       {
-        // SCRUM-348. The guard tested `=== 0`, so this row scored as available
+        // The guard tested `=== 0`, so this row scored as available
         // and was offered — while `reserveSeat` refused every acceptance,
         // because it has always tested `> 0`.
         name: "a rider is not matched with a driver whose seat count went negative",
@@ -440,7 +440,7 @@ describe("calculateScore", () => {
     });
 
     /**
-     * The empty-selection edge, which was the user-visible half of SCRUM-386.
+     * The empty-selection edge, which was the user-visible half of the fix.
      *
      * `days === 1` with no days selected was already asserted to exclude
      * nobody, further down in "identity and pathological inputs". `days === 2`

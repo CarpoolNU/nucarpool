@@ -1,5 +1,5 @@
 /**
- * **Preview Group Route** (SCRUM-391).
+ * **Preview Group Route**.
  *
  * The defect: this handler added a destination pin for every group member and
  * nothing ever took them off, so they outlived the route they belonged to, the

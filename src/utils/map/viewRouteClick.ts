@@ -25,7 +25,7 @@ import { planViewRoute } from "./viewRoutePlan";
  */
 
 /**
- * SCRUM-379's `DestinationMarkerRef` and `removeDestinationMarker` **were
+ * that change's `DestinationMarkerRef` and `removeDestinationMarker` **were
  * here, and SCRUM-391 removed them.**
  *
  * They existed because pin removal was keyed by identity: a pin is a named

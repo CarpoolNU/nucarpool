@@ -245,7 +245,7 @@ describe("checkSeedIntegrity", () => {
   });
 
   it("catches an orphan conversation", () => {
-    // The exact defect class behind production's 620 (SCRUM-295).
+    // The exact defect class behind production's 620.
     const snapshot = consistent();
     snapshot.conversations.push({ id: "ghost", requestId: "gone" });
 

@@ -5,7 +5,7 @@ import {
 } from "./exploreSidebarView";
 
 /**
- * The explore sidebar's visibility decision (SCRUM-413).
+ * The explore sidebar's visibility decision.
  *
  * The defect was not a wrong value, it was that three mechanisms wrote the
  * same DOM node's class list and two of them were invisible to React. That is
@@ -170,7 +170,7 @@ describe("planExploreSidebar - totality", () => {
 });
 
 /**
- * The expanded card's viewport masking (SCRUM-418).
+ * The expanded card's viewport masking.
  *
  * The ticket asked for a jsdom test that crosses the breakpoint mid-render and
  * asserts the expanded state does not survive it, because it proposed clearing

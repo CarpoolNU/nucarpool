@@ -79,7 +79,7 @@ export const isSeatCountInRange = (seats: number) =>
  * refused a reader-driver with no space, and this is the mirror image nothing
  * covered. A rider reaching a full driver's card could send a request that
  * `reserveSeat` would refuse for as long as the driver stayed full, and neither
- * party was told why. SCRUM-361.
+ * party was told why..
  *
  * The card can only be reached two ways, both of them ordinary: a favourite
  * who filled up since being starred (`favorites.me` returns them deliberately,

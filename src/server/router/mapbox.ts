@@ -51,7 +51,7 @@ export const MAP_RESULT_LIMIT = 150;
  *
  * The cost is a larger payload, and it is not free: a VIEWER receives about 751
  * `PublicUser` records where every other role receives 150 — roughly 5x — and
- * that grows with the platform until it meets `CANDIDATE_LIMIT` (SCRUM-345).
+ * that grows with the platform until it meets `CANDIDATE_LIMIT`.
  * Each record carries a name, pronouns, bio, "City, State" home, coarsened home
  * coordinates and the employer's street address. It no longer carries an email
  * address; SCRUM-292 removed that. With 13 active onboarded VIEWERs the

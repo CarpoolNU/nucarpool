@@ -118,7 +118,7 @@ export const conversationsToDeleteWith = (request: {
  * `conversation.count()` and `message.groupBy` both include them, which is why
  * the dashboard's conversation figure and its messages-per-conversation average
  * drift upward and cannot be reconciled afterwards. That distortion is accepted
- * for now: the 620 are retained by decision (SCRUM-365), not pending deletion.
+ * for now: the 620 are retained by decision, not pending deletion.
  *
  * Nothing creates these any more — `requests.delete` removes the conversation
  * with the request — but every decline, withdrawal and "Leave Conversation"

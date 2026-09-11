@@ -1,5 +1,5 @@
 /**
- * `EntryLabel`'s one piece of conditional styling (SCRUM-425).
+ * `EntryLabel`'s one piece of conditional styling.
  *
  * The `$error` prop's entire effect is the label's colour, and these are the
  * assertions that catch a half-done rename: prefixing the declaration and the

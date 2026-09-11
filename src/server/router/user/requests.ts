@@ -254,7 +254,7 @@ export const requestsRouter = router({
     // request vanished from both Requests tabs while `create`'s duplicate
     // guard — which reads only `Request.status` — went on refusing every retry
     // with `CONFLICT`. Neither party could withdraw it, decline it or replace
-    // it until the other reactivated. SCRUM-369.
+    // it until the other reactivated..
     //
     // `requestUnavailableExplanation` is what the card shows on those
     // requests, and `validateRequestAcceptance` plus the status checks in
@@ -592,7 +592,7 @@ export const requestsRouter = router({
       //
       // A PENDING decline or withdrawal is untouched and does not even pay for
       // the query - which is why the read sits inside this branch. That path is
-      // the common one, it is what SCRUM-295 is about, and nothing of value is
+      // the common one, it is the point, and nothing of value is
       // lost when a request nobody accepted goes away.
       //
       // **A self-request is exempt, because the comparison degenerates for
@@ -603,7 +603,7 @@ export const requestsRouter = router({
       // carpool worth protecting: there is one person, and the "conversation"
       // is their own words to themselves.
       //
-      // Two of these exist in production (SCRUM-409), one of them ACCEPTED and
+      // Two of these exist in production, one of them ACCEPTED and
       // its owner in a group, so the row is unclearable for them today.
       // `requests.create` has refused new self-requests for some time, so this
       // branch goes dormant once `scripts/cleanup-self-requests.ts` has run -
@@ -661,7 +661,7 @@ export const requestsRouter = router({
       // row that no longer existed. 620 of them in production, holding 1,258
       // real messages between them.
       //
-      // Deleting rather than preserving, decided on SCRUM-295: the thread is
+      // Deleting rather than preserving, decided on the thread is
       // already unreachable the instant the request row goes.
       // `getConversationMessages` looks the request up first and throws
       // NOT_FOUND without it, and the unread count joins through

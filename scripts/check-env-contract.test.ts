@@ -14,7 +14,7 @@ import {
 } from "./check-env-contract";
 
 /**
- * The `--amplify` half of the environment-contract check (SCRUM-385).
+ * The `--amplify` half of the environment-contract check.
  *
  * `amplify.yml` is the deployed contract and `.env.example` is the
  * developer-facing one. Only the second was ever checked, so `S3_BUCKET_NAME`

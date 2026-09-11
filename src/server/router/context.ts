@@ -26,7 +26,7 @@ export const createContext = async (
      * Random reference for this request, used only if it fails. Generated here
      * rather than in either error callback so that `onError` and
      * `errorFormatter` report the same value without depending on the order
-     * tRPC invokes them (SCRUM-400).
+     * tRPC invokes them.
      */
     requestId: newRequestId(),
   };

@@ -6,7 +6,7 @@
  * foreign key, so `onDelete: Cascade` runs Conversation → Request. Nothing ran
  * Request → Conversation, so every decline, withdrawal and "Leave
  * Conversation" left a conversation and its messages behind. `requests.delete`
- * now removes both in one transaction (SCRUM-295), which makes this a one-off
+ * now removes both in one transaction, which makes this a one-off
  * for the backlog rather than a recurring chore — running it a second time
  * should report zero.
  *
@@ -14,9 +14,9 @@
  * SCRUM-365 decided to keep the 620 conversations and their 1,258 messages and
  * to revisit only if they cause a problem. So this script's job today is to
  * *report* — it is the instrument that would show the population growing, which
- * would be the sign that SCRUM-295's fix had regressed. Nothing here should be
+ * would be the sign that that change's fix had regressed. Nothing here should be
  * run with `--apply` against production without a new, explicit decision that
- * supersedes SCRUM-365.
+ * supersedes.
  *
  * **These rows are unreachable, and that was measured rather than assumed.**
  * The relationship is stored twice, so there are two ways a request can still

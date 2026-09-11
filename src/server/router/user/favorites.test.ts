@@ -226,7 +226,7 @@ describe("user.favorites.edit — authentication gate", () => {
 });
 
 /**
- * SCRUM-351: `favorites.me` no longer hides a favourite it cannot match.
+ * `favorites.me` no longer hides a favourite it cannot match.
  *
  * The procedure used to drop any favourite whose role equalled the caller's,
  * whose role was VIEWER, or whose search was INACTIVE — the predicate that

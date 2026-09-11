@@ -129,7 +129,7 @@ const FAVORITES_JOIN_TABLE = "_Favorites";
  * through `main()` would otherwise reach seven unconditional `deleteMany`
  * calls against whatever `DATABASE_URL` names. The check is cheap and runs
  * before the first statement, so the destructive primitive is safe by itself
- * rather than by convention (SCRUM-410).
+ * rather than by convention.
  *
  * This also replaces the previous `clearConnections()` pass, which ran
  * immediately before it and issued roughly 4,900 no-op `favorites.disconnect`

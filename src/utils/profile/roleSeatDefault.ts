@@ -27,7 +27,7 @@
  * come to edit. `reserveSeat` decrements under `seatsAvail: { gt: 0 }`, so the
  * invented seat was immediately spendable and the car ended up over-subscribed
  * with the over-subscription visible to nobody — least of all the driver, whose
- * profile now showed `1` as though they had typed it. SCRUM-380.
+ * profile now showed `1` as though they had typed it..
  *
  * The fix is to run the coercion where the ambiguity does not exist: the role
  * radio's own `onChange`, which fires only when a person picks a different

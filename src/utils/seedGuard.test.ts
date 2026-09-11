@@ -11,7 +11,7 @@ import {
 //
 // Both branches are named explicitly rather than left to a generic "remote"
 // case. They are the two hosts this guard exists to refuse, and a test that
-// says so by name is the one a reader checks for (SCRUM-410).
+// says so by name is the one a reader checks for.
 const REMOTE_URL =
   "mysql://user:not-a-real-password@aws.connect.psdb.cloud/nucarpool?sslaccept=strict";
 const PLANETSCALE_MAIN_URL =

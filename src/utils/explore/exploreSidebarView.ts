@@ -2,7 +2,7 @@
  * Which of its five states the explore page's sidebar is in.
  *
  * Lifted out of `index.tsx` because visibility there had **three** owners
- * operating on the same DOM node, two of them not React-aware (SCRUM-413):
+ * operating on the same DOM node, two of them not React-aware:
  * the `className` template literal, a `useEffect` calling
  * `sidebarRef.current.classList.add("hidden")`, and `handleUserSelect` calling
  * `.classList.remove("hidden")`. Both imperative calls tested the same
@@ -109,7 +109,7 @@ export function planExploreSidebar({
 }
 
 /**
- * The expanded card, as every consumer should read it (SCRUM-418).
+ * The expanded card, as every consumer should read it.
  *
  * `index.tsx` holds one piece of state for "a single card's details are
  * showing". It is written only by the mobile activation path and cleared only

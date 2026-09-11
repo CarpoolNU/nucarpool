@@ -34,7 +34,7 @@ import {
  * *Not covered, and not coverable here:* that the sheet clears the bottom
  * navigation, that its height is reasonable, or that it sits above the
  * navigation's `z-index: 100`. jsdom does no layout and computes no stacking -
- * see `src/testing/viewport.ts`. The positioning is arithmetic from SCRUM-412's
+ * see `src/testing/viewport.ts`. The positioning is arithmetic from that change's
  * tokens, not a measurement, and wants a look on a real phone.
  */
 

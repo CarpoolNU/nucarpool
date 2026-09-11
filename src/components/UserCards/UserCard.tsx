@@ -87,7 +87,7 @@ export type UserCardProps = UserCardBaseProps & CardActivation;
  * The `disabled:` pair matches the mobile Connect button's existing
  * `disabled:bg-gray-300`, so the two say the same thing. Without them the
  * button kept its full red while being inert, which mattered once favourites
- * started carrying entries the reader cannot connect with (SCRUM-351): a card
+ * started carrying entries the reader cannot connect with: a card
  * whose notice explains they are unavailable must not also show a live-looking
  * Connect. It applies equally to the two reader-side conditions that could
  * already disable this button - Viewer mode and the reader's own paused search

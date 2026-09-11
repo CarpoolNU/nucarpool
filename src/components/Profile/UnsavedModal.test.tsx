@@ -1,5 +1,5 @@
 /**
- * The first component test in this repository (SCRUM-377).
+ * The first component test in this repository.
  *
  * `UnsavedModal` is deliberately the subject: it is three buttons and no
  * dependencies, so anything that fails here is the jsdom project's wiring

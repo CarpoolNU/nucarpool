@@ -7,7 +7,7 @@ import { UNEXPECTED_ERROR_MESSAGE, maskUnexpectedError } from "./errorMasking";
 import { newRequestId } from "./requestId";
 
 /**
- * Masking unexpected server errors on the way to the browser (SCRUM-388).
+ * Masking unexpected server errors on the way to the browser.
  *
  * `[trpc].ts` keeps error contents out of production logs; the same payload was
  * going to the client untouched, because `initTRPC` had no `errorFormatter` and
@@ -16,7 +16,7 @@ import { newRequestId } from "./requestId";
  *
  * The property that has to survive is the *opposite* one: every deliberate
  * refusal in this codebase is shown to the user as written, and several fixes
- * (SCRUM-294, SCRUM-354, SCRUM-296) depended on that. So the tests below are as
+ * depended on that. So the tests below are as
  * much about what is *not* masked as what is.
  */
 

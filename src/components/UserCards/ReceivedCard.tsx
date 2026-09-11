@@ -21,7 +21,7 @@ export const ReceivedCard = (props: ReceivedCardProps): React.JSX.Element => {
   //
   // `requestUnavailableExplanation` rather than `roleMismatchExplanation`,
   // because a counterpart who has paused their search now reaches this list
-  // too (SCRUM-369) and their role says nothing about why. A compatible pair
+  // too and their role says nothing about why. A compatible pair
   // where one has paused would otherwise get `null` here — a blank card with
   // no hint of why Accept refuses.
   //

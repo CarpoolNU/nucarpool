@@ -1,5 +1,5 @@
 /**
- * The unsaved-changes rule (SCRUM-381).
+ * The unsaved-changes rule.
  *
  * Two of its fourteen comparisons used `getDate()` — the day of the month — on
  * the co-op dates. The profile's month controls are antd `DatePicker`s storing

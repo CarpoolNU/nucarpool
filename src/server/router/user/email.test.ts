@@ -354,7 +354,7 @@ describe("user.emails.sendRequestNotification — participants only, addresses f
   });
 
   it("caps the preview length rather than relaying an unbounded body", async () => {
-    // This asserted 251 until SCRUM-382: the server capped the preview at 250
+    // This asserted 251 until the server capped the preview at 250
     // while ConnectModal's textarea and counter allowed 255, so a message in
     // that window created its request and then failed to notify the recipient.
     // The cap is now `MESSAGE_MAX_LENGTH`, so 256 is the first rejected length.

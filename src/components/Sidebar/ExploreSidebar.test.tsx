@@ -11,7 +11,7 @@ import {
 } from "../../testing/viewport";
 
 /**
- * Reachability of the Explore list controls at a mobile viewport (SCRUM-414).
+ * Reachability of the Explore list controls at a mobile viewport.
  *
  * Three controls were wrapped in `!isMobile` with no mobile equivalent behind
  * them, so on a phone they did not exist:

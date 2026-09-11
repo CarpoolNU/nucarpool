@@ -247,7 +247,7 @@ export const createRequestHandlers = (
     // you had asked them.
     //
     // Both buttons that reach here are in `MessageHeader`, labelled Reject and
-    // Withdraw Request, and both call the same handler. SCRUM-362.
+    // Withdraw Request, and both call the same handler..
     toast.success(
       request.fromUserId === user.id
         ? `Your carpool request to ${otherUser.preferredName} has been withdrawn.`

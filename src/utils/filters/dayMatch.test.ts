@@ -8,7 +8,7 @@ import {
 } from "./dayMatch";
 
 /**
- * The day-match filter's shared rules (SCRUM-386).
+ * The day-match filter's shared rules.
  *
  * These functions exist because the Explore panel and `calculateScore`
  * each carried their own version of this arithmetic and disagreed. The

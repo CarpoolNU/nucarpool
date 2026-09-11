@@ -2,7 +2,7 @@ import { Role, Status } from "@prisma/client";
 import { updateUser } from "./updateUser";
 
 /**
- * The payload `updateUser` sends to `user.edit` (SCRUM-387).
+ * The payload `updateUser` sends to `user.edit`.
  *
  * Only the schedule times are asserted here, because they are the fields whose
  * *absence* and *nullness* mean different things and the ones this file used to

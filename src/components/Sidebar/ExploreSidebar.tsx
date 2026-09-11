@@ -42,7 +42,7 @@ const ExploreSidebar = (props: ExploreSidebarProps) => {
    * Which filters differ from their defaults. Drives the "filters active"
    * indicator and which panel sections start open.
    *
-   * `flexDays` and `daysWorking` were missing (SCRUM-386) and are **gated on
+   * `flexDays` and `daysWorking` were missing and are **gated on
    * the mode**, which is not a detail: `defaultFilters.daysWorking` is frozen
    * at `""` while `filters.daysWorking` is seeded from the signed-in user's own
    * days once `user.me` resolves. A bare `!==` would therefore report the day
@@ -99,7 +99,7 @@ const ExploreSidebar = (props: ExploreSidebarProps) => {
    * Recommendations/Favorites switch and a sort control have nothing to act on
    * there, and would crowd out the card they sit above.
    *
-   * This carried an `isMobile` term until SCRUM-418. Nothing cleared
+   * This carried an `isMobile` term until. Nothing cleared
    * `mobileSelectedUser` when the viewport crossed the breakpoint, so a card
    * expanded on a phone left it set at desktop width - and reading it alone
    * would have cost the desktop layout these controls over a state it can
@@ -123,7 +123,7 @@ const ExploreSidebar = (props: ExploreSidebarProps) => {
          * to `"recommendations"` for the component's lifetime and `props.favs`
          * could never be rendered. The favourite star on each card is not gated,
          * so favouriting was a write with no matching read: a mobile user could
-         * save a match and had no way to see what they had saved (SCRUM-414).
+         * save a match and had no way to see what they had saved.
          *
          * `isMobile` here now only picks a type scale. At `text-xl` the two
          * labels are wider than a 375px column minus this row's `px-5`, so the

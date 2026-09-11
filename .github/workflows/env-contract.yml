@@ -54,7 +54,7 @@ jobs:
       # against, and still absent at runtime. That is what happened to
       # `S3_BUCKET_NAME`: required, defaulted in code, matched by none of the
       # grep patterns, so the build resolved the console value into the CSP
-      # while the runtime fell back to the default bucket (SCRUM-385).
+      # while the runtime fell back to the default bucket.
       #
       # A separate step rather than folded into the one above, for the same
       # reason this job is separate from `build`: two contracts, two failures,

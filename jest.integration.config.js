@@ -1,5 +1,5 @@
 /*
- * Jest configuration for the database-backed suite (SCRUM-263).
+ * Jest configuration for the database-backed suite.
  *
  * A separate configuration rather than a third entry in `jest.config.js`'s
  * `projects` array, so that `yarn test` stays exactly what it was: fast,
@@ -26,8 +26,8 @@
  * zone is fixed.
  *
  * **Read the shared file, not `jest.config.js`.** It used to be the latter,
- * which stopped being safe the moment `jest.config.js` grew a `projects` array
- * (SCRUM-377): spreading that here would import a project list *and* leave the
+ * which stopped being safe the moment `jest.config.js` grew a `projects` array:
+ * spreading that here would import a project list *and* leave the
  * `testMatch` below inert, because Jest ignores a top-level `testMatch` when
  * `projects` is present. The result is a run that collects nothing and exits
  * "no tests found" rather than failing - the same silent-removal failure mode

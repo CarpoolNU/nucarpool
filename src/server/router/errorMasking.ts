@@ -11,7 +11,7 @@ import type { TRPCError } from "@trpc/server";
  * verbatim. Several handlers render that into a toast, so a `P2025` arrived in
  * the UI as "Something went wrong: Invalid `prisma.user.update()`
  * invocation…". One half of the request was hardened and the other was open,
- * which made the protection read as complete when it was not (SCRUM-388).
+ * which made the protection read as complete when it was not.
  *
  * Deliberately says no more than the toast wrapping it already does. A
  * per-request reference is appended when one is available, so the user has
@@ -52,7 +52,7 @@ type ErrorShapeLike = { message: string };
  * untouched, because the retry policy reads `error.data.code` and must behave
  * identically.
  *
- * `requestId` is what makes the masked message diagnosable (SCRUM-400). It is
+ * `requestId` is what makes the masked message diagnosable. It is
  * read from the tRPC context rather than generated here, because
  * `[trpc].ts`'s `onError` has to log the *same* value: both callbacks receive
  * the context, so neither depends on the other running first. (`onError` does

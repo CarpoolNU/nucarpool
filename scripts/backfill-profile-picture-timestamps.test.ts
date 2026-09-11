@@ -132,7 +132,7 @@ describe("planBackfill", () => {
   });
 
   it("reports a picture whose user no longer exists rather than writing it", () => {
-    // Deleting a User is currently impossible (SCRUM-311), so this is mostly
+    // Deleting a User is currently impossible, so this is mostly
     // defence — but an update by a primary key that does not exist throws, and
     // aborting the whole run over one stray object would be the wrong trade.
     const plan = planBackfill(

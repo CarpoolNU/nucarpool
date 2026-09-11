@@ -163,8 +163,8 @@ model User {
   // server is not otherwise told.
   //
   // It exists so `getPresignedDownloadUrl` can answer "has a picture?" without
-  // an S3 `HeadObject`, which was the entire AWS cost of rendering an avatar
-  // (SCRUM-276). A timestamp rather than a boolean: it also records when the
+  // an S3 `HeadObject`, which was the entire AWS cost of rendering an avatar.
+  // A timestamp rather than a boolean: it also records when the
   // picture last changed, and can serve as a cache-busting key later.
   //
   // **Null still means "ask S3"**, not "no picture", until

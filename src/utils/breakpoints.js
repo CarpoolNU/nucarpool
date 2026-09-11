@@ -34,7 +34,7 @@ const DESKTOP_SCREEN_NAME = "desktop";
 
 /**
  * Split out from the hook so the boundary itself is testable without a DOM.
- * That was originally the only way to test it at all; since SCRUM-377 the hook
+ * That was originally the only way to test it at all; the hook
  * has its own suite in `useIsMobile.test.tsx`, and this stays split because
  * `tailwind.config.js` has to `require` it and Tailwind's config is not run
  * through the TypeScript pipeline.

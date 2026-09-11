@@ -11,7 +11,7 @@
  * rows** so the fallback can eventually be deleted.
  *
  * Until it has run, nothing is broken and nothing is lost: a null row behaves
- * exactly as it did before SCRUM-276. What is missing is the saving. The
+ * exactly as it did before. What is missing is the saving. The
  * fallback and this script are retired together, once it reports nothing to do
  * in every environment — the sequence `group_message` follows in
  * SCRUM-253 / SCRUM-287.

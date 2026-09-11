@@ -95,7 +95,7 @@ describe("isMobileWidth", () => {
 });
 
 /**
- * The mobile navigation's height (SCRUM-412).
+ * The mobile navigation's height.
  *
  * The defect these guard is the same one the breakpoint had, in a second
  * quantity: `MobileNav` declared no height, so the bar measured whatever its
