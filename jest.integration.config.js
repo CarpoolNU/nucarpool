@@ -58,10 +58,15 @@ module.exports = {
    * these files. Spreading it above copies that pattern in - which would
    * make this configuration ignore the only files it exists to run, and Jest
    * would exit "no tests found" rather than fail, so nothing would look wrong.
-   * The two entries below are the shared config's other two, kept for the same
-   * reasons it states.
+   * The three entries below are the shared config's others, kept for the same
+   * reasons it states - including the worktree pattern, which has to be
+   * repeated here for exactly the reason this note gives.
    */
-  testPathIgnorePatterns: ["/node_modules/", "/\\.next/"],
+  testPathIgnorePatterns: [
+    "/node_modules/",
+    "/\\.next/",
+    "<rootDir>/\\.claude/worktrees/",
+  ],
 
   // Approves the target, builds the schema from migration history, and proves
   // the database is reachable - once, in the parent process, before any worker
