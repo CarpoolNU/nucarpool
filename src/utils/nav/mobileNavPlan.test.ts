@@ -1,4 +1,9 @@
-import { isNavTab, planMobileNav, tabHref } from "./mobileNavPlan";
+import {
+  activeMobileNavItem,
+  isNavTab,
+  planMobileNav,
+  tabHref,
+} from "./mobileNavPlan";
 
 /**
  * The mobile bottom navigation's decision.
@@ -109,5 +114,71 @@ describe("isNavTab and tabHref", () => {
   it("builds the href the destination page reads back", () => {
     // `Header`'s own effect reads `?tab=`; nothing else survives a full load.
     expect(tabHref("requests")).toBe("/?tab=requests");
+  });
+});
+
+describe("activeMobileNavItem", () => {
+  const active = (
+    overrides: Partial<Parameters<typeof activeMobileNavItem>[0]> = {},
+  ) =>
+    activeMobileNavItem({
+      pathname: "/",
+      isAdmin: false,
+      displayGroup: false,
+      lastTapped: "explore",
+      ...overrides,
+    });
+
+  it("lights nothing on the admin page", () => {
+    // The whole point. `/admin` supplies no `sidebarValue`, so the inline
+    // ternary this replaced fell through to `activeNav` - initial value
+    // "explore" - and the bar claimed the user was on the map.
+    expect(active({ isAdmin: true })).toBeNull();
+  });
+
+  it("still lights nothing on the admin page when the group modal is open", () => {
+    // No control on that page can open it, so this is defence against a later
+    // one being added rather than a reachable state today.
+    expect(active({ isAdmin: true, displayGroup: true })).toBeNull();
+  });
+
+  it("lights nothing on the admin page whatever was last tapped", () => {
+    expect(active({ isAdmin: true, lastTapped: "requests" })).toBeNull();
+  });
+
+  it("pins the profile page ahead of everything else", () => {
+    // Preserved precedence: this used to be the first arm of the ternary, and
+    // it is what stops a cancelled unsaved-changes modal leaving a tab lit
+    // that was never reached.
+    expect(active({ pathname: "/profile", lastTapped: "requests" })).toBe(
+      "profile",
+    );
+    expect(active({ pathname: "/profile/setup" })).toBe("profile");
+    expect(active({ pathname: "/profile", displayGroup: true })).toBe(
+      "profile",
+    );
+  });
+
+  it("reflects the group modal on the map page", () => {
+    expect(active({ displayGroup: true })).toBe("mygroup");
+  });
+
+  it("prefers the page's sidebar over the last tap", () => {
+    // `index.tsx` supplies `sidebarValue`; the fallback is for pages that do
+    // not, which is how the admin page came to borrow "explore".
+    expect(active({ sidebarValue: "requests", lastTapped: "explore" })).toBe(
+      "requests",
+    );
+  });
+
+  it("falls back to the last tap when no sidebar value is supplied", () => {
+    expect(active({ lastTapped: "mygroup" })).toBe("mygroup");
+  });
+
+  it("lights nothing for a value that is not a tab", () => {
+    // The ternary compared a bare string against each id and matched none.
+    // Same outcome, now stated in the type.
+    expect(active({ sidebarValue: "settings" })).toBeNull();
+    expect(active({ sidebarValue: "", lastTapped: "" })).toBeNull();
   });
 });

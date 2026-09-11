@@ -20,7 +20,11 @@ import useIsMobile from "../utils/useIsMobile";
 // The same module `useIsMobile` and `tailwind.config.js` read, so the bar's own
 // height and the space every caller reserves for it have one definition.
 import { MOBILE_NAV_SPACE } from "../utils/breakpoints";
-import { planMobileNav, type NavTab } from "../utils/nav/mobileNavPlan";
+import {
+  activeMobileNavItem,
+  planMobileNav,
+  type NavTab,
+} from "../utils/nav/mobileNavPlan";
 import {
   HiOutlineMap,
   HiOutlineChatAlt2,
@@ -446,13 +450,18 @@ const Header = (props: HeaderProps) => {
   };
 
   const renderMobileNav = () => {
-    const isProfilePage = router.pathname.includes("/profile");
-
-    const currentActiveTab = isProfilePage
-      ? "profile"
-      : displayGroup
-        ? "mygroup"
-        : props.data?.sidebarValue || activeNav;
+    // Decided beside `planMobileNav` rather than here, because `Header` cannot
+    // be executed without a router, a tRPC client and a portal - so a rule
+    // living in this function is a rule nothing checks. `/admin` is why it
+    // matters: the version inline here fell through to `activeNav` and lit
+    // Explore while the user was on the admin dashboard.
+    const currentActiveTab = activeMobileNavItem({
+      pathname: router.pathname,
+      isAdmin: props.admin ?? false,
+      displayGroup,
+      sidebarValue: props.data?.sidebarValue,
+      lastTapped: activeNav,
+    });
 
     const navItems = [
       {

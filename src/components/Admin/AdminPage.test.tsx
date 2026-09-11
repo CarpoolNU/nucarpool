@@ -68,6 +68,16 @@ jest.mock("../../components/Admin/AdminData", () => ({
   default: () => <div>data</div>,
 }));
 
+/**
+ * A marker like the rest. The notice's own behaviour - that its "Back to map"
+ * button exists and navigates - is covered in `AdminMobileNotice.test.tsx`;
+ * the subject here is only which of the two the page chooses.
+ */
+jest.mock("../../components/Admin/AdminMobileNotice", () => ({
+  __esModule: true,
+  default: () => <div>mobile notice</div>,
+}));
+
 import Admin from "../../pages/admin";
 import { Permission } from "@prisma/client";
 
@@ -130,5 +140,47 @@ describe("/admin's header", () => {
     // rendered as before - this is not `next/dynamic` around the page.
     expect(serverHtml).toContain("sidebar");
     expect(serverHtml).toContain("management");
+  });
+});
+
+describe("/admin's layout below the mobile breakpoint", () => {
+  it("shows the notice instead of the dashboard on a phone", async () => {
+    const { hydratedText } = await hydrateAdminAt(MOBILE_WIDTH);
+
+    // The dashboard is a 175px sidebar beside four charts, which left them
+    // about 200px at this width. The ticket's choice was to say so rather
+    // than render into it.
+    expect(hydratedText).toContain("mobile notice");
+    expect(hydratedText).not.toContain("sidebar");
+    expect(hydratedText).not.toContain("management");
+  });
+
+  it("leaves the desktop dashboard exactly as it was", async () => {
+    const { hydratedText } = await hydrateAdminAt(DESKTOP_WIDTH);
+
+    // The other half of the pair. A page that simply stopped rendering its
+    // dashboard would pass the assertion above on its own.
+    expect(hydratedText).toContain("sidebar");
+    expect(hydratedText).toContain("management");
+    expect(hydratedText).not.toContain("mobile notice");
+  });
+
+  it("keeps the dashboard in the server HTML even for a phone", async () => {
+    const { serverHtml } = await hydrateAdminAt(MOBILE_WIDTH);
+
+    /*
+     * Not an oversight, and the reason the branch is gated on `useIsHydrated`
+     * rather than on `useIsMobile` alone. The server cannot know the device,
+     * so React renders - and re-reads during hydration - the desktop
+     * snapshot; the notice replaces it on the pass after that. Asserting the
+     * dashboard is still here is what pins the page to that shape, and keeps
+     * the deferral scoped the way the header's already is above.
+     *
+     * **This is not a layout assertion.** jsdom does no layout, so nothing
+     * here observes that the charts did not fit - see
+     * `src/testing/viewport.ts`.
+     */
+    expect(serverHtml).toContain("sidebar");
+    expect(serverHtml).not.toContain("mobile notice");
   });
 });
