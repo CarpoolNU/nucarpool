@@ -304,7 +304,7 @@ export const messageRouter = router({
       //
       // The find-or-create itself now lives in `findOrCreateConversation`,
       // shared with `requests.create`'s reopen branch — which had the same bug
-      // in the same shape and was fixed on. Two hand-written copies
+      // in the same shape and was fixed alongside it. Two hand-written copies
       // of a two-statement link repair that has already been got wrong twice
       // is the thing worth not having.
       //

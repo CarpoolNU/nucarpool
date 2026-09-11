@@ -51,12 +51,13 @@
  *
  * **It only ever reached Favorites.** `viewerModeHidesCards` replaces the
  * recommendations list with copy, so a VIEWER sees no recommendation cards at
- * all. Requests were exempted by. That left one surface: the reader's
- * own favourites, where a former Driver who saved three people and then
- * switched to Viewer read "Driver", "Driver", "Rider" with no way to tell them
- * apart — the same defect fixed on the Requests tab, in the one place
- * it survived. The note on `viewerModeHidesCards` above already argues that
- * favourites is "a list the user built themselves, and hiding them loses
+ * all. Requests were exempted once hiding them was found to strand a reader's
+ * own sent requests with no way left to withdraw them. That left one surface:
+ * the reader's own favourites, where a former Driver who saved three people
+ * and then switched to Viewer read "Driver", "Driver", "Rider" with no way to
+ * tell them apart — the same defect fixed on the Requests tab, in the one
+ * place it survived. The note on `viewerModeHidesCards` above already argues
+ * that favourites is "a list the user built themselves, and hiding them loses
  * information rather than withholding a feature"; withholding the names
  * contradicted it.
  *

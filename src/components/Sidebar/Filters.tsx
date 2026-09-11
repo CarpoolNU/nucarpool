@@ -407,9 +407,10 @@ const Filters = ({
         toggleOpen={() => setStartTimeOpen(!startTimeOpen)}
       >
         <div className="mt-3">
-          {/* "Min" until. `calculateScore` rejects when
-              `startTime > inputs.startTime * 60` — a maximum, exactly like the
-              end-time control four labels below, which always said so. */}
+          {/* This label read "Min" until it was corrected to say "Max":
+              `calculateScore` rejects when `startTime > inputs.startTime * 60`,
+              a maximum, exactly like the end-time control four labels below,
+              which always said so. */}
           <label className="mb-2 block">
             Max deviation in start time (hours)
           </label>

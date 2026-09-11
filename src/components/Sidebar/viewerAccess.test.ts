@@ -94,12 +94,13 @@ describe("the predicates together", () => {
   });
 
   it("leaves favorites as the only non-request tab a VIEWER can see", () => {
-    // Worth pinning because it is the fact that decided. Viewer mode
-    // used to print a counterpart's role in place of their name on "discovery"
-    // cards, and this is the whole of the surface that reached: recommendations
-    // are replaced by copy, requests are relationships, so the rule only ever
-    // applied to the reader's own favourites. A former Driver who saved three
-    // people and switched to Viewer read "Driver", "Driver", "Rider".
+    // Worth pinning because it is the fact that decided the name-withholding
+    // rule was not worth keeping. Viewer mode used to print a counterpart's
+    // role in place of their name on "discovery" cards, and this is the whole
+    // of the surface that reached: recommendations are replaced by copy,
+    // requests are relationships, so the rule only ever applied to the
+    // reader's own favourites. A former Driver who saved three people and
+    // switched to Viewer read "Driver", "Driver", "Rider".
     //
     // Nothing withholds a name now, and there is no predicate left to test for
     // it - see the note at the top of `viewerAccess.ts` for why, and for what a

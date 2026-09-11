@@ -309,8 +309,10 @@ describe("buildCandidateWhere — role compatibility", () => {
 
     expect(result.role).toEqual({ in: [Role.DRIVER] });
     // The shared constant rather than a literal: `reserveSeat` decrements
-    // under this same object, and spelling it out here is what let the two
-    // drift apart until.
+    // under this same object, and spelling the predicate out at each site is
+    // what let the two drift apart once already — the read path kept `not: 0`
+    // while the write path required `gt: 0`, so the one ACTIVE driver sitting
+    // at -1 was offered to riders and then refused every one of them.
     expect(result.seatsAvail).toBe(SEAT_AVAILABLE_FILTER);
   });
 
