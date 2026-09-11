@@ -79,7 +79,7 @@ const Admin: NextPage<AdminProps> = ({ userPermission }) => {
   const isHydrated = useIsHydrated();
 
   return (
-    <div className="relative h-screen w-screen select-none">
+    <div className="relative h-full select-none">
       {isHydrated && <Header admin={true} />}
       {!userPermission ? (
         <Spinner />
