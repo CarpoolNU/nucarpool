@@ -39,12 +39,13 @@ import {
  * `className.includes("lg:text-2xl")` is true of `lg:text-2xlfalse`, so the
  * substring form passes against the bug it is meant to catch.
  *
- * Buttons are found by a regular expression over their label rather than by
- * their full accessible name, because each icon inside them contributes its
- * `alt` text to that name - "user User Profile", "car Carpool Details". The
- * icons are decorative and should not be named at all, which is a separate
- * defect from this one and is tracked on its own; matching the label this way
- * means these tests keep passing when it is fixed.
+ * Buttons are found by their **exact** accessible name. They were once found
+ * by a regular expression over the label instead, because each icon inside them
+ * contributed its `alt` text to that name - "user User Profile", "car Carpool
+ * Details". That was a second defect, fixed under SCRUM-446, and the matchers
+ * tightened along with it: the regex form is precisely what could not see it,
+ * since /User Profile/ matches "user User Profile" as happily as it matches the
+ * right answer.
  */
 
 restoreViewportAfterEach();
@@ -53,11 +54,28 @@ restoreViewportAfterEach();
 const tokensOf = (element: HTMLElement): string[] =>
   (element.getAttribute("class") ?? "").split(/\s+/).filter(Boolean);
 
+/**
+ * Every image's `alt` exactly as the accessible-name computation reads it.
+ *
+ * The attribute rather than the property, so that a *missing* `alt` comes back
+ * as `null` and is distinguishable from an empty one. The two are not
+ * equivalent: an empty `alt` marks the image presentational, while no `alt` at
+ * all leaves assistive technology to guess, often from the file name - which is
+ * the same failure in a less obvious form.
+ */
+const imageAltsOf = (container: HTMLElement): (string | null)[] =>
+  [...container.querySelectorAll("img")].map((image) =>
+    image.getAttribute("alt"),
+  );
+
 const renderSidebar = (option: "user" | "carpool" | "account" = "user") =>
   render(<ProfileSidebar option={option} setOption={jest.fn()} />);
 
 /** Desktop labels. The mobile branch uses shorter ones. */
-const DESKTOP_BUTTONS = [/User Profile/, /Carpool Details/, /Account Status/];
+const DESKTOP_BUTTONS = ["User Profile", "Carpool Details", "Account Status"];
+
+/** The mobile branch's own three, in the order it renders them. */
+const MOBILE_BUTTONS = ["Profile", "Carpool", "Account"];
 
 describe("the desktop sidebar", () => {
   beforeEach(() => {
@@ -80,7 +98,7 @@ describe("the desktop sidebar", () => {
     renderSidebar("carpool");
 
     const tokens = tokensOf(
-      screen.getByRole("button", { name: /Carpool Details/ }),
+      screen.getByRole("button", { name: "Carpool Details" }),
     );
 
     expect(tokens).toContain("font-bold");
@@ -95,11 +113,38 @@ describe("the desktop sidebar", () => {
     // fix that put `selectedButton` on every button would pass the test above.
     renderSidebar("carpool");
 
-    for (const name of [/User Profile/, /Account Status/]) {
+    for (const name of ["User Profile", "Account Status"]) {
       expect(tokensOf(screen.getByRole("button", { name }))).not.toContain(
         "font-bold",
       );
     }
+  });
+
+  /*
+   * SCRUM-446. Each button held an icon rendered with descriptive alt text -
+   * `alt="user"`, `alt="car"`, `alt="checkbox"` - and an image's alt text
+   * contributes to the accessible name of the control containing it, so the
+   * buttons announced themselves as "user User Profile", "car Carpool Details"
+   * and "checkbox Account Status". The last is the worst of the three:
+   * `checkbox` names a widget role these controls do not have.
+   *
+   * The two assertions are deliberately separate. The first pins the names
+   * these three buttons must have; the second is the property behind it, and
+   * covers an icon added later that this file does not yet know about.
+   */
+
+  it("names every button with its visible label and nothing else", () => {
+    renderSidebar();
+
+    for (const name of DESKTOP_BUTTONS) {
+      expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    }
+  });
+
+  it("lets no icon contribute to a name", () => {
+    const { container } = renderSidebar();
+
+    expect(imageAltsOf(container)).toEqual(["", "", ""]);
   });
 
   it("writes no token that a boolean was concatenated into", () => {
@@ -151,7 +196,7 @@ describe("the mobile sidebar", () => {
   it("builds its own classes cleanly", () => {
     renderSidebar("user");
 
-    const tokens = tokensOf(screen.getByRole("button", { name: /Profile$/ }));
+    const tokens = tokensOf(screen.getByRole("button", { name: "Profile" }));
 
     // Its own type scale, not the desktop one.
     expect(tokens).toContain("text-base");
@@ -159,6 +204,22 @@ describe("the mobile sidebar", () => {
     expect(tokens).toContain("font-bold");
     // The mobile-only selection affordance.
     expect(tokens).toContain("border-b-4");
+  });
+
+  it("names every button with its visible label and nothing else", () => {
+    // The shorter labels, and the same requirement. Both branches render their
+    // own three icons, so fixing one would leave the other announcing them.
+    renderSidebar();
+
+    for (const name of MOBILE_BUTTONS) {
+      expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    }
+  });
+
+  it("lets no icon contribute to a name either", () => {
+    const { container } = renderSidebar();
+
+    expect(imageAltsOf(container)).toEqual(["", "", ""]);
   });
 
   it("writes no stringified boolean either", () => {
