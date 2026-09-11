@@ -7,6 +7,16 @@ description: Execute a NUCarpool engineering ticket through the Jira-first workf
 
 You own the work **through PR readiness**. The human owns the **merge**.
 
+## One ticket, one session
+
+```
+one Jira ticket → one worktree → one session → one PR → stop
+```
+
+This conversation belongs to **one** ticket. Finish it, report, and stop. A different ticket is a different session, started fresh.
+
+The reason is mechanical rather than stylistic: every turn re-sends the entire conversation, so a second ticket in this session pays to re-send the first one's whole history on every turn it takes — and the window fills until it has to be compacted, which loses detail from work you already did. The cost grows with the square of the session's length, and the quality falls.
+
 ## Where truth lives — read, don't restate
 
 | Source                                                                        | Authority                                                               |
@@ -48,11 +58,19 @@ Once real investigation or implementation starts. Creating or reading a ticket d
 
 Ticket → repository → _then_ decide whether outside knowledge is needed. Reach for Confluence only when the task needs something the repo does not contain, and fetch specific pages. Confluence can be stale; where it disagrees with the code, the code wins.
 
-## 4. Feature branch
+## 4. Workspace, then branch
+
+Concurrent sessions share one repository, so a branch switch in the primary checkout moves another session's HEAD. Establish where you are **before** editing anything — `git rev-parse --abbrev-ref HEAD`, `git status --short` and `git worktree list` are how you tell:
+
+- **Already in this ticket's own worktree under `.claude/worktrees/`** — verify it and carry on. Do not create a second one, and never nest one inside it.
+- **Not in a task worktree** — get one, then run `./scripts/wt-bootstrap.sh` inside it. The [README](../../../README.md#working-in-a-worktree) has the commands.
+- **In the primary checkout, or on a branch carrying changes that are not yours** — **report the mismatch and stop.** Never move, stash, reset, clean, switch away from or commit another session's work. Ask for a session in the right workspace instead.
 
 Inspect the working tree first. Identify pre-existing changes that are not yours: **never discard them, and never silently include them in your commit.** Name them in your report.
 
 Branch off a freshly fetched `origin/main`, or reuse the ticket's existing branch.
+
+Teardown is not yours. After the human merges, they run `./scripts/wt-cleanup.sh <task>` from the primary checkout. Never remove your own worktree.
 
 ## 5. Implement
 
@@ -116,6 +134,8 @@ Stop in exactly one of two states, and report which:
 
 Then stop. The human reviews and merges.
 
+**Stopping means this session is finished, not paused.** Report the state and end there — do not look for more work, do not pick up the next ticket, and do not ask which ticket is next. If the operator names another one, say it belongs in a fresh session and why. Only an explicit instruction to continue here anyway overrides that, and then say plainly what it costs.
+
 ## Discovered issues
 
 1. Part of the active ticket? Handle it in scope.
@@ -126,7 +146,7 @@ Then stop. The human reviews and merges.
 
 **File before the session ends.** Chat, a report and a PR description are not the board; once the session ends the transcript is the only record. If told not to write to Jira, say so, name the finding, and file it when the restriction lifts.
 
-Only when the request explicitly authorized find-and-fix may a discovered ticket become the active work item — and then state the scope change out loud and keep it a separate PR unless the problems are genuinely inseparable.
+Filing it is this session's job; implementing it is not. Even when the request explicitly authorized find-and-fix, a discovered ticket belongs to its own session and its own PR — unless the two problems are genuinely inseparable, in which case say so out loud and keep them in this one.
 
 Do not file trivial observations, speculation, or duplicates.
 
@@ -136,6 +156,8 @@ Do not file trivial observations, speculation, or duplicates.
 - push or commit to `main` or `staging`
 - force-push, or bypass branch protection
 - transition an issue to `Done` — that follows the human merge
+- begin a second ticket in this conversation — a new ticket is a new session
+- remove your own worktree, or disturb a workspace holding another session's work
 - work around the permission system
 
 When an action needs approval, request it and wait. A declined prompt means _don't_ — adjust the approach rather than reaching for another route to the same effect.
