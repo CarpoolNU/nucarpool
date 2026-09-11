@@ -80,7 +80,7 @@ describe("cleanup-orphan-conversations tranche arguments", () => {
 
   it("parses a cutoff as UTC midnight", () => {
     // Local midnight would make the tranche depend on the operator's timezone,
-    // which is the failure SCRUM-373 documents for the schedule columns.
+    // which is the documented failure mode for the schedule columns.
     const { olderThan } = parseArgs(["--older-than", "2025-01-01"]);
 
     expect(olderThan?.toISOString()).toBe("2025-01-01T00:00:00.000Z");

@@ -124,7 +124,7 @@ describe("evaluateSeedTarget", () => {
   });
 
   /**
-   * SCRUM-410 removed `SEED_ALLOW_REMOTE`, which turned the refusal below off
+   * `SEED_ALLOW_REMOTE` was removed; it turned the refusal below off
    * for any host — production included. These pin that no argument brings it
    * back: `evaluateSeedTarget` now takes one parameter, and the only route to
    * `allowed: true` is membership of `LOCAL_HOSTNAMES`.

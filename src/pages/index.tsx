@@ -554,9 +554,9 @@ const Home: NextPage<any> = () => {
     // Reset collapsed state when switching tabs
     setIsSidebarCollapsed(false);
     // Changing tab drops every other user's pin along with the route they
-    // belonged to. This block existed before SCRUM-379 and could never run -
+    // belonged to. This block predates the extraction and could never run -
     // the state it tested was only ever set from an unreachable branch - so a
-    // pin genuinely did survive a tab change. SCRUM-379 fixed that for the one
+    // pin genuinely did survive a tab change. That was fixed for the one
     // pin the page was tracking; the sweep covers the group preview's too,
     // which were never tracked at all.
     if (mapState) {
@@ -740,7 +740,7 @@ const Home: NextPage<any> = () => {
         {/* Always render the banner outside of other containers. It hides
             itself below the mobile breakpoint; it used to be declared inside
             this component's render body, which remounted it on every render
-            of this page rather than updating it (SCRUM-415). */}
+            of this page rather than updating it. */}
         <MobileBanner />
 
         {/* Tutorial overlay for first-time users */}
@@ -762,7 +762,7 @@ const Home: NextPage<any> = () => {
           {/* `h-mobile-row` is the viewport less the navigation and less the
               banner this row is pushed down by - see `tailwind.config.js`.
 
-              The top margin was one step short until SCRUM-411's final
+              The top margin was one step short until the banner's final
               reconciliation: the banner measures 24px and the margin reserved
               20px, so the fixed bar overlapped the first 4px of this row. Both
               numbers are resolved from the built stylesheet rather than read
@@ -772,7 +772,7 @@ const Home: NextPage<any> = () => {
               The
               desktop `h-[91.5%]` is left alone deliberately: its 8.5% reserves
               the *top* header, a different quantity from the bottom navigation
-              and outside SCRUM-412. On mobile that reservation meant nothing at
+              and outside the bottom bar's own height. On mobile that reservation meant nothing at
               all, because the header renders as the bottom bar instead, so 8.5%
               of viewport height happened to equal the bar at exactly one
               viewport height (~694px) and drifted either side of it. */}
@@ -809,7 +809,7 @@ const Home: NextPage<any> = () => {
                      still 2 and 11 units. The arbitrary form is deliberately
                      not spelled out here - Tailwind scans this file for
                      class-like strings and would emit whichever one a comment
-                     names (SCRUM-419). Do not shrink this to make the
+                     names. Do not shrink this to make the
                      handle look smaller - shrink the `h-2` span instead, and
                      leave the padding to hold the target open. */
                   className={`focus-visible:outline-northeastern-red absolute left-1/2 z-30 -translate-x-1/2 transform cursor-pointer py-4.5 transition-all duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${

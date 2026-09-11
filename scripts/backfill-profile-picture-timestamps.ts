@@ -2,7 +2,7 @@
  * Set `User.profile_picture_updated_at` for every user who already has a
  * picture in S3.
  *
- * SCRUM-276 added the column so `getPresignedDownloadUrl` can answer "has a
+ * The column exists so `getPresignedDownloadUrl` can answer "has a
  * picture?" without an S3 `HeadObject`, which was the entire AWS cost of
  * rendering an avatar. Every row written before the column exists is `null`,
  * and `null` cannot mean "no picture" — an object may well be sitting at
@@ -14,7 +14,7 @@
  * exactly as it did before. What is missing is the saving. The
  * fallback and this script are retired together, once it reports nothing to do
  * in every environment — the sequence `group_message` follows in
- * SCRUM-253 / SCRUM-287.
+ * the database README.
  *
  * **This is the one script here that reads AWS rather than only the database.**
  * It needs `s3:ListBucket` on the configured bucket. It performs no S3 writes,

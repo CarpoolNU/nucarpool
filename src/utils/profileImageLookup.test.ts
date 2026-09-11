@@ -5,7 +5,7 @@ import {
 } from "./profileImageLookup";
 
 /**
- * The decision SCRUM-276 turns on, and the one place it is checkable.
+ * The decision the column turns on, and the one place it is checkable.
  *
  * The failure this guards against is not subtle in effect but is invisible in
  * review: reading a `null` column as "no picture" looks like the obvious

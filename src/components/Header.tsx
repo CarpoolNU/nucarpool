@@ -49,7 +49,7 @@ const HeaderDiv = styled.div`
  * The mobile bottom navigation.
  *
  * `height` and `padding-bottom` are the load-bearing pair, and they are the
- * point of SCRUM-412. This used to declare no height, so the bar was whatever
+ * point of this block. This used to declare no height, so the bar was whatever
  * its children summed to and three other files each guessed at that number -
  * disagreeing with it and with each other. The height now comes from
  * `MOBILE_NAV_SPACE`, which every one of those callers also reads, so the value
@@ -278,7 +278,7 @@ const Header = (props: HeaderProps) => {
       hasUnsavedGuard: props.checkChanges !== undefined,
     });
 
-    // The full page load SCRUM-171 needs. Kept identical, and deliberately not
+    // The full page load the profile page needs. Kept identical, and deliberately not
     // run until the guard below has had its say.
     const leaveProfile = (href: string) => {
       setIsLoading(true);
@@ -379,16 +379,16 @@ const Header = (props: HeaderProps) => {
      * and the sole caller that supplies it is `pages/index.tsx` at route `/`.
      * So `props.profile` was always undefined and `router.pathname` always `/`.
      *
-     * It read like a third way off the profile page, and SCRUM-384 had to
-     * enumerate every `<Header>` usage to prove it was not one. Its comment
+     * It read like a third way off the profile page, and the unsaved-changes
+     * work had to enumerate every `<Header>` usage to prove it was not one. Its comment
      * also said "don't force reload" directly above a full page load.
      *
      * **If a page ever passes both `data` and `profile`, this needs the guard,
      * not the old branch** - leaving the profile page without consulting
-     * `checkChanges` is exactly the defect SCRUM-384 fixed. Route it through
+     * `checkChanges` is exactly the defect that was fixed. Route it through
      * `planMobileNav`'s equivalent rather than restoring a hard navigation.
      *
-     * It is now a plain forward to `setSidebar` — SCRUM-383 removed the
+     * It is now a plain forward to `setSidebar`: the badge no longer needs the
      * `setCurrentunreadMessagesCount(0)` that fired on the Requests tab, since
      * there is no longer a local counter for a tab click to reset. Kept as a
      * named function rather than inlined because it is the one place a future

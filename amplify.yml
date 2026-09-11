@@ -95,7 +95,7 @@
 # these values**, and recommends an IAM compute role instead of long-lived
 # credentials for reaching AWS services. `ACCESS_KEY_ID_AWS` and
 # `SECRET_ACCESS_KEY_AWS` are exactly what that warning is about, and a compute
-# role would remove them rather than protect them. SCRUM-390; not changed here.
+# role would remove them rather than protect them. Tracked separately; not changed here.
 #
 # Amplify Hosting's Next.js compute support covers Next.js 12 through 15.
 # Bumping the framework past that fails at deploy, not at build.

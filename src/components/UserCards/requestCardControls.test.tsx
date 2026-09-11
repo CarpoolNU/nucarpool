@@ -12,15 +12,14 @@ import {
 } from "../../testing/viewport";
 
 /**
- * What a Requests-tab card offers, and what it deliberately does not
- * (SCRUM-422).
+ * What a Requests-tab card offers, and what it deliberately does not.
  *
  * Both card types make the same `UserCard` call with the same props, so the
  * contract below is one contract and is tested once here rather than copied
  * into two near-identical files.
  *
  * **This test pins a decision, not a fix.** It passes against the code before
- * SCRUM-422 as well as after, and that is the point rather than an oversight:
+ * the prop removal as well as after, and that is the point rather than an oversight:
  * the change was to delete a `onViewRouteClick` prop that both cards required,
  * were passed at all four call sites, and silently dropped. Deleting it
  * altered no rendered output, so no assertion here could fail beforehand.
@@ -136,7 +135,7 @@ describe.each(CARDS)("%s controls", (_name, Card) => {
 
     it("does not offer View Route", () => {
       // Stated separately from the count above because it is the specific
-      // claim SCRUM-422 decided, and a reader looking for it should find it
+      // claim that was decided, and a reader looking for it should find it
       // by name. View Route lives in the conversation's Map tab.
       renderCard(Card);
 

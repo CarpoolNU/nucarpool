@@ -11,10 +11,10 @@
  * The decision is lifted out here for the same reason `viewRoutePlan.ts` was:
  * `Header` cannot be executed without a router, a tRPC client, a portal and a
  * `GroupPage`, so a rule living inside it is a rule nothing checks. This is
- * the shape SCRUM-379 established — a plan that decides, and a caller that
+ * the established shape — a plan that decides, and a caller that
  * carries it out.
  *
- * **The hard navigation is kept deliberately.** SCRUM-171 fixed "can't switch
+ * **The hard navigation is kept deliberately.** It fixed "can't switch
  * from profile to explore/requests on a real phone despite that it works on a
  * simulator" by replacing a client-side push with a full page load, and that
  * is load-bearing on real devices. A full load does defeat any client-side

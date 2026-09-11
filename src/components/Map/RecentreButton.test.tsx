@@ -9,7 +9,7 @@ import {
 } from "../../testing/viewport";
 
 /**
- * The recentre control's reachability (SCRUM-414 item 3).
+ * The recentre control's reachability.
  *
  * It was `!isMobile`-gated inside `index.tsx`, so a mobile user who panned
  * away from their workplace had no way back. This file exists because that

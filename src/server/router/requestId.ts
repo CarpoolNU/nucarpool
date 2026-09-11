@@ -4,7 +4,7 @@ import { randomBytes } from "crypto";
  * A short random reference for one request, so a masked client message and a
  * redacted server log line can be tied together.
  *
- * SCRUM-388 stopped sending unexpected error messages to the browser, which
+ * Unexpected error messages are no longer sent to the browser, which
  * left a user with "Something went wrong. Please try again." and nothing to
  * quote, and whoever reads the log with no way to find that particular
  * failure among the rest. This is the thing both ends can name.

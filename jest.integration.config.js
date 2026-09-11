@@ -31,7 +31,7 @@
  * `testMatch` below inert, because Jest ignores a top-level `testMatch` when
  * `projects` is present. The result is a run that collects nothing and exits
  * "no tests found" rather than failing - the same silent-removal failure mode
- * SCRUM-324 was filed for. There is no jsdom in this configuration and there
+ * this guards against. There is no jsdom in this configuration and there
  * should not be: this suite is database-only and contains no React.
  */
 

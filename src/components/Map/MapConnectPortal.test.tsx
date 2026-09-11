@@ -12,10 +12,9 @@ import {
 } from "../../testing/viewport";
 
 /**
- * What a map pin tap opens, and whether it can be closed again (SCRUM-414
- * item 2).
+ * What a map pin tap opens, and whether it can be closed again.
  *
- * This assertion was written for SCRUM-416 (phase 5) and deferred to this
+ * This assertion was written earlier and deferred to this
  * ticket, because the capability did not exist to test: `MapConnectPortal` was
  * `!isMobile`-gated in `index.tsx` while the map's click handlers ran on every
  * platform, so a phone tap set `popupUsers` and nothing rendered - and nothing
@@ -129,8 +128,8 @@ describe("a map pin tap at a mobile viewport", () => {
      * that a mobile render carries a control able to clear the selection - and
      * that is what could regress. The gate's removal is verified by reading the
      * diff, because `index.tsx` has no test: it is ~1300 lines behind Mapbox,
-     * NextAuth and a dozen tRPC queries, which is the same reason SCRUM-379
-     * gave for lifting decisions out of it. There is no decision left here to
+     * NextAuth and a dozen tRPC queries, which is the same reason earlier work
+     * had for lifting decisions out of it. There is no decision left here to
      * lift - the answer is now "always render" - so there is nothing to make
      * pure and test.
      */

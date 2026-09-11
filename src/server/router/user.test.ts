@@ -307,7 +307,7 @@ describe("user.getPresignedDownloadUrl — recorded picture state", () => {
   });
 
   it("still resolves { url: null } rather than undefined on the signing path", async () => {
-    // The SCRUM-242 cacheability contract has to survive the new branch: a
+    // The cacheability contract has to survive the new branch: a
     // signing failure is a successful lookup that found nothing renderable.
     mockUserFindUnique.mockResolvedValue({
       profilePictureUpdatedAt: new Date("2026-09-03T12:00:00Z"),

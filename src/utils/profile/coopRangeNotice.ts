@@ -2,10 +2,10 @@
  * Whether the profile page should tell this user their stored co-op range runs
  * backwards, the moment it loads.
  *
- * **Why anything is needed.** SCRUM-302 made `user.edit` and `onboardSchema`
- * reject a range whose end precedes its start, and it was not retroactive:
+ * **Why anything is needed.** `user.edit` and `onboardSchema` now
+ * reject a range whose end precedes its start, and that was not retroactive:
  * production carries **47** searches that already store one, 40 of them
- * `ACTIVE` (measured 2026-09-09, SCRUM-392). Every one of those users is
+ * `ACTIVE` (measured 2026-09-09). Every one of those users is
  * invisible in matching and sees an empty map, because `dateOverlapFilter` asks
  * for `startDate <= theirs AND endDate >= theirs` and an inverted range
  * satisfies that for nobody.
@@ -28,7 +28,7 @@
  * inverted, so a user without the defect sees no difference whatsoever.
  *
  * **Deliberately not a server log either.** The other candidate read path was
- * `user.me`, which already flattens both columns. SCRUM-402 records that nobody
+ * `user.me`, which already flattens both columns. Nobody
  * knows where deployed server logs are read, so a line there would be
  * unfalsifiable; and the population is already reportable through
  * `scripts/check-profile-coordinates.ts`. Telling the affected person beats

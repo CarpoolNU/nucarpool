@@ -27,24 +27,24 @@
  * violation is what makes these greppable in a hosted log viewer". The more
  * important sink was the one not doing it.
  *
- * **What this deliberately does not change: the fields themselves.** SCRUM-388
- * and SCRUM-399 settle what may be disclosed where, and SCRUM-400 states that
- * changing redaction is out of scope. Production carries the *shape* of a
+ * **What this deliberately does not change: the fields themselves.** What may
+ * be disclosed where is settled elsewhere, and changing redaction is out of
+ * scope here. Production carries the *shape* of a
  * fault and never its contents, exactly as before — this is a formatting
  * change, and the tests assert the field set is unchanged.
  *
- * **`console` is the decided sink, not a placeholder.** SCRUM-400 offered a
- * third-party error reporter and closed on its own AC 6 — the correlation id
+ * **`console` is the decided sink, not a placeholder.** A
+ * third-party error reporter was considered and declined — the correlation id
  * and this line — without adopting one. Two reasons, both recorded on that
  * ticket: a reporter is another third-party processor of data from an
- * application holding real student addresses, and SCRUM-402 established that
+ * application holding real student addresses, and it is established that
  * nobody has yet confirmed where the deployed server's output is read, which
  * would be the wrong problem to solve by adding a vendor.
  *
  * So do not read `console.error` here as an unfinished thought. What is
  * genuinely still missing is **aggregation** — a fault affecting many users
- * looks identical to one affecting a single user — and that is SCRUM-403,
- * which wants SCRUM-402 answered first.
+ * looks identical to one affecting a single user — which is tracked separately
+ * and wants the log-destination question answered first.
  */
 
 /**

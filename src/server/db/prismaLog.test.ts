@@ -135,7 +135,7 @@ describe("stripSourceContext", () => {
   });
 
   it("never reveals an argument value, because Prisma does not log one", () => {
-    // The premise SCRUM-399 was filed on, pinned. If a future Prisma starts
+    // The premise this was investigated on, pinned. If a future Prisma starts
     // quoting arguments, the captured payload above stops matching reality and
     // this is the test that should be revisited.
     expect(REQUEST_ERROR.message).not.toContain("SENTINEL_VALUE");

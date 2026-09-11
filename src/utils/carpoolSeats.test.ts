@@ -10,7 +10,7 @@ import {
 /**
  * Every value worth asking about, including the one this ticket is named for.
  * `-1` is not hypothetical: it is what an ACTIVE driver's row held in
- * production-derived data, written by the accounting SCRUM-229 fixed.
+ * production-derived data, written by accounting that has since been fixed.
  */
 const SEAT_COUNTS = [-3, -1, 0, 1, 2, MAX_SEATS_AVAILABLE, 7, 12];
 
@@ -109,7 +109,7 @@ describe("driverHasNoSeatsExplanation", () => {
   });
 
   it("says the same for a negative count", () => {
-    // One predicate, so the SCRUM-348 row needs no branch of its own.
+    // One predicate, so the negative row needs no branch of its own.
     expect(driverHasNoSeatsExplanation(driver(-1))).toBe(
       driverHasNoSeatsExplanation(driver(0)),
     );

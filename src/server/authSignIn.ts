@@ -51,7 +51,7 @@ export const INSTITUTIONAL_EMAIL_DOMAINS = [
  *
  * Tightening this to the specific tester addresses, or to addresses that
  * already exist in the database, is a strictly better control and needs a list
- * this repository should not carry. See SCRUM-344 for that decision.
+ * this repository should not carry.
  */
 export const STAGING_GUEST_EMAIL_DOMAINS = ["gmail.com"] as const;
 

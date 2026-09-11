@@ -95,7 +95,7 @@ describe("clearOtherUserMarkers", () => {
     });
 
     it("takes the icon and its label together", () => {
-      // The specific asymmetry SCRUM-391 exists to remove: `clearMarkers` swept
+      // The specific asymmetry this removes: `clearMarkers` swept
       // `-text-layer` and left the icon, so a pin lost its name and stayed.
       const { map, layers } = buildMap({
         layers: [

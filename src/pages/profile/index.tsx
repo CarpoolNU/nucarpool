@@ -213,12 +213,12 @@ const Index: NextPage = () => {
    * nothing to lose.
    *
    * The comparison lives in `utils/profile/hasProfileChanges.ts` - see the
-   * header there for SCRUM-381, which is what happens when fourteen of these
+   * header there, which records what happens when fourteen of these
    * are chained inline and two of them are wrong.
    *
    * `proceed` is the navigation the header wanted to perform. It arrives as a
    * callback rather than a destination so that the mobile path's full page
-   * load - SCRUM-171 - stays in `Header` where its reason is written down.
+   * load stays in `Header` where its reason is written down.
    * Absent, the map is the destination, which is what the desktop button
    * asked for before this took an argument.
    */
@@ -425,7 +425,7 @@ const Index: NextPage = () => {
 
           `top-[6rem]` stays: it clears the profile tab strip above, which is a
           different component and a different quantity - see the note on
-          SCRUM-412. */}
+          the explore page. */}
       {isMobile ? (
         <div className="bottom-mobile-nav absolute top-[6rem] right-0 left-0 overflow-y-auto">
           <div className="px-8 pt-6 pb-24">

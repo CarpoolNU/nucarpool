@@ -9,11 +9,11 @@ interface RecentreButtonProps {
 /**
  * Puts the map back on the user's workplace.
  *
- * **Desktop-only until SCRUM-414 item 3**, so a mobile user who panned away
+ * **Previously desktop-only**, so a mobile user who panned away
  * from their workplace had no way back to it.
  *
  * Lifted out of `index.tsx` rather than un-gated in place, for the reason
- * SCRUM-379 gave about that file: it is ~1300 lines behind Mapbox, NextAuth
+ * given about that file: it is ~1300 lines behind Mapbox, NextAuth
  * and a dozen tRPC queries and has no test, so a control living inside it is a
  * control nothing checks. Reachability is exactly what this ticket is about -
  * five of its six defects were controls that existed on one platform and not
@@ -30,7 +30,7 @@ interface RecentreButtonProps {
  * so the top of the map is clear.
  *
  * 44px on mobile against the desktop 32px, matching the touch target
- * SCRUM-421 settled on for the explore sheet's handle. jsdom measures nothing,
+ * settled on for the explore sheet's handle. jsdom measures nothing,
  * so that is arithmetic and not a measurement.
  */
 export const RecentreButton = (props: RecentreButtonProps) => {

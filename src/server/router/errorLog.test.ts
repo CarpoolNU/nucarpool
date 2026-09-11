@@ -8,7 +8,7 @@ import {
 } from "./errorLog";
 
 /**
- * The server-error log line (SCRUM-400, part 2's decision-independent half).
+ * The server-error log line.
  *
  * `[trpc].ts` handed an object to `console.error` as a second argument, which
  * Node renders with `util.inspect` — six lines for one fault, and six events
@@ -19,7 +19,7 @@ import {
  * The assertions that matter here are the two the old form failed: that the
  * output is **one line**, and that it is **parseable** — those are what make a
  * metric filter or a Logs Insights query on `requestId` possible at all. The
- * rest pin the field set, because SCRUM-400 puts redaction explicitly out of
+ * rest pin the field set, because redaction is explicitly out of
  * scope and this had to be a formatting change and nothing more.
  */
 

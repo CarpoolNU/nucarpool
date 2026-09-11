@@ -9,7 +9,7 @@ import {
 } from "../../testing/viewport";
 
 /**
- * The pin-colour key, now that mobile has one (SCRUM-414 item 3).
+ * The pin-colour key, now that mobile has one.
  *
  * The legend was `!isMobile`-gated in `index.tsx`, so the colour encoding was
  * unexplained on the platform where the map is most of the screen. It is

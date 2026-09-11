@@ -9,7 +9,7 @@ import { connectAction } from "./connectAction";
  * user either to wait for a response nobody owed them, or to visit a tab whose
  * Accept button does not render for a resolved request. The journey it blocked
  * is a real one: carpooling again with someone after the group has ended, which
- * SCRUM-353 made depend on sending a fresh request.
+ * now depends on sending a fresh request.
  *
  * The four cases that matter most are the two `ACCEPTED` ones — which used to
  * be refused and now fall through — and the two `PENDING` ones, which must keep
@@ -178,7 +178,7 @@ describe("connectAction — seat availability", () => {
   });
 
   it("refuses a driver whose seat count went negative", () => {
-    // SCRUM-348 made the call this test used to defer: non-positive is
+    // The call this test used to defer: non-positive is
     // unavailable. A driver at -1 is a real state in production data, and
     // `reserveSeat` would refuse the acceptance anyway — so opening the modal
     // only led to a server error naming the driver as having no space.
@@ -319,7 +319,7 @@ describe("connectAction — the counterpart has no seats", () => {
   });
 
   it("refuses one whose count went negative, the same way", () => {
-    // The SCRUM-348 row. `hasSeatAvailable` is the single predicate, so this
+    // The negative-seat row. `hasSeatAvailable` is the single predicate, so this
     // needs no separate branch — asserted because it is the case that was
     // live in production data.
     expect(action({ viewerRole: Role.RIDER, otherSeatAvail: -1 })).toEqual({

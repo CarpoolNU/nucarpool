@@ -15,7 +15,7 @@ interface ConnectPortalProps {
 /**
  * What a tap or click on a map pin opens.
  *
- * **This rendered on desktop only until SCRUM-414 item 2, and the mobile
+ * **This rendered on desktop only, and the mobile
  * failure was worse than "nothing happens".** The click handlers in
  * `utils/map/addMapEvents.tsx` are registered unconditionally and call
  * `setPopupUsers`, but this component was the sole reader of that state *and*

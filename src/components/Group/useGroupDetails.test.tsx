@@ -122,8 +122,8 @@ const renderWithStored = (initial: StoredProp, canEdit = true) =>
   );
 
 /**
- * A caller that rebuilds `stored` on every render, which is what SCRUM-389 is
- * about. Deliberately *not* frozen or hoisted: a new object with the same
+ * A caller that rebuilds `stored` on every render, which is what the render
+ * loop was. Deliberately *not* frozen or hoisted: a new object with the same
  * values, every time it is called.
  */
 const freshStored = (): StoredGroupPreferences => ({
@@ -153,7 +153,7 @@ const renderCounting = (getStored: () => StoredGroupPreferences) => {
         `useGroupDetails re-rendered more than ${RENDER_LIMIT} times without ` +
           `settling. The sync effect is feeding itself: it applied a new ` +
           `details object, which re-rendered the caller, which built a new ` +
-          `stored object, which re-ran the effect. See SCRUM-389.`,
+          `stored object, which re-ran the effect.`,
       );
     }
     return useGroupDetails({ stored: getStored(), canEdit: true });

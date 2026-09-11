@@ -179,7 +179,7 @@ export const convertCarpoolSearchToPublic = (
  *
  * The counterpart stays *visible* either way. This narrows what each request
  * discloses and never which requests are returned - hiding them is what
- * SCRUM-296 and SCRUM-316 were filed to undo.
+ * earlier work was filed to undo.
  *
  * @param search the counterpart's CarpoolSearch, with user and location relations
  * @param status the status of the request between the viewer and that user

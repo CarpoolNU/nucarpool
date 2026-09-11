@@ -4,11 +4,11 @@ import { PublicUser } from "../types";
  * The order a group route visits everybody in.
  *
  * Lifted out of `onViewGroupRoute` in `pages/index.tsx` for the reason
- * SCRUM-379 gives for `viewRoutePlan.ts`: this is the only part of the group
+ * given for `viewRoutePlan.ts`: this is the only part of the group
  * route with a right and a wrong answer, and until now no test could reach it
  * without rendering a 1300-line page against Mapbox, NextAuth and a dozen tRPC
- * queries. It is unchanged in behaviour — the extraction is what SCRUM-391 asks
- * for so that `groupRouteClick.ts` can be tested at all.
+ * queries. It is unchanged in behaviour — the extraction is what is needed
+ * so that `groupRouteClick.ts` can be tested at all.
  *
  * The algorithm is a constraint-aware nearest neighbour. Start at the driver's
  * home; repeatedly go to the closest point that is *legal* right now; end at
@@ -18,7 +18,7 @@ import { PublicUser } from "../types";
  * neighbour over all four corners would.
  *
  * It is a heuristic and not the shortest tour, which is fine: this draws a
- * preview, and Mapbox reorders nothing. SCRUM-184 is where combining the route
+ * preview, and Mapbox reorders nothing. A separate ticket covers combining the route
  * algorithms lives.
  */
 

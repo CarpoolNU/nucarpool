@@ -1,56 +1,29 @@
 /**
  * Takes every *other* user's pin off the map — icon, label, source and image.
  *
- * Pin cleanup used to be keyed by identity: `updateCompanyLocation` and
- * `updateStartLocation` name their layers after the user
- * (`other-user-<id>-company-layer`), and the only way to remove one was to call
- * the same function back with `remove: true` — which meant you had to have
- * remembered whose pin it was. `onViewGroupRoute` adds a pin for every group
- * member and remembered none of them, so **nothing ever removed them**.
- * They survived an individual route being drawn over the top, a
- * tab change, and every later group preview.
+ * **Asks the map which layers exist rather than remembering which were added.**
+ * Cleanup used to be keyed by identity, so removing a pin required having
+ * remembered whose it was; `onViewGroupRoute` adds one per group member and
+ * remembered none, so nothing ever removed them and they survived a route drawn
+ * over the top, a tab change and every later preview. A sweep cannot forget a
+ * pin, and a bookkeeping slip here is invisible until somebody looks at the map.
  *
- * The three functions that looked like cleanup each missed:
- *
- * - `clearMarkers` swept `-text-layer` and nothing else, so a group member's
- *   *label* went and their *icon* stayed. An unlabelled pin is the worst of the
- *   two states, and it is why the leftovers read as unexplained destinations
- *   rather than as an obviously stale overlay.
- * - `clearRiderStartMarkers` swept `-start-layer`, so start markers went and
- *   destination pins stayed. (It also filtered `!id.includes("driver")`, which
- *   read as "riders only" but excluded nothing: a layer id carries a cuid, not
- *   a role. Deleted with the file.)
- * - the page's `sidebarType` effect removed the single pin it was tracking,
- *   which after SCRUM-379 is the individual View Route pin. Group pins were
- *   never tracked.
- *
- * **The map already knows which layers exist, so ask it.** That is the whole
- * change in approach: a sweep cannot forget a pin, where bookkeeping can, and a
- * bookkeeping slip here is invisible until somebody looks at the map. It also
- * retires the `DestinationMarkerRef` that SCRUM-379 introduced, along with
- * `ViewRoutePlan.removesDestinationMarkerFor` — with a sweep at the top of both
- * handlers there is no remembered pin left to name.
- *
- * `viewRoutePlan.ts` used to argue the opposite: "Only ever names the one
- * remembered pin, never a sweep of every `other-user-*` layer.
- * `onViewGroupRoute` puts a pin on every group member, and a sweep here would
- * erase them." That was right about the danger and wrong about the remedy. A
- * sweep is safe **because of where it is called** — at the *start* of each
+ * **A sweep is safe because of where it is called** — at the *start* of each
  * handler, before that handler draws its own pins. `onViewGroupRoute` sweeps
  * and then immediately re-adds every member, so its pins are never the ones
- * erased.
+ * erased. Calling this anywhere else needs that ordering re-established first.
  *
  * ## What it deliberately does not touch
  *
  * Only the `other-user-` prefix. Removing too much is the likelier failure and
- * the harder one to notice, so these stay, and `clearOtherUserMarkers.test.ts`
+ * the harder one to notice, so these stay and `clearOtherUserMarkers.test.ts`
  * holds them there:
  *
  * - `clusters`, `cluster-count`, `riders`, `drivers` and their
  *   `company-locations` source — the discovery map itself.
  * - `layer-with-pulsing-dot` / `dot-point` — the viewer's own position.
  * - `current-user-company-layer` — the viewer's own destination.
- * - `route` — the line being drawn. Its own lifecycle is `clearDirections`.
+ * - `route` — the line being drawn; its lifecycle is `clearDirections`.
  * - every Mapbox base-style layer.
  */
 

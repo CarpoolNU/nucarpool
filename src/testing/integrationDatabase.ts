@@ -1,56 +1,29 @@
 /**
  * Lifecycle for the disposable database the integration suite runs against.
  *
- * The mocked suite (`yarn test`) proves what a hand-built Prisma double was
- * told to return. This one proves what MySQL actually does: whether a
- * `where`/`include`/`select` is even a valid query, whether the referential
- * actions that `relationMode = "prisma"` emulates behave as the schema says,
- * and whether a multi-step write really rolls back..
+ * The mocked suite proves what a Prisma double was told to return. This one
+ * proves what MySQL does: whether a `where`/`include`/`select` is a valid
+ * query, whether the referential actions `relationMode = "prisma"` emulates
+ * behave as the schema says, and whether a multi-step write really rolls back.
  *
- * ## This is test infrastructure, not application code
+ * **This is test infrastructure and lives outside `src/server/` on purpose.**
+ * It `TRUNCATE`s tables and shells out to the Prisma CLI. Nothing under
+ * `src/pages/` or `src/server/` may import it.
  *
- * It lives in `src/testing/` rather than under `src/server/` on purpose. It
- * `TRUNCATE`s tables and shells out to the Prisma CLI, and neither belongs
- * anywhere the application could reach it — the same boundary
- * `src/utils/seedGuard.ts` draws for itself, drawn here with a directory so it
- * is visible in an import path. Nothing under `src/pages/` or `src/server/`
- * may import this module.
+ * **It reads `TEST_DATABASE_URL` and never `DATABASE_URL`**, with no fallback.
+ * Every entry point goes through `assertTestDatabaseTarget` first, and there is
+ * no override. The connection string is never logged; the host and database
+ * name are, because an operator needs to see which database they just wiped.
  *
- * ## What it will and will not touch
+ * `prepareIntegrationDatabase` runs `prisma migrate deploy` against that
+ * disposable database and nothing else — which is the point, since building the
+ * schema from committed history is what makes the history testable. It does
+ * **not** mean this repository has adopted `migrate deploy` for shared
+ * environments; see the database README. The guard keeps the two apart
+ * mechanically: a PlanetScale host can never be a target.
  *
- * It reads `TEST_DATABASE_URL`. It **never** reads `DATABASE_URL`, and never
- * falls back to it. Every entry point below goes through
- * [`assertTestDatabaseTarget`](../utils/testDatabaseGuard.ts) first, which
- * refuses anything that is not a local host holding a database whose name
- * carries a `test` word — and refuses a `TEST_DATABASE_URL` that addresses the
- * same database as `DATABASE_URL`. There is no override. The connection string
- * is never logged; the hostname and database name are, because an operator
- * needs to see which database they just wiped and neither is a credential.
- *
- * ## `prisma migrate deploy` here is not a change to the deploy workflow
- *
- * `prepareIntegrationDatabase` runs `prisma migrate deploy` against the
- * disposable database named by `TEST_DATABASE_URL`, and against nothing else.
- * That is deliberate and it is the point of the suite: building the schema from
- * the committed migration history is what makes the history itself testable,
- * and it is how `tutorial_completed` would have been caught.
- *
- * **It does not mean this repository has adopted `prisma migrate deploy` for
- * shared environments.** PlanetScale is still changed by `prisma db push` to
- * staging followed by a Deploy Request promoting staging to `main`; nothing in
- * the deploy pipeline reads `prisma/migrations/`, and that separation is
- * intentional. See "Changing the schema" and "What migrations are for here,
- * and what they are not" in [the db README](../server/db/README.md). The guard
- * is what keeps the two apart mechanically rather than by convention: a
- * PlanetScale host cannot be a target, so this command cannot reach one.
- *
- * ## Isolation
- *
- * `jest.integration.setupAfterEnv.js` truncates **before every test**, so a
- * suite is order-independent and a failure leaves nothing behind for the next
- * one. The consequence for anyone writing a test here: build fixtures in
- * `beforeEach` or in the test body, never in `beforeAll` — a `beforeAll`
- * insert is truncated before the first test that would have used it.
+ * Fixtures go in `beforeEach` or the test body, **never `beforeAll`** —
+ * truncation runs before every test. See `docs/testing.md`.
  */
 
 import { execFileSync } from "child_process";
@@ -289,7 +262,7 @@ export const claimIntegrationDatabase = async (
   );
   await prisma.$executeRawUnsafe(
     `INSERT INTO \`${MARKER_TABLE}\` (claimed_at, note) VALUES (NOW(3), ?)`,
-    "Claimed by the NUCarpool integration test harness (SCRUM-263). " +
+    "Claimed by the NUCarpool integration test harness. " +
       "Every table in this database is truncated between tests.",
   );
 

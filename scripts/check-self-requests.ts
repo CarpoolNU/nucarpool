@@ -13,7 +13,7 @@
  *
  * **The repair now lives in `cleanup-self-requests.ts`.** This header used to
  * say the expected count was zero and that anything turning up should be
- * removed by hand — reasonable while the set was empty, and it is not: SCRUM-392
+ * removed by hand — reasonable while the set was empty, and it is not: a later check
  * found **2** rows in production on 2026-09-09, against 0 on staging. Two rows
  * are still few enough to remove by hand and that is exactly the argument for
  * not doing it by hand, because an ad-hoc delete leaves no dry run, no

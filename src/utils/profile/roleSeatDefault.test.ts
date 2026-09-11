@@ -66,7 +66,7 @@ describe("seatAvailOnRoleChange", () => {
 
     it("replaces an out-of-range negative rather than keeping it", () => {
       // Not reachable from the input (`min="0"`), but a stored residue can be
-      // negative - SCRUM-348 - and a driver switching role should not carry it.
+      // negative, and a driver switching role should not carry it.
       expect(seatAvailOnRoleChange(Role.RIDER, Role.DRIVER, -1)).toBe(
         DEFAULT_DRIVER_SEATS,
       );

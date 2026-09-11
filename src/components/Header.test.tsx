@@ -185,7 +185,7 @@ describe("Header navigation at a mobile viewport", () => {
     }
   });
 
-  it("underlines the active tab and only the active tab (SCRUM-424)", () => {
+  it("underlines the active tab and only the active tab", () => {
     // `renderHeader` passes `sidebarValue: "explore"`, so that is the tab
     // carrying `$active`.
     renderHeader();
@@ -235,7 +235,7 @@ describe("Header navigation at a mobile viewport", () => {
     expect(desktopBrand()).not.toBeInTheDocument();
   });
 
-  it("never mounts the desktop-only avatar query (SCRUM-420)", () => {
+  it("never mounts the desktop-only avatar query", () => {
     // Not "the desktop header is absent from the final tree", which the test
     // above already covers and which passed while the bug was live. This
     // asserts nothing desktop-only *ever mounted*, by watching the one side

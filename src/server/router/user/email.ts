@@ -8,8 +8,8 @@ import { RequestStatus } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 // The preview is the connect message itself, so it is bounded by the column
 // that message is written to and by nothing else. This used to be a local
-// constant of 250, mirroring a number ConnectModal hardcoded before SCRUM-231
-// replaced it with this one; the server was left three days behind, and a
+// constant of 250, mirroring a number ConnectModal once hardcoded before it was
+// replaced with this one; the server was left three days behind, and a
 // 251-255 character message created its request and then failed to notify
 // anyone. The bound itself still matters — the preview reaches an
 // SES template — so this is a change of source, not a removal.

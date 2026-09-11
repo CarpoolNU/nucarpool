@@ -25,7 +25,7 @@ import {
  * told to go somewhere that could not help them, about a request nobody had to
  * answer.
  *
- * SCRUM-353 is what makes this load-bearing rather than merely untidy. The
+ * The server contract is what makes this load-bearing rather than untidy. The
  * server now requires a **pending** request before it will build a group, and
  * `requests.create` reopens a resolved row to `PENDING` — rewriting the
  * direction so whoever asks now is the sender. That is the entire recovery
@@ -38,7 +38,7 @@ import {
  * Extracted as a pure function rather than left inline for the reason
  * `viewerAccess.ts` gives: a rule deciding what a user can reach belongs
  * somewhere a test can state it directly, rather than being inferred from a
- * rendered card. Before SCRUM-377 there was no other option; now it is a
+ * rendered card. There was once no other option; now it is a
  * preference, and still the right one here.
  */
 
@@ -145,7 +145,7 @@ export const connectAction = ({
     return { kind: "blocked", message: outgoingPending(preferredName) };
   }
 
-  // SCRUM-348 made that decision: non-positive is unavailable, via the
+  // The decision: non-positive is unavailable, via the
   // `hasSeatAvailable` predicate `reserveSeat` already used. A driver at a
   // negative count is now told they have no space instead of being sent to a
   // modal whose acceptance the server refuses.

@@ -5,8 +5,7 @@
  * strings, which is Prisma's *stdout* mode: the client formats its own error
  * and prints it, with nothing in the application able to intervene.
  * `src/pages/api/trpc/[trpc].ts` redacts the tRPC error payload in production
- * for a stated reason, and this route ran alongside it under no policy at all
- * (SCRUM-399).
+ * for a stated reason, and this route ran alongside it under no policy at all.
  *
  * **What that route actually discloses, measured rather than assumed.** The
  * ticket was filed suspecting query parameters — "addresses and emails" — on

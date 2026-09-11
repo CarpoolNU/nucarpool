@@ -22,7 +22,7 @@
  *
  * Extracted as a predicate rather than left inline because a gate that decides
  * what a user can reach is worth pinning somewhere a test can state it
- * directly. That was also the only option before SCRUM-377 added a jsdom
+ * directly. That was also the only option before there was a jsdom
  * project; it remains the better one for a pure decision.
  */
 
@@ -33,7 +33,7 @@
  * printed the other person's *role* — "Driver", "Rider" — in place of their
  * name whenever a VIEWER read a discovery card, on the rationale that a
  * browsing user should not collect the names of students they have no
- * relationship with. SCRUM-323 removed both. The reasoning, so that nobody
+ * relationship with. Both were removed. The reasoning, so that nobody
  * reinstates it by accident:
  *
  * **The photograph beside the name was never withheld, by decision.**
@@ -68,7 +68,7 @@
  * One consequence worth keeping in mind: the card's heading, the profile
  * image's `alt` text and the activation button's `aria-label` all read
  * `otherUser.preferredName` directly now. They cannot diverge, which is what
- * `counterpartLabel` existed to guarantee — SCRUM-279 had found the `alt` text
+ * `counterpartLabel` existed to guarantee — an audit had found the `alt` text
  * announcing a name the heading was hiding. With nothing withheld there is
  * nothing to leak, so the guarantee is structural rather than enforced.
  */

@@ -4,57 +4,22 @@ const {
   MOBILE_NAV_SPACE,
 } = require("./src/utils/breakpoints");
 
-/** @type {import('tailwindcss').Config} */
-/**
- * The theme and the screens. **Not the scan surface** - and this file used to
- * look as though it controlled that too.
+/*
+ * **Tailwind v4 scans the whole repository for class names**, minus what
+ * `.gitignore` excludes -- not just `src/`, and not just JS and TS. Automatic
+ * source detection comes from the `@import` in `src/styles/globals.css` and
+ * supersedes any scan configuration here; a `content` array in this file has no
+ * effect and was removed.
  *
- * A `content` array restricting the class scan to `src/pages` and
- * `src/components` stood at the top of this object and had no effect
- * whatsoever. Tailwind v4 is reached through the `@import` in
- * `src/styles/globals.css`, which turns on automatic source detection, and that
- * supersedes the legacy key this config carries in through `@config`. It was
- * deleted rather than corrected, because a key that reads as configuration and
- * configures nothing is worse than no key at all: two separate sessions
- * reasoned from it and reached a false conclusion, one of them writing that
- * conclusion into source comments before a build probe caught it.
+ * Two things follow, and the second is the one that bites. **Naming a utility
+ * in prose emits that utility**, so a comment or document mentioning a class
+ * ships it as CSS. And therefore **"class X no longer appears in the output" is
+ * never a valid check** -- the sentence explaining X's removal is enough to keep
+ * X in the stylesheet. Verify CSS changes by diffing the compiled
+ * `.next/static/css/*.css` between builds instead.
  *
- * The boundary actually in force is **the whole repository, minus whatever
- * `.gitignore` excludes**, and it is not limited to JavaScript and TypeScript.
- * Established by building with single-use probe utilities rather than inferred
- * from documentation: probes placed in `src/utils`, at the repository root, in
- * `scripts/` and inside a markdown file under `docs/` were every one of them
- * emitted, while one inside the build directory was not.
- *
- * Two consequences, both of which have already cost time:
- *
- *  - **Naming a utility in prose emits that utility.** A code comment, a
- *    markdown document, or this docblock will do it. So "utility X no longer
- *    appears in the compiled CSS" is not a usable acceptance criterion unless
- *    nothing in the repository mentions X - including the sentence explaining
- *    why it was removed. SCRUM-412 wrote that criterion and was defeated by its
- *    own comment.
- *  - **There is no configured restriction to design against.** SCRUM-413 shaped
- *    a helper partly on the strength of the deleted key's promise.
- *
- * Narrowing the scan for real is possible - `@source` in `globals.css` - and is
- * deliberately **not** done here. It is a separate change because deleting an
- * inert key is provably a no-op and narrowing a scan is not: bundled together,
- * a diff of the compiled stylesheets could no longer say which change caused
- * what.
- *
- * The weight it would save was measured rather than left as a guess. Building
- * with detection narrowed to the two directories the deleted key named drops
- * **8 utilities and 601 bytes** from the larger stylesheet before compression -
- * around 0.8% - and none of the 8 is used in any markup. Four come from the
- * comments in this very file, one from a comment in `breakpoints.js`, one from
- * an animation *value* rather than any prose at all, and two are ordinary
- * English words that happen to also be utility names, emitted because those
- * words appear in unrelated comments elsewhere in the repository.
- *
- * So the case for narrowing is not weight. It is that it would make "utility X
- * is gone from the CSS" a checkable claim again, which is the thing this
- * currently costs.
+ * The `theme` and `screens` keys below are load-bearing. Only the scan
+ * boundary was inert.
  *
  * TODO: add theme to follow the branding rules of Northeastern
  * https://brand.northeastern.edu/visual-design/typography/

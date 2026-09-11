@@ -122,7 +122,7 @@ describe("GET /api/version", () => {
      * Amplify serves through CloudFront. A cached response would keep
      * reporting the old commit across exactly the deploy boundary this
      * endpoint exists to observe - and would look like a correct answer while
-     * doing it, which is worse than the gap SCRUM-405 closes.
+     * doing it, which is worse than the gap this endpoint closes.
      */
     const res = call();
 

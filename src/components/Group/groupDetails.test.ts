@@ -308,7 +308,7 @@ describe("detailsEqual", () => {
   });
 
   it("compares every field of GroupDetails, not a subset", () => {
-    // The guard against the quiet version of SCRUM-389: a field left out of
+    // The guard against the quiet version of that loop: a field left out of
     // the comparison is a field whose changes never reach the form.
     // `COMPARED_FIELDS` is `Record<keyof GroupDetails, true>` so omitting one
     // fails `tsc`, and this asserts the runtime half of the same thing.

@@ -1,59 +1,30 @@
 /**
  * What pressing **View Route** on a card should do to the map.
  *
- * This exists because the decision it makes was previously spelled out inline
- * in `onViewRouteClick`, in a shape that could not be true:
+ * **The decision: a route is drawn for anyone with usable coordinates, whether
+ * or not the map is currently plotting them.** An off-map user also gets a
+ * destination pin so the route has both ends visible.
  *
- * ```ts
- * const isInRequestContext = selectedUserId && selectedUserId === clickedUser.id;
- * ...
- * if (!isInRequestContext) {
- *   if (!isOtherUserInGeoList && selectedUserId === clickedUser.id) {
- *     // add a destination pin for the off-map user
- *   } else if (!isOtherUserInGeoList && selectedUserId !== clickedUser.id) {
- *     setOtherUser(null);
- *     return;                     // <- returned before viewRoute() ran
- *   }
- * }
- * ```
+ * Absence from `geoJsonUsers` is a statement about the *discovery query's*
+ * filters, not about whether two people's routes can be compared — so it is
+ * never a reason to refuse. That matters because the omission is routine:
+ * `initialFilters.messaged` is `false` and `geoJsonUserList` then excludes
+ * every user you have a request with, so the map omits exactly the people whose
+ * cards you are most likely to press. `MAP_RESULT_LIMIT`, the distance, day and
+ * date filters, an `INACTIVE` counterpart and an incompatible role all reach
+ * the same state.
  *
- * The first inner branch asks for `selectedUserId === clickedUser.id`, which is
- * precisely what makes `isInRequestContext` truthy - so inside
- * `if (!isInRequestContext)` it was unreachable, and ids are cuids so no
- * falsy-equality case rescues it. Every click on a user the map was not already
- * plotting fell to the `else if` and returned before the route was drawn.
- * Nothing was logged and no toast was raised, so the button simply did nothing.
+ * **This deliberately does not decide whether to draw the route.** There is no
+ * `drawsRoute` field, because the answer is unconditionally yes and a plan
+ * field that never varies is a field nobody reads. The invariant is pinned
+ * where the drawing happens: `viewRouteClick.test.ts` asserts `viewRoute` is
+ * reached for every combination of these inputs.
  *
- * That was true from the moment it was written (`b97fc6b`, 2025-11-13) and it
- * is reachable on **default filter settings**: `initialFilters.messaged` is
- * `false`, and `mapbox.geoJsonUserList` excludes every user you have a request
- * with when `messaged` is false. So the map deliberately omits exactly the
- * people whose cards you are most likely to press. `MAP_RESULT_LIMIT = 150` is
- * a second route into the same state, as are the distance, day and date
- * filters, an `INACTIVE` counterpart, and an incompatible role.
- *
- * **The decision recorded here: a route is drawn for anyone with usable
- * coordinates, whether or not the map is currently plotting them.** The dead
- * branch's intent - give an off-map user a destination pin so the route has
- * both ends visible - is kept, because that is the behaviour the original
- * author was reaching for. Absence from `geoJsonUsers` is a statement about the
- * *discovery query's* filters, not about whether two people's routes can be
- * compared, so it was never a good reason to refuse.
- *
- * **What this deliberately does not decide is whether to draw the route.**
- * There is no `drawsRoute` field, because the answer is unconditionally yes and
- * a plan field that never varies is a field nobody reads. The invariant is
- * pinned where the drawing happens instead: `viewRouteClick.test.ts` asserts
- * that `viewRoute` is reached for every combination of these inputs. Gating the
- * call on an always-true flag would only have replaced one unreachable branch
- * with another.
- *
- * Extracted as a pure function for the reason `connectAction.ts` and
- * `viewerAccess.ts` give, and for one more specific to this defect: a
- * contradictory condition is invisible in review and invisible to a suite that
- * cannot reach the code. Stating the decision where a test can enumerate every
- * input is what makes "this branch can never run" a failing assertion rather
- * than a comment nobody wrote.
+ * Extracted as a pure function because the decision was previously inline in
+ * `onViewRouteClick` in a shape that could never be true — a contradictory
+ * condition is invisible in review and invisible to a suite that cannot reach
+ * the code. Stating it where a test can enumerate every input is what makes
+ * "this branch can never run" a failing assertion rather than a comment.
  */
 
 export type ViewRoutePlan = {
@@ -97,7 +68,7 @@ export type ViewRoutePlan = {
   addsDestinationMarker: boolean;
 
   /**
-   * **Removed in SCRUM-391**, along with the `markedDestinationUserId` input it
+   * **Removed**, along with the `markedDestinationUserId` input it
    * was computed from: `removesDestinationMarkerFor`, naming the one previously
    * added pin to take off first.
    *
@@ -109,7 +80,7 @@ export type ViewRoutePlan = {
    * erase them."
    *
    * That was right about the danger and wrong about the remedy. The pins it was
-   * protecting were the ones nothing *ever* removed, which is SCRUM-391 - they
+   * protecting were the ones nothing *ever* removed - they
    * outlived the route they belonged to, the tab they were drawn on, and the
    * session. `clearOtherUserMarkers` now sweeps them at the *start* of both
    * handlers, before either draws its own, so the group preview re-adds every

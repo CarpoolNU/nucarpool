@@ -388,8 +388,8 @@ describe("buildCandidateWhere — group, favorites, bounds", () => {
   });
 
   it("keeps discovery's role and status narrowing under the favorites filter", () => {
-    // SCRUM-351 asked whether the explore map's favorites filter should agree
-    // with the favorites *list* about who is included. It should not, and this
+    // Whether the explore map's favorites filter should agree
+    // with the favorites *list* about who is included was asked. It should not, and this
     // pins that.
     //
     // `favorites.me` stopped filtering by role and status, because hiding an

@@ -8,7 +8,7 @@
  * and Prisma 4 cannot express a CHECK at all), not the router, and not any
  * script. `clampSeats` bounds computed values only on the release path.
  *
- * So when the accounting bugs SCRUM-229 fixed pushed a driver to `-1`, nothing
+ * So when the accounting bugs since fixed pushed a driver to `-1`, nothing
  * noticed, and nothing has since. That row was found by hand-written SQL a
  * year and a half later — still ACTIVE, still being offered to riders, still
  * refusing every one of them. **This script is the piece whose absence let
@@ -102,7 +102,7 @@ const main = async () => {
     if (negative.length > 0) {
       console.log(
         `\n✖ ${negative.length} row(s) below zero. These are what the ` +
-          `pre-SCRUM-229 seat accounting left behind. The read path no longer ` +
+          `earlier seat accounting left behind. The read path no longer ` +
           `offers them — non-positive is unavailable everywhere now — so an ` +
           `ACTIVE driver here is not stuck in the dead end any more, but they ` +
           `are advertising no space at all until the count is repaired. ` +

@@ -6,7 +6,7 @@ import { RequestStatus } from "@prisma/client";
  * Extracted from `MessageHeader` for the same reason `connectAction` was
  * extracted from `ConnectCard`: the rule is worth pinning where a test can
  * state it as a rule. When this was written the component was not reachable
- * from a test at all; SCRUM-377 added the jsdom project, so `MessageHeader`
+ * from a test at all; the jsdom project changed that, so `MessageHeader`
  * *could* now be rendered — but a table of states reads better as a table than
  * as a dozen renders, and the extraction stays.
  *

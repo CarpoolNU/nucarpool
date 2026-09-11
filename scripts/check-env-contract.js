@@ -73,7 +73,7 @@ const ENV_PRODUCTION_FILE = ".env.production";
  * app has, because `src/utils/env/browser.ts` writes them literally. It would
  * stop being true for one read through a computed key - and an exemption whose
  * correctness depends on how a module happens to be written is exactly the
- * kind of implicit reasoning SCRUM-385 was filed about. A grep pattern costs
+ * kind of implicit reasoning this check exists to prevent. A grep pattern costs
  * one line and needs no argument.
  *
  * The mechanism stays for the case that genuinely needs it. An exemption here
@@ -265,7 +265,7 @@ function contractVars() {
             `process.env.${name} in ${rel}, so it cannot be told whether the ` +
             `variable has a default. Refusing to guess: a defaulted variable ` +
             `reported as required is what broke the production build in ` +
-            `SCRUM-397. Either restore the ` +
+            `the past. Either restore the ` +
             `\`NAME: validator({ input: process.env.NAME, ... })\` shape or ` +
             `teach envsafeOptionsAt() the new one.`,
         );
@@ -630,7 +630,7 @@ function strictnessIssues(entries, required, optional) {
         `amplify.yml:${entry.line} pattern(s) ${shown} cover only optional ` +
           `variable(s) ${optionalHit.join(", ")}, which a deployment need ` +
           `never set. grep then exits 1, and Amplify fails the build - this ` +
-          `is the SCRUM-397 outage. Append \`|| true\` to the command.`,
+          `is the outage this rule exists to prevent. Append \`|| true\` to the command.`,
       );
     }
   }
@@ -730,7 +730,7 @@ function checkAmplifySpec(contract, verbose) {
       const entry = contract.get(name);
       // An optional variable still has to be covered. If a deployment does set
       // one and no pattern carries it, the build resolves the console value
-      // and the runtime falls back to the code default - the SCRUM-385 split.
+      // and the runtime falls back to the code default - the two-contract split.
       const label = entry.optional
         ? ", optional: covered so a console override cannot be lost"
         : "";
@@ -743,7 +743,7 @@ function checkAmplifySpec(contract, verbose) {
         `  - add a grep pattern to amplify.yml covering it, or\n` +
         `  - add it to AMPLIFY_EXEMPT in this script with the reason it does ` +
         `not need to be there.\n` +
-        `Leaving it out silently is what SCRUM-385 was filed for: a variable ` +
+        `Leaving it out silently is the failure this check exists for: a variable ` +
         `with a code default resolves one way at build time and another at ` +
         `runtime, and nothing errors.`,
     );

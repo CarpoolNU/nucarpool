@@ -51,7 +51,7 @@ type SearchRow = {
   role: Role;
   /**
    * Optional, and absent from most fixtures on purpose: a row that never sets
-   * it must behave exactly as an ACTIVE one, so the SCRUM-369 guards cannot
+   * it must behave exactly as an ACTIVE one, so the status guards cannot
    * quietly start refusing the hundred cases in this file that say nothing
    * about status.
    */
@@ -717,8 +717,8 @@ describe("user.groups.create — only the two people involved", () => {
    * `invitation` is `[asker, asked]`. It defaults to the rider asking the
    * driver, because `requireAcceptableRequest` only lets the person a request
    * was *sent to* accept it — so which way the request points decides which of
-   * the two may create the group. Before SCRUM-347 the direction was
-   * irrelevant and every test here seeded the same one.
+   * the two may create the group. The direction used to be
+   * irrelevant, and every test here seeded the same one.
    */
   const freshPair = (invitation: RequestPair = [RIDER_1, DRIVER]) =>
     buildGroupsDb({
@@ -1093,7 +1093,7 @@ describe("user.groups — only the person a request was sent to may accept it", 
 /**
  * an invitation is spent once it is used.
  *
- * SCRUM-347 settled *who* may accept a request. This is *how long* the
+ * Who may accept a request is settled elsewhere. This is *how long* the
  * acceptance stays valid. `markRequestAccepted` resolves the row rather than
  * deleting it — deliberately, because `sendAcceptanceNotification` reads it and
  * the conversation hangs off its id — so an ACCEPTED request outlives the group
@@ -2503,7 +2503,7 @@ describe("user.groups.create — legal states only", () => {
  * membership moved. These replay the exact sequence rather than setting the
  * states up directly.
  *
- * **Which guard refuses moved in SCRUM-353, and the code with it.** The first
+ * **Which guard refuses has moved, and the code with it.** The first
  * accept resolves the request to ACCEPTED, so the second call is now stopped by
  * `requireAcceptableRequest` — the invitation is spent — before it ever reaches
  * the membership checks that used to answer CONFLICT. The state asserted below
@@ -2827,7 +2827,7 @@ describe("the rider slot holds a rider", () => {
  * the two halves of one inconsistency, asserted together.
  *
  * A driver at `seats_avail = -1` was a live, ACTIVE row in production-derived
- * data — the residue of the accounting SCRUM-229 fixed without repairing what
+ * data — the residue of accounting that was fixed without repairing what
  * it had already written. The write path refused it and the read path
  * advertised it, so the row was recommended to riders and then rejected every
  * one of them with a message naming the driver as having no space.
@@ -2959,7 +2959,7 @@ describe("a driver at a negative seat count", () => {
  * A paused search stops a group being built, on both slots.
  *
  * The status half of the two role checks above, and it arrived the same way.
- * SCRUM-369 stopped `user.requests.me` hiding a request whose counterpart had
+ * `user.requests.me` no longer hides a request whose counterpart has
  * paused their search — the dead end being that the request was invisible in
  * both Requests tabs while `requests.create`'s duplicate guard went on refusing
  * every retry with CONFLICT, so neither party could withdraw it — which put an

@@ -93,9 +93,9 @@ export const createRequestHandlers = (
     // below would misread it, because each treats "I am not a DRIVER" as
     // "they are".
     //
-    // Status is part of that question now, not just role. SCRUM-369 stopped
-    // `requests.me` hiding a request whose counterpart had *paused* their
-    // search, for the same reason SCRUM-296 stopped it hiding a role change,
+    // Status is part of that question now, not just role. `requests.me` no
+    // longer hides a request whose counterpart had *paused* their
+    // search, for the same reason it no longer hides a role change,
     // so the Accept button reaches those too. A paused counterpart is not
     // looking for a carpool, and their roles may well still fit — which is
     // exactly the case a role-only check waves through.
@@ -114,7 +114,6 @@ export const createRequestHandlers = (
       // count would otherwise be told to go ahead and then refused by
       // `reserveSeat`, whose NO_SEATS_MESSAGE describes the driver in the
       // third person and reads oddly when the driver is the one seeing it.
-      // SCRUM-348.
       if (!hasSeatAvailable(user.seatAvail)) {
         // Says what happens next, because the request is not dead. This used
         // to read "You do not have any space in your car to accept X." — true,
@@ -123,7 +122,7 @@ export const createRequestHandlers = (
         // change the answer. Nothing here rejects or hides the request, so it
         // is still theirs to accept when a seat frees.
         //
-        // SCRUM-361 turned this from wording into the fix for one of two
+        // This turned from wording into the fix for one of two
         // populations: new requests to a full driver are now refused at the
         // card, but requests already sent can only be met with an explanation.
         // Both routes to a seat are named, since a count of 0 may mean the car
@@ -247,7 +246,7 @@ export const createRequestHandlers = (
     // you had asked them.
     //
     // Both buttons that reach here are in `MessageHeader`, labelled Reject and
-    // Withdraw Request, and both call the same handler..
+    // Withdraw Request, and both call the same handler.
     toast.success(
       request.fromUserId === user.id
         ? `Your carpool request to ${otherUser.preferredName} has been withdrawn.`

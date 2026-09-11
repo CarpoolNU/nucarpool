@@ -29,14 +29,12 @@ export const SCHEDULE_TIMEZONE = "America/New_York";
  * *the day the user saved*, so a July save resolved at EDT and stored 9:00 AM
  * as `13:00` where January stored it as `14:00`. The two halves therefore
  * disagreed for the roughly two-thirds of the year DST covers, and one
- * wall-clock time had two stored forms depending on nothing the user could see
- * (SCRUM-373).
+ * wall-clock time had two stored forms depending on nothing the user could see.
  *
  * Pinning both sides here is what makes the round trip exact. The value is the
  * epoch deliberately, because that is the anchor the read side already had:
- * every correctly-stored row predating the fix stays correct, and the repair in
- * SCRUM-374 is confined to rows written under DST rather than to every row in
- * the table.
+ * every correctly-stored row predating the fix stays correct, and the repair is
+ * confined to rows written under DST rather than to every row in the table.
  */
 export const SCHEDULE_ANCHOR_DATE = "1970-01-01";
 

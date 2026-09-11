@@ -205,7 +205,7 @@ describe("Discovery card activation on desktop", () => {
   });
 
   /*
-   * A test stood here until SCRUM-418, named "does not offer the mobile
+   * A test stood here once, named "does not offer the mobile
    * condensed Connect". It rendered at a desktop width with
    * `mobileSelectedUser` set and asserted the condensed Connect stayed away,
    * pinning the `isMobile` term the gate carried because page state could
@@ -229,7 +229,7 @@ describe("Discovery card with no selection prop at all", () => {
    * That was masked rather than harmless: the portal sits behind a
    * desktop-only branch in `index.tsx`, and the reads carried an `isMobile`
    * term, so the wrong answer was only ever reached on a viewport where the
-   * term suppressed it. SCRUM-418 removes that term, so the masking goes with
+   * term suppressed it. That term is now gone, so the masking goes with
    * it - and that change's remaining map-pin work is what puts this card on a
    * mobile viewport for real.
    *

@@ -10,7 +10,7 @@ import { planViewRoute } from "./viewRoutePlan";
  * The **View Route** click handler, lifted out of `pages/index.tsx`.
  *
  * `onViewRouteClick` is now a `useCallback` that forwards to this. The move is
- * part of SCRUM-379 rather than tidying alongside it: the bug fixed there - a
+ * deliberate rather than tidying: the bug fixed there - a
  * branch that could never be true, so the route was never drawn for anyone the
  * map was not already plotting - lived for ten months because nothing could
  * execute this code without rendering a 1300-line page against Mapbox,
@@ -26,7 +26,7 @@ import { planViewRoute } from "./viewRoutePlan";
 
 /**
  * that change's `DestinationMarkerRef` and `removeDestinationMarker` **were
- * here, and SCRUM-391 removed them.**
+ * here, and have been removed.**
  *
  * They existed because pin removal was keyed by identity: a pin is a named
  * layer, so the only way to take one off was to have remembered whose it was.
@@ -67,7 +67,7 @@ export const runViewRouteClick = ({
   setPoints: (value: [number, number][]) => void;
 }): void => {
   // Take off every pin the previous view left - the group preview's markers for
-  // each member, and this handler's own pin from the last click. SCRUM-391:
+  // each member, and this handler's own pin from the last click:
   // before the sweep, only the rider *start* markers were cleared here, so the
   // group's destination pins stayed behind an individual route with nothing
   // explaining them.

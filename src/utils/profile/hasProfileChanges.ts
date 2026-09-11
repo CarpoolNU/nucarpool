@@ -6,7 +6,7 @@ import { OnboardingFormInputs, User } from "../types";
  *
  * Lifted out of `checkForChanges` in `pages/profile/index.tsx`, where it was
  * fourteen comparisons chained into one boolean expression inside a component.
- * That shape is why SCRUM-381 went unnoticed: two of the fourteen compared
+ * That shape is why the defect went unnoticed: two of the fourteen compared
  * **the day of the month** rather than the instant.
  *
  * ```ts
@@ -30,7 +30,7 @@ import { OnboardingFormInputs, User } from "../types";
  * | America/New_York | 2026-01-01T05:00Z | 2026-03-01T05:00Z | yes, both 1 |
  * | Europe/Berlin | 2025-12-31T23:00Z | 2026-02-28T23:00Z | yes, both 1 |
  *
- * SCRUM-381 predicted something narrower — that only months *sharing a last
+ * The ticket predicted something narrower — that only months *sharing a last
  * day* would collide, sparing February — on the premise that
  * `lastDayOfMonthUTC` writes these fields. It does not. That function backs
  * `handleMonthChange`, whose only caller is the map filter panel in
@@ -94,8 +94,8 @@ const differentInstant = (
  * A stored value with more entries would have its extras ignored, and an absent
  * form array reports no change however many days are stored. Neither is
  * reachable today - `profileDefaultValues.daysWorking` is always seven booleans
- * and `reset(...)` maps the stored string one-for-one - and SCRUM-381 asked for
- * this to be confirmed and recorded rather than changed, because widening it
+ * and `reset(...)` maps the stored string one-for-one - and it was decided
+ * to confirm and record this rather than change it, because widening it
  * would alter what the modal does for inputs the form cannot produce.
  */
 const daysWorkingDiffer = (
@@ -141,7 +141,7 @@ export const profileChanges = (
   );
   add("startTime", differentInstant(formValues.startTime, user?.startTime));
   add("endTime", differentInstant(formValues.endTime, user?.endTime));
-  // The two that compared `getDate()`..
+  // The two that compared `getDate()`.
   add(
     "coopStartDate",
     differentInstant(formValues.coopStartDate, user?.coopStartDate),

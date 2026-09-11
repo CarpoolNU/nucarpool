@@ -609,7 +609,7 @@ describe("handleAcceptRequest - a pair who can no longer carpool", () => {
     expect(message).toContain("both drivers");
     // The seat refusal must not be what they hear: it is the role that is
     // wrong, and no seat count would fix it. Pinned against the current
-    // wording rather than the wording SCRUM-361 replaced, which would have
+    // wording rather than the wording it replaced, which would have
     // made this assertion vacuous.
     expect(message).not.toContain("no seats free");
   });

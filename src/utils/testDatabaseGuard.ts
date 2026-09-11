@@ -21,8 +21,8 @@
  * either. It used to: `SEED_ALLOW_REMOTE` existed on the argument that seeding
  * a shared branch was something a human might one day legitimately need, and
  * this comment cited it as the deliberate difference between the two guards.
- * Nothing ever set it, and it would have permitted production, so SCRUM-410
- * removed it — the two modules now agree. An escape hatch of that kind gets set
+ * Nothing ever set it, and it would have permitted production, so it was
+ * removed — the two modules now agree. An escape hatch of that kind gets set
  * once, in a workflow file, by someone in a hurry, and is then permanent and
  * invisible. If a target is refused, the answer is to change the target.
  *

@@ -128,7 +128,7 @@ const COMPARED_FIELDS: Record<keyof GroupDetails, true> = {
  * compare two of its results with `===`. `useGroupDetails` has to: its sync
  * effect writes the resolved value into state, and without a value comparison
  * every resolve is a state change and every state change is a render - which
- * is the loop SCRUM-389 fixes.
+ * is the loop this avoids.
  */
 export const detailsEqual = (a: GroupDetails, b: GroupDetails): boolean =>
   (Object.keys(COMPARED_FIELDS) as (keyof GroupDetails)[]).every(

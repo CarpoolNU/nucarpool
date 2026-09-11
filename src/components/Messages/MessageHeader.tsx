@@ -188,7 +188,7 @@ const MessageHeader = ({
           A pair already carpooling together get no button here, only the
           close control below. There used to be a "Leave Conversation" button
           in this slot on `onReject`, which deleted their accepted request and
-          with it a thread they could not recreate. SCRUM-362 removed it: `×`
+          with it a thread they could not recreate. It was removed: `×`
           already closes the panel, and the Group page already leaves the
           carpool.
         */}

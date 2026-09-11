@@ -130,7 +130,7 @@ describe("handleMonthPickerChange", () => {
     // dates against filter values that `handleMonthChange` builds as the last
     // of the month, so a first-of-month profile value fails `endDate >= yours`
     // under full overlap for a co-op that is an exact match. Both halves of
-    // SCRUM-393 come from the same missing call.
+    // the defect come from the same missing call.
     const { stored, setValue } = capture();
 
     handleMonthPickerChange("coopEndDate", setValue)(picked("2026-06"));

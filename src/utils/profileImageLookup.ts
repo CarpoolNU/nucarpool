@@ -26,8 +26,7 @@
  * everyone else stays exactly as expensive as before until
  * `scripts/backfill-profile-picture-timestamps.ts` has run. Removing the
  * fallback is a separate contract step, once that script reports nothing to do
- * in every environment — the same sequence `group_message` follows in
- * SCRUM-253 / SCRUM-287.
+ * in every environment — the same sequence `group_message` follows.
  *
  * Kept as a pure function, away from the S3 client, for the reason every other
  * decision like it in this repository is: the suite runs on mocks with no

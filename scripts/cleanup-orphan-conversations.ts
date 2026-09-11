@@ -2,84 +2,48 @@
  * Delete `Conversation` rows that no live `Request` reaches by either link, and
  * the `Message` rows inside them.
  *
- * The cascade in the schema points the wrong way for this: `Request` holds the
- * foreign key, so `onDelete: Cascade` runs Conversation → Request. Nothing ran
- * Request → Conversation, so every decline, withdrawal and "Leave
- * Conversation" left a conversation and its messages behind. `requests.delete`
- * now removes both in one transaction, which makes this a one-off
- * for the backlog rather than a recurring chore — running it a second time
- * should report zero.
+ * The schema's cascade points the wrong way: `Request` holds the foreign key,
+ * so `onDelete: Cascade` runs Conversation -> Request. Nothing ran the other
+ * direction, so every decline and withdrawal used to leave a conversation and
+ * its messages behind. `requests.delete` now removes both in one transaction,
+ * which makes this a one-off for the backlog -- a second run should report zero.
  *
- * **The production backlog is retained by decision, not pending deletion.**
- * SCRUM-365 decided to keep the 620 conversations and their 1,258 messages and
- * to revisit only if they cause a problem. So this script's job today is to
- * *report* — it is the instrument that would show the population growing, which
- * would be the sign that that change's fix had regressed. Nothing here should be
- * run with `--apply` against production without a new, explicit decision that
- * supersedes.
+ * **The production backlog is retained by decision, not pending deletion.** 620
+ * conversations and 1,258 messages are kept, revisited only if they cause a
+ * problem. This script's job today is to *report*: it is the instrument that
+ * would show the population growing, which would mean that fix had regressed.
+ * **Do not run `--apply` against production without a new explicit decision.**
  *
- * **These rows are unreachable, and that was measured rather than assumed.**
- * The relationship is stored twice, so there are two ways a request can still
- * reach a conversation, and unreachability needs both to be dead:
- * `getConversationMessages` goes through `Conversation.requestId`, while
- * `requests.me` and the unread count go through `Request.conversationId`.
- * `findOrphanConversationIds` now tests both, which is the same definition the
- * pre-delete re-check below uses — so the plan and the action can no longer
- * disagree. Both links were answered on production, read-only, on 2026-09-03:
- * **zero** orphans were still pointed at by a live request, and all **620**
- * fail both. What counts them regardless is `admin.getDashboardStats`, which is
- * why the dashboard's conversation figure and its messages-per-conversation
- * average read high while the 620 are retained.
+ * **Unreachability needs both links dead, and that was measured.** The
+ * relationship is stored twice: `getConversationMessages` reads
+ * `Conversation.requestId`, while `requests.me` and the unread count read
+ * `Request.conversationId`. `findOrphanConversationIds` tests both, which is
+ * the same definition the pre-delete re-check uses, so the plan and the action
+ * cannot disagree. On production, read-only: all 620 fail both links and none
+ * is still referenced either way. Staging holds 11 conversations, 25 messages,
+ * so staging is no guide to the scale.
  *
- * **This deletes real message content, and production is much larger than
- * staging.** Measured read-only on 2026-09-03:
- *
- *   - production: **620 conversations, all of them non-empty, 1,258 messages**
- *     in total, the largest holding 28
- *   - production, both links: **620** unreachable through
- *     `Conversation.requestId` *and* `Request.conversationId`; **0** still
- *     referenced either way
- *   - staging: 11 conversations, 25 messages
- *
- * So `--apply` against production would destroy over twelve hundred messages
- * that two people typed to each other and nobody can read any more. The dry run
- * prints the message count per conversation for exactly that reason.
- *
- * **Retiring a population larger than `--max` is what `--limit` is for.** The
- * default ceiling is 500 and the backlog is 620, so a bare `--apply` refuses
- * with exit code 2. The route through that is `--limit 400`, which acts on the
- * oldest 400 and reports the rest as deferred — *not* `--max 700`, which
- * restores exactly the single command the ceiling exists to prevent: "a
- * population this size should not be deleted by a command that looks identical
- * to the one that would have deleted eleven rows."
- *
- * Safety, because this deletes production rows:
+ * Safety, because this deletes real message content:
  *
  *   - **Dry run by default.** Nothing is deleted without `--apply`.
- *   - Every candidate is re-checked immediately before its delete, against
- *     rows read after the plan was built, by *both* links — a request that
- *     appeared pointing at it either way rescues it. This matters beyond
- *     staleness: `Request.conversation` declares `onDelete: Cascade`, so
- *     deleting a conversation a live request points at would take that request
- *     with it.
- *   - Refuses when the number of candidates it would *act on* exceeds `--max`
- *     (default 500). A logic error that classified every conversation as an
- *     orphan stops here rather than emptying the messaging history.
- *   - Prints every conversation, with its message count, immediately before
- *     deleting it. That is the rollback record: restoring private messages is
- *     not something anyone can do, but "which rows went" must not be
- *     unanswerable.
- *   - Reports its counters on the way out even if a candidate throws, and
- *     carries on past a single failure rather than discarding the record of
- *     what already succeeded.
- *   - Deletes one conversation at a time, each pair of statements in its own
- *     transaction. Slower than deleteMany, and deliberately so: a partial run
- *     leaves a consistent database.
+ *   - **Every candidate is re-checked immediately before its delete**, by
+ *     *both* links, against rows read after the plan was built. This matters
+ *     beyond staleness: `Request.conversation` declares `onDelete: Cascade`,
+ *     so deleting a conversation a live request points at would take that
+ *     request with it.
+ *   - **Refuses past `--max`** (default 500), so a logic error that classified
+ *     every conversation as an orphan stops here.
+ *   - **Prints every conversation and its message count before deleting it.**
+ *     That is the only rollback record there can be: restoring private
+ *     messages is impossible, but "which rows went" must be answerable.
+ *   - One conversation at a time, each in its own transaction, so a partial
+ *     run leaves a consistent database. Counters are reported even if a
+ *     candidate throws.
  *
- * `relationMode = "prisma"` means MySQL holds no foreign key from
- * `conversation` to `request`, so "orphan" has to be computed here rather than
- * asked of the database. The `Message` rows go through Prisma's emulated
- * cascade, which is why they are deleted by the client rather than by MySQL.
+ * **Use `--limit`, not `--max`, for a population above the ceiling.** The
+ * backlog is 620 against a default of 500, so a bare `--apply` exits 2.
+ * `--limit 400` acts on the oldest 400 and defers the rest; raising `--max`
+ * restores exactly the single command the ceiling exists to prevent.
  *
  * Usage:
  *   npx ts-node scripts/cleanup-orphan-conversations.ts             # report only
@@ -87,11 +51,8 @@
  *   npx ts-node scripts/cleanup-orphan-conversations.ts --apply --limit 400
  *   npx ts-node scripts/cleanup-orphan-conversations.ts --older-than 2025-01-01
  *
- * `--older-than` is a UTC date, and the comparison is strict: a conversation
- * created exactly at that midnight is not older than it.
- *
- * Confirm DATABASE_URL points where you intend before using --apply. This
- * script does not print it.
+ * `--older-than` is a UTC date, compared strictly. **Confirm `DATABASE_URL`
+ * before using `--apply`; this script does not print it.**
  */
 
 import { PrismaClient } from "@prisma/client";
@@ -115,7 +76,7 @@ const CUTOFF_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 /**
  * Parsed as a UTC midnight rather than a local one, so the tranche a given
  * cutoff selects does not depend on the operator's timezone or on whether
- * daylight saving was in force — the failure mode SCRUM-373 documents for the
+ * daylight saving was in force — the documented failure mode for the
  * schedule columns.
  */
 const parseCutoff = (value: string | undefined): Date => {
@@ -248,7 +209,7 @@ const main = async () => {
       }),
       // `conversationId` as well as `id`, because the orphan predicate tests
       // both links. Reading only the ids would make the plan disagree with the
-      // pre-delete re-check, which is the gap SCRUM-364 closed.
+      // pre-delete re-check, which is the gap that closed.
       prisma.request.findMany({ select: { id: true, conversationId: true } }),
     ]);
 

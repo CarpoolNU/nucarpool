@@ -34,9 +34,9 @@
      * ambiguous. `ts-jest` compiles one file at a time, so the "common source
      * directory" of each compilation is whatever folder that single file lives
      * in — `./src/utils`, `./scripts`, and so on — and 53 of 54 suites fail to
-     * *load*. That failure mode is the dangerous one, and the one SCRUM-324 was
-     * filed for: the suites never run, so `yarn test` reports the tests that
-     * remain as passing rather than reporting a failure. `tsc` itself is
+     * *load*. That failure mode is the dangerous one: the suites never run, so
+     * `yarn test` reports the tests that remain as passing rather than
+     * reporting a failure. `tsc` itself is
      * unaffected either way, because `noEmit` means no output layout is ever
      * produced.
      */
@@ -48,12 +48,12 @@
      * not merely untidy — a dead import is a false statement about what a file
      * depends on. `AccountSection.tsx` imported `handleMonthChange` and stopped
      * calling it in February 2025, which made the file read as though the
-     * profile had adopted the UTC date fix. It had not. SCRUM-381 was written
-     * on that assumption and got its analysis wrong; SCRUM-393, the live data
-     * bug behind it, stayed invisible for eighteen months..
+     * profile had adopted the UTC date fix. It had not. A later ticket was
+     * written on that assumption and got its analysis wrong, and the live data
+     * bug behind it stayed invisible for eighteen months.
      *
      * `noUnusedLocals` here rather than `@typescript-eslint/no-unused-vars`,
-     * reversing what SCRUM-394 first proposed, for two reasons:
+     * reversing what was first proposed, for two reasons:
      *
      *   - **Coverage.** `yarn lint` globs `src/**` only, so ESLint never sees
      *     `prisma/` or `scripts/`. Four of the 59 findings cleared alongside

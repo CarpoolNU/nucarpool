@@ -35,7 +35,7 @@
  * when both parties are in the same group, and for a self-request that
  * comparison is a user against themselves — so it matches whenever the user is
  * in any group at all, and the CONFLICT tells them to leave a carpool they are
- * really in to clear a request that is not real. SCRUM-409 fixes that guard as
+ * really in to clear a request that is not real. That guard is fixed as
  * well; this script does not depend on the fix, because it writes through
  * Prisma rather than through the router.
  *

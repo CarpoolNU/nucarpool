@@ -21,15 +21,15 @@ import useIsMobile from "../utils/useIsMobile";
  * that guarantees it.
  *
  * **It is also on its way out**, which is the stronger reason to leave it
- * alone. SCRUM-415 exists to delete this component: the banner is a deliberate
- * statement that mobile is secondary, and it stops being *true* once SCRUM-414
- * finishes giving mobile the capabilities it names. Two of those - the map-pin
+ * alone. A separate ticket exists to delete this component: the banner is a deliberate
+ * statement that mobile is secondary, and it stops being *true* once the
+ * mobile capability work it names is finished. Two of those - the map-pin
  * sheet and the legend/recentre controls - are still unstarted, so the banner
  * is still accurate and still has to stay. Restyling something scheduled for
  * removal is work done twice.
  *
  * When it does go, four sites compensate for its height and all four have to
- * go with it. They are listed on SCRUM-415; note that the ticket's own
+ * go with it. They are listed on that ticket; note that its own
  * evidence names `top-[6rem]` on the profile page as one of them and that is
  * wrong - this component is local to the explore page, so `/profile` never
  * renders it.

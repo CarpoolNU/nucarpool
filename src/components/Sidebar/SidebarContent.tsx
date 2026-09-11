@@ -211,7 +211,7 @@ export const SidebarContent = (props: SidebarContentProps) => {
   /**
    * The mobile detail state shows one card, so the list collapses to it.
    *
-   * `isMobile &&` stood in front of this until SCRUM-418, defending against a
+   * `isMobile &&` stood in front of this once, defending against a
    * `mobileSelectedUser` that outlived the viewport that produced it. The page
    * derives the value through `resolveMobileSelectedUser` now, so a non-null
    * value implies a mobile viewport and this component no longer needs to know

@@ -426,7 +426,7 @@ describe("user.favorites.me — a favourite survives becoming unmatchable", () =
 
 describe("user.favorites.me — returning more rows must not disclose more", () => {
   it("omits the email address from every entry", async () => {
-    // SCRUM-292 removed email from the bulk payloads, favourites among them.
+    // Email was removed from the bulk payloads, favourites among them.
     // Relaxing the row filter must not quietly widen the per-row shape.
     const db = buildMeDb({
       callerRole: Role.RIDER,

@@ -330,7 +330,7 @@ const Filters = ({
 
           {/* The day checkboxes exist only once a mode is chosen, which is why
               disabling the mode buttons until a day is checked - the fix
-              SCRUM-386 proposed - would have deadlocked the panel. */}
+              once proposed - would have deadlocked the panel. */}
           {dayModeChosen ? (
             <>
               <div className="mx-4 flex flex-col gap-2">

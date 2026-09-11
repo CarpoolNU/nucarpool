@@ -13,7 +13,7 @@ import {
 import { DEFAULT_GROUP_DETAILS } from "./groupDetails";
 
 /**
- * Dismissing "My Group" on mobile (SCRUM-414, item 4).
+ * Dismissing "My Group" on mobile.
  *
  * The desktop branch renders inside Headless UI's `Dialog`, so it has dismissed
  * on backdrop click and on Escape since it was written. The mobile branch is a

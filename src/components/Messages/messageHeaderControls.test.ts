@@ -41,7 +41,7 @@ describe("messageHeaderControls", () => {
   });
 
   it("prefers responding when both directions are somehow pending", () => {
-    // The duplicate-request state SCRUM-349 closed. Answering the request sent
+    // The duplicate-request state now closed. Answering the request sent
     // *to* you is the more useful of the two, and the header must pick one:
     // the two blocks used to be guarded by `!hasIncomingRequest` in the JSX,
     // and now the type makes it impossible to render both.
