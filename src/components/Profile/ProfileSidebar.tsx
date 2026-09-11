@@ -22,6 +22,27 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
     ? "font-bold !text-northeastern-red border-b-4 border-northeastern-red"
     : "font-bold !text-northeastern-red";
 
+  /*
+    Both branches compose these with a template literal and a ternary, and the
+    desktop one has to be read as a fix rather than a style preference. It used
+    to build each button as `baseButton + (option === "user" && selectedButton)`
+    - concatenation with no separator, and a boolean on the right - so whichever
+    class sat last in `baseButton` was glued to whatever followed it:
+
+      unselected -> `… text-xl lg:text-2xlfalse`
+      selected   -> `… text-xl lg:text-2xlfont-bold !text-northeastern-red`
+
+    `lg:text-2xl` therefore never applied to any of the three, and the selected
+    button was red but never bold; only `!text-northeastern-red` survived,
+    because it follows a space inside `selectedButton`.
+
+    Neither glued token is in the compiled stylesheet - Tailwind scans source
+    text, and those strings only ever existed at runtime - so the browser
+    matched no rule and the output looked deliberate: `text-xl` was intact, and
+    selection was still visible in red. The `class` attribute is the only place
+    it showed, which is what `ProfileSidebar.test.tsx` asserts on.
+  */
+
   if (isMobile) {
     return (
       <div className="w-full bg-white shadow-md">
@@ -69,7 +90,7 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
     <div className="my-10 h-full w-full">
       <div className="mt-6 flex w-full flex-col items-start justify-center gap-6 lg:text-start">
         <button
-          className={baseButton + (option === "user" && selectedButton)}
+          className={`${baseButton} ${option === "user" ? selectedButton : ""}`}
           onClick={() => setOption("user")}
         >
           {option === "user" && (
@@ -77,9 +98,10 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
           )}
           <div
             className={`relative ml-4 w-12 lg:ml-12 ${
-              option === "user" &&
-              "after:bg-northeastern-red after:absolute after:inset-0 after:mix-blend-screen"
-            } `}
+              option === "user"
+                ? "after:bg-northeastern-red after:absolute after:inset-0 after:mix-blend-screen"
+                : ""
+            }`}
           >
             <div className="relative flex justify-center">
               <Image src={user} alt="user" />
@@ -88,7 +110,7 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
           User Profile
         </button>
         <button
-          className={baseButton + (option === "carpool" && selectedButton)}
+          className={`${baseButton} ${option === "carpool" ? selectedButton : ""}`}
           onClick={() => setOption("carpool")}
         >
           {option === "carpool" && (
@@ -96,9 +118,10 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
           )}
           <div
             className={`relative ml-4 w-12 lg:ml-12 ${
-              option === "carpool" &&
-              "after:bg-northeastern-red after:absolute after:inset-0 after:mix-blend-screen"
-            } `}
+              option === "carpool"
+                ? "after:bg-northeastern-red after:absolute after:inset-0 after:mix-blend-screen"
+                : ""
+            }`}
           >
             <div className="relative flex justify-center">
               <Image src={car} alt="car" />
@@ -108,7 +131,7 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
         </button>
 
         <button
-          className={baseButton + (option === "account" && selectedButton)}
+          className={`${baseButton} ${option === "account" ? selectedButton : ""}`}
           onClick={() => setOption("account")}
         >
           {option === "account" && (
@@ -116,9 +139,10 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
           )}
           <div
             className={`relative ml-4 w-12 lg:ml-12 ${
-              option === "account" &&
-              "after:bg-northeastern-red after:absolute after:inset-0 after:mix-blend-screen"
-            } `}
+              option === "account"
+                ? "after:bg-northeastern-red after:absolute after:inset-0 after:mix-blend-screen"
+                : ""
+            }`}
           >
             <div className="relative flex justify-center">
               <Image src={checkbox} alt="checkbox" />
