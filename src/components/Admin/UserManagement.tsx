@@ -6,6 +6,7 @@ import { toast } from "react-toastify/unstyled";
 import { ConfigProvider, Select } from "antd";
 import { Note } from "../../styles/profile";
 import { AdminUser } from "../../utils/types";
+import useIsHydrated from "../../utils/useIsHydrated";
 
 type UserManagementProps = {
   permission: Permission;
@@ -17,7 +18,36 @@ const UserManagement = ({ permission }: UserManagementProps) => {
   );
   const [selectedPermission, setSelectedPermission] =
     React.useState<Permission | null>(null);
-  const { data: users } = trpc.user.admin.getAllUsers.useQuery<AdminUser[]>();
+  /*
+   * Holds `getAllUsers` back on a render that hydration may discard.
+   *
+   * `/admin` is the one page whose dashboard is genuinely in the server HTML,
+   * because `userPermission` arrives from `getServerSideProps` rather than
+   * from a query behind `ssr: false`. React reads `useIsMobile`'s
+   * `getServerSnapshot` - hardcoded `false` - during hydration as well as on
+   * the server, so on a phone that pass renders the desktop dashboard and
+   * mounts this component before `AdminMobileNotice` replaces it. React Query
+   * subscribes in a passive effect, which runs *before* React's corrective
+   * re-render, so the request really went out - one privileged read of the
+   * whole user table per mobile load, for a list nobody saw.
+   *
+   * **No viewport term, and that is forced rather than chosen.** On the pass
+   * in question `useIsMobile` reports `false` - that *is* the defect - so "is
+   * this a phone" cannot be answered here. The only computable question is
+   * "might this render be thrown away", so desktop is deferred by that one
+   * pass too and then fetches exactly as before. `useProfileImage` gates its
+   * presigned-URL call the same way and for the same reason.
+   *
+   * Nothing flashes while it is held back: `loading` above starts `true` and
+   * only clears once `users` arrives, so the deferred pass renders the spinner
+   * this component already shows while fetching.
+   */
+  const isHydrated = useIsHydrated();
+
+  const { data: users } = trpc.user.admin.getAllUsers.useQuery<AdminUser[]>(
+    undefined,
+    { enabled: isHydrated },
+  );
   const utils = trpc.useUtils();
 
   const updateUserPermission = trpc.user.admin.updateUserPermission.useMutation(
