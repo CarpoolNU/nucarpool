@@ -2,6 +2,7 @@ import React, { useRef, useState } from "react";
 import Image from "next/image";
 import sendIcon from "../../../public/sendIcon.png";
 import { MESSAGE_MAX_LENGTH } from "../../utils/textLimits";
+import useIsMobile from "../../utils/useIsMobile";
 
 interface SendBarProps {
   /**
@@ -15,6 +16,9 @@ const SendBar = ({ onSendMessage }: SendBarProps) => {
   const [messageContent, setMessageContent] = useState("");
   const [isSending, setIsSending] = useState(false);
   const messageInputRef = useRef<HTMLDivElement>(null);
+  // Behaviour, not styling, which is why this is the hook and not a
+  // `desktop:` utility - the same split the inset docblock below draws.
+  const isMobile = useIsMobile();
 
   // Measured on the raw text rather than the trimmed text so the counter and
   // the block agree with each other. `message.content` is `VARCHAR(255)` and
@@ -44,8 +48,28 @@ const SendBar = ({ onSendMessage }: SendBarProps) => {
     }
   };
 
+  /**
+   * Enter sends on desktop only.
+   *
+   * The `!e.shiftKey` escape hatch is what makes a newline reachable, and a
+   * phone keyboard has no Shift+Enter - so on mobile this handler was the
+   * whole story: Enter sent, unconditionally, and a multi-line message was
+   * impossible to type. Worse, the key that did it is drawn by the operating
+   * system, so nothing on screen said it would send.
+   *
+   * Mobile therefore falls through to the browser's own default, which inserts
+   * a newline. That the newline survives is a property of the box's
+   * `white-space: pre-wrap` below: Chromium inserts a literal "\n" text node
+   * rather than a wrapper element, so the `textContent` read in `onInput`
+   * keeps it. Verified in Chromium rather than assumed - with the default
+   * `white-space` it would be a `<div>` and `textContent` would silently
+   * concatenate the lines.
+   *
+   * Sending on mobile is the Send button, which is beside the box and already
+   * carries an accessible name.
+   */
   const handleKeyPress = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey && !isMobile) {
       e.preventDefault();
       handleSend();
     }
@@ -94,8 +118,19 @@ const SendBar = ({ onSendMessage }: SendBarProps) => {
           // pseudo-element, which assistive tech is not required to announce, so
           // the name has to be stated explicitly.
           role="textbox"
+          // True on both platforms, and only now. A newline was reachable on
+          // desktop through Shift+Enter and not reachable on mobile at all, so
+          // this attribute was announcing a capability half the users did not
+          // have; the Enter handling above is what makes it honest.
           aria-multiline="true"
           aria-label="Message"
+          // Labels the action key on a virtual keyboard, which is otherwise
+          // drawn with no indication of what it does. "enter" because that is
+          // now what it does - it inserts a newline. Labelling it "send" would
+          // describe the Send button instead of this key. Inert where there is
+          // no virtual keyboard, so it is set unconditionally rather than
+          // through the hook, which keeps it out of the hydration snapshot.
+          enterKeyHint="enter"
           // `text-lg` is kept at every width, which was the other half of the
           // decision the inset raised. It resolves to 1.125rem - 18px, read
           // from the compiled stylesheet rather than assumed - and anything
