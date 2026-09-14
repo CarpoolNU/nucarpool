@@ -67,7 +67,7 @@ const CarpoolSection = ({
         className={"!text-2xl"}
       />
 
-      <div className="mb-2 w-full max-w-[360px] md:my-4 md:max-w-[448px] lg:max-w-[504px]">
+      <div className="@container mb-2 w-full max-w-[360px] md:my-4 md:max-w-[448px] lg:max-w-[504px]">
         {/*
           Seven boxes at the base 40px plus 8px of `ml-2` each need 336px. The
           mobile profile content is inset `px-8`, so a 375px phone offers 311px
@@ -119,11 +119,46 @@ const CarpoolSection = ({
           the reason the explore-page offset gives: Tailwind v4 scans this file
           for class-like strings, so naming it here would keep emitting it and
           would put a false hit in front of anyone grepping for live uses.
+
+          **The container query is the second shrink rule, and it exists
+          because a cap cannot create space that is not there.** Everything
+          above reasons about the viewport, and that is what left a band of
+          widths where the row was clipped rather than capped. From 640px to
+          649px the page has already switched to the desktop grid, so the
+          250px sidebar is out of the column while `md:` has not started: the
+          column measures `min(672, viewport - 250) - 64`, which is 326px at
+          640px and does not reach 336px until 650px. `max-desktop:` has
+          stopped applying by then, so the row is at its 40px base in the
+          narrowest desktop column that exists, and the seventh day hangs 10px
+          past a scroller that is `overflow-x-hidden` - clipped, not
+          scrollable, and that strip answered no clicks.
+
+          `@max-[336px]:` asks the wrapper how wide it actually is instead of
+          asking the viewport, so it fires exactly when the row would not fit
+          and never otherwise. It is deliberately not a second viewport
+          breakpoint: a 650px one would restate `250 + 64 + 336` as a magic
+          number that drifts the moment the sidebar or the inset changes, and
+          it would still miss the case the measurement turned up - a classic
+          (non-overlay) scrollbar on the vertical scroller, which narrows the
+          column without moving the viewport.
+
+          Both rules are kept, because they say different things.
+          `max-desktop:` is the deliberate mobile treatment SCRUM-430 chose,
+          and it is why 639px keeps its 32px boxes even though 360px of
+          wrapper would hold the 40px ones. The container query is a floor
+          under every width: it cannot fire at `md` or `lg`, where the wrapper
+          caps at exactly the 448px and 504px those rows occupy and the column
+          is wider than both, and if a future change ever did squeeze it, the
+          important flag means the row shrinks rather than clips.
+
+          Tailwind v4 has container queries in core, so `@container` here is
+          the whole cost - no plugin, and no `ResizeObserver` to stub in jsdom.
+          This is the repository's first use of one.
         */}
         <SelectDays
           control={control}
           disabled={isViewer}
-          dayBoxClassName="max-desktop:!h-8 max-desktop:!w-8"
+          dayBoxClassName="max-desktop:!h-8 max-desktop:!w-8 @max-[336px]:!h-8 @max-[336px]:!w-8"
           error={errors.daysWorking}
         />
       </div>

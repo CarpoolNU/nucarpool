@@ -408,12 +408,6 @@ const Index: NextPage = () => {
 
       <Header profile={true} checkChanges={checkForChanges} />
 
-      {isMobile && (
-        <div className="border-busy-red z-10 w-full border-b-2 bg-stone-100">
-          <ProfileSidebar option={option} setOption={setOption} />
-        </div>
-      )}
-
       {/* `bottom-mobile-nav` below replaces a hard-coded 64px bottom offset,
           which was this file's own guess at the navigation's height and
           disagreed with both the bar itself and the explore page's guess of
@@ -423,45 +417,73 @@ const Index: NextPage = () => {
           removal - which also puts a false hit in front of anyone grepping for
           remaining uses.
 
-          `top-[6rem]` stays: it clears the profile tab strip above, which is a
-          different component and a different quantity - see the note on
-          the explore page. */}
+          The tab strip moved inside this container, and the strip and the pane
+          are now one flex column. That replaces a 6rem top offset the pane
+          used to carry - described rather than written out, for the same
+          scanning reason.
+
+          Every quantity that offset was reserving space for lives in
+          `ProfileSidebar`, not here: 12px of `py-3` either side, a 32px icon,
+          4px of `mb-1`, the label's 24px `text-base` line box, the selected
+          tab's 4px underline, and this wrapper's 2px bottom border. That is
+          90px against the 96 reserved, so a 6px dead band sat under the strip.
+          The 6px was the smaller half of the problem. The larger half was that
+          nothing kept the two in step - changing the icon size or the label's
+          type scale in the other file moved the strip and left the offset
+          behind, with nothing to notice it.
+
+          A flex column deletes the quantity rather than correcting it. The
+          strip is `shrink-0` and takes its natural height, the pane takes
+          whatever is left, and no number in this file measures a component in
+          another one. It also holds where a derived constant would not - a
+          late-loading font, or a label that wraps at a narrow width - without
+          the `ResizeObserver` that measuring at runtime would have cost.
+
+          `min-h-0` is load-bearing. A flex item defaults to `min-height: auto`
+          and refuses to shrink below its content, so without it the pane grows
+          to fit rather than scrolling, and its overflow runs on underneath the
+          bottom navigation. */}
       {isMobile ? (
-        <div className="bottom-mobile-nav absolute top-[6rem] right-0 left-0 overflow-y-auto">
-          <div className="px-8 pt-6 pb-24">
-            {option === "user" ? (
-              <UserSection
-                watch={watch}
-                onFileSelect={setSelectedFile}
-                errors={errors}
-                register={register}
-                onSubmit={handleSubmit(onSubmit, onError)}
-                setValue={setValue}
-                user={user}
-              />
-            ) : option === "carpool" ? (
-              <CarpoolSection
-                watch={watch}
-                onFileSelect={setSelectedFile}
-                errors={errors}
-                register={register}
-                setValue={setValue}
-                onSubmit={handleSubmit(onSubmit, onError)}
-                startAddressHook={startAddressHook}
-                companyAddressHook={companyAddressHook}
-                control={control}
-              />
-            ) : option === "account" ? (
-              <AccountSection
-                control={control}
-                watch={watch}
-                onSubmit={handleSubmit(onSubmit, onError)}
-                errors={errors}
-                setValue={setValue}
-              />
-            ) : (
-              <></>
-            )}
+        <div className="bottom-mobile-nav absolute top-0 right-0 left-0 flex flex-col">
+          <div className="border-busy-red z-10 w-full shrink-0 border-b-2 bg-stone-100">
+            <ProfileSidebar option={option} setOption={setOption} />
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="px-8 pt-6 pb-24">
+              {option === "user" ? (
+                <UserSection
+                  watch={watch}
+                  onFileSelect={setSelectedFile}
+                  errors={errors}
+                  register={register}
+                  onSubmit={handleSubmit(onSubmit, onError)}
+                  setValue={setValue}
+                  user={user}
+                />
+              ) : option === "carpool" ? (
+                <CarpoolSection
+                  watch={watch}
+                  onFileSelect={setSelectedFile}
+                  errors={errors}
+                  register={register}
+                  setValue={setValue}
+                  onSubmit={handleSubmit(onSubmit, onError)}
+                  startAddressHook={startAddressHook}
+                  companyAddressHook={companyAddressHook}
+                  control={control}
+                />
+              ) : option === "account" ? (
+                <AccountSection
+                  control={control}
+                  watch={watch}
+                  onSubmit={handleSubmit(onSubmit, onError)}
+                  errors={errors}
+                  setValue={setValue}
+                />
+              ) : (
+                <></>
+              )}
+            </div>
           </div>
         </div>
       ) : (
