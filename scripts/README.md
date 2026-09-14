@@ -93,6 +93,8 @@ These three touch git and the filesystem, never a database, and none of them is 
 
 `wt-recycle.test.ts` and `wt-state.test.ts` run in `yarn test` and drive the real scripts against disposable git repositories under `os.tmpdir()`, with `yarn` shadowed by a fake that records its arguments. **No test here runs against this repository or any remote.**
 
+`wt-pipelines.test.ts` runs nothing at all. It reads every `wt-*.sh` and asserts one property of the source: **no pipeline consumer leaves before its input is exhausted** — no `| head`, no `grep -q`/`-m`, no `awk` program containing `exit`. A consumer that leaves early makes its producer take SIGPIPE, and under the `set -euo pipefail` these scripts run with, that is the pipeline's exit status: 141, aborting the script at that line with a number that says nothing about worktrees. It is static because the defect is a race — it needs the producer still writing at the instant the consumer goes, so it passed every local run and failed on CI (SCRUM-449, then SCRUM-454 for the same shape in `wt-bootstrap.sh` and `wt-cleanup.sh`). Being a builtin does not exempt `printf`, and the file list is globbed, so a fifth worktree script is covered the day it lands.
+
 ## Run-state record
 
 Two different questions, and only one of them is answerable from a database:

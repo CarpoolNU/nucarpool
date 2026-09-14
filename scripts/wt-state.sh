@@ -13,6 +13,22 @@
 # depending on which script last touched it, so the rule lives here once.
 #
 # Every function assumes the caller has already `cd`-ed to the worktree root.
+#
+# ---------------------------------------------------------------- shell options
+#
+# This file sets none, deliberately (SCRUM-454). `set` in a sourced file is not
+# scoped to the file: it mutates the caller's shell for the rest of its run. A
+# `set -o pipefail` here would silently change how wt-bootstrap.sh and
+# wt-recycle.sh behave everywhere *after* the `.` line, which is a side effect
+# no sourced helper should have - and both of them already set `-euo pipefail`
+# themselves, so there is nothing to add.
+#
+# The consequence worth stating, because it is the opposite of what "sets no
+# pipefail" suggests: the pipelines below **do** run under `pipefail`, inherited
+# from whichever caller sourced this file. They are therefore held to the same
+# rule as the callers' own - no consumer may leave before its input is
+# exhausted - and `scripts/wt-pipelines.test.ts` asserts that over this file
+# too. `tr` reads to EOF, which is why the two pipelines here are already safe.
 
 # Both callers define these; defined here too so this file is safe to source
 # from anything, and so a missing helper can never be the reason a

@@ -939,41 +939,11 @@ describe("what it never does", () => {
     expect(code).not.toMatch(/ASSUME_YES|FORCE|SKIP_CHECK/);
   });
 
-  // The locked-slot refusal exited 141 rather than 1 on CI, because
-  // `git worktree list --porcelain | awk '\''...; exit'\''` left git killed by
-  // SIGPIPE and `set -o pipefail` reports a signalled producer as the
-  // pipeline's status. It fires only when the producer is still writing as the
-  // consumer leaves, so it passed on every local run and failed on CI.
-  //
-  // Reading from a shell variable is not the fix and this test is not a style
-  // rule: `printf` is a builtin, but bash takes SIGPIPE like any other
-  // producer. The invariant is a property of the source rather than of any one
-  // run - no consumer in this script may leave before its input is exhausted -
-  // which is why it is asserted statically instead of by running the script.
-  it("pipes into no consumer that exits before reading its input", () => {
-    const source = fs.readFileSync(
-      path.join(__dirname, "wt-recycle.sh"),
-      "utf8",
-    );
-    const code = source
-      .split("\n")
-      .filter((line) => !/^\s*#/.test(line))
-      .join("\n");
-
-    // Consumers that are early-exiting by definition.
-    expect(code).not.toMatch(/\|\s*head\b/);
-    expect(code).not.toMatch(/\|\s*grep\s+[^|\n]*-[a-zA-Z]*[qm]\b/);
-
-    // And awk programs, which exit early only when told to. Each is a
-    // single-quoted block with no quote inside it, so it extracts cleanly.
-    const awkPrograms = [...code.matchAll(/awk\b[^'\n]*'([^']*)'/g)].map(
-      (match) => match[1],
-    );
-    expect(awkPrograms.length).toBeGreaterThan(0);
-    expect(awkPrograms.filter((program) => /\bexit\b/.test(program))).toEqual(
-      [],
-    );
-  });
+  // "pipes into no consumer that exits before reading its input" used to live
+  // here, asserted over this script alone. `wt-bootstrap.sh` and
+  // `wt-cleanup.sh` turned out to carry the same shape, so SCRUM-454 moved it
+  // to `wt-pipelines.test.ts`, which asserts it over every `wt-*.sh` - this one
+  // included - and picks up a new script automatically.
 
   it(
     "never pushes",
