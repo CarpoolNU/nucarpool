@@ -64,7 +64,7 @@ const SignIn: NextPage = () => {
         <title>Sign In - NU Carpool</title>
       </Head>
 
-      <div className="flex min-h-screen items-center justify-center bg-gray-100">
+      <div className="flex h-full items-center justify-center bg-gray-100">
         <div className="m-4 flex w-fit flex-col items-center justify-center space-y-4 rounded-2xl bg-white p-6 drop-shadow-lg">
           <Header signIn={true} />
           <button onClick={handleOnNortheasternSignInClick}>
