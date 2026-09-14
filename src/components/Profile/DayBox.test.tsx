@@ -17,9 +17,13 @@ import { OnboardingFormInputs } from "../../utils/types";
  * **This is a wiring test, and only a wiring test.** `testing/viewport.ts` is
  * the long version; the short version is that jsdom does no layout and
  * evaluates no media queries, so nothing here can show that seven boxes fit in
- * 311px, and a `max-desktop:` utility is inert in this environment. Asserting
- * the *class string* arrives is the whole of what is assertable, and it is the
- * half that broke. The fit itself is manual verification at 360px and 375px.
+ * 311px, and a `max-desktop:` utility is inert in this environment. The
+ * container query `CarpoolSection` now passes alongside it is inert for a
+ * second reason - jsdom implements no container queries at all, and the
+ * element it would be sized against measures zero. Asserting the *class
+ * string* arrives is the whole of what is assertable, and it is the half that
+ * broke. The fit itself is manual verification at 360px and 375px, and in the
+ * 640-649px band the container query exists for.
  *
  * Deliberately not asserted: which sizes `CarpoolSection` passes. That is a
  * styling decision, and a test restating it would fail on every future tweak

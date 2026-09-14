@@ -29,10 +29,15 @@ import useIsMobile from "../utils/useIsMobile";
  * removal is work done twice.
  *
  * When it does go, four sites compensate for its height and all four have to
- * go with it. They are listed on that ticket; note that its own
- * evidence names `top-[6rem]` on the profile page as one of them and that is
- * wrong - this component is local to the explore page, so `/profile` never
- * renders it.
+ * go with it. They are listed on that ticket; note that its own evidence names
+ * the profile page's 6rem content offset as one of them, and that was wrong
+ * twice over. This component is local to the explore page, so `/profile` never
+ * rendered it - and that offset no longer exists in any case: SCRUM-451
+ * replaced it with a flex column that reserves nothing. So the list on that
+ * ticket is one entry shorter than it reads.
+ *
+ * The retired offset is described rather than written out as a class, because
+ * Tailwind v4 scans this file and naming it here would keep emitting it.
  */
 export const MobileBanner = () => {
   const isMobile = useIsMobile();
