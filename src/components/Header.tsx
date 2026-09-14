@@ -29,6 +29,7 @@ import {
   planMobileNav,
   type NavTab,
 } from "../utils/nav/mobileNavPlan";
+import { type UnsavedChangesGuard } from "../utils/profile/signOutWithGuard";
 import {
   HiOutlineMap,
   HiOutlineChatAlt2,
@@ -178,8 +179,12 @@ interface HeaderProps {
    * Taking the navigation as a callback rather than a destination string keeps
    * that change's full page load here, where the reason for it is documented,
    * instead of teaching the profile page when to bypass the router.
+   *
+   * The type moved to `signOutWithGuard` alongside the third consumer, so the
+   * set of things that take the guard is one grep rather than three inline
+   * declarations that could drift apart.
    */
-  checkChanges?: (proceed: () => void | Promise<void>) => void | Promise<void>;
+  checkChanges?: UnsavedChangesGuard;
   onViewGroupRoute?: (driver: PublicUser, riders: PublicUser[]) => void;
 }
 
@@ -581,7 +586,9 @@ const Header = (props: HeaderProps) => {
             >
               Home
             </button>
-            {!props.signIn && <DropDownMenu />}
+            {!props.signIn && (
+              <DropDownMenu checkChanges={props.checkChanges} />
+            )}
           </div>
         ) : (
           <div className="flex items-center">
@@ -604,7 +611,12 @@ const Header = (props: HeaderProps) => {
                 )}
               </div>
             )}
-            {!props.signIn && <DropDownMenu />}
+            {/* The guard reaches the dropdown's Sign Out the same way it
+                reaches the Map button above: `undefined` everywhere except
+                `/profile`, which is the only page with edits to lose. */}
+            {!props.signIn && (
+              <DropDownMenu checkChanges={props.checkChanges} />
+            )}
           </div>
         )}
       </HeaderDiv>

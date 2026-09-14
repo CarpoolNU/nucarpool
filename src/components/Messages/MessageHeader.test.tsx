@@ -103,29 +103,36 @@ const buttonNames = () =>
     .getAllByRole("button")
     .map((b) => b.getAttribute("aria-label") ?? b.textContent);
 
-const renderHeader = (
-  over: {
-    selectedUser?: EnhancedPublicUser;
-    viewer?: User;
-    groupId?: string | null;
-    isMutating?: boolean;
-    onAccept?: () => void;
-    onReject?: () => void;
-    onClose?: () => void;
-  } = {},
-) =>
-  render(
-    <UserContext.Provider value={over.viewer ?? VIEWER}>
-      <MessageHeader
-        selectedUser={over.selectedUser ?? otherUser()}
-        onAccept={over.onAccept ?? (() => undefined)}
-        onReject={over.onReject ?? (() => undefined)}
-        onClose={over.onClose ?? (() => undefined)}
-        groupId={over.groupId ?? null}
-        isMutating={over.isMutating ?? false}
-      />
-    </UserContext.Provider>,
-  );
+type HeaderOverrides = {
+  selectedUser?: EnhancedPublicUser;
+  viewer?: User;
+  groupId?: string | null;
+  isMutating?: boolean;
+  onAccept?: () => void;
+  onReject?: () => void;
+  onClose?: () => void;
+};
+
+/**
+ * Split out from `renderHeader` so a test can `rerender` the same tree with a
+ * different counterpart - the conversation switch that must not carry a
+ * half-answered confirmation with it.
+ */
+const headerElement = (over: HeaderOverrides = {}) => (
+  <UserContext.Provider value={over.viewer ?? VIEWER}>
+    <MessageHeader
+      selectedUser={over.selectedUser ?? otherUser()}
+      onAccept={over.onAccept ?? (() => undefined)}
+      onReject={over.onReject ?? (() => undefined)}
+      onClose={over.onClose ?? (() => undefined)}
+      groupId={over.groupId ?? null}
+      isMutating={over.isMutating ?? false}
+    />
+  </UserContext.Provider>
+);
+
+const renderHeader = (over: HeaderOverrides = {}) =>
+  render(headerElement(over));
 
 describe("Conversation header controls on mobile", () => {
   beforeEach(() => {
@@ -198,6 +205,9 @@ describe("Conversation header controls on mobile", () => {
     // The handlers were reaching the component the whole time; only the render
     // was missing. This is what makes the new row a control rather than
     // decoration.
+    //
+    // Reject now takes two presses - see the confirmation suite below. Accept
+    // still takes one, deliberately.
     const onAccept = jest.fn();
     const onReject = jest.fn();
     renderHeader({
@@ -208,9 +218,26 @@ describe("Conversation header controls on mobile", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Accept" }));
     await userEvent.click(screen.getByRole("button", { name: "Reject" }));
+    await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
 
     expect(onAccept).toHaveBeenCalledTimes(1);
     expect(onReject).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps Reject and Accept 24px apart rather than 12px", () => {
+    // **This is a proxy, and only a proxy.** jsdom performs no layout and
+    // resolves no Tailwind, so every element here measures zero whatever its
+    // classes say - `testing/viewport.ts` has the measured list. What is
+    // observable is the class that carries the separation, and the defect was
+    // exactly a class: `gap-3` on a row of two `flex-1` buttons put a
+    // destructive action 12px from a constructive one, where the desktop pair
+    // carry `mr-10`. The 24px itself is a device check.
+    renderHeader({ selectedUser: otherUser({ incomingRequest: PENDING }) });
+
+    const row = screen.getByRole("button", { name: "Reject" }).parentElement;
+
+    expect(row).toHaveClass("gap-6");
+    expect(row).not.toHaveClass("gap-3");
   });
 });
 
@@ -257,6 +284,235 @@ describe("Conversation header controls on desktop", () => {
     });
 
     expect(buttonNames()).toEqual([CLOSE]);
+  });
+});
+
+/**
+ * The confirmation step in front of the button that clears a request.
+ *
+ * `onReject` runs `requests.delete`, which removes the `Request` row and takes
+ * the conversation with it - and there is no undo. It was a single press, and
+ * on mobile that press was 12px from Accept as one of two half-width thumb
+ * targets, against a finger's roughly 8px of positional slop. This file
+ * already records what the same slot cost once before: a "Leave Conversation"
+ * button wired to the same handler destroyed accepted requests and their
+ * threads until it was removed.
+ *
+ * Both states of that one button are confirmed, Reject and Withdraw Request.
+ * They are the same element on the same handler with a different label, and
+ * both end in the same deletion. Accept is not, and must not be: it already
+ * refuses a second press through `isMutating`.
+ *
+ * The step is the in-place two-step `GroupMemberCard` uses for Delete Group,
+ * Leave Group and Remove, reused rather than reinvented - with one deliberate
+ * difference, asserted below: Cancel comes first.
+ */
+describe("Clearing a request asks first", () => {
+  beforeEach(() => {
+    setViewportWidth(MOBILE_WIDTH);
+  });
+
+  it("deletes nothing on the first press", async () => {
+    const onReject = jest.fn();
+    renderHeader({
+      selectedUser: otherUser({ incomingRequest: PENDING }),
+      onReject,
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Reject" }));
+
+    expect(onReject).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(/Reject this request\? This also deletes/),
+    ).toBeInTheDocument();
+  });
+
+  it("puts Cancel where the finger that just pressed Reject already is", async () => {
+    // The ordering is the point of the step, not a detail of it. An impatient
+    // second press in the same place is the likeliest way to defeat a two-step
+    // confirmation, so the first slot holds the harmless answer. Accept is
+    // withdrawn while the question is open, so there is nothing destructive
+    // *or* constructive left in the row to hit by accident.
+    renderHeader({ selectedUser: otherUser({ incomingRequest: PENDING }) });
+
+    await userEvent.click(screen.getByRole("button", { name: "Reject" }));
+
+    expect(buttonNames()).toEqual([BACK, "Cancel", "Confirm"]);
+  });
+
+  it("does not dress Confirm as Accept", async () => {
+    // A class proxy, for the same reason as the gap above - but the defect it
+    // guards is a visual one that a measured browser check found and no
+    // behavioural test could: `primary` is `bg-northeastern-red`, the brand
+    // colour and *not* a danger colour, and Accept wears it. A filled-red
+    // Confirm therefore looks like Accept while standing in the slot Accept
+    // just vacated, which is the strongest possible invitation to the mis-tap
+    // this whole step exists to prevent. Outlined clears the request in both
+    // states of the row; filled red is the affirmative answer in both.
+    renderHeader({ selectedUser: otherUser({ incomingRequest: PENDING }) });
+
+    const accept = screen.getByRole("button", { name: "Accept" });
+    expect(accept).toHaveClass("bg-northeastern-red");
+
+    await userEvent.click(screen.getByRole("button", { name: "Reject" }));
+
+    expect(screen.getByRole("button", { name: "Confirm" })).not.toHaveClass(
+      "bg-northeastern-red",
+    );
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveClass(
+      "bg-northeastern-red",
+    );
+  });
+
+  it("survives a second press in the same place without deleting anything", async () => {
+    // The scenario the ordering above exists for, played out: press, press
+    // again where you just pressed. The request is still there.
+    const onReject = jest.fn();
+    renderHeader({
+      selectedUser: otherUser({ incomingRequest: PENDING }),
+      onReject,
+    });
+
+    const row = () => screen.getAllByRole("button")[1];
+
+    await userEvent.click(row());
+    await userEvent.click(row());
+
+    expect(onReject).not.toHaveBeenCalled();
+    expect(buttonNames()).toEqual([BACK, "Reject", "Accept"]);
+  });
+
+  it("deletes once Confirm is pressed, exactly once", async () => {
+    const onReject = jest.fn();
+    renderHeader({
+      selectedUser: otherUser({ incomingRequest: PENDING }),
+      onReject,
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Reject" }));
+    await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+    expect(onReject).toHaveBeenCalledTimes(1);
+  });
+
+  it("puts the original controls back on Cancel", async () => {
+    const onReject = jest.fn();
+    renderHeader({
+      selectedUser: otherUser({ incomingRequest: PENDING }),
+      onReject,
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Reject" }));
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(onReject).not.toHaveBeenCalled();
+    expect(buttonNames()).toEqual([BACK, "Reject", "Accept"]);
+  });
+
+  it("asks before withdrawing too, in the words of that state", async () => {
+    // One button, two labels, one handler, one deletion. Gating the
+    // confirmation to only one of the two states would be a conditional with
+    // nothing behind it.
+    const onReject = jest.fn();
+    renderHeader({
+      selectedUser: otherUser({ outgoingRequest: PENDING }),
+      onReject,
+    });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Withdraw Request" }),
+    );
+
+    expect(onReject).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(/Withdraw this request\? This also deletes/),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+    expect(onReject).toHaveBeenCalledTimes(1);
+  });
+
+  it("still confirms when a role mismatch has already taken Accept away", async () => {
+    // Clearing the request is the way out of a mismatch, so Reject is the only
+    // control here. The prompt displaces the explanation while it is open; the
+    // explanation comes back on Cancel.
+    renderHeader({
+      selectedUser: otherUser({ role: Role.RIDER, incomingRequest: PENDING }),
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Reject" }));
+
+    expect(buttonNames()).toEqual([BACK, "Cancel", "Confirm"]);
+    expect(
+      screen.queryByText(/You and Riley are both riders/),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(
+      screen.getByText(/You and Riley are both riders/),
+    ).toBeInTheDocument();
+  });
+
+  it("cannot be opened while a mutation is already in flight", async () => {
+    const onReject = jest.fn();
+    renderHeader({
+      selectedUser: otherUser({ incomingRequest: PENDING }),
+      isMutating: true,
+      onReject,
+    });
+
+    const reject = screen.getByRole("button", { name: "Reject" });
+    expect(reject).toBeDisabled();
+
+    await userEvent.click(reject);
+
+    expect(onReject).not.toHaveBeenCalled();
+    expect(buttonNames()).toEqual([BACK, "Reject", "Accept"]);
+  });
+
+  it("does not carry a half-answered question into the next conversation", async () => {
+    // Both branches key `RequestControls` on the counterpart's id for this.
+    // `MessagePanel` renders one `MessageHeader` at a fixed position and swaps
+    // `selectedUser` underneath it, so without the key an abandoned
+    // confirmation would be inherited by the next person's request - and
+    // Confirm would then delete a request its owner never pressed Reject on.
+    const onReject = jest.fn();
+    const first = otherUser({ id: "other-1", incomingRequest: PENDING });
+    const second = otherUser({
+      id: "other-2",
+      preferredName: "Sam",
+      incomingRequest: PENDING,
+    });
+
+    const { rerender } = renderHeader({ selectedUser: first, onReject });
+
+    await userEvent.click(screen.getByRole("button", { name: "Reject" }));
+    expect(buttonNames()).toEqual([BACK, "Cancel", "Confirm"]);
+
+    rerender(headerElement({ selectedUser: second, onReject }));
+
+    expect(buttonNames()).toEqual([BACK, "Reject", "Accept"]);
+    expect(onReject).not.toHaveBeenCalled();
+  });
+
+  it("asks on desktop as well, where the same handler deletes the same row", async () => {
+    setViewportWidth(DESKTOP_WIDTH);
+    const onReject = jest.fn();
+    renderHeader({
+      selectedUser: otherUser({ incomingRequest: PENDING }),
+      onReject,
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Reject" }));
+
+    expect(buttonNames()).toEqual(["Cancel", "Confirm", CLOSE]);
+    expect(onReject).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+    expect(onReject).toHaveBeenCalledTimes(1);
   });
 });
 

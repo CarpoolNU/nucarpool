@@ -459,6 +459,7 @@ const Index: NextPage = () => {
                   onSubmit={handleSubmit(onSubmit, onError)}
                   setValue={setValue}
                   user={user}
+                  checkChanges={checkForChanges}
                 />
               ) : option === "carpool" ? (
                 <CarpoolSection
@@ -503,6 +504,7 @@ const Index: NextPage = () => {
                   onSubmit={handleSubmit(onSubmit, onError)}
                   setValue={setValue}
                   user={user}
+                  checkChanges={checkForChanges}
                 />
               ) : option === "carpool" ? (
                 <CarpoolSection

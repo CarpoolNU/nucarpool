@@ -1,5 +1,5 @@
 import { Menu, Transition } from "@headlessui/react";
-import { signOut, useSession } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import Image from "next/image";
 import Link from "next/link";
 import Spinner from "./Spinner";
@@ -7,8 +7,26 @@ import React, { Fragment, useState } from "react";
 import { AiOutlineUser } from "react-icons/ai";
 import { useRouter } from "next/router";
 import useProfileImage from "../utils/useProfileImage";
+import {
+  signOutWithGuard,
+  UnsavedChangesGuard,
+} from "../utils/profile/signOutWithGuard";
 
-const DropDownMenu = () => {
+interface DropDownMenuProps {
+  /**
+   * The unsaved-changes guard, when the page this is mounted on has one.
+   *
+   * Only the profile page does, and `Header` forwards it from the same prop it
+   * already passes the Map button and the bottom navigation. Signing out from
+   * here on `/profile` discarded pending edits exactly as `UserSection`'s
+   * button did - the same defect on the other viewport - so it is routed
+   * through the same guard rather than left as the one remaining unguarded
+   * exit. Everywhere else this is `undefined` and the behaviour is unchanged.
+   */
+  checkChanges?: UnsavedChangesGuard;
+}
+
+const DropDownMenu = ({ checkChanges }: DropDownMenuProps) => {
   const { data: session } = useSession();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
@@ -20,7 +38,7 @@ const DropDownMenu = () => {
   } = useProfileImage();
 
   const logout = () => {
-    signOut();
+    void signOutWithGuard(checkChanges);
   };
 
   const handleProfileClick = async () => {
