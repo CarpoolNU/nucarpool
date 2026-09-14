@@ -281,10 +281,40 @@ const Setup: NextPage = () => {
     );
   }
 
-  // Responsive classes based on isMobile
-  const buttonContainerClass = isMobile
-    ? "fixed left-1/2 bottom-6 transform -translate-x-1/2 flex flex-col items-center gap-3 z-50"
-    : "absolute left-1/2 bottom-10 transform -translate-x-1/2 flex flex-col items-center gap-6";
+  /*
+    The navigation buttons, which are a sibling of the card rather than an
+    overlay on top of it.
+
+    On mobile this element is *in flow*, the last child of the same full-screen
+    column the card sits in, so the card's height and the strip's height are
+    sized against each other by the flex container instead of by two numbers
+    that have to agree. It used to be `fixed ... bottom-6 ... z-50` outside that
+    container, which the card's own height knew nothing about, so the strip
+    covered the bottom 70px of every step's scroll area at 375x667 - measured,
+    not estimated. `z-50` on `SetupContainer` did not save it: `position: fixed`
+    on the wrapper creates a stacking context, so the card's z-index only ever
+    competed with its own siblings while the strip competed in the root.
+
+    No `shrink-0` here, though a column layout invites one. The strip keeps its
+    height for free: its `overflow` is `visible`, so its automatic minimum size
+    is its own content, and the browser shrinks the card instead. Measured down
+    to a 260px-tall container - the strip held 96px at every step of that, with
+    and without the class - so `shrink-0` would have been a no-op asserting
+    something load-bearing.
+
+    `z-50` is kept for the desktop arrangement, where the strip is taken out of
+    flow again and *can* meet the card on a short window. It is a no-op on
+    mobile, where the two no longer occupy the same space at all.
+
+    Styling-only differences go through `desktop:` overrides on mobile-first
+    base classes rather than an `isMobile` ternary, per SCRUM-415. That also
+    removes a first-render wrinkle this element used to have: `useIsMobile`
+    returns the desktop snapshot during hydration, so the ternary positioned the
+    strip twice on a phone, and - because the two branches lived at different
+    points in the tree - React remounted the buttons to do it.
+  */
+  const buttonContainerClass =
+    "desktop:absolute desktop:bottom-10 desktop:left-1/2 desktop:-translate-x-1/2 desktop:gap-6 z-50 flex flex-col items-center gap-3";
 
   const backButtonClass = isMobile
     ? "px-4 py-2 font-montserrat text-base text-black underline"
@@ -320,7 +350,26 @@ const Setup: NextPage = () => {
     }
   };
 
-  // Mobile heights for different steps
+  /*
+    The height each step would *like* on mobile. A request, not a guarantee.
+
+    These are requests because the card is a shrinkable item in the column
+    below, so the flex container hands back whatever is left once the button
+    strip, the gap and the safe-area inset have been taken - and on a 667px
+    phone that is less than any figure here, so every step renders at the same
+    height. That was already true before: a `maxHeight: "85vh"` clamped all of
+    them to 567px, and the table only began to take effect above roughly 824px
+    of viewport height. The difference is that the space is now measured rather
+    than guessed at 85%, so the remainder is genuinely reachable instead of
+    sitting under the buttons.
+
+    The `vh` is gone with it. Per the note in `globals.css`, `vh` resolves
+    against the *large* viewport on iOS Safari - the page as it would measure
+    with the browser chrome retracted - so the clamp was computed against space
+    the user could not see, which made the overlap worse on a real phone than
+    in a desktop Chromium at the same size. Nothing here needs a viewport unit
+    now that the container does the arithmetic.
+  */
   const mobileHeights = {
     0: 500,
     1: 700,
@@ -354,15 +403,46 @@ const Setup: NextPage = () => {
         </div>
       )}
 
-      {/* Full screen flex container for perfect centering */}
-      <div className="fixed inset-0 flex items-center justify-center">
+      {/*
+        Full screen flex container for perfect centering.
+
+        A *column* on mobile, holding the card and the navigation strip as two
+        in-flow items, which is what makes the card's height account for the
+        buttons rather than ignore them. `pt-12` keeps the card's top edge where
+        it has always been, clear of the "CarpoolNU" title; the bottom padding
+        restates the `bottom-6` the strip used to position itself with and adds
+        `env(safe-area-inset-bottom)`, so `Continue` clears a home indicator.
+        The `0px` fallback is load-bearing for the same reason it is in
+        `breakpoints.js`: `env()` with no fallback invalidates the whole
+        `calc()` on a browser that does not know the variable, which would drop
+        the padding entirely rather than drop the inset.
+
+        `desktop:flex-row` restores the original direction rather than leaving
+        the column in place, so the card keeps the desktop behaviour it has
+        today. Height is the main axis in a column and the cross axis in a row,
+        and a flex item only shrinks along the main axis - so on desktop the
+        500px card still refuses to shrink on a short window exactly as before,
+        and only mobile gains the new sizing. Verified by measurement: the card
+        and the strip land on identical boxes either side of this change at
+        1280x900 and at 1280x600.
+
+        `min-h-0` on the card is *redundant today* and kept deliberately. A flex
+        item's default `min-height: auto` would floor the card at its requested
+        700px and push the buttons off the bottom of the screen - trading the
+        overlap for something worse - but `overflow-y-auto` already zeroes that
+        automatic minimum, because the rule only applies to a `visible`
+        overflow. The two are independent routes to the same thing and either
+        alone is enough; with neither the card measures 700px in a 667px
+        viewport. This is the one that still holds if the scroll area ever moves
+        to an inner element.
+      */}
+      <div className="desktop:flex-row desktop:gap-0 desktop:p-0 fixed inset-0 flex flex-col items-center justify-center gap-4 pt-12 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]">
         <SetupContainer
-          className={`${containerPadding()} overflow-y-auto`}
+          className={`${containerPadding()} min-h-0 overflow-y-auto`}
           style={
             isMobile
               ? {
                   height: `${mobileHeights[step as keyof typeof mobileHeights]}px`,
-                  maxHeight: "85vh",
                 }
               : undefined
           }
@@ -409,45 +489,45 @@ const Setup: NextPage = () => {
             />
           )}
         </SetupContainer>
-      </div>
 
-      {step > 0 && (
-        <div className={buttonContainerClass}>
-          {step > 1 && (
+        {step > 0 && (
+          <div className={buttonContainerClass}>
+            {step > 1 && (
+              <button
+                type="button"
+                className={backButtonClass}
+                onClick={() => setStep((prevStep) => Math.max(prevStep - 1, 0))}
+              >
+                Previous
+              </button>
+            )}
             <button
               type="button"
-              className={backButtonClass}
-              onClick={() => setStep((prevStep) => Math.max(prevStep - 1, 0))}
+              className={`${continueBaseClass} ${
+                step === 4 || watch("role") === Role.VIEWER
+                  ? continueButtonFinalStepClass
+                  : continueButtonDefaultClass
+              }`}
+              onClick={handleNextStep}
             >
-              Previous
+              <div
+                className={`font-montserrat flex items-center ${isMobile ? "text-xl" : "text-2xl"} font-bold`}
+              >
+                {watch("role") === Role.VIEWER
+                  ? "View Map"
+                  : step === 4
+                    ? "Complete"
+                    : "Continue"}
+                {step !== 4 && watch("role") !== Role.VIEWER && (
+                  <FaArrowRight
+                    className={`${isMobile ? "ml-1" : "ml-2"} text-black`}
+                  />
+                )}
+              </div>
             </button>
-          )}
-          <button
-            type="button"
-            className={`${continueBaseClass} ${
-              step === 4 || watch("role") === Role.VIEWER
-                ? continueButtonFinalStepClass
-                : continueButtonDefaultClass
-            }`}
-            onClick={handleNextStep}
-          >
-            <div
-              className={`font-montserrat flex items-center ${isMobile ? "text-xl" : "text-2xl"} font-bold`}
-            >
-              {watch("role") === Role.VIEWER
-                ? "View Map"
-                : step === 4
-                  ? "Complete"
-                  : "Continue"}
-              {step !== 4 && watch("role") !== Role.VIEWER && (
-                <FaArrowRight
-                  className={`${isMobile ? "ml-1" : "ml-2"} text-black`}
-                />
-              )}
-            </div>
-          </button>
-        </div>
-      )}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
