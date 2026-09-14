@@ -21,6 +21,26 @@ const SelectDays = ({
 }: SelectDaysProps) => {
   const daysOfWeek = ["Su", "M", "Tu", "W", "Th", "F", "S"];
 
+  /*
+   * Both boxes must accept `className`, because `dayBoxClassName` below is the
+   * only way a caller can size them - `CarpoolSection` shrinks them under the
+   * mobile breakpoint and `StepThree` sizes them at both.
+   *
+   * **That requirement is not enforceable by the type checker, and this is the
+   * bug that taught us so.** `DayBox` declared no `className` prop for as long
+   * as this forwarding existed; the JSX below still compiled, because excess
+   * property checking against a union of component types admits a prop that
+   * any one member declares - `StaticDayBox` did. Annotating this binding as
+   * `ComponentType<{... className: string}>` does not help either: parameter
+   * bivariance makes a component that takes only `{day, isSelected}` assignable
+   * to it, since ignoring a prop is not a type error. TypeScript can require
+   * that a component *declare* `className` only at the component's own
+   * declaration site, and can never require that it *apply* it.
+   *
+   * So the guard is a test, not a type: `DayBox.test.tsx` renders through this
+   * component and asserts the forwarded class reaches the rendered box on both
+   * branches. A new box that drops `className` fails there.
+   */
   const DayBoxComponent = useStaticDayBox ? StaticDayBox : DayBox;
 
   return (
