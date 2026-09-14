@@ -306,6 +306,23 @@ const Setup: NextPage = () => {
     flow again and *can* meet the card on a short window. It is a no-op on
     mobile, where the two no longer occupy the same space at all.
 
+    **The placement is `desktop-tall:`, not `desktop:`, and that is SCRUM-474.**
+    Taking the strip out of flow is only safe while the window is tall enough
+    for a centred 500px card to clear it, which is `WIZARD_DESKTOP_MIN_HEIGHT_PX`
+    - see the derivation there. Below it the strip stays in flow and the column
+    above sizes the two against each other, which is the arrangement that was
+    already correct on a phone. `desktop:` alone is a `min-width`, so a phone
+    held in landscape is 667px wide, reports desktop, and got this branch in a
+    375px-tall viewport: the card was clipped 62px off the top and 63px off the
+    bottom with the strip across the middle of what was left, and the last field
+    could not be reached at all. Measured, not estimated, and not only a phone
+    problem - at 1280x800 the strip covered the card's last 22px.
+
+    `desktop:gap-6` deliberately keeps the plain width breakpoint. The space
+    between the two buttons is type-scale styling, which tracks the same thing
+    the button padding beside it does; only the strip's *placement* depends on
+    there being vertical room.
+
     Styling-only differences go through `desktop:` overrides on mobile-first
     base classes rather than an `isMobile` ternary, per SCRUM-415. That also
     removes a first-render wrinkle this element used to have: `useIsMobile`
@@ -314,7 +331,7 @@ const Setup: NextPage = () => {
     points in the tree - React remounted the buttons to do it.
   */
   const buttonContainerClass =
-    "desktop:absolute desktop:bottom-10 desktop:left-1/2 desktop:-translate-x-1/2 desktop:gap-6 z-50 flex flex-col items-center gap-3";
+    "desktop-tall:absolute desktop-tall:bottom-10 desktop-tall:left-1/2 desktop-tall:-translate-x-1/2 desktop:gap-6 z-50 flex flex-col items-center gap-3";
 
   const backButtonClass = isMobile
     ? "px-4 py-2 font-montserrat text-base text-black underline"
@@ -390,15 +407,25 @@ const Setup: NextPage = () => {
         resolving against a shrink-to-fit parent is circular. 90% is the same
         figure `SetupContainer` uses, so the bar and the card share an edge.
 
-        Both differences here are styling only, so both are `desktop:`
-        overrides on mobile-first base classes rather than an `isMobile`
-        ternary - the direction SCRUM-415 settled on. That also removes a
-        first-render wrinkle: `useIsMobile` returns the desktop snapshot during
-        hydration, so the ternary placed the bar at its desktop offset once on
-        a phone before correcting.
+        Both differences here are overrides on mobile-first base classes rather
+        than an `isMobile` ternary - the direction SCRUM-415 settled on. That
+        also removes a first-render wrinkle: `useIsMobile` returns the desktop
+        snapshot during hydration, so the ternary placed the bar at its desktop
+        offset once on a phone before correcting.
+
+        The two differences take *different* breakpoints, which is the point of
+        SCRUM-474. The width is a width concern and stays on `desktop:`, sharing
+        its 600px with the card. The offset is not: `calc(50% - 250px - 60px)`
+        is only meaningful while the card is a 500px block centred in the
+        viewport - it reads as "half the screen, back up over the card's top
+        half, then 60px clear of it" - and below `WIZARD_DESKTOP_MIN_HEIGHT_PX`
+        the card is neither 500px nor centred that way. Left on `desktop:` the
+        formula went negative on a landscape phone and put the bar at y -122,
+        entirely off the top of the screen; on `desktop-tall:` it falls back to
+        the same `top-16` a phone uses.
       */}
       {step > 1 && (
-        <div className="desktop:top-[calc(50%-250px-60px)] desktop:w-[600px] absolute top-16 left-1/2 z-20 w-[90%] -translate-x-1/2 transform">
+        <div className="desktop-tall:top-[calc(50%-250px-60px)] desktop:w-[600px] absolute top-16 left-1/2 z-20 w-[90%] -translate-x-1/2 transform">
           <ProgressBar step={step - 2} />
         </div>
       )}
@@ -417,14 +444,23 @@ const Setup: NextPage = () => {
         `calc()` on a browser that does not know the variable, which would drop
         the padding entirely rather than drop the inset.
 
-        `desktop:flex-row` restores the original direction rather than leaving
-        the column in place, so the card keeps the desktop behaviour it has
-        today. Height is the main axis in a column and the cross axis in a row,
-        and a flex item only shrinks along the main axis - so on desktop the
-        500px card still refuses to shrink on a short window exactly as before,
-        and only mobile gains the new sizing. Verified by measurement: the card
-        and the strip land on identical boxes either side of this change at
-        1280x900 and at 1280x600.
+        `desktop-tall:flex-row` restores the original direction rather than
+        leaving the column in place, so the card keeps the desktop behaviour it
+        has today. Height is the main axis in a column and the cross axis in a
+        row, and a flex item only shrinks along the main axis - which is exactly
+        why the direction is the thing that has to be conditional. In a row the
+        500px card refuses to shrink however short the window is, so it was
+        clipped rather than fitted; in a column it shrinks to what is left.
+
+        **The condition gained a height term for SCRUM-474.** It was
+        `desktop:flex-row`, a `min-width` and nothing else, so a phone in
+        landscape - 667px wide, 375px tall, above the breakpoint - was handed
+        the arrangement that cannot shrink. Switching on
+        `WIZARD_DESKTOP_MIN_HEIGHT_PX` as well means the row is used only where
+        it fits, and the column below it is not a new layout but the one a phone
+        already gets. Desktop above that height is untouched, which is measured
+        rather than asserted: the card and the strip land on identical boxes
+        either side of this change at 1280x900.
 
         `min-h-0` on the card is *redundant today* and kept deliberately. A flex
         item's default `min-height: auto` would floor the card at its requested
@@ -436,7 +472,7 @@ const Setup: NextPage = () => {
         viewport. This is the one that still holds if the scroll area ever moves
         to an inner element.
       */}
-      <div className="desktop:flex-row desktop:gap-0 desktop:p-0 fixed inset-0 flex flex-col items-center justify-center gap-4 pt-12 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]">
+      <div className="desktop-tall:flex-row desktop-tall:gap-0 desktop-tall:p-0 fixed inset-0 flex flex-col items-center justify-center gap-4 pt-12 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]">
         <SetupContainer
           className={`${containerPadding()} min-h-0 overflow-y-auto`}
           style={

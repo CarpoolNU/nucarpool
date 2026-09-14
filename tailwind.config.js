@@ -14,6 +14,8 @@
 const {
   MOBILE_BREAKPOINT_PX,
   DESKTOP_SCREEN_NAME,
+  DESKTOP_TALL_SCREEN_NAME,
+  DESKTOP_TALL_MEDIA_QUERY,
   MOBILE_NAV_SPACE,
   MOBILE_SHEET_MAP_STRIP,
 } = require("./src/utils/breakpoints");
@@ -200,6 +202,28 @@ module.exports = {
       // are min-width: `desktop:` applies at this width and above.
       [DESKTOP_SCREEN_NAME]: `${MOBILE_BREAKPOINT_PX}px`,
       // => @media (min-width: 640px) { ... }
+
+      // The desktop boundary with a *height* term, for layouts whose desktop
+      // arrangement needs vertical room rather than only horizontal. A `raw`
+      // query because a screen is otherwise min-width only, which is precisely
+      // the gap: a landscape phone is 667px wide and 375px tall, so `desktop:`
+      // alone hands it a layout that cannot fit (SCRUM-474).
+      //
+      // Declared immediately after `desktop` and before `md`, which keeps the
+      // ascending order this list requires: its width term is the same 640px,
+      // and it is strictly narrower in scope, so where both ever set one
+      // property this one has to be emitted second to win.
+      //
+      // One known artifact, and it is inert. Tailwind's `container` utility
+      // derives a `max-width` from every screen, and a `raw` screen has no
+      // width to derive one from - so the build emits a `.container` rule whose
+      // `max-width` is the media query text, which is not a length and which
+      // every browser therefore drops. Nothing in the app uses the bare
+      // `container` utility; the rule exists at all only because Tailwind v4
+      // scans the whole repository and the *word* appears in prose, which is
+      // the effect this file's docblock describes.
+      [DESKTOP_TALL_SCREEN_NAME]: { raw: DESKTOP_TALL_MEDIA_QUERY },
+      // => @media (min-width: 640px) and (min-height: 844px) { ... }
 
       // ipad 14 size
       md: "834px",

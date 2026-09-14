@@ -17,6 +17,15 @@
  * is the assertion that catches it. The geometry belongs in SCRUM-264's
  * Playwright suite.
  *
+ * SCRUM-474 added the second half of the same idea: *which* breakpoint each of
+ * those classes hangs off. That fix moved the arrangement - the flex direction,
+ * the strip's placement, the progress bar's offset - from `desktop:` to
+ * `desktop-tall:`, because `desktop:` is a `min-width` and a phone in landscape
+ * is 667px wide and 375px tall. Those assertions are class-request assertions
+ * for the same reason as the rest of this file: jsdom resolves no media query
+ * and no layout, so it can see which variant was *asked for* and nothing about
+ * what it does.
+ *
  * **Deliberately not co-located with the page.** Under `src/pages/` a filename
  * is also a route: `pageExtensions` includes `.ts`/`.tsx`, so
  * `setup.test.tsx` beside the page would be compiled and shipped as
@@ -31,6 +40,7 @@ import {
   restoreViewportAfterEach,
   setViewportWidth,
 } from "../../testing/viewport";
+import { WIZARD_CARD_HEIGHT_PX } from "../../utils/breakpoints";
 
 /*
  * `getServerSideProps` is not exercised here, and left unmocked these two pull
@@ -194,10 +204,84 @@ describe("the onboarding wizard's navigation strip", () => {
 
     const wrapper = card!.parentElement!;
     expect(wrapper.className).toContain("flex-col");
-    // Restores the original row direction above the breakpoint, which is what
-    // keeps the 500px desktop card from shrinking on a short window: a flex
-    // item only shrinks along the main axis.
-    expect(wrapper.className).toContain("desktop:flex-row");
+    /*
+     * Restores the original row direction, which is what keeps the 500px
+     * desktop card from shrinking: a flex item only shrinks along the main
+     * axis, and height is the cross axis in a row.
+     *
+     * On `desktop-tall:` rather than `desktop:`, and that is SCRUM-474. The row
+     * is the arrangement that cannot shrink, so it is only safe where there is
+     * room for it - and `desktop:` is a `min-width`, which a phone in landscape
+     * satisfies at 667px wide and 375px tall.
+     */
+    expect(wrapper.className).toContain("desktop-tall:flex-row");
+    expect(wrapper.className).not.toContain("desktop:flex-row");
+  });
+
+  /**
+   * The strip leaves the flow only where the card it would float over has room
+   * to clear it. Same reasoning as the direction above, and the two have to
+   * agree: an out-of-flow strip in a column arrangement is the SCRUM-467 defect
+   * again, and an in-flow strip in a row arrangement would sit beside the card
+   * rather than below it.
+   */
+  it("takes the strip out of flow only on a window tall enough to hold it", async () => {
+    const { container } = await renderAtStepOne();
+
+    const strip = screen.getByRole("button", {
+      name: /Continue/,
+    }).parentElement!;
+    const wrapper = cardOf(container)!.parentElement!;
+
+    for (const placement of [
+      "desktop-tall:absolute",
+      "desktop-tall:bottom-10",
+    ]) {
+      expect(strip.className).toContain(placement);
+    }
+    expect(strip.className).not.toContain("desktop:absolute");
+    expect(strip.className).not.toContain("desktop:bottom-10");
+
+    // The pair that has to move together.
+    expect(wrapper.className).toContain("desktop-tall:flex-row");
+  });
+
+  /**
+   * The type scale deliberately did *not* move. The gap between the two buttons
+   * tracks their padding and font size, which are width concerns; only the
+   * strip's placement depends on there being vertical room. Asserted because
+   * "change every `desktop:` in the string" is the obvious wrong way to make
+   * this edit, and it would silently shrink the desktop button spacing on a
+   * short window.
+   */
+  it("leaves the button spacing on the plain width breakpoint", async () => {
+    await renderAtStepOne();
+
+    const strip = screen.getByRole("button", {
+      name: /Continue/,
+    }).parentElement!;
+    expect(strip.className).toContain("desktop:gap-6");
+  });
+
+  /**
+   * The threshold is derived from this card's height, so the two are only
+   * connected while the card really does request it. Nothing else would fail if
+   * the card were made taller: the arithmetic in `breakpoints.js` would simply
+   * be describing a card that no longer exists, and the strip would start
+   * overlapping again in a band just above the breakpoint.
+   *
+   * Spelled through the constant rather than as a literal, which is also why
+   * the paragraph above does not name a second example height. Tailwind v4
+   * scans this file, so writing an arbitrary height utility in prose emits it
+   * as real CSS - including, the first time this was written, an example height
+   * no element in the app has ever asked for. See the docblock in
+   * `tailwind.config.js`.
+   */
+  it("requests the card height the desktop threshold is derived from", async () => {
+    const { container } = await renderAtStepOne();
+
+    const cardClasses = (cardOf(container) as HTMLElement).className;
+    expect(cardClasses).toContain(`h-[${WIZARD_CARD_HEIGHT_PX}px]`);
   });
 
   it("reserves the home-indicator inset below the buttons", async () => {

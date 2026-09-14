@@ -54,6 +54,98 @@ const DESKTOP_SCREEN_NAME = "desktop";
 const DESKTOP_MEDIA_QUERY = `(min-width: ${MOBILE_BREAKPOINT_PX}px)`;
 
 /**
+ * The name of the screen that means "wide enough for the desktop layout *and*
+ * tall enough to lay it out", used by the onboarding wizard.
+ *
+ * `desktop:` is a `min-width` and nothing else, which is the defect SCRUM-474
+ * records: a phone held in landscape is 667px wide, so it is above the
+ * breakpoint and takes every desktop branch - into a viewport 375px tall.
+ *
+ * Deliberately a *second* screen rather than a height term added to
+ * `MOBILE_BREAKPOINT_PX`. That constant is read by `useIsMobile`, by the
+ * `desktop:` screen and by `DESKTOP_MEDIA_QUERY`, so giving it a height would
+ * move every page across the line at once - a far larger change than the defect
+ * justifies, and one that needs its own survey. This adds a variant the wizard
+ * opts into and changes no existing one.
+ */
+const DESKTOP_TALL_SCREEN_NAME = "desktop-tall";
+
+/**
+ * The onboarding card's desktop height, in pixels - the `h-[500px]` that
+ * `SetupContainer` declares.
+ *
+ * Restated here only so the threshold below can be *composed* from it rather
+ * than from a number typed twice. `setupNavigationPlacement.test.tsx` asserts
+ * the component really does request this height, so the two cannot drift apart
+ * without a test failing.
+ */
+const WIZARD_CARD_HEIGHT_PX = 500;
+
+/**
+ * The vertical space the `Previous`/`Continue` strip occupies at the bottom of
+ * the desktop arrangement: the strip itself, plus the 40px it is raised off the
+ * bottom edge by.
+ *
+ * The offset is written as a number rather than as the utility that sets it,
+ * deliberately. Tailwind v4 scans this file like any other, so naming a bare
+ * utility in prose emits it as real CSS - the effect `tailwind.config.js`
+ * describes at length.
+ *
+ * **132 of this is measured, not declared** - it is two buttons and a `gap-6`
+ * at the desktop type scale, so it follows the font and the padding rather than
+ * any constant. Measured in Chromium against the compiled stylesheet, on the
+ * steps that draw both buttons; step 1 draws only `Continue` and is 56px, so
+ * this is the worst case and therefore the right one to reserve.
+ */
+const WIZARD_NAV_STRIP_SPACE_PX = 132 + 40;
+
+/**
+ * The shortest viewport the onboarding wizard's *desktop* arrangement actually
+ * fits in, in pixels.
+ *
+ * **Derived, not chosen**, and this is the arithmetic. On desktop the wizard
+ * centres the card in the viewport and pins the navigation strip to the bottom,
+ * out of flow, so the two are placed by rules that know nothing about each
+ * other:
+ *
+ *   card bottom = (H + CARD) / 2
+ *   strip top   = H - STRIP
+ *
+ * They clear each other only while `(H + CARD) / 2 <= H - STRIP`, which solves
+ * to `H >= CARD + 2 * STRIP`. The doubling is the part worth reading twice: the
+ * card is *centred*, so every pixel the strip takes at the bottom costs the card
+ * two.
+ *
+ * Verified by measurement rather than trusted - in Chromium, against the
+ * compiled stylesheet, reproducing the real ancestor chain. At 900px tall the
+ * card and the strip clear each other by 28px; at 844px by exactly 0; at 800px
+ * the strip covers the card's last 22px; and at 375px it covers 132px of a card
+ * that is itself clipped 62px off the top of the screen and 63px off the
+ * bottom.
+ *
+ * Because the strip's share is measured, this is a floor that has to be
+ * rechecked if the strip's contents change, and that is what the composition
+ * above is for: the pieces are named, so the recheck is arithmetic rather than
+ * archaeology. The geometry itself is not assertable in jsdom and belongs in
+ * SCRUM-264's Playwright suite.
+ */
+const WIZARD_DESKTOP_MIN_HEIGHT_PX =
+  WIZARD_CARD_HEIGHT_PX + 2 * WIZARD_NAV_STRIP_SPACE_PX;
+
+/**
+ * The same pair of conditions as a media query, which is what
+ * `tailwind.config.js` registers as a screen.
+ *
+ * Both terms are `min-`, matching `DESKTOP_MEDIA_QUERY`'s direction and for the
+ * same reason: the mobile-first arrangement is the base and this overrides it,
+ * so no `max-width: 639.98px` fractional value is needed to avoid claiming the
+ * boundary pixel for the wrong side.
+ */
+const DESKTOP_TALL_MEDIA_QUERY =
+  `(min-width: ${MOBILE_BREAKPOINT_PX}px) and ` +
+  `(min-height: ${WIZARD_DESKTOP_MIN_HEIGHT_PX}px)`;
+
+/**
  * Split out from the hook so the boundary itself is testable without a DOM.
  * That was originally the only way to test it at all; the hook
  * has its own suite in `useIsMobile.test.tsx`, and this stays split because
@@ -134,6 +226,11 @@ module.exports = {
   MOBILE_BREAKPOINT_PX,
   DESKTOP_SCREEN_NAME,
   DESKTOP_MEDIA_QUERY,
+  DESKTOP_TALL_SCREEN_NAME,
+  DESKTOP_TALL_MEDIA_QUERY,
+  WIZARD_CARD_HEIGHT_PX,
+  WIZARD_NAV_STRIP_SPACE_PX,
+  WIZARD_DESKTOP_MIN_HEIGHT_PX,
   isMobileWidth,
   MOBILE_NAV_HEIGHT_PX,
   MOBILE_NAV_SPACE,
