@@ -1,5 +1,6 @@
 import {
   isRequestSubType,
+  roleFetchesRecommendations,
   viewerModeHidesCards,
   type SidebarSubType,
 } from "./viewerAccess";
@@ -110,5 +111,59 @@ describe("the predicates together", () => {
     );
 
     expect(visibleNonRequestTabs).toEqual(["favorites"]);
+  });
+});
+
+describe("roleFetchesRecommendations", () => {
+  // SCRUM-460. `user.recommendations.me` is a ranked scoring pass returning up
+  // to 50 candidates, and a VIEWER's copy of it was discarded unrendered on
+  // every mount. "A query did not fire" is not something the mocked suite can
+  // observe, which is why the rule is a predicate and why these are its tests.
+
+  it("does not fetch for a VIEWER, whose cards are replaced by copy", () => {
+    expect(roleFetchesRecommendations("VIEWER")).toBe(false);
+  });
+
+  it.each(["RIDER", "DRIVER"])(
+    "still fetches for a %s — the behaviour that must not regress",
+    (role) => {
+      expect(roleFetchesRecommendations(role)).toBe(true);
+    },
+  );
+
+  it("does not fetch before the role is known", () => {
+    // `user?.role` is `undefined` until `user.me` resolves. Answering `true`
+    // here would fire the request this exists to prevent, every time, for
+    // everyone — before the answer was knowable.
+    expect(roleFetchesRecommendations(undefined)).toBe(false);
+  });
+
+  it("releases the query once a real role arrives, rather than staying off", () => {
+    // The other half of the case above, and the mistake the ticket names: a
+    // term that tolerates the initial `undefined` by disabling the query must
+    // not leave it disabled for a RIDER or a DRIVER once the role lands.
+    const beforeUserMe = roleFetchesRecommendations(undefined);
+    const afterUserMe = roleFetchesRecommendations("RIDER");
+
+    expect([beforeUserMe, afterUserMe]).toEqual([false, true]);
+  });
+
+  it("agrees with the render gate rather than restating it", () => {
+    // The invariant that makes this safe to keep: the query is skipped for
+    // exactly the role whose recommendation cards `SidebarContent` replaces.
+    // If `viewerModeHidesCards("recommendations")` ever turns false, a VIEWER
+    // is being shown real cards and must be fetching them again.
+    expect(roleFetchesRecommendations("VIEWER")).toBe(
+      !viewerModeHidesCards("recommendations"),
+    );
+  });
+
+  it("fetches for an unrecognised role rather than withholding the list", () => {
+    // Failing open matches `viewerModeHidesCards`: a role nobody gated is a
+    // role that still sees cards, and a tab with cards needs the query behind
+    // them. Only the empty-string case is worth pinning alongside, since it is
+    // what a mistyped enum would look like.
+    expect(roleFetchesRecommendations("MANAGER")).toBe(true);
+    expect(roleFetchesRecommendations("")).toBe(true);
   });
 });

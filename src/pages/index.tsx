@@ -23,6 +23,7 @@ import WelcomeTutorial from "../components/WelcomeTutorial";
 import { UserContext } from "../utils/userContext";
 import _, { debounce } from "lodash";
 import { SidebarPage } from "../components/Sidebar/Sidebar";
+import { roleFetchesRecommendations } from "../components/Sidebar/viewerAccess";
 import { QueryError } from "../components/QueryError";
 import { toQueryState } from "../utils/queryState";
 import type { PublicUser, EnhancedPublicUser, User } from "../utils/types";
@@ -302,12 +303,30 @@ const Home: NextPage<any> = () => {
    */
   const isSheetCollapsed = sheetDetent === "collapsed";
 
+  // `enabled` is the whole of SCRUM-460. A VIEWER's recommendations tab renders
+  // a sentence, not cards — `SidebarContent` short-circuits on
+  // `viewerModeHidesCards` ahead of its error, loading and empty branches — so
+  // every one of the 50 ranked candidates the server built was discarded on
+  // arrival, on first mount and again on every client-side navigation back here.
+  //
+  // `roleFetchesRecommendations` is that same predicate read one layer earlier,
+  // which is what keeps the query and the render agreeing by construction. It
+  // answers `false` while `user?.role` is still `undefined`, so the request
+  // waits for `user.me` rather than racing it; see the note there for why that
+  // is a hold and not a permanent disable.
+  //
+  // Nothing downstream mistakes this for a spinner: React Query v5 defines
+  // `isLoading` as `isPending && isFetching`, and a disabled query is not
+  // fetching, so `toQueryState` reads it as `ready` with an empty list.
   const recommendationsQuery = trpc.user.recommendations.me.useQuery(
     {
       sort: sort,
       filters: debouncedFilters,
     },
-    { refetchOnMount: true },
+    {
+      refetchOnMount: true,
+      enabled: roleFetchesRecommendations(user?.role),
+    },
   );
   const { data: recommendations = NO_USERS } = recommendationsQuery;
 
