@@ -67,23 +67,20 @@ const CarpoolSection = ({
         className={"!text-2xl"}
       />
 
-      <div className="mb-2 w-full max-w-[360px] md:my-4 lg:pl-20">
+      <div className="mb-2 w-full max-w-[360px] md:my-4 md:max-w-[448px] lg:max-w-[504px]">
         {/*
           Seven boxes at the base 40px plus 8px of `ml-2` each need 336px. The
           mobile profile content is inset `px-8`, so a 375px phone offers 311px
           and a 360px one 296px - the row overflowed both, and since the
           scroller above sets `overflow-y-auto` with the x-axis left visible,
           CSS computes that axis to `auto` and the whole tab panned sideways.
-          Worse than the panning: the MUI `Checkbox` wrappers shrink to their
-          share of the row while the box inside them does not, so each box
-          overhung its own hit area and a tap could land on the neighbouring
-          day or on nothing.
+          Measured at 360px, the seventh day ended 40px past the column and the
+          clipped part of it answered no clicks at all.
 
-          32px puts the row at 7 x 40px = 280px, inside both widths, and back
-          inside the ~44px each checkbox gets - so the target and the box the
-          user is aiming at coincide again. The `ml-2` gap is kept rather than
-          traded away, since shrinking the gap instead would leave the targets
-          narrower still.
+          32px puts the row at 7 x 40px = 280px, inside both widths. The `ml-2`
+          gap is kept rather than traded away: a checkbox never shrinks below
+          its box plus that gap - see the paragraph on the cap below - so
+          narrowing the gap would only narrow every hit area.
 
           **`max-desktop:` is doing specific work.** It compiles to
           `@media (width < 640px)`, which is disjoint from the `md:` (834px)
@@ -95,6 +92,33 @@ const CarpoolSection = ({
 
           This only does anything because `DayBox` now declares `className`;
           until it did, the prop was accepted, type-checked and dropped.
+
+          **The cap is per-size because the row's width is not negotiable.**
+          Each MUI `Checkbox` is `width: 1` and shrinks like any other flex
+          item, but its automatic minimum size is content-based and its content
+          is a fixed-width `DayBox` plus that 8px margin - so it floors at
+          box + 8px and goes no lower. Measured in a browser: 48px at the 40px
+          base, 64px against `md:h-14`, 72px against `lg:h-16`. Two things
+          follow. The hit area and the circle drawn inside it coincide at every
+          width, so the boxes cannot overlap and a click cannot land on the
+          neighbouring day. And a cap below 7 x (box + 8px) does not compress
+          the row, it is simply overflowed: `max-w-[360px]` was exceeded by
+          88px at `md`, and by 224px at `lg` once the 80px of left padding
+          this wrapper used to carry there had come out of it.
+
+          So each size now caps at what that size's row actually occupies -
+          336px fits inside the 360px the base keeps for mobile, `md` needs
+          7 x 64 = 448px and `lg` 7 x 72 = 504px, both of which the column has
+          room for. That `lg` padding goes with it: it indented the row 88px
+          past the labels, address fields and save button below, which all sit
+          flush with the column's left edge. Nothing moves at `md`, where the
+          boxes already fell inside the column - what changes there is that the
+          declared cap stops being a number the row ignores.
+
+          The retired padding utility is described rather than written out, for
+          the reason the explore-page offset gives: Tailwind v4 scans this file
+          for class-like strings, so naming it here would keep emitting it and
+          would put a false hit in front of anyone grepping for live uses.
         */}
         <SelectDays
           control={control}
