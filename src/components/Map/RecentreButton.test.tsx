@@ -22,6 +22,17 @@ import {
  * bottom navigation, the explore sheet and Mapbox's own controls by
  * construction rather than by measurement - jsdom computes no geometry and no
  * stacking. See `src/testing/viewport.ts`.
+ *
+ * *Also not covered, and not coverable here:* **that the caller renders this
+ * inside a positioned ancestor.** Every offset below is `absolute`, so where
+ * the button lands is decided by whichever ancestor establishes its containing
+ * block - and that is `index.tsx`'s business, not this component's. It was the
+ * whole of SCRUM-464 item 2: the classes asserted below were already correct
+ * while the button sat under `MobileBanner`, because it was rendered as a
+ * sibling of `#map` rather than inside it and `top-2` was measuring from the
+ * viewport. `index.tsx` has no test, so nothing in this suite fails if that
+ * regresses. The assertion that would catch it is SCRUM-264's:
+ * `elementFromPoint` at the button's top edge returns the button.
  */
 
 restoreViewportAfterEach();
@@ -66,5 +77,39 @@ describe.each([
     render(<RecentreButton onRecentre={() => undefined} />);
 
     expect(screen.getByRole("button", { name: LABEL })).toHaveTextContent("");
+  });
+
+  /**
+   * **A proxy, not a measurement**, and a weak one - see the note at the top
+   * of this file. It pins only that the control positions itself out of the
+   * normal flow at both widths, which is the premise the call site's placement
+   * inside `#map` exists to satisfy. It cannot tell a correctly placed button
+   * from one anchored to the viewport, because that difference is entirely in
+   * the ancestor chain and jsdom resolves no containing blocks.
+   */
+  it("positions itself absolutely, so its ancestor decides where it lands", () => {
+    render(<RecentreButton onRecentre={() => undefined} />);
+
+    expect(screen.getByRole("button", { name: LABEL })).toHaveClass("absolute");
+  });
+});
+
+describe("RecentreButton's mobile placement", () => {
+  beforeEach(() => {
+    setViewportWidth(MOBILE_WIDTH);
+  });
+
+  /**
+   * The top edge is the one side of the map nothing else claims - the bottom
+   * belongs to the navigation, the explore sheet and Mapbox's own controls.
+   * Same caveat as above: this is the class list, not the rendered box.
+   */
+  it("sits at the top-right of whatever contains it", () => {
+    render(<RecentreButton onRecentre={() => undefined} />);
+
+    expect(screen.getByRole("button", { name: LABEL })).toHaveClass(
+      "top-2",
+      "right-2",
+    );
   });
 });

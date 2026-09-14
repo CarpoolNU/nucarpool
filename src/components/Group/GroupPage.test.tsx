@@ -154,6 +154,32 @@ describe("My Group on mobile", () => {
 
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  /**
+   * **A proxy, not a measurement.** What actually matters is that the sticky
+   * action bar holding "Preview Group Route" is not behind the bottom
+   * navigation, and jsdom cannot check that: it computes no geometry, no
+   * `z-index` and no `env()` - see `src/testing/viewport.ts`. This asserts the
+   * class that encodes the clearance and nothing more, so it catches the
+   * regression of someone putting `inset-0` back and catches nothing else.
+   *
+   * The real assertion belongs in SCRUM-264's Playwright suite:
+   * `boundingBox().y + height <= viewportHeight - navHeight` for this overlay.
+   *
+   * `inset-0` is asserted absent as well as `bottom-mobile-nav` present,
+   * because the two together are contradictory rather than additive - Tailwind
+   * emits both `bottom: 0` and the token, and which one wins is source order
+   * in the compiled stylesheet, not the class list. A version carrying both
+   * would pass a presence-only check while still overlapping.
+   */
+  it("reserves the bottom navigation's height on the overlay root", () => {
+    const { container } = renderGroupPage(() => undefined);
+
+    const overlay = container.firstElementChild;
+
+    expect(overlay).toHaveClass("fixed", "bottom-mobile-nav", "inset-x-0");
+    expect(overlay).not.toHaveClass("inset-0");
+  });
 });
 
 describe("My Group on desktop", () => {
