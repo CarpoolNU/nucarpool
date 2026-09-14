@@ -17,12 +17,45 @@ import { carpoolUnavailableExplanation } from "../../utils/roleCompatibility";
 import { driverHasNoSeatsExplanation } from "../../utils/carpoolSeats";
 import React from "react";
 
+/**
+ * Which surface this card is on, and therefore which controls it carries.
+ *
+ * **Why this exists rather than the selection id it replaces.** `ConnectCard`
+ * used to infer "show the mobile action" from `mobileSelectedUser`, a prop
+ * naming *which card the user expanded in the explore sheet*. One value was
+ * answering two unrelated questions, and this type exists because the second
+ * answer was wrong everywhere the first was not applicable: `MapConnectPortal`
+ * has no selection to pass, so its card silently inherited list-card
+ * behaviour and a map pin opened a sheet with nothing to press.
+ *
+ * Passing `mobileSelectedUser={user.id}` from the portal - the smaller
+ * alternative - would have fixed the missing button and taken the card's
+ * schedule, dates and seats rows down with it, because
+ * `isMobileCondensedLayout` reads the same value. The portal wants the action
+ * *and* the full detail, which is a third combination neither existing caller
+ * expresses. Stating it is what stops the next surface inheriting the wrong
+ * one by omission.
+ *
+ * - `list` - a discovery card in the explore list. Tapping the body expands it
+ *   on mobile; the actions live in `UserCard`'s desktop-only row.
+ * - `detail` - the one card in the mobile detail sheet. Condensed, because the
+ *   sheet is short, and carrying its own full-width `Connect!`.
+ * - `portal` - a card in the map-pin sheet. Full detail, and on mobile the
+ *   same `Connect!`, because `UserCard`'s row is desktop-only.
+ *
+ * `View Route` is deliberately not offered on `portal`, matching the mobile
+ * detail sheet rather than the desktop portal: the pin the user just tapped is
+ * already on the map that route would draw on.
+ */
+export type ConnectCardVariant = "list" | "detail" | "portal";
+
 interface ConnectCardProps {
   otherUser: EnhancedPublicUser;
   onViewRouteClick: (user: User, otherUser: PublicUser) => void;
   onClose?: (action: string) => void;
   onViewRequest: (userId: string) => void;
-  mobileSelectedUser?: string | null;
+  /** Defaults to `list`, the only variant with more than one instance. */
+  variant?: ConnectCardVariant;
   handleMobileExpand?: (userId?: string) => void;
 }
 
@@ -120,25 +153,31 @@ export const ConnectCard = (props: ConnectCardProps): React.JSX.Element => {
         }
       : {};
 
+  const variant = props.variant ?? "list";
+
   /**
-   * Whether this card is the one open in the mobile detail sheet.
+   * The condensed layout belongs to the detail sheet alone.
    *
-   * Both reads below carried their own `isMobile` term once,
-   * defending against a `mobileSelectedUser` that outlived the viewport that
-   * set it. The page derives that value through `resolveMobileSelectedUser`
-   * now, so a non-null value implies a mobile viewport.
-   *
-   * **Truthiness rather than `!== null`, which is a fix and not a tidy-up.**
-   * The prop is optional, and `MapConnectPortal` renders this card without it
-   * - so `props.mobileSelectedUser` is `undefined` there and `undefined !==
-   * null` is *true*. That read said "a card is expanded" for a card that had
-   * never been told about any selection. It was harmless only because the
-   * `isMobile` term masked it: the portal is itself behind a desktop-only
-   * branch in `index.tsx` today. Removing the mask without this would have
-   * turned a latent bug into a live one, and that change's remaining map-pin
-   * work puts that portal on mobile.
+   * `UserCard` drops the schedule, dates and seats rows for it because that
+   * sheet is deliberately short. A portal card is not short and keeps them.
+   * `UserCard` already ands this with its own `isMobile`, so no viewport term
+   * is needed here.
    */
-  const isExpandedDetail = Boolean(props.mobileSelectedUser);
+  const isCondensedDetail = variant === "detail";
+
+  /**
+   * Whether this card carries its own full-width action.
+   *
+   * The `isMobile` term is load-bearing here in a way it was not for the
+   * selection id this replaced. That value could only ever be non-null on a
+   * phone - `index.tsx` derives it through `resolveMobileSelectedUser` - so
+   * reading it alone was safe. `variant` carries no such guarantee:
+   * `MapConnectPortal` sets `portal` on both platforms, and without this term
+   * a desktop pin click would draw this button *underneath* the `View Route` +
+   * `Connect` row `UserCard` already renders there, which is the one thing
+   * this ticket must not change.
+   */
+  const showsOwnAction = isMobile && variant !== "list";
 
   return (
     <>
@@ -149,9 +188,9 @@ export const ConnectCard = (props: ConnectCardProps): React.JSX.Element => {
         notice={unavailable ?? undefined}
         onViewRouteClick={props.onViewRouteClick}
         {...activation}
-        isMobileCondensedLayout={isExpandedDetail}
+        isMobileCondensedLayout={isCondensedDetail}
       />
-      {isExpandedDetail && (
+      {showsOwnAction && (
         <div className="mx-3.5 mt-2 mb-4">
           <button
             onClick={() => handleConnect(props.otherUser)}

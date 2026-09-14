@@ -6,7 +6,7 @@ import {
   User,
 } from "../../utils/types";
 import Spinner from "../Spinner";
-import { ConnectCard } from "../UserCards/ConnectCard";
+import { ConnectCard, ConnectCardVariant } from "../UserCards/ConnectCard";
 import { ReceivedCard } from "../UserCards/ReceivedCard";
 import { SentCard } from "../UserCards/SentCard";
 import {
@@ -105,6 +105,20 @@ const renderUserCard = (
   mobileSelectedUser?: string | null,
 ): React.JSX.Element => {
   const handleClick = () => onCardClick(otherUser.id);
+
+  /**
+   * Which of this card's two roles in the explore list it is playing.
+   *
+   * Compared against the card's own id rather than read for truthiness. The
+   * list above is already filtered down to the selection when one exists, so
+   * the two agree today - but "is this the expanded card" is the question the
+   * variant answers, and asking it of the wrong card is the mistake
+   * `ConnectCardVariant` was introduced to stop. `portal` is not reachable
+   * from here; `MapConnectPortal` sets it.
+   */
+  const variant: ConnectCardVariant =
+    mobileSelectedUser === otherUser.id ? "detail" : "list";
+
   switch (subType) {
     case "recommendations":
       return (
@@ -114,7 +128,7 @@ const renderUserCard = (
           onViewRouteClick={onViewRouteClick}
           onViewRequest={onViewRequest}
           handleMobileExpand={handleMobileExpand}
-          mobileSelectedUser={mobileSelectedUser}
+          variant={variant}
         />
       );
     case "favorites":
@@ -125,7 +139,7 @@ const renderUserCard = (
           onViewRouteClick={onViewRouteClick}
           onViewRequest={onViewRequest}
           handleMobileExpand={handleMobileExpand}
-          mobileSelectedUser={mobileSelectedUser}
+          variant={variant}
         />
       );
     case "sent":
