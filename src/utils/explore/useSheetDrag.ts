@@ -118,13 +118,23 @@ export const useSheetDrag = ({
    * reproducing it in JavaScript would mean duplicating three layout constants
    * and would be wrong on any device with a home indicator.
    *
-   * The sheet renders expanded by default on mobile, so this is populated
-   * before the handle can be touched. A viewport that resizes *while the sheet
-   * is not expanded* leaves it stale until the next expanded render — the drag
-   * then runs against the previous viewport's range. Rotating a phone with the
-   * sheet collapsed is the way to see that; the `Math.min` against the space
-   * actually available below keeps the consequence to a slightly short drag
-   * rather than a sheet dragged off the screen.
+   * A viewport that resizes *while the sheet is not expanded* leaves this stale
+   * until the next expanded render — the drag then runs against the previous
+   * viewport's range. Rotating a phone with the sheet collapsed is the way to
+   * see that; the `Math.min` against the space actually available below keeps
+   * the consequence to a slightly short drag rather than a sheet dragged off
+   * the screen.
+   *
+   * **It is zero until the sheet has rendered expanded at least once, and
+   * `onPointerDown` refuses to start a drag on zero.** This used to be
+   * unreachable: every role opened the sheet expanded, so the measurement was
+   * always taken before a finger could arrive. SCRUM-455 changed that — a
+   * VIEWER now opens `collapsed` (`defaultSheetDetent`), so that role's *first*
+   * gesture on the handle cannot be a drag. It degrades to the tap path, which
+   * expands the sheet and takes the measurement, and dragging works normally
+   * from then on. **SCRUM-459** tracks it rather than SCRUM-455 fixing it in
+   * passing: the fix is to measure the expanded height without an expanded
+   * render, and the paragraph above is the reason that is not a one-liner.
    */
   const expandedHeightRef = useRef(0);
 

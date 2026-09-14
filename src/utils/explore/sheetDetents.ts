@@ -24,6 +24,8 @@
  * `messageHeaderControls` already use, and for the same reason.
  */
 
+import { Role } from "@prisma/client";
+
 /**
  * The sheet's resting positions.
  *
@@ -81,6 +83,46 @@ export const isTap = (deltaPx: number): boolean =>
  */
 export const toggleSheetDetent = (detent: SheetDetent): SheetDetent =>
   detent === "collapsed" ? "expanded" : "collapsed";
+
+/**
+ * Where the sheet rests before the user has moved it.
+ *
+ * Role-dependent, because the roles do not have the same thing underneath the
+ * sheet. A RIDER and a DRIVER keep `expanded`, the default the sheet has always
+ * had: the recommendation list is their reason for being on the page, so the
+ * sheet *is* the content and covering the map with it is the right opening
+ * state.
+ *
+ * A VIEWER gets `collapsed`. That role's whole interface is the "Search my
+ * route" panel, which renders inside `#map` — and `#map` is `relative z-0`, a
+ * stacking context a descendant cannot escape, while the sheet is `z-20` and a
+ * sibling of the map area. So on a phone the expanded sheet covered the panel
+ * outright and **no z-index available to the panel could lift it**: the
+ * comparison that decides paint order is sheet `z-20` against `#map` `z-0`, and
+ * the panel is never a party to it. That is SCRUM-455, and it is why the fix is
+ * a detent rather than a restyle.
+ *
+ * **Collapsed rather than not rendering the sheet at all**, which was the other
+ * candidate and looked cheaper. It is not: a VIEWER's Favorites tab renders real
+ * cards with working un-favorite and View Route controls, and only the
+ * Recommendations tab is replaced by copy (`viewerModeHidesCards`). Dropping the
+ * sheet would take that tab away on mobile. `collapsed` keeps the box and the
+ * drag handle — the handle clears the navigation in this detent — so Favorites
+ * stays one drag up, and the panel is unobstructed until the user asks for the
+ * sheet.
+ *
+ * **Only the opening position.** Every later write still says exactly what it
+ * means: a tap toggles, a drag snaps, opening a card's details expands. None of
+ * them consult the role, because by then the user has expressed a preference and
+ * this default has done its job.
+ *
+ * @param role the signed-in user's role, `undefined` while `user.me` is still in
+ *   flight. Resolves to `expanded` then, which is unobservable — the page
+ *   renders a spinner instead of the sheet until the user loads — and is the
+ *   safe end of the range if that ever stops being true.
+ */
+export const defaultSheetDetent = (role?: Role): SheetDetent =>
+  role === Role.VIEWER ? "collapsed" : "expanded";
 
 /** The pixel height of a detent, given the sheet's measured expanded height. */
 export const detentHeightPx = ({
