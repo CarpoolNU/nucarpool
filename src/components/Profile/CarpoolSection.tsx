@@ -43,7 +43,22 @@ const CarpoolSection = ({
 
   return (
     <div className="flex flex-col space-y-4">
-      <ProfileHeader className={"!text-4xl"}>Carpool Details</ProfileHeader>
+      {/*
+        The mobile size is the base and desktop overrides it, which is the same
+        24px/36px pair `UserSection` and `AccountSection` reach with an
+        `isMobile` ternary - this tab was the only one of the three that never
+        scaled down.
+
+        `desktop:` rather than the hook, per the direction set for styling-only
+        viewport differences: this is one number, not a different tree, and a
+        hook renders its server snapshot once during hydration. `desktop:` is
+        640px from the same `MOBILE_BREAKPOINT_PX` the hook reads, so the two
+        cannot disagree about where mobile ends. Note `sm:` would be the trap
+        here - this project overrides Tailwind's screens and `sm` is 576px.
+      */}
+      <ProfileHeader className={"desktop:!text-4xl !text-2xl"}>
+        Carpool Details
+      </ProfileHeader>
 
       <EntryLabel
         label="Commuting Schedule"
@@ -53,9 +68,38 @@ const CarpoolSection = ({
       />
 
       <div className="mb-2 w-full max-w-[360px] md:my-4 lg:pl-20">
+        {/*
+          Seven boxes at the base 40px plus 8px of `ml-2` each need 336px. The
+          mobile profile content is inset `px-8`, so a 375px phone offers 311px
+          and a 360px one 296px - the row overflowed both, and since the
+          scroller above sets `overflow-y-auto` with the x-axis left visible,
+          CSS computes that axis to `auto` and the whole tab panned sideways.
+          Worse than the panning: the MUI `Checkbox` wrappers shrink to their
+          share of the row while the box inside them does not, so each box
+          overhung its own hit area and a tap could land on the neighbouring
+          day or on nothing.
+
+          32px puts the row at 7 x 40px = 280px, inside both widths, and back
+          inside the ~44px each checkbox gets - so the target and the box the
+          user is aiming at coincide again. The `ml-2` gap is kept rather than
+          traded away, since shrinking the gap instead would leave the targets
+          narrower still.
+
+          **`max-desktop:` is doing specific work.** It compiles to
+          `@media (width < 640px)`, which is disjoint from the `md:` (834px)
+          and `lg:` (1440px) sizes `DayBox` carries, so the two can never both
+          apply and the desktop ladder is untouched. An unconditional
+          `!h-8 !w-8` - what `StepThree` passes, correctly, to a `StaticDayBox`
+          that has no such ladder - would have overridden `md:h-14` and
+          `lg:h-16` at every width and shrunk the desktop picker.
+
+          This only does anything because `DayBox` now declares `className`;
+          until it did, the prop was accepted, type-checked and dropped.
+        */}
         <SelectDays
           control={control}
           disabled={isViewer}
+          dayBoxClassName="max-desktop:!h-8 max-desktop:!w-8"
           error={errors.daysWorking}
         />
       </div>
