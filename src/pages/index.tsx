@@ -739,8 +739,47 @@ const Home: NextPage<any> = () => {
     return <Spinner />;
   }
 
+  /**
+   * The route search a VIEWER gets instead of a recommendation list.
+   *
+   * It is that role's entire interface and had never been given a mobile
+   * treatment. Two defects, both styling-only, so both are fixed as `desktop:`
+   * overrides on top of mobile-first base classes rather than with an
+   * `isMobile` ternary - the direction SCRUM-415 settled on.
+   *
+   * **Width.** The floor was an unconditional `min-w-[25rem]`. 400px, plus
+   * `m-2` either side, is a 416px minimum on a viewport that is commonly 375px
+   * or 360px, and a `min-width` cannot shrink - so the panel ran off the screen
+   * with no way to reach its right-hand edge. Mobile now takes its width from
+   * the container, less that margin, and the 400px floor applies from the
+   * `desktop:` breakpoint up, where it always held.
+   *
+   * **Vertical offset.** The panel and the map legend were both flush into the
+   * map's top-left corner at the same `z-10`, and `MapLegend` renders second,
+   * so it painted over this panel's heading and its start-address input. The
+   * panel moves down rather than the legend moving aside: the legend and the
+   * recentre button would otherwise have to know that a viewer box exists, and
+   * keeping that role check here is the coupling their own placement rules
+   * exist to avoid.
+   *
+   * 4.25rem clears the legend's collapsed row, which measures 70px - `top-2`,
+   * plus `p-2` either side of a `min-h-11` toggle, plus its 1px border - and
+   * this panel's own `m-2` leaves 6px between the two. **Declared, not
+   * measured:** jsdom computes no geometry, so nothing in the suite can assert
+   * it, and expanding the legend still paints its rows over the panel because
+   * the two share a z-index and the legend is the later sibling.
+   *
+   * **Known and deliberately not fixed here: SCRUM-455.** On mobile the
+   * explore sheet covers everything below the top 5.5rem of the map row. It is
+   * `z-20` and a sibling of the map area, while this panel sits inside `#map`,
+   * which is `relative z-0` - a stacking context a descendant cannot escape -
+   * so no z-index available here can lift the panel above it, and the offset
+   * above puts the heading under that line too. Fixing it means moving the
+   * panel out of `#map` or not giving a viewer the sheet at all, which is a
+   * product decision rather than a restyle.
+   */
   const viewerBox = (
-    <div className="absolute top-0 left-0 z-10 m-2 flex min-w-[25rem] flex-col rounded-xl bg-white p-4 shadow-lg">
+    <div className="desktop:top-0 desktop:w-auto desktop:min-w-[25rem] absolute top-[4.25rem] left-0 z-10 m-2 flex w-[calc(100%-1rem)] flex-col rounded-xl bg-white p-4 shadow-lg">
       <h2 className="mb-4 text-xl">Search my route</h2>
       <div className="flex items-center space-x-4">
         <Image
