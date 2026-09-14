@@ -1,9 +1,4 @@
-import {
-  GeoJSONSource,
-  Map,
-  MapLayerMouseEvent,
-  NavigationControl,
-} from "mapbox-gl";
+import { GeoJSONSource, Map, NavigationControl } from "mapbox-gl";
 import { PublicUser } from "../types";
 import { Dispatch, SetStateAction } from "react";
 import { setPointClickHandler, createPointClickHandler } from "./handlers";
@@ -15,7 +10,7 @@ const addMapEvents = (
   map.addControl(new NavigationControl(), "bottom-right");
 
   const handlePointClick = createPointClickHandler(setPopupUser);
-  setPointClickHandler(handlePointClick);
+  setPointClickHandler(map, handlePointClick);
 
   map.on("click", "clusters", (e) => {
     const features = map.queryRenderedFeatures(e.point, {
@@ -40,25 +35,22 @@ const addMapEvents = (
     });
   });
 
-  map.on("click", (e) => {
-    const allPointLayers = map
-      .getStyle()
-      .layers.filter((layer) => layer.type === "symbol")
-      .map((layer) => layer.id);
-
-    const pointFeatures = map.queryRenderedFeatures(e.point, {
-      layers: allPointLayers,
-    });
-
-    if (pointFeatures.length > 0 && handlePointClick) {
-      handlePointClick(e as MapLayerMouseEvent);
-    }
-  });
-
-  if (handlePointClick) {
-    map.on("click", "riders", handlePointClick);
-    map.on("click", "drivers", handlePointClick);
-  }
+  // A third binding of `handlePointClick` stood here: a generic `click`
+  // listener that filtered every symbol layer out of the style and ran
+  // `queryRenderedFeatures` across all of them, on every click anywhere on the
+  // map - the empty ocean included.
+  //
+  // It never once opened a popup. Mapbox populates `event.features` only for a
+  // listener registered against a layer ("If no `layerId` was specified when
+  // adding the event listener, `features` will be `undefined`"), and
+  // `createPointClickHandler` opens with `if (!e.features) return`. So every
+  // click paid for a full render query whose result was thrown away, and the
+  // two layer-scoped bindings below were always the path that did the work.
+  //
+  // Which is why they stay. Deleting them instead - the symmetric-looking
+  // change - stops every pin answering a tap, with no error to show for it.
+  map.on("click", "riders", handlePointClick);
+  map.on("click", "drivers", handlePointClick);
 
   map.on("mouseenter", "clusters", () => {
     map.getCanvas().style.cursor = "pointer";

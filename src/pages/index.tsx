@@ -10,6 +10,7 @@ import {
   type SetStateAction,
 } from "react";
 import addMapEvents from "../utils/map/addMapEvents";
+import { useMapInstance, useMapResize } from "../utils/map/useMapInstance";
 import Head from "next/head";
 import { trpc } from "../utils/trpc";
 import { browserEnv } from "../utils/env/browser";
@@ -166,6 +167,24 @@ const HANDLE_POSITION_CLASSES: Record<SheetDetent, string> = {
   expanded: "bottom-sheet-handle",
 };
 
+/**
+ * The empty results a query stands in for until it resolves.
+ *
+ * Module scope rather than an inline `= []` in the destructuring below,
+ * because an inline default is a *new* array on every render. That is what
+ * would keep the `useMemo`s over these missing on every render until the query
+ * landed - and `extendPublicUser`, whose dependencies are `favorites` and
+ * `requests`, would be rebuilt each time and take every memo keyed on it with
+ * it. React Query's own `data` is already stable between renders; only the
+ * fallback was not.
+ */
+const NO_USERS: PublicUser[] = [];
+const NO_REQUESTS = { sent: [], received: [] };
+
+/** Where the map opens for a VIEWER, who has no company of their own. */
+const NEU_LAT = 42.33907;
+const NEU_LNG = -71.088748;
+
 const Home: NextPage<any> = () => {
   const { data: session } = useSession();
   const [showTutorial, setShowTutorial] = useState(false);
@@ -189,8 +208,6 @@ const Home: NextPage<any> = () => {
   const [sort, setSort] = useState<string>("any");
   const [debouncedFilters, setDebouncedFilters] = useState(filters);
   const [otherUser, setOtherUser] = useState<PublicUser | null>(null);
-  const isMapInitialized = useRef(false);
-  const [mapStateLoaded, setMapStateLoaded] = useState(false);
   const isMobile: boolean = useIsMobile();
   // const [mobileSidebarExpanded, setMobileSidebarExpanded] = useState<boolean>(false);
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
@@ -291,12 +308,12 @@ const Home: NextPage<any> = () => {
     },
     { refetchOnMount: true },
   );
-  const { data: recommendations = [] } = recommendationsQuery;
+  const { data: recommendations = NO_USERS } = recommendationsQuery;
 
   const favoritesQuery = trpc.user.favorites.me.useQuery(undefined, {
     refetchOnMount: true,
   });
-  const { data: favorites = [] } = favoritesQuery;
+  const { data: favorites = NO_USERS } = favoritesQuery;
 
   // `"always"` rather than `true`, and kept deliberately.
   //
@@ -320,7 +337,7 @@ const Home: NextPage<any> = () => {
   const requestsQuery = trpc.user.requests.me.useQuery(undefined, {
     refetchOnMount: "always",
   });
-  const { data: requests = { sent: [], received: [] } } = requestsQuery;
+  const { data: requests = NO_REQUESTS } = requestsQuery;
 
   const recsState = toQueryState(recommendationsQuery);
   const favsState = toQueryState(favoritesQuery);
@@ -347,10 +364,63 @@ const Home: NextPage<any> = () => {
     }
   };
 
-  const [mapState, setMapState] = useState<mapboxgl.Map>();
   const [sidebarType, setSidebarType] = useState<HeaderOptions>("explore");
   const [popupUsers, setPopupUsers] = useState<PublicUser[] | null>(null);
-  const mapContainerRef = useRef(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * **The map's whole lifecycle.** Body in `utils/map/useMapInstance.ts`.
+   *
+   * Two effects further down this file used to own this. The first built the
+   * map and returned no cleanup, so every unmount left a live WebGL context,
+   * its tiles, six `map.on` listeners and a `NavigationControl` behind; the
+   * second queued an unthrottled `map.resize()` per `resize` event, with no
+   * `clearTimeout`. Both are lifted out for the reason this file keeps lifting
+   * things out - a route cannot carry a test - and are covered by
+   * `useMapInstance.test.tsx`.
+   *
+   * The leak was mobile-only in reach. The Profile tab is a `router.push`, so
+   * browser Back remounts this page client-side and built another map each
+   * time. iOS Safari caps live WebGL contexts at roughly 8-16 and silently
+   * drops the oldest, which is the blank map that was being reported.
+   *
+   * It sits here, rather than beside the effects it replaces, because
+   * `mapState` is read by callbacks declared further down and `const` has no
+   * hoisting to lean on.
+   */
+  const mapCenter: [number, number] | null = user
+    ? user.role === "VIEWER"
+      ? [NEU_LNG, NEU_LAT]
+      : [user.companyCoordLng, user.companyCoordLat]
+    : null;
+
+  const { map: mapState, isLoaded: mapStateLoaded } = useMapInstance({
+    containerId: "map",
+    containerRef: mapContainerRef,
+    center: mapCenter,
+    onLoad: (newMap) => {
+      addMapEvents(newMap, setPopupUsers);
+
+      // Initial setting of user and company locations
+      if (user && user.role !== "VIEWER") {
+        updateUserLocation(newMap, user.startCoordLng, user.startCoordLat);
+        updateCompanyLocation(
+          newMap,
+          user.companyCoordLng,
+          user.companyCoordLat,
+          user.role,
+          user.id,
+          user,
+          true,
+        );
+      }
+    },
+  });
+
+  // `isMobile` as the layout key: its flip swaps the whole layout around the
+  // map, and no `resize` event reports that.
+  useMapResize(mapState, isMobile);
+
   const [points, setPoints] = useState<[number, number][]>([]);
   const [companyAddressSuggestions, setCompanyAddressSuggestions] = useState<
     CarpoolFeature[]
@@ -453,15 +523,47 @@ const Home: NextPage<any> = () => {
   const sidebarRef = useRef<HTMLDivElement>(null);
   const lastScrollTop = useRef<number>(0);
 
-  const enhancedSentUsers = requests.sent
-    .filter((request) => request.toUser !== null)
-    .map((request) => extendPublicUser(request.toUser!));
+  /**
+   * The four card lists, memoised.
+   *
+   * These were four bare `.map`s in the render body, and each call to
+   * `extendPublicUser` does a `favorites.some()` and two `requests.find()` -
+   * so this was O(n x m) work on *every* render of this page. Every render:
+   * the 300ms debounce above guards the network call the filter sliders make,
+   * not the re-render each `setFilters` causes, so a single slider drag ran
+   * all four lists at pointer frequency. On iOS Safari `resize` fires on every
+   * URL-bar collapse during an ordinary scroll, which did the same.
+   *
+   * The identities matter as much as the work. `handleMobileSidebarExpand`
+   * lists all four as dependencies, so a fresh array each render defeated its
+   * `useCallback` - and the scroll effect below depends on *that*, so it
+   * detached and re-attached its listener on every render too.
+   */
+  const enhancedSentUsers = useMemo(
+    () =>
+      requests.sent
+        .filter((request) => request.toUser !== null)
+        .map((request) => extendPublicUser(request.toUser!)),
+    [requests.sent, extendPublicUser],
+  );
 
-  const enhancedReceivedUsers = requests.received
-    .filter((request) => request.fromUser !== null)
-    .map((request) => extendPublicUser(request.fromUser!));
-  const enhancedRecs = recommendations.map(extendPublicUser);
-  const enhancedFavs = favorites.map(extendPublicUser);
+  const enhancedReceivedUsers = useMemo(
+    () =>
+      requests.received
+        .filter((request) => request.fromUser !== null)
+        .map((request) => extendPublicUser(request.fromUser!)),
+    [requests.received, extendPublicUser],
+  );
+
+  const enhancedRecs = useMemo(
+    () => recommendations.map(extendPublicUser),
+    [recommendations, extendPublicUser],
+  );
+
+  const enhancedFavs = useMemo(
+    () => favorites.map(extendPublicUser),
+    [favorites, extendPublicUser],
+  );
 
   /**
    * **View Route.** The body lives in `utils/map/viewRouteClick.ts` - see the
@@ -622,67 +724,6 @@ const Home: NextPage<any> = () => {
       }));
     }
   }, [user]);
-
-  useEffect(() => {
-    // Map initialization
-    if (!isMapInitialized.current && user && mapContainerRef.current) {
-      isMapInitialized.current = true;
-      const isViewer = user.role === "VIEWER";
-      const neuLat = 42.33907;
-      const neuLng = -71.088748;
-      const newMap = new mapboxgl.Map({
-        container: "map",
-        style: "mapbox://styles/mapbox/light-v10",
-        center: isViewer
-          ? [neuLng, neuLat]
-          : [user.companyCoordLng, user.companyCoordLat],
-        zoom: 8,
-      });
-
-      newMap.on("load", () => {
-        newMap.setMaxZoom(13);
-        setMapState(newMap);
-        addMapEvents(newMap, setPopupUsers);
-
-        // Initial setting of user and company locations
-        if (user.role !== "VIEWER") {
-          updateUserLocation(newMap, user.startCoordLng, user.startCoordLat);
-          updateCompanyLocation(
-            newMap,
-            user.companyCoordLng,
-            user.companyCoordLat,
-            user.role,
-            user.id,
-            user,
-            true,
-          );
-        }
-        setMapStateLoaded(true);
-      });
-    }
-  }, [mapContainerRef, user]);
-
-  useEffect(() => {
-    if (!mapState) return;
-
-    const handleResize = () => {
-      // small delay to ensure container has resized
-      setTimeout(() => {
-        if (mapState) {
-          mapState.resize();
-        }
-      }, 100);
-    };
-
-    // resize when window size changes
-    window.addEventListener("resize", handleResize);
-
-    handleResize();
-
-    return () => {
-      window.removeEventListener("resize", handleResize);
-    };
-  }, [mapState, isMobile]);
 
   useEffect(() => {
     if (mapState && geoJsonUsers && mapStateLoaded) {

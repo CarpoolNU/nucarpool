@@ -98,7 +98,7 @@ const updateCompanyLocation = (
         );
 
         if (!isCurrent) {
-          const handlePointClick = getPointClickHandler();
+          const handlePointClick = getPointClickHandler(map);
           map.on("click", layerId, (e) => {
             if (!e.features) return;
             handlePointClick!(e as MapLayerMouseEvent);
@@ -182,7 +182,7 @@ const updateCompanyLocation = (
 
       if (!isCurrent) {
         // click event for request user markers
-        const handlePointClick = getPointClickHandler();
+        const handlePointClick = getPointClickHandler(map);
         map.on("click", layerId, (e) => {
           if (!e.features) return;
           handlePointClick!(e as MapLayerMouseEvent);
