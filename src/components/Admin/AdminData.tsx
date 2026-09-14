@@ -9,6 +9,7 @@ import { format, startOfWeek } from "date-fns";
 import { ConfigProvider, Slider } from "antd";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
+import useIsHydrated from "../../utils/useIsHydrated";
 
 /**
  * The admin dashboard.
@@ -26,14 +27,41 @@ function AdminData() {
   // drag costs one request instead of one per pixel.
   const [queryRange, setQueryRange] = useState<number[] | null>(null);
 
-  const { data: dateRange } = trpc.user.admin.getDateRange.useQuery();
-  const { data: stats } = trpc.user.admin.getDashboardStats.useQuery();
+  /*
+   * The same deferral `UserManagement` carries, and here it is precaution
+   * rather than a fix.
+   *
+   * On a phone, `/admin`'s hydration pass renders the desktop dashboard once
+   * before `AdminMobileNotice` replaces it, and React Query subscribes in a
+   * passive effect that runs before React's corrective re-render - so any
+   * query mounted on that pass really goes out and is then discarded. Today
+   * this component is not on it: `admin.tsx` defaults `option` to
+   * `"management"`, so the pass mounts `UserManagement` and reaching this one
+   * takes a sidebar click, by which point hydration is long done and
+   * `isHydrated` is already `true`. These three gates are therefore no-ops as
+   * the page stands.
+   *
+   * They are here because the thing keeping them no-ops is a default value.
+   * Changing `option`'s default would move three more queries - one of them
+   * the dashboard series - onto the discarded pass, silently, with nothing
+   * failing. See `UserManagement.tsx` for why the condition carries no
+   * viewport term.
+   */
+  const isHydrated = useIsHydrated();
+
+  const { data: dateRange } = trpc.user.admin.getDateRange.useQuery(undefined, {
+    enabled: isHydrated,
+  });
+  const { data: stats } = trpc.user.admin.getDashboardStats.useQuery(
+    undefined,
+    { enabled: isHydrated },
+  );
   const { data: series } = trpc.user.admin.getDashboardSeries.useQuery(
     {
       start: new Date(queryRange?.[0] ?? 0),
       end: new Date(queryRange?.[1] ?? 0),
     },
-    { enabled: queryRange !== null },
+    { enabled: isHydrated && queryRange !== null },
   );
 
   useEffect(() => {

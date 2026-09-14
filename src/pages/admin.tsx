@@ -96,13 +96,15 @@ const Admin: NextPage<AdminProps> = ({ userPermission }) => {
    * above it already does, and keeps the dashboard in the server HTML for
    * desktop, which is what `AdminPage.test.tsx` asserts deliberately.
    *
-   * The residual cost is that the hydration pass mounts `UserManagement`,
-   * whose `getAllUsers` query React Query subscribes to in a passive effect -
-   * which runs *before* React's corrective re-render, so the request goes out
-   * on a phone and its result is then discarded. Same shape as the wasted
-   * presigned-URL calls SCRUM-423 and SCRUM-437 removed, and tracked in
-   * SCRUM-452 rather than fixed here, because avoiding it means gating the
-   * query inside `UserManagement` instead of the layout in this file.
+   * That pass still mounts `UserManagement`, but it no longer costs anything:
+   * the component gates its own `getAllUsers` on `useIsHydrated`, so the
+   * request waits for the render that is known not to be hydration. The gate
+   * lives there rather than as a prop from here because it carries no
+   * viewport term - `useIsMobile` reports `false` on the pass in question, so
+   * "is this a phone" is unanswerable at that point and "might this render be
+   * discarded" is the only computable condition. This page therefore knows
+   * nothing the component does not. `AdminData` carries the same gate against
+   * `option`'s default changing. See `UserManagement.tsx`.
    */
   const isMobile = useIsMobile();
   const showMobileNotice = isHydrated && isMobile;
