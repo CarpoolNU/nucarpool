@@ -1,7 +1,14 @@
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import type { GetServerSidePropsContext, NextPage } from "next";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type SetStateAction,
+} from "react";
 import addMapEvents from "../utils/map/addMapEvents";
 import Head from "next/head";
 import { trpc } from "../utils/trpc";
@@ -50,6 +57,7 @@ import {
   type ExploreSidebarView,
 } from "../utils/explore/exploreSidebarView";
 import {
+  defaultSheetDetent,
   toggleSheetDetent,
   type SheetDetent,
 } from "../utils/explore/sheetDetents";
@@ -162,21 +170,24 @@ const Home: NextPage<any> = () => {
   // const [mobileSidebarExpanded, setMobileSidebarExpanded] = useState<boolean>(false);
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
   /**
-   * Where the explore sheet is resting. A tap toggles it, a drag on the handle
-   * snaps it - see `utils/explore/sheetDetents.ts`.
+   * Where the user has put the explore sheet, or `null` if they have not
+   * touched it and its opening position therefore still applies. A tap toggles
+   * it, a drag on the handle snaps it - see `utils/explore/sheetDetents.ts`.
    *
    * One value rather than the `isSidebarCollapsed` boolean it replaces,
    * because there are now three positions and two booleans could encode a
    * fourth that does not exist.
+   *
+   * **The `null` is what makes the opening position role-dependent.** It cannot
+   * be a `useState` initial value: the role arrives with `user.me`, which is
+   * still in flight on the render that runs this. Nor can it be an effect - one
+   * would land a frame late, and that frame is the bug for a VIEWER, whose
+   * panel the sheet covers. So the resting detent is *derived* below, once
+   * `user` is in scope, and this holds only the override. Same reasoning as
+   * `resolveMobileSelectedUser`, which is in that file for the same reason.
    */
-  const [sheetDetent, setSheetDetent] = useState<SheetDetent>("expanded");
-
-  /**
-   * The one thing most readers of the detent want to know. `half` reads as
-   * open, so the handle offers to hide the list from it exactly as it does
-   * from `expanded`.
-   */
-  const isSheetCollapsed = sheetDetent === "collapsed";
+  const [sheetDetentOverride, setSheetDetentOverride] =
+    useState<SheetDetent | null>(null);
 
   /**
    * The expanded card, masked to null on desktop.
@@ -210,6 +221,43 @@ const Home: NextPage<any> = () => {
   // error and loading states are what tell an empty list apart from a failed one.
   const userQuery = trpc.user.me.useQuery();
   const { data: user = null } = userQuery;
+
+  /**
+   * Where the sheet is actually resting: what the user chose, or the opening
+   * position for their role until they choose something.
+   *
+   * `defaultSheetDetent` carries why that differs by role - in short, a VIEWER's
+   * only interface is the route-search panel and an expanded sheet paints over
+   * it from a stacking context the panel cannot reach out of (SCRUM-455).
+   */
+  const sheetDetent = sheetDetentOverride ?? defaultSheetDetent(user?.role);
+
+  /**
+   * The setter every existing call site keeps using, `useState`-shaped so that
+   * the updater form still works.
+   *
+   * That form is load-bearing rather than stylistic - `handleSidebarToggle`
+   * relies on it because the handle's click can arrive in the same tick as a
+   * drag's release - and a raw `setSheetDetentOverride` would hand the updater
+   * the `null`, not the detent on screen. Resolving the default here is what
+   * keeps "toggle from where it looks like it is" true on a VIEWER's first tap.
+   */
+  const setSheetDetent = useCallback(
+    (next: SetStateAction<SheetDetent>) =>
+      setSheetDetentOverride((override) =>
+        typeof next === "function"
+          ? next(override ?? defaultSheetDetent(user?.role))
+          : next,
+      ),
+    [user?.role],
+  );
+
+  /**
+   * The one thing most readers of the detent want to know. `half` reads as
+   * open, so the handle offers to hide the list from it exactly as it does
+   * from `expanded`.
+   */
+  const isSheetCollapsed = sheetDetent === "collapsed";
 
   const recommendationsQuery = trpc.user.recommendations.me.useQuery(
     {
@@ -503,6 +551,11 @@ const Home: NextPage<any> = () => {
       mapStateLoaded,
       onViewRouteClick,
       setExpandedUserId,
+      // Newly a real dependency. `setSheetDetent` used to be the `useState`
+      // setter, which React guarantees is stable; it is now a `useCallback`
+      // that closes over the role, so omitting it would pin this callback to
+      // the setter from before `user.me` resolved.
+      setSheetDetent,
     ],
   );
 
@@ -616,8 +669,14 @@ const Home: NextPage<any> = () => {
     setSelectedUserId(null);
     // Clear other user and related route data when sidebar type changes
     setOtherUser(null);
-    // Reset the sheet's position when switching tabs
-    setSheetDetent("expanded");
+    // Reset the sheet's position when switching tabs - to the opening position
+    // for this role, by dropping the override, rather than to a hard-coded
+    // `expanded`. Two reasons. This effect also runs on mount and again when
+    // `mapState` first arrives, so a literal here would have overwritten the
+    // role default moments after the page settled and put a VIEWER straight
+    // back under the sheet. And "reset" reads as "forget where the user put
+    // it", which is what clearing the override says.
+    setSheetDetentOverride(null);
     // Changing tab drops every other user's pin along with the route they
     // belonged to. This block predates the extraction and could never run -
     // the state it tested was only ever set from an unreachable branch - so a
@@ -769,14 +828,17 @@ const Home: NextPage<any> = () => {
    * it, and expanding the legend still paints its rows over the panel because
    * the two share a z-index and the legend is the later sibling.
    *
-   * **Known and deliberately not fixed here: SCRUM-455.** On mobile the
-   * explore sheet covers everything below the top 5.5rem of the map row. It is
-   * `z-20` and a sibling of the map area, while this panel sits inside `#map`,
-   * which is `relative z-0` - a stacking context a descendant cannot escape -
-   * so no z-index available here can lift the panel above it, and the offset
-   * above puts the heading under that line too. Fixing it means moving the
-   * panel out of `#map` or not giving a viewer the sheet at all, which is a
-   * product decision rather than a restyle.
+   * **Still inside a stacking context this panel cannot escape, and that is
+   * now handled elsewhere: SCRUM-455.** On mobile the explore sheet covers
+   * everything below the top 5.5rem of the map row. It is `z-20` and a sibling
+   * of the map area, while this panel sits inside `#map`, which is `relative
+   * z-0` - so no z-index written here can lift the panel above it, and the
+   * offset above puts the heading under that line too. The fix was not to move
+   * either box but to stop the sheet claiming the space unasked: it now opens
+   * `collapsed` for a VIEWER, per `defaultSheetDetent`. **So the constraint
+   * above is unchanged** - adding a `z-` class here still buys nothing, and a
+   * future change that puts the sheet back over this panel has to answer for
+   * the detent, not the z-index.
    */
   const viewerBox = (
     <div className="desktop:top-0 desktop:w-auto desktop:min-w-[25rem] absolute top-[4.25rem] left-0 z-10 m-2 flex w-[calc(100%-1rem)] flex-col rounded-xl bg-white p-4 shadow-lg">

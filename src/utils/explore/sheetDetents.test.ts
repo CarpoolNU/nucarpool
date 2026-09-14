@@ -1,4 +1,6 @@
+import { Role } from "@prisma/client";
 import {
+  defaultSheetDetent,
   detentHeightPx,
   dragHeightPx,
   isTap,
@@ -78,6 +80,42 @@ describe("toggleSheetDetent", () => {
     // `half` is the exception, and the only one: there is no way back to a
     // detent a tap cannot express.
     expect(toggleSheetDetent(toggleSheetDetent("half"))).toBe("expanded");
+  });
+});
+
+describe("defaultSheetDetent", () => {
+  /**
+   * SCRUM-455. The defect itself is unobservable from here — whether one box
+   * paints over another is layout, and jsdom does none (`src/testing/
+   * viewport.ts`). This is the one part of the fix that is a rule rather than a
+   * position, so it is the one part a test can hold: *which* detent the sheet
+   * opens in, per role. The manual mobile pass is still the acceptance
+   * evidence for the rest.
+   */
+  it("opens collapsed for a VIEWER, whose panel an expanded sheet would cover", () => {
+    expect(defaultSheetDetent(Role.VIEWER)).toBe("collapsed");
+  });
+
+  it("keeps the long-standing expanded default for a RIDER and a DRIVER", () => {
+    // The regression that would matter most: this fix is for one role, and
+    // taking the recommendation list off the screen for the other two would be
+    // a far larger bug than the one being fixed.
+    expect(defaultSheetDetent(Role.RIDER)).toBe("expanded");
+    expect(defaultSheetDetent(Role.DRIVER)).toBe("expanded");
+  });
+
+  it("falls back to expanded before the role is known", () => {
+    // `user.me` is still in flight on the first render. The page shows a
+    // spinner rather than the sheet at that point, so this is unobservable
+    // today; it is pinned so that it stays the harmless answer if that changes.
+    expect(defaultSheetDetent(undefined)).toBe("expanded");
+  });
+
+  it("is only the opening position, not a rule a tap has to respect", () => {
+    // A VIEWER who taps the handle gets the sheet, Favorites and all. The
+    // default exists so the route-search panel is reachable without first
+    // discovering the handle - not to withhold the sheet from the role.
+    expect(toggleSheetDetent(defaultSheetDetent(Role.VIEWER))).toBe("expanded");
   });
 });
 
