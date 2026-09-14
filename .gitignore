@@ -58,3 +58,13 @@ nucarpool-db-data/
 # — without --no-track the new branch tracks origin/main, which aims a later
 # bare `git push` at main. They are checkouts, not content. Never commit them.
 .claude/worktrees/
+
+# Written by the Playwright MCP server at the repository root: page snapshots,
+# console logs and screenshots from a browser session. Two reasons this matters
+# beyond untidiness. A snapshot is a serialised accessibility tree of the app, so
+# it is dense with class-like strings — and Tailwind v4 scans the whole
+# repository minus what this file excludes, so an unignored one emits CSS for
+# utilities no source file uses, differing between a local build and CI with no
+# source change to explain it. It also puts false hits in front of anyone
+# grepping for live uses of a class. Session debris, never content.
+.playwright-mcp/
