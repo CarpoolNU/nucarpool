@@ -1,8 +1,12 @@
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type React from "react";
-import type { ExploreSidebarView } from "./exploreSidebarView";
+import {
+  isSheetDetentView,
+  type ExploreSidebarView,
+} from "./exploreSidebarView";
 import {
   dragHeightPx,
+  expandedSheetHeightPx,
   isTap,
   snapToDetent,
   type SheetDetent,
@@ -46,15 +50,68 @@ import {
  *
  * The handle's own `bottom` is written the same way and for the same reason,
  * so the pill rides the sheet's top edge instead of waiting at a detent.
+ *
+ * ---
+ *
+ * **Where the drag's range comes from, and why it is no longer a cache.**
+ * The expanded height was measured off the sheet during an expanded render and
+ * kept in a ref, on the reasoning that `h-mobile-sheet` is a `calc()` no
+ * JavaScript should try to reproduce. That held only while every role opened
+ * the sheet expanded. SCRUM-455 gave a VIEWER a `collapsed` opening detent, so
+ * for a third of the user base the ref was still zero when the first finger
+ * arrived and the gesture fell through to the tap path (SCRUM-459).
+ *
+ * `expandedSheetHeightPx` derives the range instead, from the sheet's own
+ * bottom edge at the moment the gesture starts — see there for why that is
+ * exact rather than an estimate, and why it needs one shared constant instead
+ * of the three the `calc()` contains. Three things follow. There is no longer a
+ * state in which the sheet is undraggable; a rotation cannot leave a stale
+ * range behind, because nothing is kept between gestures; and the `resize`
+ * listener this hook used to install is gone with the cache it maintained.
  */
+
+/**
+ * What one rem measures, when the document will not say.
+ *
+ * 16px is the CSS initial value for `font-size` and what every major browser
+ * ships as the default, so a real browser reaches the fallback only if
+ * `getComputedStyle` fails outright.
+ *
+ * **jsdom reaches it always**, which was measured rather than assumed:
+ * `getComputedStyle(document.documentElement).fontSize` is the empty string
+ * there, and `parseFloat("")` is `NaN` — a value that would make the whole
+ * range `NaN`, write an invalid height the DOM discards, and snap to a detent
+ * chosen by comparisons that are all false. That is the same silent shape as
+ * the missing `PointerEvent` this file's tests document, so it is guarded here
+ * rather than left to be discovered again.
+ */
+const DEFAULT_ROOT_FONT_SIZE_PX = 16;
+
+/**
+ * One rem in pixels, read per gesture.
+ *
+ * Not a constant: text zoom and a `font-size` on `:root` both change it, and a
+ * rem-based layout constant scaled by a stale figure is a range that does not
+ * match the sheet it is dragging.
+ */
+const rootFontSizePx = (): number => {
+  const declared = parseFloat(
+    getComputedStyle(document.documentElement).fontSize,
+  );
+
+  return Number.isFinite(declared) && declared > 0
+    ? declared
+    : DEFAULT_ROOT_FONT_SIZE_PX;
+};
 
 type UseSheetDragArgs = {
   /** The sheet. Its height is what a drag changes. */
   sheetRef: React.RefObject<HTMLElement | null>;
   /**
-   * The view the page is currently rendering. Only `expanded` is a trustworthy
-   * thing to measure: `detail` is a different fixed height and `hidden` is
-   * `display: none`, which measures zero.
+   * The view the page is currently rendering. A drag begins only in one of the
+   * three detent views — `isSheetDetentView` is the same test that decides
+   * whether the handle is rendered at all, and it says why the other two are
+   * excluded.
    */
   view: ExploreSidebarView;
   /** Where a released drag lands. */
@@ -109,59 +166,6 @@ export const useSheetDrag = ({
   const [isDragging, setIsDragging] = useState(false);
   const gestureRef = useRef<Gesture | null>(null);
 
-  /**
-   * The expanded height, in pixels, as last measured from a real expanded
-   * render.
-   *
-   * Measured rather than computed: `h-mobile-sheet` is a `calc()` over the
-   * viewport, a rem-based map strip and `env(safe-area-inset-bottom)`, so
-   * reproducing it in JavaScript would mean duplicating three layout constants
-   * and would be wrong on any device with a home indicator.
-   *
-   * A viewport that resizes *while the sheet is not expanded* leaves this stale
-   * until the next expanded render — the drag then runs against the previous
-   * viewport's range. Rotating a phone with the sheet collapsed is the way to
-   * see that; the `Math.min` against the space actually available below keeps
-   * the consequence to a slightly short drag rather than a sheet dragged off
-   * the screen.
-   *
-   * **It is zero until the sheet has rendered expanded at least once, and
-   * `onPointerDown` refuses to start a drag on zero.** This used to be
-   * unreachable: every role opened the sheet expanded, so the measurement was
-   * always taken before a finger could arrive. SCRUM-455 changed that — a
-   * VIEWER now opens `collapsed` (`defaultSheetDetent`), so that role's *first*
-   * gesture on the handle cannot be a drag. It degrades to the tap path, which
-   * expands the sheet and takes the measurement, and dragging works normally
-   * from then on. **SCRUM-459** tracks it rather than SCRUM-455 fixing it in
-   * passing: the fix is to measure the expanded height without an expanded
-   * render, and the paragraph above is the reason that is not a one-liner.
-   */
-  const expandedHeightRef = useRef(0);
-
-  useLayoutEffect(() => {
-    if (view !== "expanded") {
-      return;
-    }
-
-    const measure = () => {
-      const height = sheetRef.current?.getBoundingClientRect().height ?? 0;
-
-      // Zero means unmeasurable rather than measured-as-nothing - a detached
-      // node, or jsdom, which reports zero for everything. Caching it would
-      // disable dragging for the rest of the session.
-      if (height > 0) {
-        expandedHeightRef.current = height;
-      }
-    };
-
-    measure();
-    window.addEventListener("resize", measure);
-
-    return () => {
-      window.removeEventListener("resize", measure);
-    };
-  }, [view, sheetRef]);
-
   /** Put the sheet and the handle back under the control of their classes. */
   const releaseStyles = useCallback(
     (gesture: Gesture) => {
@@ -179,24 +183,34 @@ export const useSheetDrag = ({
   const onPointerDown = useCallback<React.PointerEventHandler<HTMLElement>>(
     (event) => {
       const sheet = sheetRef.current;
-      const expandedHeightPx = expandedHeightRef.current;
 
-      // No measurement, no drag. Tapping still works, which is the behaviour
-      // this control has always had - degrading to it is the right failure.
-      if (!sheet || expandedHeightPx <= 0) {
+      // `detail` and `hidden` are sheets a drag has no range for; the handle is
+      // not rendered in either, so this is the second statement of a rule
+      // rather than the only one.
+      if (!sheet || !isSheetDetentView(view)) {
         return;
       }
 
       const rect = sheet.getBoundingClientRect();
       const handle = event.currentTarget;
+      const expandedHeightPx = expandedSheetHeightPx({
+        sheetBottomPx: rect.bottom,
+        rootFontSizePx: rootFontSizePx(),
+      });
+
+      // A range of nothing is a sheet that cannot be dragged anywhere, and
+      // snapping within it would pick a detent by arithmetic over zero. Tapping
+      // still works, which is the behaviour this control has always had -
+      // degrading to it is the right failure.
+      if (expandedHeightPx <= 0) {
+        return;
+      }
 
       gestureRef.current = {
         pointerId: event.pointerId,
         startY: event.clientY,
         startHeightPx: rect.height,
-        // The sheet cannot be taller than the space between its pinned bottom
-        // edge and the top of the viewport, whatever was last measured.
-        expandedHeightPx: Math.min(expandedHeightPx, rect.bottom),
+        expandedHeightPx,
         sheetBottomInsetPx: window.innerHeight - rect.bottom,
         handle,
         moved: false,
@@ -208,7 +222,7 @@ export const useSheetDrag = ({
       handle.setPointerCapture?.(event.pointerId);
       setIsDragging(true);
     },
-    [sheetRef],
+    [sheetRef, view],
   );
 
   /** Where the drag currently stands, without touching React state. */

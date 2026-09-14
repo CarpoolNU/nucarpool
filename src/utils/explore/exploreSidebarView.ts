@@ -126,6 +126,38 @@ export function planExploreSidebar({
 }
 
 /**
+ * The three views that are detents, keyed so that adding a `SheetDetent`
+ * without listing it here is a type error rather than a detent the drag
+ * quietly refuses to work in.
+ */
+const DETENT_VIEWS: Record<SheetDetent, true> = {
+  collapsed: true,
+  half: true,
+  expanded: true,
+};
+
+/**
+ * Whether the sheet is resting at a detent, which is both when the drag handle
+ * is rendered and when a drag may begin.
+ *
+ * **One rule rather than two.** The page used to spell the render condition out
+ * as a three-way `||`, and `useSheetDrag` enforced its own separate
+ * precondition — that an expanded render had already been measured. Those were
+ * never the same statement, and the gap between them is SCRUM-459: the handle
+ * rendered in `collapsed` while the drag refused to start there.
+ *
+ * The other two views are excluded for reasons that outlive that ticket.
+ * `hidden` is `display: none`, so there is no sheet to drag and no geometry to
+ * read. `detail` is a *different* sheet — a fixed 320px capped at `60dvh` —
+ * pinned to the same bottom edge, so the expanded range derived from that edge
+ * would be several times its height and a drag would resize it to something the
+ * view does not have classes for.
+ */
+export const isSheetDetentView = (
+  view: ExploreSidebarView,
+): view is SheetDetent => view in DETENT_VIEWS;
+
+/**
  * The expanded card, as every consumer should read it.
  *
  * `index.tsx` holds one piece of state for "a single card's details are

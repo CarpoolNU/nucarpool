@@ -105,6 +105,31 @@ const MOBILE_NAV_HEIGHT_PX = 60;
  */
 const MOBILE_NAV_SPACE = `calc(${MOBILE_NAV_HEIGHT_PX}px + env(safe-area-inset-bottom, 0px))`;
 
+/**
+ * The strip of map left visible above the expanded explore sheet, in rem.
+ *
+ * It lived in `tailwind.config.js` and moved here because the drag gesture now
+ * needs it as a *number*: `useSheetDrag` derives the sheet's expanded height
+ * from the sheet's own bottom edge minus this strip, so that the range is known
+ * in every detent rather than only after an expanded render (SCRUM-459).
+ *
+ * The rem figure is the definition and the CSS string below is derived from it,
+ * rather than the other way round, because parsing `"5.5rem"` back into a
+ * number at the point of use is the step that would silently produce `NaN` if
+ * anyone ever wrote the value in another unit.
+ *
+ * **This is the only layout constant the drag reads, and that is the point.**
+ * The sheet's other two - the navigation's height and the home-indicator inset
+ * - cancel out of the arithmetic: both sit below the sheet's bottom edge, and
+ * that edge is measured. `env(safe-area-inset-bottom)` cannot be evaluated in
+ * JavaScript at all, so a derivation that needed it would be wrong on exactly
+ * the devices that have one.
+ */
+const MOBILE_SHEET_MAP_STRIP_REM = 5.5;
+
+/** The same strip as a CSS length, which is what `tailwind.config.js` composes. */
+const MOBILE_SHEET_MAP_STRIP = `${MOBILE_SHEET_MAP_STRIP_REM}rem`;
+
 module.exports = {
   MOBILE_BREAKPOINT_PX,
   DESKTOP_SCREEN_NAME,
@@ -112,4 +137,6 @@ module.exports = {
   isMobileWidth,
   MOBILE_NAV_HEIGHT_PX,
   MOBILE_NAV_SPACE,
+  MOBILE_SHEET_MAP_STRIP_REM,
+  MOBILE_SHEET_MAP_STRIP,
 };

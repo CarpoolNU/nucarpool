@@ -1,4 +1,5 @@
 import {
+  isSheetDetentView,
   planExploreSidebar,
   resolveMobileSelectedUser,
   type ExploreSidebarView,
@@ -241,6 +242,46 @@ describe("resolveMobileSelectedUser", () => {
       expect(
         resolveMobileSelectedUser({ isMobile, expandedUserId: null }),
       ).toBeNull();
+    }
+  });
+});
+
+describe("isSheetDetentView", () => {
+  it("accepts exactly the three views that are detents", () => {
+    // The predicate decides two things at once - whether the drag handle is
+    // rendered, and whether `useSheetDrag` will begin a gesture - so the set it
+    // accepts is the set of states the sheet can be dragged in.
+    const detents: SheetDetent[] = ["collapsed", "half", "expanded"];
+
+    for (const detent of detents) {
+      expect(isSheetDetentView(detent)).toBe(true);
+    }
+  });
+
+  it("rejects the views that have no drag range", () => {
+    // `desktop` is not a sheet at all, `hidden` is out of layout, and `detail`
+    // is a different sheet at a fixed height pinned to the same bottom edge -
+    // dragging it against the full range would resize it to a height its view
+    // has no classes for.
+    for (const other of ["desktop", "hidden", "detail"] as const) {
+      expect(isSheetDetentView(other)).toBe(false);
+    }
+  });
+
+  it("agrees with the views a detent can actually produce", () => {
+    // SCRUM-459 was the gap between the handle's render condition and the
+    // drag's precondition. They are one predicate now, and this is the link
+    // back to `planExploreSidebar`: every view a detent resolves to is one the
+    // drag accepts.
+    for (const detent of ["collapsed", "half", "expanded"] as SheetDetent[]) {
+      const produced = view({
+        isMobile: true,
+        hasOpenConversation: false,
+        isDetailOpen: false,
+        detent,
+      });
+
+      expect(isSheetDetentView(produced)).toBe(true);
     }
   });
 });

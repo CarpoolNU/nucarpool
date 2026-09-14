@@ -4,6 +4,8 @@ import {
   MOBILE_BREAKPOINT_PX,
   MOBILE_NAV_HEIGHT_PX,
   MOBILE_NAV_SPACE,
+  MOBILE_SHEET_MAP_STRIP,
+  MOBILE_SHEET_MAP_STRIP_REM,
   isMobileWidth,
 } from "./breakpoints";
 
@@ -220,5 +222,58 @@ describe("the shared mobile navigation height", () => {
       const closes = (value!.match(/\)/g) ?? []).length;
       expect(opens).toBe(closes);
     }
+  });
+});
+
+/**
+ * The strip of map left visible above the expanded explore sheet.
+ *
+ * The third quantity to move into this file, and for a new reason: the drag
+ * gesture needs it as a *number*. `useSheetDrag` derives the sheet's expanded
+ * height as its measured bottom edge less this strip, which is what lets a
+ * drag start from a collapsed sheet instead of only after an expanded render
+ * (SCRUM-459). A figure defined twice - once as CSS here and once as
+ * arithmetic there - would let the gesture and the layout drift apart with
+ * nothing failing, which is the same defect the navigation height had.
+ */
+describe("the shared explore-sheet map strip", () => {
+  it("is a positive number of rem", () => {
+    expect(Number.isFinite(MOBILE_SHEET_MAP_STRIP_REM)).toBe(true);
+    expect(MOBILE_SHEET_MAP_STRIP_REM).toBeGreaterThan(0);
+  });
+
+  /**
+   * The rem figure is the definition and the CSS length is derived from it.
+   * The other direction - parsing `"5.5rem"` at the point of use - is the one
+   * that yields `NaN` the day someone writes the value in another unit, and a
+   * `NaN` range makes every comparison in `snapToDetent` false rather than
+   * throwing.
+   */
+  it("derives its CSS length from the number, in rem", () => {
+    expect(MOBILE_SHEET_MAP_STRIP).toBe(`${MOBILE_SHEET_MAP_STRIP_REM}rem`);
+    expect(parseFloat(MOBILE_SHEET_MAP_STRIP)).toBe(MOBILE_SHEET_MAP_STRIP_REM);
+  });
+
+  it("is what the sheet's own Tailwind tokens are built from", () => {
+    // `h-mobile-sheet` is the height the drag treats as the top of its range,
+    // and `sheet-handle` is where the pill rests against it. Both have to
+    // reserve the same strip or the handle floats off the sheet's edge.
+    expect(height["mobile-sheet"]).toContain(MOBILE_SHEET_MAP_STRIP);
+    expect(height["mobile-sheet-half"]).toContain(MOBILE_SHEET_MAP_STRIP);
+    expect(spacing["sheet-handle"]).toContain(MOBILE_SHEET_MAP_STRIP);
+    expect(spacing["half-sheet-handle"]).toContain(MOBILE_SHEET_MAP_STRIP);
+  });
+
+  /**
+   * The substitution the gesture relies on: `expanded = bottom - MAP_STRIP`
+   * holds only because the sheet's height token subtracts the strip *and* the
+   * navigation from a viewport percentage, while its bottom offset is that
+   * same navigation space. If the height ever stopped being a percentage of
+   * the viewport, the drag's range would be measuring against the wrong box.
+   */
+  it("subtracts the strip from a viewport percentage, which is what the drag assumes", () => {
+    expect(height["mobile-sheet"]).toContain("100%");
+    expect(height["mobile-sheet"]).toContain(MOBILE_NAV_SPACE);
+    expect(spacing["mobile-nav"]).toBe(MOBILE_NAV_SPACE);
   });
 });

@@ -1,8 +1,10 @@
 import { Role } from "@prisma/client";
+import { MOBILE_SHEET_MAP_STRIP_REM } from "../breakpoints";
 import {
   defaultSheetDetent,
   detentHeightPx,
   dragHeightPx,
+  expandedSheetHeightPx,
   isTap,
   snapToDetent,
   TAP_SLOP_PX,
@@ -31,6 +33,66 @@ const EXPANDED = 400;
 
 const snap = (heightPx: number): SheetDetent =>
   snapToDetent({ heightPx, expandedHeightPx: EXPANDED });
+
+describe("expandedSheetHeightPx", () => {
+  /** A 16px root, so the 5.5rem map strip is 88px. */
+  const ROOT = 16;
+  const STRIP = MOBILE_SHEET_MAP_STRIP_REM * ROOT;
+
+  const range = (sheetBottomPx: number) =>
+    expandedSheetHeightPx({ sheetBottomPx, rootFontSizePx: ROOT });
+
+  /** The range a 718px bottom edge leaves: 630. */
+  const EXPANDED_FROM_718 = 718 - STRIP;
+
+  it("is the sheet's bottom edge less the strip of map above it", () => {
+    // 812px iPhone X, whose 60px navigation and 34px home indicator put the
+    // sheet's bottom edge at 718. The nav and the inset do not appear here at
+    // all: both are below that edge, so measuring it is what removes them.
+    expect(range(718)).toBe(EXPANDED_FROM_718);
+  });
+
+  it("gives a collapsed sheet a full range, which is the whole bug", () => {
+    // SCRUM-459. A VIEWER's sheet opens `collapsed` and measures no height at
+    // all, and before this their first gesture had no range to drag within.
+    // The sheet's own height is not an input here - only the bottom edge its
+    // classes pin it to, which is the same in every detent - so "collapsed"
+    // is not a state this arithmetic can distinguish, let alone refuse.
+    expect(range(718)).toBe(EXPANDED_FROM_718);
+    expect(EXPANDED_FROM_718).toBeGreaterThan(0);
+  });
+
+  it("tracks the viewport rather than whatever it last saw", () => {
+    // The pre-existing staleness the hook's docblock named: a rotation with
+    // the sheet closed used to leave the cached range from the taller
+    // viewport. Derived per gesture, a shorter viewport is simply a shorter
+    // range.
+    expect(range(330)).toBeLessThan(range(718));
+  });
+
+  it("scales the strip with the root font size, not with 16", () => {
+    // `MAP_STRIP` is a rem, so a user who has enlarged their browser's default
+    // text has a physically larger strip of map and a correspondingly shorter
+    // sheet. Hard-coding pixels would drag the sheet up over it.
+    expect(
+      expandedSheetHeightPx({ sheetBottomPx: 718, rootFontSizePx: 20 }),
+    ).toBe(718 - MOBILE_SHEET_MAP_STRIP_REM * 20);
+  });
+
+  it("reports no range at all for a sheet that is out of layout", () => {
+    // `hidden` is `display: none`, so every figure on its rect is zero. The
+    // clamp is what turns that into "nothing to drag" rather than a negative
+    // range, which `dragHeightPx` would clamp against in the wrong direction.
+    expect(range(0)).toBe(0);
+  });
+
+  it("reports no range for a viewport shorter than the strip it reserves", () => {
+    // Absurdly short, but the arithmetic must not hand back a negative number
+    // to a pointer handler that only checks for `<= 0`.
+    expect(range(STRIP - 1)).toBe(0);
+    expect(range(STRIP)).toBe(0);
+  });
+});
 
 describe("detentHeightPx", () => {
   it("places the three detents at nothing, half and full", () => {
