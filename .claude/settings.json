@@ -21,6 +21,12 @@
       "mcp__atlassian__getConfluencePageInlineComments",
       "mcp__atlassian__getConfluenceCommentChildren",
 
+      "mcp__atlassian__createJiraIssue",
+      "mcp__atlassian__editJiraIssue",
+      "mcp__atlassian__transitionJiraIssue",
+      "mcp__atlassian__addCommentToJiraIssue",
+      "mcp__atlassian__createIssueLink",
+
       "Bash(git status:*)",
       "Bash(git diff:*)",
       "Bash(git log:*)",
@@ -30,6 +36,7 @@
       "Bash(git fetch:*)",
       "Bash(git branch)",
       "Bash(git remote -v)",
+      "Bash(git worktree list:*)",
 
       "Bash(git switch -c:*)",
       "Bash(git checkout -b:*)",
@@ -108,17 +115,6 @@
       "Edit(yarn.lock)",
       "Edit(package-lock.json)",
 
-      "mcp__atlassian__createJiraIssue",
-      "mcp__atlassian__editJiraIssue",
-      "mcp__atlassian__transitionJiraIssue",
-      "mcp__atlassian__addCommentToJiraIssue",
-      "mcp__atlassian__createIssueLink",
-
-      "mcp__atlassian__createConfluencePage",
-      "mcp__atlassian__updateConfluencePage",
-      "mcp__atlassian__createConfluenceFooterComment",
-      "mcp__atlassian__createConfluenceInlineComment",
-
       "Bash(pscale sql:*)",
       "Bash(pscale branch create:*)",
       "Bash(pscale password create nucarpool staging:*)",
@@ -179,6 +175,15 @@
       "Bash(git push -u origin staging:*)",
       "Bash(git push --force:*)",
       "Bash(git push -f:*)",
+
+      "Bash(git worktree unlock:*)",
+      "Bash(git worktree remove:*)",
+      "Bash(./scripts/wt-recycle.sh:*)",
+      "Bash(scripts/wt-recycle.sh:*)",
+      "Bash(bash scripts/wt-recycle.sh:*)",
+      "Bash(sh scripts/wt-recycle.sh:*)",
+      "Bash(bash ./scripts/wt-recycle.sh:*)",
+      "Bash(sh ./scripts/wt-recycle.sh:*)",
 
       "Bash(yarn seed:*)",
       "Bash(yarn run seed:*)",

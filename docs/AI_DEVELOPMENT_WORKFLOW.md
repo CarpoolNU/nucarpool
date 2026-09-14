@@ -130,7 +130,7 @@ Resolve transitions by workflow status **name**, never a hard-coded transition I
 ```
 1.  Jira first — get or create the issue            [To Do]
 2.  transition the issue                       → [In Progress]
-3.  own worktree off a fetched origin/main  ← not a branch switch in the shared checkout
+3.  own worktree SLOT off a fetched origin/main  ← not a branch switch in the shared checkout
 4.  investigate: code + READMEs; Confluence only if needed
 5.  implement
 6.  yarn lint && yarn tsc            (yarn test where applicable)
@@ -150,8 +150,32 @@ Resolve transitions by workflow status **name**, never a hard-coded transition I
 18. report PR readiness + remaining risks → STOP, end the session
     (or → [Blocked] with what's blocking and what's needed)
 19. human reviews and merges, then sets     → [Done]
-20. human retires the worktree: ./scripts/wt-cleanup.sh <task>
+20. human releases the workspace:
+      reusable slot:  git worktree unlock + ./scripts/wt-recycle.sh <slot> <next-branch>
+      task worktree:  ./scripts/wt-cleanup.sh <task>
 ```
+
+### One ticket, one slot, one session
+
+```
+one ticket
+  -> one isolated worktree SLOT
+  -> one FRESH Claude session
+  -> one PR
+  -> STOP SESSION
+```
+
+```
+one ticket != one permanent worktree directory
+```
+
+The **slot** is a directory and is reused: `.claude/worktrees/scrum` and `.claude/worktrees/infra` each hold one ticket at a time and many tickets in sequence. The **session** is a conversation and is never reused — it holds exactly one ticket, ever.
+
+Those two facts are easy to conflate now that the directory persists, and conflating them is the expensive mistake. A reusable directory is not licence to run a second ticket in the same conversation: every turn re-sends the whole conversation, so the cost grows with the square of the session's length and the window fills until it has to be compacted, losing detail from work already done.
+
+Step 3 is therefore about the **branch**, not the directory. `.claude/worktrees/scrum-443` used to name its ticket; `.claude/worktrees/scrum` names nothing, so the branch is the only thing that identifies which ticket a workspace is on. Verify it before editing, and see the [README](../README.md#working-in-a-worktree) for the slot commands and the `git worktree lock` ownership gate.
+
+**Recycling is the human's, between tickets.** A session never recycles its own slot, deletes its own branch, or removes its own worktree.
 
 **The PR is not the finish line.** After it exists, inspect its checks, its final diff, and its base and head branches. Confirm it contains only the intended changes and that the acceptance criteria are actually met. Report unmet criteria rather than implying the work is clean.
 
