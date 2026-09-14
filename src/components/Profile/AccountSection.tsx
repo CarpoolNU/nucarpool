@@ -20,6 +20,43 @@ import { Switch } from "@mui/material";
 import { DatePicker } from "antd";
 import dayjs, { Dayjs } from "dayjs";
 
+/**
+ * A stored co-op date as the month picker's own value, or `null` when the field
+ * is empty.
+ *
+ * **Controlled deliberately.** Both pickers used to take `defaultValue`, which
+ * antd reads once at mount and ignores afterwards. `src/pages/profile/index.tsx`
+ * calls `reset(...)` on every `user` change - which every save triggers, via a
+ * refetch - and `AccountSection` stays mounted across it, since it is gated on
+ * `option === "account"` at a fixed position in the tree with no `key`. So the
+ * form moved to the saved months and the controls kept displaying the ones they
+ * had started with: a user who had just saved was told their change had not
+ * taken, which is the opposite of what the database held. `UnsavedModal`'s
+ * discard is the same `reset(...)` and had the same outcome.
+ *
+ * **`null` rather than `undefined`, and the empty case never reaches `dayjs`.**
+ * `formatDateToMonth(null)` is `undefined`, and `dayjs(undefined, format)` is
+ * not empty either way: it is `Invalid Date` once `customParseFormat` is
+ * extended - which `@rc-component/picker/generate/dayjs` does to the shared
+ * dayjs singleton, so importing `DatePicker` above is enough - and *today*
+ * when it is not. Neither is "no month chosen". `null` is antd's documented
+ * empty value for a controlled picker, and is also what
+ * `handleMonthPickerChange` writes when the field is cleared, so the round trip
+ * is symmetric.
+ *
+ * The format matches what `formatDateToMonth` emits. The call site used to pass
+ * `"YYYY/MM"` against its hyphenated output; dayjs parses it either way, so
+ * that was latent rather than broken, but there is no reason for the two to
+ * disagree. The month is parsed in local time and only ever rendered as
+ * `YYYY-MM`, so the displayed month is the stored one in every zone - which is
+ * why the suite gives the same answers under UTC and `America/New_York`.
+ */
+const toMonthPickerValue = (date: Date | null | undefined): Dayjs | null => {
+  const month = formatDateToMonth(date ?? null);
+
+  return month ? dayjs(month, "YYYY-MM") : null;
+};
+
 interface AccountSectionProps {
   errors: FieldErrors<OnboardingFormInputs>;
   setValue: UseFormSetValue<OnboardingFormInputs>;
@@ -127,12 +164,7 @@ const AccountSection = ({
               id="coopStartDate"
               picker="month"
               disabled={isViewer}
-              {...(watch("coopStartDate") && {
-                defaultValue: dayjs(
-                  formatDateToMonth(watch("coopStartDate") ?? null),
-                  "YYYY/MM",
-                ),
-              })}
+              value={toMonthPickerValue(watch("coopStartDate"))}
               onChange={handleMonthPickerChange("coopStartDate", setValue)}
               format="YYYY-MM"
               // Matches `StepThree`'s two identical pickers and
@@ -157,12 +189,7 @@ const AccountSection = ({
               id="coopEndDate"
               picker="month"
               disabled={isViewer}
-              {...(watch("coopEndDate") && {
-                defaultValue: dayjs(
-                  formatDateToMonth(watch("coopEndDate") ?? null),
-                  "YYYY/MM",
-                ),
-              })}
+              value={toMonthPickerValue(watch("coopEndDate"))}
               onChange={handleMonthPickerChange("coopEndDate", setValue)}
               format="YYYY-MM"
               // Read-only for the same reason as the start picker above.
