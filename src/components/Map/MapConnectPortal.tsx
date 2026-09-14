@@ -53,7 +53,8 @@ export const MapConnectPortal = (props: ConnectPortalProps) => {
    * token for that height and already accounts for the home-indicator inset,
    * which matters because the navigation is `z-index: 100` against this
    * dialog's `z-50` - it would otherwise sit *over* the sheet, hiding whatever
-   * is at the bottom of it, including the Connect button.
+   * is at the bottom of it, including the Connect button - which this sheet did
+   * not in fact render until `variant="portal"` below put one there.
    *
    * `fixed`, not `absolute`: Headless UI renders the dialog through a portal,
    * so there is no positioned map container to be absolute within.
@@ -135,7 +136,18 @@ export const MapConnectPortal = (props: ConnectPortalProps) => {
                 {props.otherUsers &&
                   props.otherUsers.map((user: PublicUser) => (
                     <div key={user.id}>
+                      {/*
+                       * `portal` is what puts a Connect control on this card
+                       * at a phone width. `UserCard`'s `View Route` +
+                       * `Connect` row is desktop-only, and until this prop
+                       * existed nothing replaced it here: a mobile pin tap
+                       * opened a sheet describing someone with the favourite
+                       * star and `x` as its only controls. See
+                       * `ConnectCardVariant` for why the explore sheet's
+                       * selection id was not reused for this.
+                       */}
                       <ConnectCard
+                        variant="portal"
                         otherUser={props.extendUser(user)}
                         onViewRouteClick={props.onViewRouteClick}
                         onViewRequest={props.onViewRequest}

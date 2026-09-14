@@ -26,9 +26,13 @@ import {
  * defect: the state being unclearable was the worse half, and it is the half a
  * presence assertion misses entirely.
  *
- * Measured against the pre-fix component, **two of these seven fail** - the two
- * about the close control. The rest pass either way, and the first test's own
- * comment explains why that is expected rather than a gap in the assertions.
+ * **Whether an opened sheet can be acted on came later**, and is the other
+ * reason to read this file. The original seven tests asked only whether the
+ * sheet appeared and whether it went away; the card inside it had no Connect
+ * control at a phone width and nothing here noticed for a release. "Offers a
+ * way to act on the person it is describing" is that gap closed, and the
+ * desktop block's "keeps exactly the two controls it had" is the other side of
+ * it - the fix is viewport-conditional, so both viewports need an assertion.
  *
  * *Not covered, and not coverable here:* that the sheet clears the bottom
  * navigation, that its height is reasonable, or that it sits above the
@@ -37,13 +41,37 @@ import {
  * tokens, not a measurement, and wants a look on a real phone.
  */
 
+/** Asserted by name below; `mock`-prefixed for `jest.mock`'s hoisting. */
+const mockCreateRequest = jest.fn();
+
+/**
+ * `requests.create` and `emails.sendRequestNotification` joined this shape
+ * when the sheet gained a Connect control: pressing it mounts `ConnectModal`,
+ * which calls both hooks at render.
+ */
 jest.mock("../../utils/trpc", () => ({
   trpc: {
     useUtils: () => ({
-      user: { recommendations: { me: { invalidate: jest.fn() } } },
+      user: {
+        recommendations: { me: { invalidate: jest.fn() } },
+        requests: { me: { invalidate: jest.fn() } },
+      },
     }),
     user: {
       favorites: { edit: { useMutation: () => ({ mutate: jest.fn() }) } },
+      requests: {
+        create: {
+          useMutation: () => ({
+            mutate: mockCreateRequest,
+            isPending: false,
+          }),
+        },
+      },
+      emails: {
+        sendRequestNotification: {
+          useMutation: () => ({ mutate: jest.fn() }),
+        },
+      },
     },
   },
 }));
@@ -54,6 +82,10 @@ jest.mock("../../utils/useProfileImage", () => ({
 }));
 
 restoreViewportAfterEach();
+
+beforeEach(() => {
+  mockCreateRequest.mockClear();
+});
 
 const PIN_USER = {
   id: "pin-1",
@@ -167,6 +199,42 @@ describe("a map pin tap at a mobile viewport", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("offers a way to act on the person it is describing", async () => {
+    /*
+     * The assertion this suite was missing, and the one the sheet failed.
+     * Seven tests covered whether it opened and whether it closed; none asked
+     * whether the card inside it could be *used*. It could not: `UserCard`'s
+     * `View Route` + `Connect` row is behind `!isMobile`, the replacement
+     * `Connect!` was behind a prop this component does not pass, and no
+     * card-tap path existed to turn either on. A user tapped a pin, read who
+     * they could carpool with, and had the favourite star and a close button.
+     *
+     * Driven through to `requests.create` rather than stopping at presence,
+     * because "a Connect button exists" is what the fix would satisfy
+     * accidentally if `variant` were threaded to the wrong card in a
+     * multi-pin sheet.
+     */
+    renderPortal();
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect!" }));
+    await userEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(mockCreateRequest).toHaveBeenCalledWith({
+      toId: PIN_USER.id,
+      message: "",
+    });
+  });
+
+  it("keeps the schedule and seats the reader is deciding on", () => {
+    // `variant="portal"` rather than reusing the detail sheet's selection id,
+    // which would have condensed the card and dropped these rows. Stated as a
+    // test because the alternative is a one-line change away.
+    renderPortal();
+
+    expect(screen.getByText("Seats Available:")).toBeInTheDocument();
+    expect(screen.getByText("Job Start:")).toBeInTheDocument();
+  });
+
   it("stays shut for an empty selection, not just a null one", () => {
     // `popupUsers` is `PublicUser[] | null`, so an empty array is reachable
     // and is not the same value as null.
@@ -189,6 +257,25 @@ describe("a map pin click at a desktop viewport", () => {
     renderPortal();
 
     expect(screen.getByText("Riley")).toBeInTheDocument();
+  });
+
+  it("keeps exactly the two controls it had, in the order it had them", () => {
+    // The mobile fix must not reach desktop. `UserCard` already renders the
+    // `View Route` + `Connect` row here, so a `Connect!` that ignored the
+    // viewport would be a *third* control and a second way to connect, sitting
+    // below the row. Read as an ordered list rather than a count, because the
+    // criterion is that the tab order does not move.
+    //
+    // Unfiltered, following `ConnectCard.test.tsx`'s desktop case: a card
+    // activation overlay is a `<button>` with no text of its own, so dropping
+    // the empty entries would hide the one regression that has no other
+    // symptom. The favourite control is a MUI `Rating`, which is radios rather
+    // than buttons, so it is absent from this list either way.
+    renderPortal();
+
+    const labels = screen.getAllByRole("button").map((b) => b.textContent);
+
+    expect(labels).toEqual(["View Route", "Connect"]);
   });
 
   it("adds no close button, so the desktop tab order is unchanged", () => {

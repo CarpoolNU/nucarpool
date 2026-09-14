@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Role, Status } from "@prisma/client";
-import { ConnectCard } from "./ConnectCard";
+import { ConnectCard, ConnectCardVariant } from "./ConnectCard";
 import { UserContext } from "../../utils/userContext";
 import { EnhancedPublicUser, User } from "../../utils/types";
 import {
@@ -38,18 +38,45 @@ import {
  */
 
 /**
+ * The one procedure a test here asserts against by name, rather than stubbing
+ * to keep a render from throwing. `mock`-prefixed so `jest.mock`'s hoisting
+ * allows the reference.
+ */
+const mockCreateRequest = jest.fn();
+
+/**
  * `UserCard` favourites through a mutation and reads `trpc.useUtils()`. The
  * subject here is which handler the card is given, so the client is mocked as
  * a shape rather than driven through a real provider — the precedent is
  * `GroupPage.test.tsx`.
+ *
+ * `requests.create` and `emails.sendRequestNotification` are here because
+ * pressing Connect mounts `ConnectModal`, which calls both hooks at render.
+ * Only the first is asserted on; the second would throw if absent.
  */
 jest.mock("../../utils/trpc", () => ({
   trpc: {
     useUtils: () => ({
-      user: { recommendations: { me: { invalidate: jest.fn() } } },
+      user: {
+        recommendations: { me: { invalidate: jest.fn() } },
+        requests: { me: { invalidate: jest.fn() } },
+      },
     }),
     user: {
       favorites: { edit: { useMutation: () => ({ mutate: jest.fn() }) } },
+      requests: {
+        create: {
+          useMutation: () => ({
+            mutate: mockCreateRequest,
+            isPending: false,
+          }),
+        },
+      },
+      emails: {
+        sendRequestNotification: {
+          useMutation: () => ({ mutate: jest.fn() }),
+        },
+      },
     },
   },
 }));
@@ -61,6 +88,10 @@ jest.mock("../../utils/useProfileImage", () => ({
 }));
 
 restoreViewportAfterEach();
+
+beforeEach(() => {
+  mockCreateRequest.mockClear();
+});
 
 const OTHER_USER = {
   id: "other-1",
@@ -107,16 +138,17 @@ const ACTIVATION = "Show Riley's full details";
 const renderCard = (
   overrides: {
     handleMobileExpand?: (userId?: string) => void;
-    mobileSelectedUser?: string | null;
+    variant?: ConnectCardVariant;
+    user?: User;
   } = {},
 ) =>
   render(
-    <UserContext.Provider value={VIEWER}>
+    <UserContext.Provider value={overrides.user ?? VIEWER}>
       <ConnectCard
         otherUser={OTHER_USER}
         onViewRouteClick={() => undefined}
         onViewRequest={() => undefined}
-        mobileSelectedUser={overrides.mobileSelectedUser ?? null}
+        variant={overrides.variant}
         handleMobileExpand={overrides.handleMobileExpand}
       />
     </UserContext.Provider>,
@@ -164,9 +196,9 @@ describe("Discovery card activation on mobile", () => {
 
   it("offers Connect once the card is expanded", () => {
     // The condensed detail view's own action. It exists only on mobile and
-    // only while a card is selected, so it is the mobile counterpart of the
-    // right-hand Connect button the full card carries.
-    renderCard({ mobileSelectedUser: OTHER_USER.id });
+    // only on the card the sheet expanded, so it is the mobile counterpart of
+    // the right-hand Connect button the full card carries.
+    renderCard({ variant: "detail" });
 
     expect(
       screen.getByRole("button", { name: "Connect!" }),
@@ -219,46 +251,105 @@ describe("Discovery card activation on desktop", () => {
    */
 });
 
-describe("Discovery card with no selection prop at all", () => {
+describe("The card a map pin opens, at a mobile viewport", () => {
   /**
-   * `MapConnectPortal` renders this card without `mobileSelectedUser`, so the
-   * prop is `undefined` there rather than `null` - and both reads used to test
-   * `!== null`, which `undefined` satisfies. A card that had never been told
-   * about any selection therefore claimed to *be* the selection.
+   * **This block asserted the defect as correct behaviour.** It rendered
+   * `ConnectCard` with no selection prop - which was exactly how
+   * `MapConnectPortal` rendered it - and required that no `Connect!` appear.
+   * Its own comment read the surviving `Seats Available:` row as proof that
+   * "the full layout is intact", but that is an *info* row. The row carrying
+   * the actions is `UserCard`'s, and `!isMobile` had already removed it, so
+   * the presence of one said nothing about the other. A mobile pin tap opened
+   * a card with the favourite star and a close button and nothing else.
    *
-   * That was masked rather than harmless: the portal sits behind a
-   * desktop-only branch in `index.tsx`, and the reads carried an `isMobile`
-   * term, so the wrong answer was only ever reached on a viewport where the
-   * term suppressed it. That term is now gone, so the masking goes with
-   * it - and that change's remaining map-pin work is what puts this card on a
-   * mobile viewport for real.
-   *
-   * Rendered at a mobile width for that reason: on desktop the old code and
-   * the new code agree, so a desktop version of this test would pass against
-   * the bug.
+   * The concern it was written for - an unselected card claiming to *be* the
+   * selection, because `undefined !== null` - no longer has a prop to arise
+   * from: `variant` names the surface instead, and a card given none is a list
+   * card. "Stays inert when no expand handler is supplied" above still pins
+   * that, and more strictly, by allowing no controls at all.
    */
-  it("is not treated as the expanded card", () => {
+  beforeEach(() => {
     setViewportWidth(MOBILE_WIDTH);
+  });
 
-    render(
-      <UserContext.Provider value={VIEWER}>
-        <ConnectCard
-          otherUser={OTHER_USER}
-          onViewRouteClick={() => undefined}
-          onViewRequest={() => undefined}
-        />
-      </UserContext.Provider>,
-    );
+  it("offers Connect, which the desktop-only button row cannot supply", () => {
+    renderCard({ variant: "portal" });
 
-    // The condensed detail layout's own action, which belongs to the one
-    // expanded card and would be a second Connect control on this one.
     expect(
-      screen.queryByRole("button", { name: "Connect!" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "Connect!" }),
+    ).toBeInTheDocument();
+  });
 
-    // And the full layout is intact. `UserCard` drops the schedule and seats
-    // rows when condensed, so their presence is what distinguishes "not the
-    // expanded card" from "expanded but missing a button".
+  it("opens the connect modal when it is pressed", async () => {
+    // Present is not the same as wired. A button that rendered while
+    // `connectAction` refused would satisfy a presence assertion and still
+    // leave the user with nothing that happens.
+    renderCard({ variant: "portal" });
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect!" }));
+
+    expect(
+      screen.getByRole("heading", { name: "Send a message to connect!" }),
+    ).toBeInTheDocument();
+  });
+
+  it("sends the request for the user whose pin was tapped", async () => {
+    // The end of the path the ticket says is a dead end, and the `toId` is
+    // the part worth pinning: the portal renders one card per user at the
+    // tapped location, so a control wired to the wrong one would connect the
+    // reader to somebody they did not choose.
+    renderCard({ variant: "portal" });
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect!" }));
+    await userEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(mockCreateRequest).toHaveBeenCalledWith({
+      toId: OTHER_USER.id,
+      message: "",
+    });
+  });
+
+  it("keeps the detail rows the condensed sheet drops", () => {
+    // The reason this is `portal` rather than reusing `detail`. Passing the
+    // explore sheet's selection id from the portal - the alternative this
+    // ticket weighed - would have added the button and taken these rows with
+    // it, because `isMobileCondensedLayout` reads the same value. The pin
+    // sheet is where the user decides whether this person is worth
+    // connecting with, so the schedule and the seats are the point.
+    renderCard({ variant: "portal" });
+
     expect(screen.getByText("Seats Available:")).toBeInTheDocument();
+    expect(screen.getByText("Job Start:")).toBeInTheDocument();
+  });
+
+  it("goes inert, and says why, for a reader who cannot send a request", () => {
+    // Disabled rather than absent, which is the distinction worth pinning: a
+    // control that vanished in Viewer mode would leave the card looking
+    // exactly like the pre-fix one this ticket is about, and the reader would
+    // have no idea why.
+    //
+    // Two independent conditions disable it here - `role === "VIEWER"` and a
+    // non-null `unavailable`, because `carpoolUnavailableExplanation` refuses
+    // a VIEWER reader as well. Removing either one on its own leaves this
+    // green, which is deliberate: the criterion is that the control is inert
+    // and explained, not which clause got there first.
+    renderCard({
+      variant: "portal",
+      user: { ...VIEWER, role: Role.VIEWER } as User,
+    });
+
+    expect(screen.getByRole("button", { name: "Connect!" })).toBeDisabled();
+    expect(screen.getByText(/You are in Viewer mode/)).toBeInTheDocument();
+  });
+
+  it("makes no part of the card an expand target", () => {
+    // There is nothing to expand to - the portal is already the detail view -
+    // and a stretched activation button would sit under the star and the
+    // Connect control, which is the nesting bug that was fixed once already.
+    renderCard({ variant: "portal" });
+
+    expect(
+      screen.queryByRole("button", { name: ACTIVATION }),
+    ).not.toBeInTheDocument();
   });
 });
