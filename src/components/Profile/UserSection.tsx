@@ -13,9 +13,12 @@ import {
 import { OnboardingFormInputs, User } from "../../utils/types";
 import ProfilePicture from "./ProfilePicture";
 import useIsMobile from "../../utils/useIsMobile";
-import { signOut } from "next-auth/react";
 import { PROFILE_TEXT_MAX_LENGTH } from "../../utils/textLimits";
 import { registerRoleWithSeatDefault } from "../../utils/profile/roleSeatDefault";
+import {
+  signOutWithGuard,
+  UnsavedChangesGuard,
+} from "../../utils/profile/signOutWithGuard";
 
 interface UserSectionProps {
   register: UseFormRegister<OnboardingFormInputs>;
@@ -26,6 +29,14 @@ interface UserSectionProps {
 
   onFileSelect: (file: File | null) => void;
   user?: User;
+
+  /**
+   * The profile page's unsaved-changes guard. Required rather than optional:
+   * Sign Out below is the third exit from this page found to be bypassing it,
+   * and a required prop is what stops a new call site quietly becoming the
+   * fourth. `signOutWithGuard` records the rest.
+   */
+  checkChanges: UnsavedChangesGuard;
 }
 
 const UserSection = ({
@@ -36,6 +47,7 @@ const UserSection = ({
   setValue,
   onFileSelect,
   user,
+  checkChanges,
 }: UserSectionProps) => {
   const isMobile = useIsMobile();
   const isViewer = watch("role") === Role.VIEWER;
@@ -51,8 +63,11 @@ const UserSection = ({
   // the answer is not a failed save.
   const lockedToDriver = user?.role === Role.DRIVER && !!user?.carpoolId;
 
+  // Through the guard the header already uses, rather than straight to
+  // `signOut`. This button is 20px under Save Changes and is the only route to
+  // signing out on a phone; `signOutWithGuard` carries the reasoning.
   const logout = () => {
-    signOut();
+    void signOutWithGuard(checkChanges);
   };
 
   return (

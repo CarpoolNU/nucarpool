@@ -1,4 +1,4 @@
-import React, { useContext } from "react";
+import React, { useContext, useState } from "react";
 import { EnhancedPublicUser } from "../../utils/types";
 import { UserContext } from "../../utils/userContext";
 import { roleMismatchExplanation } from "../../utils/roleCompatibility";
@@ -73,6 +73,26 @@ const MOBILE_CONTROL_CLASSES: ControlClasses = {
     "border-northeastern-red bg-northeastern-red flex-1 rounded-lg border-2 px-4 py-2 text-center text-base font-medium text-white hover:bg-red-700",
 };
 
+/**
+ * What the confirmation step asks, per state of the button that clears the
+ * request.
+ *
+ * Both states delete the `Request` row and take the conversation with it -
+ * they are one button on one `onReject`, and the label is the only difference
+ * - so both are confirmed. SCRUM-468 asked for the Reject half, where the
+ * hazard is proximity to Accept; Withdraw Request gets it too because gating
+ * one state of one button out of a confirmation is a conditional with nothing
+ * behind it, and a full-width single-press control that destroys a thread is
+ * the same defect with a different label.
+ *
+ * Accept is deliberately not confirmed: it already refuses a second press
+ * through `isMutating`, and SCRUM-468 requires it left alone.
+ */
+const CONFIRM_PROMPTS: Record<"respond" | "withdraw", string> = {
+  respond: "Reject this request? This also deletes the conversation.",
+  withdraw: "Withdraw this request? This also deletes the conversation.",
+};
+
 interface RequestControlsProps {
   controls: HeaderControls;
   /** Why Accept is withheld, or `null` when the pair still fit. */
@@ -105,8 +125,74 @@ const RequestControls = ({
   isMutating,
   classes,
 }: RequestControlsProps) => {
+  /**
+   * Whether the destructive button has been pressed once and is now asking.
+   *
+   * The two-step in place, rather than a modal, is the idiom
+   * `GroupMemberCard` already uses for Delete Group, Leave Group and Remove -
+   * reused so destructive confirmation reads the same everywhere instead of
+   * this being a third mechanism.
+   *
+   * The state belongs to this component and not the header, so it cannot
+   * outlive the controls: answering the request makes `controls.kind` `none`
+   * and unmounts this, and switching conversation remounts it, because both
+   * call sites key it on the counterpart's id. A half-confirmed Reject must
+   * never be inherited by the next person's request.
+   */
+  const [isConfirming, setIsConfirming] = useState(false);
+
   if (controls.kind === "none") {
     return null;
+  }
+
+  if (isConfirming) {
+    return (
+      <>
+        {/*
+          The prompt takes the explanation's slot, so it wraps above the
+          buttons on mobile and sits alongside them on desktop without either
+          branch needing a new class. It displaces the role-mismatch text where
+          there is one; Cancel brings that back, and the question being asked
+          is the more urgent of the two messages.
+        */}
+        <p className={classes.explanation}>{CONFIRM_PROMPTS[controls.kind]}</p>
+        {/*
+          Cancel is first, which puts it exactly where the finger that just
+          pressed Reject already is. That ordering is the point of the step: an
+          impatient second press in the same place - the likeliest way to
+          defeat a two-step confirmation - hits Cancel rather than Confirm.
+          `GroupMemberCard` puts Confirm first and is vulnerable to precisely
+          that; this is a deliberate departure from it rather than an
+          oversight.
+
+          It also takes the *filled* slot, and Confirm the outlined one, which
+          is the reverse of what a confirmation usually does. The reason is
+          that `primary` here is not a danger colour: `northeastern-red` is the
+          brand's, and Accept wears it. A filled red Confirm would therefore
+          look like Accept while standing in the place Accept just occupied -
+          the strongest possible invitation to the exact mis-tap this step
+          exists to stop. Dressing them this way keeps one rule across both
+          states of the row: outlined clears the request, filled red is the
+          affirmative answer.
+        */}
+        <button
+          onClick={() => setIsConfirming(false)}
+          className={classes.primary}
+        >
+          Cancel
+        </button>
+        <button
+          onClick={() => {
+            setIsConfirming(false);
+            onReject();
+          }}
+          disabled={isMutating}
+          className={`${classes.secondary} ${isMutating ? DISABLED_CLASS : ""}`}
+        >
+          Confirm
+        </button>
+      </>
+    );
   }
 
   return (
@@ -117,9 +203,15 @@ const RequestControls = ({
         act from either end and the label is the only difference. It stays
         available under a role mismatch: clearing is the way out of that state,
         and having no route to it was its own dead end.
+
+        It asks before it acts. `onReject` runs `requests.delete`, which
+        removes the row and the conversation with it, and on mobile this button
+        sat a `gap-3` - 12px - from Accept, as two half-width thumb targets
+        against a finger's roughly 8px of slop. The gap is 24px now and this is
+        two presses; neither alone was enough.
       */}
       <button
-        onClick={onReject}
+        onClick={() => setIsConfirming(true)}
         disabled={isMutating}
         className={`${classes.secondary} ${isMutating ? DISABLED_CLASS : ""}`}
       >
@@ -286,8 +378,25 @@ const MessageHeader = ({
           them - costs no padding.
         */}
         {controls.kind !== "none" && (
-          <div className="flex flex-wrap items-center gap-3 px-4 pb-4">
+          /*
+            `gap-6` - 24px - and not the `gap-3` this had. Reject and Accept
+            are both `flex-1`, so they were two half-width thumb targets 12px
+            apart where the desktop pair carry `mr-10`; a destructive and a
+            constructive action that close, at that size, is a mis-tap away
+            from deleting a request and its conversation. 24px is what
+            SCRUM-468 asks for, and it still leaves each button ~160px wide at
+            375px.
+
+            The row gap moves with it, which is the intended effect where the
+            role-mismatch explanation or the confirmation prompt wraps above
+            the buttons.
+
+            jsdom measures none of this - see `testing/viewport.ts`. The test
+            file asserts the class as a proxy and says so.
+          */
+          <div className="flex flex-wrap items-center gap-6 px-4 pb-4">
             <RequestControls
+              key={selectedUser.id}
               controls={controls}
               roleMismatch={roleMismatch}
               onAccept={onAccept}
@@ -323,7 +432,11 @@ const MessageHeader = ({
         </span>
       </div>
       <div className="relative flex items-center justify-between">
+        {/* Keyed like the mobile branch: the confirmation step lives in
+            `RequestControls`, and switching conversation must drop a
+            half-answered one rather than carry it to the next person. */}
         <RequestControls
+          key={selectedUser.id}
           controls={controls}
           roleMismatch={roleMismatch}
           onAccept={onAccept}
