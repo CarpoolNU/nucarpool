@@ -135,6 +135,13 @@ const AccountSection = ({
               })}
               onChange={handleMonthPickerChange("coopStartDate", setValue)}
               format="YYYY-MM"
+              // Matches `StepThree`'s two identical pickers and
+              // `ControlledTimePicker`. Without it antd renders a focusable
+              // text input, so a tap opens the soft keyboard as well as the
+              // month panel - and the keyboard covers the panel it opened.
+              // The field is only ever set by picking a month, so there is no
+              // typed entry to lose.
+              inputReadOnly={true}
               className="h-14 w-full rounded-md border border-gray-200 p-2 text-lg"
             />
           </div>
@@ -158,6 +165,8 @@ const AccountSection = ({
               })}
               onChange={handleMonthPickerChange("coopEndDate", setValue)}
               format="YYYY-MM"
+              // Read-only for the same reason as the start picker above.
+              inputReadOnly={true}
               className="h-14 w-full rounded-md border border-gray-200 p-2 text-lg"
             />
           </div>

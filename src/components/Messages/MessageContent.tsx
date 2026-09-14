@@ -274,14 +274,16 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
                 key={message.id}
                 ref={isLastMessage ? messagesEndRef : null}
                 className={`mb-4 flex flex-col ${
-                  isFromCurrentUser ? "items-end pr-10" : "items-start pl-10"
+                  isFromCurrentUser
+                    ? "desktop:pr-10 items-end pr-4"
+                    : "desktop:pl-10 items-start pl-4"
                 }`}
               >
                 <span className="mb-1 text-xs text-gray-500">
                   {messageTime}
                 </span>
                 <div
-                  className={`max-w-[50%] rounded-lg px-4 py-2 text-base sm:max-w-[50%] sm:text-sm md:max-w-[50%] md:text-base lg:max-w-[50%] lg:text-xl ${
+                  className={`desktop:max-w-[50%] max-w-[85%] rounded-lg px-4 py-2 text-base break-words lg:text-xl ${
                     isFromCurrentUser
                       ? "bg-northeastern-red text-white"
                       : "bg-gray-200 text-black"
