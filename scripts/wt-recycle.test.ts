@@ -30,6 +30,7 @@ import {
   mergeIntoOriginMain,
   remoteBranchExists,
   removeTree,
+  expectStatus,
   runScript,
   yarnCalls,
 } from "./wt-testkit";
@@ -72,7 +73,7 @@ describe("arguments", () => {
     (_label, args) => {
       const box = sandbox();
       const run = runScript(box, "wt-recycle.sh", args as string[]);
-      expect(run.status).toBe(1);
+      expectStatus(run, 1);
       expect(run.output).toContain("usage:");
     },
     TIMEOUT,
@@ -84,7 +85,7 @@ describe("arguments", () => {
       const box = sandbox();
       const target = readySlot(box);
       const run = runScript(box, "wt-recycle.sh", ["--help"]);
-      expect(run.status).toBe(1);
+      expectStatus(run, 1);
       expect(run.output).toContain("slot must be one of: scrum infra");
       expect(slotBranch(box, target)).toBe("scrum-900-first");
     },
@@ -102,7 +103,7 @@ describe("the slot allowlist", () => {
         "mobile-audit",
         "scrum-901-next",
       ]);
-      expect(run.status).toBe(1);
+      expectStatus(run, 1);
       expect(run.output).toContain("is not a reusable slot");
       expect(localBranchExists(box, "audit-branch")).toBe(true);
     },
@@ -118,7 +119,7 @@ describe("the slot allowlist", () => {
         ".claude/worktrees/scrum",
         "scrum-901-next",
       ]);
-      expect(run.status).toBe(1);
+      expectStatus(run, 1);
       expect(run.output).toContain("is not a reusable slot");
     },
     TIMEOUT,
@@ -130,7 +131,7 @@ describe("the slot allowlist", () => {
       const box = sandbox();
       const target = addSlot(box, "infra", "infra-900-first");
       const run = runScript(box, "wt-recycle.sh", ["infra", "infra-901-next"]);
-      expect(run.status).toBe(0);
+      expectStatus(run, 0);
       expect(slotBranch(box, target)).toBe("infra-901-next");
     },
     TIMEOUT,
@@ -145,7 +146,7 @@ describe("which worktree it is", () => {
       // A symlink is the reachable way to make the two paths resolve the same.
       fs.symlinkSync(box.primary, path.join(box.worktreesRoot, "scrum"));
       const run = runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]);
-      expect(run.status).toBe(1);
+      expectStatus(run, 1);
       expect(run.output).toContain("primary checkout");
     },
     TIMEOUT,
@@ -159,7 +160,7 @@ describe("which worktree it is", () => {
       const run = runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"], {
         cwd: target,
       });
-      expect(run.status).toBe(1);
+      expectStatus(run, 1);
       expect(run.output).toContain("must never");
       expect(run.output).toContain("recycle its own slot");
       expect(slotBranch(box, target)).toBe("scrum-900-first");
@@ -173,7 +174,7 @@ describe("which worktree it is", () => {
       const box = sandbox();
       fs.mkdirSync(path.join(box.worktreesRoot, "scrum"), { recursive: true });
       const run = runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]);
-      expect(run.status).toBe(1);
+      expectStatus(run, 1);
       expect(run.output).toContain("no worktree is registered");
     },
     TIMEOUT,
@@ -186,7 +187,7 @@ describe("which worktree it is", () => {
       const target = readySlot(box);
       fs.rmSync(target, { recursive: true, force: true });
       const run = runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]);
-      expect(run.status).toBe(1);
+      expectStatus(run, 1);
       expect(run.output).toContain("prunable");
       expect(localBranchExists(box, "scrum-900-first")).toBe(true);
     },
@@ -210,7 +211,7 @@ describe("locking is the ownership gate", () => {
         target,
       );
       const run = runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]);
-      expect(run.status).toBe(1);
+      expectStatus(run, 1);
       expect(run.output).toContain("locked");
       expect(run.output).toContain("SCRUM-900 in progress");
       expect(run.output).toContain("git worktree unlock");
@@ -226,13 +227,14 @@ describe("locking is the ownership gate", () => {
       const box = sandbox();
       const target = readySlot(box);
       git(box, box.primary, "worktree", "lock", target);
-      expect(
-        runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]).status,
-      ).toBe(1);
+      expectStatus(
+        runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]),
+        1,
+      );
 
       git(box, box.primary, "worktree", "unlock", target);
       const run = runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]);
-      expect(run.status).toBe(0);
+      expectStatus(run, 0);
       expect(slotBranch(box, target)).toBe("scrum-901-next");
     },
     TIMEOUT,
@@ -247,7 +249,7 @@ describe("the slot's git state", () => {
       const target = readySlot(box);
       git(box, target, "checkout", "--detach", "--quiet");
       const run = runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]);
-      expect(run.status).toBe(1);
+      expectStatus(run, 1);
       expect(run.output).toContain("detached");
     },
     TIMEOUT,
@@ -264,7 +266,7 @@ describe("the slot's git state", () => {
       git(box, box.primary, "checkout", "--detach", "--quiet");
       const target = addSlot(box, "scrum", protectedBranch, { existing: true });
       const run = runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]);
-      expect(run.status).toBe(1);
+      expectStatus(run, 1);
       expect(run.output).toContain("Protected branches");
       expect(slotBranch(box, target)).toBe(protectedBranch);
       expect(localBranchExists(box, protectedBranch)).toBe(true);
@@ -279,7 +281,7 @@ describe("the slot's git state", () => {
       const target = readySlot(box);
       fs.writeFileSync(path.join(target, "README.md"), "edited in the slot\n");
       const run = runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]);
-      expect(run.status).toBe(1);
+      expectStatus(run, 1);
       expect(run.output).toContain("modified or untracked files");
       expect(run.output).toContain("README.md");
       expect(fs.readFileSync(path.join(target, "README.md"), "utf8")).toContain(
@@ -299,7 +301,7 @@ describe("the slot's git state", () => {
         "half-finished\n",
       );
       const run = runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]);
-      expect(run.status).toBe(1);
+      expectStatus(run, 1);
       expect(run.output).toContain("modified or untracked files");
       expect(fs.existsSync(path.join(target, "scratch-notes.md"))).toBe(true);
     },
@@ -327,7 +329,7 @@ describe("the slot's git state", () => {
         fs.mkdirSync(path.join(gitDir, marker), { recursive: true });
       }
       const run = runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]);
-      expect(run.status).toBe(1);
+      expectStatus(run, 1);
       expect(run.output).toContain("operation in progress");
       expect(run.output).toContain(marker);
       expect(localBranchExists(box, "scrum-900-first")).toBe(true);
@@ -348,7 +350,7 @@ describe("the shared stash", () => {
       expect(before).toContain("scrum-900-first");
 
       const run = runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]);
-      expect(run.status).toBe(1);
+      expectStatus(run, 1);
       expect(run.output).toContain("shared stash holds entries");
       // The entry is still exactly where it was - not popped, dropped or cleared.
       expect(git(box, target, "stash", "list")).toBe(before);
@@ -380,7 +382,7 @@ describe("the shared stash", () => {
       const before = git(box, box.primary, "stash", "list");
 
       const run = runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]);
-      expect(run.status).toBe(0);
+      expectStatus(run, 0);
       expect(git(box, box.primary, "stash", "list")).toBe(before);
       expect(slotBranch(box, target)).toBe("scrum-901-next");
     },
@@ -396,7 +398,7 @@ describe("environment files", () => {
       const target = readySlot(box);
       fs.rmSync(path.join(target, ".env"));
       const run = runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]);
-      expect(run.status).toBe(1);
+      expectStatus(run, 1);
       expect(run.output).toContain("no .env");
     },
     TIMEOUT,
@@ -411,7 +413,7 @@ describe("environment files", () => {
       fs.writeFileSync(path.join(box.primary, ".env"), "SHARED=1\n");
       fs.symlinkSync(path.join(box.primary, ".env"), path.join(target, ".env"));
       const run = runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]);
-      expect(run.status).toBe(1);
+      expectStatus(run, 1);
       expect(run.output).toContain("symlink");
     },
     TIMEOUT,
@@ -424,7 +426,7 @@ describe("environment files", () => {
       const target = readySlot(box);
       fs.writeFileSync(path.join(target, ".env.production"), "DEPLOYED=1\n");
       const run = runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]);
-      expect(run.status).toBe(1);
+      expectStatus(run, 1);
       expect(run.output).toContain(".env.production");
       expect(run.output).toContain("Amplify");
       // Refused, not deleted - removing a credentials file is the human's call.
@@ -443,7 +445,7 @@ describe("environment files", () => {
         env: 'DATABASE_URL="mysql://u:p@127.0.0.1:3306/nucarpool"\nTEST_DATABASE_URL="mysql://u:p@127.0.0.1:3306/nucarpool_test_scrum"\n',
       });
       const run = runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]);
-      expect(run.status).toBe(0);
+      expectStatus(run, 0);
       expect(run.output).toContain("MAPBOX_ACCESS_TOKEN");
       expect(run.output).toContain("values were not read or compared");
       // The value side of the slot's own .env is never echoed.
@@ -459,9 +461,10 @@ describe("environment files", () => {
       const box = sandbox();
       const target = readySlot(box);
       const before = fs.readFileSync(path.join(target, ".env"), "utf8");
-      expect(
-        runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]).status,
-      ).toBe(0);
+      expectStatus(
+        runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]),
+        0,
+      );
       expect(fs.readFileSync(path.join(target, ".env"), "utf8")).toBe(before);
     },
     TIMEOUT,
@@ -481,7 +484,7 @@ describe("the integration database name", () => {
       const box = sandbox();
       addSlot(box, "scrum", "scrum-900-first", { env: envWith(db) });
       const run = runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]);
-      expect(run.status).toBe(1);
+      expectStatus(run, 1);
       expect(run.output).toContain(word);
       expect(run.output).toContain("TRUNCATE");
     },
@@ -494,7 +497,7 @@ describe("the integration database name", () => {
       const box = sandbox();
       addSlot(box, "scrum", "scrum-900-first", { env: envWith("nucarpool") });
       const run = runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]);
-      expect(run.status).toBe(1);
+      expectStatus(run, 1);
       expect(run.output).toContain("not marked as a test database");
     },
     TIMEOUT,
@@ -508,7 +511,7 @@ describe("the integration database name", () => {
         env: envWith("nucarpool_test"),
       });
       const run = runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]);
-      expect(run.status).toBe(0);
+      expectStatus(run, 0);
       expect(run.output).toContain("nucarpool_test_scrum");
       expect(run.output).toContain("Deferred");
     },
@@ -523,7 +526,7 @@ describe("the integration database name", () => {
         env: 'TEST_DATABASE_URL="mysql://someuser:sup3rsecret@127.0.0.1:3306/nucarpool_test_scrum"\n',
       });
       const run = runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]);
-      expect(run.status).toBe(0);
+      expectStatus(run, 0);
       expect(run.output).not.toContain("sup3rsecret");
       expect(run.output).not.toContain("someuser");
       expect(run.output).toContain("nucarpool_test_scrum");
@@ -540,7 +543,7 @@ describe("advisory liveness", () => {
       const target = readySlot(box);
       makeSlotLookBusy(box);
       const run = runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]);
-      expect(run.status).toBe(1);
+      expectStatus(run, 1);
       expect(run.output).toContain("working directory inside that slot");
       expect(slotBranch(box, target)).toBe("scrum-900-first");
     },
@@ -559,7 +562,7 @@ describe("the new branch name", () => {
       const box = sandbox();
       const target = readySlot(box);
       const run = runScript(box, "wt-recycle.sh", ["scrum", name]);
-      expect(run.status).toBe(1);
+      expectStatus(run, 1);
       expect(slotBranch(box, target)).toBe("scrum-900-first");
     },
     TIMEOUT,
@@ -571,7 +574,7 @@ describe("the new branch name", () => {
       const box = sandbox();
       const target = readySlot(box);
       const run = runScript(box, "wt-recycle.sh", ["scrum", name]);
-      expect(run.status).toBe(1);
+      expectStatus(run, 1);
       expect(run.output).toContain("protected branch");
       expect(slotBranch(box, target)).toBe("scrum-900-first");
     },
@@ -584,7 +587,7 @@ describe("the new branch name", () => {
       const box = sandbox();
       const target = readySlot(box);
       const run = runScript(box, "wt-recycle.sh", ["scrum", "scrum-900-first"]);
-      expect(run.status).toBe(1);
+      expectStatus(run, 1);
       expect(run.output).toContain("already checked out");
       expect(localBranchExists(box, "scrum-900-first")).toBe(true);
       expect(slotBranch(box, target)).toBe("scrum-900-first");
@@ -605,7 +608,7 @@ describe("the new branch name", () => {
         "refs/remotes/origin/main",
       );
       const run = runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]);
-      expect(run.status).toBe(1);
+      expectStatus(run, 1);
       expect(run.output).toContain("already exists");
       expect(slotBranch(box, target)).toBe("scrum-900-first");
     },
@@ -626,7 +629,7 @@ describe("the new branch name", () => {
       expect(localBranchExists(box, "scrum-901-next")).toBe(false);
 
       const run = runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]);
-      expect(run.status).toBe(1);
+      expectStatus(run, 1);
       expect(run.output).toContain("already exists on the remote");
       expect(slotBranch(box, target)).toBe("scrum-900-first");
       expect(remoteBranchExists(box, "scrum-901-next")).toBe(true);
@@ -647,7 +650,7 @@ describe("merge evidence", () => {
       const tip = git(box, target, "rev-parse", "HEAD");
 
       const run = runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]);
-      expect(run.status).toBe(1);
+      expectStatus(run, 1);
       expect(run.output).toContain("not reachable from origin/main");
       expect(run.output).toContain("work that is nowhere else");
       // The whole point: the commit is still here and still on its branch.
@@ -669,14 +672,15 @@ describe("merge evidence", () => {
       git(box, target, "push", "--quiet", "origin", "scrum-900-first");
       const tip = git(box, target, "rev-parse", "HEAD");
 
-      expect(
-        runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]).status,
-      ).toBe(1);
+      expectStatus(
+        runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]),
+        1,
+      );
 
       mergeIntoOriginMain(box, "scrum-900-first");
 
       const run = runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]);
-      expect(run.status).toBe(0);
+      expectStatus(run, 0);
       expect(slotBranch(box, target)).toBe("scrum-901-next");
       expect(localBranchExists(box, "scrum-900-first")).toBe(false);
       // Deleted from the branch namespace, still reachable from main.
@@ -693,7 +697,7 @@ describe("merge evidence", () => {
         base: "trunk",
       });
       const run = runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]);
-      expect(run.status).toBe(1);
+      expectStatus(run, 1);
       expect(run.output).toContain("origin/main");
       expect(slotBranch(box, target)).toBe("scrum-900-first");
       expect(localBranchExists(box, "scrum-900-first")).toBe(true);
@@ -715,7 +719,7 @@ describe("a successful recycle", () => {
         "scrum",
         "scrum-901-second",
       ]);
-      expect(run.status).toBe(0);
+      expectStatus(run, 0);
 
       // The new branch is at fresh origin/main.
       expect(slotBranch(box, target)).toBe("scrum-901-second");
@@ -761,9 +765,10 @@ describe("a successful recycle", () => {
     () => {
       const box = sandbox();
       readySlot(box);
-      expect(
-        runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-second"]).status,
-      ).toBe(0);
+      expectStatus(
+        runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-second"]),
+        0,
+      );
       const calls = yarnCalls(box);
       expect(calls).toContain("install --frozen-lockfile");
       expect(calls).toContain("prisma generate");
@@ -778,9 +783,10 @@ describe("a successful recycle", () => {
       const target = readySlot(box);
       const lock = fs.readFileSync(path.join(target, "yarn.lock"), "utf8");
       const pkg = fs.readFileSync(path.join(target, "package.json"), "utf8");
-      expect(
-        runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-second"]).status,
-      ).toBe(0);
+      expectStatus(
+        runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-second"]),
+        0,
+      );
       expect(fs.readFileSync(path.join(target, "yarn.lock"), "utf8")).toBe(
         lock,
       );
@@ -801,9 +807,10 @@ describe("a successful recycle", () => {
         recursive: true,
         force: true,
       });
-      expect(
-        runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-second"]).status,
-      ).toBe(0);
+      expectStatus(
+        runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-second"]),
+        0,
+      );
       expect(yarnCalls(box)).toContain("prepare");
       expect(fs.existsSync(path.join(target, ".husky", "_"))).toBe(true);
     },
@@ -828,7 +835,7 @@ describe("a successful recycle", () => {
         "scrum",
         "scrum-901-second",
       ]);
-      expect(run.status).toBe(0);
+      expectStatus(run, 0);
       expect(run.output).toContain("symlink");
       expect(fs.existsSync(path.join(outside, "keep.txt"))).toBe(true);
     },
@@ -840,12 +847,14 @@ describe("a successful recycle", () => {
     () => {
       const box = sandbox();
       const target = readySlot(box);
-      expect(
-        runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-second"]).status,
-      ).toBe(0);
-      expect(
-        runScript(box, "wt-recycle.sh", ["scrum", "scrum-902-third"]).status,
-      ).toBe(0);
+      expectStatus(
+        runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-second"]),
+        0,
+      );
+      expectStatus(
+        runScript(box, "wt-recycle.sh", ["scrum", "scrum-902-third"]),
+        0,
+      );
       expect(slotBranch(box, target)).toBe("scrum-902-third");
       expect(localBranchExists(box, "scrum-900-first")).toBe(false);
       expect(localBranchExists(box, "scrum-901-second")).toBe(false);
@@ -876,7 +885,7 @@ describe("partial failure", () => {
       expect(localBranchExists(box, "scrum-901-next")).toBe(false);
 
       const run = runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-next"]);
-      expect(run.status).toBe(1);
+      expectStatus(run, 1);
       expect(run.output).toContain("Nothing was deleted");
       // The slot is untouched and the old branch is intact.
       expect(slotBranch(box, target)).toBe("scrum-900-first");
@@ -892,9 +901,10 @@ describe("partial failure", () => {
       const box = sandbox();
       const target = readySlot(box);
       const oldTip = git(box, target, "rev-parse", "HEAD");
-      expect(
-        runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-second"]).status,
-      ).toBe(0);
+      expectStatus(
+        runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-second"]),
+        0,
+      );
       // Whatever happened, the commit the slot used to be on is still reachable.
       expect(isReachableFrom(box, oldTip, "refs/remotes/origin/main")).toBe(
         true,
@@ -929,6 +939,42 @@ describe("what it never does", () => {
     expect(code).not.toMatch(/ASSUME_YES|FORCE|SKIP_CHECK/);
   });
 
+  // The locked-slot refusal exited 141 rather than 1 on CI, because
+  // `git worktree list --porcelain | awk '\''...; exit'\''` left git killed by
+  // SIGPIPE and `set -o pipefail` reports a signalled producer as the
+  // pipeline's status. It fires only when the producer is still writing as the
+  // consumer leaves, so it passed on every local run and failed on CI.
+  //
+  // Reading from a shell variable is not the fix and this test is not a style
+  // rule: `printf` is a builtin, but bash takes SIGPIPE like any other
+  // producer. The invariant is a property of the source rather than of any one
+  // run - no consumer in this script may leave before its input is exhausted -
+  // which is why it is asserted statically instead of by running the script.
+  it("pipes into no consumer that exits before reading its input", () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, "wt-recycle.sh"),
+      "utf8",
+    );
+    const code = source
+      .split("\n")
+      .filter((line) => !/^\s*#/.test(line))
+      .join("\n");
+
+    // Consumers that are early-exiting by definition.
+    expect(code).not.toMatch(/\|\s*head\b/);
+    expect(code).not.toMatch(/\|\s*grep\s+[^|\n]*-[a-zA-Z]*[qm]\b/);
+
+    // And awk programs, which exit early only when told to. Each is a
+    // single-quoted block with no quote inside it, so it extracts cleanly.
+    const awkPrograms = [...code.matchAll(/awk\b[^'\n]*'([^']*)'/g)].map(
+      (match) => match[1],
+    );
+    expect(awkPrograms.length).toBeGreaterThan(0);
+    expect(awkPrograms.filter((program) => /\bexit\b/.test(program))).toEqual(
+      [],
+    );
+  });
+
   it(
     "never pushes",
     () => {
@@ -940,9 +986,10 @@ describe("what it never does", () => {
         "for-each-ref",
         "--format=%(refname) %(objectname)",
       );
-      expect(
-        runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-second"]).status,
-      ).toBe(0);
+      expectStatus(
+        runScript(box, "wt-recycle.sh", ["scrum", "scrum-901-second"]),
+        0,
+      );
       expect(
         git(
           box,

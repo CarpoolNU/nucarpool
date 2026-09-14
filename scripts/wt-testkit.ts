@@ -362,6 +362,24 @@ export const runInline = (
   return { status: result.status, stdout, stderr, output: stdout + stderr };
 };
 
+/**
+ * Assert a script's exit status, attaching its output to the failure message.
+ *
+ * A bare `expect(run.status).toBe(1)` reports "Expected 1, Received 141" and
+ * nothing else, which says a refusal exited wrongly but not which refusal or
+ * where. For a script whose whole contract is *which* message it refuses with,
+ * the output is the diagnostic - and on a failure that only reproduces on CI
+ * it is the only one available.
+ */
+export const expectStatus = (run: Run, status: number): void => {
+  if (run.status !== status) {
+    throw new Error(
+      `expected exit ${status} but got ${run.status}\n` +
+        `--- stdout ---\n${run.stdout}\n--- stderr ---\n${run.stderr}`,
+    );
+  }
+};
+
 /** Every argument list the fake `yarn` was called with. */
 export const yarnCalls = (box: Sandbox): string[] =>
   fs

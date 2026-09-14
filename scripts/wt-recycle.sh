@@ -179,11 +179,30 @@ script_dir=$(abspath "$(dirname "$0")")
 [ -f "$script_dir/wt-state.sh" ] ||
   die "cannot find wt-state.sh beside this script (looked in $script_dir)."
 
+# One snapshot of `git worktree list --porcelain`, taken once and reused, so
+# every question below is answered from one consistent view - a second
+# invocation could disagree with the first if a worktree appeared or was
+# locked in between.
+#
+# The snapshot also sits next to an exit-141 hazard worth naming, because it is
+# the kind a green local run hides. Under `set -o pipefail` a producer killed
+# by SIGPIPE makes the whole pipeline exit 141, so a refusal meaning to exit 1
+# leaves with the wrong status. It fires only when the producer is still
+# writing as the consumer goes away, which a short worktree table on a fast
+# machine usually wins by luck and CI does not.
+#
+# The guard is the *consumer*, not the producer: every parse below reads its
+# input to EOF. Reading from a variable does not by itself help - `printf` is a
+# builtin, but bash takes SIGPIPE like anything else - so a `head`, a `grep -q`
+# or an `awk ... exit` added later reintroduces the bug even on a shell
+# variable. Keep consumers exhaustive.
+porcelain=$(git worktree list --porcelain)
+
 # The worktree table as path<TAB>branch<TAB>flags. `branch` is empty for a
 # detached HEAD; `flags` collects locked/prunable. `locked` may carry a reason,
 # so the pattern matches the prefix.
 worktree_table() {
-  git worktree list --porcelain | awk '
+  printf '%s\n' "$porcelain" | awk '
     function emit() { if (p != "") printf "%s\t%s\t%s\n", p, b, f }
     /^worktree /  { emit(); p = substr($0, 10); b = ""; f = "" }
     /^branch /    { b = substr($0, 8); sub(/^refs\/heads\//, "", b) }
@@ -197,7 +216,10 @@ table=$(worktree_table)
 
 # The first entry is always the primary worktree - that is how the primary is
 # located without hard-coding a path that is only right on one machine.
-primary=$(printf '%s\n' "$table" | head -1 | cut -f1)
+# First line, first field, by parameter expansion rather than `head | cut`.
+# No subprocess and therefore no pipeline whose status has to be reasoned about.
+primary_row=${table%%$'\n'*}
+primary=${primary_row%%$'\t'*}
 [ -n "$primary" ] && [ -d "$primary" ] || die "could not locate the primary worktree."
 primary=$(abspath "$primary")
 worktrees_root="$primary/.claude/worktrees"
@@ -238,8 +260,13 @@ case "$flags" in
              Deregister it with:  git worktree prune"
     ;;
   *locked*)
-    lock_reason=$(git worktree list --porcelain |
-      awk -v t="$target" '$0 == "worktree " t {f=1; next} f && /^locked/ {print substr($0, 8); exit} f && /^$/ {exit}' || true)
+    lock_reason=$(printf '%s\n' "$porcelain" |
+      awk -v t="$target" '
+        $0 == "worktree " t { inside = 1; next }
+        inside && /^locked/ && !found { found = substr($0, 8) }
+        inside && /^worktree / { inside = 0 }
+        END { if (found != "") print found }
+      ' || true)
     refuse "that slot is locked, which is how a session says it is still using it.
              ${lock_reason:+lock reason: $lock_reason}
              Confirm the ticket is merged and the session has ended, then unlock
