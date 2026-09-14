@@ -6329,10 +6329,10 @@ map-obj@^4.0.0:
   resolved "https://registry.npmjs.org/map-obj/-/map-obj-4.3.0.tgz"
   integrity sha512-hdN1wVrZbb29eBGiGjJbeP8JbKjq1urkHJ/LIP/NY48MZ1QVXUsQBV1G1zvYFHn1XE06cwjBsOI2K3Ulnj1YXQ==
 
-mapbox-gl@^3.28.1:
-  version "3.29.0"
-  resolved "https://registry.yarnpkg.com/mapbox-gl/-/mapbox-gl-3.29.0.tgz#6a1e918c177a6baeef4329078e6ec0171180fd55"
-  integrity sha512-Fnh1WLsZMfihwRZY5scp456iQuZo9G97tTpb26bf/Ejsi/L7O+4dE9+I03VoOor2ul3DEOp6F2P3273omyVsNw==
+mapbox-gl@^3.30.0:
+  version "3.30.0"
+  resolved "https://registry.yarnpkg.com/mapbox-gl/-/mapbox-gl-3.30.0.tgz#df0c80225bb162a671a13bd5b1815e7d94d40490"
+  integrity sha512-26m0CSBszLkvbdVWf2oIZ3SjqCuResxJKEbupwwSyNwbwJAcgnMhDy2Yl5cSgtUxeamUJ1UeXRqpBmGEUVaAeQ==
 
 math-intrinsics@^1.1.0:
   version "1.1.0"
