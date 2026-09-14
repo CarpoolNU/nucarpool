@@ -51,9 +51,22 @@ script_dir=$(abspath "$(dirname "$0")")
 cd "$worktree_root"
 
 # The first entry `git worktree list --porcelain` prints is always the primary
-# worktree, which is how the primary checkout is located without hard-coding a
-# path that is only right on one machine.
-primary=$(git worktree list --porcelain | awk '/^worktree /{print substr($0, 10); exit}')
+# worktree, and its first line is always `worktree <path>`. That is how the
+# primary checkout is located without hard-coding a path that is only right on
+# one machine.
+#
+# Taken by parameter expansion rather than by piping into a consumer that
+# leaves after the first line. Under `pipefail` such a consumer makes git a
+# producer killed by SIGPIPE and the pipeline's status 141, which aborts this
+# script before it does anything and never reaches the `die` below (SCRUM-454,
+# the same defect SCRUM-449 fixed in wt-recycle.sh). No subprocess here, so
+# there is no pipeline status to reason about at all.
+#
+# A first line that is somehow not a worktree line leaves the prefix unstripped
+# and fails the directory test below, which is the existing refusal.
+porcelain=$(git worktree list --porcelain)
+primary_line=${porcelain%%$'\n'*}
+primary=${primary_line#worktree }
 [ -n "$primary" ] && [ -d "$primary" ] || die "could not locate the primary worktree."
 [ "$primary" != "$worktree_root" ] || die "resolved the primary worktree as this one; refusing to continue."
 

@@ -82,7 +82,14 @@ table=$(worktree_table)
 # The first entry `git worktree list` prints is always the primary worktree.
 # That is how the primary is located without hard-coding a path that is only
 # right on one machine.
-primary=$(printf '%s\n' "$table" | head -1 | cut -f1)
+#
+# First line, first field, by parameter expansion. A consumer that leaves after
+# one line makes its producer take SIGPIPE, and under `pipefail` that is the
+# pipeline's status - 141, aborting the script with no message (SCRUM-454).
+# Being a builtin does not exempt `printf`; bash takes the signal like anything
+# else. What kept this one latent was only that `$table` fits the pipe buffer.
+primary_row=${table%%$'\n'*}
+primary=${primary_row%%$'\t'*}
 [ -n "$primary" ] && [ -d "$primary" ] || die "could not locate the primary worktree."
 primary=$(abspath "$primary")
 worktrees_root="$primary/.claude/worktrees"
