@@ -53,6 +53,7 @@ import clearOtherUserMarkers from "../utils/map/clearOtherUserMarkers";
 import { isValidCoordinates } from "../utils/map/coordinates";
 import { MobileBanner } from "../components/MobileBanner";
 import {
+  isSheetDetentView,
   planExploreSidebar,
   resolveMobileSelectedUser,
   type ExploreSidebarView,
@@ -1017,10 +1018,14 @@ const Home: NextPage<any> = () => {
                 toggle. That is the same condition as before for `isMobile` and
                 the detail view, and newly excludes an open conversation: the
                 handle used to sit there over the message panel toggling a
-                sheet the user could not see. */}
-            {(sidebarView === "collapsed" ||
-              sidebarView === "half" ||
-              sidebarView === "expanded") &&
+                sheet the user could not see.
+
+                The three-way `||` this used to spell out is now
+                `isSheetDetentView`, which `useSheetDrag` checks before starting
+                a gesture. Sharing the predicate is the point: the handle
+                rendering somewhere the drag refuses to run is precisely what
+                SCRUM-459 was. */}
+            {isSheetDetentView(sidebarView) &&
               (sidebarType === "explore" || sidebarType === "requests") && (
                 <button
                   type="button"

@@ -25,6 +25,7 @@
  */
 
 import { Role } from "@prisma/client";
+import { MOBILE_SHEET_MAP_STRIP_REM } from "../breakpoints";
 
 /**
  * The sheet's resting positions.
@@ -124,6 +125,60 @@ export const toggleSheetDetent = (detent: SheetDetent): SheetDetent =>
 export const defaultSheetDetent = (role?: Role): SheetDetent =>
   role === Role.VIEWER ? "collapsed" : "expanded";
 
+/**
+ * The sheet's expanded height, derived from the bottom edge it is pinned to.
+ *
+ * **This is what lets a drag start from any detent.** The height used to be
+ * read off the sheet itself during an expanded render and cached, so the range
+ * did not exist until the sheet had been expanded once — and after SCRUM-455 a
+ * VIEWER's sheet opens `collapsed`, which made that role's first gesture on the
+ * handle fall through to the tap path (SCRUM-459).
+ *
+ * The derivation is exact rather than approximate, and the reason is where the
+ * sheet's offsets resolve against. `h-mobile-sheet` is
+ * `calc(100% - MAP_STRIP - NAV_SPACE)` and the sheet is `absolute` with no
+ * positioned ancestor, so its containing block is the initial one — the
+ * viewport — and that `100%` is the viewport's height. `bottom-mobile-nav` puts
+ * its bottom edge `NAV_SPACE` above the viewport's bottom, in **every** detent,
+ * since only the height class changes between them. Substituting one into the
+ * other:
+ *
+ * ```
+ *   expanded = viewportHeight - MAP_STRIP - NAV_SPACE
+ *   bottom   = viewportHeight - NAV_SPACE          (measured, any detent)
+ *   expanded = bottom - MAP_STRIP
+ * ```
+ *
+ * `NAV_SPACE` cancels, and with it `env(safe-area-inset-bottom)` — the one term
+ * JavaScript cannot evaluate. So a single constant remains, shared with the CSS
+ * through `breakpoints.js` rather than restated here.
+ *
+ * **Not the containing row**, which was the first suggestion and is off by the
+ * banner. The row is `h-mobile-row` with `mt-6`, so its top edge sits 1.5rem
+ * down the viewport and `rowHeight - MAP_STRIP` comes out 1.5rem short. The row
+ * is not the sheet's containing block either — `overflow` does not establish
+ * one, as `index.tsx` records for SCRUM-464.
+ *
+ * Clamped at zero because a `hidden` sheet is `display: none` and measures a
+ * bottom edge of 0, which would otherwise make the range negative rather than
+ * absent; `useSheetDrag` refuses to start a drag on a range of zero.
+ *
+ * @param sheetBottomPx the sheet's bottom edge from `getBoundingClientRect()`,
+ *   taken at the moment the gesture starts. Reading it per gesture rather than
+ *   caching it is also what makes a drag after a rotation use the new
+ *   viewport's range.
+ * @param rootFontSizePx what one rem currently measures, which the caller reads
+ *   from the document — text zoom changes it, so it is not a constant either.
+ */
+export const expandedSheetHeightPx = ({
+  sheetBottomPx,
+  rootFontSizePx,
+}: {
+  sheetBottomPx: number;
+  rootFontSizePx: number;
+}): number =>
+  Math.max(sheetBottomPx - MOBILE_SHEET_MAP_STRIP_REM * rootFontSizePx, 0);
+
 /** The pixel height of a detent, given the sheet's measured expanded height. */
 export const detentHeightPx = ({
   detent,
@@ -164,9 +219,10 @@ export const dragHeightPx = ({
  * two is the safer error: `collapsed` hides the list completely, so guessing
  * it wrongly costs the user the thing they were dragging towards.
  *
- * A zero or negative `expandedHeightPx` means nothing was measured, and every
- * detent is then zero pixels tall; the ascending walk returns `expanded` for
- * that, which is the harmless end of a state that `useSheetDrag` refuses to
+ * A zero or negative `expandedHeightPx` means the range came out as nothing -
+ * a sheet out of layout, or one whose bottom edge is above the map strip - and
+ * every detent is then zero pixels tall; the ascending walk returns `expanded`
+ * for that, which is the harmless end of a state that `useSheetDrag` refuses to
  * start a drag in anyway.
  */
 export const snapToDetent = ({

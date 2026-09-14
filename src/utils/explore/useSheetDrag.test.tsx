@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { MOBILE_SHEET_MAP_STRIP_REM } from "../breakpoints";
 import { useSheetDrag } from "./useSheetDrag";
 import type { ExploreSidebarView } from "./exploreSidebarView";
 import type { SheetDetent } from "./sheetDetents";
@@ -24,44 +25,92 @@ import type { SheetDetent } from "./sheetDetents";
  *  - the click that follows a drag does **not** also toggle, or releasing at
  *    `half` would be collapsed a moment later by the tap handler;
  *  - a release lands on a detent, and a cancel lands on none;
- *  - with nothing measured the handle degrades to tap-only rather than
- *    dragging against a zero-height range;
+ *  - a drag begins from a *collapsed* sheet with no expanded render behind it,
+ *    which is the regression SCRUM-459 fixed and the one this environment can
+ *    genuinely speak to, since the range is now arithmetic over a measured
+ *    edge rather than a cached measurement;
+ *  - a sheet with no geometry, or a view that is not a detent, degrades to
+ *    tap-only rather than dragging against a zero-height range;
  *  - keyboard activation reaches the tap path, since a `click` with no pointer
  *    sequence must not be mistaken for the end of a drag.
  *
- * The rect below is the stub that makes any of it possible: a sheet 400px tall
- * whose bottom edge sits 700px down a 768px-tall jsdom viewport. Detents are
- * therefore 0, 200 and 400.
+ * ---
+ *
+ * **The geometry below is a whole phone, not just a sheet**, because the drag's
+ * range is now derived from the viewport rather than read off the sheet. A
+ * 548px-tall viewport with a 60px navigation puts the sheet's pinned bottom
+ * edge at 488, and the 5.5rem map strip above it — 88px at the 16px root font
+ * size jsdom forces the hook to fall back to — leaves an expanded height of
+ * 400. So the detents are 0, 200 and 400, the same three the assertions below
+ * were written against before the range moved.
+ *
+ * Every figure is derived rather than typed in, so a change to the map strip
+ * re-derives the expectations instead of silently invalidating them.
  */
 
-const EXPANDED_HEIGHT = 400;
-const SHEET_BOTTOM_Y = 700;
+/**
+ * jsdom returns the empty string for `getComputedStyle(:root).fontSize`, so the
+ * hook falls back to 16 — the CSS initial value. Stated here because the strip
+ * below depends on it and it is not a choice this file gets to make.
+ */
+const ROOT_FONT_SIZE_PX = 16;
+
+/** 5.5rem of map left visible above an expanded sheet: 88px. */
+const MAP_STRIP_PX = MOBILE_SHEET_MAP_STRIP_REM * ROOT_FONT_SIZE_PX;
+
+const VIEWPORT_HEIGHT = 548;
+const NAV_SPACE = 60;
+
+/** Where `bottom-mobile-nav` pins the sheet, in every detent: 488. */
+const SHEET_BOTTOM_Y = VIEWPORT_HEIGHT - NAV_SPACE;
+
+/** What the hook should derive from that edge: 400. */
+const EXPANDED_HEIGHT = SHEET_BOTTOM_Y - MAP_STRIP_PX;
 
 /** The sheet's current height, which the stubbed rect reports. */
 let sheetHeightPx = EXPANDED_HEIGHT;
 
+/**
+ * The sheet's bottom edge. A `let` because the one thing that moves it is the
+ * sheet leaving layout entirely, which is what `display: none` does and what
+ * the degradation test needs.
+ */
+let sheetBottomPx = SHEET_BOTTOM_Y;
+
 const rectStub = () =>
   ({
     height: sheetHeightPx,
-    bottom: SHEET_BOTTOM_Y,
-    top: SHEET_BOTTOM_Y - sheetHeightPx,
+    bottom: sheetBottomPx,
+    top: sheetBottomPx - sheetHeightPx,
     left: 0,
     right: 400,
     width: 400,
     x: 0,
-    y: SHEET_BOTTOM_Y - sheetHeightPx,
+    y: sheetBottomPx - sheetHeightPx,
     toJSON: () => ({}),
   }) as DOMRect;
 
 const originalRect = Element.prototype.getBoundingClientRect;
+const originalInnerHeight = window.innerHeight;
+
+const setViewportHeight = (height: number) => {
+  Object.defineProperty(window, "innerHeight", {
+    value: height,
+    writable: true,
+    configurable: true,
+  });
+};
 
 beforeEach(() => {
   sheetHeightPx = EXPANDED_HEIGHT;
+  sheetBottomPx = SHEET_BOTTOM_Y;
+  setViewportHeight(VIEWPORT_HEIGHT);
   Element.prototype.getBoundingClientRect = rectStub;
 });
 
 afterEach(() => {
   Element.prototype.getBoundingClientRect = originalRect;
+  setViewportHeight(originalInnerHeight);
 });
 
 /**
@@ -201,23 +250,62 @@ describe("a drag", () => {
   it("collapses when dragged most of the way down", () => {
     const { handle, onDetentChange } = setup();
 
-    gesture(handle, { from: 300, to: 660 });
+    // The pill starts near the sheet's top edge on an expanded sheet and is
+    // pulled down to just above the navigation: 340px of travel from 400
+    // leaves 60, nearest collapsed (0).
+    gesture(handle, { from: 100, to: 440 });
 
     expect(onDetentChange).toHaveBeenCalledWith("collapsed");
   });
 
-  it("expands from a collapsed sheet, using the height last measured", () => {
-    // The case that needs the cache: the sheet measures zero while collapsed,
-    // so the drag's range has to come from the last expanded render. Without
-    // it there would be no range and no drag - which is why the hook keeps the
-    // measurement rather than reading the element it is about to resize.
+  it("expands from a collapsed sheet on the very first gesture", () => {
+    // **SCRUM-459.** A VIEWER's sheet opens `collapsed`, so this is that role's
+    // first touch of the handle in a session - no expanded render has ever
+    // happened. The sheet itself measures zero here, and that no longer
+    // matters: the range comes from the bottom edge the sheet is pinned to,
+    // which is the same in every detent.
+    sheetHeightPx = 0;
+    const { handle, onDetentChange } = setup("collapsed");
+
+    // Up 340px from nothing: nearest expanded (400).
+    gesture(handle, { from: 440, to: 100 });
+
+    expect(onDetentChange).toHaveBeenCalledWith("expanded");
+  });
+
+  it("uses the same range after the sheet has been collapsed by hand", () => {
+    // The other half of the criterion: a RIDER or DRIVER who collapses the
+    // sheet themselves must still be able to drag it back open, and the range
+    // must not have shrunk to the collapsed sheet's zero height.
     const { handle, onDetentChange, rerender } = setup("expanded");
 
     sheetHeightPx = 0;
     rerender("collapsed");
 
-    // Up 380px from nothing: nearest expanded (400).
-    gesture(handle, { from: 600, to: 220 });
+    gesture(handle, { from: 440, to: 100 });
+
+    expect(onDetentChange).toHaveBeenCalledWith("expanded");
+  });
+
+  it("drags against the viewport it is in, not the one it last saw", () => {
+    // The staleness the old cache carried: rotating with the sheet closed left
+    // the previous viewport's range in a ref, because only an expanded render
+    // refreshed it. Nothing is kept between gestures now, so a shorter
+    // viewport is simply a shorter range - here 288, whose detents are 0, 144
+    // and 288 rather than 0, 200 and 400.
+    const { handle, onDetentChange, rerender } = setup("expanded");
+
+    sheetHeightPx = 0;
+    rerender("collapsed");
+
+    setViewportHeight(436);
+    sheetBottomPx = 436 - NAV_SPACE;
+
+    // Up 230px from nothing. In the new range that is nearest expanded (288);
+    // measured against the taller viewport's stale 400 it would have been
+    // nearest half (200) - so this asserts which range was used, not merely
+    // that some drag happened.
+    gesture(handle, { from: 300, to: 70 });
 
     expect(onDetentChange).toHaveBeenCalledWith("expanded");
   });
@@ -255,9 +343,9 @@ describe("a drag", () => {
     fireEvent(handle, pointer("pointermove", { clientY: 400, pointerId: 1 }));
 
     expect(sheet.style.height).toBe("300px");
-    // 68px of viewport below the sheet's bottom edge (768 - 700), plus the
-    // 300px the sheet now stands at: the pill rides the top edge.
-    expect(handle.style.bottom).toBe("368px");
+    // 60px of viewport below the sheet's bottom edge - the navigation - plus
+    // the 300px the sheet now stands at: the pill rides the top edge.
+    expect(handle.style.bottom).toBe(`${NAV_SPACE + 300}px`);
     expect(handle).toHaveTextContent("dragging");
   });
 
@@ -312,16 +400,17 @@ describe("a cancelled pointer", () => {
   });
 });
 
-describe("an unmeasured sheet", () => {
+describe("a sheet with no range", () => {
   it("refuses to drag, and still taps", () => {
-    // No expanded render has happened, so there is no range to drag within.
-    // Degrading to the tap the control has always had is the right failure;
-    // dragging against a zero range would snap to a detent chosen by
-    // arithmetic over nothing.
+    // A sheet out of layout reports a rect of zeros, so its bottom edge is
+    // above the map strip and the range comes out as nothing. Degrading to the
+    // tap the control has always had is the right failure; dragging against a
+    // zero range would snap to a detent chosen by arithmetic over nothing.
     sheetHeightPx = 0;
+    sheetBottomPx = 0;
     const { handle, onTap, onDetentChange, sheet } = setup("collapsed");
 
-    gesture(handle, { from: 600, to: 300 });
+    gesture(handle, { from: 440, to: 100 });
 
     expect(onDetentChange).not.toHaveBeenCalled();
     expect(onTap).toHaveBeenCalledTimes(1);
@@ -329,16 +418,19 @@ describe("an unmeasured sheet", () => {
     expect(handle).toHaveTextContent("resting");
   });
 
-  it("ignores a measurement taken while the sheet is not expanded", () => {
-    // `detail` is a different fixed height and `hidden` is `display: none`,
-    // which measures zero. Caching either would put the drag's range at the
-    // wrong end of the sheet.
+  it("refuses in a view that is not a detent", () => {
+    // `detail` is a *different* sheet - a fixed 320px capped at `60dvh` -
+    // pinned to the same bottom edge, so the range derived from that edge is
+    // several times its height and a drag would resize it to something the
+    // view has no classes for. The handle is not rendered there, so this is
+    // the second statement of that rule rather than the only one.
     sheetHeightPx = 320;
-    const { handle, onDetentChange } = setup("detail");
+    const { handle, onDetentChange, onTap } = setup("detail");
 
-    gesture(handle, { from: 600, to: 300 });
+    gesture(handle, { from: 440, to: 100 });
 
     expect(onDetentChange).not.toHaveBeenCalled();
+    expect(onTap).toHaveBeenCalledTimes(1);
   });
 });
 

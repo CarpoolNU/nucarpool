@@ -1,18 +1,22 @@
+/**
+ * `MOBILE_SHEET_MAP_STRIP` is the strip of map left visible above the expanded
+ * explore sheet, and it is read by four tokens below.
+ *
+ * It was a local constant here, hoisted out of the `h-mobile-sheet` token once
+ * the sheet gained a second open height. It moved into `breakpoints.js` for
+ * SCRUM-459, which needs the same figure as a number in JavaScript: the drag
+ * gesture derives the sheet's expanded height from its measured bottom edge
+ * less this strip, so the range is known in every detent rather than only after
+ * an expanded render. Defining it twice would let the gesture and the CSS drift
+ * apart silently, which is the failure this file's other constants already
+ * avoid by coming from the same place.
+ */
 const {
   MOBILE_BREAKPOINT_PX,
   DESKTOP_SCREEN_NAME,
   MOBILE_NAV_SPACE,
+  MOBILE_SHEET_MAP_STRIP,
 } = require("./src/utils/breakpoints");
-
-/**
- * The strip of map left visible above the expanded explore sheet.
- *
- * Hoisted out of the `h-mobile-sheet` token because the sheet now has a second
- * open height and the handle has a rest position per height, so this figure is
- * read by four tokens below. It was written out three times before that and
- * would have been written out four.
- */
-const MOBILE_SHEET_MAP_STRIP = "5.5rem";
 
 /**
  * How far the handle's pill sits above the top edge of the sheet it belongs
