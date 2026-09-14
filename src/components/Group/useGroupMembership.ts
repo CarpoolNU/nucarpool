@@ -1,7 +1,6 @@
 import { useCallback } from "react";
 import { toast } from "react-toastify/unstyled";
 import { trpc } from "../../utils/trpc";
-import { PublicUser } from "../../utils/types";
 
 /**
  * Deleting a group and removing a rider from it, owned in one place.
@@ -28,10 +27,35 @@ import { PublicUser } from "../../utils/types";
  * Toasts go through `react-toastify`. The desktop copy used a second toast
  * library for the same three events; that one has since been removed, so
  * `react-toastify` is now the only one.
+ *
+ * This took the whole driver row as an argument until SCRUM-457, purely to read
+ * two fields off it, which made the hook uncallable for a group that has no
+ * DRIVER member - the one group whose members most need the removal path, since
+ * leaving is all the server will let them do. It now takes the group id and an
+ * optional driver id instead.
  */
 
 type UseGroupMembershipArgs = {
-  driver: PublicUser;
+  /**
+   * The group to act on, taken from the *caller's* own `carpoolId` rather than
+   * the driver's.
+   *
+   * Both name the same group whenever there is a driver, and a group with no
+   * DRIVER member has no driver row to read it off at all - which was enough to
+   * make this hook uncallable in exactly the state whose only permitted action
+   * is the one it exists to perform. See SCRUM-457.
+   */
+  groupId: string | null;
+  /**
+   * The group's driver, when it has one.
+   *
+   * `groups.edit` requires the field but deliberately ignores it on the remove
+   * path, deriving the driver from the group's own membership instead - its
+   * input schema says so, and crediting the seat to client input is the bug
+   * that made it stop. It is still sent when known, so the payload for a group
+   * that has a driver is unchanged.
+   */
+  driverId?: string;
   currentUserId: string;
   /**
    * Called once the caller is no longer part of the group, either because they
@@ -42,7 +66,8 @@ type UseGroupMembershipArgs = {
 };
 
 export const useGroupMembership = ({
-  driver,
+  groupId,
+  driverId,
   currentUserId,
   onLeftGroup,
 }: UseGroupMembershipArgs) => {
@@ -96,27 +121,29 @@ export const useGroupMembership = ({
     });
 
   const handleDeleteGroup = useCallback(() => {
-    if (!driver.carpoolId) {
+    if (!groupId) {
       toast.error("This group could not be found, so it was not deleted.");
       return;
     }
-    deleteGroup({ groupId: driver.carpoolId });
-  }, [driver.carpoolId, deleteGroup]);
+    deleteGroup({ groupId });
+  }, [groupId, deleteGroup]);
 
   const handleRemoveRider = useCallback(
     (riderId: string) => {
-      if (!driver.carpoolId) {
+      if (!groupId) {
         toast.error("This group could not be found, so nothing was changed.");
         return;
       }
       editGroup({
-        driverId: driver.id,
+        // Ignored by the server on this path, so the caller's own id stands in
+        // when the group has no driver to name. See `driverId` above.
+        driverId: driverId ?? currentUserId,
         riderId,
         add: false,
-        groupId: driver.carpoolId,
+        groupId,
       });
     },
-    [driver.carpoolId, driver.id, editGroup],
+    [groupId, driverId, currentUserId, editGroup],
   );
 
   return {

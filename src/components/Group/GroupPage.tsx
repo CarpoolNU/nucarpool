@@ -464,18 +464,6 @@ const GroupSection = ({
     }
   };
 
-  const viewProps = {
-    isDriver,
-    users,
-    riderCount: riders.length,
-    hasDriver: Boolean(driver),
-    details,
-    setDetails,
-    isSaving,
-    onViewRoute,
-    onClose,
-  };
-
   // The group tab gets the same three states as the sidebar lists.
   // Without this, a failure and a group that has been deleted underneath a stale
   // `carpoolId` both left `GroupMembers` rendering a spinner with no driver to
@@ -505,6 +493,27 @@ const GroupSection = ({
   if (!group) {
     return <NoGroupSection role={curUser.role} variant={variant} />;
   }
+
+  // Built after the guards above rather than before them, so `hasDriver` can be
+  // read off the settled group.
+  const viewProps = {
+    isDriver,
+    users,
+    riderCount: riders.length,
+    /*
+     * The server's flag, not a second local derivation of it. `groups.me`
+     * computes `hasDriver` from the same membership rows it maps into `users`,
+     * and it was added expressly so this page could explain itself - but no
+     * client read it, and this line recomputed `Boolean(driver)` beside it. Two
+     * spellings of one fact, either of which could be changed alone.
+     */
+    hasDriver: group.hasDriver,
+    details,
+    setDetails,
+    isSaving,
+    onViewRoute,
+    onClose,
+  };
 
   return variant === "mobile" ? (
     <MobileGroupView

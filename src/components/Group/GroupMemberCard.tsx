@@ -29,85 +29,178 @@ interface GroupMembersProps {
 
 export const GroupMembers = ({ users, onLeftGroup }: GroupMembersProps) => {
   const curUser = useContext(UserContext);
-  const driver = users.find((user) => user.role === Role.DRIVER);
-  const otherRiders = users.filter(
-    (user) => user.id !== driver?.id && user.id !== curUser?.id,
-  );
 
-  if (!driver || !curUser) {
+  /*
+   * The spinner belongs to this condition and this one only. `UserContext` is
+   * null until `user.me` resolves, and no row below can be drawn - not even
+   * the caller's own - without the caller.
+   *
+   * A missing *driver* used to share this branch, and that was the bug. The
+   * group query has already succeeded by then; the group simply has no DRIVER
+   * member, and nothing about that will change on its own - so the spinner was
+   * permanent, and the member list, the explanation and the one exit the server
+   * still accepts were all unreachable behind it. 15 groups holding 33 members
+   * were in that state on production. See SCRUM-457.
+   */
+  if (!curUser) {
     return <Spinner />;
   }
 
   return (
     <GroupMembersList
-      driver={driver}
+      users={users}
       curUser={curUser}
-      otherRiders={otherRiders}
       onLeftGroup={onLeftGroup}
     />
   );
 };
 
 /**
- * Split from `GroupMembers` only so the `driver`/`curUser` null checks happen
- * before `useGroupMembership` is called - a hook cannot sit behind an early
- * return.
+ * Split from `GroupMembers` only so the `curUser` null check happens before
+ * `useGroupMembership` is called - a hook cannot sit behind an early return.
+ *
+ * The driver is resolved here rather than above for the same reason it is no
+ * longer a precondition: it decides what to *draw*, not whether to draw.
  */
 const GroupMembersList = ({
-  driver,
+  users,
   curUser,
-  otherRiders,
   onLeftGroup,
 }: {
-  driver: PublicUser;
+  users: PublicUser[];
   curUser: PublicUser;
-  otherRiders: PublicUser[];
   onLeftGroup?: () => void;
 }) => {
+  const driver = users.find((user) => user.role === Role.DRIVER);
+  const otherMembers = users.filter(
+    (user) => user.id !== driver?.id && user.id !== curUser.id,
+  );
+
   const { handleDeleteGroup, handleRemoveRider, isMutating } =
     useGroupMembership({
-      driver,
+      groupId: curUser.carpoolId,
+      driverId: driver?.id,
       currentUserId: curUser.id,
       onLeftGroup,
     });
 
-  const isDriver = curUser.role === Role.DRIVER;
+  /*
+   * Managing a group means acting on somebody else's membership, and
+   * `requireGroupDriver` refuses that for every caller once the group has no
+   * DRIVER member. So "Delete Group" and "Remove" are withheld here rather
+   * than drawn and then rejected by the server.
+   *
+   * `curUser.role === DRIVER` on its own would very nearly do, since a driver
+   * of *this* group would be among `users` and therefore found above - but the
+   * condition that actually governs the server's answer is the group's state,
+   * so that is the one written down.
+   */
+  const canManage = driver !== undefined && curUser.role === Role.DRIVER;
+
+  /*
+   * The caller's own row. Offered to every member who is not managing the
+   * group, which now includes every member of a driverless one: `groups.edit`
+   * skips the seat credit instead of failing it precisely so that leaving
+   * stays possible there.
+   */
+  const leaveCard = (
+    <GroupMemberCard
+      user={curUser}
+      isCurrentUser
+      actionLabel="Leave Group"
+      onAction={() => handleRemoveRider(curUser.id)}
+      confirmPrompt="Leave this group?"
+      disabled={isMutating}
+    />
+  );
+
+  const otherMemberCards = otherMembers.map((member) => (
+    <GroupMemberCard
+      key={member.id}
+      user={member}
+      isCurrentUser={false}
+      actionLabel={canManage ? "Remove" : undefined}
+      onAction={canManage ? () => handleRemoveRider(member.id) : undefined}
+      confirmPrompt={`Remove ${member.preferredName} from the group?`}
+      disabled={isMutating}
+    />
+  ));
+
+  if (!driver) {
+    return (
+      <>
+        <DriverlessGroupNotice memberCount={users.length} />
+        {leaveCard}
+        {otherMemberCards}
+      </>
+    );
+  }
 
   return (
     <>
       <GroupMemberCard
         user={driver}
         isCurrentUser={driver.id === curUser.id}
-        actionLabel={isDriver ? "Delete Group" : undefined}
-        onAction={isDriver ? handleDeleteGroup : undefined}
+        actionLabel={canManage ? "Delete Group" : undefined}
+        onAction={canManage ? handleDeleteGroup : undefined}
         confirmPrompt="Delete this group for everyone?"
         disabled={isMutating}
       />
 
-      {!isDriver && (
-        <GroupMemberCard
-          user={curUser}
-          isCurrentUser
-          actionLabel="Leave Group"
-          onAction={() => handleRemoveRider(curUser.id)}
-          confirmPrompt="Leave this group?"
-          disabled={isMutating}
-        />
-      )}
+      {!canManage && leaveCard}
 
-      {otherRiders.map((rider) => (
-        <GroupMemberCard
-          key={rider.id}
-          user={rider}
-          isCurrentUser={false}
-          actionLabel={isDriver ? "Remove" : undefined}
-          onAction={isDriver ? () => handleRemoveRider(rider.id) : undefined}
-          confirmPrompt={`Remove ${rider.preferredName} from the group?`}
-          disabled={isMutating}
-        />
-      ))}
+      {otherMemberCards}
     </>
   );
+};
+
+/**
+ * What a group with no driver says for itself, in place of the spinner it used
+ * to show instead.
+ *
+ * Two facts, because each one is load-bearing for the person reading it:
+ *
+ *  1. Nothing here can be managed. `requireGroupDriver` refuses every
+ *     management action in this state, so the screen is not merely missing
+ *     buttons - the actions do not exist to offer.
+ *  2. Leaving may end the group. `groups.edit` dissolves a group once a single
+ *     member would be left, and 14 of the 15 driverless groups on production
+ *     hold exactly two members - so for almost all of them, one person leaving
+ *     is the end of it. Said here, before the confirmation, rather than in a
+ *     toast afterwards.
+ *
+ * "Members" throughout, never "riders": 8 of the 33 people in this state are
+ * VIEWER rows.
+ */
+const DriverlessGroupNotice = ({ memberCount }: { memberCount: number }) => (
+  <div className="bg-gray-50 px-2 py-3 sm:px-4">
+    <h3 className="text-base font-semibold text-gray-900">
+      This group has no driver
+    </h3>
+    <p className="mt-1 text-sm text-gray-600">
+      Nobody in this group is signed up to drive, so there is nothing to manage
+      here and no route to preview. Leaving the group is the only change you can
+      make.
+      {memberCount === 2
+        ? " There are only two of you, so leaving will dissolve the group for both of you."
+        : ""}
+    </p>
+  </div>
+);
+
+/**
+ * Role badges, one per role.
+ *
+ * VIEWER used to fall into the `: "Rider"` half of a two-way conditional and be
+ * labelled as something it is not - and a group member can genuinely be one,
+ * since `carpoolId` lives on `CarpoolSearch` alongside `role` and nothing ties
+ * the two together. 8 of the 33 members of the driverless groups on production
+ * are VIEWER rows, every one of them previously shown as "Rider".
+ */
+const ROLE_BADGES: Record<Role, { label: string; className: string }> = {
+  [Role.DRIVER]: { label: "Driver", className: "bg-blue-100 text-blue-800" },
+  [Role.RIDER]: { label: "Rider", className: "bg-green-100 text-green-800" },
+  [Role.VIEWER]: { label: "Viewer", className: "bg-gray-200 text-gray-700" },
 };
 
 interface GroupMemberCardProps {
@@ -128,6 +221,7 @@ export const GroupMemberCard = ({
   disabled = false,
 }: GroupMemberCardProps) => {
   const [isConfirming, setIsConfirming] = useState(false);
+  const roleBadge = ROLE_BADGES[user.role];
 
   return (
     <div className="flex items-center gap-3 px-2 py-3 sm:px-4">
@@ -152,13 +246,9 @@ export const GroupMemberCard = ({
             )}
           </h3>
           <span
-            className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
-              user.role === Role.DRIVER
-                ? "bg-blue-100 text-blue-800"
-                : "bg-green-100 text-green-800"
-            }`}
+            className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${roleBadge.className}`}
           >
-            {user.role === Role.DRIVER ? "Driver" : "Rider"}
+            {roleBadge.label}
           </span>
         </div>
         <p className="truncate text-sm text-gray-600">{user.email}</p>
