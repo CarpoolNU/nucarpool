@@ -26,8 +26,16 @@ interface RecentreButtonProps {
  * own `NavigationControl` is added at `bottom-right` in `addMapEvents.tsx`,
  * the explore sheet covers the lower viewport at `z-20`, and the navigation
  * sits above both at `z-index: 100`. The top edge is the only side nothing
- * else claims. The map row is already offset below the banner in `index.tsx`,
- * so the top of the map is clear.
+ * else claims.
+ *
+ * **`absolute` here only works because the caller renders this inside `#map`**,
+ * which is `relative`. That was not true when this was written: the docblock
+ * argued "the map row is already offset below the banner in `index.tsx`, so the
+ * top of the map is clear", which was true of the map and not of this button -
+ * it was a *sibling* of the map container with nothing positioned between it
+ * and `#__next`, so `top-2` measured from the viewport and landed 16px under
+ * `MobileBanner`. SCRUM-464 moved the call site inside `#map`; keep it there.
+ * The offsets below are relative to the map, not to the page.
  *
  * 44px on mobile against the desktop 32px, matching the touch target
  * settled on for the explore sheet's handle. jsdom measures nothing,

@@ -108,13 +108,38 @@ export async function getServerSideProps(context: GetServerSidePropsContext) {
  * the sheet is out of layout entirely and the message panel underneath is
  * reachable; `collapsed` is the other thing, keeping the box and animating it
  * to nothing for the collapse handle.
+ *
+ * **The containing block for every offset here is the initial containing
+ * block - the viewport - not the map row and not `#map`.** The sheet is
+ * `absolute`, and nothing between it and `#__next` is positioned: the row is
+ * `flex overflow-hidden h-mobile-row`, and `overflow` does not establish a
+ * containing block. Only `position`, `transform`, `filter` and `contain` do.
+ * So `bottom-mobile-nav` measures from the viewport's bottom edge and
+ * `h-mobile-sheet`'s `100%` resolves against the viewport's height.
+ *
+ * That is deliberate as of SCRUM-464, and it is why the recentre button was
+ * moved *into* `#map` rather than the row being given `relative`: making the
+ * row a containing block would have repositioned this sheet and the drag
+ * handle as a side effect of placing a button. Anything that needs to be
+ * positioned against the map goes inside `#map`, beside `MapLegend`; anything
+ * positioned against the viewport stays here. Note the two are not
+ * interchangeable - `#map` is `z-0`, so it is also a stacking context, and an
+ * element that must paint above something outside it cannot live there.
+ *
+ * `detail` is capped at `60dvh` on top of its 320px. Without the cap its top
+ * edge went negative below about a 380px viewport - at 568x320, an iPhone SE
+ * in landscape and still under the 640px mobile breakpoint, the sheet's top
+ * was at -60px and the Back button, its first child, was entirely off-screen
+ * with no way to scroll to it. The cap is a `max-height`, so the 320px is
+ * unchanged at every viewport tall enough for it; `dvh` rather than `vh` per
+ * `globals.css`.
  */
 const MOBILE_SIDEBAR_CLASSES: Record<
   Exclude<ExploreSidebarView, "desktop">,
   string
 > = {
   hidden: "hidden",
-  detail: "bottom-mobile-nav h-[320px]",
+  detail: "bottom-mobile-nav h-[320px] max-h-[60dvh]",
   collapsed: "bottom-mobile-nav pointer-events-none h-0 opacity-0",
   half: "bottom-mobile-nav h-mobile-sheet-half",
   expanded: "bottom-mobile-nav h-mobile-sheet",
@@ -1083,18 +1108,6 @@ const Home: NextPage<any> = () => {
               )}
             </div>
 
-            {/* Reachable on mobile item 3, and lifted into
-                its own component so that reachability is assertable - see its
-                docblock for why the mobile placement is not from the phase 1
-                tokens. */}
-            <RecentreButton
-              onRecentre={() =>
-                mapState?.flyTo({
-                  center: [user.companyCoordLng, user.companyCoordLat],
-                  essential: true,
-                })
-              }
-            />
             <div className="relative flex-auto">
               {/* Message Panel */}
               {selectedUser && (
@@ -1120,6 +1133,45 @@ const Home: NextPage<any> = () => {
                     claimed by the navigation, the explore sheet and Mapbox's
                     own controls. The component owns that decision. */}
                 <MapLegend role={user.role} />
+                {/* Reachable on mobile item 3, and lifted into
+                    its own component so that reachability is assertable - see
+                    its docblock for why the mobile placement is not from the
+                    phase 1 tokens.
+
+                    Inside `#map` rather than beside it. It is `absolute`, and
+                    it used to render as a sibling of this container with
+                    nothing positioned between it and `#__next` - so `top-2
+                    right-2` resolved against the initial containing block,
+                    which is the viewport, not the map. That put its 44px box
+                    16px under `MobileBanner`; the banner is `fixed` at a
+                    z-index of 9999, so `elementFromPoint` at the button's top
+                    edge returned the banner and the overlap cost the hit test,
+                    not just the paint. `MapLegend` above was placed inside
+                    from the start and has always been clear of the banner,
+                    because this container starts below it.
+
+                    The banner's z-index is spelled out in words above rather
+                    than as its Tailwind class, deliberately: v4 scans this
+                    whole repository for class names, comments included, so
+                    naming that utility here would ship a rule nothing uses.
+                    Confirmed by selector-set diff on the compiled stylesheet.
+
+                    Moved rather than making the row `relative`, which would
+                    have fixed this button by changing the containing block of
+                    the sheet and the drag handle as a side effect - see
+                    `MOBILE_SIDEBAR_CLASSES`. This container's `z-0` does make
+                    it a stacking context, so nothing inside can paint above
+                    something outside it; that costs this button nothing,
+                    because the only thing it needed to clear it now clears
+                    geometrically. */}
+                <RecentreButton
+                  onRecentre={() =>
+                    mapState?.flyTo({
+                      center: [user.companyCoordLng, user.companyCoordLat],
+                      essential: true,
+                    })
+                  }
+                />
                 {/* Ungated item 2. The map's click handlers
                     always ran and always set `popupUsers`; with this behind
                     `!isMobile` a phone tap set state that nothing read and

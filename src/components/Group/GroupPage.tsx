@@ -293,7 +293,33 @@ export const GroupPage = (props: GroupPageProps) => {
 
   if (isMobile) {
     return (
-      <div className="fixed inset-0 z-50 bg-white">
+      /* `bottom-mobile-nav` rather than the `inset-0` this used to carry.
+       * `inset-0` put the overlay's bottom edge at the viewport's, and the
+       * bottom navigation is `position: fixed` at `z-index: 100` against this
+       * screen's `z-50` - so the nav won both the paint and the hit test over
+       * whatever the overlay put down there. That was the sticky action bar
+       * holding "Preview Group Route", the group screen's primary action:
+       * SCRUM-464 measured 44 of its 56px behind the nav on a 375x667 phone,
+       * leaving a 12px strip to tap. The last member card's Leave/Remove
+       * button is the same exposure whenever it is the bottom-most thing in
+       * the scroll port, which is the `hasDriver` false case, where no action
+       * bar renders below it.
+       *
+       * Reserving the nav's height once here rather than padding the action
+       * bar: the scroll port fills this box, so its bottom edge is now the
+       * nav's top edge and *nothing* it contains can sit behind the nav, at
+       * any scroll position and for any amount of content. The sticky bar
+       * inherits that, and so does anything else ever pinned to the bottom of
+       * this screen - which is why this is one class here rather than padding
+       * on each of them. `MapConnectPortal` solved the same overlap the same
+       * way, and `bottom-mobile-nav` is the token SCRUM-412 created for it -
+       * it carries `env(safe-area-inset-bottom)`, which a hand-written offset
+       * would not.
+       *
+       * The nav stays visible and tappable over this view by design; see this
+       * file's test for why it is a full-screen view with live navigation
+       * rather than a modal. */
+      <div className="bottom-mobile-nav fixed inset-x-0 top-0 z-50 bg-white">
         <div className="flex h-full flex-col bg-gray-50">
           <div className="mt-6 flex items-center border-b border-gray-200 bg-white px-4 py-3 shadow-xs">
             {/* The way out. This header held the title alone, so the only exit
