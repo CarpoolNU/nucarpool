@@ -334,10 +334,22 @@ const Setup: NextPage = () => {
       <div className="bg-floaty absolute inset-0" />
       <h1 className={titleClass}>CarpoolNU</h1>
 
+      {/*
+        The progress bar's wrapper carries its width, because `ProgressBar` is
+        a capped `w-full` and this element is absolutely positioned: with no
+        explicit width it shrink-wraps its content, and a `w-full` child
+        resolving against a shrink-to-fit parent is circular. 90% is the same
+        figure `SetupContainer` uses, so the bar and the card share an edge.
+
+        Both differences here are styling only, so both are `desktop:`
+        overrides on mobile-first base classes rather than an `isMobile`
+        ternary - the direction SCRUM-415 settled on. That also removes a
+        first-render wrinkle: `useIsMobile` returns the desktop snapshot during
+        hydration, so the ternary placed the bar at its desktop offset once on
+        a phone before correcting.
+      */}
       {step > 1 && (
-        <div
-          className={`absolute left-1/2 ${isMobile ? "top-16" : "top-[calc(50%-250px-60px)]"} z-20 -translate-x-1/2 transform`}
-        >
+        <div className="desktop:top-[calc(50%-250px-60px)] desktop:w-[600px] absolute top-16 left-1/2 z-20 w-[90%] -translate-x-1/2 transform">
           <ProgressBar step={step - 2} />
         </div>
       )}
@@ -345,7 +357,7 @@ const Setup: NextPage = () => {
       {/* Full screen flex container for perfect centering */}
       <div className="fixed inset-0 flex items-center justify-center">
         <SetupContainer
-          className={`${containerPadding()} ${isMobile ? "w-[90%]" : ""} overflow-y-auto`}
+          className={`${containerPadding()} overflow-y-auto`}
           style={
             isMobile
               ? {
