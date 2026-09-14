@@ -103,3 +103,33 @@ export const isRequestSubType = (subType: string): boolean =>
  */
 export const viewerModeHidesCards = (subType: string): boolean =>
   subType === "recommendations";
+
+/**
+ * Whether a caller in this role should issue `user.recommendations.me` at all.
+ *
+ * The same fact as the gate above, read one layer earlier. `SidebarContent`
+ * already decides that a VIEWER on the recommendations tab gets copy instead of
+ * cards, so the request behind those cards was paid for and then discarded — a
+ * ranked scoring pass over *both* other roles' candidate pools, since
+ * `compatibleRoles` is deliberately at its widest for a VIEWER caller. About a
+ * third of accounts hold that role, and `refetchOnMount: true` at the call site
+ * means it was paid again on every client-side navigation back to `/`.
+ *
+ * Written in terms of `viewerModeHidesCards` rather than as a second
+ * `role === "VIEWER"` test, so the query and the render cannot drift apart: if
+ * a VIEWER is ever shown real recommendation cards, that predicate is the one
+ * place to change and this one follows it.
+ *
+ * **The `undefined` case is the trap.** The role arrives with `user.me`, which
+ * is still in flight on the first render, so `user?.role` is `undefined` there.
+ * Answering `true` for it would fire the exact request this exists to prevent,
+ * every time, before the answer was knowable. Answering `false` holds the query
+ * until the role is known and then releases it for a RIDER or a DRIVER — it
+ * does not disable it permanently, which is the mistake to avoid here. The cost
+ * is that a cold load serialises `user.me` ahead of this query; a return
+ * navigation does not pay it, because `user.me` is cached by then
+ * (`refetchOnMount` defaults to `false` — see `utils/trpc.ts`).
+ */
+export const roleFetchesRecommendations = (role: string | undefined): boolean =>
+  role !== undefined &&
+  !(role === "VIEWER" && viewerModeHidesCards("recommendations"));
