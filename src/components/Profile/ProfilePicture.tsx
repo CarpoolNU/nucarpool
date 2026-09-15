@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import Image from "next/image";
 import Cropper, { Area, Point } from "react-easy-crop";
 import { AiOutlineUser } from "react-icons/ai";
@@ -15,15 +15,58 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
   const [zoom, setZoom] = useState(1);
   const [minZoom, setMinZoom] = useState(1);
 
-  // The crop rectangle react-easy-crop reports, in pixels, and the only thing
-  // `handleCrop` needs. Typed with the library's own `Area` rather than `any`,
+  // The crop rectangle react-easy-crop reports, and the only thing
+  // `handleCrop` needs. Its units are the *source image's* pixels, not the
+  // cropper box's - a 4032x3024 photo cropped square reports ~3369x3369 - which
+  // is why `getCroppedImg` scales it to a capped output rather than trusting it
+  // as a canvas size. Typed with the library's own `Area` rather than `any`,
   // because this is the value a future major could reshape without anything
-  // here noticing: no test covers the cropper.
+  // here noticing: no test covers this component, and only the size arithmetic
+  // is reachable from one (`src/utils/cropImage.test.ts`).
   //
   // `onCropComplete`'s first argument - the same rectangle as percentages - was
   // also being stored, in state nothing ever read. Dropped rather than typed.
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
   const [showModal, setShowModal] = useState<boolean>(false);
+
+  /**
+   * The two object URLs this component owns, held in refs rather than read
+   * back out of state.
+   *
+   * `URL.createObjectURL` hands out a reference the browser keeps alive - along
+   * with the whole underlying blob - until it is revoked or the document is
+   * discarded. On mobile, where the source is a 4MB camera-roll photo, letting
+   * those accumulate across a few selections is exactly the memory the ticket
+   * is about.
+   *
+   * Refs because the unmount cleanup below has to see the *current* URL: a
+   * cleanup closing over state would revoke whatever was set when the effect
+   * was created, which for an empty dependency list is `null` forever.
+   */
+  const sourceUrlRef = useRef<string | null>(null);
+  const croppedUrlRef = useRef<string | null>(null);
+
+  /** Releases the full-resolution source, which only the open cropper needs. */
+  const revokeSourceUrl = useCallback(() => {
+    if (sourceUrlRef.current) {
+      URL.revokeObjectURL(sourceUrlRef.current);
+      sourceUrlRef.current = null;
+    }
+  }, []);
+
+  // Both URLs die with the component. Safe under StrictMode's double-invoke:
+  // the setup does nothing, and on the first mount both refs are still null,
+  // so the extra cleanup pass has nothing to revoke.
+  useEffect(
+    () => () => {
+      revokeSourceUrl();
+      if (croppedUrlRef.current) {
+        URL.revokeObjectURL(croppedUrlRef.current);
+        croppedUrlRef.current = null;
+      }
+    },
+    [revokeSourceUrl],
+  );
 
   const {
     profileImageUrl,
@@ -39,7 +82,8 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
   );
 
   const handleCancel = () => {
-    setImageSrc("");
+    revokeSourceUrl();
+    setImageSrc(null);
     setCrop({ x: 0, y: 0 });
     setZoom(1);
     setMinZoom(1);
@@ -47,37 +91,53 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
     setShowModal(false);
   };
 
-  const handleFileChange = async (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      const imageDataUrl = await readFile(file);
-      setImageSrc(imageDataUrl as string);
-      setShowModal(true);
-    } else {
+    if (!file) {
       onFileSelected(null);
+      return;
     }
+
+    // An object URL rather than `FileReader.readAsDataURL`. A data URL puts a
+    // base64 copy of the whole file - about 33% larger than the bytes - on the
+    // JS heap, in React state, and then hands the same string to both the
+    // cropper's `<img>` and `getCroppedImg`'s `new Image()`, so each decode
+    // carries its own copy. An object URL is a short reference to bytes the
+    // browser already holds, and the two decodes can share one resource.
+    //
+    // Revoking first matters: picking a second photo without it would leak the
+    // first, which is the common path when someone dislikes their own crop.
+    revokeSourceUrl();
+    const url = URL.createObjectURL(file);
+    sourceUrlRef.current = url;
+    setImageSrc(url);
+    setShowModal(true);
   };
 
   const handleCrop = async () => {
     if (!imageSrc || !croppedAreaPixels) return;
     try {
       const { file, url } = await getCroppedImg(imageSrc, croppedAreaPixels);
+
+      // The preview this replaces is about to stop being rendered, so its URL
+      // is dead. Revoking before storing the new one keeps at most one alive.
+      if (croppedUrlRef.current) {
+        URL.revokeObjectURL(croppedUrlRef.current);
+      }
+      croppedUrlRef.current = url;
+
       setCroppedImageUrl(url);
       onFileSelected(file);
       setShowModal(false);
+
+      // `getCroppedImg` has already decoded and drawn by the time it resolves,
+      // so the source is finished with. Nothing else reads it once the modal
+      // is closed, and revoking it does not disturb the already-loaded <img>.
+      revokeSourceUrl();
+      setImageSrc(null);
     } catch (error) {
       console.error(error);
     }
-  };
-
-  const readFile = (file: File): Promise<string | ArrayBuffer | null> => {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.addEventListener("load", () => resolve(reader.result));
-      reader.readAsDataURL(file);
-    });
   };
   const onMediaLoaded = useCallback(
     (mediaSize: { naturalWidth: number; naturalHeight: number }) => {
