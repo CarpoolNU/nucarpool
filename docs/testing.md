@@ -61,6 +61,34 @@ So a jsdom test can assert that a control is **in the tree** and what happens wh
 
 Use the helpers in `src/testing/viewport.ts` — `setViewportWidth`, `resizeViewportTo`, `MOBILE_WIDTH`, `DESKTOP_WIDTH`, `restoreViewportAfterEach`. jsdom reports a fixed `innerWidth` and never changes it, so the viewport has to be written with `Object.defineProperty`. `MOBILE_WIDTH` and `DESKTOP_WIDTH` straddle the breakpoint by one pixel, so an off-by-one fails a test rather than passing one.
 
+### Measuring layout in a real browser
+
+jsdom cannot do the layout half at all, so there is a harness for doing it in Chromium by hand: [`scripts/measure-layout.ts`](../scripts/measure-layout.ts), with [`src/testing/layoutProbe.js`](../src/testing/layoutProbe.js) running in the page and [`src/testing/layoutFixtures.ts`](../src/testing/layoutFixtures.ts) holding what gets measured.
+
+```bash
+npx ts-node scripts/measure-layout.ts                            # list fixtures
+npx ts-node scripts/measure-layout.ts group-member-card-trigger  # serve one
+```
+
+It compiles `src/styles/globals.css` through `@tailwindcss/postcss` — the same plugin, entry point, `@config` and repo-wide scan the build uses — mounts a fixture inside `#__next`, and serves both over HTTP on an OS-assigned port. Then you drive a browser to it, resize, and evaluate the probe call the banner prints. About 200ms of compile, no `.env`, no `.next`.
+
+**What it proves.** That this project's real CSS, at a given viewport width, gives a reproduction of a component's markup the box you think it does — `rect`, `clientHeight` and `contentWidth` separately, plus a 3×3 hit-test grid over a control's footprint and each neighbour's share of it.
+
+**What it does not prove**, and the third one is the one that matters:
+
+1. It measures a **copy** of the markup, not the component. `reproduces` on each fixture names the class strings it copied and the file they came from, and `scripts/measure-layout.test.ts` fails in `yarn test` the moment one is no longer there — but a guarded copy is still a copy, and only the class strings are guarded, not the container chain above them. The printed predicted `contentWidth` is the check on that chain: if the browser disagrees, the fixture is wrong and every figure under it is wrong too.
+2. It says nothing about a real device — no touch, no safe-area inset, no browser chrome moving under `dvh`.
+3. **Nothing runs it.** It is not in `yarn test`, not in CI, not scheduled. A criterion measured through it is measured once, by someone who chose to. The class-name assertions the mobile tickets left behind are still the only standing guard, and they are proxies. Making these durable means a browser in CI, which means a new dev dependency; SCRUM-481 decided against that deliberately rather than by omission.
+
+Four edges are paid for and encoded rather than left to be rediscovered:
+
+- **Probe a grid, never a centre point.** `gridPoints` has no single-point option. SCRUM-476 measured one control's centre, found it clear, and recorded it safe; the hazard was its left third.
+- **Every `elementFromPoint` is viewport-guarded, structurally.** That call returns `null` both for "nothing is there" and for "outside the viewport", so an off-screen probe reads as the reassuring answer. `plannedProbePoints` removes off-screen points before the DOM is asked, and reports `measurable: false` when it removed all of them — which is a different result from "probed and found nothing".
+- **A height criterion reads `clientHeight`, not the rect.** Tailwind v4 compiles `divide-y` to `:where(.divide-y > :not(:last-child)) { border-bottom-width: 1px }`, so every row **but the last** carries a border pixel — the opposite end of the list from v3's `& > * + *`. The group-card fixture holds a bordered and an unbordered row so the 73-versus-72 difference is observable rather than asserted.
+- **One stylesheet is only sound when every utility both variants need is still emitted.** Reverting `p-3` to `px-3 py-2` needs no second build, because both are in use elsewhere in the repo; a change to a scan _input_ needs two (SCRUM-467). And remember the scan reaches this whole repository, comments included: naming a utility in a test comment ships it as CSS, which happened while writing these tests and cost 52 bytes of production stylesheet.
+
+`yarn test` covers the arithmetic, the fixture registry and the drift guard, in the `node` project with no DOM at all — the probe's three DOM-touching functions take an injectable `{ document, window }` that the tests stub. That is deliberate: running them in jsdom would give the appearance of a DOM while still measuring nothing.
+
 ### React warnings are cached, so a `console.error` spy can pass falsely
 
 React caches each invalid-attribute warning **per attribute name at module scope**: it fires once and is then suppressed for the lifetime of the module. Jest gives each test _file_ a fresh registry, so exactly one render per file can observe it.
@@ -87,4 +115,6 @@ What it covers beyond the harness's own self-test: `user.me`'s nested `include` 
 
 ## Not covered at all
 
-No browser or end-to-end tests exist. Anything that depends on layout, paint order, or real device behaviour is unverified.
+No **automated** browser or end-to-end tests exist, and nothing in CI opens a browser. Anything that depends on layout, paint order, or real device behaviour is unverified by any run.
+
+Layout can be measured by hand, in Chromium, through [the harness above](#measuring-layout-in-a-real-browser) — but that is a tool for taking a measurement, not a test that stops a regression. Nothing invokes it.
