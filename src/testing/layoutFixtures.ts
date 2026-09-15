@@ -594,10 +594,605 @@ const adminConsoleChartFold: LayoutFixture = {
   ],
 };
 
+/* ===================== SCRUM-485 measurement fixtures ===================== */
+
+/**
+ * An inline box for a stand-in element, in CSS rather than utilities.
+ *
+ * **A fixture's markup ships as CSS, and a stand-in's box is the one part of a
+ * fixture that must not.** The rule `adminConsoleChartFold` records above is
+ * the same rule: Tailwind v4 scans this file, so a class written here for a
+ * placeholder is compiled into the bundle every user downloads, applying to
+ * nothing. That fixture could obey it by reaching for utilities the app
+ * already had, because its stand-in needed no particular size.
+ *
+ * These fixtures cannot. A legend pin is 32x42 and a send icon 26x26 - figures
+ * set by `width`/`height` props on a `next/image`, not by any utility - and
+ * they are load-bearing, because the legend's total height is what item 4 is
+ * about. Rounding them to the spacing scale would change the measurement;
+ * writing them as arbitrary values would grow the bundle.
+ *
+ * Measured rather than assumed, and it caught this: the first draft of these
+ * fixtures used arbitrary-value utilities, and a selector-set diff of the
+ * compiled stylesheet against `origin/main` came back with eight additions -
+ * two pin dimensions, two icon dimensions, and the four the Mapbox stand-in
+ * needed. An inline style is invisible to the scanner, so the diff is now
+ * exactly one line, and it is the `max-height` this ticket set out to remove.
+ */
+const standIn = (width: number, height: number): string =>
+  `width:${width}px;height:${height}px`;
+
+const PROFILE_GRID_CLASS =
+  "relative grid h-[91.5%] w-full grid-cols-[250px_repeat(2,1fr)] overflow-hidden";
+
+const PROFILE_SIDEBAR_CLASS =
+  "border-busy-red sticky top-0 col-start-1 col-end-2 h-full w-[250px] border-r-4 bg-stone-100 lg:w-[350px]";
+
+const PROFILE_SCROLL_COLUMN_CLASS =
+  "col-start-2 col-end-4 flex h-full shrink items-start justify-center overflow-x-hidden overflow-y-auto";
+
+const PROFILE_SCROLL_INNER_CLASS = "mt-10 w-full max-w-2xl px-8";
+
+const ACCOUNT_SECTION_DESKTOP_CLASS =
+  "flex h-fit w-[700px] flex-col justify-start";
+
+/**
+ * `AccountSection.tsx:80` composes its class through a ternary, so the desktop
+ * string above never appears contiguously in the source and cannot anchor the
+ * drift guard. The anchor is the ternary's own text instead - a weaker anchor
+ * than a class string, for the same reason `Header.tsx`'s declarations are, and
+ * the only one available where the branch is assembled rather than written.
+ */
+const ACCOUNT_SECTION_WIDTH_TERNARY =
+  'flex h-fit ${isMobile ? "w-full" : "w-[700px]"} flex-col justify-start';
+
+const ACCOUNT_SAVE_BUTTON_CLASS =
+  "bg-northeastern-red w-full rounded-lg py-3 text-lg text-white hover:bg-red-700";
+
+const USER_SECTION_ROLE_ROW_DESKTOP_CLASS = "flex h-24 w-[700px]";
+
+const profileContentColumnWidth: LayoutFixture = {
+  name: "profile-content-column-width",
+  summary:
+    "The profile page's two 700px desktop rows inside the content column an overflow-x-hidden grid gives them",
+  source: "src/components/Profile/AccountSection.tsx:80",
+  issue: "SCRUM-485",
+  viewportWidth: 667,
+  viewportHeight: 375,
+  insets: [
+    { name: "sidebar column 250px", x: 250 },
+    { name: "inner px-8", x: 64 },
+  ],
+  markup: `
+    <style>
+      [data-probe="bar"] {${HEADER_BAR_CSS}      }
+
+      @media (min-width: 640px) {
+        [data-probe="bar"] {
+          padding: 0 40px;
+        }
+      }
+    </style>
+    <div data-probe="bar"></div>
+    <div class="${PROFILE_GRID_CLASS}" data-probe="grid">
+      <div class="${PROFILE_SIDEBAR_CLASS}"></div>
+      <div class="${PROFILE_SCROLL_COLUMN_CLASS}" data-probe="scroll-column">
+        <div class="${PROFILE_SCROLL_INNER_CLASS}" data-probe="scroll-inner">
+          <div class="${USER_SECTION_ROLE_ROW_DESKTOP_CLASS} max-w-full items-end" data-probe="role-row">
+            <div class="flex gap-8">
+              <span>Viewer</span><span>Rider</span><span>Driver</span>
+            </div>
+            <div class="flex flex-1 flex-col">
+              <span>Seat Availability</span>
+              <input class="h-14 w-full self-end text-lg" data-probe="seat-field" />
+            </div>
+          </div>
+          <div class="${ACCOUNT_SECTION_DESKTOP_CLASS}" data-probe="account-section">
+            <div class="mt-2 w-full">
+              <div class="flex w-2/3 gap-8 lg:w-full" data-probe="date-row">
+                <div class="flex flex-1 flex-col">
+                  <span>Start Date</span>
+                  <div class="h-14 w-full rounded-md border border-gray-200 p-2 text-lg" data-probe="start-date">2026-01</div>
+                </div>
+                <div class="flex flex-1 flex-col">
+                  <span>End Date</span>
+                  <div class="h-14 w-full rounded-md border border-gray-200 p-2 text-lg" data-probe="end-date">2026-06</div>
+                </div>
+              </div>
+              <div class="font-montserrat py-8">
+                <button type="button" class="${ACCOUNT_SAVE_BUTTON_CLASS}" data-probe="save-button">
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `,
+  widthProbe: "[data-probe='scroll-inner']",
+  probe: {
+    boxes: [
+      "[data-probe='grid']",
+      "[data-probe='scroll-column']",
+      "[data-probe='scroll-inner']",
+      "[data-probe='role-row']",
+      "[data-probe='seat-field']",
+      "[data-probe='account-section']",
+      "[data-probe='date-row']",
+      "[data-probe='end-date']",
+      "[data-probe='save-button']",
+    ],
+    footprint: "[data-probe='save-button']",
+    against: ["[data-probe='scroll-column']"],
+  },
+  recorded: [
+    "scroll-inner contentWidth 353, matching the predicted chain. clientWidth is 417; the 64px difference is its own px-8.",
+    "account-section rect left 282 width 700 — right edge at 982 against a viewport of 667. 315px of it is outside the screen.",
+    "save-button rect width 700, of which 385 is on screen. `overlaps scroll-column` 0.55, and the footprint hit test skipped 3 of its 9 points as outside the viewport. The 6 it could press are reachable, so the button works — it is just 45% off-screen.",
+    'save-button label survives: centred in the 700px box it lands at x 632, which is inside 667. Reading this as "the label is cut off" is the easy mistake; it is not.',
+    "end-date rect left 531.33 width 217.34 — right edge 748.66, so 81.66px of the End Date picker is off-screen. This is the item's real cost: a form control, not blank box.",
+    "The overflow is not reachable by any gesture. scroll-column is `overflow-x-hidden` with scrollWidth 732 against clientWidth 417, and the document itself has scrollWidth 667 = clientWidth 667 with scrollLeft pinned at 0. Setting scrollLeft programmatically does move it, which is why keyboard focus rescues the control and a finger does not: scrollIntoView on end-date takes the column to 81.5.",
+    "role-row — `UserSection.tsx:93`, the item SCRUM-477 ranked High — measures 353 wide and 96 tall, and is the counter-example. `max-w-full` caps its declared 700px, so it does not overflow at all, and the 56px seat field ends at 167.875, exactly the row's own bottom edge. SCRUM-477's \"64px overflow\" was a misreading: `ProfilePicture` is not in this div, it is at `UserSection.tsx:175`.",
+  ],
+  reproduces: [
+    { file: "src/pages/profile/index.tsx", className: PROFILE_GRID_CLASS },
+    { file: "src/pages/profile/index.tsx", className: PROFILE_SIDEBAR_CLASS },
+    {
+      file: "src/pages/profile/index.tsx",
+      className: PROFILE_SCROLL_COLUMN_CLASS,
+    },
+    {
+      file: "src/pages/profile/index.tsx",
+      className: PROFILE_SCROLL_INNER_CLASS,
+    },
+    {
+      file: "src/components/Profile/AccountSection.tsx",
+      className: ACCOUNT_SECTION_WIDTH_TERNARY,
+    },
+    {
+      file: "src/components/Profile/AccountSection.tsx",
+      className: ACCOUNT_SAVE_BUTTON_CLASS,
+    },
+    {
+      file: "src/components/Profile/UserSection.tsx",
+      className: USER_SECTION_ROLE_ROW_DESKTOP_CLASS,
+    },
+  ],
+};
+
+const HEADER_NAV_BUTTON_CLASS = "rounded-xl p-4 font-medium text-xl text-white";
+
+const HEADER_AVATAR_TRIGGER_CLASS =
+  "flex h-14 w-14 items-center justify-center overflow-hidden rounded-full";
+
+const headerControlRow: LayoutFixture = {
+  name: "header-control-row",
+  summary:
+    "The header's right-hand controls - the tab buttons and the 56px avatar trigger - inside the 8.5% bar",
+  source: "src/components/DropDownMenu.tsx:58",
+  issue: "SCRUM-485",
+  viewportWidth: 667,
+  viewportHeight: 375,
+  insets: [{ name: "bar padding 0 40px", x: 80 }],
+  markup: `
+    <style>
+      [data-probe="bar"] {${HEADER_BAR_CSS}      }
+      [data-probe="logo"] {${HEADER_LOGO_CSS}      }
+
+      @media (min-width: 640px) {
+        [data-probe="bar"] {
+          padding: 0 40px;
+        }
+
+        [data-probe="logo"] {${HEADER_LOGO_DESKTOP_CSS}        }
+      }
+    </style>
+    <div data-probe="bar">
+      <h1 data-probe="logo">CarpoolNU</h1>
+      <div class="flex items-center">
+        <div class="pr-8">
+          <button class="${HEADER_NAV_BUTTON_CLASS}" data-probe="nav-button">Explore</button>
+          <button class="${HEADER_NAV_BUTTON_CLASS}">Requests</button>
+          <button class="${HEADER_NAV_BUTTON_CLASS}">My Group</button>
+        </div>
+        <div class="z-30">
+          <button class="${HEADER_AVATAR_TRIGGER_CLASS}" data-probe="avatar-trigger">
+            <span class="h-14 w-14 rounded-full bg-gray-400"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="${CONTENT_ROW_CLASS}" data-probe="content-row">
+      <div class="h-full w-full bg-stone-100">
+        <button data-probe="row-first-control" class="m-2 rounded bg-white px-4 py-2">
+          Anything at the top of the row
+        </button>
+      </div>
+    </div>
+  `,
+  widthProbe: "[data-probe='bar']",
+  probe: {
+    boxes: [
+      "[data-probe='bar']",
+      "[data-probe='logo']",
+      "[data-probe='nav-button']",
+      "[data-probe='avatar-trigger']",
+      "[data-probe='content-row']",
+    ],
+    footprint: "[data-probe='avatar-trigger']",
+    against: ["[data-probe='content-row']"],
+  },
+  recorded: [
+    "bar rect height 31.875 at 375 tall, and logo rect height 31.875 at top 0 — SCRUM-484's fix still holding. Everything below is what that ticket did not reach.",
+    "avatar-trigger rect height 56 at top -12.0625: the top 12.06px is above the viewport and the bottom 12.06px is below the bar. `overlaps content-row` 0.215.",
+    "nav-button rect height 60 at top -14.0625 — the four desktop tabs are the taller offender, and they are `rounded-xl p-4 text-xl`: 16 + 28 + 16.",
+    "The two differ in whether the overlap is clickable, and the reason is a flex-item rule rather than a z-index one. At y 38 — below the bar, inside the row — elementFromPoint returns the avatar's own span, but for the nav button it returns the row's background div. `DropDownMenu`'s wrapper carries a z-index and is a flex item, and a flex item's z-index creates a stacking context even at `position: static`; the tab group's wrapper has none. So the avatar keeps its full 43.94px of visible target and each tab is left with 31.875px, the bar's height, against the 44px this repository asks of a touch control.",
+    "avatar-trigger footprint skipped 3 of 9 points as outside the viewport and found the remaining 6 reachable and unobstructed.",
+    "Not strictly landscape-specific — the bar is 8.5% of the viewport, so the 60px tab overflows below 706px of viewport height and the 56px trigger below 659px — but the band matters far less than that sounds, and the measurement is what says so. At 1366x660 the bar is 56.094, the tab overhangs by 1.953px each way and the trigger fits exactly (-0.047). Two pixels is not a defect. It is only at a landscape phone's 31.875px bar that the figures become the 12-14px above.",
+    "DESKTOP CONTROL at 1440x900: bar 76.5, both fit with room to spare, overflow 0. So the honest statement is that this degrades continuously as the window shortens and is only worth acting on at the bottom of the range. SCRUM-477's Closeout recorded the same shape for the logo, which overflowed by 17.25px each way even at 1440x900 — this is the milder version of that.",
+    "bar contentWidth 587, matching the predicted chain; the 80px against clientWidth 667 is the bar's own desktop padding.",
+  ],
+  reproduces: [
+    {
+      file: "src/components/DropDownMenu.tsx",
+      className: HEADER_AVATAR_TRIGGER_CLASS,
+    },
+    {
+      file: "src/components/Header.tsx",
+      className: HEADER_NAV_BUTTON_CLASS,
+    },
+    {
+      file: "src/components/Header.tsx",
+      className: "height: ${HEADER_BAR_HEIGHT};",
+    },
+    { file: "src/pages/admin.tsx", className: CONTENT_ROW_CLASS },
+  ],
+};
+
+const MESSAGE_HEADER_DESKTOP_CLASS =
+  "flex items-center justify-between border-b border-gray-200 bg-white p-8";
+
+const MESSAGE_CONTENT_CLASS =
+  "flex h-full flex-1 flex-col overflow-x-hidden overflow-y-auto bg-white p-4";
+
+const SEND_BAR_CLASS = "desktop:px-6 border-t border-gray-200 px-4 py-6";
+
+const SEND_BAR_ROW_CLASS =
+  "desktop:mx-10 mx-0 flex items-center overflow-hidden rounded-lg border border-gray-200 bg-gray-100";
+
+/**
+ * The composer is a `contentEditable` div, not a `textarea`, and its height
+ * comes from the inline `minHeight: 20px` rather than from any utility - so a
+ * fixture that stands it in with a line of `text-lg` text measures 72px where
+ * the real control measures 36. The first draft of this fixture did exactly
+ * that and reported the send bar overflowing the viewport by 34px, which is an
+ * artefact of the stand-in and not a fact about the app. The inline style is
+ * reproduced on the element below for that reason.
+ */
+const SEND_BAR_COMPOSER_CLASS =
+  "placeholder w-full flex-1 resize-none border-0 bg-gray-100 p-2 text-lg focus:outline-hidden";
+
+const SEND_BAR_BUTTON_CLASS = "p-2 px-4 pt-3";
+
+const messagePanelChrome: LayoutFixture = {
+  name: "message-panel-chrome",
+  summary:
+    "The desktop message panel's header, tab strip and send bar inside the 91.5% row, and what is left for the conversation",
+  source: "src/components/Messages/MessageHeader.tsx:421",
+  issue: "SCRUM-485",
+  viewportWidth: 667,
+  viewportHeight: 375,
+  insets: [
+    { name: "sidebar w-[25rem]", x: 400 },
+    { name: "header p-8", x: 64 },
+  ],
+  markup: `
+    <style>
+      [data-probe="bar"] {${HEADER_BAR_CSS}      }
+
+      @media (min-width: 640px) {
+        [data-probe="bar"] {
+          padding: 0 40px;
+        }
+      }
+    </style>
+    <div data-probe="bar"></div>
+    <div class="${CONTENT_ROW_CLASS}" data-probe="content-row">
+      <div class="relative w-[25rem] bg-stone-100"></div>
+      <div class="relative flex-auto">
+        <div class="absolute inset-0 z-10 h-full w-full" data-probe="panel-slot">
+          <div class="flex h-full w-full flex-col">
+            <div>
+              <div class="${MESSAGE_HEADER_DESKTOP_CLASS}" data-probe="message-header">
+                <div class="flex items-center">
+                  <span class="h-20 w-20 rounded-full bg-gray-200" data-probe="avatar"></span>
+                  <span class="font-montserrat pr-10 pl-10 font-semibold sm:text-lg md:text-xl lg:text-2xl">Alex</span>
+                </div>
+                <div class="relative flex items-center justify-between">
+                  <button class="h-14 w-14 cursor-pointer items-center justify-center text-3xl text-black" data-probe="close-button">&times;</button>
+                </div>
+              </div>
+              <div class="flex border-b border-gray-200 bg-white" data-probe="tab-strip">
+                <button class="flex-1 py-3 text-center text-lg font-medium">Message</button>
+                <button class="flex-1 py-3 text-center text-lg font-medium">Map</button>
+              </div>
+            </div>
+            <div class="flex h-0 flex-1 flex-col bg-white" data-probe="content-area">
+              <div class="${MESSAGE_CONTENT_CLASS}" data-probe="message-content">
+                <p class="mb-2">A message in the thread.</p>
+              </div>
+              <div class="${SEND_BAR_CLASS}" data-probe="send-bar">
+                <div class="${SEND_BAR_ROW_CLASS}" data-probe="composer-row">
+                  <div
+                    class="${SEND_BAR_COMPOSER_CLASS}"
+                    data-probe="composer"
+                    style="min-height: 20px; max-height: 100px; line-height: normal; display: inline-block; white-space: pre-wrap; overflow-y: auto; overflow-wrap: break-word;"
+                  ></div>
+                  <div class="h-10 w-px bg-gray-300"></div>
+                  <button class="${SEND_BAR_BUTTON_CLASS}" data-probe="send-button">
+                    <span class="block bg-gray-500" style="${standIn(26, 26)}"></span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `,
+  widthProbe: "[data-probe='message-header']",
+  probe: {
+    boxes: [
+      "[data-probe='content-row']",
+      "[data-probe='panel-slot']",
+      "[data-probe='message-header']",
+      "[data-probe='avatar']",
+      "[data-probe='tab-strip']",
+      "[data-probe='content-area']",
+      "[data-probe='message-content']",
+      "[data-probe='send-bar']",
+      "[data-probe='composer-row']",
+      "[data-probe='composer']",
+      "[data-probe='send-button']",
+    ],
+    footprint: "[data-probe='send-button']",
+    against: ["[data-probe='content-row']"],
+  },
+  recorded: [
+    "message-header rect height 145 — SCRUM-477 surveyed 144, and the missing pixel is the `border-b`. The 80px avatar plus `p-8`'s 64.",
+    "The chrome is the finding, not the header alone: header 145 + tab-strip 53 = 198 of a 343.125px row, leaving content-area 145.13.",
+    "message-content rect height 32 with clientHeight 32 and `padding: 16px` — **contentHeight 0**. scrollHeight is 64, so there is content wanting to show and none of it does. At 667x375 the conversation is not cramped, it is invisible.",
+    "send-bar rect height 131.5 with its bottom at 393.38 against a viewport of 375 — 18.38px past the edge, and `#__next` is `100dvh` with no page scroll, so that strip is unreachable.",
+    "Why the conversation collapses rather than sharing the space: content-area is `flex h-0 flex-1 flex-col` at 145px, and send-bar's min-content height is 131.5, which a flex item's automatic minimum size will not go below. message-content is left with its own padding. content-area scrollHeight 179 against clientHeight 145 is the same 34px from the other side.",
+    "send-button rect 58x46 at top 305.13, fully inside the composer row and reachable — the button is fine. An earlier draft of this fixture reported it clipped and unreachable; that was the stand-in composer's fault, see SEND_BAR_COMPOSER_CLASS.",
+    "The composer is 78px wide and 80.5px tall, because at that width `globals.css`'s `.placeholder:empty:before` hint wraps to three lines. A width problem driving the height problem: the send bar's 219px of content width loses 80 to `desktop:mx-10`.",
+    "THRESHOLD: contentHeight reaches 0 at about 395px of viewport height, and 5px was measured at 667x400. Below ~395 the send bar also leaves the screen. That band is landscape phones and nothing else, which is what keeps this item's blast radius honest.",
+    "DESKTOP CONTROL at 1440x900: header still 145 but the row is 823.5, message-content contentHeight 497, send-bar 97 with nothing past the viewport, composer 37.5 on one line. The panel is healthy wherever there is height for it.",
+    "message-header contentWidth 203, matching the predicted chain — 667 less the 400px sidebar less its own `p-8`.",
+  ],
+  reproduces: [
+    {
+      file: "src/components/Messages/MessageHeader.tsx",
+      className: MESSAGE_HEADER_DESKTOP_CLASS,
+    },
+    {
+      file: "src/components/Messages/MessageContent.tsx",
+      className: MESSAGE_CONTENT_CLASS,
+    },
+    {
+      file: "src/components/Messages/SendBar.tsx",
+      className: SEND_BAR_CLASS,
+    },
+    {
+      file: "src/components/Messages/SendBar.tsx",
+      className: SEND_BAR_ROW_CLASS,
+    },
+    {
+      file: "src/components/Messages/SendBar.tsx",
+      className: SEND_BAR_COMPOSER_CLASS,
+    },
+    {
+      file: "src/components/Messages/SendBar.tsx",
+      className: SEND_BAR_BUTTON_CLASS,
+    },
+    { file: "src/pages/admin.tsx", className: CONTENT_ROW_CLASS },
+  ],
+};
+
+const RECENTRE_DESKTOP_CLASS =
+  "absolute right-[8px] bottom-[150px] z-10 flex h-8 w-8 items-center justify-center rounded-md border-2 border-solid border-gray-300 bg-white shadow-xs hover:bg-gray-200";
+
+const MAP_LEGEND_DESKTOP_CLASS =
+  "text-md absolute bottom-8 left-2 z-10 flex flex-col rounded-xl border border-gray-200 bg-white p-2 md:text-lg";
+
+const MAP_CONTAINER_CLASS =
+  "pointer-events-auto relative z-0 h-full w-full flex-auto";
+
+const mapOverlayAnchors: LayoutFixture = {
+  name: "map-overlay-anchors",
+  summary:
+    "The desktop recentre button and the always-expanded legend against a map that is only 91.5% of a landscape phone",
+  source: "src/components/Map/RecentreButton.tsx:53",
+  issue: "SCRUM-485",
+  viewportWidth: 667,
+  viewportHeight: 375,
+  insets: [{ name: "sidebar w-[25rem]", x: 400 }],
+  markup: `
+    <style>
+      [data-probe="bar"] {${HEADER_BAR_CSS}      }
+
+      @media (min-width: 640px) {
+        [data-probe="bar"] {
+          padding: 0 40px;
+        }
+      }
+    </style>
+    <div data-probe="bar"></div>
+    <div class="${CONTENT_ROW_CLASS}" data-probe="content-row">
+      <div class="relative w-[25rem] bg-stone-100"></div>
+      <div class="relative flex-auto">
+        <div class="${MAP_CONTAINER_CLASS}" data-probe="map">
+          <div class="${MAP_LEGEND_DESKTOP_CLASS}" data-probe="legend">
+            <div class="my-1 flex flex-row items-center">
+              <span class="block bg-gray-300" style="${standIn(32, 42)}"></span>
+              <p class="mx-2">My Destination</p>
+            </div>
+            <div class="my-1 flex flex-row items-center">
+              <span class="block bg-gray-300" style="${standIn(32, 42)}"></span>
+              <p class="mx-2">Driver Destination</p>
+            </div>
+            <div class="my-1 flex flex-row items-center">
+              <span class="block bg-gray-300" style="${standIn(32, 42)}"></span>
+              <p class="mx-2">Rider Destination</p>
+            </div>
+          </div>
+          <button class="${RECENTRE_DESKTOP_CLASS}" data-probe="recentre"></button>
+          <div
+            class="absolute bg-gray-200"
+            style="right:10px;bottom:10px;${standIn(29, 87)}"
+            data-probe="mapbox-nav"
+          ></div>
+        </div>
+      </div>
+    </div>
+  `,
+  widthProbe: "[data-probe='map']",
+  probe: {
+    boxes: [
+      "[data-probe='content-row']",
+      "[data-probe='map']",
+      "[data-probe='legend']",
+      "[data-probe='recentre']",
+      "[data-probe='mapbox-nav']",
+    ],
+    footprint: "[data-probe='recentre']",
+    against: ["[data-probe='legend']", "[data-probe='mapbox-nav']"],
+  },
+  recorded: [
+    "The map is 267x343.13 at 667x375 — the `w-[25rem]` sidebar takes 400 of the 667px width, so the map is 40% of the screen. Both items below are about overlays on that box.",
+    'legend rect 195.69x168, top 143.13 within the map: 48.96% of its height and 73% of its width, so roughly a third of the map\'s area. SCRUM-477 said "roughly 45%" of the height and was close.',
+    "recentre rect 32x32, top 161.13 within the map — its centre is 51.62% of the way down, which is the item as described: `bottom-[150px]` lands it mid-map.",
+    "Both are nonetheless cosmetic, and the hit test is why. recentre is reachable and unobstructed, and `overlaps` against both the legend and Mapbox's own control is 0 — the 150px offset still clears the `bottom-right` NavigationControl by 53px at this height, because the offset and the control it avoids are measured from the same edge.",
+    "So nothing here is unreachable, nothing is covered and nothing is off-screen. The map items are the clearest case in phase 4 for leaving the layout alone: the cost is an ugly anchor, and the risk of re-anchoring is a desktop regression on the platform where these controls work today.",
+    "map contentWidth 267, matching the predicted chain.",
+    "mapbox-nav is a stand-in for a control Mapbox draws itself, at the size and `bottom-right` offset `addMapEvents.tsx` asks for. It measures the clearance, not Mapbox's markup.",
+  ],
+  reproduces: [
+    {
+      file: "src/components/Map/RecentreButton.tsx",
+      className: RECENTRE_DESKTOP_CLASS,
+    },
+    {
+      file: "src/components/Map/MapLegend.tsx",
+      className: MAP_LEGEND_DESKTOP_CLASS,
+    },
+    { file: "src/pages/index.tsx", className: MAP_CONTAINER_CLASS },
+    { file: "src/pages/admin.tsx", className: CONTENT_ROW_CLASS },
+  ],
+};
+
+const COMPLIANCE_CENTRING_CLASS =
+  "fixed inset-0 z-50 flex items-center justify-center p-4";
+
+const COMPLIANCE_PANEL_CLASS =
+  "flex h-4/6 w-5/6 flex-col content-center justify-center gap-4 rounded-md bg-white p-9 shadow-md sm:h-4/6 sm:w-4/6 md:h-3/6 md:w-3/6";
+
+const GROUP_PANEL_CLASS =
+  "flex h-4/6 w-4/6 flex-col content-center justify-start gap-1 overflow-y-auto rounded-md bg-white py-9 shadow-lg";
+
+const UNSAVED_MODAL_PANEL_CLASS =
+  "relative flex w-1/3 flex-col justify-center rounded-lg bg-white px-6 py-16 text-center shadow-lg";
+
+const centredDialogPanels: LayoutFixture = {
+  name: "centred-dialog-panels",
+  summary:
+    "The three centred panels SCRUM-485 inherited, and whether a percentage-height panel can overflow the box centring it",
+  source: "src/components/CompliancePortal.tsx:55",
+  issue: "SCRUM-485",
+  viewportWidth: 667,
+  viewportHeight: 375,
+  insets: [{ name: "centring container p-4", x: 32 }],
+  markup: `
+    <div class="${COMPLIANCE_CENTRING_CLASS}" data-probe="compliance-centring">
+      <div class="${COMPLIANCE_PANEL_CLASS}" data-probe="compliance-panel">
+        <h2 class="text-center text-2xl font-bold" data-probe="compliance-title">Carpool Terms and Conditions</h2>
+        <div class="scroll overflow-y-auto" data-probe="compliance-scroll">
+          <p>This application and any related transportation arrangements and services are provided on an AS IS basis and without any warranty or condition, express, implied or statutory. User agrees and acknowledges that they assume full, exclusive and sole responsibility for the use of and reliance on any services through this application.</p>
+        </div>
+        <button class="bg-northeastern-red rounded px-4 py-2 font-bold text-white" data-probe="compliance-agree">I Agree</button>
+      </div>
+    </div>
+    <div class="fixed inset-0 flex items-center justify-center p-4" data-probe="group-centring">
+      <div class="${GROUP_PANEL_CLASS}" data-probe="group-panel">
+        <h2 class="text-center text-3xl font-bold">My Group</h2>
+        <p class="px-9">Group details, the route preview and the destructive controls all live in here.</p>
+      </div>
+    </div>
+    <div class="font-montserrat fixed inset-0 z-50 flex items-center justify-center bg-black/50" data-probe="unsaved-centring">
+      <div class="${UNSAVED_MODAL_PANEL_CLASS}" data-probe="unsaved-panel">
+        <h3 class="mb-6 text-xl font-semibold lg:text-2xl">You have unsaved changes!</h3>
+        <p class="my-4 text-gray-700">Continue with or without saving?</p>
+        <div class="flex justify-center space-x-4" data-probe="unsaved-buttons">
+          <button class="rounded bg-gray-400 px-4 py-2 font-bold text-white" data-probe="unsaved-continue">Continue</button>
+          <button class="bg-northeastern-red rounded px-4 py-2 font-bold text-white" data-probe="unsaved-save">Save and Continue</button>
+        </div>
+      </div>
+    </div>
+  `,
+  widthProbe: "[data-probe='compliance-centring']",
+  probe: {
+    boxes: [
+      "[data-probe='compliance-centring']",
+      "[data-probe='compliance-panel']",
+      "[data-probe='compliance-scroll']",
+      "[data-probe='compliance-agree']",
+      "[data-probe='group-panel']",
+      "[data-probe='unsaved-panel']",
+      "[data-probe='unsaved-buttons']",
+      "[data-probe='unsaved-save']",
+    ],
+    footprint: "[data-probe='unsaved-save']",
+    against: ["[data-probe='unsaved-panel']"],
+  },
+  recorded: [
+    "compliance-panel and group-panel both measure 423.33x228.66 at top 73.16, bottom 301.83 — **fully inside the viewport**, and that is this fixture's main result.",
+    "It falsifies a specific claim: SCRUM-485's opening comment listed all three of these as centred boxes needing `justify-center-safe` alongside a cap. Two of them cannot overflow at all. `h-4/6` is a percentage of the centring container, so the panel is always two thirds of the space available and there is no overflow for safe alignment to rescue. The pairing SCRUM-482 measured is real; it does not apply here.",
+    "compliance-scroll clientHeight 53 against scrollHeight 192, and compliance-agree fully inside the viewport. So the terms are readable 53px at a time and the only control is reachable: cramped exactly as the ticket describes, with nothing lost.",
+    "unsaved-panel is the exception and the one that does overflow: rect height 376 at top -0.5, bottom 375.5 against a viewport of 375. Half a pixel each way now, growing on any shorter viewport — this is the centred box `justify-center-safe` would be for.",
+    "Its mechanism is not the one SCRUM-477 recorded. The survey blamed `py-16` and put the clipping threshold at ~280px; the padding is 128px and the panel is 376px, so something else supplies the other 248. It is the width: `w-1/3` is 222.33px here, leaving 174 of content for a button row whose two labels need 196 (scrollWidth 196 against clientWidth 174), so both labels wrap and unsaved-buttons measures 88px tall instead of ~40.",
+    "unsaved-save is fully inside the viewport at 101.32x88, so the modal is answerable — it is the panel's own top and bottom edges that leave the screen, by half a pixel at this height.",
+    "compliance-centring contentWidth 635, matching the predicted chain: 667 less its own `p-4`.",
+  ],
+  reproduces: [
+    {
+      file: "src/components/CompliancePortal.tsx",
+      className: COMPLIANCE_CENTRING_CLASS,
+    },
+    {
+      file: "src/components/CompliancePortal.tsx",
+      className: COMPLIANCE_PANEL_CLASS,
+    },
+    {
+      file: "src/components/Group/GroupPage.tsx",
+      className: GROUP_PANEL_CLASS,
+    },
+    {
+      file: "src/components/Profile/UnsavedModal.tsx",
+      className: UNSAVED_MODAL_PANEL_CLASS,
+    },
+  ],
+};
+
 export const LAYOUT_FIXTURES: readonly LayoutFixture[] = [
   groupMemberCardTrigger,
   headerLogoBar,
   adminConsoleChartFold,
+  profileContentColumnWidth,
+  headerControlRow,
+  messagePanelChrome,
+  mapOverlayAnchors,
+  centredDialogPanels,
 ];
 
 export const findFixture = (name: string): LayoutFixture | undefined =>
