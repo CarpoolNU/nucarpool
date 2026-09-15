@@ -21,6 +21,16 @@
  * compiled stylesheet, and the numbers are recorded in the component's own
  * comment.
  *
+ * SCRUM-480 is the same defect on the *trigger* those two sit behind, which
+ * SCRUM-476 left at 36px because its acceptance criteria named only the pair -
+ * there were three 36px controls in this flow, not two. It is measured the same
+ * way and asserted the same way, one `it.each` per label, and it is the same
+ * proxy with the same limits rather than a second kind of test. The Chromium
+ * figures: 36px to 44px at all three labels, with the row's own content box
+ * unchanged at the 72px the `h-12` avatar sets, the three widths unchanged at
+ * 111.1px, 106.7px and 76.6px, and Confirm still at 0% of the trigger's
+ * footprint - 46px clear before the change, 42px after.
+ *
  * What is assertable, and what is therefore asserted: the handler is not
  * reached on the first press, Cancel comes before Confirm in tree order, and
  * a second press on the control that now occupies the first slot cancels
@@ -201,4 +211,31 @@ describe("the destructive confirmation on a group member row", () => {
     expect(pair).toHaveClass("flex", "flex-col", "gap-6");
     expect(confirm.parentElement).toBe(pair);
   });
+
+  /*
+   * The same proxy for the trigger, which SCRUM-480 raised from 36px to the
+   * same 44px. `py-2` is the 36px and `p-3` the 44px, so the negative half
+   * matters as much as the positive one: `p-3` alongside a leftover `py-2`
+   * would still measure 36, since both set `padding-block` and the later
+   * declaration in the stylesheet wins rather than the one written last in
+   * the class attribute.
+   *
+   * `px-3` is asserted absent for the same reason and one more: the trigger's
+   * horizontal padding has to stay 12px for the name beside it to clip no
+   * further than it did, and `p-3` is what now supplies that. Measured at
+   * 375px, the three labels stay 111.1px, 106.7px and 76.6px wide across the
+   * change, and the name's clipped overflow stays 32px, 23px and 0px.
+   */
+  it.each(["Delete Group", "Leave Group", "Remove"])(
+    "keeps the trigger's 44px padding class for %s",
+    (actionLabel) => {
+      renderCard(jest.fn(), actionLabel);
+
+      const trigger = screen.getByRole("button", { name: actionLabel });
+
+      expect(trigger).toHaveClass("p-3", "text-sm");
+      expect(trigger).not.toHaveClass("py-2");
+      expect(trigger).not.toHaveClass("px-3");
+    },
+  );
 });

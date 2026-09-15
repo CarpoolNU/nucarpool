@@ -345,11 +345,30 @@ export const GroupMemberCard = ({
               </div>
             </div>
           ) : (
+            /*
+              `p-3`, not `px-3 py-2`, and the vertical half is the point: 12 +
+              20 (the `text-sm` line box) + 12 = 44, the same figure the pair
+              behind this button already meets. It was 36px - 8 + 20 + 8 - so
+              the flow got *easier* to hit as it got more dangerous, which is
+              backwards. The horizontal padding is unchanged at 12px, so the
+              trigger's width does not move and the name beside it clips no
+              further than it did.
+
+              The row does not grow. Its content box is 48px, set by the
+              `h-12` avatar, and a 44px button still fits inside that - the
+              72px is the avatar's and stays the avatar's. Measured, not
+              assumed; the 73px an inspector shows on a non-last row is
+              `divide-y`'s 1px border on the container, not this card.
+
+              SCRUM-476's property survives too: Confirm sits 46px below this
+              button's bottom edge before the change and 42px after it, still
+              0% of the footprint. See SCRUM-480.
+            */
             <button
               type="button"
               disabled={disabled}
               onClick={() => setIsConfirming(true)}
-              className="rounded-lg bg-red-100 px-3 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-200 disabled:opacity-50"
+              className="rounded-lg bg-red-100 p-3 text-sm font-medium text-red-700 transition-colors hover:bg-red-200 disabled:opacity-50"
             >
               {actionLabel}
             </button>
