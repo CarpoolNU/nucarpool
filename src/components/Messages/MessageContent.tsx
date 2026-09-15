@@ -8,7 +8,7 @@ import React, {
 } from "react";
 import { EnhancedPublicUser, Message } from "../../utils/types";
 import { format, isSameDay } from "date-fns";
-import { trpc } from "../../utils/trpc";
+import { trpc, realTimeQueryOptions } from "../../utils/trpc";
 import { UserContext } from "../../utils/userContext";
 import { conversationChannel } from "../../utils/pusherChannels";
 import {
@@ -44,6 +44,14 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
    * "Next page" is *older*, because the procedure returns newest-first. Pages
    * are concatenated newest-page-first, so flattening walks backwards through
    * history and has to be reversed per page to end up in render order.
+   *
+   * `realTimeQueryOptions` adds the focus refetch, and it is what makes this
+   * thread survive a locked phone. The Pusher effect below only ever *appends*
+   * live events; it has no path that re-reads history, so anything sent while
+   * iOS Safari had the socket torn down was simply absent until the user closed
+   * and reopened the conversation. Refetching on focus closes that gap in
+   * place, and the merge effect below folds the recovered messages in beside
+   * whatever did arrive live.
    */
   const threadQuery = trpc.user.messages.conversation.useInfiniteQuery(
     { requestId: request?.id ?? "" },
@@ -51,6 +59,7 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
       enabled: !!request?.id,
       getNextPageParam: (lastPage) => lastPage.nextCursor,
       refetchOnMount: "always",
+      ...realTimeQueryOptions,
     },
   );
 

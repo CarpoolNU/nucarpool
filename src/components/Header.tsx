@@ -9,7 +9,7 @@ import styled from "styled-components";
 import DropDownMenu from "./DropDownMenu";
 import { createPortal } from "react-dom";
 import { GroupPage } from "./Group/GroupPage";
-import { trpc } from "../utils/trpc";
+import { trpc, realTimeQueryOptions } from "../utils/trpc";
 import { UserContext } from "../utils/userContext";
 import { useRouter } from "next/router";
 import Spinner from "./Spinner";
@@ -198,8 +198,18 @@ export type HeaderOptions = NavTab;
 const Header = (props: HeaderProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [activeNav, setActiveNav] = useState<string>("explore");
+  // Refetched when the tab comes back, because this is the one query with no
+  // other way to recover: `Header` never unmounts while the user stays on `/`,
+  // so `refetchOnMount: false` never gets a second chance, and the count only
+  // otherwise moves on a live `sendNotification`. A notification missed while
+  // the phone was locked would leave the badge wrong for the rest of the
+  // session. `useUnreadNotifications` covers the same gap from the transport
+  // side, for a socket that drops without the tab ever being backgrounded.
   const { data: unreadMessagesCount } =
-    trpc.user.messages.getUnreadMessageCount.useQuery();
+    trpc.user.messages.getUnreadMessageCount.useQuery(
+      undefined,
+      realTimeQueryOptions,
+    );
   const user = useContext(UserContext);
   const router = useRouter();
 
