@@ -34,6 +34,36 @@ const MOBILE_SHEET_HANDLE_LIFT = "0.5rem";
 /** The expanded sheet's height, which the half detent is half of. */
 const MOBILE_SHEET_HEIGHT = `calc(100% - ${MOBILE_SHEET_MAP_STRIP} - ${MOBILE_NAV_SPACE})`;
 
+/**
+ * The chrome above the map connect portal's desktop card list, which that
+ * list's own height budget has to reserve.
+ *
+ * Every term is set by an ancestor in `src/components/Map/MapConnectPortal.tsx`,
+ * so a change to one of those class strings has to move the matching line here.
+ * Listed in the order the boxes nest:
+ *
+ *   `mt-20` on `anchorClasses`        5rem       80px
+ *   `pt-4`  on `anchorClasses`        1rem       16px
+ *   `mt-11` on `panelClasses`         2.75rem    44px
+ *   `marginTop: -8%` in `listStyle`  -2.08rem   -33.28px
+ *
+ * **The negative term is the one worth reading twice**, and leaving it out is
+ * the arithmetic error SCRUM-483 corrects. A percentage margin resolves against
+ * the containing block's *inline* size - the panel's `w-[26rem]` - and never
+ * against the viewport height, so it contributes a constant 8% of 26rem at
+ * every window height rather than scaling with one. It also collapses with the
+ * `mt-11` directly above it, the panel having no border or padding to keep the
+ * two apart, which is why they belong in one sum rather than as separate boxes.
+ *
+ * **Measured, not only declared**, in Chromium against the compiled stylesheet
+ * and reproducing the real ancestor chain: the list's top edge lands at
+ * 106.73px at viewport heights of 640, 800 and 1200. The 6.67rem below is that
+ * figure to within a hundredth of a pixel. The budget this replaced reserved
+ * 128px, which capped the list 21.27px *shorter* than the space it had at all
+ * three heights - it under-used the viewport rather than overflowing it.
+ */
+const CONNECT_PORTAL_LIST_CHROME = "calc(5rem + 1rem + 2.75rem - 2.08rem)";
+
 /*
  * **Tailwind v4 scans the whole repository for class names**, minus what
  * `.gitignore` excludes -- not just `src/`, and not just JS and TS. Automatic
@@ -132,6 +162,27 @@ module.exports = {
          * `useSheetDrag`.
          */
         "mobile-sheet-half": `calc((${MOBILE_SHEET_HEIGHT}) / 2)`,
+      },
+      maxHeight: {
+        /**
+         * The map connect portal's desktop card list: the viewport, less the
+         * chrome above it.
+         *
+         * `dvh` rather than `vh`, for the reason `src/styles/globals.css`
+         * records at length - `vh` on a mobile browser is the height with the
+         * browser chrome retracted, so it over-measures wherever that chrome is
+         * showing. That applies to this desktop branch despite the name,
+         * because the `desktop` screen and `useIsMobile` are both width-only: a
+         * phone held in landscape is 667px wide and takes this branch. This was
+         * the last applied `vh` in `src`.
+         *
+         * A token rather than an arbitrary value at the call site, following
+         * the `spacing` block above and for the same reason the list of
+         * contributors gives: the budget is a sum of four separate offsets, one
+         * of them a percentage of a width, and a literal at the call site is a
+         * number nobody can check against them.
+         */
+        "connect-portal-list": `calc(100dvh - (${CONNECT_PORTAL_LIST_CHROME}))`,
       },
       colors: {
         "northeastern-red": "#C8102E",

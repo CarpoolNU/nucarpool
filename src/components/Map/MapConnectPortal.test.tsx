@@ -244,6 +244,27 @@ describe("a map pin tap at a mobile viewport", () => {
       screen.queryByRole("button", { name: "Close" }),
     ).not.toBeInTheDocument();
   });
+
+  it("keeps its own height cap rather than the desktop one", () => {
+    /*
+     * The two branches stay separate expressions, and SCRUM-483 considered
+     * merging them and decided against: this sheet is bottom-anchored against
+     * the navigation and the desktop column is top-anchored under desktop
+     * chrome, so the two budgets share no term. The desktop token reserves
+     * four margins that do not exist here, and applying it to the sheet would
+     * make its height a function of chrome it sits nowhere near.
+     *
+     * The positive half is the assertion that makes the negative one mean
+     * something - without it this passes just as well when the element is not
+     * found at all.
+     */
+    renderPortal();
+
+    const sheet = screen.getByText("Riley").closest('[tabindex="0"]');
+
+    expect(sheet).toHaveClass("max-h-[45dvh]");
+    expect(sheet).not.toHaveClass("max-h-connect-portal-list");
+  });
 });
 
 describe("a map pin click at a desktop viewport", () => {
@@ -276,6 +297,28 @@ describe("a map pin click at a desktop viewport", () => {
     const labels = screen.getAllByRole("button").map((b) => b.textContent);
 
     expect(labels).toEqual(["View Route", "Connect"]);
+  });
+
+  it("caps the card list with the token that reserves the chrome above it", () => {
+    /*
+     * A class-request assertion and deliberately nothing more. The defect
+     * SCRUM-483 fixed was arithmetic - the budget reserved 128px for chrome
+     * that measures 106.73px, so the list was capped 21px shorter than its own
+     * container at every window height - and **none of that is assertable
+     * here**. jsdom does no layout and evaluates no `calc()` against a
+     * viewport, so the numbers were measured in Chromium against the compiled
+     * stylesheet and the geometry belongs in SCRUM-264's Playwright suite.
+     *
+     * What this catches is the regression that has no other symptom: the cap
+     * reverting to a literal. The token's *value* is verified by the four
+     * contributors listed at its definition in `tailwind.config.js`; this only
+     * says the desktop branch still asks for it.
+     */
+    renderPortal();
+
+    const list = screen.getByText("Riley").closest('[tabindex="0"]');
+
+    expect(list).toHaveClass("max-h-connect-portal-list");
   });
 
   it("adds no close button, so the desktop tab order is unchanged", () => {
