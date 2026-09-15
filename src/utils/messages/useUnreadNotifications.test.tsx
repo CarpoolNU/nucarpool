@@ -48,6 +48,17 @@ const unbind = jest.fn();
 const subscribe = jest.fn((_channelName: string) => ({ bind, unbind }));
 const unsubscribe = jest.fn((_channelName: string) => undefined);
 
+/**
+ * The client's own connection state machine, which `pusher-js` exposes as an
+ * `EventsDispatcher` with a `state` string beside it. The hook reads `state` at
+ * bind time and listens for `connected`, so the mock has to carry both.
+ */
+const connection = {
+  state: "connecting",
+  bind: jest.fn(),
+  unbind: jest.fn(),
+};
+
 beforeEach(() => {
   jest.clearAllMocks();
 
@@ -63,7 +74,8 @@ beforeEach(() => {
     user: { messages: { getUnreadMessageCount: { invalidate } } },
   }));
 
-  mockedAcquire.mockReturnValue({ subscribe, unsubscribe });
+  connection.state = "connecting";
+  mockedAcquire.mockReturnValue({ subscribe, unsubscribe, connection });
 });
 
 /** The handler currently bound for `sendNotification` — the live one. */
@@ -80,6 +92,26 @@ const liveNotificationHandler = (): (() => void) => {
 /** One `sendNotification` delivered to the subscription that is actually live. */
 const receiveNotification = () => {
   const handler = liveNotificationHandler();
+  act(() => {
+    handler();
+  });
+};
+
+/** The handler currently bound for the transport's `connected` event. */
+const liveConnectedHandler = (): (() => void) => {
+  const bound = connection.bind.mock.calls.filter(
+    ([event]) => event === "connected",
+  );
+  const last = bound[bound.length - 1];
+
+  if (!last) throw new Error("nothing was bound for connected");
+  return last[1] as () => void;
+};
+
+/** The transport reporting that it is connected, once. */
+const reachConnected = () => {
+  const handler = liveConnectedHandler();
+  connection.state = "connected";
   act(() => {
     handler();
   });
@@ -238,6 +270,65 @@ describe("useUnreadNotifications — receiving a notification", () => {
     receiveNotification();
 
     expect(invalidate).toHaveBeenCalledTimes(1);
+  });
+
+  it("recovers a notification missed while the socket was down", () => {
+    // The gap this hook exists to close a second time. `sendNotification` is
+    // the *only* thing that moves the count, and `Header` never unmounts while
+    // the user stays on `/`, so an event that fired while the transport was
+    // down is not merely late - it is gone, and the badge stays wrong for the
+    // rest of the session. Reconciling when the transport says it is back
+    // asks the server what the count really is.
+    renderHook(() => useUnreadNotifications("user-1"));
+
+    reachConnected(); // the initial connect
+    expect(invalidate).not.toHaveBeenCalled();
+
+    reachConnected(); // back after a drop
+
+    expect(invalidate).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not invalidate on the first connect", () => {
+    // The trap in reconciling on a transport event: the state machine emits
+    // `connected` on the *initial* connection too, so a handler that does not
+    // distinguish them fires a second `getUnreadMessageCount` on every page
+    // load - doubling the query this change is meant to make cheaper to reason
+    // about.
+    renderHook(() => useUnreadNotifications("user-1"));
+
+    reachConnected();
+
+    expect(invalidate).not.toHaveBeenCalled();
+  });
+
+  it("treats a connect on an already-connected client as a reconnect", () => {
+    // Why the guard reads `connection.state` instead of just remembering
+    // whether it has seen an event. The client is *shared* - `MessageContent`
+    // may have acquired and connected it before `Header` mounted, and
+    // StrictMode's second mount arrives at an already-connected socket either
+    // way. A plain "skip the first event I see" flag would swallow the next
+    // genuine reconnect in both cases, which is the failure this hook is
+    // supposed to fix.
+    connection.state = "connected";
+
+    renderHook(() => useUnreadNotifications("user-1"));
+
+    reachConnected();
+
+    expect(invalidate).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops listening to the transport when it releases the client", () => {
+    // The shared client outlives this hook, so a handler left bound would keep
+    // invalidating through a torn-down subscription. This is also the guard on
+    // the socket-leak fix: the hook must unbind and release, never disconnect.
+    const { unmount } = renderHook(() => useUnreadNotifications("user-1"));
+    const handler = liveConnectedHandler();
+
+    unmount();
+
+    expect(connection.unbind).toHaveBeenCalledWith("connected", handler);
   });
 
   it("still invalidates after a re-render has replaced the utils object", () => {

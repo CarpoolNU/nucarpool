@@ -12,7 +12,7 @@ import {
 import addMapEvents from "../utils/map/addMapEvents";
 import { useMapInstance, useMapResize } from "../utils/map/useMapInstance";
 import Head from "next/head";
-import { trpc } from "../utils/trpc";
+import { trpc, realTimeQueryOptions } from "../utils/trpc";
 import { browserEnv } from "../utils/env/browser";
 import Header, { HeaderOptions } from "../components/Header";
 import { useSession } from "next-auth/react";
@@ -354,8 +354,14 @@ const Home: NextPage<any> = () => {
   // is why the projection above it matters: the narrowing in
   // `user.requests.me` is what makes paying this on every mount
   // reasonable.
+  //
+  // `realTimeQueryOptions` extends that same reasoning to the tab coming back
+  // from the background. "What happened while the user was on another page" and
+  // "what happened while the phone was locked" are the same gap; only the
+  // former fires a mount. Bounded by the projection above for the same reason.
   const requestsQuery = trpc.user.requests.me.useQuery(undefined, {
     refetchOnMount: "always",
+    ...realTimeQueryOptions,
   });
   const { data: requests = NO_REQUESTS } = requestsQuery;
 
