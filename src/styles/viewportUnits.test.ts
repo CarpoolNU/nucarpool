@@ -42,20 +42,27 @@ import postcss from "postcss";
  *
  * ## What this cannot see
  *
- * Spellings only, and two gaps are worth knowing.
+ * Spellings only - but one of the two gaps this used to record is now closed.
  *
- * `max-h-screen` in `src/pages/index.tsx` compiles to `max-height: 100vh` and
- * is invisible here, because the source says `screen` and the unit appears only
- * in Tailwind's output. That one is a known exemption, deferred to SCRUM-477's
- * phase 4 rather than folded into SCRUM-483. Catching aliases would mean
- * asserting against the compiled stylesheet, which puts a Tailwind compile in
- * the middle of every CI run; this is the cheap nine-tenths.
+ * **The height utilities named after the viewport are the closed one.** They
+ * compile to a `100vh` length while the source never says `vh`, so the literal
+ * walk above cannot see them: SCRUM-483 left exactly one, on a div in
+ * `src/pages/index.tsx`, as a known exemption for SCRUM-477's phase 4.
+ * SCRUM-485 measured it inert - the div is a child of a `100dvh` `#__next`, and
+ * the dynamic viewport is never larger than the large one - removed it, and
+ * added `VIEWPORT_HEIGHT_ALIAS` below so the next one is rejected at source.
  *
- * A unit glued on at runtime - a template literal interpolating the number -
- * also slips through, since no single literal then holds both digit and unit.
- * That shape is already discouraged for class names, for the reason
- * `tailwind.config.js` gives: the scanner cannot see a composed name either, so
- * it emits no CSS.
+ * That check is a spelling too, which is the point: catching aliases *by their
+ * output* would mean asserting against the compiled stylesheet and putting a
+ * Tailwind compile in the middle of every CI run. Matching the three class
+ * names that produce the unit costs nothing and covers the way one would
+ * actually arrive.
+ *
+ * **A unit glued on at runtime is the gap that remains.** A template literal
+ * interpolating the number slips through, since no single literal then holds
+ * both digit and unit. That shape is already discouraged for class names, for
+ * the reason `tailwind.config.js` gives: the scanner cannot see a composed name
+ * either, so it emits no CSS.
  */
 
 const SRC = join(__dirname, "..");
@@ -80,6 +87,33 @@ const STYLE_EXTENSIONS = [".css"];
  */
 const VH_LENGTH = /\d(?:\.\d+)?vh\b/;
 
+/**
+ * The height utilities Tailwind names after the viewport, which are `vh`
+ * lengths under another name.
+ *
+ * All three compile to `100vh` - as a height, a floor and a ceiling - so each
+ * is the thing `VH_LENGTH` exists to reject, written in a way it cannot see.
+ * The width member of the same family is deliberately absent: it compiles to
+ * `100vw`, and `globals.css` uses that unit on `#__next` on purpose.
+ *
+ * **Assembled from a token rather than written out, and that is mandatory
+ * rather than tidy.** Tailwind v4 scans this file like any other under `src/`,
+ * so spelling one of these names here - in a pattern, in a fixture or in a
+ * comment - emits its declaration into the bundle every user downloads, which
+ * is precisely the byte this guard exists to keep out. The alternation below
+ * therefore never contains the whole name, and neither does any prose in this
+ * file. `layoutFixtures.ts` and `index.tsx` keep the same discipline.
+ *
+ * The `\b` on each side matters: without the leading one this would also match
+ * a project utility that merely ends in the same token, and there is no reason
+ * to assume none will ever be added.
+ */
+const VIEWPORT_TOKEN = "screen";
+
+const VIEWPORT_HEIGHT_ALIAS = new RegExp(
+  `\\b(?:h|min-h|max-h)-${VIEWPORT_TOKEN}\\b`,
+);
+
 const extensionOf = (path: string): string => {
   const dot = path.lastIndexOf(".");
   return dot === -1 ? "" : path.slice(dot);
@@ -103,6 +137,7 @@ const scriptHitsIn = (
   path: string,
   kind: ts.ScriptKind,
   source: string,
+  pattern: RegExp = VH_LENGTH,
 ): string[] => {
   const parsed = ts.createSourceFile(
     path,
@@ -121,7 +156,7 @@ const scriptHitsIn = (
       node.kind === ts.SyntaxKind.TemplateMiddle ||
       node.kind === ts.SyntaxKind.TemplateTail;
 
-    if (isLiteral && VH_LENGTH.test((node as ts.LiteralLikeNode).text)) {
+    if (isLiteral && pattern.test((node as ts.LiteralLikeNode).text)) {
       const { line } = parsed.getLineAndCharacterOfPosition(
         node.getStart(parsed),
       );
@@ -136,17 +171,25 @@ const scriptHitsIn = (
 };
 
 /** The same, for a stylesheet: declarations and at-rule parameters. */
-const styleHitsIn = (path: string, source: string): string[] => {
+const styleHitsIn = (
+  path: string,
+  source: string,
+  pattern: RegExp = VH_LENGTH,
+): string[] => {
   const root = postcss.parse(source, { from: path });
   const hits: string[] = [];
 
   root.walkDecls((decl) => {
-    if (VH_LENGTH.test(decl.value)) {
+    if (pattern.test(decl.value)) {
       hits.push(`${label(path)}:${decl.source?.start?.line ?? 0}`);
     }
   });
+  /* At-rule params are where an alias would turn up in CSS - an `@apply` of
+     one of the utilities `VIEWPORT_HEIGHT_ALIAS` matches. Declarations are
+     checked for it too, at no cost, rather than reasoning about which half of
+     a stylesheet could hold it. */
   root.walkAtRules((at) => {
-    if (VH_LENGTH.test(at.params)) {
+    if (pattern.test(at.params)) {
       hits.push(`${label(path)}:${at.source?.start?.line ?? 0}`);
     }
   });
@@ -163,14 +206,19 @@ const scannableFiles = (): string[] =>
     return ext in SCRIPT_KINDS || STYLE_EXTENSIONS.includes(ext);
   });
 
-const appliedViewportHeights = (): string[] =>
+const matchesUnder = (pattern: RegExp): string[] =>
   scannableFiles().flatMap((path) => {
     const source = readFileSync(path, "utf8");
     const kind = SCRIPT_KINDS[extensionOf(path)];
     return kind === undefined
-      ? styleHitsIn(path, source)
-      : scriptHitsIn(path, kind, source);
+      ? styleHitsIn(path, source, pattern)
+      : scriptHitsIn(path, kind, source, pattern);
   });
+
+const appliedViewportHeights = (): string[] => matchesUnder(VH_LENGTH);
+
+const viewportHeightAliases = (): string[] =>
+  matchesUnder(VIEWPORT_HEIGHT_ALIAS);
 
 /**
  * The detector's fixtures, assembled from a unit rather than written out.
@@ -187,6 +235,16 @@ const appliedViewportHeights = (): string[] =>
  */
 const arbitraryValue = (unit: string): string => `zz-h-[calc(100${unit}-2rem)]`;
 const declaration = (unit: string): string => `a { height: 100${unit}; }`;
+
+/**
+ * An alias fixture, composed for the same reason as the two above: the whole
+ * class name must never appear as a literal in this file.
+ *
+ * `prefix` is passed in so the controls can exercise all three real prefixes
+ * and a near-miss, without any call site spelling a complete utility.
+ */
+const alias = (prefix: string): string =>
+  `flex ${prefix}-${VIEWPORT_TOKEN} w-full`;
 
 describe("the `vh` detector", () => {
   /*
@@ -263,11 +321,86 @@ describe("the `vh` detector", () => {
   });
 });
 
+describe("the viewport-height alias detector", () => {
+  /*
+   * The same control discipline as above, and needed more here: this detector
+   * guards a spelling rather than a unit, so its whole value rests on the
+   * alternation covering the names that actually compile to `100vh`.
+   */
+
+  it.each([
+    ["h", true],
+    ["min-h", true],
+    ["max-h", true],
+    /* The width member of the family compiles to `100vw`, which `globals.css`
+       uses on `#__next` deliberately. Flagging it would report a decision as a
+       defect. */
+    ["w", false],
+    ["max-w", false],
+    /* A project utility that merely ends in the same token is not an alias.
+       None exists today; the leading `\b` is what keeps that true if one is
+       added. */
+    ["zz-h-off", false],
+  ])("treats a %s- prefix as an alias: %s", (prefix, flagged) => {
+    expect(VIEWPORT_HEIGHT_ALIAS.test(alias(prefix))).toBe(flagged);
+  });
+
+  it("reports an alias in a class literal, with the line it is on", () => {
+    const fixture = join(SRC, "testing", "__alias_fixture__.tsx");
+    const hits = scriptHitsIn(
+      fixture,
+      ts.ScriptKind.TSX,
+      ["const a = 1;", `const b = "${alias("max-h")}";`].join("\n"),
+      VIEWPORT_HEIGHT_ALIAS,
+    );
+
+    expect(hits).toEqual(["testing/__alias_fixture__.tsx:2"]);
+  });
+
+  it("ignores an alias that only appears in prose", () => {
+    // The reason `index.tsx` describes the utility it removed instead of
+    // naming it: a comment mentioning the name would emit the declaration.
+    // The detector must not report that comment as the violation.
+    const fixture = join(SRC, "testing", "__alias_fixture__.tsx");
+    const hits = scriptHitsIn(
+      fixture,
+      ts.ScriptKind.TSX,
+      [
+        "const C = () => <p>it's a viewport</p>;",
+        `/* ${alias("max-h")} used to sit here */`,
+        "export default C;",
+      ].join("\n"),
+    );
+
+    expect(hits).toEqual([]);
+  });
+
+  it("reports an alias applied through @apply in a stylesheet", () => {
+    expect(
+      styleHitsIn(
+        "control.css",
+        `a { @apply ${alias("min-h")}; }`,
+        VIEWPORT_HEIGHT_ALIAS,
+      ),
+    ).toEqual(["../control.css:1"]);
+  });
+});
+
 describe("applied viewport units in src/", () => {
   it("declares no `vh` length anywhere", () => {
     // `dvh` is the unit. The one height budget that used to be spelled in `vh`
     // is now a named token in `tailwind.config.js`, under `maxHeight`.
     expect(appliedViewportHeights()).toEqual([]);
+  });
+
+  it("names no viewport-height alias anywhere", () => {
+    /* The gap the docblock used to record as open. One of these was live on a
+       div in `src/pages/index.tsx` until SCRUM-485 measured it inert and
+       removed it - it compiled to the only `100vh` left in the bundle, while
+       the assertion above saw nothing, because the source named the viewport
+       and not the unit. Use a `dvh` token from `tailwind.config.js` instead of
+       reaching for one of these. */
+    expect(viewportHeightAliases()).toEqual([]);
   });
 
   it("scanned the tree it claims to have scanned", () => {
