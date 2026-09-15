@@ -1,6 +1,11 @@
 import {
   DESKTOP_MEDIA_QUERY,
   DESKTOP_SCREEN_NAME,
+  DESKTOP_TALL_MEDIA_QUERY,
+  DESKTOP_TALL_SCREEN_NAME,
+  WIZARD_CARD_HEIGHT_PX,
+  WIZARD_DESKTOP_MIN_HEIGHT_PX,
+  WIZARD_NAV_STRIP_SPACE_PX,
   MOBILE_BREAKPOINT_PX,
   MOBILE_NAV_HEIGHT_PX,
   MOBILE_NAV_SPACE,
@@ -13,7 +18,19 @@ import {
 // it here is what makes this a real drift guard rather than a restated constant.
 const tailwindConfig = require("../../tailwind.config.js");
 
-const screens: Record<string, string> = tailwindConfig.theme.screens;
+/**
+ * A screen is either a plain `min-width` string or a `raw` media query. Only
+ * `desktop-tall` is the latter, because a screen cannot otherwise express a
+ * height term - see `DESKTOP_TALL_MEDIA_QUERY`.
+ */
+type Screen = string | { raw: string };
+
+const screens: Record<string, Screen> = tailwindConfig.theme.screens;
+
+/** The screens that are a width, which is all of them bar `desktop-tall`. */
+const widthScreens = Object.entries(screens).filter(
+  (entry): entry is [string, string] => typeof entry[1] === "string",
+);
 const spacing: Record<string, string> = tailwindConfig.theme.extend.spacing;
 const height: Record<string, string> = tailwindConfig.theme.extend.height;
 
@@ -46,14 +63,56 @@ describe("the shared mobile breakpoint", () => {
   });
 
   /**
+   * `desktop-tall` reuses the breakpoint's width and adds a height, so a
+   * reader could reasonably expect it to be a second definition of "desktop".
+   * It is not: it has to *compose* the same constant, or the two would answer
+   * differently about where mobile ends.
+   */
+  it("builds the tall desktop screen from the same width constant", () => {
+    expect(screens[DESKTOP_TALL_SCREEN_NAME]).toEqual({
+      raw: DESKTOP_TALL_MEDIA_QUERY,
+    });
+    expect(DESKTOP_TALL_MEDIA_QUERY).toContain(
+      `(min-width: ${MOBILE_BREAKPOINT_PX}px)`,
+    );
+    expect(DESKTOP_TALL_MEDIA_QUERY).toContain(
+      `(min-height: ${WIZARD_DESKTOP_MIN_HEIGHT_PX}px)`,
+    );
+  });
+
+  /**
+   * Both terms `min-`, for the reason `DESKTOP_MEDIA_QUERY` spells out: the
+   * mobile-first arrangement is the base and this overrides it. A `max-` term
+   * here would mean the inversion had been undone, and would need a fractional
+   * pixel to avoid claiming the boundary itself for the wrong side.
+   */
+  it("states the tall desktop screen as two min- terms", () => {
+    expect(DESKTOP_TALL_MEDIA_QUERY).not.toContain("max-width");
+    expect(DESKTOP_TALL_MEDIA_QUERY).not.toContain("max-height");
+  });
+
+  /**
+   * Declaration order again, and it matters more here than elsewhere: this
+   * screen's width term is *equal* to `desktop`'s, so the two overlap
+   * completely above the height. Emitted first it would lose the cascade to
+   * `desktop:` wherever both set one property, which is silent.
+   */
+  it("declares the tall desktop screen after the plain one", () => {
+    const names = Object.keys(screens);
+    expect(names.indexOf(DESKTOP_TALL_SCREEN_NAME)).toBeGreaterThan(
+      names.indexOf(DESKTOP_SCREEN_NAME),
+    );
+  });
+
+  /**
    * Tailwind emits media queries in declaration order, so a larger screen
    * declared before a smaller one silently loses the cascade wherever the two
    * set the same property. Easy to reintroduce when adding a screen.
    */
   it("declares screens in ascending order", () => {
-    const widths = Object.values(screens).map((value) =>
-      Number.parseInt(value, 10),
-    );
+    // Only the width-valued screens can be ordered by width. `desktop-tall` is
+    // a `raw` query and is checked for its own position separately, below.
+    const widths = widthScreens.map(([, value]) => Number.parseInt(value, 10));
     expect(widths).toEqual([...widths].sort((a, b) => a - b));
     expect(widths.every((width) => Number.isFinite(width))).toBe(true);
   });
@@ -275,5 +334,88 @@ describe("the shared explore-sheet map strip", () => {
     expect(height["mobile-sheet"]).toContain("100%");
     expect(height["mobile-sheet"]).toContain(MOBILE_NAV_SPACE);
     expect(spacing["mobile-nav"]).toBe(MOBILE_NAV_SPACE);
+  });
+});
+
+/**
+ * The height the onboarding wizard's desktop arrangement needs.
+ *
+ * The defect (SCRUM-474) was that it needed one at all and nothing said so:
+ * `desktop:` is a `min-width`, so a phone in landscape - 667px wide, 375px tall
+ * - took the desktop branch and got a 500px card centred in a 375px viewport,
+ * clipped at both ends with the navigation strip across what was left.
+ *
+ * These guard the derivation rather than the number. A test that restated `844`
+ * would still pass on the day someone changes the card's height, which is
+ * precisely the day the threshold stops being true.
+ */
+describe("the onboarding wizard's minimum desktop height", () => {
+  it("is composed from the card and the strip, not written down", () => {
+    expect(WIZARD_DESKTOP_MIN_HEIGHT_PX).toBe(
+      WIZARD_CARD_HEIGHT_PX + 2 * WIZARD_NAV_STRIP_SPACE_PX,
+    );
+  });
+
+  /**
+   * The doubling is the part that is easy to get wrong, and it is not a safety
+   * margin. The card is *centred*, so the space the strip occupies at the
+   * bottom has an unusable mirror image at the top: every pixel the strip takes
+   * costs the card two.
+   */
+  it("doubles the strip's share, because the card is centred", () => {
+    const wrong = WIZARD_CARD_HEIGHT_PX + WIZARD_NAV_STRIP_SPACE_PX;
+    expect(WIZARD_DESKTOP_MIN_HEIGHT_PX).toBeGreaterThan(wrong);
+    expect(WIZARD_DESKTOP_MIN_HEIGHT_PX - wrong).toBe(
+      WIZARD_NAV_STRIP_SPACE_PX,
+    );
+  });
+
+  it("is a whole number of pixels taller than the card it has to fit", () => {
+    expect(Number.isInteger(WIZARD_DESKTOP_MIN_HEIGHT_PX)).toBe(true);
+    expect(WIZARD_DESKTOP_MIN_HEIGHT_PX).toBeGreaterThan(WIZARD_CARD_HEIGHT_PX);
+  });
+
+  /**
+   * At the threshold the two exactly touch, which is what makes it the
+   * threshold. Restating the inequality the constant was solved from is the
+   * cheapest way to catch a sign or a factor going astray in the composition
+   * above.
+   */
+  it("is the height at which the card's bottom edge meets the strip's top", () => {
+    const cardBottom =
+      (WIZARD_DESKTOP_MIN_HEIGHT_PX + WIZARD_CARD_HEIGHT_PX) / 2;
+    const stripTop = WIZARD_DESKTOP_MIN_HEIGHT_PX - WIZARD_NAV_STRIP_SPACE_PX;
+    expect(cardBottom).toBe(stripTop);
+  });
+
+  /**
+   * One pixel either side of it, to pin the direction: shorter overlaps, taller
+   * clears. The measured numbers behind these are in the constant's docblock -
+   * 22px of overlap at 800, 28px of clearance at 900.
+   */
+  it("overlaps below the threshold and clears above it", () => {
+    const overlapAt = (viewport: number) =>
+      (viewport + WIZARD_CARD_HEIGHT_PX) / 2 -
+      (viewport - WIZARD_NAV_STRIP_SPACE_PX);
+
+    expect(overlapAt(WIZARD_DESKTOP_MIN_HEIGHT_PX - 2)).toBeGreaterThan(0);
+    expect(overlapAt(WIZARD_DESKTOP_MIN_HEIGHT_PX)).toBe(0);
+    expect(overlapAt(WIZARD_DESKTOP_MIN_HEIGHT_PX + 2)).toBeLessThan(0);
+  });
+
+  /**
+   * A landscape phone is the case the ticket was filed for, and it has to land
+   * below the threshold on height while still being above it on width - that
+   * combination is the whole defect.
+   */
+  it("excludes a phone held in landscape, which is above the width breakpoint", () => {
+    for (const [width, height] of [
+      [667, 375], // iPhone SE2 / 8
+      [844, 390], // iPhone 12/13/14
+      [932, 430], // iPhone 14 Pro Max
+    ]) {
+      expect(isMobileWidth(width)).toBe(false);
+      expect(height).toBeLessThan(WIZARD_DESKTOP_MIN_HEIGHT_PX);
+    }
   });
 });

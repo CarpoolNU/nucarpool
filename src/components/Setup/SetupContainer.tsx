@@ -21,10 +21,22 @@ import { CSSProperties } from "styled-components";
  * so there is no override left to lose. Styling-only differences go through
  * `desktop:` rather than an `isMobile` ternary, per SCRUM-415.
  *
- * `h-[500px]` stays a desktop figure and is deliberately *not* paired with a
- * `desktop:` prefix: the caller overrides the height with an inline `style` per
- * step on mobile, and an inline declaration beats any class regardless of
- * stylesheet order, so that one is unambiguous already.
+ * `h-[500px]` is deliberately *not* paired with a `desktop:` prefix, and it is
+ * a request rather than a guarantee. On mobile the caller overrides it with an
+ * inline `style` per step, and an inline declaration beats any class regardless
+ * of stylesheet order, so that one is unambiguous already. Everywhere else it
+ * is whatever the flex parent grants: the caller also passes `min-h-0
+ * overflow-y-auto`, either of which zeroes the automatic minimum size that
+ * would otherwise floor this at the full 500px, so in the wizard's column
+ * arrangement the card shrinks to the space the navigation strip leaves.
+ *
+ * That it shrinks is now load-bearing above the mobile breakpoint too. Until
+ * SCRUM-474 the desktop arrangement was a flex *row*, where height is the cross
+ * axis and this 500px could not shrink at all - so a window shorter than the
+ * card simply clipped it, 62px off the top and 63px off the bottom of a phone
+ * held in landscape. The row is now conditional on the window being tall enough
+ * to hold it; see `WIZARD_DESKTOP_MIN_HEIGHT_PX` in `src/utils/breakpoints.js`
+ * for where that height comes from.
  */
 export const SetupContainer = ({
   children,
