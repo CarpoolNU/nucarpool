@@ -83,16 +83,46 @@ export const setViewportWidth = (width: number) => {
 };
 
 /**
+ * The same for `innerHeight`, which jsdom reports as 768 and likewise never
+ * changes.
+ *
+ * Added for SCRUM-484, the first criterion in this repository that branches on
+ * viewport *height* - `useIsViewportShorterThan`, which `/admin` reads to
+ * decide between the console and the notice.
+ *
+ * **It reaches the JavaScript and nothing else**, which is the same caveat the
+ * width helper carries and is worth restating because a height feels more like
+ * layout. `100dvh` is still unresolved here, an 8.5% bar still measures zero,
+ * and the `desktop-tall:` screen is still inert: jsdom has no `matchMedia` at
+ * all. So this can drive a gate and cannot check a box.
+ */
+export const setViewportHeight = (height: number) => {
+  Object.defineProperty(window, "innerHeight", {
+    value: height,
+    writable: true,
+    configurable: true,
+  });
+};
+
+/**
  * Change the viewport of an already-mounted tree and let React process the
  * resulting state update.
  *
  * Wrapped in `act` because `useIsMobile`'s listener calls `setState`: without
  * it the update lands outside React's batching and the assertion races the
  * re-render.
+ *
+ * `height` is optional so that every existing caller is unaffected, and the
+ * two hooks reading these share one `resize` event - which is the real thing
+ * this models. A rotation changes both dimensions in one event, and a helper
+ * that could only change one would let a test pass a state no device produces.
  */
-export const resizeViewportTo = (width: number) => {
+export const resizeViewportTo = (width: number, height?: number) => {
   act(() => {
     setViewportWidth(width);
+    if (height !== undefined) {
+      setViewportHeight(height);
+    }
     window.dispatchEvent(new Event("resize"));
   });
 };
@@ -110,8 +140,13 @@ export const resizeViewportTo = (width: number) => {
  */
 export const restoreViewportAfterEach = () => {
   const originalWidth = window.innerWidth;
+  /* Captured even by files that never set a height, so that adding one test
+     that does cannot leak into the rest of the file. That leak is exactly the
+     trap described above, and it would be a new instance of it. */
+  const originalHeight = window.innerHeight;
 
   afterEach(() => {
     setViewportWidth(originalWidth);
+    setViewportHeight(originalHeight);
   });
 };

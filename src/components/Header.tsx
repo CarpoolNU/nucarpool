@@ -23,7 +23,12 @@ import useIsMobile from "../utils/useIsMobile";
 // wrote their own wider threshold until this import replaced it; the module's
 // docblock carries the rest of that story, including why the three queries
 // below are `min-width` and not their inverse.
-import { DESKTOP_MEDIA_QUERY, MOBILE_NAV_SPACE } from "../utils/breakpoints";
+import {
+  DESKTOP_MEDIA_QUERY,
+  MOBILE_NAV_SPACE,
+  HEADER_BAR_HEIGHT,
+  HEADER_LOGO_MAX_FONT_SIZE,
+} from "../utils/breakpoints";
 import {
   activeMobileNavItem,
   planMobileNav,
@@ -45,7 +50,7 @@ const HeaderDiv = styled.div`
   background-color: #c8102e;
   padding: 0 20px;
   box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.25);
-  height: 8.5%;
+  height: ${HEADER_BAR_HEIGHT};
   width: 100%;
   z-index: 10;
 
@@ -122,12 +127,39 @@ const MobileNavItem = styled.button<{ $active: boolean }>`
   }
 `;
 
+/**
+ * The in-page logo, which is the bar's only child on the pages that give the
+ * bar a definite height.
+ *
+ * **`height: 100%`, not a pixel figure, and that is SCRUM-484's fix.**
+ * `HeaderDiv` above is a percentage of the viewport; this declared `70px` and
+ * `111px`, so the child's height had no relationship to the parent's and lost
+ * whenever the parent was smaller. Measured at 667x375 the bar is 31.88px and
+ * the 111px box overhung it by 39.56px each way - clipped off the top of the
+ * screen, painted over the content row below. `100%` cannot do that at any
+ * viewport, because it *is* the bar.
+ *
+ * `line-height: 77px` went with the fixed height, and for the same reason: a
+ * third independent number that a 31.88px bar could not hold either. The base
+ * `normal` now applies at every width, which makes the line box follow the
+ * font rather than contradict it.
+ *
+ * **The font size is capped and not replaced.** `min()` picks the design size
+ * wherever it fits, so an ordinary desktop window renders exactly what it
+ * rendered before - 48px, measured identical at 1440x900 - and only a bar too
+ * short to hold that line scales it down. `HEADER_LOGO_MAX_FONT_SIZE` carries
+ * the derivation and the measured `1.15` behind it.
+ *
+ * Both `min()` calls name their own design size rather than sharing one: 32px
+ * and 48px are different decisions about two different widths, and the cap is
+ * the only thing they have in common.
+ */
 export const Logo = styled.h1`
   font-family: "Lato", sans-serif;
-  height: 70px;
+  height: 100%;
   font-style: normal;
   font-weight: 700;
-  font-size: 32px;
+  font-size: min(32px, ${HEADER_LOGO_MAX_FONT_SIZE});
   line-height: normal;
   display: flex;
   align-items: center;
@@ -135,12 +167,32 @@ export const Logo = styled.h1`
   color: #f4f4f4;
 
   @media ${DESKTOP_MEDIA_QUERY} {
-    font-size: 48px;
-    height: 111px;
-    line-height: 77px;
+    font-size: min(48px, ${HEADER_LOGO_MAX_FONT_SIZE});
   }
 `;
 
+/**
+ * The sign-in logo, and **deliberately not given `Logo`'s treatment above.**
+ *
+ * It looks like the same defect and is not, which is the reason this comment
+ * exists rather than a matching edit. `sign-in.tsx:68` renders `Header` inside
+ * a `w-fit` card in an auto-height flex column, so `HeaderDiv`'s `height: 8.5%`
+ * has no definite containing block to resolve against and falls back to
+ * `auto`: on that page the bar takes its height *from* this logo instead of
+ * imposing one on it. Measured in Chromium at 667x375 against the compiled
+ * stylesheet, the bar computes to `111px` and this logo's box ends exactly at
+ * the bar's own bottom edge - an overflow of 0.
+ *
+ * So the two changes that fix `Logo` would both be regressions here. `100%`
+ * against an auto-height parent collapses to the line box and shrinks the
+ * card's header by about half; the `dvh` font cap is derived from a bar that
+ * is 8.5% of the viewport, which this one is not, so it would shrink the
+ * sign-in logo on a short window where the card has room to spare.
+ *
+ * Leaving it untouched is also what keeps `/sign-in` out of the blast radius:
+ * `Logo` and `SigninLogo` are used nowhere but this file, and only in the two
+ * arms of one ternary, so the pages are genuinely separable.
+ */
 export const SigninLogo = styled.h1`
   font-family: "Lato", sans-serif;
   height: 70px;

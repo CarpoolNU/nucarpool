@@ -5,6 +5,7 @@
  *   npx ts-node scripts/measure-layout.ts                                  # list fixtures
  *   npx ts-node scripts/measure-layout.ts group-member-card-trigger        # serve one
  *   npx ts-node scripts/measure-layout.ts group-member-card-trigger --width 320
+ *   npx ts-node scripts/measure-layout.ts header-logo-bar --width 667 --height 375
  *
  * This is the harness SCRUM-481 committed. Eight tickets needed a real pixel,
  * hand-rolled the same four steps in their own session, and threw them away
@@ -93,41 +94,57 @@ export const PROBE_SOURCE = path.join(
 export interface Options {
   readonly fixture?: string;
   readonly width?: number;
+  readonly height?: number;
   readonly host: string;
 }
 
+/** The two viewport dimensions an override can name, parsed identically. */
+const DIMENSION_FLAGS = ["width", "height"] as const;
+
+type DimensionFlag = (typeof DIMENSION_FLAGS)[number];
+
 /**
- * `--width` overrides the fixture's recorded width, which is how a criterion
- * stated across a breakpoint band gets checked at both ends (SCRUM-456/458 did
- * that by hand). A width the fixture did not record is reported as such in the
- * banner, so a figure taken at one width is not read as the recorded one.
+ * `--width` and `--height` override the fixture's recorded viewport, which is
+ * how a criterion stated across a breakpoint band gets checked at both ends
+ * (SCRUM-456/458 did that by hand for width). A dimension the fixture did not
+ * record is reported as such in the banner, so a figure taken at one viewport
+ * is not read as the recorded one.
+ *
+ * **`--height` is not cosmetic symmetry.** The harness began width-only
+ * because its first seven criteria were, and a fixture whose defect is
+ * vertical cannot state the viewport its figures came from at all - so the one
+ * number the whole measurement turns on would live in prose beside it.
+ * SCRUM-484 is the first pair of those: a logo overflowing a percentage-height
+ * bar, and a fixed-height chart in a percentage-height row. Both are the same
+ * defect shape and neither has a horizontal component.
  */
 export const parseArgs = (argv: readonly string[]): Options => {
   let fixture: string | undefined;
-  let width: number | undefined;
+  const dimensions: { -readonly [K in DimensionFlag]?: number } = {};
+
+  /* Shared rather than written twice: the two flags differ only in their name,
+     and a second copy of this validation is a second place for the positive-
+     number check to be dropped from. */
+  const readDimension = (flag: DimensionFlag, raw: string | undefined) => {
+    const value = Number(raw);
+
+    if (!Number.isFinite(value) || value <= 0) {
+      throw new Error(`--${flag} needs a positive number, got "${raw}"`);
+    }
+
+    dimensions[flag] = value;
+  };
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
+    const spaced = DIMENSION_FLAGS.find((flag) => arg === `--${flag}`);
+    const joined = DIMENSION_FLAGS.find((flag) => arg.startsWith(`--${flag}=`));
 
-    if (arg === "--width") {
-      const value = Number(argv[index + 1]);
-
-      if (!Number.isFinite(value) || value <= 0) {
-        throw new Error(
-          `--width needs a positive number, got "${argv[index + 1]}"`,
-        );
-      }
-
-      width = value;
+    if (spaced) {
+      readDimension(spaced, argv[index + 1]);
       index += 1;
-    } else if (arg.startsWith("--width=")) {
-      const value = Number(arg.slice("--width=".length));
-
-      if (!Number.isFinite(value) || value <= 0) {
-        throw new Error(`--width needs a positive number, got "${arg}"`);
-      }
-
-      width = value;
+    } else if (joined) {
+      readDimension(joined, arg.slice(`--${joined}=`.length));
     } else if (arg.startsWith("--")) {
       throw new Error(`Unknown option "${arg}"`);
     } else if (fixture === undefined) {
@@ -139,7 +156,12 @@ export const parseArgs = (argv: readonly string[]): Options => {
     }
   }
 
-  return { fixture, width, host: "127.0.0.1" };
+  return {
+    fixture,
+    width: dimensions.width,
+    height: dimensions.height,
+    host: "127.0.0.1",
+  };
 };
 
 /**
@@ -263,7 +285,10 @@ const JS_SOURCE_ESCAPE_MAP: Record<string, string> = {
 };
 
 const escapeForJavaScriptSource = (value: string): string =>
-  value.replace(/[<>/\\\b\f\n\r\t\0\u2028\u2029]/g, (char) => JS_SOURCE_ESCAPE_MAP[char]);
+  value.replace(
+    /[<>/\\\b\f\n\r\t\0\u2028\u2029]/g,
+    (char) => JS_SOURCE_ESCAPE_MAP[char],
+  );
 
 /** The `browser_evaluate` body to paste, built from the fixture's own spec. */
 export const probeSnippet = (fixture: LayoutFixture): string => {
@@ -275,14 +300,41 @@ export const probeSnippet = (fixture: LayoutFixture): string => {
   return `() => window.__nucarpoolLayoutProbe.report(${spec})`;
 };
 
+/**
+ * One `width`/`height` line, annotated when the figure is not the one the
+ * fixture recorded.
+ *
+ * The annotation is the whole point of printing these at all. A fixture's
+ * `recorded` lines are only true at its own viewport, and the cheapest way to
+ * misread this harness is to resize to something else and compare against them
+ * anyway.
+ *
+ * `undefined` for `recorded` means the fixture declares no figure for that
+ * dimension - a width-only criterion has no height to record - which is
+ * labelled as such rather than silently reading as agreement.
+ */
+export const describeViewportDimension = (
+  label: string,
+  serving: number,
+  recorded: number | undefined,
+): string => {
+  const note =
+    recorded === undefined
+      ? `  (fixture records no ${label}; this is the driver's)`
+      : recorded === serving
+        ? ""
+        : `  (recorded at ${recorded}px, not this)`;
+
+  return `  ${label.padEnd(13)} ${serving}px${note}`;
+};
+
 export const banner = (
   fixture: LayoutFixture,
   url: string,
   width: number,
+  height: number,
   cssBytes: number,
 ): string => {
-  const recordedWidth = width === fixture.viewportWidth;
-
   return [
     ``,
     `  ${fixture.name}`,
@@ -291,11 +343,8 @@ export const banner = (
     `  copied from   ${fixture.source}`,
     `  criterion     ${fixture.issue}`,
     `  url           ${url}`,
-    `  width         ${width}px${
-      recordedWidth
-        ? ""
-        : `  (recorded at ${fixture.viewportWidth}px, not this)`
-    }`,
+    describeViewportDimension("width", width, fixture.viewportWidth),
+    describeViewportDimension("height", height, fixture.viewportHeight),
     `  stylesheet    ${cssBytes} bytes, compiled from src/styles/globals.css`,
     ``,
     `  predicted contentWidth of ${fixture.widthProbe}:`,
@@ -305,7 +354,8 @@ export const banner = (
     `  wrong, and every figure under it is wrong with it. Note it is contentWidth`,
     `  and not clientWidth: the last inset is the box's own padding.`,
     ``,
-    `  1. Open the url, resized to ${width} wide.`,
+    `  1. Open the url, resized to ${width}x${height}. Both terms matter:`,
+    `     every percentage height in a fixture resolves against the second one.`,
     `  2. Evaluate:`,
     ``,
     `  ${probeSnippet(fixture)}`,
@@ -365,9 +415,22 @@ const main = async (): Promise<void> => {
   const address = server.address();
   const port = address && typeof address === "object" ? address.port : 0;
   const width = options.width || fixture.viewportWidth;
+  /* A fixture with no recorded height still has to be served at *some*
+     height, and the driver's default is not a figure this script knows. 375
+     is the landscape-phone height every mobile criterion in this repository
+     is stated at, so it is the useful default rather than an arbitrary one -
+     and `describeViewportDimension` labels it as the driver's whenever the
+     fixture did not record one. */
+  const height = options.height || fixture.viewportHeight || 375;
 
   process.stdout.write(
-    banner(fixture, `http://${options.host}:${port}/`, width, css.length),
+    banner(
+      fixture,
+      `http://${options.host}:${port}/`,
+      width,
+      height,
+      css.length,
+    ),
   );
 };
 

@@ -21,6 +21,12 @@
  * for the entry point.
  */
 
+import {
+  ADMIN_CONSOLE_MIN_HEIGHT_PX,
+  HEADER_BAR_HEIGHT,
+  HEADER_LOGO_MAX_FONT_SIZE,
+} from "../utils/breakpoints";
+
 /**
  * One step of the chain from the viewport edge to the measured content box.
  *
@@ -49,6 +55,18 @@ export interface LayoutFixture {
   readonly issue: string;
   /** The viewport width the recorded figures were taken at. */
   readonly viewportWidth: number;
+  /**
+   * The viewport **height** the recorded figures were taken at, for a fixture
+   * whose criterion is vertical.
+   *
+   * Optional, and the asymmetry with `viewportWidth` is deliberate rather than
+   * an omission. A fixture measuring a tap target or a container chain has no
+   * height its figures depend on, and making it invent one would be a number
+   * nothing checks. A fixture holding a percentage height has nothing *but*
+   * that dependency: `#__next` is `100dvh`, so every `%` below it resolves
+   * against this and a figure quoted without it is unreadable.
+   */
+  readonly viewportHeight?: number;
   /**
    * Viewport edge to the `widthProbe` element's **content** box, outermost
    * first, including that element's own padding as the last step.
@@ -225,8 +243,338 @@ const groupMemberCardTrigger: LayoutFixture = {
   ],
 };
 
+/*
+ * SCRUM-484's two items, and the one thing they have in common: a
+ * percentage-height container holding a fixed-pixel child.
+ *
+ * `#__next` is `height: 100dvh` (`globals.css`), `HeaderDiv` is `height: 8.5%`
+ * of it, and every desktop content row is the `h-[91.5%]` remainder. So both
+ * fixtures below are unreadable without a viewport *height*, which is why
+ * `viewportHeight` exists on the interface above and why `--height` exists on
+ * the script.
+ *
+ * **Both reproduce styled-components declarations, not Tailwind classes**, so
+ * the compiled stylesheet the harness serves does not contain them and the
+ * markup has to carry its own `<style>`. That is a second copy on top of the
+ * copy every fixture already is, and the drift guard is what makes it
+ * survivable: `reproduces` names the declaration text, and
+ * `measure-layout.test.ts` fails when `Header.tsx` no longer contains it.
+ * A declaration is a weaker anchor than a class string - `height: 111px` could
+ * in principle move to another rule in the same file - but it is the only
+ * anchor available, and it is strictly better than prose.
+ */
+
+/**
+ * `HeaderDiv`, `Header.tsx:45`. The bar every page's content row sits under.
+ *
+ * The height is composed from the constant rather than restated, because after
+ * SCRUM-484 it *is* the constant - `Header.tsx` reads the same export. The
+ * `min-width: 640px` in the queries below is the opposite case and is written
+ * literally on purpose: that boundary is an independent decision the fixture
+ * should state rather than inherit, so that a fixture measured at 667 is
+ * visibly measuring the desktop side of it. `breakpoints.test.ts` is what
+ * holds the constant itself to 640.
+ */
+const HEADER_BAR_CSS = `
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  background-color: #c8102e;
+  padding: 0 20px;
+  box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.25);
+  height: ${HEADER_BAR_HEIGHT};
+  width: 100%;
+  z-index: 10;
+`;
+
+/**
+ * `Logo`, `Header.tsx:148`, mobile base plus the `desktop:` override.
+ *
+ * **This reproduces the fixed rule, not the defect**, which is the only state
+ * a fixture can honestly hold: the drift guard reads `Header.tsx` as it is, so
+ * a fixture frozen at the old declarations would fail `yarn test` rather than
+ * document anything. The figures the defect produced are in `recorded` below,
+ * measured before the change, next to the figures from after it.
+ */
+const HEADER_LOGO_CSS = `
+  font-family: "Lato", sans-serif;
+  height: 100%;
+  font-style: normal;
+  font-weight: 700;
+  font-size: min(32px, ${HEADER_LOGO_MAX_FONT_SIZE});
+  line-height: normal;
+  display: flex;
+  align-items: center;
+  text-align: center;
+  color: #f4f4f4;
+`;
+
+const HEADER_LOGO_DESKTOP_CSS = `
+    font-size: min(48px, ${HEADER_LOGO_MAX_FONT_SIZE});
+`;
+
+/**
+ * The content row the logo overflows into.
+ *
+ * `admin.tsx:120`'s string, and the choice of page does not affect the figure.
+ * All three desktop rows - `admin.tsx:120`, `index.tsx:1039`,
+ * `profile/index.tsx:491` - are `h-[91.5%]` siblings of the bar, so the edge
+ * this fixture measures against is at 8.5% of the viewport on every one of
+ * them. The row's own contents differ and are not what is being measured.
+ */
+const CONTENT_ROW_CLASS =
+  "relative flex h-[91.5%] w-full flex-row overflow-hidden";
+
+const headerLogoBar: LayoutFixture = {
+  name: "header-logo-bar",
+  summary:
+    "The 111px desktop logo inside the header's 8.5% bar, at a landscape phone's viewport",
+  source: "src/components/Header.tsx:125",
+  issue: "SCRUM-484",
+  viewportWidth: 667,
+  viewportHeight: 375,
+  /* The bar's own content box, which is the one prediction available here: the
+     logo is a flex item sized by its text, so no chain describes its width.
+     `padding: 0 40px` is the `desktop:` value, which applies at 667. */
+  insets: [{ name: "bar padding 0 40px", x: 80 }],
+  markup: `
+    <style>
+      [data-probe="bar"] {${HEADER_BAR_CSS}      }
+      [data-probe="logo"] {${HEADER_LOGO_CSS}      }
+
+      @media (min-width: 640px) {
+        [data-probe="bar"] {
+          padding: 0 40px;
+        }
+
+        [data-probe="logo"] {${HEADER_LOGO_DESKTOP_CSS}        }
+      }
+    </style>
+    <div data-probe="bar">
+      <h1 data-probe="logo">CarpoolNU</h1>
+      <div class="flex items-center">
+        <button class="rounded-xl pr-10 text-xl font-medium text-white">Home</button>
+      </div>
+    </div>
+    <div class="${CONTENT_ROW_CLASS}" data-probe="content-row">
+      <div class="h-full w-full bg-stone-100">
+        <button data-probe="row-first-control" class="m-2 rounded bg-white px-4 py-2">
+          Anything at the top of the row
+        </button>
+      </div>
+    </div>
+  `,
+  widthProbe: "[data-probe='bar']",
+  probe: {
+    boxes: [
+      "[data-probe='bar']",
+      "[data-probe='logo']",
+      "[data-probe='content-row']",
+      "[data-probe='row-first-control']",
+    ],
+    /* The logo is the footprint because the question is what its box covers,
+       not what covers it. `against` then reports the share of that box lying
+       over the content row. */
+    footprint: "[data-probe='logo']",
+    against: ["[data-probe='content-row']"],
+  },
+  recorded: [
+    "bar rect height 31.875 at 375 tall — 8.5% of the viewport, the figure the whole item turns on. Unchanged by the fix; the bar was never the part that was wrong.",
+    "AFTER: logo rect height 31.875 and top 0 — the box is the bar. Overflow below the bar 0, clipped above the viewport 0, overlap with the content row 0, against 39.5625 / 39.5625 / 0.356 before.",
+    "AFTER: computed font-size 27.7174px, which is 375 * 0.085 / 1.15 — the cap binding, as designed. The text box measures 32.00 against a 31.875 bar, so it is inside it to within 0.06px.",
+    "BEFORE: logo rect height 111 with top -39.5625. `align-items: center` split the 79px overflow, so the top 39.5625px was clipped off the screen — the logo was cut through the middle of its letters — and the bottom 39.5625px painted over the content row.",
+    "BEFORE, and this is the finding the ticket did not have: the footprint hit test came back `reachable: false`, obstructed at all three lower probe points by the content row's own button. `z-index: 10` on `HeaderDiv` is inert because the element is `position: static`, so the logo painted over the row's *background* and under the row's *controls*. The overlap was a paint defect, not a stolen-click defect. It is `reachable: true` after.",
+    "DESKTOP REGRESSION CHECK at 1440x900: font-size 48px, text box top 10.75 height 55 — identical before and after, and the text's centre is exactly the bar's centre. The 17.25px the 111px box used to overhang each way is now 0. Visually unchanged, geometrically correct.",
+    "The cap stops binding at 650px of viewport height: measured there, the bar is 55.25 and a 48px line box is 55, so the design size still wins. Below that the logo tracks the bar.",
+    "bar contentWidth 587, matching the predicted chain. clientWidth is 667; the 80px difference is the bar's own desktop padding.",
+    "SIGN-IN CONTROL, measured separately because `sign-in.tsx` gives the bar no definite height: there the bar computes to 111px and the logo overflows it by 0, before and after. That page is why `SigninLogo` is untouched.",
+  ],
+  /*
+   * Three anchors, because this fixture's CSS comes from two files.
+   *
+   * The two `Header.tsx` entries pin the *references* - that the bar still
+   * takes its height from the constant and the logo still caps its font
+   * against it. The `breakpoints.js` entry pins the 8.5% those references
+   * resolve to, which is the figure every number above actually depends on.
+   * Neither anchor alone is enough: the reference could stay while the value
+   * moved, or the value could stay while `Header.tsx` went back to a literal.
+   *
+   * A declaration is a weaker anchor than a class string - it is not a token
+   * list, and `toContain` would still pass if the same text appeared in a
+   * different rule in the same file. It is the only anchor styled-components
+   * offers, and it is what caught this fixture when `height: 8.5%` became a
+   * template reference mid-ticket.
+   */
+  reproduces: [
+    {
+      file: "src/components/Header.tsx",
+      className: "height: ${HEADER_BAR_HEIGHT};",
+    },
+    {
+      file: "src/components/Header.tsx",
+      className: "font-size: min(48px, ${HEADER_LOGO_MAX_FONT_SIZE});",
+    },
+    {
+      file: "src/utils/breakpoints.js",
+      className: "const HEADER_BAR_VIEWPORT_PERCENT = 8.5;",
+    },
+    { file: "src/pages/admin.tsx", className: CONTENT_ROW_CLASS },
+  ],
+};
+
+/*
+ * The admin console's tallest chart in the row it is given.
+ *
+ * `BarChartUserCounts.tsx:196` and `LineChartCount.tsx:220` are both
+ * `min-h-[600px]`; this reproduces one of them, since two would measure the
+ * same box twice. `BarChartDaysFrequency`'s `h-[500px]` is shorter and
+ * therefore not the binding case.
+ *
+ * **The x-axis is a stand-in, and that is the honest limit of this fixture.**
+ * The real axis is drawn by Chart.js into a canvas, which no static fixture
+ * can reproduce - and a canvas has no measurable children even in a browser.
+ * What is reproducible is the *box*: Chart.js draws its axis along the bottom
+ * edge of the element it is given, so the marker below is pinned there and its
+ * rect top is where the axis is. A criterion about the axis being below the
+ * fold is a criterion about that edge.
+ */
+const ADMIN_CHART_CLASS = "relative min-h-[600px] w-full";
+
+/**
+ * `BarChartDaysFrequency.tsx:103` - the shortest of the four, and the one
+ * `ADMIN_CONSOLE_MIN_HEIGHT_PX` is derived from.
+ *
+ * Both charts are in this fixture because the threshold's whole argument is
+ * about which of them binds. A fixture holding only the 600px block could not
+ * show that the gate is set where the *500px* one first fits, which is the
+ * decision a reviewer is being asked to accept.
+ */
+const ADMIN_SHORT_CHART_CLASS = "flex h-[500px] w-full flex-col";
+
+const ADMIN_SCROLL_PORT_CLASS = "my-4 h-full w-full overflow-y-auto";
+
+const ADMIN_SCROLL_INNER_CLASS = "flex h-full w-full flex-col space-y-4 px-8";
+
+const ADMIN_SIDEBAR_CLASS =
+  "border-busy-red z-0 h-full max-w-[250px] min-w-[175px] flex-[1] border-r-4 bg-stone-100";
+
+const adminConsoleChartFold: LayoutFixture = {
+  name: "admin-console-chart-fold",
+  summary:
+    "The admin console's two chart heights inside the 91.5% content row, at the height its gate is set to",
+  source: "src/components/Admin/BarChartUserCounts.tsx:196",
+  issue: "SCRUM-484",
+  viewportWidth: 667,
+  /*
+   * The gate, not the defect - and the difference matters for what this
+   * fixture is for. After SCRUM-484 a 375px-tall viewport is served
+   * `AdminMobileNotice` and renders no chart at all, so 375 measures a layout
+   * the app no longer produces; the figures it gave are kept in `recorded` as
+   * the before-state. `ADMIN_CONSOLE_MIN_HEIGHT_PX` is the shortest viewport
+   * that *does* still get the console, which makes it the one height where the
+   * threshold's arithmetic is checkable against a browser.
+   */
+  viewportHeight: ADMIN_CONSOLE_MIN_HEIGHT_PX,
+  /*
+   * The sidebar's `min-w-[175px]` is the right inset at this width, and the
+   * reason is the flex clamp rather than the declaration. `flex-[1]` beside
+   * `flex-[3]` would give the sidebar a quarter of the 663px left after its
+   * own border - 165.75px - which violates its minimum, so the sidebar
+   * freezes at 175 and the content column takes the whole remainder. At a
+   * wider viewport the quarter exceeds 175 and `max-w-[250px]` becomes the
+   * binding term instead, so this chain is specific to 667 and
+   * `describeViewportDimension` is what says so.
+   */
+  insets: [
+    { name: "sidebar min-w-[175px]", x: 175 },
+    { name: "sidebar border-r-4", x: 4 },
+    { name: "AdminData px-8", x: 64 },
+  ],
+  markup: `
+    <style>
+      [data-probe="bar"] {${HEADER_BAR_CSS}      }
+
+      @media (min-width: 640px) {
+        [data-probe="bar"] {
+          padding: 0 40px;
+        }
+      }
+    </style>
+    <div data-probe="bar"></div>
+    <div class="${CONTENT_ROW_CLASS}" data-probe="content-row">
+      <div class="${ADMIN_SIDEBAR_CLASS}"></div>
+      <div class="h-full w-full flex-[3]">
+        <div class="${ADMIN_SCROLL_PORT_CLASS}" data-probe="scroll-port">
+          <div class="${ADMIN_SCROLL_INNER_CLASS}">
+            <button class="bg-northeastern-red self-start rounded px-4 py-2 font-bold text-white">
+              Download Data
+            </button>
+            <div class="${ADMIN_CHART_CLASS}" data-probe="chart">
+              <div class="absolute inset-x-0 bottom-0 h-6" data-probe="chart-x-axis"></div>
+            </div>
+            <div class="${ADMIN_SHORT_CHART_CLASS}" data-probe="short-chart">
+              <div class="mt-auto h-6 w-full" data-probe="short-chart-x-axis"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `,
+  widthProbe: "[data-probe='chart']",
+  probe: {
+    boxes: [
+      "[data-probe='content-row']",
+      "[data-probe='scroll-port']",
+      "[data-probe='chart']",
+      "[data-probe='chart-x-axis']",
+      "[data-probe='short-chart']",
+      "[data-probe='short-chart-x-axis']",
+    ],
+  },
+  recorded: [
+    "At 667x582 — the gate, the shortest viewport still served the console — content-row rect top 49.469 and height 532.523, which is 0.915 of 582 to three decimals.",
+    "scroll-port rect top 65.469 and height 532.523: the same height as the row, pushed 16px down by `my-4`. The largest slice of scroll content that can be on screen at once is therefore 516.523, and the 500px chart the gate is derived from fits inside it — scrolled to the top of the port, its axis lands at 581.969 against a viewport of 582.",
+    "chart (`min-h-[600px]`) rect height 600 at every viewport measured. A minimum is a floor a flex shrink cannot cross, which is what makes this the console's real tallest block.",
+    "short-chart (`h-[500px]`) rect height 24 here and 151.5 at 1440x900 — **not 500 at either**. It is a shrinkable flex item in a column that always overflows, so it renders at whatever is left. Separate defect, filed, not fixed here; `ADMIN_SHORTEST_CHART_HEIGHT_PX` explains why the gate still uses the declared 500.",
+    "chart contentWidth 424, matching the predicted chain. Read the sidebar note on `insets` before reusing this at another width.",
+    "BEFORE, at 667x375 — the viewport that now gets `AdminMobileNotice` instead: row 343.125, port 311.13 of usable window, chart 600, and the axis at rect top 679.875, some 305px below the fold.",
+    "BEFORE, and the more serious half: scrolled fully to the bottom the axis's rect bottom was 390.875 against a viewport of 375, so it was *permanently* unreachable — `my-4` plus `h-full` makes the port 16px taller than the row that clips it, so its last 16px is outside the clip at any scroll position. Measured at 1440x900 too, where it is also 16. Viewport-independent, separate defect, filed.",
+  ],
+  reproduces: [
+    {
+      file: "src/components/Admin/BarChartUserCounts.tsx",
+      className: ADMIN_CHART_CLASS,
+    },
+    {
+      file: "src/components/Admin/BarChartDaysFrequency.tsx",
+      className: ADMIN_SHORT_CHART_CLASS,
+    },
+    {
+      file: "src/components/Admin/AdminData.tsx",
+      className: ADMIN_SCROLL_PORT_CLASS,
+    },
+    {
+      file: "src/components/Admin/AdminData.tsx",
+      className: ADMIN_SCROLL_INNER_CLASS,
+    },
+    { file: "src/pages/admin.tsx", className: ADMIN_SIDEBAR_CLASS },
+    { file: "src/pages/admin.tsx", className: CONTENT_ROW_CLASS },
+    {
+      file: "src/utils/breakpoints.js",
+      className: "const HEADER_BAR_VIEWPORT_PERCENT = 8.5;",
+    },
+    {
+      file: "src/utils/breakpoints.js",
+      className: "const ADMIN_SHORTEST_CHART_HEIGHT_PX = 500;",
+    },
+  ],
+};
+
 export const LAYOUT_FIXTURES: readonly LayoutFixture[] = [
   groupMemberCardTrigger,
+  headerLogoBar,
+  adminConsoleChartFold,
 ];
 
 export const findFixture = (name: string): LayoutFixture | undefined =>

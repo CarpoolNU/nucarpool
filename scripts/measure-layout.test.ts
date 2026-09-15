@@ -78,9 +78,43 @@ describe("parseArgs", () => {
     );
   });
 
+  it.each([
+    [["a", "--height", "800"], 800],
+    [["a", "--height=800"], 800],
+    [["--height", "800", "a"], 800],
+  ])("reads a height from %j", (argv, expected) => {
+    expect(parseArgs(argv).height).toBe(expected);
+  });
+
+  it.each([
+    ["--height", "0"],
+    ["--height", "-375"],
+    ["--height", "tall"],
+    ["--height"],
+  ])("refuses a height of %j rather than serving at NaN", (...argv) => {
+    /* The same validation as `--width`, and it is shared rather than copied -
+       so this case exists to prove the sharing did not drop it for one of the
+       two flags. */
+    expect(() => parseArgs(["a", ...argv])).toThrow(
+      /--height needs a positive number/,
+    );
+  });
+
+  it("takes both dimensions at once, which is the landscape-phone case", () => {
+    expect(parseArgs(["a", "--width", "667", "--height", "375"])).toEqual({
+      fixture: "a",
+      width: 667,
+      height: 375,
+      host: "127.0.0.1",
+    });
+  });
+
   it("refuses an unknown option rather than ignoring it", () => {
-    expect(() => parseArgs(["a", "--height", "800"])).toThrow(
-      /Unknown option "--height"/,
+    /* `--viewport` rather than `--height`, which this asserted against until
+       SCRUM-484 added that flag. A flag name that later becomes real is how a
+       negative assertion quietly stops testing anything. */
+    expect(() => parseArgs(["a", "--viewport", "667x375"])).toThrow(
+      /Unknown option "--viewport"/,
     );
   });
 
@@ -444,7 +478,7 @@ describe("what the harness prints", () => {
   });
 
   it("leads with the source file, the criterion and the predicted width", () => {
-    const text = banner(fixture, "http://127.0.0.1:1234/", 375, 77694);
+    const text = banner(fixture, "http://127.0.0.1:1234/", 375, 375, 77694);
 
     expect(text).toContain(fixture.source);
     expect(text).toContain(fixture.issue);
@@ -458,17 +492,54 @@ describe("what the harness prints", () => {
   it("says when a width is not the one the figures were recorded at", () => {
     /* Otherwise a figure taken at 320 gets compared against a 375 criterion,
        which is a mistake the harness can prevent by mentioning it. */
-    expect(banner(fixture, "http://x/", 320, 1)).toContain(
+    expect(banner(fixture, "http://x/", 320, 375, 1)).toContain(
       `recorded at ${fixture.viewportWidth}px, not this`,
     );
     expect(
-      banner(fixture, "http://x/", fixture.viewportWidth, 1),
+      banner(fixture, "http://x/", fixture.viewportWidth, 375, 1),
     ).not.toContain("not this");
+  });
+
+  it("says when a height is not the one the figures were recorded at", () => {
+    /*
+     * The height half, and it needs a fixture that records one - the group
+     * card's criterion is horizontal, so it declares no height at all.
+     */
+    const tall = LAYOUT_FIXTURES.find(
+      (each) => each.viewportHeight !== undefined,
+    );
+
+    /* Not an `if`: a silently skipped assertion is the failure mode this
+       whole file is built to avoid. */
+    expect(tall).toBeDefined();
+
+    const recorded = tall!.viewportHeight!;
+
+    expect(banner(tall!, "http://x/", tall!.viewportWidth, 900, 1)).toContain(
+      `recorded at ${recorded}px, not this`,
+    );
+    expect(
+      banner(tall!, "http://x/", tall!.viewportWidth, recorded, 1),
+    ).not.toContain("not this");
+  });
+
+  it("labels a height the fixture never recorded as the driver's own", () => {
+    /*
+     * A width-only fixture served at some height anyway. Reading 375 here as
+     * "the figure this fixture was measured at" is the misreading, so the
+     * banner says whose number it is instead of leaving it bare.
+     */
+    expect(fixture.viewportHeight).toBeUndefined();
+    expect(
+      banner(fixture, "http://x/", fixture.viewportWidth, 375, 1),
+    ).toContain("fixture records no height");
   });
 
   it("names the gitignored directory a measurement leaves behind", () => {
     /* .playwright-mcp/ landed in the repo root twice, SCRUM-461 and SCRUM-473. */
-    expect(banner(fixture, "http://x/", 375, 1)).toContain(".playwright-mcp/");
+    expect(banner(fixture, "http://x/", 375, 375, 1)).toContain(
+      ".playwright-mcp/",
+    );
   });
 
   it("lists every fixture with its criterion, for a run with no arguments", () => {

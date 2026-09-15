@@ -6,6 +6,15 @@ import {
   WIZARD_CARD_HEIGHT_PX,
   WIZARD_DESKTOP_MIN_HEIGHT_PX,
   WIZARD_NAV_STRIP_SPACE_PX,
+  HEADER_BAR_VIEWPORT_PERCENT,
+  HEADER_BAR_VIEWPORT_FRACTION,
+  HEADER_BAR_HEIGHT,
+  CONTENT_ROW_VIEWPORT_FRACTION,
+  LOGO_FONT_BOX_RATIO,
+  HEADER_LOGO_MAX_FONT_SIZE,
+  ADMIN_SHORTEST_CHART_HEIGHT_PX,
+  ADMIN_DATA_VERTICAL_MARGIN_PX,
+  ADMIN_CONSOLE_MIN_HEIGHT_PX,
   MOBILE_BREAKPOINT_PX,
   MOBILE_NAV_HEIGHT_PX,
   MOBILE_NAV_SPACE,
@@ -417,5 +426,166 @@ describe("the onboarding wizard's minimum desktop height", () => {
       expect(isMobileWidth(width)).toBe(false);
       expect(height).toBeLessThan(WIZARD_DESKTOP_MIN_HEIGHT_PX);
     }
+  });
+});
+
+/**
+ * The header bar's share of the viewport, and the two things SCRUM-484 derived
+ * from it.
+ *
+ * The bar declares a percentage and its logo declared a fixed `111px`, so the
+ * two were unrelated numbers and the child overflowed the parent at every
+ * realistic viewport - measured at 31.88px of bar around a 111px logo at
+ * 667x375, and still 76.5px around 111px at 1440x900. These pin the
+ * composition that replaced it. The resulting *geometry* is a browser question
+ * and lives on the `header-logo-bar` fixture.
+ */
+describe("the header bar's share of the viewport", () => {
+  it("states the percentage and derives the fraction from it, not the reverse", () => {
+    /*
+     * `0.085 * 100` is `8.500000000000001` in IEEE 754, so composing the CSS
+     * string from a fraction would emit a `height` nobody wrote. This is that
+     * ordering, asserted - the string has to be exact, because it is what
+     * reaches the browser.
+     */
+    expect(HEADER_BAR_HEIGHT).toBe("8.5%");
+    expect(HEADER_BAR_VIEWPORT_FRACTION).toBe(0.085);
+    expect(`${HEADER_BAR_VIEWPORT_PERCENT}%`).toBe(HEADER_BAR_HEIGHT);
+  });
+
+  it("leaves the content row exactly the remainder", () => {
+    /* 91.5%, the figure `admin.tsx`, `index.tsx` and `profile/index.tsx` each
+       declare. Stated as the complement so the bar and the row cannot add up
+       to anything but the viewport. */
+    expect(CONTENT_ROW_VIEWPORT_FRACTION).toBe(0.915);
+    expect(HEADER_BAR_VIEWPORT_FRACTION + CONTENT_ROW_VIEWPORT_FRACTION).toBe(
+      1,
+    );
+  });
+
+  it("caps the logo's font against the bar, composed from that same fraction", () => {
+    expect(HEADER_LOGO_MAX_FONT_SIZE).toBe("calc(100dvh * 0.085 / 1.15)");
+    expect(HEADER_LOGO_MAX_FONT_SIZE).toContain(
+      `${HEADER_BAR_VIEWPORT_FRACTION}`,
+    );
+    expect(HEADER_LOGO_MAX_FONT_SIZE).toContain(`${LOGO_FONT_BOX_RATIO}`);
+  });
+
+  /**
+   * The arithmetic behind the cap, checked at the heights it was measured at.
+   *
+   * The cap is the bar's height over `LOGO_FONT_BOX_RATIO`, so the design size
+   * survives wherever its line box fits the bar. Both figures below came back
+   * from Chromium: 48px at 900 tall and at 650 tall, 27.7174px at 375.
+   */
+  it("keeps the desktop design size wherever the bar can hold its line", () => {
+    const capAt = (viewportHeight: number) =>
+      (viewportHeight * HEADER_BAR_VIEWPORT_FRACTION) / LOGO_FONT_BOX_RATIO;
+
+    // Measured: font-size came back as 48px at both of these.
+    expect(capAt(900)).toBeGreaterThan(48);
+    expect(capAt(650)).toBeGreaterThan(48);
+
+    // Measured: 27.7174px, against a bar of 31.875px.
+    expect(capAt(375)).toBeCloseTo(27.7174, 3);
+    expect(capAt(375) * LOGO_FONT_BOX_RATIO).toBeCloseTo(
+      375 * HEADER_BAR_VIEWPORT_FRACTION,
+      6,
+    );
+  });
+
+  /**
+   * The boundary, which is where the cap takes over from the design size.
+   *
+   * Worth an assertion rather than a comment because it is the answer to "does
+   * this change my laptop": everything above it renders what it rendered
+   * before.
+   */
+  it("starts binding below about 650px of viewport height", () => {
+    const heightWhereDesignSizeJustFits =
+      (48 * LOGO_FONT_BOX_RATIO) / HEADER_BAR_VIEWPORT_FRACTION;
+
+    expect(heightWhereDesignSizeJustFits).toBeCloseTo(649.4, 1);
+
+    /* So a 1366x768 laptop, which leaves about 650px of viewport, is on the
+       unchanged side of it - and a landscape phone is not. */
+    expect(heightWhereDesignSizeJustFits).toBeLessThan(650);
+    expect(heightWhereDesignSizeJustFits).toBeGreaterThan(430);
+  });
+});
+
+/**
+ * The admin console's height gate.
+ *
+ * SCRUM-484's other half: `showMobileNotice` was width-only, so a landscape
+ * phone was served the console into a 343px row. The threshold is the
+ * console's own, read at that one call site, and `MOBILE_BREAKPOINT_PX` is
+ * untouched - SCRUM-477 records why a height term on that constant would move
+ * all twelve of its survey sites at once.
+ */
+describe("the admin console's minimum height", () => {
+  it("is composed from the console's own numbers, not chosen", () => {
+    expect(ADMIN_CONSOLE_MIN_HEIGHT_PX).toBe(
+      Math.ceil(
+        (ADMIN_SHORTEST_CHART_HEIGHT_PX + ADMIN_DATA_VERTICAL_MARGIN_PX) /
+          CONTENT_ROW_VIEWPORT_FRACTION,
+      ),
+    );
+  });
+
+  it("is the height at which the shortest chart first fits the scroll window", () => {
+    /*
+     * The claim the threshold makes, restated as the inequality it solves. At
+     * the threshold the row less the margin is at least the chart; one pixel
+     * below, it is not. That one-pixel check is what makes this a boundary
+     * rather than a plausible number.
+     */
+    const windowAt = (viewportHeight: number) =>
+      viewportHeight * CONTENT_ROW_VIEWPORT_FRACTION -
+      ADMIN_DATA_VERTICAL_MARGIN_PX;
+
+    expect(windowAt(ADMIN_CONSOLE_MIN_HEIGHT_PX)).toBeGreaterThanOrEqual(
+      ADMIN_SHORTEST_CHART_HEIGHT_PX,
+    );
+    expect(windowAt(ADMIN_CONSOLE_MIN_HEIGHT_PX - 1)).toBeLessThan(
+      ADMIN_SHORTEST_CHART_HEIGHT_PX,
+    );
+  });
+
+  it("is a whole number of pixels", () => {
+    // Compared against `window.innerHeight`, which is an integer.
+    expect(Number.isInteger(ADMIN_CONSOLE_MIN_HEIGHT_PX)).toBe(true);
+  });
+
+  /**
+   * The two bounds the figure was accepted against, because the arithmetic
+   * alone cannot say whether the answer is usable. The notice removes a
+   * capability, so a threshold set too high costs a real user their console.
+   */
+  it("excludes every phone in landscape while keeping every desktop window", () => {
+    for (const [width, height] of [
+      [667, 375], // iPhone SE2 / 8
+      [844, 390], // iPhone 12/13/14
+      [932, 430], // iPhone 14 Pro Max
+    ]) {
+      // Above the width breakpoint and below the height gate: the defect.
+      expect(isMobileWidth(width)).toBe(false);
+      expect(height).toBeLessThan(ADMIN_CONSOLE_MIN_HEIGHT_PX);
+    }
+
+    /* And the side that must not regress. ~650 is a 1366x768 laptop after
+       browser chrome, ~695 an iPad in landscape in Safari. */
+    for (const height of [650, 695, 800, 900]) {
+      expect(height).toBeGreaterThan(ADMIN_CONSOLE_MIN_HEIGHT_PX);
+    }
+  });
+
+  /**
+   * Not the wizard's, and this is the assertion that would have caught the
+   * mistake SCRUM-484's ticket warns about by name: copying 844px to a place
+   * it means nothing.
+   */
+  it("is its own figure, not the onboarding wizard's", () => {
+    expect(ADMIN_CONSOLE_MIN_HEIGHT_PX).not.toBe(WIZARD_DESKTOP_MIN_HEIGHT_PX);
   });
 });

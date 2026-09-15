@@ -409,12 +409,81 @@ describe("Header styling across the breakpoint", () => {
     renderHeader();
     const logo = desktopBrand()!;
 
-    expect(baseOf(logo)).toContain("font-size: 32px");
-    expect(baseOf(logo)).toContain("height: 70px");
+    /*
+     * The design sizes, which SCRUM-484 capped rather than replaced: each is
+     * still the first argument to its own `min()`, so a viewport with room for
+     * it still gets exactly it.
+     */
+    expect(baseOf(logo)).toContain("font-size: min(32px");
+    expect(desktopOf(logo)).toContain("font-size: min(48px");
+  });
 
-    expect(desktopOf(logo)).toContain("font-size: 48px");
+  /**
+   * SCRUM-484's regression guard, and the one assertion in this file whose
+   * subject is an *absence*.
+   *
+   * The defect was a fixed pixel height inside a percentage-height bar:
+   * `HeaderDiv` is 8.5% of the viewport and `Logo` declared `111px`, so the
+   * child overflowed its parent at every viewport below about 1500px tall -
+   * measured at 31.88px of bar around a 111px logo at 667x375, and still
+   * 76.5px around 111px at 1440x900. The fix is that the logo's height is now
+   * the bar's, whatever that turns out to be.
+   *
+   * **A positive control comes first.** `desktopOf` returning the empty string
+   * would satisfy every `not.toContain` below it and read as a pass - the same
+   * vacuous-negative shape `guards the header's styling` guards against above,
+   * and the one SCRUM-475 was written about. So the block is proved non-empty
+   * by the declaration it *does* carry before anything is asserted missing.
+   *
+   * This says nothing about the resulting geometry. jsdom computes no layout
+   * and resolves no `dvh`, so whether 100% of the bar is 31.88px is a browser
+   * question - measured through `scripts/measure-layout.ts`, recorded on the
+   * `header-logo-bar` fixture, and regression-testable only in SCRUM-264's
+   * Playwright suite.
+   */
+  it("gives the logo a height it can occupy rather than a fixed one", () => {
+    renderHeader();
+    const logo = desktopBrand()!;
+
+    // The control: the desktop query does guard a declaration for this
+    // element, so the absences below are real absences.
+    expect(desktopOf(logo)).toContain("font-size");
+
+    expect(baseOf(logo)).toContain("height: 100%");
+    expect(baseOf(logo)).toContain("line-height: normal");
+
+    /* The three declarations that went with the fixed box. `line-height: 77px`
+       was the third independent number a 31.88px bar could not hold either. */
+    expect(baseOf(logo)).not.toContain("height: 70px");
+    expect(desktopOf(logo)).not.toContain("height: 111px");
+    expect(desktopOf(logo)).not.toContain("line-height: 77px");
+  });
+
+  /**
+   * The deliberate asymmetry, pinned so that a later reader "finishing the
+   * job" has to delete a test that says why not.
+   *
+   * `SigninLogo` keeps the fixed 111px because its bar is not a percentage of
+   * anything: `sign-in.tsx:68` puts `Header` inside a `w-fit` card in an
+   * auto-height flex column, so `HeaderDiv`'s 8.5% has no definite containing
+   * block and resolves to `auto`. Measured in Chromium at 667x375 the bar
+   * computes to 111px and the logo's box ends exactly on the bar's bottom edge
+   * - an overflow of zero, which is the whole reason this one is not a defect.
+   */
+  it("leaves the sign-in logo's fixed height alone, because its bar has none", () => {
+    render(<Header signIn={true} />);
+
+    const logo = screen.getByText("CarpoolNU");
+
+    expect(baseOf(logo)).toContain("height: 70px");
     expect(desktopOf(logo)).toContain("height: 111px");
     expect(desktopOf(logo)).toContain("line-height: 77px");
+
+    /* And therefore no cap: the card has room the viewport height says nothing
+       about, so scaling this logo with `dvh` would shrink it for no reason. */
+    expect(baseOf(logo)).toContain("font-size: 32px");
+    expect(baseOf(logo)).not.toContain("min(");
+    expect(desktopOf(logo)).not.toContain("min(");
   });
 
   it("does the same with the header's padding", () => {
