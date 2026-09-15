@@ -362,17 +362,22 @@ export const GroupPage = (props: GroupPageProps) => {
 
   return (
     <Dialog open={isOpen} onClose={onClose} className="relative z-50">
-      <div className="fixed inset-0 backdrop-blur-xs" aria-hidden="true">
-        <div className="fixed inset-0 flex items-center justify-center p-4">
-          <Dialog.Panel className="flex h-4/6 w-4/6 flex-col content-center justify-start gap-1 overflow-y-auto rounded-md bg-white py-9 shadow-lg">
-            <div className="relative">
-              <Dialog.Title className="text-center text-3xl font-bold">
-                My Group
-              </Dialog.Title>
-            </div>
-            {body("desktop")}
-          </Dialog.Panel>
-        </div>
+      {/* Backdrop and panel are siblings. While the backdrop wrapped the
+       * panel, its `aria-hidden` covered the whole subtree - the group-details
+       * form, "Preview Group Route", "Leave Group", "Remove", "Delete Group" -
+       * and no descendant can opt back in. SCRUM-475. The `relative z-50` on
+       * `Dialog` above is the stacking context both of these sit in, so DOM
+       * order alone puts the panel over the blur. */}
+      <div className="fixed inset-0 backdrop-blur-xs" aria-hidden="true" />
+      <div className="fixed inset-0 flex items-center justify-center p-4">
+        <Dialog.Panel className="flex h-4/6 w-4/6 flex-col content-center justify-start gap-1 overflow-y-auto rounded-md bg-white py-9 shadow-lg">
+          <div className="relative">
+            <Dialog.Title className="text-center text-3xl font-bold">
+              My Group
+            </Dialog.Title>
+          </div>
+          {body("desktop")}
+        </Dialog.Panel>
       </div>
     </Dialog>
   );

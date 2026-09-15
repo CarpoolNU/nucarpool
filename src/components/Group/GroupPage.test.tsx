@@ -49,13 +49,25 @@ jest.mock("../../utils/trpc", () => ({
   },
 }));
 
+/**
+ * The keys are `GroupDetails`', spelled out rather than spread from
+ * `DEFAULT_GROUP_DETAILS` - a `jest.mock` factory runs while the module under
+ * test is being required, before the imports above are initialised, so it can
+ * only use literals. `groupDetails.ts` is the source of truth for the shape.
+ *
+ * They were `musicPreference`, `snackPreference`, `conversationStyle` and
+ * `groupNotes` until SCRUM-475, and the last three of those are not fields.
+ * Nothing noticed, because the only body these tests rendered was a RIDER's,
+ * which is prose - `GroupDetailsForm` reads `details.notes` and appears on the
+ * DRIVER branch alone, which nothing here reached until the desktop
+ * accessibility cases below.
+ */
 jest.mock("./useGroupDetails", () => ({
   useGroupDetails: () => ({
     details: {
+      notes: "",
       musicPreference: "",
-      snackPreference: "",
       conversationStyle: "",
-      groupNotes: "",
     },
     setDetails: jest.fn(),
     save: jest.fn(),
@@ -211,5 +223,107 @@ describe("My Group on desktop", () => {
     await userEvent.keyboard("{Escape}");
 
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * Whether the desktop modal exists for assistive technology at all.
+ *
+ * The backdrop used to wrap the `Dialog.Panel` rather than sit beside it, and
+ * it carries `aria-hidden="true"`. That attribute applies to the entire subtree
+ * and no descendant can opt back in, so every control the modal offers - the
+ * group-details form and its Submit, "Preview Group Route", "Leave Group",
+ * "Remove", "Delete Group" - was absent from the accessibility tree while
+ * rendering, staying visible, and staying clickable with a mouse. SCRUM-475.
+ *
+ * `getByRole` resolves against that tree and `getByText` does not, which is the
+ * only reason these assertions can tell the difference. It is also why the
+ * queries below deliberately carry no `{ hidden: true }` - the flag
+ * `GroupPage.driverless.test.tsx` needed to work around this, and has now
+ * dropped.
+ *
+ * Note what the `does not render the mobile close control` case above could not
+ * prove while the defect stood: with the whole panel hidden, *every*
+ * `queryByRole` in this branch returned null, so that negative held whether or
+ * not the button was drawn. It passed for the wrong reason. It only becomes an
+ * assertion about the close control once the panel is in the tree.
+ */
+describe("My Group's desktop modal in the accessibility tree", () => {
+  /**
+   * A DRIVER rather than the RIDER the cases above use, because the desktop
+   * no-group body only draws a control - Submit, under the group-details form -
+   * for a driver. A rider's is prose, which has no role to query.
+   */
+  const DRIVING_USER_WITHOUT_GROUP = {
+    ...USER_WITHOUT_GROUP,
+    role: Role.DRIVER,
+  } as unknown as User;
+
+  const renderDesktopModal = () =>
+    render(
+      <UserContext.Provider value={DRIVING_USER_WITHOUT_GROUP}>
+        <GroupPage
+          onClose={() => undefined}
+          onViewGroupRoute={() => undefined}
+        />
+      </UserContext.Provider>,
+    );
+
+  beforeEach(() => {
+    setViewportWidth(DESKTOP_WIDTH);
+  });
+
+  it("offers the panel's controls as controls", () => {
+    renderDesktopModal();
+
+    expect(screen.getByRole("button", { name: "Submit" })).toBeInTheDocument();
+  });
+
+  it("announces the dialog's title", () => {
+    renderDesktopModal();
+
+    expect(
+      screen.getByRole("heading", { name: "My Group" }),
+    ).toBeInTheDocument();
+  });
+
+  it("puts no aria-hidden on any ancestor of the panel", () => {
+    renderDesktopModal();
+
+    const hiddenAncestors: string[] = [];
+
+    for (
+      let node = screen.getByRole("button", { name: "Submit" })
+        .parentElement as HTMLElement | null;
+      node && node !== document.body;
+      node = node.parentElement
+    ) {
+      if (node.getAttribute("aria-hidden") === "true") {
+        hiddenAncestors.push(node.className);
+      }
+    }
+
+    expect(hiddenAncestors).toEqual([]);
+  });
+
+  /**
+   * The other half of the pin. Deleting `aria-hidden` outright would satisfy
+   * every assertion above, and would put a decorative blur layer into the
+   * accessibility tree instead - so the backdrop is asserted from its own side.
+   *
+   * Selected by the class that draws the blur rather than by the attribute:
+   * Headless UI marks internal nodes of its own `aria-hidden`, so the attribute
+   * does not identify this element on its own.
+   */
+  it("keeps the backdrop hidden, and still blurring", () => {
+    const { baseElement } = renderDesktopModal();
+
+    const backdrops = baseElement.querySelectorAll(".backdrop-blur-xs");
+
+    expect(backdrops).toHaveLength(1);
+    expect(backdrops[0]).toHaveAttribute("aria-hidden", "true");
+    expect(backdrops[0]).not.toContainElement(
+      screen.getByRole("button", { name: "Submit" }),
+    );
   });
 });
