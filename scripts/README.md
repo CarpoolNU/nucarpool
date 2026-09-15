@@ -64,7 +64,15 @@ The `check-*` scripts exit `0` when clean and `1` when not, so they can gate a f
 | -------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | [`check-env-contract.js`](./check-env-contract.js) | CI: `yarn check:env` and `yarn check:amplify`, and the source of the placeholder build environment |
 | [`check-page-routes.js`](./check-page-routes.js)   | CI: `yarn check:routes` and the `build` job's manifest assertion                                   |
+| [`measure-layout.ts`](./measure-layout.ts)         | Serves a layout fixture for measuring in a real browser. **No database.**                          |
 | [`emailtemplate.py`](./emailtemplate.py)           | **Mutates AWS.** Creates and updates the SES templates the app sends                               |
+
+`measure-layout.ts` is the exception to this directory's opening sentence: it touches no database, connects to no environment, and has no `--apply` because it writes nothing anywhere. It compiles `src/styles/globals.css` and serves it with a fixture over HTTP on an OS-assigned loopback port, so a browser can measure boxes that jsdom reports as zero. [`docs/testing.md`](../docs/testing.md#measuring-layout-in-a-real-browser) covers what it proves, what it does not, and the four sharp edges it encodes. It is not in CI and nothing schedules it.
+
+```bash
+npx ts-node scripts/measure-layout.ts                            # list fixtures
+npx ts-node scripts/measure-layout.ts group-member-card-trigger  # serve one
+```
 
 `*.test.ts` files next to each script cover argument parsing and the pure planning half, and run in `yarn test`. **A passing suite says nothing about what a script would do to a real database.**
 

@@ -22,8 +22,31 @@ import { MOBILE_NAV_SPACE } from "../../utils/breakpoints";
  * ticks and rotated labels. That was left undone deliberately rather than
  * deferred to a ticket, because it should only be built if someone turns out
  * to need the dashboard on a phone. This panel is not the obstacle to it.
+ *
+ * **It is no longer only the narrow case.** SCRUM-484 added a height term to
+ * the gate in `admin.tsx`, so this also stands in for the console on a
+ * viewport that is wide enough and too short - a phone in landscape, which is
+ * 667x375 and therefore above the width breakpoint. Two things below follow
+ * from that and neither is cosmetic: the copy no longer says "wider", because
+ * the screen arriving here may be plenty wide, and the navigation allowance is
+ * now conditional, because the bar it clears is not always rendered.
  */
-const AdminMobileNotice = () => {
+type AdminMobileNoticeProps = {
+  /**
+   * Whether `Header` is currently rendering its fixed bottom navigation, which
+   * is true at mobile *width* and not at mobile height.
+   *
+   * A prop rather than a second `useIsMobile()` call in here. The two reads
+   * would be the same value in practice, but the question this component is
+   * answering is "is that bar on screen", and the page above already knows -
+   * it is the same `isMobile` that chose which `Header` branch to render.
+   * Asking again would make it possible for the answer to differ from the one
+   * that actually decided.
+   */
+  reservesMobileNav: boolean;
+};
+
+const AdminMobileNotice = ({ reservesMobileNav }: AdminMobileNoticeProps) => {
   const router = useRouter();
 
   return (
@@ -39,13 +62,31 @@ const AdminMobileNotice = () => {
      * and the inline form keeps the reason next to it. Naming that utility
      * here is also not free - Tailwind v4 scans this comment, so writing it in
      * prose would ship it as CSS whether or not anything uses it.
+     *
+     * **`undefined` and not `0` when there is no bar**, so the declaration is
+     * absent rather than present with a zero value. Either renders the same;
+     * the absent one does not invite a reader to wonder which rule the zero is
+     * overriding.
+     *
+     * The height moves with it, and this is the half that is easy to miss.
+     * The bottom navigation is `position: fixed`, so on a mobile-width
+     * viewport it takes no space in flow and `h-full` correctly fills the page
+     * box. The desktop bar is *in flow* at 8.5%, so the same `h-full` would
+     * run 8.5% past the bottom of the viewport - this panel is the bar's
+     * sibling, not its child. 91.5% is the remainder the console's own row
+     * takes at `admin.tsx:120`, so the notice occupies exactly the space the
+     * layout it replaces would have.
      */
     <div
-      className="flex h-full w-full flex-col items-center justify-center px-8 text-center"
-      style={{ paddingBottom: MOBILE_NAV_SPACE }}
+      className={`flex w-full flex-col items-center justify-center px-8 text-center ${
+        reservesMobileNav ? "h-full" : "h-[91.5%]"
+      }`}
+      style={{
+        paddingBottom: reservesMobileNav ? MOBILE_NAV_SPACE : undefined,
+      }}
     >
       <h1 className="text-northeastern-red font-montserrat text-2xl font-bold">
-        Admin needs a wider screen
+        Admin needs a bigger screen
       </h1>
 
       <p className="font-montserrat mt-4 text-base text-stone-700">

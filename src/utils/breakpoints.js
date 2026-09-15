@@ -158,6 +158,172 @@ const DESKTOP_TALL_MEDIA_QUERY =
 const isMobileWidth = (width) => width < MOBILE_BREAKPOINT_PX;
 
 /**
+ * The share of the viewport the header bar takes, as the percentage
+ * `HeaderDiv` declares and as the fraction the arithmetic below needs.
+ *
+ * Hoisted out of `Header.tsx` for SCRUM-484, which needs the same figure three
+ * times: the bar declares it, the logo's font cap is derived from it, and the
+ * admin console's height gate is derived from its complement. It was one
+ * number in one template before that, and nothing else could read it.
+ *
+ * **The percentage is the definition and the fraction is derived from it**,
+ * rather than the reverse. `0.085 * 100` is `8.500000000000001` in IEEE 754,
+ * so composing the CSS string from a fraction would emit a `height` no one
+ * wrote; `8.5 / 100` is exactly `0.085`.
+ *
+ * Worth knowing before reusing these: **the bar is 8.5% of its containing
+ * block, which is only the viewport on the pages that give it one.** On `/`,
+ * `/profile` and `/admin` the bar's parent is `100dvh`, so 8.5% is 8.5% of the
+ * viewport and the content row beside it is the 91.5% remainder. On
+ * `/sign-in` the bar sits inside a `w-fit` card in an auto-height flex column
+ * (`sign-in.tsx:68`), so the percentage has no definite height to resolve
+ * against and falls back to `auto` - measured in Chromium at 667x375, where
+ * the bar computes to 111px and takes its height *from* its logo rather than
+ * giving one to it. Anything derived from these constants therefore describes
+ * the in-page bar and not the sign-in card.
+ */
+const HEADER_BAR_VIEWPORT_PERCENT = 8.5;
+
+const HEADER_BAR_VIEWPORT_FRACTION = HEADER_BAR_VIEWPORT_PERCENT / 100;
+
+/** The bar's own `height`, which is what `HeaderDiv` declares. */
+const HEADER_BAR_HEIGHT = `${HEADER_BAR_VIEWPORT_PERCENT}%`;
+
+/**
+ * The share of the viewport left for a page's content row - the 91.5% the
+ * desktop rows in `admin.tsx`, `index.tsx` and `profile/index.tsx` each
+ * declare.
+ *
+ * Stated as the complement rather than as a fourth copy of the number, so the
+ * bar and the row cannot add up to anything but the viewport.
+ */
+const CONTENT_ROW_VIEWPORT_FRACTION = 1 - HEADER_BAR_VIEWPORT_FRACTION;
+
+/**
+ * The vertical space Chromium reserves for one line of the logo's font, per
+ * `1em`.
+ *
+ * **Measured, not declared**, and the distinction is the same one
+ * `WIZARD_NAV_STRIP_SPACE_PX` makes. Read out of
+ * `TextMetrics.fontBoundingBoxAscent + fontBoundingBoxDescent` for
+ * `700 100px Lato, sans-serif` in Chromium, which came to 115 - and confirmed
+ * against the rendered element, whose text box a `Range` measured at 55px for
+ * a 48px font. Both the Lato the app loads and the sans-serif it falls back to
+ * give 115, so the figure does not depend on whether the webfont has arrived.
+ *
+ * This is the *font* box and not the glyph ink, which is smaller: the actual
+ * inked height of "CarpoolNU" is about 0.94em. Reserving the font box is the
+ * conservative choice and the right one, because it is what the browser
+ * actually lays out and therefore what decides whether a line overflows its
+ * container.
+ */
+const LOGO_FONT_BOX_RATIO = 1.15;
+
+/**
+ * The largest font size the header logo can take and still have its line fit
+ * inside the bar.
+ *
+ * **This is the fix SCRUM-484 exists for, and the shape of the defect is worth
+ * stating.** The bar's height is a *percentage* and the logo's was a fixed
+ * `111px`, so the two were unrelated: the logo fit only above
+ * `111 * 1.15 / 0.085` of viewport height, which is past 1500px and therefore
+ * never. Measured at 667x375 the bar is 31.88px around a 111px logo, whose box
+ * is clipped 39.56px off the top of the screen and paints the other 39.56px
+ * over the content row; at 1440x900 - an ordinary desktop window, not a short
+ * one - the bar is 76.5px and the same 111px box still overhangs by 17.25px
+ * each way. The visible clipping is landscape-only, but the overflow is not.
+ *
+ * `100dvh` reconstructs the bar's own basis rather than reading it, and that
+ * is a real limitation: a CSS length cannot ask its parent how tall it turned
+ * out. It is composed from the same fraction the bar declares, so the two
+ * cannot drift; `Header.console.test.tsx`'s sibling
+ * `headerLogoFontCap.test.ts` pins the composition. Container query units
+ * (`cqh`, against `container-type: size` on the bar) would read the real
+ * height and were deliberately not used: sizing containment on the header of
+ * every authenticated page is a larger behavioural change than this defect
+ * justifies.
+ *
+ * Used inside `min()` against the design size, so it binds only where the
+ * design size does not fit. At 900px tall it computes to 66.5px and 48px wins,
+ * which is why desktop is untouched; 48px stops fitting below about 649px of
+ * viewport height, and from there down the logo tracks the bar.
+ */
+const HEADER_LOGO_MAX_FONT_SIZE = `calc(100dvh * ${HEADER_BAR_VIEWPORT_FRACTION} / ${LOGO_FONT_BOX_RATIO})`;
+
+/**
+ * The shortest chart the admin console **declares**, in pixels - the
+ * `h-[500px]` on `BarChartDaysFrequency`. The other two chart blocks are
+ * `min-h-[600px]`.
+ *
+ * **"Declares" is doing real work in that sentence, and the difference was
+ * measured.** This is the only one of the three that is a fixed `h-` rather
+ * than a `min-h-` floor, and all three are flex items of `AdminData`'s
+ * `flex-col` - which always overflows, because its children sum to more than
+ * the row at every viewport. `flex-shrink` defaults to 1 and `min-height:
+ * auto` does not stop it, so this chart is shrunk to whatever is left:
+ * measured at 151.5px at 1440x900 and 24px at 667x582. The `min-h-[600px]`
+ * pair resist, because a minimum is a floor a shrink cannot cross.
+ *
+ * So the 500px below is an intent the page does not currently honour. It is
+ * still the right figure to derive the gate from - the gate is a judgement
+ * about the layout as designed, and a gate derived from a defect would have to
+ * move when the defect is fixed. The shrinking itself is a separate,
+ * viewport-independent defect, found while measuring this one and filed rather
+ * than fixed here: widening this ticket to `AdminData`'s flex column would
+ * mean changing what the console renders at every viewport, which is not what
+ * SCRUM-484 is about.
+ */
+const ADMIN_SHORTEST_CHART_HEIGHT_PX = 500;
+
+/**
+ * The vertical space `AdminData`'s `my-4` takes out of the content row: 16px
+ * at each end.
+ *
+ * The only part of the console's chrome that a scroll cannot reach past.
+ * Everything else inside the scroll port - the Download button, the quick
+ * stats, the gaps - can be scrolled off, so none of it belongs in a floor.
+ */
+const ADMIN_DATA_VERTICAL_MARGIN_PX = 32;
+
+/**
+ * The shortest viewport the admin console is served into, in pixels. Below
+ * this, `/admin` renders `AdminMobileNotice` instead.
+ *
+ * **Derived, and the derivation is a claim about what makes the console
+ * unusable rather than merely cramped.** The console scrolls, so no height
+ * makes a chart unreachable. What a height does decide is whether any chart
+ * can be seen *whole*: the scroll port is the content row less the margin
+ * above, and a chart taller than that can never be fully on screen at any
+ * scroll position. So the floor is the shortest chart plus that margin, over
+ * the row's share of the viewport - below it, not one of the four charts in
+ * the console is ever fully visible.
+ *
+ *   0.915 * H - 32 >= 500   solves to   H >= 581.4
+ *
+ * **Deliberately not derived from the tallest chart.** `min-h-[600px]` would
+ * put the floor at 691px, and the notice is a removal of a capability rather
+ * than a cosmetic downgrade - so the cost of setting it too high is that a
+ * manager on a 1366x768 laptop, whose browser viewport is around 650px, loses
+ * a console that works for them today by scrolling. That is a worse outcome
+ * than the cropping this ticket is about.
+ *
+ * 582 clears both bounds with room: the tallest phone in landscape is 430px
+ * (a 932x430 iPhone), and the shortest desktop viewport worth serving is that
+ * ~650px laptop. It is not a device figure, it is the layout's - but it was
+ * checked against both before being accepted, because a threshold that is
+ * derived and also wrong is still wrong.
+ *
+ * Opt-in at one call site, which is `admin.tsx`. `MOBILE_BREAKPOINT_PX` is
+ * untouched: SCRUM-477 records why giving that constant a height term would
+ * move all twelve of its survey sites across the line at once, and SCRUM-474
+ * is the pattern this follows instead.
+ */
+const ADMIN_CONSOLE_MIN_HEIGHT_PX = Math.ceil(
+  (ADMIN_SHORTEST_CHART_HEIGHT_PX + ADMIN_DATA_VERTICAL_MARGIN_PX) /
+    CONTENT_ROW_VIEWPORT_FRACTION,
+);
+
+/**
  * The height of the mobile bottom navigation, in pixels.
  *
  * **Declared, not measured.** `MobileNav` used to set no height at all, so its
@@ -231,6 +397,15 @@ module.exports = {
   WIZARD_CARD_HEIGHT_PX,
   WIZARD_NAV_STRIP_SPACE_PX,
   WIZARD_DESKTOP_MIN_HEIGHT_PX,
+  HEADER_BAR_VIEWPORT_PERCENT,
+  HEADER_BAR_VIEWPORT_FRACTION,
+  HEADER_BAR_HEIGHT,
+  CONTENT_ROW_VIEWPORT_FRACTION,
+  LOGO_FONT_BOX_RATIO,
+  HEADER_LOGO_MAX_FONT_SIZE,
+  ADMIN_SHORTEST_CHART_HEIGHT_PX,
+  ADMIN_DATA_VERTICAL_MARGIN_PX,
+  ADMIN_CONSOLE_MIN_HEIGHT_PX,
   isMobileWidth,
   MOBILE_NAV_HEIGHT_PX,
   MOBILE_NAV_SPACE,
