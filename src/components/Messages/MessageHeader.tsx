@@ -161,9 +161,16 @@ const RequestControls = ({
           pressed Reject already is. That ordering is the point of the step: an
           impatient second press in the same place - the likeliest way to
           defeat a two-step confirmation - hits Cancel rather than Confirm.
-          `GroupMemberCard` puts Confirm first and is vulnerable to precisely
-          that; this is a deliberate departure from it rather than an
-          oversight.
+          That works *here* because these two are `flex-1` across a full-width
+          row, so first means leftmost and Reject was leftmost too.
+
+          `GroupMemberCard` reaches the same property by stacking its pair with
+          Cancel on top, and not by this ordering, because its controls are
+          right-aligned in a shrink-wrapped slot under a right-aligned trigger
+          - so ordering its row this way would move Confirm *onto* the slot the
+          finger just pressed instead of off it. Same rule, opposite
+          arrangement; SCRUM-476 has the measurements. Read that comment before
+          changing either one to match the other.
 
           It also takes the *filled* slot, and Confirm the outlined one, which
           is the reverse of what a confirmation usually does. The reason is

@@ -260,7 +260,77 @@ export const GroupMemberCard = ({
           {isConfirming ? (
             <div className="flex flex-col items-end gap-1">
               <p className="text-xs text-gray-600">{confirmPrompt}</p>
-              <div className="flex gap-2">
+              {/*
+                A column, Cancel on top, and both of those are measurements
+                rather than taste.
+
+                The pair used to be a row 8px apart, 36px tall, with Confirm
+                leftmost. Two things were wrong with that and only one of them
+                is the one you would guess.
+
+                `p-3` is the 44px: 12 + 20 (the `text-sm` line box) + 12 = 44,
+                the figure Apple's HIG and WCAG 2.5.5 ask of a touch control
+                and the one the explore sheet handle and the conversation back
+                control already meet. The padding is the tap target - do not
+                trade it away to make the labels look smaller.
+
+                The column is the more interesting half. `RequestControls` in
+                `MessageHeader` puts Cancel first for exactly this hazard, and
+                copying that ordering into a row here would have made this
+                *worse*, because the two components align their controls
+                oppositely. There the pair are `flex-1` across a full-width
+                row, so "first" means leftmost and Reject was leftmost too.
+                Here the pair are right-aligned under `items-end`, beneath a
+                trigger that is right-aligned in this same shrink-wrapped
+                slot - so "first" means *furthest from* the button the finger
+                just pressed, and last means on top of it.
+
+                Measured in Chromium at 375px against this project's own
+                compiled stylesheet, as the share of the trigger's own
+                footprint that the affirmative button comes to occupy:
+
+                                        Delete Group  Leave Group  Remove
+                  a row, Confirm first     18.6%        16.5%        0%
+                  a row, Cancel first      42.2%        44.2%      60.7%
+                  a column, Cancel first      0%           0%         0%
+
+                So the row it had was already safer at the centre than the
+                reordered row would be - a press at the trigger's midpoint
+                lands on Cancel in the first case and on Confirm in the
+                second. What the old row really exposed was its left third,
+                43px of which sat outside the trigger's footprint entirely.
+
+                A column removes the question instead of trading one edge for
+                another: Confirm ends up below the trigger's bottom edge, with
+                no vertical overlap at any label, so no press anywhere inside
+                the box the user just pressed can reach it.
+
+                `gap-6` - 24px - is then about the remaining hazard, which is
+                a press aimed at Cancel drifting down onto Confirm rather than
+                a repeat press. 24px is the figure SCRUM-468 settled on for a
+                destructive control next to a non-destructive one, reused so
+                there is one number in the codebase for this rather than two.
+
+                The colours are deliberately *not* SCRUM-468's. That ticket
+                gave Cancel the filled treatment because `primary` in the
+                conversation header is `northeastern-red`, the brand colour
+                Accept wears, so a filled red Confirm impersonated the
+                constructive button. `bg-red-600` here is a plain danger red
+                that nothing constructive uses, so the argument does not carry
+                and filled-red-means-destructive is left alone.
+
+                jsdom measures none of this - see `testing/viewport.ts`.
+                `GroupMemberCard.test.tsx` asserts tree order and the wiring,
+                which are the parts that are assertable there, and says so.
+              */}
+              <div className="flex flex-col gap-6">
+                <button
+                  type="button"
+                  onClick={() => setIsConfirming(false)}
+                  className="rounded-lg bg-gray-100 p-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200"
+                >
+                  Cancel
+                </button>
                 <button
                   type="button"
                   disabled={disabled}
@@ -268,16 +338,9 @@ export const GroupMemberCard = ({
                     onAction();
                     setIsConfirming(false);
                   }}
-                  className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                  className="rounded-lg bg-red-600 p-3 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
                 >
                   Confirm
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsConfirming(false)}
-                  className="rounded-lg bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200"
-                >
-                  Cancel
                 </button>
               </div>
             </div>
