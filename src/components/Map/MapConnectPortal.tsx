@@ -84,10 +84,26 @@ export const MapConnectPortal = (props: ConnectPortalProps) => {
    * gets a plain scroller with a viewport-relative cap instead. `dvh` rather
    * than `vh` for the same reason `globals.css` uses it: `vh` on a mobile
    * browser is the height with the chrome retracted.
+   *
+   * The desktop cap is `max-h-connect-portal-list`, whose value is composed in
+   * `tailwind.config.js` out of the four things that push this element down the
+   * page - the anchor's `mt-20` and `pt-4`, the panel's `mt-11`, and the
+   * negative `marginTop` in `listStyle` below, which pulls it back up.
+   * **Change any of those four and that token has to move with it**; the
+   * docblock there lists them and records what each measures.
+   *
+   * It is a token rather than a `calc()` here because the two cannot be made
+   * to agree any other way. The pull-up is a percentage of the panel's width,
+   * so the budget is not something a reader can verify from this line, and the
+   * literal that used to sit here reserved 128px for chrome that measures
+   * 106.73px - capping the list 21px shorter than its own container at every
+   * window height. The two branches stay separate expressions: this one is
+   * top-anchored under desktop chrome and the mobile sheet is bottom-anchored
+   * against the navigation, so they share no term.
    */
   const listClasses = isMobile
     ? "max-h-[45dvh] overflow-y-auto"
-    : "scrollbar scrollbar-thumb-northeastern-red scrollbar-track-rounded-full scrollbar-thumb-rounded-full mr-3 max-h-[calc(100vh-8rem)] scrollbar-track-transparent overflow-y-scroll";
+    : "scrollbar scrollbar-thumb-northeastern-red scrollbar-track-rounded-full scrollbar-thumb-rounded-full mr-3 max-h-connect-portal-list scrollbar-track-transparent overflow-y-scroll";
 
   const listStyle = isMobile
     ? undefined
