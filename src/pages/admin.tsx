@@ -11,6 +11,8 @@ import AdminData from "../components/Admin/AdminData";
 import AdminMobileNotice from "../components/Admin/AdminMobileNotice";
 import useIsHydrated from "../utils/useIsHydrated";
 import useIsMobile from "../utils/useIsMobile";
+import useIsViewportShorterThan from "../utils/useIsViewportShorterThan";
+import { ADMIN_CONSOLE_MIN_HEIGHT_PX } from "../utils/breakpoints";
 
 // One direct session lookup, not a self-directed HTTP round trip to
 // `/api/auth/session`. `getSession` from `next-auth/react` is the
@@ -107,7 +109,32 @@ const Admin: NextPage<AdminProps> = ({ userPermission }) => {
    * `option`'s default changing. See `UserManagement.tsx`.
    */
   const isMobile = useIsMobile();
-  const showMobileNotice = isHydrated && isMobile;
+
+  /*
+   * The height half of the same question, and the reason SCRUM-484 touched
+   * this line.
+   *
+   * `isMobile` is width alone, so a phone held in landscape is 667px wide,
+   * lands *above* the breakpoint, and was served the full console into a
+   * content row 343px tall - measured, at 667x375, against the compiled
+   * stylesheet. The console's charts are the tallest fixed blocks in the
+   * repository, so what arrived was a 600px chart showing 57% of itself.
+   *
+   * The threshold is the console's own, derived in `breakpoints.js` from the
+   * shortest chart it contains and the row's share of the viewport, and read
+   * at this one call site. `MOBILE_BREAKPOINT_PX` is untouched on purpose:
+   * SCRUM-477 records why a height term on that constant would move all twelve
+   * of its survey sites at once, and SCRUM-474's opt-in threshold is the
+   * pattern instead.
+   */
+  const isTooShort = useIsViewportShorterThan(ADMIN_CONSOLE_MIN_HEIGHT_PX);
+
+  /*
+   * Either condition serves the notice, and `isHydrated` still gates both for
+   * the reason written above - `isTooShort` has the same server snapshot as
+   * `isMobile` and is false on the hydration pass for the same reason.
+   */
+  const showMobileNotice = isHydrated && (isMobile || isTooShort);
 
   return (
     <div className="relative h-full select-none">
@@ -115,7 +142,16 @@ const Admin: NextPage<AdminProps> = ({ userPermission }) => {
       {!userPermission ? (
         <Spinner />
       ) : showMobileNotice ? (
-        <AdminMobileNotice />
+        /*
+         * `isMobile`, not `showMobileNotice`: the prop is about which header
+         * is on screen, not about why the notice is. `Header` renders its
+         * fixed bottom navigation exactly when the viewport is mobile *width*,
+         * so a landscape phone reaching the notice by the height term above
+         * gets the desktop bar instead - and reserving room for a navigation
+         * that is not there would push the notice's own content down by 60px
+         * of nothing.
+         */
+        <AdminMobileNotice reservesMobileNav={isMobile} />
       ) : (
         <div className="relative flex h-[91.5%] w-full flex-row overflow-hidden">
           <div className="border-busy-red z-0 h-full max-w-[250px] min-w-[175px] flex-[1] border-r-4 bg-stone-100">

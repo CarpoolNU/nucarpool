@@ -33,6 +33,7 @@ import {
   DESKTOP_WIDTH,
   MOBILE_WIDTH,
   restoreViewportAfterEach,
+  setViewportHeight,
   setViewportWidth,
 } from "../../testing/viewport";
 
@@ -80,14 +81,27 @@ jest.mock("../../components/Admin/AdminMobileNotice", () => ({
 
 import Admin from "../../pages/admin";
 import { Permission } from "@prisma/client";
+import { ADMIN_CONSOLE_MIN_HEIGHT_PX } from "../../utils/breakpoints";
 
 restoreViewportAfterEach();
 
 const headerIsIn = (html: string) => html.includes("DESKTOP HEADER");
 
-/** Server-render the page, then hydrate that HTML the way a page load does. */
-const hydrateAdminAt = async (width: number) => {
+/**
+ * Server-render the page, then hydrate that HTML the way a page load does.
+ *
+ * `height` is optional, and every caller that omits it gets jsdom's default
+ * 768 - which is above `ADMIN_CONSOLE_MIN_HEIGHT_PX`, so the cases written
+ * before SCRUM-484 added a height term still describe the viewport they
+ * always did. That is deliberate rather than convenient: those tests are the
+ * control for the gate below, and rewriting them to state a height would make
+ * it possible to change the threshold without any of them noticing.
+ */
+const hydrateAdminAt = async (width: number, height?: number) => {
   setViewportWidth(width);
+  if (height !== undefined) {
+    setViewportHeight(height);
+  }
 
   const page = <Admin userPermission={Permission.ADMIN} />;
   const serverHtml = renderToString(page);
@@ -180,6 +194,78 @@ describe("/admin's layout below the mobile breakpoint", () => {
      * here observes that the charts did not fit - see
      * `src/testing/viewport.ts`.
      */
+    expect(serverHtml).toContain("sidebar");
+    expect(serverHtml).not.toContain("mobile notice");
+  });
+});
+
+/**
+ * SCRUM-484: the same choice, decided on height rather than width.
+ *
+ * The gate above was width-only, so a phone held in landscape is 667px wide,
+ * lands above the breakpoint, and was served the full console into a content
+ * row 343px tall - measured, at 667x375, against the compiled stylesheet. The
+ * charts are the tallest fixed blocks in the repository, so what arrived was a
+ * 600px chart showing 57% of itself.
+ *
+ * **None of this is a layout assertion**, and the distinction matters more
+ * here than usual because the subject *is* geometry. jsdom does no layout, so
+ * nothing below observes that 8.5% of 375px is 31.88px or that a chart
+ * overflowed anything; it observes which subtree the page chose. The geometry
+ * was measured in Chromium through `scripts/measure-layout.ts` and is recorded
+ * on the `admin-console-chart-fold` fixture, and it is regression-testable
+ * only in SCRUM-264's Playwright suite.
+ */
+describe("/admin's layout on a viewport that is wide enough but too short", () => {
+  it("shows the notice to a phone held in landscape", async () => {
+    const { hydratedText } = await hydrateAdminAt(667, 375);
+
+    // The case the ticket was filed for, and the one the width-only gate let
+    // through.
+    expect(hydratedText).toContain("mobile notice");
+    expect(hydratedText).not.toContain("sidebar");
+    expect(hydratedText).not.toContain("management");
+  });
+
+  it("keeps the console one pixel above the threshold and drops it one below", async () => {
+    /*
+     * The boundary, at the derived figure rather than at a round number
+     * either side of it. A gate with the comparison inverted, or reading a
+     * different constant, passes the landscape case above and fails here.
+     */
+    const atThreshold = await hydrateAdminAt(1024, ADMIN_CONSOLE_MIN_HEIGHT_PX);
+    expect(atThreshold.hydratedText).toContain("sidebar");
+    expect(atThreshold.hydratedText).not.toContain("mobile notice");
+
+    const belowThreshold = await hydrateAdminAt(
+      1024,
+      ADMIN_CONSOLE_MIN_HEIGHT_PX - 1,
+    );
+    expect(belowThreshold.hydratedText).toContain("mobile notice");
+    expect(belowThreshold.hydratedText).not.toContain("sidebar");
+  });
+
+  it("still serves the console to an ordinary desktop window", async () => {
+    /*
+     * The regression this threshold could most easily cause. The notice is a
+     * removal of a capability, so a gate set too high costs a manager on a
+     * 1366x768 laptop - about 650px of viewport after browser chrome - a
+     * console that works for them today by scrolling.
+     */
+    for (const height of [650, 800, 900]) {
+      const { hydratedText } = await hydrateAdminAt(1366, height);
+
+      expect(hydratedText).toContain("sidebar");
+      expect(hydratedText).not.toContain("mobile notice");
+    }
+  });
+
+  it("keeps the console in the server HTML for a short viewport too", async () => {
+    const { serverHtml } = await hydrateAdminAt(667, 375);
+
+    /* Same shape as the width gate's equivalent above, and for the same
+       reason: both hooks return their server snapshot during hydration, so
+       neither can move this branch before the pass after it. */
     expect(serverHtml).toContain("sidebar");
     expect(serverHtml).not.toContain("mobile notice");
   });
