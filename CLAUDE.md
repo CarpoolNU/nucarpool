@@ -4,7 +4,9 @@ Guidance for Claude Code when working in this repository.
 
 ## Project
 
-NUCarpool matches Northeastern co-op students into carpools. Next.js **Pages Router** + TypeScript, tRPC v10 (Zod + React Query), Prisma on MySQL, NextAuth (Azure AD), Mapbox, Pusher, AWS SES/S3, Tailwind.
+NUCarpool matches Northeastern co-op students into carpools. Next.js **Pages Router** + TypeScript, tRPC (Zod + TanStack React Query), Prisma on MySQL, NextAuth (Azure AD), Mapbox, Pusher, AWS SES/S3, Tailwind.
+
+**No version is pinned above, deliberately** — [`package.json`](package.json) is the authority, and this line went on naming a stale tRPC major long after the v11 and React Query v5 bump. Name a major in prose only where behaviour turns on it, the way the Conventions section does for Tailwind v4 and styled-components v6.
 
 ## Commands
 
