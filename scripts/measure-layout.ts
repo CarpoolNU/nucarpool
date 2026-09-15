@@ -247,9 +247,27 @@ export const createFixtureServer = (
     );
   });
 
+const JS_SOURCE_ESCAPE_MAP: Record<string, string> = {
+  "<": "\\u003C",
+  ">": "\\u003E",
+  "/": "\\u002F",
+  "\\": "\\\\",
+  "\b": "\\b",
+  "\f": "\\f",
+  "\n": "\\n",
+  "\r": "\\r",
+  "\t": "\\t",
+  "\0": "\\0",
+  "\u2028": "\\u2028",
+  "\u2029": "\\u2029",
+};
+
+const escapeForJavaScriptSource = (value: string): string =>
+  value.replace(/[<>/\\\b\f\n\r\t\0\u2028\u2029]/g, (char) => JS_SOURCE_ESCAPE_MAP[char]);
+
 /** The `browser_evaluate` body to paste, built from the fixture's own spec. */
 export const probeSnippet = (fixture: LayoutFixture): string => {
-  const spec = JSON.stringify(fixture.probe, null, 2)
+  const spec = escapeForJavaScriptSource(JSON.stringify(fixture.probe, null, 2))
     .split("\n")
     .map((line, index) => (index === 0 ? line : `    ${line}`))
     .join("\n");
