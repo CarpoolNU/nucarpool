@@ -282,8 +282,16 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
                 <span className="mb-1 text-xs text-gray-500">
                   {messageTime}
                 </span>
+                {/* `whitespace-pre-line` keeps the newlines the composer already
+                    stores. SendBar sets `white-space: pre-wrap` on the input box,
+                    so a Shift+Enter on desktop or a plain Enter on mobile puts a
+                    literal newline in `message.content` — and this element, left
+                    at the initial `normal`, collapsed it to a space. `pre-line`
+                    rather than `pre-wrap` because the content arrives trim()-ed
+                    from a contentEditable that accumulates incidental spaces:
+                    keep the line breaks, still collapse the runs of spaces. */}
                 <div
-                  className={`desktop:max-w-[50%] max-w-[85%] rounded-lg px-4 py-2 text-base break-words lg:text-xl ${
+                  className={`desktop:max-w-[50%] max-w-[85%] rounded-lg px-4 py-2 text-base break-words whitespace-pre-line lg:text-xl ${
                     isFromCurrentUser
                       ? "bg-northeastern-red text-white"
                       : "bg-gray-200 text-black"
