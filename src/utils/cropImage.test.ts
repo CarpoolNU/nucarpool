@@ -21,13 +21,22 @@ import { croppedCanvasSize, MAX_CROPPED_IMAGE_PX } from "./cropImage";
  * The crop rectangle a 4032x3024 iPhone photo actually produces, which is the
  * case the ticket was filed for.
  *
- * Derived from react-easy-crop 6.2.3's own `computeCroppedArea`: at `zoom: 1`
- * with `objectFit="contain"` the image lays out at 359x269 in the modal's
- * 359x384 cropper box, a 300x300 crop box is 83.565% of its width, and
- * `Math.round(0.83565 * 4032)` is 3369. With `aspect={1}` the library squares
- * the rectangle itself, so both sides are 3369 - not merely close to equal.
+ * Derived from react-easy-crop 6.2.3's own `computeCroppedArea`: with
+ * `objectFit="contain"` the image lays out at 359x269.25 in the modal's
+ * 359x384 cropper box, and the cropper opens at the zoom that just covers the
+ * 300x300 crop box - `300/269.25`, or 1.1142. The box is then exactly 100% of
+ * the displayed height and 75% of the width, so the rectangle is the full
+ * 3024px height and `0.75 * 4032` of the width. With `aspect={1}` the library
+ * squares it itself, so both sides are 3024 - not merely close to equal.
+ *
+ * **This was 3369x3369 before SCRUM-479**, when the cropper opened at a flat
+ * `zoom: 1` and the crop box was 111% of the displayed image's height: the
+ * rectangle overhung the photo by 173px top and bottom, and those bands
+ * reached the encoded JPEG as opaque black. The framing changed, so this
+ * number did; `croppedCanvasSize` itself is unchanged and still caps either
+ * one at 512.
  */
-const IPHONE_CROP = { width: 3369, height: 3369 };
+const IPHONE_CROP = { width: 3024, height: 3024 };
 
 /** The older iOS Safari total-canvas-area ceiling, past which it blanks. */
 const IOS_CANVAS_AREA_CAP_PX = 5_000_000;
@@ -52,13 +61,19 @@ describe("croppedCanvasSize", () => {
     expect(megapixels(after)).toBeCloseTo(0.26, 2);
   });
 
-  it("scales the area down by roughly 43x for that crop", () => {
+  it("scales the area down by roughly 35x for that crop", () => {
     // Not a round number worth asserting precisely, but the order of magnitude
     // is the point: this is why the uploaded object gets materially smaller.
+    //
+    // It was ~43x when the crop rectangle was 3369x3369. SCRUM-479 made the
+    // cropper open at a zoom that covers its crop box, so the rectangle is now
+    // 3024x3024 - a smaller source for the same 512x512 output, hence a
+    // smaller ratio. The saving this asserts is unaffected; there is simply
+    // less black band to throw away.
     const after = croppedCanvasSize(IPHONE_CROP);
     const ratio =
       (IPHONE_CROP.width * IPHONE_CROP.height) / (after.width * after.height);
-    expect(ratio).toBeGreaterThan(40);
+    expect(ratio).toBeGreaterThan(30);
   });
 
   describe("preserves aspect ratio rather than assuming square", () => {

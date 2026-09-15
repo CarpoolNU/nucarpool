@@ -1,8 +1,9 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import Image from "next/image";
-import Cropper, { Area, Point } from "react-easy-crop";
+import Cropper, { Area, MediaSize } from "react-easy-crop";
 import { AiOutlineUser } from "react-icons/ai";
 import getCroppedImg from "../../utils/cropImage";
+import { CROP_BOX_PX, minZoomToFill } from "../../utils/cropZoom";
 import useProfileImage from "../../utils/useProfileImage";
 import { createPortal } from "react-dom";
 interface ProfilePictureProps {
@@ -139,54 +140,29 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
       console.error(error);
     }
   };
-  const onMediaLoaded = useCallback(
-    (mediaSize: { naturalWidth: number; naturalHeight: number }) => {
-      const { naturalWidth, naturalHeight } = mediaSize;
-      const cropWidth = 300;
-      const cropHeight = 300;
+  /**
+   * Opens the cropper at the tightest zoom that still covers the crop box, so
+   * the square the user takes is entirely photograph.
+   *
+   * The intent - fill the box and crop the long edge, rather than fit the
+   * whole photo inside it and letterbox the rest - is recorded in
+   * `minZoomToFill`, along with why `mediaSize`'s *displayed* pair is the
+   * right one to measure. This used to divide the crop box by the source
+   * photo's natural pixels and then discard the answer for a flat `1`, which
+   * left a 4:3 photo shorter than the 300px box and burned black bands into
+   * the saved JPEG.
+   *
+   * Setting `minZoom` as well as `zoom` is what makes it stick: react-easy-crop
+   * clamps every subsequent zoom change to `[minZoom, maxZoom]`, so the user
+   * cannot pinch back out to an uncovered framing.
+   */
+  const onMediaLoaded = useCallback((mediaSize: MediaSize) => {
+    const fillZoom = minZoomToFill(mediaSize);
 
-      // Calculate minZoom to ensure the entire image fits into area but doesn't extend outside of it
-      const widthRatio = cropWidth / naturalWidth;
-      const heightRatio = cropHeight / naturalHeight;
-
-      let newMinZoom = Math.min(widthRatio, heightRatio);
-      if (widthRatio < 1 || heightRatio < 1) {
-        // automatically scales to fit
-        newMinZoom = 1;
-      }
-      setMinZoom(newMinZoom);
-      setZoom(newMinZoom);
-
-      setCrop({ x: 0, y: 0 }); // ReCenter
-    },
-    [],
-  );
-  const onCropChange = useCallback(
-    (newCrop: Point) => {
-      const boundedCrop = { x: newCrop.x, y: newCrop.y };
-      const cropWidth = 300;
-      const cropHeight = 300;
-      const midWidth = cropWidth / 2;
-      const midHeight = cropHeight / 2;
-      const zoomIncrease = (zoom - minZoom) / minZoom;
-
-      let maxHorizontalMovement = zoomIncrease * midWidth + midWidth;
-      let maxVerticalMovement = zoomIncrease * midHeight + midHeight;
-
-      boundedCrop.x = Math.min(
-        Math.max(boundedCrop.x, -maxHorizontalMovement),
-        maxHorizontalMovement,
-      );
-
-      boundedCrop.y = Math.min(
-        Math.max(boundedCrop.y, -maxVerticalMovement),
-        maxVerticalMovement,
-      );
-
-      setCrop(boundedCrop);
-    },
-    [zoom, minZoom],
-  );
+    setMinZoom(fillZoom);
+    setZoom(fillZoom);
+    setCrop({ x: 0, y: 0 }); // ReCenter
+  }, []);
 
   return (
     <>
@@ -207,11 +183,19 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
                   onCropComplete={onCropComplete}
                   onZoomChange={setZoom}
                   onMediaLoaded={onMediaLoaded}
-                  cropSize={{ width: 300, height: 300 }}
+                  cropSize={{ width: CROP_BOX_PX, height: CROP_BOX_PX }}
                   cropShape="round"
-                  restrictPosition={false}
                   objectFit="contain"
-                  onCropChange={onCropChange}
+                  // `restrictPosition` is deliberately absent, which is the
+                  // library's default of `true`: it clamps the crop rectangle
+                  // inside the photo, so `croppedAreaPixels` can never come
+                  // back with a negative origin. Passing `false` disabled that
+                  // clamp and was half of SCRUM-479's black bands. The
+                  // clamping is the library's to do - it is the only party
+                  // that knows the laid-out media size - so this stores the
+                  // position it asks for rather than bounding it a second
+                  // time against a guess.
+                  onCropChange={setCrop}
                 />
               </div>
               <div className="flex w-full items-stretch justify-between p-4">

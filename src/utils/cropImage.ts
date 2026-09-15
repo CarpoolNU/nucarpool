@@ -100,10 +100,15 @@ export default function getCroppedImg(
       // image's own pixels - only the destination shrinks, so the output is
       // the crop they chose rather than a re-centred or stretched one.
       //
-      // `ProfilePicture` sets `restrictPosition={false}`, so this rectangle can
-      // extend past the image's bounds (a landscape photo cropped square at
-      // `zoom: 1` gives a negative `y`). `drawImage` clips the source and the
-      // destination in the same proportion, which is what keeps the framing
+      // That rectangle now always lies inside the image. `ProfilePicture` used
+      // to pass `restrictPosition={false}` and open at a zoom too small to
+      // cover its own crop box, so a landscape photo cropped square arrived
+      // here with a negative `y`: `drawImage` left that band of the
+      // destination transparent, and JPEG has no alpha channel to store it in,
+      // so it composited onto black. SCRUM-479 fixed both halves at the
+      // source - see `cropZoom.ts`. Nothing here depends on that having
+      // happened, because `drawImage` clips the source and the destination in
+      // the same proportion either way, which is what keeps the framing
       // identical to the cropper's preview at any output size.
       ctx.drawImage(
         image,
