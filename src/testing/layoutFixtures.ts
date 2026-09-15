@@ -449,6 +449,28 @@ const ADMIN_CHART_CLASS = "relative min-h-[600px] w-full";
  * about which of them binds. A fixture holding only the 600px block could not
  * show that the gate is set where the *500px* one first fits, which is the
  * decision a reviewer is being asked to accept.
+ *
+ * ---
+ *
+ * **A fixture's markup ships as CSS, so it may only use utilities the app
+ * already has.** Tailwind v4 scans this file like any other under `src/`, so a
+ * class written here for a stand-in element is compiled into the bundle every
+ * user downloads - applying to nothing, and costing them the bytes anyway.
+ *
+ * Measured rather than reasoned about: the first draft of the axis marker below
+ * pushed itself down with an automatic top margin, and a selector-set diff of
+ * the compiled output against `origin/main` came back with exactly one
+ * addition - that margin utility, 39 bytes, applying to nothing. It is now a
+ * `flex-1` spacer plus a fixed-height marker, which is the same geometry out of
+ * utilities already in the output, and the diff is empty.
+ *
+ * **The utility is described here rather than named, and that is not
+ * squeamishness** - writing it in this sentence would emit it again, which is
+ * how the figure above came to be measured twice. `breakpoints.js` keeps the
+ * same discipline for the same reason, and `measure-layout.test.ts` documents
+ * the trap from the other direction, where naming an invented utility in a
+ * comment grew the stylesheet by 52 bytes. This file is more exposed to it
+ * than most, because carrying copied markup is its whole purpose.
  */
 const ADMIN_SHORT_CHART_CLASS = "flex h-[500px] w-full flex-col";
 
@@ -514,7 +536,8 @@ const adminConsoleChartFold: LayoutFixture = {
               <div class="absolute inset-x-0 bottom-0 h-6" data-probe="chart-x-axis"></div>
             </div>
             <div class="${ADMIN_SHORT_CHART_CLASS}" data-probe="short-chart">
-              <div class="mt-auto h-6 w-full" data-probe="short-chart-x-axis"></div>
+              <div class="flex-1"></div>
+              <div class="h-6 w-full" data-probe="short-chart-x-axis"></div>
             </div>
           </div>
         </div>
