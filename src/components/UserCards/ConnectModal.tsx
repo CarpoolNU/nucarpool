@@ -133,7 +133,38 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
     >
       <div className="font-montserrat fixed inset-0 backdrop-blur-xs">
         <div className="fixed inset-0 flex items-center justify-center">
-          <Dialog.Panel className="absolute flex w-5/6 max-w-[700px] flex-col content-center justify-center gap-4 overflow-x-hidden overflow-y-auto rounded-2xl bg-white py-4 shadow-md select-none md:aspect-square">
+          {/*
+            `max-h` is what makes the `overflow-y-auto` beside it mean
+            anything. Without a ceiling the panel simply grows to its content,
+            so the scroller never engages and the box overflows a centred
+            `fixed inset-0` wrapper off *both* edges at once - with no page
+            scroll to recover it, since `#__next` is `height: 100dvh`.
+
+            Measured at two viewports, because there are two distinct failures
+            and only the second is the one the survey named. At 667x375 - a
+            small phone in landscape - `md:` is *not* active, since `md` is
+            834px in this project's theme: the panel was simply its natural
+            802px tall, putting `Cancel` and `Send` 198px past the bottom edge
+            and entirely out of reach. At 932x430 - a large phone in landscape,
+            which is above `md` - `md:aspect-square` derived a 700px height
+            from the 700px width, and the action row sat 96px below the fold.
+            The cap fixes both; `aspect-ratio` yields to `max-height`, so the
+            square proportion is kept wherever there is room for it.
+
+            `dvh` rather than `vh` for the reason `globals.css` records.
+
+            `justify-center-safe`, not `justify-center`, and the distinction is
+            the whole point of adding a scroller here. A flex container that
+            centres its content on the main axis overflows it *symmetrically*,
+            and the half that goes past the start edge cannot be scrolled back
+            to - scroll containers have no negative scroll range, so centring
+            alone would have traded an unreachable bottom for an unreachable
+            top. Measured: with plain `justify-center` and this cap applied,
+            the panel's first child sits at -197px against a panel top of 19px.
+            `safe` falls back to `start` alignment at exactly the point the
+            content stops fitting, and is inert at every size where it fit.
+          */}
+          <Dialog.Panel className="absolute flex max-h-[90dvh] w-5/6 max-w-[700px] flex-col content-center justify-center-safe gap-4 overflow-x-hidden overflow-y-auto rounded-2xl bg-white py-4 shadow-md select-none md:aspect-square">
             {!requestSent ? (
               <>
                 <div className="relative flex w-full">
