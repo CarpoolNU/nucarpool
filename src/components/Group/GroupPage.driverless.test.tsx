@@ -173,32 +173,28 @@ beforeEach(() => {
 });
 
 /**
- * Every role query here carries `hidden: true`, and it is load-bearing rather
- * than habitual.
+ * These carried `hidden: true` when this file was written, and no longer do.
  *
- * The desktop branch wraps its whole `Dialog.Panel` in a `div` marked
- * `aria-hidden="true"` (`GroupPage.tsx:365`), so every control inside it is
- * absent from the accessibility tree that `getByRole` resolves against -
- * including the one this ticket adds. That is a real defect, filed as
- * SCRUM-475, and deliberately not fixed here; `hidden: true` is the flag that
- * makes a role query ignore the exclusion, so these tests address the button
- * that exists rather than the one the modal announces.
+ * The desktop branch used to wrap its whole `Dialog.Panel` in a `div` marked
+ * `aria-hidden="true"`, so every control inside it - including the one this
+ * file's ticket added - was absent from the accessibility tree that `getByRole`
+ * resolves against. `hidden: true` made a role query ignore that exclusion, so
+ * these addressed the button that existed rather than the one the modal
+ * announced. The wrapper was the defect, filed as SCRUM-475 and deliberately
+ * not fixed here; SCRUM-475 has since split the backdrop out into a sibling,
+ * and the flag came off with it.
  *
- * It matters just as much on the **negative** assertions. Without it,
- * `queryByRole("button", { name: "Remove" })` on desktop returns null because
- * *everything* in that panel is hidden, so "Remove is not offered" would hold
- * even if a Remove button were drawn - the assertion would pass for the wrong
- * reason and keep passing after a regression. With it, the query means what it
- * says on both branches.
- *
- * These calls should lose the flag when SCRUM-475 lands, and they will fail
- * loudly if it is removed before then.
+ * It mattered just as much on the **negative** assertions, which is the part
+ * worth not losing. While everything in that panel was hidden,
+ * `queryByRole("button", { name: "Remove" })` on desktop returned null whether
+ * or not a Remove button was drawn - so "Remove is not offered" held for the
+ * wrong reason and would have kept holding through a regression. Now that the
+ * panel is in the tree, the query means what it says on both branches, without
+ * the flag papering over the difference.
  */
-const button = (name: string) =>
-  screen.getByRole("button", { name, hidden: true });
+const button = (name: string) => screen.getByRole("button", { name });
 
-const maybeButton = (name: string) =>
-  screen.queryByRole("button", { name, hidden: true });
+const maybeButton = (name: string) => screen.queryByRole("button", { name });
 
 const renderDriverlessGroup = (users: PublicUser[] = [SAM, ALEX]) => {
   mockedTrpc.user.groups.me.useQuery.mockReturnValue({
