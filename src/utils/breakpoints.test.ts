@@ -15,6 +15,14 @@ import {
   ADMIN_SHORTEST_CHART_HEIGHT_PX,
   ADMIN_DATA_VERTICAL_MARGIN_PX,
   ADMIN_CONSOLE_MIN_HEIGHT_PX,
+  MESSAGE_PANEL_TALL_SCREEN_NAME,
+  MESSAGE_PANEL_TALL_MEDIA_QUERY,
+  MESSAGE_PANEL_HEADER_PX,
+  MESSAGE_PANEL_TAB_STRIP_PX,
+  MESSAGE_PANEL_SEND_BAR_PX,
+  MESSAGE_CONTENT_PADDING_PX,
+  MESSAGE_PANEL_DATED_MESSAGE_PX,
+  MESSAGE_PANEL_MIN_HEIGHT_PX,
   MOBILE_BREAKPOINT_PX,
   MOBILE_NAV_HEIGHT_PX,
   MOBILE_NAV_SPACE,
@@ -587,5 +595,179 @@ describe("the admin console's minimum height", () => {
    */
   it("is its own figure, not the onboarding wizard's", () => {
     expect(ADMIN_CONSOLE_MIN_HEIGHT_PX).not.toBe(WIZARD_DESKTOP_MIN_HEIGHT_PX);
+  });
+});
+
+/**
+ * The message panel's height gate.
+ *
+ * The third of these, and the defect is the same shape as the other two:
+ * `desktop:` is a `min-width`, so a phone in landscape is served the desktop
+ * conversation panel into a 343px row. What made this one worse than a crowded
+ * layout is that the chrome does not shrink - 145px of header and a 53px tab
+ * strip came off the top, and `SendBar`'s min-content height took the rest, so
+ * the conversation was left with its own padding and nothing else:
+ * `contentHeight` 0, with a `scrollHeight` of 220 behind it (SCRUM-489).
+ *
+ * These guard the derivation rather than the number, for the reason the
+ * wizard's docblock gives: a test restating 489 would still pass on the day one
+ * of the five measured terms changes, which is the day the threshold stops
+ * being true.
+ */
+describe("the message panel's minimum height", () => {
+  it("is composed from the panel's own blocks, not chosen", () => {
+    expect(MESSAGE_PANEL_MIN_HEIGHT_PX).toBe(
+      Math.ceil(
+        (MESSAGE_PANEL_HEADER_PX +
+          MESSAGE_PANEL_TAB_STRIP_PX +
+          MESSAGE_PANEL_SEND_BAR_PX +
+          MESSAGE_CONTENT_PADDING_PX +
+          MESSAGE_PANEL_DATED_MESSAGE_PX) /
+          CONTENT_ROW_VIEWPORT_FRACTION,
+      ),
+    );
+  });
+
+  /**
+   * The inequality the constant was solved from, restated at the boundary. At
+   * the threshold the conversation has room for one dated message; one pixel
+   * below, it does not. That one-pixel check is what makes this a boundary
+   * rather than a plausible number.
+   */
+  it("is the height at which one whole message first fits beside the chrome", () => {
+    const conversationAt = (viewportHeight: number) =>
+      viewportHeight * CONTENT_ROW_VIEWPORT_FRACTION -
+      MESSAGE_PANEL_HEADER_PX -
+      MESSAGE_PANEL_TAB_STRIP_PX -
+      MESSAGE_PANEL_SEND_BAR_PX -
+      MESSAGE_CONTENT_PADDING_PX;
+
+    expect(conversationAt(MESSAGE_PANEL_MIN_HEIGHT_PX)).toBeGreaterThanOrEqual(
+      MESSAGE_PANEL_DATED_MESSAGE_PX,
+    );
+    expect(conversationAt(MESSAGE_PANEL_MIN_HEIGHT_PX - 1)).toBeLessThan(
+      MESSAGE_PANEL_DATED_MESSAGE_PX,
+    );
+  });
+
+  it("is a whole number of pixels", () => {
+    // Emitted into a media query, and compared against viewport heights that
+    // are integers.
+    expect(Number.isInteger(MESSAGE_PANEL_MIN_HEIGHT_PX)).toBe(true);
+  });
+
+  /**
+   * The two bounds the figure was accepted against. Unlike the admin console's
+   * gate this one removes no capability - the panel still renders, with
+   * compacted chrome - but setting it too high would restyle a real desktop,
+   * and setting it too low would leave a landscape phone on the arrangement
+   * that shows nothing.
+   */
+  it("excludes every phone in landscape while keeping every desktop window", () => {
+    for (const [width, height] of [
+      [667, 375], // iPhone SE2 / 8
+      [844, 390], // iPhone 12/13/14
+      [932, 430], // iPhone 14 Pro Max
+    ]) {
+      // Above the width breakpoint and below the height gate: the defect.
+      expect(isMobileWidth(width)).toBe(false);
+      expect(height).toBeLessThan(MESSAGE_PANEL_MIN_HEIGHT_PX);
+    }
+
+    /* And the side that must not regress. ~650 is a 1366x768 laptop after
+       browser chrome, ~695 an iPad in landscape in Safari. */
+    for (const height of [650, 695, 800, 900]) {
+      expect(height).toBeGreaterThan(MESSAGE_PANEL_MIN_HEIGHT_PX);
+    }
+  });
+
+  /**
+   * Neither of the other two, and this is the assertion that keeps the three
+   * from being quietly collapsed into one "short desktop" figure. They answer
+   * different questions about different layouts, and the wizard's 844 would
+   * compact this panel on an ordinary laptop.
+   */
+  it("is its own figure, not the wizard's or the console's", () => {
+    expect(MESSAGE_PANEL_MIN_HEIGHT_PX).not.toBe(WIZARD_DESKTOP_MIN_HEIGHT_PX);
+    expect(MESSAGE_PANEL_MIN_HEIGHT_PX).not.toBe(ADMIN_CONSOLE_MIN_HEIGHT_PX);
+    expect(MESSAGE_PANEL_MIN_HEIGHT_PX).toBeLessThan(
+      WIZARD_DESKTOP_MIN_HEIGHT_PX,
+    );
+  });
+});
+
+/**
+ * The message panel's screen, which is the gate above plus the width
+ * breakpoint.
+ *
+ * Both terms matter and the width one is the less obvious. `SendBar` and
+ * `MessageContent` are a single tree on both platforms, so their compact
+ * values are the *base* - and without the width term this screen would reach a
+ * phone held in portrait, restoring insets written for a desktop panel onto a
+ * 375px screen. `MessageHeader` is the exception that proves it: its desktop
+ * arrangement is a separate branch, so its base classes are unreachable from
+ * mobile whatever this query says.
+ */
+describe("the message panel's screen", () => {
+  it("is registered in the Tailwind config, so the CSS and the JS agree", () => {
+    expect(screens[MESSAGE_PANEL_TALL_SCREEN_NAME]).toEqual({
+      raw: MESSAGE_PANEL_TALL_MEDIA_QUERY,
+    });
+  });
+
+  it("composes both terms rather than restating either", () => {
+    expect(MESSAGE_PANEL_TALL_MEDIA_QUERY).toContain(
+      `(min-width: ${MOBILE_BREAKPOINT_PX}px)`,
+    );
+    expect(MESSAGE_PANEL_TALL_MEDIA_QUERY).toContain(
+      `(min-height: ${MESSAGE_PANEL_MIN_HEIGHT_PX}px)`,
+    );
+  });
+
+  /**
+   * Both `min-`, matching the other two queries in this file. A `max-` term
+   * here would mean the mobile-first inversion had been undone, and would need
+   * a fractional pixel to avoid claiming the boundary itself for the wrong
+   * side.
+   */
+  it("states both terms as min-", () => {
+    expect(MESSAGE_PANEL_TALL_MEDIA_QUERY).not.toContain("max-width");
+    expect(MESSAGE_PANEL_TALL_MEDIA_QUERY).not.toContain("max-height");
+  });
+
+  it("does not shadow an existing screen", () => {
+    const others = Object.keys(screens).filter(
+      (name) => name !== MESSAGE_PANEL_TALL_SCREEN_NAME,
+    );
+    expect(others).not.toContain(MESSAGE_PANEL_TALL_SCREEN_NAME);
+  });
+
+  /**
+   * Declaration order, and it bites harder here than anywhere else in this
+   * list: this screen and `desktop-tall` share a width term, and every viewport
+   * that matches `desktop-tall` also matches this one. Emitted after it, this
+   * screen would win the cascade wherever both set a property - so a desktop
+   * window would get the compact chrome, which is the opposite of the intent.
+   */
+  it("is declared after the plain desktop screen and before the tall one", () => {
+    const names = Object.keys(screens);
+
+    expect(names.indexOf(MESSAGE_PANEL_TALL_SCREEN_NAME)).toBeGreaterThan(
+      names.indexOf(DESKTOP_SCREEN_NAME),
+    );
+    expect(names.indexOf(MESSAGE_PANEL_TALL_SCREEN_NAME)).toBeLessThan(
+      names.indexOf(DESKTOP_TALL_SCREEN_NAME),
+    );
+  });
+
+  /**
+   * The ordering test above is only meaningful while the heights really are
+   * ascending, so pin the relation it depends on rather than the positions
+   * alone.
+   */
+  it("gates on a shorter viewport than the tall desktop screen does", () => {
+    expect(MESSAGE_PANEL_MIN_HEIGHT_PX).toBeLessThan(
+      WIZARD_DESKTOP_MIN_HEIGHT_PX,
+    );
   });
 });

@@ -850,16 +850,61 @@ const headerControlRow: LayoutFixture = {
   ],
 };
 
+/**
+ * The compact values are the base and `message-panel-tall:` restores the
+ * full-size ones, so this one string carries both sides of SCRUM-489's fix and
+ * the fixture measures whichever the viewport selects. Serve it at 667x375 for
+ * the compact chrome and at 1440x900 for the full-size one.
+ */
 const MESSAGE_HEADER_DESKTOP_CLASS =
-  "flex items-center justify-between border-b border-gray-200 bg-white p-8";
+  "message-panel-tall:p-8 flex items-center justify-between border-b border-gray-200 bg-white px-2 py-1";
+
+/**
+ * The avatar, which is guarded now that its size is load-bearing rather than
+ * decorative: 80px was the single largest block in a 145px header, and 56px is
+ * the largest box that costs nothing, because the close control beside the name
+ * is already `h-14`.
+ */
+const MESSAGE_HEADER_AVATAR_CLASS =
+  "message-panel-tall:h-20 message-panel-tall:w-20 h-14 w-14 rounded-full";
 
 const MESSAGE_CONTENT_CLASS =
   "flex h-full flex-1 flex-col overflow-x-hidden overflow-y-auto bg-white p-4";
 
+/**
+ * The date separator every group carries, and one message block, copied from
+ * `MessageContent` so the conversation the fixture measures has the height a
+ * real one does. The stand-in was a single `<p>`, which made
+ * `message-content`'s `scrollHeight` an arbitrary number rather than the
+ * height of something a user has to be able to read.
+ */
+const MESSAGE_DATE_SEPARATOR_CLASS = "text-md my-2 text-center text-gray-500";
+
+/*
+  Two constants and not one, because the component composes the block's class
+  from a template - the shared part and then a ternary on who sent the message.
+  A single joined string would be a class string that exists only here, and the
+  drift guard asserts these appear in the source *literally*, so it would fail
+  rather than guard anything.
+*/
+const MESSAGE_BLOCK_CLASS = "mb-4 flex flex-col";
+
+const MESSAGE_BLOCK_INCOMING_CLASS = "desktop:pl-10 items-start pl-4";
+
+const MESSAGE_TIMESTAMP_CLASS = "mb-1 text-xs text-gray-500";
+
+/**
+ * The bubble's own width cap, which is a height term at a narrow panel: it does
+ * not widen, it wraps. `message-panel-tall:` for the same reason the header's
+ * padding is.
+ */
+const MESSAGE_BUBBLE_CLASS =
+  "message-panel-tall:max-w-[50%] max-w-[85%] rounded-lg px-4 py-2 text-base break-words whitespace-pre-line lg:text-xl";
+
 const SEND_BAR_CLASS = "desktop:px-6 border-t border-gray-200 px-4 py-6";
 
 const SEND_BAR_ROW_CLASS =
-  "desktop:mx-10 mx-0 flex items-center overflow-hidden rounded-lg border border-gray-200 bg-gray-100";
+  "message-panel-tall:mx-10 mx-0 flex items-center overflow-hidden rounded-lg border border-gray-200 bg-gray-100";
 
 /**
  * The composer is a `contentEditable` div, not a `textarea`, and its height
@@ -879,13 +924,20 @@ const messagePanelChrome: LayoutFixture = {
   name: "message-panel-chrome",
   summary:
     "The desktop message panel's header, tab strip and send bar inside the 91.5% row, and what is left for the conversation",
-  source: "src/components/Messages/MessageHeader.tsx:421",
-  issue: "SCRUM-485",
+  source: "src/components/Messages/MessageHeader.tsx:450",
+  issue: "SCRUM-489",
   viewportWidth: 667,
   viewportHeight: 375,
+  /*
+    `px-2` and not `p-8`: the chain is stated for the viewport the fixture
+    records, and at 375px tall the header takes the compact padding SCRUM-489
+    added. Serving this fixture at 1440x900 therefore prints a prediction that
+    is 48px short of what it measures, which is the harness working as
+    intended - the banner says the height is not the recorded one.
+  */
   insets: [
     { name: "sidebar w-[25rem]", x: 400 },
-    { name: "header p-8", x: 64 },
+    { name: "header px-2", x: 16 },
   ],
   markup: `
     <style>
@@ -906,7 +958,7 @@ const messagePanelChrome: LayoutFixture = {
             <div>
               <div class="${MESSAGE_HEADER_DESKTOP_CLASS}" data-probe="message-header">
                 <div class="flex items-center">
-                  <span class="h-20 w-20 rounded-full bg-gray-200" data-probe="avatar"></span>
+                  <span class="${MESSAGE_HEADER_AVATAR_CLASS} bg-gray-200" data-probe="avatar"></span>
                   <span class="font-montserrat pr-10 pl-10 font-semibold sm:text-lg md:text-xl lg:text-2xl">Alex</span>
                 </div>
                 <div class="relative flex items-center justify-between">
@@ -920,7 +972,13 @@ const messagePanelChrome: LayoutFixture = {
             </div>
             <div class="flex h-0 flex-1 flex-col bg-white" data-probe="content-area">
               <div class="${MESSAGE_CONTENT_CLASS}" data-probe="message-content">
-                <p class="mb-2">A message in the thread.</p>
+                <div data-probe="date-group">
+                  <div class="${MESSAGE_DATE_SEPARATOR_CLASS}" data-probe="date-separator">Tuesday, September 15, 2026</div>
+                  <div class="${MESSAGE_BLOCK_CLASS} ${MESSAGE_BLOCK_INCOMING_CLASS}" data-probe="message-block">
+                    <span class="${MESSAGE_TIMESTAMP_CLASS}">3:04 PM</span>
+                    <div class="${MESSAGE_BUBBLE_CLASS} bg-gray-200 text-black" data-probe="bubble">Sounds good, see you at 8.</div>
+                  </div>
+                </div>
               </div>
               <div class="${SEND_BAR_CLASS}" data-probe="send-bar">
                 <div class="${SEND_BAR_ROW_CLASS}" data-probe="composer-row">
@@ -951,6 +1009,10 @@ const messagePanelChrome: LayoutFixture = {
       "[data-probe='tab-strip']",
       "[data-probe='content-area']",
       "[data-probe='message-content']",
+      "[data-probe='date-group']",
+      "[data-probe='date-separator']",
+      "[data-probe='message-block']",
+      "[data-probe='bubble']",
       "[data-probe='send-bar']",
       "[data-probe='composer-row']",
       "[data-probe='composer']",
@@ -960,16 +1022,21 @@ const messagePanelChrome: LayoutFixture = {
     against: ["[data-probe='content-row']"],
   },
   recorded: [
-    "message-header rect height 145 — SCRUM-477 surveyed 144, and the missing pixel is the `border-b`. The 80px avatar plus `p-8`'s 64.",
-    "The chrome is the finding, not the header alone: header 145 + tab-strip 53 = 198 of a 343.125px row, leaving content-area 145.13.",
-    "message-content rect height 32 with clientHeight 32 and `padding: 16px` — **contentHeight 0**. scrollHeight is 64, so there is content wanting to show and none of it does. At 667x375 the conversation is not cramped, it is invisible.",
-    "send-bar rect height 131.5 with its bottom at 393.38 against a viewport of 375 — 18.38px past the edge, and `#__next` is `100dvh` with no page scroll, so that strip is unreachable.",
-    "Why the conversation collapses rather than sharing the space: content-area is `flex h-0 flex-1 flex-col` at 145px, and send-bar's min-content height is 131.5, which a flex item's automatic minimum size will not go below. message-content is left with its own padding. content-area scrollHeight 179 against clientHeight 145 is the same 34px from the other side.",
-    "send-button rect 58x46 at top 305.13, fully inside the composer row and reachable — the button is fine. An earlier draft of this fixture reported it clipped and unreachable; that was the stand-in composer's fault, see SEND_BAR_COMPOSER_CLASS.",
-    "The composer is 78px wide and 80.5px tall, because at that width `globals.css`'s `.placeholder:empty:before` hint wraps to three lines. A width problem driving the height problem: the send bar's 219px of content width loses 80 to `desktop:mx-10`.",
-    "THRESHOLD: contentHeight reaches 0 at about 395px of viewport height, and 5px was measured at 667x400. Below ~395 the send bar also leaves the screen. That band is landscape phones and nothing else, which is what keeps this item's blast radius honest.",
-    "DESKTOP CONTROL at 1440x900: header still 145 but the row is 823.5, message-content contentHeight 497, send-bar 97 with nothing past the viewport, composer 37.5 on one line. The panel is healthy wherever there is height for it.",
-    "message-header contentWidth 203, matching the predicted chain — 667 less the 400px sidebar less its own `p-8`.",
+    "AFTER SCRUM-489. Every figure below was re-measured on the fix; the `BEFORE` lines are kept because this fixture's whole purpose is the comparison, and because two of them are the reason the threshold is where it is.",
+    "message-header rect height 65 — `px-2 py-1` around an `h-14` avatar, plus the `border-b`. BEFORE: 145, from `p-8` around `h-20`. The height is set by the close control rather than the avatar below 56px, which is why the avatar stops at `h-14` and the padding does the rest.",
+    "The chrome was the finding, not the header alone: header 65 + tab-strip 53 = 118 of a 343.125px row, leaving content-area 225.13. BEFORE: 198 of chrome and 145.13 of content-area.",
+    "message-content rect height 115.13, clientHeight 115, `padding: 16px` — **contentHeight 83**. BEFORE: rect 32, clientHeight 32, **contentHeight 0** with a scrollHeight of 220 behind it. That is the defect: the conversation was not cramped at 667x375, it was invisible.",
+    "The newest message is readable, which is the criterion and not a proxy for it. Scroll the port to the bottom the way `MessageContent` does and the bubble is 64px tall with **all 64 inside the port** — 83 of content height is the 64px bubble plus the block's 16px `mb-4`, with 3 to spare. At `py-2` on the header it would be 75 and the bubble's top 5px would be clipped, which is the whole argument for the 4px.",
+    "send-bar rect height 110, bottom at **375.00** against a viewport of 375 — nothing past the edge. BEFORE: 131.5 with its bottom at 393.38, so the last 18.38px sat under the screen with `#__next` at `100dvh` and no page scroll to reach it.",
+    "content-area scrollHeight equals its clientHeight — **overflow 0**. BEFORE: 179 against 145, the same 34px of overflow seen from the other side. The mechanism was that content-area is `flex h-0 flex-1 flex-col`, and a flex item will not shrink below its min-content height, so the 131.5px send bar took the space and message-content was left with its own padding.",
+    "The bubble is 153x64. BEFORE: 90x112 — the half-column width cap, then applied on width alone, held it to 110px of a 220px column, so a 26-character message wrapped to four lines. The cap is a readability rule at a wide panel and a height multiplier at a narrow one, which is why it moved to the same screen as the rest of the chrome. (Both caps are named here as widths rather than as their utilities: this file is scanned, and a selector-set diff caught the `BEFORE` half of this very line keeping the retired rule alive in the shipped bundle.)",
+    "The composer is 158px wide and 59px tall, two lines of `globals.css`'s `.placeholder:empty:before` hint. BEFORE: 78x80.5 and three lines. The hint needs about 200px for one line, which a 267px panel cannot give it at any inset — so dropping the row's 40px side margins relieves the height cost rather than removing it. The remaining crowding, and the unconditional `py-6` this ticket could not reach, are SCRUM-494.",
+    "send-button rect 58x46, fully inside the composer row and reachable — unchanged, and it was never the problem. An earlier draft of this fixture reported it clipped; that was the stand-in composer's fault, see SEND_BAR_COMPOSER_CLASS.",
+    "message-header contentWidth 251, matching the predicted chain — 667 less the 400px sidebar less its own `px-2`. Note the chain is stated for *this* viewport, so serving the fixture at a tall one prints a prediction 48px short of what it measures.",
+    "DESKTOP CONTROL at 1440x900, unchanged in every term: header 145 with `padding: 32px`, avatar 80, tab-strip 53, content-area 625.5, message-content contentHeight **497**, send-bar **97** with nothing past the viewport, composer 37.5 on one line, composer row margin `0px 40px`, bubble max-width `50%` at 44px tall. This is what `message-panel-tall:` is protecting.",
+    "THE BOUNDARY, both sides of it, at 667 wide: 489 gives the full-size chrome — header 145, margin `0px 40px`, cap `50%`, contentHeight 86 — and 488 gives the compact one — header 65, margin `0px`, cap `85%`, contentHeight 187. Neither overflows.",
+    "THE DERIVATION, checked where it was derived: at 1440x489 the conversation measures exactly 120px of content height against a dated message of exactly 120. `MESSAGE_PANEL_MIN_HEIGHT_PX` is tight at the threshold rather than approximately right, and the 86 above is the same threshold seen at a panel too narrow for a one-line composer.",
+    "BEFORE, retained from SCRUM-485: contentHeight reached 0 at about 395px of viewport height, with 5px measured at 667x400. Below ~395 the send bar also left the screen. That band is landscape phones and nothing else, which is what kept this item's blast radius honest.",
   ],
   reproduces: [
     {
@@ -977,8 +1044,32 @@ const messagePanelChrome: LayoutFixture = {
       className: MESSAGE_HEADER_DESKTOP_CLASS,
     },
     {
+      file: "src/components/Messages/MessageHeader.tsx",
+      className: MESSAGE_HEADER_AVATAR_CLASS,
+    },
+    {
       file: "src/components/Messages/MessageContent.tsx",
       className: MESSAGE_CONTENT_CLASS,
+    },
+    {
+      file: "src/components/Messages/MessageContent.tsx",
+      className: MESSAGE_DATE_SEPARATOR_CLASS,
+    },
+    {
+      file: "src/components/Messages/MessageContent.tsx",
+      className: MESSAGE_BLOCK_CLASS,
+    },
+    {
+      file: "src/components/Messages/MessageContent.tsx",
+      className: MESSAGE_BLOCK_INCOMING_CLASS,
+    },
+    {
+      file: "src/components/Messages/MessageContent.tsx",
+      className: MESSAGE_TIMESTAMP_CLASS,
+    },
+    {
+      file: "src/components/Messages/MessageContent.tsx",
+      className: MESSAGE_BUBBLE_CLASS,
     },
     {
       file: "src/components/Messages/SendBar.tsx",

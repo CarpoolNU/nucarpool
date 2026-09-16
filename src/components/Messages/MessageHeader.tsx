@@ -418,20 +418,53 @@ const MessageHeader = ({
   }
 
   return (
-    <div className="flex items-center justify-between border-b border-gray-200 bg-white p-8">
+    /*
+      The full-size chrome is restored only where the panel is tall enough to
+      pay for it.
+
+      `p-8` around an 80px avatar is 145px of header, and the panel fills a row
+      that is 91.5% of the viewport - so on a phone in landscape it took 145 of
+      343px, the tab strip below took 53 more, and the conversation was left
+      with nothing: `message-content` measured 32px tall, all of it its own
+      padding, with `contentHeight` 0 and a `scrollHeight` of 220 behind it.
+      Not cramped - a user who opened a thread in landscape saw no messages at
+      all, including the one they had just sent (SCRUM-489).
+
+      **The compact values are the base and the full-size ones the override**,
+      which is the inversion `DESKTOP_MEDIA_QUERY`'s docblock argues for: a
+      `min-` query cannot be negated, so anything stated only as an override is
+      unreachable below the threshold. Here it costs nothing, because this
+      branch is desktop-only already - `ismobile` returns above, so these base
+      classes never reach a phone in portrait.
+
+      **`py-1` is 4px and that is deliberate, not a slip.** The header's height
+      is set by the tallest thing in it, and below 56px that is the close
+      control beside the name rather than the avatar - so shrinking the avatar
+      past `h-14` buys nothing while `py-2` costs 8px that the conversation
+      needs. Measured: at 667x375 this leaves `message-content` 83px of content
+      height, which is exactly enough for the newest message to be read whole
+      (64px for a one-line bubble plus its 16px of margin). `py-2` leaves 75 and
+      clips the top 5px of it. The avatar keeps `h-14` for the same arithmetic
+      seen from the other side: 56px is free.
+    */
+    <div className="message-panel-tall:p-8 flex items-center justify-between border-b border-gray-200 bg-white px-2 py-1">
       <div className="flex items-center">
         {isProfileImageLoading ? (
-          <div className="h-20 w-20 rounded-full bg-gray-200" />
+          <div className="message-panel-tall:h-20 message-panel-tall:w-20 h-14 w-14 rounded-full bg-gray-200" />
         ) : profileImageUrl && !imageLoadError ? (
           <Image
             src={profileImageUrl}
             alt={`${selectedUser.preferredName}'s Profile Image`}
+            // Unchanged at 80: this is the size the source is *requested* at,
+            // not the size it is drawn at, so leaving it alone means the
+            // compact avatar is a downscaled 80px image rather than an
+            // upscaled 56px one. The classes below decide the box.
             width={80}
             height={80}
-            className="h-20 w-20 rounded-full object-contain"
+            className="message-panel-tall:h-20 message-panel-tall:w-20 h-14 w-14 rounded-full object-contain"
           />
         ) : (
-          <AiOutlineUser className="h-20 w-20 rounded-full bg-gray-200" />
+          <AiOutlineUser className="message-panel-tall:h-20 message-panel-tall:w-20 h-14 w-14 rounded-full bg-gray-200" />
         )}
 
         <span className="font-montserrat pr-10 pl-10 font-semibold sm:text-lg md:text-xl lg:text-2xl">

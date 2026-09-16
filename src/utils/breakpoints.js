@@ -324,6 +324,152 @@ const ADMIN_CONSOLE_MIN_HEIGHT_PX = Math.ceil(
 );
 
 /**
+ * The name of the screen that means "wide enough for the desktop message panel
+ * *and* tall enough to lay its full-size chrome out".
+ *
+ * A third screen rather than a height term on `MOBILE_BREAKPOINT_PX`, for the
+ * reason `DESKTOP_TALL_SCREEN_NAME` gives and SCRUM-477 records: that constant
+ * is read by `useIsMobile`, by the `desktop:` screen and by
+ * `DESKTOP_MEDIA_QUERY`, so giving it a height would move every page at once.
+ * And not `desktop-tall` either - 844px is the onboarding card's figure and
+ * means nothing here, so reusing it would hand the compact chrome to a 1366x768
+ * laptop as well.
+ */
+const MESSAGE_PANEL_TALL_SCREEN_NAME = "message-panel-tall";
+
+/**
+ * The desktop conversation header's height, in pixels - `p-8` around an
+ * `h-20 w-20` avatar, plus its `border-b`.
+ *
+ * **Measured, not declared**, like `WIZARD_NAV_STRIP_SPACE_PX`: 64 of padding
+ * and an 80px avatar predict 144, and Chromium reports 145. The extra pixel is
+ * the border, and it is the kind of term that is easier to measure than to
+ * remember to add.
+ */
+const MESSAGE_PANEL_HEADER_PX = 145;
+
+/**
+ * The `Message`/`Map` tab strip's height - `py-3` around one line of `text-lg`,
+ * plus its own `border-b`. Measured at 53.
+ */
+const MESSAGE_PANEL_TAB_STRIP_PX = 53;
+
+/**
+ * The send bar's height with its composer on one line, in pixels.
+ *
+ * **Measured at a wide panel, and that qualifier is load-bearing.** The bar is
+ * `py-6` around a row whose height is the send button's 46px plus 2px of
+ * border - 97 in total - but only while the composer fits that row. The
+ * composer is `flex-1`, so its width is the panel's, and below about 200px of
+ * composer the `.placeholder:empty:before` hint in `globals.css` wraps: at a
+ * 267px panel the bar measures 110 with two lines of hint and 131.5 with the
+ * three that the row's 40px side margins force. (Named as a length rather than
+ * as the utility that sets it: Tailwind v4 scans this file, so writing the
+ * class out would emit it as real CSS with nothing using it - the effect
+ * `tailwind.config.js` describes at length, and one a selector-set diff caught
+ * here.) So this figure describes the panel the full-size
+ * chrome was designed for, which is the panel a viewport above the threshold
+ * below has.
+ */
+const MESSAGE_PANEL_SEND_BAR_PX = 97;
+
+/**
+ * The conversation list's own `p-4`, top and bottom.
+ *
+ * Declared rather than measured, and it is the whole of the box at a landscape
+ * phone today: `message-content` measures 32px tall with `contentHeight` 0.
+ */
+const MESSAGE_CONTENT_PADDING_PX = 32;
+
+/**
+ * The vertical space one message needs to be seen whole, in pixels - the date
+ * separator every group carries, plus one message block.
+ *
+ * **Measured in Chromium at 1440x900**, because none of it is declared
+ * anywhere: the separator is `text-md my-2` (24 + 16 of margin = 40), and a
+ * block is a `text-xs` timestamp with `mb-1` (20) plus a one-line bubble at
+ * `px-4 py-2` (44) plus the block's own `mb-4` (16). 120 together.
+ *
+ * Width-dependent, like the send bar above, and for a sharper reason: the
+ * bubble is capped at half the width of the conversation column, so a narrow
+ * panel wraps it rather than widening it. The same 26-character message
+ * measures 44px tall at a 1040px panel and **112px** at a 267px one. 120 is
+ * therefore the wide-panel figure, which is the right one for a threshold that
+ * decides whether the *full-size* chrome still fits.
+ */
+const MESSAGE_PANEL_DATED_MESSAGE_PX = 120;
+
+/**
+ * The shortest viewport the desktop message panel's full-size chrome is served
+ * into, in pixels. Below this, the panel takes the compact chrome instead.
+ *
+ * **Derived, and the derivation is a claim about being able to read a message
+ * rather than about the layout looking tidy.** The panel fills the content row,
+ * and its header and tab strip come off the top before the conversation and the
+ * send bar divide what is left:
+ *
+ *   0.915 * H - HEADER - TABS - SEND_BAR >= PADDING + DATED_MESSAGE
+ *
+ * which solves to `H >= 447 / 0.915`, or 489. Below it the newest message
+ * cannot be seen whole at any scroll position; below about 395 - SCRUM-485's
+ * figure - the conversation has no content height at all and the send bar
+ * leaves the screen, which is the defect SCRUM-489 was filed for.
+ *
+ * Verified at the threshold and at the width it was derived for: at 1440x489
+ * the conversation measures exactly 120px of content height against a dated
+ * message of exactly 120, so the inequality is tight rather than
+ * approximately right. One pixel below, the compact chrome takes over.
+ *
+ * **Two of the five terms are width-dependent** (see `MESSAGE_PANEL_SEND_BAR_PX`
+ * and `MESSAGE_PANEL_DATED_MESSAGE_PX`), so this is the threshold for a panel
+ * wide enough to hold a one-line composer and an unwrapped bubble, and a
+ * narrow desktop window crosses the same line higher. Measured at 667x489,
+ * where the send bar is 131.5 rather than 97 because the row's side margins
+ * are restored alongside it: the conversation gets 86px, not the 120 the
+ * inequality
+ * promises. Nothing overflows and the send bar stays on screen, so that band
+ * is cramped rather than broken - and the alternative, stacking each term's
+ * worst case, walks the threshold up past a real laptop, which costs a desktop
+ * user their layout to buy a landscape phone nothing it can measure.
+ *
+ * Checked against both bounds before being accepted, because a derived figure
+ * can still be the wrong one:
+ *
+ *  - every phone in landscape is below it - 375, 390 and 430 for the three
+ *    iPhones `breakpoints.test.ts` names - so all of them get the compact
+ *    chrome, which is the band SCRUM-485 measured the defect in;
+ *  - every desktop viewport worth serving is above it, including the ~650px a
+ *    1366x768 laptop leaves and the ~695px an iPad in landscape leaves. So the
+ *    full-size chrome is what desktop keeps rendering.
+ *
+ * Opt-in at its own call sites, which are `MessageHeader`, `SendBar` and
+ * `MessageContent`; SCRUM-474 is the pattern this follows.
+ */
+const MESSAGE_PANEL_MIN_HEIGHT_PX = Math.ceil(
+  (MESSAGE_PANEL_HEADER_PX +
+    MESSAGE_PANEL_TAB_STRIP_PX +
+    MESSAGE_PANEL_SEND_BAR_PX +
+    MESSAGE_CONTENT_PADDING_PX +
+    MESSAGE_PANEL_DATED_MESSAGE_PX) /
+    CONTENT_ROW_VIEWPORT_FRACTION,
+);
+
+/**
+ * The same pair of conditions as a media query, which is what
+ * `tailwind.config.js` registers as a screen.
+ *
+ * Both terms `min-`, matching the other two queries in this file. That
+ * direction is what keeps the compact chrome out of the mobile tree: the
+ * conversation's insets are declared compact as the base and restored inside
+ * here, and the base is also what a phone in portrait gets - so `SendBar` and
+ * `MessageContent`, which are one tree on both platforms, can only be reached
+ * by this screen where they are already above the width breakpoint.
+ */
+const MESSAGE_PANEL_TALL_MEDIA_QUERY =
+  `(min-width: ${MOBILE_BREAKPOINT_PX}px) and ` +
+  `(min-height: ${MESSAGE_PANEL_MIN_HEIGHT_PX}px)`;
+
+/**
  * The height of the mobile bottom navigation, in pixels.
  *
  * **Declared, not measured.** `MobileNav` used to set no height at all, so its
@@ -406,6 +552,14 @@ module.exports = {
   ADMIN_SHORTEST_CHART_HEIGHT_PX,
   ADMIN_DATA_VERTICAL_MARGIN_PX,
   ADMIN_CONSOLE_MIN_HEIGHT_PX,
+  MESSAGE_PANEL_TALL_SCREEN_NAME,
+  MESSAGE_PANEL_TALL_MEDIA_QUERY,
+  MESSAGE_PANEL_HEADER_PX,
+  MESSAGE_PANEL_TAB_STRIP_PX,
+  MESSAGE_PANEL_SEND_BAR_PX,
+  MESSAGE_CONTENT_PADDING_PX,
+  MESSAGE_PANEL_DATED_MESSAGE_PX,
+  MESSAGE_PANEL_MIN_HEIGHT_PX,
   isMobileWidth,
   MOBILE_NAV_HEIGHT_PX,
   MOBILE_NAV_SPACE,
