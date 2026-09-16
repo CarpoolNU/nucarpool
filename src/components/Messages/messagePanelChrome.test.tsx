@@ -12,6 +12,7 @@ import {
 } from "../../testing/viewport";
 import {
   DESKTOP_SCREEN_NAME,
+  MESSAGE_PANEL_SHORT_SCREEN_NAME,
   MESSAGE_PANEL_TALL_SCREEN_NAME,
 } from "../../utils/breakpoints";
 
@@ -62,6 +63,13 @@ const tall = (utility: string) =>
   `${MESSAGE_PANEL_TALL_SCREEN_NAME}:${utility}`;
 
 const widthOnly = (utility: string) => `${DESKTOP_SCREEN_NAME}:${utility}`;
+
+/**
+ * The complement of `tall`, and the only variant here that takes something away
+ * rather than restoring it - see `MESSAGE_PANEL_SHORT_SCREEN_NAME`.
+ */
+const short = (utility: string) =>
+  `${MESSAGE_PANEL_SHORT_SCREEN_NAME}:${utility}`;
 
 /**
  * The two utilities this file names that the app only ever uses *behind a
@@ -348,6 +356,65 @@ describe("the send bar's composer inset", () => {
     expect(counter).not.toBeNull();
     expect(counter).toHaveClass("mx-0", tall(SIDE_INSET));
     expect(counter?.className).not.toContain(widthOnly(SIDE_INSET));
+  });
+});
+
+/**
+ * The bar's own two insets, which SCRUM-494 moved onto two different screens.
+ *
+ * Unlike everything above, the utilities named here - the 24px horizontal inset
+ * and the 12px vertical one - are both already used bare elsewhere in the app,
+ * so spelling them costs no rule in the bundle and they need none of the
+ * splitting `SIDE_INSET` describes. Checked rather than assumed: the horizontal
+ * one is in `ConnectModal`, `GroupPage` and `AdminMobileNotice`, the vertical
+ * one in `MessagePanel`'s own tab strip.
+ */
+describe("the send bar's container insets", () => {
+  beforeEach(() => {
+    setViewportWidth(DESKTOP_WIDTH);
+  });
+
+  const renderSendBar = () =>
+    render(<SendBar onSendMessage={jest.fn()} />).container
+      .firstElementChild as HTMLElement;
+
+  /**
+   * The horizontal half, and the same mistake as the row's margins one level
+   * out: gated on width alone, a landscape phone took the 24px desktop inset
+   * out of a panel that is the viewport less a 400px sidebar. The 8px a side it
+   * gives back is what widens the composer past the hint's 160.77px, which is
+   * worth 13px of bar height - measured on the fixture, not reasoned about.
+   */
+  it("asks for the wider horizontal inset only above the threshold", () => {
+    expect(renderSendBar()).toHaveClass("px-4", tall("px-6"));
+  });
+
+  it("no longer asks for that inset on width alone", () => {
+    expect(renderSendBar().className).not.toContain(widthOnly("px-6"));
+  });
+
+  /**
+   * The vertical half, and the one that needed a new screen. It runs the other
+   * way round from every other value in this chrome: the full-size figure is
+   * the *base*, because this tree is shared with mobile and a compact base
+   * would follow a phone into portrait.
+   */
+  it("asks for the reduced vertical inset only inside the short screen", () => {
+    expect(renderSendBar()).toHaveClass("py-6", short("py-3"));
+  });
+
+  /**
+   * The assertion that actually protects a phone in portrait, and it has to
+   * read tokens rather than substrings: the variant class *contains* the bare
+   * utility, so `not.toContain` would pass against a class list that requested
+   * both. An unvariant 12px would reach portrait, where the budget is not tight
+   * and where most of the traffic is.
+   */
+  it("never requests the reduced inset unvariant, which portrait would take", () => {
+    const tokens = Array.from(renderSendBar().classList);
+
+    expect(tokens).toContain(short("py-3"));
+    expect(tokens).not.toContain("py-3");
   });
 });
 

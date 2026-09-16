@@ -17,6 +17,8 @@ import {
   ADMIN_CONSOLE_MIN_HEIGHT_PX,
   MESSAGE_PANEL_TALL_SCREEN_NAME,
   MESSAGE_PANEL_TALL_MEDIA_QUERY,
+  MESSAGE_PANEL_SHORT_SCREEN_NAME,
+  MESSAGE_PANEL_SHORT_MEDIA_QUERY,
   MESSAGE_PANEL_HEADER_PX,
   MESSAGE_PANEL_TAB_STRIP_PX,
   MESSAGE_PANEL_SEND_BAR_PX,
@@ -769,5 +771,101 @@ describe("the message panel's screen", () => {
     expect(MESSAGE_PANEL_MIN_HEIGHT_PX).toBeLessThan(
       WIZARD_DESKTOP_MIN_HEIGHT_PX,
     );
+  });
+});
+
+/**
+ * The complement screen, which is the first in this repository that stops
+ * applying as a viewport grows (SCRUM-494).
+ *
+ * Everything else here is mobile-first, and these tests exist because this one
+ * cannot be: `SendBar`'s vertical padding is declared unconditionally on a tree
+ * shared with the mobile branch, so the compact value cannot become the base
+ * without following a phone into portrait. What needs guarding is therefore not
+ * the direction but the two things that make the direction safe - that the
+ * width term still shuts mobile out, and that the height boundary is a negation
+ * rather than a bound, so that no viewport can fall between the two screens.
+ */
+describe("the message panel's short screen", () => {
+  it("is registered in the Tailwind config, so the CSS and the JS agree", () => {
+    expect(screens[MESSAGE_PANEL_SHORT_SCREEN_NAME]).toEqual({
+      raw: MESSAGE_PANEL_SHORT_MEDIA_QUERY,
+    });
+  });
+
+  /**
+   * The term that keeps this screen out of the mobile tree, and the only reason
+   * a `max-`-shaped query is safe here at all. Without it the screen would
+   * reach a 375px phone in portrait - which is short - and take the padding off
+   * the one layout this ticket had to leave alone.
+   */
+  it("keeps the width term min-, which is what excludes a phone in portrait", () => {
+    expect(MESSAGE_PANEL_SHORT_MEDIA_QUERY).toContain(
+      `(min-width: ${MOBILE_BREAKPOINT_PX}px)`,
+    );
+    expect(MESSAGE_PANEL_SHORT_MEDIA_QUERY).not.toContain("max-width");
+  });
+
+  /**
+   * The boundary, and the assertion worth having: this is exactly the shape a
+   * later simplification would undo. `max-height: 488px` leaves every viewport
+   * between 488 and 489 exclusive matching neither screen, and the fractional
+   * repair (`max-height: 488.98px`) narrows that gap without closing it - 488.99
+   * matches neither - while introducing a second figure that has to be kept in
+   * step with the first by hand.
+   */
+  it("negates the tall screen's own height term instead of bounding it", () => {
+    expect(MESSAGE_PANEL_SHORT_MEDIA_QUERY).toContain(
+      `(not (min-height: ${MESSAGE_PANEL_MIN_HEIGHT_PX}px))`,
+    );
+    expect(MESSAGE_PANEL_SHORT_MEDIA_QUERY).not.toContain("max-height");
+    // No decimal point anywhere: the fractional bound is the specific mistake
+    // this form exists to avoid, and it cannot be written without one.
+    expect(MESSAGE_PANEL_SHORT_MEDIA_QUERY).not.toContain(".");
+  });
+
+  /**
+   * One figure between the two screens rather than two. Derived from the tall
+   * query itself, so the pair cannot drift apart: if either gains a term or
+   * moves its threshold, this fails rather than silently opening a band that
+   * matches both screens or neither.
+   */
+  it("is the exact complement of the tall screen", () => {
+    const heightTerm = `(min-height: ${MESSAGE_PANEL_MIN_HEIGHT_PX}px)`;
+
+    expect(MESSAGE_PANEL_TALL_MEDIA_QUERY).toBe(
+      `(min-width: ${MOBILE_BREAKPOINT_PX}px) and ${heightTerm}`,
+    );
+    expect(MESSAGE_PANEL_SHORT_MEDIA_QUERY).toBe(
+      MESSAGE_PANEL_TALL_MEDIA_QUERY.replace(heightTerm, `(not ${heightTerm})`),
+    );
+  });
+
+  /**
+   * Declaration order is the one thing that genuinely does not matter for this
+   * pair, and pinning *that* is more useful than pinning a position: the two are
+   * exact complements, so no viewport matches both and neither can take a
+   * property from the other whichever is emitted first. The screens list's
+   * ascending rule is about screens that overlap, and these two never do.
+   */
+  it("cannot overlap the tall screen, so their order is immaterial", () => {
+    const matchesTall = (height: number) =>
+      height >= MESSAGE_PANEL_MIN_HEIGHT_PX;
+    const matchesShort = (height: number) => !matchesTall(height);
+
+    // The three iPhone landscape heights, both sides of the boundary, and two
+    // desktop viewports - including the fractional height a browser zoom
+    // produces, which is the case a `max-height` bound would drop.
+    for (const height of [375, 390, 430, 488, 488.99, 489, 582, 667, 900]) {
+      expect(matchesShort(height)).toBe(!matchesTall(height));
+    }
+  });
+
+  it("does not shadow an existing screen", () => {
+    const others = Object.keys(screens).filter(
+      (name) => name !== MESSAGE_PANEL_SHORT_SCREEN_NAME,
+    );
+
+    expect(others).not.toContain(MESSAGE_PANEL_SHORT_SCREEN_NAME);
   });
 });

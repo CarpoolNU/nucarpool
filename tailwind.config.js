@@ -18,6 +18,8 @@ const {
   DESKTOP_TALL_MEDIA_QUERY,
   MESSAGE_PANEL_TALL_SCREEN_NAME,
   MESSAGE_PANEL_TALL_MEDIA_QUERY,
+  MESSAGE_PANEL_SHORT_SCREEN_NAME,
+  MESSAGE_PANEL_SHORT_MEDIA_QUERY,
   MOBILE_NAV_SPACE,
   MOBILE_SHEET_MAP_STRIP,
 } = require("./src/utils/breakpoints");
@@ -288,6 +290,26 @@ module.exports = {
       // property the taller screen has to be emitted second to win.
       [MESSAGE_PANEL_TALL_SCREEN_NAME]: { raw: MESSAGE_PANEL_TALL_MEDIA_QUERY },
       // => @media (min-width: 640px) and (min-height: 489px) { ... }
+
+      // The complement of the screen above, inside the same width band: wide
+      // enough for the desktop panel, too short for its full-size chrome. The
+      // first screen here that narrows as a viewport grows, and the reason it
+      // has to exist is in `MESSAGE_PANEL_SHORT_SCREEN_NAME` - `SendBar`'s
+      // vertical padding is unconditional on a tree shared with mobile, so it
+      // cannot be moved to the base the way every other value in this chrome
+      // was.
+      //
+      // Position in this list is the one thing that does *not* matter here, and
+      // saying so is worth more than picking a defensible spot: this screen and
+      // `message-panel-tall` are exact complements, so no viewport can ever
+      // match both and neither can take a property from the other. It is
+      // declared adjacent to its complement so the pair reads together, and
+      // `breakpoints.test.ts` pins the mutual exclusivity rather than the
+      // order.
+      [MESSAGE_PANEL_SHORT_SCREEN_NAME]: {
+        raw: MESSAGE_PANEL_SHORT_MEDIA_QUERY,
+      },
+      // => @media (min-width: 640px) and (not (min-height: 489px)) { ... }
 
       [DESKTOP_TALL_SCREEN_NAME]: { raw: DESKTOP_TALL_MEDIA_QUERY },
       // => @media (min-width: 640px) and (min-height: 844px) { ... }
