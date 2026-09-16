@@ -76,8 +76,17 @@ const AccountSection = ({
   const isViewer = watch("role") === Role.VIEWER;
 
   return (
+    /* `max-w-full` is what makes the 700px a preference rather than a floor,
+       and it is the one thing `UserSection`'s identical row already has. The
+       declared width never fits: this section's container is the profile
+       page's `max-w-2xl` reading column, so the box it is given is 608px at
+       1440x900 and 353px at 667x375. Uncapped it simply overflowed both - on
+       a desktop into a wide enough column that nothing clipped, and on a
+       landscape phone off the side of the screen, where the column's
+       `overflow-x-hidden` meant no gesture reached the End Date picker or
+       most of Save Changes. See SCRUM-490 for the measurements. */
     <div
-      className={`flex h-fit ${isMobile ? "w-full" : "w-[700px]"} flex-col justify-start`}
+      className={`flex h-fit ${isMobile ? "w-full" : "w-[700px]"} max-w-full flex-col justify-start`}
     >
       <ProfileHeader className={isMobile ? "!text-2xl" : "!text-4xl"}>
         Account Status
@@ -149,10 +158,19 @@ const AccountSection = ({
           className={"mt-12 mb-6 !text-2xl"}
         />
 
-        {/* Date pickers stack on mobile for better fit */}
-        <div
-          className={`flex ${isMobile ? "flex-col gap-4" : "w-2/3 gap-8 lg:w-full"}`}
-        >
+        {/* Date pickers stack on mobile for better fit.
+            The desktop arm used to take two thirds of the row below 1440px and
+            the whole of it at or above - which is backwards, because the
+            narrower the column the less a fraction of it leaves. Capping the
+            section above made that visible: two thirds of the capped 338px
+            gives each picker 96.66px, and at that width "Start Date" and "End
+            Date" both wrap onto a second line in Montserrat at the 18px the
+            label asks for. The full row gives each 153px and one line. The
+            fraction was only ever applied between 640px and 1440px, and the
+            full width is what the layout already resolved to above that, so
+            this makes the wide-desktop arrangement the single arrangement
+            rather than inventing one. Measured for SCRUM-490. */}
+        <div className={`flex ${isMobile ? "flex-col gap-4" : "w-full gap-8"}`}>
           <div className="flex flex-1 flex-col">
             <EntryLabel
               required={!isViewer}

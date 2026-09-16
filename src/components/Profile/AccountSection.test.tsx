@@ -4,6 +4,12 @@ import { useForm, UseFormReturn } from "react-hook-form";
 import { Role, Status } from "@prisma/client";
 import AccountSection from "./AccountSection";
 import { OnboardingFormInputs } from "../../utils/types";
+import {
+  DESKTOP_WIDTH,
+  MOBILE_WIDTH,
+  restoreViewportAfterEach,
+  setViewportWidth,
+} from "../../testing/viewport";
 
 /**
  * The two co-op month pickers: the one prop that decides whether tapping one is
@@ -217,5 +223,88 @@ describe("AccountSection co-op date pickers", () => {
 
     expect(monthInput(container, "coopStartDate").value).toBe("2026-02");
     expect(monthInput(container, "coopEndDate").value).toBe("");
+  });
+});
+
+/**
+ * The widths this section asks for, either side of the mobile breakpoint.
+ *
+ * **Class-request assertions, and that is the ceiling in this file.**
+ * SCRUM-490 is a geometry defect - a declared 700px box hanging 315px off a
+ * 667px screen, inside a column that hides the overflow rather than scrolling
+ * it - and jsdom resolves no CSS and reports every rect as zero, so none of
+ * that is observable here. See `src/testing/viewport.ts`. What *is* observable
+ * is which utilities the component asks for, and the defect was precisely the
+ * absence of a cap beside the declared width. So these fail if the cap is
+ * dropped again, and they would still pass if a cap were present and
+ * ineffective - which is the honest limit of the assertion. The pixels are in
+ * `src/testing/layoutFixtures.ts`'s `profile-content-column-width`, measured in
+ * Chromium; the geometry itself belongs in SCRUM-264's Playwright suite.
+ */
+describe("AccountSection widths", () => {
+  restoreViewportAfterEach();
+
+  /* The outermost div carries the width. Reached by position rather than by a
+     class, so the assertions are about what that element requests and not
+     about a selector that has already assumed the answer. */
+  const section = (container: HTMLElement) =>
+    container.firstElementChild as HTMLElement;
+
+  /* The date row found through one of the pickers it contains, rather than by
+     its own classes - those are the thing under test, and a selector naming
+     them could not observe them changing. */
+  const dateRow = (container: HTMLElement) => {
+    const column = monthInput(container, "coopStartDate").closest(".flex-1");
+
+    expect(column).not.toBeNull();
+
+    const row = column?.parentElement;
+
+    expect(row).not.toBeNull();
+
+    return row as HTMLElement;
+  };
+
+  it("caps its declared desktop width against the container", () => {
+    setViewportWidth(DESKTOP_WIDTH);
+
+    const { container } = render(<Harness />);
+
+    /* Both halves matter. The declared width is the design intent and is
+       kept; the cap is what stops it being a floor. Asserting only the cap
+       would pass if someone deleted the design width, and asserting only the
+       width is the state this ticket found. */
+    expect(section(container)).toHaveClass("w-[700px]");
+    expect(section(container)).toHaveClass("max-w-full");
+  });
+
+  it("asks for the container's width on mobile, where no cap is needed", () => {
+    setViewportWidth(MOBILE_WIDTH);
+
+    const { container } = render(<Harness />);
+
+    expect(section(container)).toHaveClass("w-full");
+    expect(section(container)).not.toHaveClass("w-[700px]");
+  });
+
+  it("gives the date row the whole width rather than a fraction of it", () => {
+    setViewportWidth(DESKTOP_WIDTH);
+
+    const { container } = render(<Harness />);
+
+    /* The fraction is the regression to catch. Two thirds of the capped
+       column left each picker 96.66px in Chromium, at which both labels wrap
+       onto a second line - so a fraction here is not a cosmetic preference,
+       it is what made the row worse once the cap was added. */
+    expect(dateRow(container)).toHaveClass("w-full");
+    expect(dateRow(container).className).not.toMatch(/\bw-\d+\/\d+/);
+  });
+
+  it("stacks the date row on mobile instead of sizing it", () => {
+    setViewportWidth(MOBILE_WIDTH);
+
+    const { container } = render(<Harness />);
+
+    expect(dateRow(container)).toHaveClass("flex-col");
   });
 });

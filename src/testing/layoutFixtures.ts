@@ -472,9 +472,9 @@ const ADMIN_CHART_CLASS = "relative min-h-[600px] w-full";
  * comment grew the stylesheet by 52 bytes. This file is more exposed to it
  * than most, because carrying copied markup is its whole purpose.
  */
-const ADMIN_SHORT_CHART_CLASS = "flex h-[500px] w-full flex-col";
+const ADMIN_SHORT_CHART_CLASS = "flex h-[500px] w-full shrink-0 flex-col";
 
-const ADMIN_SCROLL_PORT_CLASS = "my-4 h-full w-full overflow-y-auto";
+const ADMIN_SCROLL_PORT_CLASS = "h-full w-full overflow-y-auto py-4";
 
 const ADMIN_SCROLL_INNER_CLASS = "flex h-full w-full flex-col space-y-4 px-8";
 
@@ -512,6 +512,23 @@ const adminConsoleChartFold: LayoutFixture = {
     { name: "sidebar min-w-[175px]", x: 175 },
     { name: "sidebar border-r-4", x: 4 },
     { name: "AdminData px-8", x: 64 },
+    /*
+     * Not a CSS length, and the only inset here that is not. Before SCRUM-488
+     * the scroll port never scrolled - the column's one shrinkable child
+     * absorbed the whole overflow, so `scrollHeight` equalled `clientHeight`
+     * and no scrollbar was laid out. Stopping that shrink is what gives the
+     * port real scroll range, and a classic scrollbar takes width from the
+     * content when it appears.
+     *
+     * 11px is Chromium's, measured here at both 667 and 1440. It is the one
+     * figure in this fixture that is the environment's rather than the
+     * stylesheet's: a platform with overlay scrollbars - macOS Safari, or
+     * Chrome with them enabled - takes 0 instead, and Windows takes about 15.
+     * It is listed so the predicted width matches the measured one, because a
+     * reader told to treat a mismatch as a broken container chain should not
+     * meet an 11px mismatch that is nobody's mistake.
+     */
+    { name: "scroll port's scrollbar (Chromium's, not CSS)", x: 11 },
   ],
   markup: `
     <style>
@@ -557,12 +574,14 @@ const adminConsoleChartFold: LayoutFixture = {
   },
   recorded: [
     "At 667x582 — the gate, the shortest viewport still served the console — content-row rect top 49.469 and height 532.523, which is 0.915 of 582 to three decimals.",
-    "scroll-port rect top 65.469 and height 532.523: the same height as the row, pushed 16px down by `my-4`. The largest slice of scroll content that can be on screen at once is therefore 516.523, and the 500px chart the gate is derived from fits inside it — scrolled to the top of the port, its axis lands at 581.969 against a viewport of 582.",
+    "scroll-port rect top 49.469 and height 532.523 — the row's box exactly, top and bottom, and `portRect.bottom - rowRect.bottom` is 0. SCRUM-488 moved the 16px inside as `py-4`, so the port is no longer a `h-full` box wearing a margin inside an `overflow-hidden` parent. BEFORE it was top 65.469 for the same height, hanging 16px past the row's clip.",
+    "The port's usable content height at the gate is 501 — `clientHeight` 533 less the 32px of `py-4` — against the 500px chart the gate is derived from. `ADMIN_CONSOLE_MIN_HEIGHT_PX` solves `0.915 * H - 32 >= 500` to 581.4 and rounds to 582, and that arithmetic is now what the box does rather than what it was hoped to do: scrolled to the maximum the short chart sits at rect top 81.969 and bottom 581.969, whole, inside a row that ends at 581.992.",
     "chart (`min-h-[600px]`) rect height 600 at every viewport measured. A minimum is a floor a flex shrink cannot cross, which is what makes this the console's real tallest block.",
-    "short-chart (`h-[500px]`) rect height 24 here and 151.5 at 1440x900 — **not 500 at either**. It is a shrinkable flex item in a column that always overflows, so it renders at whatever is left. Separate defect, filed, not fixed here; `ADMIN_SHORTEST_CHART_HEIGHT_PX` explains why the gate still uses the declared 500.",
-    "chart contentWidth 424, matching the predicted chain. Read the sidebar note on `insets` before reusing this at another width.",
+    "short-chart (`h-[500px] shrink-0`) rect height 500 here and 500 at 1440x900, matching what its class string says. BEFORE, without the `shrink-0` SCRUM-488 added, it was 24 here and 151.5 at 1440x900: a shrinkable flex item in a column that always overflows renders at whatever is left, and `min-height: auto` does not stop it.",
+    "The scroll range is the other half of that change, and it is the tell that the shrink was doing real work. BEFORE, `scrollHeight` equalled `clientHeight` at 824 at 1440x900 — the port did not scroll at all, because crushing one chart was enough to make the column fit. AFTER it is 1188 against 824, so the console scrolls, and an 11px Chromium scrollbar appears that was never laid out before. That is the `insets` entry above, and it is why this fixture's measured contentWidth is 413 at 667 where SCRUM-484 recorded 424.",
+    "chart contentWidth 413, matching the predicted chain once the scrollbar is in it — 424 of CSS less Chromium's 11. Read the sidebar note on `insets` before reusing this at another width, and the scrollbar note before reading the 11 as a constant.",
     "BEFORE, at 667x375 — the viewport that now gets `AdminMobileNotice` instead: row 343.125, port 311.13 of usable window, chart 600, and the axis at rect top 679.875, some 305px below the fold.",
-    "BEFORE, and the more serious half: scrolled fully to the bottom the axis's rect bottom was 390.875 against a viewport of 375, so it was *permanently* unreachable — `my-4` plus `h-full` makes the port 16px taller than the row that clips it, so its last 16px is outside the clip at any scroll position. Measured at 1440x900 too, where it is also 16. Viewport-independent, separate defect, filed.",
+    "BEFORE, and the more serious half: scrolled fully to the bottom the axis's rect bottom was 390.875 against a viewport of 375, so it was *permanently* unreachable — `my-4` plus `h-full` made the port 16px taller than the row that clips it, so its last 16px was outside the clip at any scroll position. Measured at 1440x900 too, where it was also 16. Viewport-independent; fixed in SCRUM-488, and the overhang is 0 at both viewports above.",
   ],
   reproduces: [
     {
@@ -634,29 +653,83 @@ const PROFILE_SCROLL_COLUMN_CLASS =
 const PROFILE_SCROLL_INNER_CLASS = "mt-10 w-full max-w-2xl px-8";
 
 const ACCOUNT_SECTION_DESKTOP_CLASS =
-  "flex h-fit w-[700px] flex-col justify-start";
+  "flex h-fit w-[700px] max-w-full flex-col justify-start";
 
 /**
- * `AccountSection.tsx:80` composes its class through a ternary, so the desktop
+ * `AccountSection.tsx:89` composes its class through a ternary, so the desktop
  * string above never appears contiguously in the source and cannot anchor the
  * drift guard. The anchor is the ternary's own text instead - a weaker anchor
  * than a class string, for the same reason `Header.tsx`'s declarations are, and
  * the only one available where the branch is assembled rather than written.
  */
 const ACCOUNT_SECTION_WIDTH_TERNARY =
-  'flex h-fit ${isMobile ? "w-full" : "w-[700px]"} flex-col justify-start';
+  'flex h-fit ${isMobile ? "w-full" : "w-[700px]"} max-w-full flex-col justify-start';
 
 const ACCOUNT_SAVE_BUTTON_CLASS =
   "bg-northeastern-red w-full rounded-lg py-3 text-lg text-white hover:bg-red-700";
+
+/**
+ * The co-op date row's desktop arm, and the ternary that assembles it.
+ *
+ * Two constants for one element for the same reason `AccountSection`'s width
+ * needs them: the markup below wants the resolved class string, and the drift
+ * guard can only anchor on text that appears in the source, where this branch
+ * is built by a ternary and never written out contiguously.
+ */
+const ACCOUNT_DATE_ROW_DESKTOP_CLASS = "flex w-full gap-8";
+
+const ACCOUNT_DATE_ROW_TERNARY =
+  'flex ${isMobile ? "flex-col gap-4" : "w-full gap-8"}';
+
+/**
+ * `EntryLabel`'s own declarations, as an inline style.
+ *
+ * The labels either side of the date pickers are the criterion SCRUM-490 asks
+ * about - whether narrowing the row truncates one - so a bare `<span>` would
+ * measure the wrong thing: `EntryLabel` is a styled-component at 20px bold
+ * Montserrat with `display: flex`, none of which Tailwind emits.
+ *
+ * **Inline rather than a `<style>` block, and the class beside it is real.**
+ * A fixture's markup is scanned like any other file, so inventing a utility
+ * here would ship a rule to the production bundle that applies to nothing -
+ * the eight-rule mistake SCRUM-485 caught in its first draft. Inline styles
+ * are invisible to the scanner. `!text-lg` is left as a class on purpose: it
+ * is what the component actually passes, it is already in the bundle from
+ * `AccountSection` itself, and its `!important` is what beats these inline
+ * declarations for `font-size` - which is the cascade the real label resolves
+ * through, not an approximation of it.
+ *
+ * The `@media (min-width: 834px)` padding in `EntryLabel` is deliberately
+ * omitted: it is vertical only, and this fixture is measured at 667.
+ */
+const ENTRY_LABEL_STYLE = [
+  /* Single-quoted on purpose. This string is interpolated into a
+     double-quoted `style="..."` attribute, so a double quote here closes the
+     attribute early and silently drops every declaration after it - which
+     presents as a label measuring in the fallback font and reads as "the
+     label fits". */
+  "font-family: 'Montserrat', sans-serif",
+  "font-style: normal",
+  "font-weight: 700",
+  "font-size: 20px",
+  "line-height: 24px",
+  "display: flex",
+  "align-items: center",
+].join("; ");
 
 const USER_SECTION_ROLE_ROW_DESKTOP_CLASS = "flex h-24 w-[700px]";
 
 const profileContentColumnWidth: LayoutFixture = {
   name: "profile-content-column-width",
   summary:
-    "The profile page's two 700px desktop rows inside the content column an overflow-x-hidden grid gives them",
-  source: "src/components/Profile/AccountSection.tsx:80",
-  issue: "SCRUM-485",
+    "The profile page's two 700px desktop rows, now capped, inside the content column an overflow-x-hidden grid gives them",
+  source: "src/components/Profile/AccountSection.tsx:89",
+  /* SCRUM-485 built this fixture and recorded the defect; SCRUM-490 fixed it
+     and re-measured against the same chain. The live criterion is 490's, so
+     that is what the banner should name - 485's figures are kept below as the
+     before, labelled, because a fixture that only carries the after cannot
+     show that anything moved. */
+  issue: "SCRUM-490",
   viewportWidth: 667,
   viewportHeight: 375,
   insets: [
@@ -689,13 +762,13 @@ const profileContentColumnWidth: LayoutFixture = {
           </div>
           <div class="${ACCOUNT_SECTION_DESKTOP_CLASS}" data-probe="account-section">
             <div class="mt-2 w-full">
-              <div class="flex w-2/3 gap-8 lg:w-full" data-probe="date-row">
+              <div class="${ACCOUNT_DATE_ROW_DESKTOP_CLASS}" data-probe="date-row">
                 <div class="flex flex-1 flex-col">
-                  <span>Start Date</span>
+                  <label class="!text-lg" style="${ENTRY_LABEL_STYLE}" data-probe="start-label">Start Date<span class="text-northeastern-red pl-1">*</span></label>
                   <div class="h-14 w-full rounded-md border border-gray-200 p-2 text-lg" data-probe="start-date">2026-01</div>
                 </div>
                 <div class="flex flex-1 flex-col">
-                  <span>End Date</span>
+                  <label class="!text-lg" style="${ENTRY_LABEL_STYLE}" data-probe="end-label">End Date<span class="text-northeastern-red pl-1">*</span></label>
                   <div class="h-14 w-full rounded-md border border-gray-200 p-2 text-lg" data-probe="end-date">2026-06</div>
                 </div>
               </div>
@@ -727,13 +800,18 @@ const profileContentColumnWidth: LayoutFixture = {
     against: ["[data-probe='scroll-column']"],
   },
   recorded: [
-    "scroll-inner contentWidth 353, matching the predicted chain. clientWidth is 417; the 64px difference is its own px-8.",
-    "account-section rect left 282 width 700 — right edge at 982 against a viewport of 667. 315px of it is outside the screen.",
-    "save-button rect width 700, of which 385 is on screen. `overlaps scroll-column` 0.55, and the footprint hit test skipped 3 of its 9 points as outside the viewport. The 6 it could press are reachable, so the button works — it is just 45% off-screen.",
-    'save-button label survives: centred in the 700px box it lands at x 632, which is inside 667. Reading this as "the label is cut off" is the easy mistake; it is not.',
-    "end-date rect left 531.33 width 217.34 — right edge 748.66, so 81.66px of the End Date picker is off-screen. This is the item's real cost: a form control, not blank box.",
-    "The overflow is not reachable by any gesture. scroll-column is `overflow-x-hidden` with scrollWidth 732 against clientWidth 417, and the document itself has scrollWidth 667 = clientWidth 667 with scrollLeft pinned at 0. Setting scrollLeft programmatically does move it, which is why keyboard focus rescues the control and a finger does not: scrollIntoView on end-date takes the column to 81.5.",
-    "role-row — `UserSection.tsx:93`, the item SCRUM-477 ranked High — measures 353 wide and 96 tall, and is the counter-example. `max-w-full` caps its declared 700px, so it does not overflow at all, and the 56px seat field ends at 167.875, exactly the row's own bottom edge. SCRUM-477's \"64px overflow\" was a misreading: `ProfilePicture` is not in this div, it is at `UserSection.tsx:175`.",
+    "AFTER SCRUM-490, at 667x375. Everything below is the fixed layout; the BEFORE lines at the end are SCRUM-485's, kept so the movement is readable.",
+    "scroll-inner rect width 402, contentWidth 338 — 15px under the predicted 353, and the prediction is the one to trust. Capping the section makes its content taller than the 343px column, so `overflow-y-auto` draws a scrollbar, and a classic scrollbar in desktop Chromium is 15px. Before the fix the content was wide rather than tall, no scrollbar appeared, and 485 measured the full 417/353. The chain did not change. The insets deliberately do not encode that 15px: a touch device uses overlay scrollbars, which take no width, so on the landscape phone this criterion is about, the column really is 353 and the fixed section is 353 with its right edge at 635. 338 is the harness's answer rather than the device's, and it is the more pessimistic of the two — which is the right way round for a check that the section fits.",
+    "account-section rect left 282 width 338 — right edge 620 against a viewport of 667. Fully on screen. Was 700 wide with its right edge at 982.",
+    "save-button rect width 338, entirely on screen. `overlaps scroll-column` 1, and the footprint hit test probed all 9 of its points with 0 skipped and 9 on target. Was 0.55 with 3 of 9 skipped.",
+    "end-date rect left 467 width 153 — right edge 620, inside the viewport. Was left 531.33 width 217.34 with its right edge at 748.66, so 81.66px hung off the screen.",
+    "date-row rect width 338, each picker 153. The row no longer takes a fraction of the column: two thirds of the capped width gave each picker 96.66px, at which both `Start Date` and `End Date` wrap onto a second line — 56px tall instead of 28 — in Montserrat at the 18px the label asks for. At 153px each label is one line.",
+    "No hidden overflow left: scroll-column scrollWidth 402 = clientWidth 402, where before it was 732 against 417. Nothing depends on a gesture the column does not offer.",
+    "**The labels are measured in a font this page does not load.** The harness serves no webfont, so `EntryLabel`'s Montserrat falls back to the system sans — which is narrower, and measured both labels as fitting on one line at 96.66px when the real font wraps them. The figures above were taken after injecting the Google Fonts link `_document.tsx` carries. Anything read off this fixture about text width, rather than about boxes, has to do the same.",
+    "DESKTOP, at 1440x900, and this one is a change rather than a fix: account-section and date-row both narrow from 700 to 608, which is exactly the content box `max-w-2xl` leaves. The declared 700px never fitted at any viewport — it overflowed the reading column on desktop too, just into a column wide enough that nothing clipped. 608 is what role-row has always measured, so the two sections now agree.",
+    "BEFORE (SCRUM-485, the defect): scroll-inner contentWidth 353 / clientWidth 417; account-section 700 wide at left 282, 315px off-screen; save-button 700 wide with 385 on screen; end-date right edge 748.66; scroll-column scrollWidth 732 against clientWidth 417, with the document pinned at scrollLeft 0 so no gesture reached any of it.",
+    'BEFORE, and not a defect: the save-button label survived, centred in the 700px box at x 632, inside 667. Reading that as "the label is cut off" was the easy mistake.',
+    'role-row — `UserSection.tsx:93`, the item SCRUM-477 ranked High — is the counter-example and is untouched by this ticket: `max-w-full` already capped its declared 700px, and it measures 338 here for the same reason account-section now does. SCRUM-477\'s "64px overflow" was a misreading: `ProfilePicture` is not in this div, it is at `UserSection.tsx:175`.',
   ],
   reproduces: [
     { file: "src/pages/profile/index.tsx", className: PROFILE_GRID_CLASS },
@@ -749,6 +827,10 @@ const profileContentColumnWidth: LayoutFixture = {
     {
       file: "src/components/Profile/AccountSection.tsx",
       className: ACCOUNT_SECTION_WIDTH_TERNARY,
+    },
+    {
+      file: "src/components/Profile/AccountSection.tsx",
+      className: ACCOUNT_DATE_ROW_TERNARY,
     },
     {
       file: "src/components/Profile/AccountSection.tsx",
@@ -1193,7 +1275,7 @@ const GROUP_PANEL_CLASS =
   "flex h-4/6 w-4/6 flex-col content-center justify-start gap-1 overflow-y-auto rounded-md bg-white py-9 shadow-lg";
 
 const UNSAVED_MODAL_PANEL_CLASS =
-  "relative flex w-1/3 flex-col justify-center rounded-lg bg-white px-6 py-16 text-center shadow-lg";
+  "relative flex w-1/3 min-w-[min(22rem,100%)] flex-col justify-center rounded-lg bg-white px-6 py-16 text-center shadow-lg";
 
 const centredDialogPanels: LayoutFixture = {
   name: "centred-dialog-panels",
@@ -1250,9 +1332,13 @@ const centredDialogPanels: LayoutFixture = {
     "compliance-panel and group-panel both measure 423.33x228.66 at top 73.16, bottom 301.83 — **fully inside the viewport**, and that is this fixture's main result.",
     "It falsifies a specific claim: SCRUM-485's opening comment listed all three of these as centred boxes needing `justify-center-safe` alongside a cap. Two of them cannot overflow at all. `h-4/6` is a percentage of the centring container, so the panel is always two thirds of the space available and there is no overflow for safe alignment to rescue. The pairing SCRUM-482 measured is real; it does not apply here.",
     "compliance-scroll clientHeight 53 against scrollHeight 192, and compliance-agree fully inside the viewport. So the terms are readable 53px at a time and the only control is reachable: cramped exactly as the ticket describes, with nothing lost.",
-    "unsaved-panel is the exception and the one that does overflow: rect height 376 at top -0.5, bottom 375.5 against a viewport of 375. Half a pixel each way now, growing on any shorter viewport — this is the centred box `justify-center-safe` would be for.",
-    "Its mechanism is not the one SCRUM-477 recorded. The survey blamed `py-16` and put the clipping threshold at ~280px; the padding is 128px and the panel is 376px, so something else supplies the other 248. It is the width: `w-1/3` is 222.33px here, leaving 174 of content for a button row whose two labels need 196 (scrollWidth 196 against clientWidth 174), so both labels wrap and unsaved-buttons measures 88px tall instead of ~40.",
-    "unsaved-save is fully inside the viewport at 101.32x88, so the modal is answerable — it is the panel's own top and bottom edges that leave the screen, by half a pixel at this height.",
+    "**The three unsaved-* figures below are SCRUM-492's, taken after it fixed this panel.** SCRUM-485 measured it overflowing — rect height 376 at top -0.5, bottom 375.5 against a viewport of 375, half a pixel each way and growing on any shorter viewport. It now measures 352x276 at top 49.5, bottom 325.5: fully inside, with 49.5px of clearance top and bottom.",
+    "unsaved-buttons is 40px tall with contentWidth 304, so neither label wraps. SCRUM-485 had it at 88px in a 174px box.",
+    "unsaved-save is 176.02x40, fully inside the viewport. It was 101.32x88 — the same button, squeezed to 101px and wrapping its label over three lines.",
+    "The mechanism was never the one SCRUM-477 recorded. The survey blamed `py-16` and put the clipping threshold at ~280px; the padding is 128px and the panel was 376px, so something else supplied the other 248. It was the width: `w-1/3` is 222.33px at this viewport, and the panel now carries a floor of `min-w-[min(22rem,100%)]` — 352px, which is the button row's natural single-line width plus the panel's own `px-6`.",
+    "**And the floor is not the arithmetic SCRUM-492's description gives**, which is the one figure here most likely to be re-derived wrongly. That ticket took the wrapped row's scrollWidth of 196, added the 48px of `px-6`, and proposed 244. scrollWidth is the overflow of a row that has *already* wrapped, not the width it needs in order not to; the row's natural single-line width is 293.34 (Continue 101.32 + gap 16 + Save and Continue 176.02), so a 244px panel still wraps both labels. 293.34 + 48 is where 352 comes from.",
+    "The `min()` in that floor is load-bearing and was also measured. An unconditional 22rem floor puts the panel 16px past each edge of a 320px-wide viewport, symmetrically and so unreachably, and a minimum width beats a maximum one in CSS — a cap alongside it is inert. Capped inside the floor, the panel measures exactly 320 wide at that viewport and 352 from 375 upwards.",
+    "This panel was the one centred box in this fixture that genuinely overflowed, and the fix means it no longer does at any viewport at or above 276px tall — so the `justify-center-safe` pairing SCRUM-477's Closeout describes is, in the end, not needed here either. Three for three: nothing in this fixture needs it.",
     "compliance-centring contentWidth 635, matching the predicted chain: 667 less its own `p-4`.",
   ],
   reproduces: [

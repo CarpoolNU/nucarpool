@@ -238,7 +238,23 @@ function AdminData() {
   };
 
   return (
-    <div className="my-4 h-full w-full overflow-y-auto">
+    /*
+     * Padding and not a margin, because this box is `h-full` inside a parent
+     * that is `overflow-hidden`. It cannot be both: `h-full` makes the scroll
+     * port exactly as tall as the content row, and a top margin then pushes it
+     * down, so the port's last 16px lands outside the row's clip and is
+     * unreachable at *any* scroll position rather than merely below the fold.
+     * Measured in Chromium at 16px at 1440x900 and at 667x582 alike, which is
+     * the half of SCRUM-484's finding that turned out not to be about small
+     * screens at all (SCRUM-488).
+     *
+     * Padding keeps the same 16px of visual gap - nothing here paints a
+     * background, so the two are indistinguishable on screen - and
+     * `box-sizing: border-box` charges it to the port's own height instead of
+     * to the row's. `ADMIN_DATA_VERTICAL_SPACE_PX` is the 32px it takes out of
+     * the row, and the console's height gate is derived from that figure.
+     */
+    <div className="h-full w-full overflow-y-auto py-4">
       <div className="flex h-full w-full flex-col space-y-4 px-8">
         <button
           onClick={handleDownloadData}

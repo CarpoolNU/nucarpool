@@ -13,7 +13,7 @@ import {
   LOGO_FONT_BOX_RATIO,
   HEADER_LOGO_MAX_FONT_SIZE,
   ADMIN_SHORTEST_CHART_HEIGHT_PX,
-  ADMIN_DATA_VERTICAL_MARGIN_PX,
+  ADMIN_DATA_VERTICAL_SPACE_PX,
   ADMIN_CONSOLE_MIN_HEIGHT_PX,
   MESSAGE_PANEL_TALL_SCREEN_NAME,
   MESSAGE_PANEL_TALL_MEDIA_QUERY,
@@ -535,7 +535,7 @@ describe("the admin console's minimum height", () => {
   it("is composed from the console's own numbers, not chosen", () => {
     expect(ADMIN_CONSOLE_MIN_HEIGHT_PX).toBe(
       Math.ceil(
-        (ADMIN_SHORTEST_CHART_HEIGHT_PX + ADMIN_DATA_VERTICAL_MARGIN_PX) /
+        (ADMIN_SHORTEST_CHART_HEIGHT_PX + ADMIN_DATA_VERTICAL_SPACE_PX) /
           CONTENT_ROW_VIEWPORT_FRACTION,
       ),
     );
@@ -550,7 +550,7 @@ describe("the admin console's minimum height", () => {
      */
     const windowAt = (viewportHeight: number) =>
       viewportHeight * CONTENT_ROW_VIEWPORT_FRACTION -
-      ADMIN_DATA_VERTICAL_MARGIN_PX;
+      ADMIN_DATA_VERTICAL_SPACE_PX;
 
     expect(windowAt(ADMIN_CONSOLE_MIN_HEIGHT_PX)).toBeGreaterThanOrEqual(
       ADMIN_SHORTEST_CHART_HEIGHT_PX,

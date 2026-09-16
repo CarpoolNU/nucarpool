@@ -251,39 +251,51 @@ const LOGO_FONT_BOX_RATIO = 1.15;
 const HEADER_LOGO_MAX_FONT_SIZE = `calc(100dvh * ${HEADER_BAR_VIEWPORT_FRACTION} / ${LOGO_FONT_BOX_RATIO})`;
 
 /**
- * The shortest chart the admin console **declares**, in pixels - the
- * `h-[500px]` on `BarChartDaysFrequency`. The other two chart blocks are
- * `min-h-[600px]`.
+ * The shortest chart the admin console draws, in pixels - the `h-[500px]` on
+ * `BarChartDaysFrequency`. The other two chart blocks are `min-h-[600px]`.
  *
- * **"Declares" is doing real work in that sentence, and the difference was
- * measured.** This is the only one of the three that is a fixed `h-` rather
- * than a `min-h-` floor, and all three are flex items of `AdminData`'s
- * `flex-col` - which always overflows, because its children sum to more than
- * the row at every viewport. `flex-shrink` defaults to 1 and `min-height:
- * auto` does not stop it, so this chart is shrunk to whatever is left:
- * measured at 151.5px at 1440x900 and 24px at 667x582. The `min-h-[600px]`
- * pair resist, because a minimum is a floor a shrink cannot cross.
+ * **This said "declares" until SCRUM-488, and the distinction was a real one
+ * rather than a pedantic one.** This is the only one of the three written as a
+ * fixed `h-` rather than a `min-h-` floor, and all three are flex items of
+ * `AdminData`'s `flex-col` - which always overflows, because its children sum
+ * to more than the row at every viewport. `flex-shrink` defaults to 1 and
+ * `min-height: auto` does not stop it, so the chart was shrunk to whatever was
+ * left: measured at 151.5px at 1440x900 and 24px at 667x582, against a class
+ * string that said 500. The `min-h-[600px]` pair resisted, because a minimum
+ * is a floor a shrink cannot cross.
  *
- * So the 500px below is an intent the page does not currently honour. It is
- * still the right figure to derive the gate from - the gate is a judgement
- * about the layout as designed, and a gate derived from a defect would have to
- * move when the defect is fixed. The shrinking itself is a separate,
- * viewport-independent defect, found while measuring this one and filed rather
- * than fixed here: widening this ticket to `AdminData`'s flex column would
- * mean changing what the console renders at every viewport, which is not what
- * SCRUM-484 is about.
+ * SCRUM-484 derived the gate from the 500 anyway, on the grounds that a gate
+ * is a judgement about the layout as designed and one derived from a defect
+ * would have to move when the defect was fixed. SCRUM-488 then added
+ * `shrink-0` to that chart, so the figure below is now measured at both
+ * viewports rather than merely intended - the derivation did not move, the
+ * page came to meet it.
  */
 const ADMIN_SHORTEST_CHART_HEIGHT_PX = 500;
 
 /**
- * The vertical space `AdminData`'s `my-4` takes out of the content row: 16px
+ * The vertical space `AdminData`'s `py-4` takes out of the content row: 16px
  * at each end.
+ *
+ * Named for the space rather than for the utility. It was
+ * `ADMIN_DATA_VERTICAL_MARGIN_PX` until SCRUM-488 changed which box the 16px
+ * is charged to, and a constant that has to be renamed whenever that changes
+ * is naming the wrong thing.
  *
  * The only part of the console's chrome that a scroll cannot reach past.
  * Everything else inside the scroll port - the Download button, the quick
  * stats, the gaps - can be scrolled off, so none of it belongs in a floor.
+ *
+ * **It was `my-4` when SCRUM-484 wrote this, and the name is the whole of
+ * SCRUM-488's second half.** A margin on a `h-full` box inside an
+ * `overflow-hidden` parent does not take space out of the row at all - it
+ * pushes a full-height port past the row's bottom edge, putting the port's
+ * last 16px outside the clip at any scroll position. As padding the 32px is
+ * charged to the port's own border box, which is both what this constant
+ * always claimed and what the arithmetic below needs: the usable content
+ * height at the gate measures 501 against the 500 it solves for.
  */
-const ADMIN_DATA_VERTICAL_MARGIN_PX = 32;
+const ADMIN_DATA_VERTICAL_SPACE_PX = 32;
 
 /**
  * The shortest viewport the admin console is served into, in pixels. Below
@@ -319,7 +331,7 @@ const ADMIN_DATA_VERTICAL_MARGIN_PX = 32;
  * is the pattern this follows instead.
  */
 const ADMIN_CONSOLE_MIN_HEIGHT_PX = Math.ceil(
-  (ADMIN_SHORTEST_CHART_HEIGHT_PX + ADMIN_DATA_VERTICAL_MARGIN_PX) /
+  (ADMIN_SHORTEST_CHART_HEIGHT_PX + ADMIN_DATA_VERTICAL_SPACE_PX) /
     CONTENT_ROW_VIEWPORT_FRACTION,
 );
 
@@ -550,7 +562,7 @@ module.exports = {
   LOGO_FONT_BOX_RATIO,
   HEADER_LOGO_MAX_FONT_SIZE,
   ADMIN_SHORTEST_CHART_HEIGHT_PX,
-  ADMIN_DATA_VERTICAL_MARGIN_PX,
+  ADMIN_DATA_VERTICAL_SPACE_PX,
   ADMIN_CONSOLE_MIN_HEIGHT_PX,
   MESSAGE_PANEL_TALL_SCREEN_NAME,
   MESSAGE_PANEL_TALL_MEDIA_QUERY,
