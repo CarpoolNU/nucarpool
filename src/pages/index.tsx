@@ -1048,16 +1048,23 @@ const Home: NextPage<any> = () => {
               off the class names - the banner is a 12px font on a 1/0.75 line
               height, which is 16px, plus 4px of padding either side. The
               matching allowance inside the height token had to move with it.
-              The
-              desktop `h-[91.5%]` is left alone deliberately: its 8.5% reserves
-              the *top* header, a different quantity from the bottom navigation
-              and outside the bottom bar's own height. On mobile that reservation meant nothing at
-              all, because the header renders as the bottom bar instead, so 8.5%
-              of viewport height happened to equal the bar at exactly one
-              viewport height (~694px) and drifted either side of it. */}
+
+              The desktop arm is `h-content-row`, which is its own token and not
+              this one: it reserves the *top* header, a different quantity from
+              the bottom navigation and outside the bottom bar's own height. On
+              mobile that reservation means nothing at all, because the header
+              renders as the bottom bar instead - the header's share happened to
+              equal the bar at exactly one viewport height (~694px) and drifted
+              either side of it, which is why the two arms are separate tokens
+              rather than one with a term switched.
+
+              Both arms were bracketed percentages once. SCRUM-496 moved the
+              desktop one into `tailwind.config.js` when the bar gained a 44px
+              floor and its complement stopped being expressible as a second
+              percentage. */}
           <div
             className={`flex overflow-hidden ${
-              isMobile ? "h-mobile-row mt-6" : "h-[91.5%]"
+              isMobile ? "h-mobile-row mt-6" : "h-content-row"
             }`}
           >
             {/* Shown exactly when the sheet is in a state this handle can

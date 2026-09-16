@@ -153,7 +153,7 @@ const Admin: NextPage<AdminProps> = ({ userPermission }) => {
          */
         <AdminMobileNotice reservesMobileNav={isMobile} />
       ) : (
-        <div className="relative flex h-[91.5%] w-full flex-row overflow-hidden">
+        <div className="h-content-row relative flex w-full flex-row overflow-hidden">
           <div className="border-busy-red z-0 h-full max-w-[250px] min-w-[175px] flex-[1] border-r-4 bg-stone-100">
             <AdminSidebar option={option} setOption={setOption} />
           </div>

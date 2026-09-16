@@ -422,9 +422,10 @@ const MessageHeader = ({
       The full-size chrome is restored only where the panel is tall enough to
       pay for it.
 
-      `p-8` around an 80px avatar is 145px of header, and the panel fills a row
-      that is 91.5% of the viewport - so on a phone in landscape it took 145 of
-      343px, the tab strip below took 53 more, and the conversation was left
+      `p-8` around an 80px avatar is 145px of header, and the panel fills the
+      content row beside the header bar - so on a phone in landscape it took
+      145 of the 343px that row then was, the tab strip below took 53 more, and
+      the conversation was left
       with nothing: `message-content` measured 32px tall, all of it its own
       padding, with `contentHeight` 0 and a `scrollHeight` of 220 behind it.
       Not cramped - a user who opened a thread in landscape saw no messages at

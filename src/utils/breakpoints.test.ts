@@ -9,7 +9,12 @@ import {
   HEADER_BAR_VIEWPORT_PERCENT,
   HEADER_BAR_VIEWPORT_FRACTION,
   HEADER_BAR_HEIGHT,
+  HEADER_BAR_MIN_HEIGHT_PX,
+  HEADER_BAR_MIN_HEIGHT,
+  HEADER_BAR_RESOLVED_HEIGHT,
   CONTENT_ROW_VIEWPORT_FRACTION,
+  CONTENT_ROW_HEIGHT,
+  shortestViewportForContentRow,
   LOGO_FONT_BOX_RATIO,
   HEADER_LOGO_MAX_FONT_SIZE,
   HEADER_AVATAR_DESIGN_SIZE_PX,
@@ -17,6 +22,7 @@ import {
   HEADER_NAV_BUTTON_LINE_BOX_PX,
   HEADER_NAV_BUTTON_PADDING_PX,
   HEADER_NAV_BUTTON_VERTICAL_PADDING,
+  HEADER_BAR_CONTROL_HEIGHT_EXPRESSION,
   ADMIN_SHORTEST_CHART_HEIGHT_PX,
   ADMIN_DATA_VERTICAL_SPACE_PX,
   ADMIN_CONSOLE_MIN_HEIGHT_PX,
@@ -469,13 +475,266 @@ describe("the header bar's share of the viewport", () => {
   });
 
   it("leaves the content row exactly the remainder", () => {
-    /* 91.5%, the figure `admin.tsx`, `index.tsx` and `profile/index.tsx` each
-       declare. Stated as the complement so the bar and the row cannot add up
-       to anything but the viewport. */
+    /* Stated as the complement so the bar and the row cannot add up to
+       anything but the viewport.
+
+       **Kept rather than deleted when SCRUM-496 put a 44px floor under the
+       bar, and narrowed to what it still proves.** The two fractions are
+       complements of each other and always were; what changed is that the
+       bar's *rendered* height is no longer the fraction at every viewport, so
+       this pair describes the row only above the floor's band. The assertion
+       that the bar and the row still sum to the viewport at any height is the
+       one below, which goes through the lengths rather than the fractions. */
     expect(CONTENT_ROW_VIEWPORT_FRACTION).toBe(0.915);
     expect(HEADER_BAR_VIEWPORT_FRACTION + CONTENT_ROW_VIEWPORT_FRACTION).toBe(
       1,
     );
+  });
+
+  /**
+   * SCRUM-496's floor, and the invariant that replaced the bare complement
+   * above.
+   *
+   * The floor reaches the bar as a separate `min-height` rather than folded
+   * into its `height`. The two spellings are equivalent - `breakpoints.js`
+   * records the Chromium measurement that settled it, including that `/sign-in`
+   * is unaffected either way - so nothing here turns on the choice. What is
+   * pinned here is the arithmetic: the floor's value, the band it binds in, and
+   * that the bar and the row still partition the viewport at every height.
+   *
+   * **jsdom resolves no percentage and does no layout**, so none of this is a
+   * measurement - it is the arithmetic the CSS encodes, evaluated here in
+   * TypeScript. The measured figures are on the `header-control-row` fixture.
+   */
+  describe("the floor under the bar", () => {
+    /* The bar's rendered height at a given viewport, which is what the
+       `height`/`min-height` pair resolves to wherever the percentage has a
+       definite containing block. */
+    const barAt = (viewportHeight: number) =>
+      Math.max(
+        viewportHeight * HEADER_BAR_VIEWPORT_FRACTION,
+        HEADER_BAR_MIN_HEIGHT_PX,
+      );
+
+    /* The row's rendered height: `calc(100% - max(8.5%, 44px))`. */
+    const rowAt = (viewportHeight: number) =>
+      viewportHeight - barAt(viewportHeight);
+
+    it("states the floor as the guideline figure, in both spellings", () => {
+      expect(HEADER_BAR_MIN_HEIGHT_PX).toBe(44);
+      expect(HEADER_BAR_MIN_HEIGHT).toBe("44px");
+      expect(HEADER_BAR_RESOLVED_HEIGHT).toBe("max(8.5%, 44px)");
+    });
+
+    it("composes the row as the bar's complement rather than a second percentage", () => {
+      expect(CONTENT_ROW_HEIGHT).toBe("calc(100% - max(8.5%, 44px))");
+      /* `100%` and not `100dvh`: the row's containing block is the bar's own
+         parent, so this is the same quantity the bar's percentage resolves
+         against. */
+      expect(CONTENT_ROW_HEIGHT).toContain("100%");
+      expect(CONTENT_ROW_HEIGHT).toContain(HEADER_BAR_RESOLVED_HEIGHT);
+    });
+
+    /**
+     * The criterion SCRUM-496 asks for by name: the bar and the content row
+     * sum to exactly the viewport at 375, 660 and 900px tall.
+     *
+     * 375 is inside the floor's band, 900 is above it, and 660 is the
+     * mid-range viewport SCRUM-491 measured at - so the three cover both cases
+     * and the case boundary is covered by its own test below.
+     */
+    it.each([375, 660, 900])(
+      "has the bar and the row partition a %ipx viewport exactly",
+      (viewportHeight) => {
+        expect(barAt(viewportHeight) + rowAt(viewportHeight)).toBe(
+          viewportHeight,
+        );
+        /* Neither side may be negative, which is the way a `calc()`
+           complement fails if the floor ever exceeds the viewport. */
+        expect(rowAt(viewportHeight)).toBeGreaterThan(0);
+      },
+    );
+
+    it("reaches the guideline on a landscape phone, where the percentage could not", () => {
+      /* The defect, stated as arithmetic: 8.5% of 375 is 31.875, and every
+         control in the bar is a child of it. */
+      expect(375 * HEADER_BAR_VIEWPORT_FRACTION).toBeCloseTo(31.875, 3);
+      expect(barAt(375)).toBe(44);
+
+      /* The three iPhones in landscape this survey names. */
+      expect(barAt(390)).toBe(44);
+      expect(barAt(430)).toBe(44);
+    });
+
+    it("binds only below its own band, which is what leaves desktop alone", () => {
+      const band = HEADER_BAR_MIN_HEIGHT_PX / HEADER_BAR_VIEWPORT_FRACTION;
+      expect(band).toBeCloseTo(517.647, 3);
+
+      /* Below the band the floor wins and the row pays for it. */
+      expect(barAt(Math.floor(band))).toBe(HEADER_BAR_MIN_HEIGHT_PX);
+
+      /* At and above it the percentage wins, so every desktop viewport worth
+         serving renders exactly what it rendered before the floor - including
+         the ~650px a 1366x768 laptop leaves. */
+      for (const viewportHeight of [518, 650, 660, 768, 900, 1200]) {
+        expect(barAt(viewportHeight)).toBe(
+          viewportHeight * HEADER_BAR_VIEWPORT_FRACTION,
+        );
+        expect(rowAt(viewportHeight)).toBeCloseTo(
+          viewportHeight * CONTENT_ROW_VIEWPORT_FRACTION,
+          10,
+        );
+      }
+    });
+
+    /**
+     * The floor repeated into the children, which is the correction SCRUM-496
+     * had to make to its own Proposed Fix.
+     *
+     * That ticket expected the bar's controls to follow the bar up on their
+     * own, on the grounds that SCRUM-491 capped them "against the bar". Only
+     * `Logo` does, because it declares `height: 100%` and therefore *is* the
+     * bar. Everything built on `HEADER_BAR_CONTROL_HEIGHT_EXPRESSION` is a
+     * reconstruction from `100dvh` - a CSS length cannot ask its parent how
+     * tall it turned out - so the floor has to appear there too or the
+     * controls stay at 31.875px inside a 44px bar.
+     */
+    /**
+     * The token the four content rows reach their call sites through.
+     *
+     * Registered in `tailwind.config.js` rather than spelled as a bracketed
+     * utility at each site, for the reason that file argues: the value is a
+     * nested `calc()` around a `max()`, and four hand-escaped copies would
+     * have nothing checking them against `breakpoints.js`. Reading the config
+     * here is what makes this catch drift rather than restate a constant.
+     */
+    it("registers the row as a Tailwind token built from this constant", () => {
+      expect(height["content-row"]).toBe(CONTENT_ROW_HEIGHT);
+      expect(height["content-row"]).toContain(HEADER_BAR_MIN_HEIGHT);
+    });
+
+    /**
+     * The helper both derived thresholds go through, checked on each side of
+     * its case boundary.
+     *
+     * It exists because the row is `H - max(0.085 x H, 44)`, which is two
+     * different functions of `H`: a constant subtraction inside the floor's
+     * band and a fraction above it. One threshold lands in each, which is why
+     * a single division could not serve both.
+     */
+    it("solves for the shortest viewport in whichever case the answer lands in", () => {
+      /* Inside the band: the bar is the floor, so the viewport is the need
+         plus a constant 44. */
+      expect(shortestViewportForContentRow(447)).toBe(491);
+      expect(shortestViewportForContentRow(100)).toBe(144);
+
+      /* Above it: the bar is the percentage again, so the viewport is the need
+         over the row's share. */
+      expect(shortestViewportForContentRow(532)).toBe(582);
+      expect(shortestViewportForContentRow(1000)).toBe(
+        Math.ceil(1000 / CONTENT_ROW_VIEWPORT_FRACTION),
+      );
+
+      /* Whichever case it picks, the answer has to be the *smallest* viewport
+         that works - so the answer satisfies the need and one pixel less does
+         not. That is the property the two cases exist to preserve, and it is
+         what fails if the boundary test is written the wrong way round. */
+      for (const needed of [100, 300, 447, 473, 474, 475, 532, 700, 1000]) {
+        const threshold = shortestViewportForContentRow(needed);
+        expect(rowAt(threshold)).toBeGreaterThanOrEqual(needed);
+        expect(rowAt(threshold - 1)).toBeLessThan(needed);
+      }
+    });
+
+    it("returns whole pixels, which is what a media query and innerHeight compare", () => {
+      for (const needed of [100, 447, 532, 733]) {
+        expect(Number.isInteger(shortestViewportForContentRow(needed))).toBe(
+          true,
+        );
+      }
+    });
+
+    it("repeats the floor in the expression the bar's children are sized against", () => {
+      expect(HEADER_BAR_CONTROL_HEIGHT_EXPRESSION).toBe(
+        "max(100dvh * 0.085, 44px)",
+      );
+      expect(HEADER_BAR_CONTROL_HEIGHT_EXPRESSION).toContain(
+        HEADER_BAR_MIN_HEIGHT,
+      );
+
+      /* The two spellings of the same quantity - one against the parent, one
+         reconstructed from the viewport - have to carry the same floor, which
+         is the drift this asserts. */
+      expect(HEADER_BAR_RESOLVED_HEIGHT).toContain(HEADER_BAR_MIN_HEIGHT);
+    });
+
+    /**
+     * What the repeated floor buys each control, as arithmetic.
+     *
+     * The measured figures are on the `header-control-row` fixture; these are
+     * the predictions that fixture confirmed, and they are what fails first if
+     * a design size or a line box moves.
+     */
+    it("brings every capped control in the bar to the guideline at 667x375", () => {
+      const controlAt = (viewportHeight: number) =>
+        Math.max(
+          viewportHeight * HEADER_BAR_VIEWPORT_FRACTION,
+          HEADER_BAR_MIN_HEIGHT_PX,
+        );
+
+      /* The trigger is `min(56px, <bar>)`, so the floor is what it takes. */
+      expect(Math.min(HEADER_AVATAR_DESIGN_SIZE_PX, controlAt(375))).toBe(44);
+
+      /* A tab is its line box plus twice the padding it can afford:
+         `(44 - 28) / 2` is 8, so the tab is exactly the bar. */
+      const padding = Math.max(
+        0,
+        Math.min(
+          HEADER_NAV_BUTTON_PADDING_PX,
+          (controlAt(375) - HEADER_NAV_BUTTON_LINE_BOX_PX) / 2,
+        ),
+      );
+      expect(padding).toBe(8);
+      expect(2 * padding + HEADER_NAV_BUTTON_LINE_BOX_PX).toBe(44);
+
+      /* Desktop keeps its design values, which is the control case: the cap
+         binds only where the design value does not fit. */
+      const desktopPadding = Math.min(
+        HEADER_NAV_BUTTON_PADDING_PX,
+        (controlAt(900) - HEADER_NAV_BUTTON_LINE_BOX_PX) / 2,
+      );
+      expect(desktopPadding).toBe(HEADER_NAV_BUTTON_PADDING_PX);
+      expect(Math.min(HEADER_AVATAR_DESIGN_SIZE_PX, controlAt(900))).toBe(
+        HEADER_AVATAR_DESIGN_SIZE_PX,
+      );
+    });
+
+    /**
+     * The logo, which is the one child that did follow the bar on its own -
+     * and the one whose font cap was deliberately left on the bare
+     * percentage.
+     *
+     * Its box is `height: 100%` of the bar, so it is 44px at 375 without
+     * anything being added to it. Its font stays capped against the
+     * unfloored percentage, which is now conservative rather than exact: the
+     * line box is `font x 1.15`, held at or below `0.085 x H`, and the bar is
+     * never smaller than that. So the logo cannot overflow at any viewport,
+     * which is the only direction that matters.
+     */
+    it("leaves the logo's font cap on the percentage, and cannot overflow the floored bar", () => {
+      expect(HEADER_LOGO_MAX_FONT_SIZE).not.toContain(HEADER_BAR_MIN_HEIGHT);
+
+      for (const viewportHeight of [320, 375, 430, 517, 660, 900]) {
+        const lineBox =
+          Math.min(
+            32,
+            (viewportHeight * HEADER_BAR_VIEWPORT_FRACTION) /
+              LOGO_FONT_BOX_RATIO,
+          ) * LOGO_FONT_BOX_RATIO;
+
+        expect(lineBox).toBeLessThanOrEqual(barAt(viewportHeight));
+      }
+    });
   });
 
   it("caps the logo's font against the bar, composed from that same fraction", () => {
@@ -545,18 +804,33 @@ describe("the header bar's share of the viewport", () => {
  */
 describe("the caps on the header bar's controls", () => {
   it("caps the profile trigger as a square, composed from the shared fraction", () => {
-    expect(HEADER_AVATAR_TRIGGER_SIZE).toBe("min(56px, calc(100dvh * 0.085))");
+    /* The inner `calc()` this had until SCRUM-496 is gone with it: the shared
+       expression is now a complete `max()`, and a math function needs no
+       `calc()` wrapper to sit inside a `min()` - only to have arithmetic done
+       to it, which is what the tab's padding below still does. */
+    expect(HEADER_AVATAR_TRIGGER_SIZE).toBe(
+      "min(56px, max(100dvh * 0.085, 44px))",
+    );
     expect(HEADER_AVATAR_TRIGGER_SIZE).toContain(
       `${HEADER_AVATAR_DESIGN_SIZE_PX}px`,
     );
     expect(HEADER_AVATAR_TRIGGER_SIZE).toContain(
       `${HEADER_BAR_VIEWPORT_FRACTION}`,
     );
+    /* The floor, which is what makes this 44px rather than 31.875px on a
+       landscape phone. The trigger takes it from the bar's expression rather
+       than naming it, so the two cannot disagree. */
+    expect(HEADER_AVATAR_TRIGGER_SIZE).toContain(
+      HEADER_BAR_CONTROL_HEIGHT_EXPRESSION,
+    );
   });
 
   it("caps a tab's padding, not its font, because its line box is absolute", () => {
     expect(HEADER_NAV_BUTTON_VERTICAL_PADDING).toBe(
-      "max(0px, min(16px, calc((100dvh * 0.085 - 28px) / 2)))",
+      "max(0px, min(16px, calc((max(100dvh * 0.085, 44px) - 28px) / 2)))",
+    );
+    expect(HEADER_NAV_BUTTON_VERTICAL_PADDING).toContain(
+      HEADER_BAR_CONTROL_HEIGHT_EXPRESSION,
     );
     expect(HEADER_NAV_BUTTON_VERTICAL_PADDING).toContain(
       `${HEADER_NAV_BUTTON_PADDING_PX}px`,
@@ -677,6 +951,32 @@ describe("the caps on the header bar's controls", () => {
 describe("the admin console's minimum height", () => {
   it("is composed from the console's own numbers, not chosen", () => {
     expect(ADMIN_CONSOLE_MIN_HEIGHT_PX).toBe(
+      shortestViewportForContentRow(
+        ADMIN_SHORTEST_CHART_HEIGHT_PX + ADMIN_DATA_VERTICAL_SPACE_PX,
+      ),
+    );
+  });
+
+  /**
+   * **This gate is above the band the bar's floor binds in, so SCRUM-496 did
+   * not move it - and that is asserted rather than assumed.**
+   *
+   * SCRUM-496's acceptance criteria named this constant as the one needing
+   * re-derivation. It went through the helper, and the helper returned the
+   * same 582: at that height the bar is still 8.5%, because 582 is above
+   * `44 / 0.085`. Pinning the equality to the old division is what would catch
+   * a future change to either chart term dragging this gate down into the
+   * floor's band, where the division stops describing the row.
+   */
+  it("is unchanged by the bar's floor, because it sits above the floor's band", () => {
+    expect(ADMIN_CONSOLE_MIN_HEIGHT_PX).toBe(582);
+    expect(ADMIN_CONSOLE_MIN_HEIGHT_PX).toBeGreaterThan(
+      HEADER_BAR_MIN_HEIGHT_PX / HEADER_BAR_VIEWPORT_FRACTION,
+    );
+
+    /* Above the band the fraction still describes the row, so the helper and
+       the division it replaced agree here. */
+    expect(ADMIN_CONSOLE_MIN_HEIGHT_PX).toBe(
       Math.ceil(
         (ADMIN_SHORTEST_CHART_HEIGHT_PX + ADMIN_DATA_VERTICAL_SPACE_PX) /
           CONTENT_ROW_VIEWPORT_FRACTION,
@@ -690,9 +990,18 @@ describe("the admin console's minimum height", () => {
      * the threshold the row less the margin is at least the chart; one pixel
      * below, it is not. That one-pixel check is what makes this a boundary
      * rather than a plausible number.
+     *
+     * The row is the viewport less the bar's *rendered* height since
+     * SCRUM-496, which is the floored `max()` and not the bare fraction. At
+     * this gate's own height the two coincide; written this way the boundary
+     * stays a boundary if the gate ever moves into the floor's band.
      */
     const windowAt = (viewportHeight: number) =>
-      viewportHeight * CONTENT_ROW_VIEWPORT_FRACTION -
+      viewportHeight -
+      Math.max(
+        viewportHeight * HEADER_BAR_VIEWPORT_FRACTION,
+        HEADER_BAR_MIN_HEIGHT_PX,
+      ) -
       ADMIN_DATA_VERTICAL_SPACE_PX;
 
     expect(windowAt(ADMIN_CONSOLE_MIN_HEIGHT_PX)).toBeGreaterThanOrEqual(
@@ -760,6 +1069,46 @@ describe("the admin console's minimum height", () => {
 describe("the message panel's minimum height", () => {
   it("is composed from the panel's own blocks, not chosen", () => {
     expect(MESSAGE_PANEL_MIN_HEIGHT_PX).toBe(
+      shortestViewportForContentRow(
+        MESSAGE_PANEL_HEADER_PX +
+          MESSAGE_PANEL_TAB_STRIP_PX +
+          MESSAGE_PANEL_SEND_BAR_PX +
+          MESSAGE_CONTENT_PADDING_PX +
+          MESSAGE_PANEL_DATED_MESSAGE_PX,
+      ),
+    );
+  });
+
+  /**
+   * **This is the gate the bar's floor actually moved, and SCRUM-496's
+   * acceptance criteria did not mention it.**
+   *
+   * They asked for `ADMIN_CONSOLE_MIN_HEIGHT_PX` to be re-derived, which sits
+   * above the floor's band and did not change. This one is 491 and *inside*
+   * the band: at that height the bar is the 44px floor rather than 41.7px of
+   * percentage, so the row is `H - 44` and the panel needs two more pixels of
+   * viewport to keep the same 447 beside its chrome. Left at 489 the gate
+   * would have claimed the full-size chrome fits at two heights where it no
+   * longer does.
+   */
+  it("moved with the bar's floor, because it sits inside the floor's band", () => {
+    expect(MESSAGE_PANEL_MIN_HEIGHT_PX).toBe(491);
+    expect(MESSAGE_PANEL_MIN_HEIGHT_PX).toBeLessThan(
+      HEADER_BAR_MIN_HEIGHT_PX / HEADER_BAR_VIEWPORT_FRACTION,
+    );
+
+    /* Inside the band the bar is the floor, so the row is the viewport less a
+       constant - which is what makes this two pixels above the figure the
+       bare fraction gives. */
+    expect(MESSAGE_PANEL_MIN_HEIGHT_PX).toBe(
+      MESSAGE_PANEL_HEADER_PX +
+        MESSAGE_PANEL_TAB_STRIP_PX +
+        MESSAGE_PANEL_SEND_BAR_PX +
+        MESSAGE_CONTENT_PADDING_PX +
+        MESSAGE_PANEL_DATED_MESSAGE_PX +
+        HEADER_BAR_MIN_HEIGHT_PX,
+    );
+    expect(
       Math.ceil(
         (MESSAGE_PANEL_HEADER_PX +
           MESSAGE_PANEL_TAB_STRIP_PX +
@@ -768,7 +1117,7 @@ describe("the message panel's minimum height", () => {
           MESSAGE_PANEL_DATED_MESSAGE_PX) /
           CONTENT_ROW_VIEWPORT_FRACTION,
       ),
-    );
+    ).toBe(489);
   });
 
   /**
@@ -779,7 +1128,11 @@ describe("the message panel's minimum height", () => {
    */
   it("is the height at which one whole message first fits beside the chrome", () => {
     const conversationAt = (viewportHeight: number) =>
-      viewportHeight * CONTENT_ROW_VIEWPORT_FRACTION -
+      viewportHeight -
+      Math.max(
+        viewportHeight * HEADER_BAR_VIEWPORT_FRACTION,
+        HEADER_BAR_MIN_HEIGHT_PX,
+      ) -
       MESSAGE_PANEL_HEADER_PX -
       MESSAGE_PANEL_TAB_STRIP_PX -
       MESSAGE_PANEL_SEND_BAR_PX -

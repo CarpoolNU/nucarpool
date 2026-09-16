@@ -243,7 +243,10 @@ describe("useIsViewportShorterThan under hydration", () => {
 describe("the threshold /admin reads", () => {
   it("is composed from the console's own numbers", () => {
     /* 500px shortest chart plus the 32px of `py-4` around the scroll port,
-       over the content row's 91.5% share. `breakpoints.test.ts` holds the
+       over the content row's share of the viewport. That share is the
+       complement of the header bar, which since SCRUM-496 has a 44px floor -
+       but this threshold is above the height where the floor binds, so the
+       figure is unmoved. `breakpoints.test.ts` holds the
        composition; this records the value a reviewer can check the
        measurements against. Both terms were a description of intent rather
        than of the page until SCRUM-488: the chart was shrunk below its 500 and

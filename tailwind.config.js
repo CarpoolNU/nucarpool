@@ -24,6 +24,7 @@ const {
   MOBILE_SHEET_MAP_STRIP,
   HEADER_AVATAR_TRIGGER_SIZE,
   HEADER_NAV_BUTTON_VERTICAL_PADDING,
+  CONTENT_ROW_HEIGHT,
 } = require("./src/utils/breakpoints");
 
 /**
@@ -156,6 +157,30 @@ module.exports = {
         "header-nav-y": HEADER_NAV_BUTTON_VERTICAL_PADDING,
       },
       height: {
+        /**
+         * Every desktop content row: the viewport, less however tall the header
+         * bar actually turned out.
+         *
+         * Four call sites - `index.tsx`, `admin.tsx`, `profile/index.tsx` and
+         * `AdminMobileNotice.tsx` - each of which declared the bar's percentage
+         * complement directly until SCRUM-496 gave the bar a 44px floor. Once
+         * the bar's height is a `max()` the complement stops being a second
+         * percentage, so it could not stay a figure typed out four times.
+         *
+         * A token and not a bracketed utility, which the `spacing` block above
+         * argues at length and which is *harder* here: the value is a nested
+         * `calc()` around a `max()`, and Tailwind emits a bracketed class only
+         * when the finished name appears literally in the source - so each call
+         * site would have to spell the whole expression, underscore-escaped,
+         * with nothing checking the four copies against `breakpoints.js`. The
+         * escaping alone would make a diff unreadable.
+         *
+         * `breakpoints.js` carries the derivation, including why the bar itself
+         * takes the floor as a separate `min-height` rather than folding it
+         * into its `height`, and why that distinction is what keeps `/sign-in`
+         * out of this.
+         */
+        "content-row": CONTENT_ROW_HEIGHT,
         /**
          * The explore page's main row on mobile: the viewport, less the
          * navigation, less the fixed banner this row is pushed down by.

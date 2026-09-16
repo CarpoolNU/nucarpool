@@ -71,15 +71,21 @@ const AdminMobileNotice = ({ reservesMobileNav }: AdminMobileNoticeProps) => {
      * The height moves with it, and this is the half that is easy to miss.
      * The bottom navigation is `position: fixed`, so on a mobile-width
      * viewport it takes no space in flow and `h-full` correctly fills the page
-     * box. The desktop bar is *in flow* at 8.5%, so the same `h-full` would
-     * run 8.5% past the bottom of the viewport - this panel is the bar's
-     * sibling, not its child. 91.5% is the remainder the console's own row
-     * takes at `admin.tsx:120`, so the notice occupies exactly the space the
-     * layout it replaces would have.
+     * box. The desktop bar is *in flow*, so the same `h-full` would run the
+     * bar's whole height past the bottom of the viewport - this panel is the
+     * bar's sibling, not its child. `h-content-row` is the remainder the
+     * console's own row takes at `admin.tsx:120`, so the notice occupies
+     * exactly the space the layout it replaces would have.
+     *
+     * The remainder is a token rather than a second percentage because
+     * SCRUM-496 gave the bar a 44px floor, so below 517.65px of viewport
+     * height the bar is that floor and the row is what is left of `100%`
+     * after it. `breakpoints.js` composes it; this site only has to name the
+     * same one the row does.
      */
     <div
       className={`flex w-full flex-col items-center justify-center px-8 text-center ${
-        reservesMobileNav ? "h-full" : "h-[91.5%]"
+        reservesMobileNav ? "h-full" : "h-content-row"
       }`}
       style={{
         paddingBottom: reservesMobileNav ? MOBILE_NAV_SPACE : undefined,
