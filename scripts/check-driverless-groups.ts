@@ -16,19 +16,24 @@
  * **Read-only. This script changes nothing.**
  *
  * Deliberately so, following `check-self-requests.ts` rather than
- * `cleanup-orphan-locations.ts`: there is no single correct repair. A group of
- * three whose driver became a rider might want that member promoted back to
- * DRIVER, or might want dissolving - and only the people in it know which. A
- * script cannot choose, so this one reports and stops.
+ * `cleanup-orphan-locations.ts`. This header used to say the repair could not
+ * be automated because only the people in the group know whether they want a
+ * member promoted back to DRIVER or the group dissolved. That reasoning held
+ * only while promotion was a candidate, and SCRUM-406 established it is not:
+ * `groups.create` did not enforce `Role.DRIVER` until SCRUM-291, and the client
+ * named whichever party did not accept the request as the driver without
+ * checking, so a group could be *born* driverless with no original driver to
+ * restore. Dissolving is the single correct repair, and it lives in
+ * `repair-seat-residue.ts`. This script stays read-only so that every `check-*`
+ * is uniformly safe to point at production.
  *
  * Three shapes are reported separately because they are not the same problem.
  * The file is named for the first, which it originally only reported; the third
  * is created by the overwritten-membership bug:
  *
- *   - **Driverless with members.** The members are
- *     listed so someone can contact them; repair is either promoting one
- *     member's `CarpoolSearch.role` back to `DRIVER` or clearing `carpoolId`
- *     for all of them and deleting the group row.
+ *   - **Driverless with members.** The members are listed so someone can
+ *     contact them; repair is clearing `carpoolId` for all of them and deleting
+ *     the group row. Nobody is promoted.
  *   - **Empty.** A group row no `CarpoolSearch` points at. Nobody is affected
  *     and nothing reads it; it is a leaked row, safe to delete once confirmed.
  *   - **Driver only.** A group holding its driver and nobody else, left behind
