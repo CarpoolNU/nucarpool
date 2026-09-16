@@ -46,7 +46,7 @@ export type MobileNavPlan =
   /** Leave the profile page with a full page load. */
   | { kind: "hardNavigate"; href: string; tab: NavTab }
   /** Client-side tab switch, staying on the map page. */
-  | { kind: "switchTab"; tab: NavTab }
+  | { kind: "switchTab"; tab: NavTab; reselected: boolean }
   /** Go to the profile page. */
   | { kind: "openProfile" }
   /** An option the bottom navigation does not handle. */
@@ -59,15 +59,25 @@ export type MobileNavPlan =
  * @param hasUnsavedGuard whether a `checkChanges` prop was supplied. Only the
  *   profile page supplies one; the map and admin pages do not, and must keep
  *   navigating immediately.
+ * @param currentTab the sidebar's current value, so a tap on the tab already
+ *   showing can be told apart from one that switches in from elsewhere.
+ *   `setSidebar(sameValue)` is a same-value `setState` and React bails out of
+ *   it without firing the effects a real switch would - which is exactly the
+ *   effect that resets the My Group sheet to its resting position. Nothing
+ *   consulted this before `reselected` existed, so tapping My Group again
+ *   while its sheet sat collapsed (from the header's Close button) did
+ *   nothing at all; only leaving for another tab and back reopened it.
  */
 export function planMobileNav({
   option,
   pathname,
   hasUnsavedGuard,
+  currentTab,
 }: {
   option: string;
   pathname: string;
   hasUnsavedGuard: boolean;
+  currentTab?: string;
 }): MobileNavPlan {
   if (option === "profile") {
     return { kind: "openProfile" };
@@ -80,7 +90,11 @@ export function planMobileNav({
   // Not on the profile page, so there is nothing to lose and no full load
   // needed: the map page swaps its sidebar in place.
   if (!pathname.includes("/profile")) {
-    return { kind: "switchTab", tab: option };
+    return {
+      kind: "switchTab",
+      tab: option,
+      reselected: option === currentTab,
+    };
   }
 
   const href = tabHref(option);

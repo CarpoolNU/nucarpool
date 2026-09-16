@@ -1289,33 +1289,6 @@ const Home: NextPage<any> = () => {
                   <InactiveBlocker />
                 )}
               </div>
-              {/* Mobile: show reopen button when sidebar collapsed and user is on My Group page, to bring back My Group */}
-              {isMobile && isSheetCollapsed && sidebarType === "mygroup" && (
-                <button
-                  onClick={() => {
-                    setSidebarType("mygroup");
-                    setSheetDetent("expanded");
-                    setExpandedUserId(null);
-                  }}
-                  className="bottom-above-mobile-nav absolute left-1/2 z-30 flex -translate-x-1/2 transform items-center gap-1 rounded-full border border-gray-300 bg-white/90 px-4 py-2 text-sm font-medium shadow-md transition-colors hover:bg-white"
-                  aria-label="Group Details"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <polyline points="15 18 9 12 15 6"></polyline>
-                  </svg>
-                  <span>Group Details</span>
-                </button>
-              )}
               {isMobile && (
                 <Header
                   data={{
@@ -1323,6 +1296,22 @@ const Home: NextPage<any> = () => {
                     setSidebar: setSidebarType,
                     disabled:
                       user.status === "INACTIVE" && user.role !== "VIEWER",
+                    // Dropping the override rather than setting "expanded"
+                    // directly, so a reselect resolves to the same resting
+                    // position a fresh switch into My Group would - see
+                    // `defaultSheetDetent`. There used to be a floating pill
+                    // for this; it is gone, and reselecting the already-active
+                    // tab is now the only way back in once the header's Close
+                    // button has collapsed the sheet.
+                    onMyGroupReselected: () => {
+                      setSheetDetentOverride(null);
+                      // The removed pill cleared this defensively too, and
+                      // there is no evidence it was ever actually reachable
+                      // here - kept rather than dropped, since it costs
+                      // nothing and a future path in is easier to reason
+                      // about if this invariant already holds.
+                      setExpandedUserId(null);
+                    },
                   }}
                   onViewGroupRoute={onViewGroupRoute}
                 />

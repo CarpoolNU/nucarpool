@@ -270,6 +270,18 @@ interface HeaderProps {
     sidebarValue: string;
     setSidebar: Dispatch<SetStateAction<HeaderOptions>>;
     disabled: boolean;
+    /**
+     * Called when the mobile bottom nav's My Group tab is tapped while it was
+     * already the active tab. That case used to do nothing: `setSidebar`
+     * receives the same value it already held, React bails out of the
+     * same-value `setState` without re-rendering, and the page's own
+     * tab-change effect - the one that resets the sheet to its resting
+     * position - never runs. This is the page's hook to run that reset
+     * anyway, which is what lets tapping My Group again reopen a sheet the
+     * header's Close button collapsed. Optional because only `pages/index.tsx`
+     * has a sheet detent to reset; nothing else supplying `data` needs it.
+     */
+    onMyGroupReselected?: () => void;
   };
   admin?: boolean;
   signIn?: boolean;
@@ -402,6 +414,7 @@ const Header = (props: HeaderProps) => {
       option,
       pathname: router.pathname,
       hasUnsavedGuard: props.checkChanges !== undefined,
+      currentTab: props.data?.sidebarValue,
     });
 
     // The full page load the profile page needs. Kept identical, and deliberately not
@@ -430,6 +443,12 @@ const Header = (props: HeaderProps) => {
           setIsLoading(false);
           if (props.data?.setSidebar) {
             props.data.setSidebar(plan.tab);
+          }
+          // `setSidebar` above is a same-value `setState` on a reselect, so it
+          // does not itself reopen a collapsed My Group sheet - see
+          // `onMyGroupReselected`'s docblock.
+          if (plan.tab === "mygroup" && plan.reselected) {
+            props.data?.onMyGroupReselected?.();
           }
         });
         // Opening the Requests tab used to zero the local counter, which was

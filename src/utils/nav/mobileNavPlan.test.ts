@@ -24,8 +24,8 @@ import {
 
 const from =
   (pathname: string, hasUnsavedGuard = true) =>
-  (option: string) =>
-    planMobileNav({ option, pathname, hasUnsavedGuard });
+  (option: string, currentTab?: string) =>
+    planMobileNav({ option, pathname, hasUnsavedGuard, currentTab });
 
 describe("planMobileNav — leaving the profile page", () => {
   const onProfile = from("/profile");
@@ -75,7 +75,13 @@ describe("planMobileNav — elsewhere", () => {
     "switches tab in place for %s",
     (option) => {
       // On the map page there is nothing to lose and no reload needed.
-      expect(from("/")(option)).toEqual({ kind: "switchTab", tab: option });
+      // `currentTab` is omitted here, so this is also the "switching in from
+      // elsewhere" case: never equal to `option`, so never `reselected`.
+      expect(from("/")(option)).toEqual({
+        kind: "switchTab",
+        tab: option,
+        reselected: false,
+      });
     },
   );
 
@@ -84,6 +90,23 @@ describe("planMobileNav — elsewhere", () => {
     // switching. `kind` is what the caller branches on, so this is the
     // assertion that matters.
     expect(from("/", true)("explore").kind).toBe("switchTab");
+  });
+
+  it.each(["explore", "requests", "mygroup"] as const)(
+    "marks %s reselected when it was already the active tab",
+    (option) => {
+      // The case `reselected` exists for: My Group's sheet can be collapsed
+      // by the header's Close button while the tab itself stays active, and
+      // tapping that same tab again is the only way back in once the pill
+      // that used to reopen it is gone.
+      expect(from("/")(option, option)).toMatchObject({ reselected: true });
+    },
+  );
+
+  it("does not mark a switch from a different tab as reselected", () => {
+    expect(from("/")("mygroup", "explore")).toMatchObject({
+      reselected: false,
+    });
   });
 
   it("opens the profile page from anywhere", () => {
