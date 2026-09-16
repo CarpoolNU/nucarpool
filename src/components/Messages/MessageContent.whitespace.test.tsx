@@ -209,11 +209,17 @@ describe("message bubble whitespace", () => {
     renderThread();
 
     // `break-words` is what wraps a long unbroken token; the width caps are
-    // the mobile and desktop halves of the bubble's geometry. None of the
-    // three is this ticket's business, so all three are pinned against it.
+    // the narrow and wide halves of the bubble's geometry. None of the three is
+    // this ticket's business, so all three are pinned against it.
+    //
+    // The 50% cap moved from the width-only `desktop:` screen to the message
+    // panel's own height-gated one in SCRUM-489: at a 267px panel the cap does
+    // not narrow the bubble, it wraps it to four lines, inside a conversation
+    // box that had nothing to show them in. This assertion is why that change
+    // had to be deliberate, which is the job it was written for.
     expect(bubble()).toHaveClass("break-words");
     expect(bubble()).toHaveClass("max-w-[85%]");
-    expect(bubble()).toHaveClass("desktop:max-w-[50%]");
+    expect(bubble()).toHaveClass("message-panel-tall:max-w-[50%]");
   });
 
   it("keeps the stored text intact, newline included", () => {

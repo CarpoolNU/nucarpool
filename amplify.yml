@@ -15,10 +15,14 @@
 # No secret value appears in this file: the patterns are variable-name
 # fragments. Note though that grep sees whole `NAME=value` lines, so a pattern
 # also matches a variable whose *value* happens to contain one of these words,
-# and that variable is then copied into .env.production too. Harmless in
-# practice - .env.production is gitignored and never leaves the container - and
-# left alone deliberately, because the obvious tightening (anchoring with `^`)
-# would silently *reduce* coverage: `SECRET_ACCESS_KEY_AWS` is matched by
+# and that variable is then copied into .env.production too. Low-stakes in
+# practice - an over-match adds one more value to a file that already carries
+# every secret the app has, rather than exposing a new kind of thing. The file
+# is gitignored, so it stays out of git; it does *not* stay out of the
+# deployment artifact, which is the subject of "What this file costs" below.
+# The patterns are left alone deliberately, because the obvious tightening
+# (anchoring with `^`) would silently *reduce* coverage:
+# `SECRET_ACCESS_KEY_AWS` is matched by
 # `ACCESS` in the middle of the name, not at the start, and so are two others.
 #
 # ---------------------------------------------------------------------------
@@ -91,11 +95,67 @@
 # carry a prefix exemption whose correctness depended on how the env module
 # happened to be written. Copying them is one line and removes the argument.
 #
+# ---------------------------------------------------------------------------
+# What this file costs, and the decision taken about it
+#
 # **AWS warns that anyone with access to the deployment artifacts can read
 # these values**, and recommends an IAM compute role instead of long-lived
-# credentials for reaching AWS services. `ACCESS_KEY_ID_AWS` and
-# `SECRET_ACCESS_KEY_AWS` are exactly what that warning is about, and a compute
-# role would remove them rather than protect them. Tracked separately; not changed here.
+# credentials for reaching AWS services. Every pattern below appends a
+# plaintext `NAME=value` line to `.env.production`, and that file travels
+# inside the per-deploy artifact. This is not a defect in the patterns; it is
+# what the only runtime-configuration mechanism Amplify supports costs.
+#
+# Two kinds of value go in, and only one kind has a way back out.
+#
+# **The two AWS keys - being removed, tracked in SCRUM-493.**
+# `ACCESS_KEY_ID_AWS` and `SECRET_ACCESS_KEY_AWS` are exactly what AWS's
+# warning is about, and an Amplify SSR compute role replaces them rather than
+# protecting them: the SDK's default credential chain picks up short-lived,
+# function-scoped credentials and the key pair stops existing. That needs
+# console access and a real deploy to verify, because a missing IAM permission
+# surfaces as mail or avatars failing at runtime rather than as a build error,
+# which is why it is a separate ticket and not a change here. When it lands the
+# `ACCESS` line goes with it - its only other match is
+# `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN`, already covered by `NEXT_PUBLIC_` - and
+# note that `SECRET_ACCESS_KEY_AWS` is *also* matched by the `SECRET` line, so
+# deleting `ACCESS` alone would not stop it being copied.
+#
+# **Everything else - accepted, deliberately, under SCRUM-390 on 2026-09-16.**
+# `DATABASE_URL`, `NEXTAUTH_SECRET`, `AZURE_CLIENT_SECRET`,
+# `GOOGLE_CLIENT_SECRET`, `PUSHER_SECRET` and `PUSHER_APP_ID` are not AWS
+# credentials, so no IAM role can stand in for them. The alternative considered
+# was fetching them at runtime from Secrets Manager through that same compute
+# role. It was rejected on cost, not on principle:
+#
+#   - `serverEnv` in `src/utils/env/server.ts` is a synchronous `envsafe()`
+#     constant, evaluated once when the module is first imported.
+#   - `ses.ts`, `uploadToS3.ts` and `pusher.ts` each build their client at
+#     module scope from that constant, before any request is served.
+#   - An SDK call to Secrets Manager returns a promise, and a promise cannot
+#     populate a synchronous constant. Adopting it means converting the whole
+#     env contract into an async initialiser and rewriting every consumer,
+#     plus both CI checks that derive their variable lists from those modules.
+#   - The values would still be resident in the compute function's memory
+#     afterwards. What changes is where they are read from, not who can
+#     ultimately reach them.
+#
+# **What that acceptance concedes**, written down so nobody has to re-derive it:
+#
+#   - Reading a deployment artifact is a different permission from reading the
+#     console's environment variables - roughly `amplify:GetJob` plus access to
+#     the artifact store, rather than the app's own configuration. So this does
+#     widen who inside the AWS account can read every secret the app holds.
+#   - Artifacts persist per deploy. Rotating a secret does not retract it from
+#     the artifacts already written, so the exposure window for a given value
+#     is the retention period of every build that carried it, not the current
+#     console configuration.
+#
+# Rotation was left out of scope on purpose: it is an operational task with its
+# own coordination, not a change to this file. **Revisit the decision if
+# Amplify gains first-class secret references** that keep a value out of the
+# artifact entirely - that is the development that would make reversing it
+# cheap.
+# ---------------------------------------------------------------------------
 #
 # Amplify Hosting's Next.js compute support covers Next.js 12 through 15.
 # Bumping the framework past that fails at deploy, not at build.
