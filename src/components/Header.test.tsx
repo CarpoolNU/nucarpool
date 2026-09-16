@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { Role, Status } from "@prisma/client";
 import Header from "./Header";
 import { UserContext } from "../utils/userContext";
@@ -247,6 +247,84 @@ describe("Header navigation at a mobile viewport", () => {
     renderHeader();
 
     expect(presignedUrlQuery).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The pill button that used to sit over the map (`< Group Details`) was the
+ * only way back into a My Group sheet the header's own Close button had
+ * collapsed. Removing it means the bottom nav's My Group tab has to be able
+ * to do that job itself - see `onMyGroupReselected`'s docblock on `Header`
+ * and `reselected`'s on `planMobileNav`.
+ */
+describe("Header navigation at a mobile viewport — reselecting My Group", () => {
+  beforeEach(() => {
+    setViewportWidth(MOBILE_WIDTH);
+    // `handleMobileNavClick`'s switchTab branch awaits `router.push(...)`
+    // before forwarding the tab; nothing before this suite ever clicked a nav
+    // item, so the mock's default `undefined` return - which has no
+    // `.finally` - was never exercised.
+    mockPush.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    mockPush.mockReset();
+  });
+
+  it("reopens the sheet when My Group is tapped while already the active tab", async () => {
+    const onMyGroupReselected = jest.fn();
+    const setSidebar = jest.fn();
+
+    render(
+      <UserContext.Provider value={VIEWER}>
+        <Header
+          data={{
+            sidebarValue: "mygroup",
+            setSidebar,
+            disabled: false,
+            onMyGroupReselected,
+          }}
+          onViewGroupRoute={() => undefined}
+        />
+      </UserContext.Provider>,
+    );
+
+    fireEvent.click(screen.getByTestId("mygroup-sidebar"));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(onMyGroupReselected).toHaveBeenCalledTimes(1);
+    // Reselecting still forwards the tab like any other tap - only the
+    // sheet-reopening side effect is new.
+    expect(setSidebar).toHaveBeenCalledWith("mygroup");
+  });
+
+  it("does not reopen the sheet when switching in from a different tab", async () => {
+    const onMyGroupReselected = jest.fn();
+
+    render(
+      <UserContext.Provider value={VIEWER}>
+        <Header
+          data={{
+            sidebarValue: "explore",
+            setSidebar: () => undefined,
+            disabled: false,
+            onMyGroupReselected,
+          }}
+          onViewGroupRoute={() => undefined}
+        />
+      </UserContext.Provider>,
+    );
+
+    fireEvent.click(screen.getByTestId("mygroup-sidebar"));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // A fresh switch already lands on the role's resting detent through the
+    // page's own tab-change effect; calling this too would be redundant, not
+    // wrong, but asserting its absence is what would catch `reselected` being
+    // computed backwards.
+    expect(onMyGroupReselected).not.toHaveBeenCalled();
   });
 });
 
