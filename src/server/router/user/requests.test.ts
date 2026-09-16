@@ -1566,7 +1566,6 @@ const searchRow = (
   endTime: null,
   startDate: null,
   endDate: null,
-  groupMessage: null,
   homeLocationId: overrides.home ? `home-${userId}` : null,
   companyLocationId: null,
   // Every row carries an address, because `me`'s counterpart queries select the

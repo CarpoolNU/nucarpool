@@ -116,13 +116,10 @@ export const userRouter = router({
       endTime: carpoolSearch?.endTime ?? null,
       coopStartDate: carpoolSearch?.startDate ?? null,
       coopEndDate: carpoolSearch?.endDate ?? null,
-      // Group ride preferences. These are real columns; `groupMessage` is
-      // carried alongside only so a row that has not been backfilled yet still
-      // resolves through `resolveGroupDetails`.
+      // Group ride preferences, as real columns.
       groupNotes: carpoolSearch?.groupNotes ?? null,
       groupMusicPreference: carpoolSearch?.groupMusicPreference ?? null,
       groupConversationStyle: carpoolSearch?.groupConversationStyle ?? null,
-      groupMessage: carpoolSearch?.groupMessage ?? null,
       carpoolId: carpoolSearch?.carpoolId ?? null,
       // Location data (homeLocation)
       startCoordLng: carpoolSearch?.homeLocation?.coordLng ?? 0,
@@ -362,7 +359,6 @@ export const userRouter = router({
             data: {
               userId: id,
               carpoolId: null,
-              groupMessage: null,
               ...carpoolSearchData,
             },
           });
