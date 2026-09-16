@@ -494,3 +494,137 @@ describe("Header styling across the breakpoint", () => {
     expect(desktopOf(headerDiv)).toContain("padding: 0 40px");
   });
 });
+
+/**
+ * The bar's *other* children, which SCRUM-484 did not reach.
+ *
+ * `Logo` above is a percentage-height bar's child that declared a fixed pixel
+ * height, and the tests above are the record of that fix. The four desktop
+ * tabs and the profile trigger had the same relationship to the same bar -
+ * `p-4 text-xl` is 60px and `h-14 w-14` is 56px, inside a bar that is 31.875px
+ * at 667x375 - and one of them lost part of its tap target rather than merely
+ * painting in the wrong place: the tab group's wrapper has no stacking
+ * context, so the content row below hit-tested above the tabs' lower band and
+ * a tap on the visible bottom third of `Explore` reached the page instead.
+ *
+ * **Everything here is a class request, and that is all jsdom can offer.** It
+ * resolves no CSS, computes no percentage and reports every rect as zero (see
+ * `testing/viewport.ts`), so not one of the figures above is assertable in
+ * this file. They were measured in Chromium against the compiled stylesheet
+ * through the `header-control-row` fixture, whose `recorded` lines carry the
+ * before and after; `scripts/measure-layout.test.ts` fails if either class
+ * string here stops matching the one that fixture copied. The geometry itself
+ * belongs to SCRUM-264's Playwright suite.
+ */
+describe("Header controls inside the bar they have to fit", () => {
+  beforeEach(() => {
+    setViewportWidth(DESKTOP_WIDTH);
+  });
+
+  /** Every tab in the desktop group, by the label it carries. */
+  const tabs = () =>
+    ["Explore", "Requests", "My Group", "Admin"].map(
+      (label) =>
+        screen.getByRole("button", { name: new RegExp(label) }) as HTMLElement,
+    );
+
+  it("caps every tab's vertical padding against the bar rather than fixing it", () => {
+    renderHeader();
+
+    for (const tab of tabs()) {
+      expect(tab.className).toContain("py-header-nav-y");
+
+      /* The horizontal half of the old `p-4` is unchanged at 16px - the tabs
+         were never too wide, and narrowing them would be a change this ticket
+         has no measurement for. */
+      expect(tab.className).toContain("px-4");
+    }
+  });
+
+  it("leaves no tab asking for the uncapped padding", () => {
+    renderHeader();
+
+    /* `p-4` is the defect itself: one shorthand setting both axes, the
+       vertical half of which a 31.875px bar cannot hold. A regression here
+       would most likely arrive as someone restoring the shorthand. */
+    for (const tab of tabs()) {
+      expect(tab.className.split(" ")).not.toContain("p-4");
+      expect(tab.className.split(" ")).not.toContain("py-4");
+    }
+  });
+
+  /**
+   * The active tab is the state one of the four is always in, and it is a
+   * separate string in `Header.tsx` - so the cap can be dropped from it alone.
+   * Measured, the underline does not move at all: the label's line box is
+   * centred in the bar either way, at a content-box top of 1.9375px before and
+   * after, which is why this fix is invisible at every viewport except in what
+   * responds to a tap.
+   */
+  it("keeps the cap on the active tab, which is a second class string", () => {
+    renderHeader();
+
+    const active = screen.getByRole("button", { name: /Explore/ });
+
+    // The control: `explore` is the rendered sidebar value, so this really is
+    // the underlined variant and the assertion below is not vacuous.
+    expect(active.className).toContain("underline");
+    expect(active.className).toContain("py-header-nav-y");
+  });
+
+  it("caps the profile trigger as a square, so it stays a circle", () => {
+    renderHeader();
+
+    const trigger = document.querySelector(".h-header-control");
+
+    expect(trigger).toBeInTheDocument();
+    expect(trigger!.className).toContain("w-header-control");
+    expect(trigger!.className).toContain("rounded-full");
+
+    /* Both axes from one token. A cap on the height alone would leave a 56px
+       circle in a 31.875px bar as a 31.875x56 ellipse. */
+    expect(trigger!.className.split(" ")).not.toContain("h-14");
+    expect(trigger!.className.split(" ")).not.toContain("w-14");
+  });
+
+  it("has the trigger's contents fill it rather than restate its size", () => {
+    renderHeader();
+
+    const inner =
+      document.querySelector(".h-header-control")!.firstElementChild;
+
+    /* `getAttribute`, not `className`: with no presigned URL this branch is
+       the `AiOutlineUser` fallback, and an SVG element's `className` is an
+       `SVGAnimatedString` rather than a string. */
+    const classes = inner!.getAttribute("class");
+
+    /* `h-full w-full`, not a second `h-14 w-14`: the avatar is a raster in a
+       circle, and a child that keeps the old fixed size would overflow the
+       capped box it sits in. */
+    expect(classes).toContain("h-full");
+    expect(classes).toContain("w-full");
+    expect(classes!.split(" ")).not.toContain("h-14");
+  });
+
+  /**
+   * Why `/sign-in` is outside this fix's blast radius, pinned rather than
+   * assumed - SCRUM-477's Closeout on `SigninLogo` is the reason to check.
+   *
+   * Both caps are derived from `100dvh * 0.085`, which reconstructs the bar's
+   * basis rather than reading it, so they describe the bar only on the pages
+   * where it has a definite height. On `/sign-in` it does not: the card is an
+   * auto-height flex column, the 8.5% resolves to `auto`, and the bar takes
+   * its height *from* its logo. That would make a cap derived from the
+   * viewport wrong there - and it cannot be, because neither control is
+   * rendered on that page at all.
+   */
+  it("renders neither control on the sign-in page", () => {
+    render(<Header signIn={true} />);
+
+    // The control: the sign-in header does render, so these are real absences.
+    expect(screen.getByText("CarpoolNU")).toBeInTheDocument();
+
+    expect(screen.queryByTestId("navigation-desktop")).not.toBeInTheDocument();
+    expect(document.querySelector(".h-header-control")).not.toBeInTheDocument();
+  });
+});

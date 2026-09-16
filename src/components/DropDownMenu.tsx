@@ -55,19 +55,37 @@ const DropDownMenu = ({ checkChanges }: DropDownMenuProps) => {
         </div>
       )}
       <Menu>
-        <Menu.Button className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full">
+        {/* `h-header-control w-header-control`, not the `h-14 w-14` this
+            declared, and that pair is SCRUM-491's fix. The trigger is a child
+            of a bar whose height is 8.5% of the viewport, so a fixed 56px was
+            unrelated to the space it had: at 667x375 the bar is 31.875px and
+            this box was 56px, centred, hanging 12.06px above the screen and
+            12.06px into the content row below - and hit-testing there, because
+            the `z-30` wrapper above makes this a flex item with a stacking
+            context. A tap aimed at the top of the page opened this menu.
+
+            The token is `min(56px, ...)`, so it binds only where 56px does not
+            fit and an ordinary desktop window is unchanged. The three children
+            below take `h-full w-full` rather than a second copy of the 56 -
+            one figure, applied to both axes, which is what keeps the circle
+            round while it scales. `breakpoints.js` carries the derivation.
+
+            The `width`/`height` props stay at 56: they are `next/image`'s
+            intrinsic hint for the raster it requests, not a layout figure, and
+            the class above is what sizes the box. */}
+        <Menu.Button className="h-header-control w-header-control flex items-center justify-center overflow-hidden rounded-full">
           {isProfileImageLoading ? (
-            <div className="h-14 w-14 rounded-full bg-gray-400" />
+            <div className="h-full w-full rounded-full bg-gray-400" />
           ) : profileImageUrl && !imageLoadError ? (
             <Image
               src={profileImageUrl}
               alt="Profile Image"
               width={56}
               height={56}
-              className="h-14 w-14 rounded-full object-cover"
+              className="h-full w-full rounded-full object-cover"
             />
           ) : (
-            <AiOutlineUser className="h-14 w-14 rounded-full bg-gray-400" />
+            <AiOutlineUser className="h-full w-full rounded-full bg-gray-400" />
           )}
         </Menu.Button>
 

@@ -12,6 +12,11 @@ import {
   CONTENT_ROW_VIEWPORT_FRACTION,
   LOGO_FONT_BOX_RATIO,
   HEADER_LOGO_MAX_FONT_SIZE,
+  HEADER_AVATAR_DESIGN_SIZE_PX,
+  HEADER_AVATAR_TRIGGER_SIZE,
+  HEADER_NAV_BUTTON_LINE_BOX_PX,
+  HEADER_NAV_BUTTON_PADDING_PX,
+  HEADER_NAV_BUTTON_VERTICAL_PADDING,
   ADMIN_SHORTEST_CHART_HEIGHT_PX,
   ADMIN_DATA_VERTICAL_SPACE_PX,
   ADMIN_CONSOLE_MIN_HEIGHT_PX,
@@ -511,6 +516,142 @@ describe("the header bar's share of the viewport", () => {
        unchanged side of it - and a landscape phone is not. */
     expect(heightWhereDesignSizeJustFits).toBeLessThan(650);
     expect(heightWhereDesignSizeJustFits).toBeGreaterThan(430);
+  });
+});
+
+/**
+ * The two caps SCRUM-491 puts on the bar's *other* children.
+ *
+ * Same defect shape as the logo above and the same treatment - a fixed pixel
+ * size inside a percentage-height bar, capped rather than replaced so that an
+ * ordinary desktop window renders what it rendered before. The difference is
+ * what each one caps. The trigger is a circle wrapping a raster, so the cap is
+ * a box applied to both axes; a tab's line box is an absolute 28px that does
+ * not follow its font, so the cap is applied to the padding around it and the
+ * label never moves.
+ *
+ * Every figure here came back from Chromium through the `header-control-row`
+ * fixture. These assertions are the compositions, not the geometry.
+ */
+describe("the caps on the header bar's controls", () => {
+  it("caps the profile trigger as a square, composed from the shared fraction", () => {
+    expect(HEADER_AVATAR_TRIGGER_SIZE).toBe("min(56px, calc(100dvh * 0.085))");
+    expect(HEADER_AVATAR_TRIGGER_SIZE).toContain(
+      `${HEADER_AVATAR_DESIGN_SIZE_PX}px`,
+    );
+    expect(HEADER_AVATAR_TRIGGER_SIZE).toContain(
+      `${HEADER_BAR_VIEWPORT_FRACTION}`,
+    );
+  });
+
+  it("caps a tab's padding, not its font, because its line box is absolute", () => {
+    expect(HEADER_NAV_BUTTON_VERTICAL_PADDING).toBe(
+      "max(0px, min(16px, calc((100dvh * 0.085 - 28px) / 2)))",
+    );
+    expect(HEADER_NAV_BUTTON_VERTICAL_PADDING).toContain(
+      `${HEADER_NAV_BUTTON_PADDING_PX}px`,
+    );
+    expect(HEADER_NAV_BUTTON_VERTICAL_PADDING).toContain(
+      `${HEADER_NAV_BUTTON_LINE_BOX_PX}px`,
+    );
+    expect(HEADER_NAV_BUTTON_VERTICAL_PADDING).toContain(
+      `${HEADER_BAR_VIEWPORT_FRACTION}`,
+    );
+  });
+
+  /*
+   * The CSS above, mirrored in JavaScript so the arithmetic can be checked at
+   * the heights it was measured at. A mirror is only as good as its agreement
+   * with the string, which is what the two assertions above are for.
+   */
+  const barAt = (viewportHeight: number) =>
+    viewportHeight * HEADER_BAR_VIEWPORT_FRACTION;
+
+  const triggerAt = (viewportHeight: number) =>
+    Math.min(HEADER_AVATAR_DESIGN_SIZE_PX, barAt(viewportHeight));
+
+  const tabPaddingAt = (viewportHeight: number) =>
+    Math.max(
+      0,
+      Math.min(
+        HEADER_NAV_BUTTON_PADDING_PX,
+        (barAt(viewportHeight) - HEADER_NAV_BUTTON_LINE_BOX_PX) / 2,
+      ),
+    );
+
+  const tabHeightAt = (viewportHeight: number) =>
+    HEADER_NAV_BUTTON_LINE_BOX_PX + 2 * tabPaddingAt(viewportHeight);
+
+  it("leaves both design sizes alone on an ordinary desktop window", () => {
+    /* Measured at 1440x900: bar 76.5, tab 60 at top 8.25, trigger 56 at top
+       10.25 - the same figures SCRUM-485 recorded before the fix. */
+    expect(barAt(900)).toBe(76.5);
+    expect(tabHeightAt(900)).toBe(60);
+    expect(triggerAt(900)).toBe(56);
+  });
+
+  it("gives a tab exactly the bar once the padding stops fitting", () => {
+    /*
+     * Measured at 667x375: bar 31.875, and the tab the same to the pixel,
+     * with 1.9375px of padding either side of its 28px line.
+     *
+     * `toBeCloseTo` and not `toBe`, and the reason is the one this file's
+     * first assertion is about: `375 * 0.085` is `31.875000000000004` in IEEE
+     * 754. The browser does not inherit that error - it resolves the
+     * percentage in its own layout units and reported exactly 31.875 - so the
+     * residue belongs to this mirror rather than to the CSS it mirrors.
+     */
+    expect(barAt(375)).toBeCloseTo(31.875, 6);
+    expect(tabPaddingAt(375)).toBeCloseTo(1.9375, 6);
+    expect(tabHeightAt(375)).toBeCloseTo(barAt(375), 6);
+    expect(triggerAt(375)).toBeCloseTo(barAt(375), 6);
+  });
+
+  it("puts the two thresholds where the overflow used to begin", () => {
+    /* A tab needs 2 * 16 + 28 = 60px of bar, the trigger 56px. Below these
+       heights the caps bind; above them nothing changes. Both figures are the
+       ticket's own, arrived at from the other direction. */
+    const tabFitsAbove =
+      (2 * HEADER_NAV_BUTTON_PADDING_PX + HEADER_NAV_BUTTON_LINE_BOX_PX) /
+      HEADER_BAR_VIEWPORT_FRACTION;
+    const triggerFitsAbove =
+      HEADER_AVATAR_DESIGN_SIZE_PX / HEADER_BAR_VIEWPORT_FRACTION;
+
+    expect(tabFitsAbove).toBeCloseTo(705.88, 2);
+    expect(triggerFitsAbove).toBeCloseTo(658.82, 2);
+
+    /* Measured at 1366x660, between the two: the tab takes the bar's 56.094
+       exactly where it used to overhang by 1.953px each way, and the trigger's
+       56px still fits inside it by 0.047px. */
+    expect(tabHeightAt(660)).toBeCloseTo(barAt(660), 6);
+    expect(triggerAt(660)).toBeLessThan(barAt(660));
+  });
+
+  /**
+   * The floor, which is load-bearing rather than defensive.
+   *
+   * A negative `padding` does not clamp - it invalidates the declaration, so
+   * the 16px would come back at the one viewport least able to hold it. Below
+   * about 330px of viewport height the bar is shorter than the 28px line box
+   * itself and the inner term goes negative.
+   */
+  it("clamps the padding at zero rather than letting it go negative", () => {
+    const heightWhereBarEqualsTheLineBox =
+      HEADER_NAV_BUTTON_LINE_BOX_PX / HEADER_BAR_VIEWPORT_FRACTION;
+
+    expect(heightWhereBarEqualsTheLineBox).toBeCloseTo(329.4, 1);
+
+    /* A 568x320 phone in landscape, the shortest viewport worth naming: the
+       padding is gone and the label's own line box overhangs the 27.2px bar by
+       0.8px. Recorded rather than fixed - closing it needs `line-height`
+       capped too, which moves the label at every viewport. */
+    expect(tabPaddingAt(320)).toBe(0);
+    expect(tabHeightAt(320)).toBe(HEADER_NAV_BUTTON_LINE_BOX_PX);
+    expect(tabHeightAt(320) - barAt(320)).toBeCloseTo(0.8, 6);
+
+    /* And the trigger has no such floor to need: it is a `min()` of two
+       positive lengths. */
+    expect(triggerAt(320)).toBeCloseTo(27.2, 6);
   });
 });
 

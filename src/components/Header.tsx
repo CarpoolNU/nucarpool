@@ -214,6 +214,26 @@ export const SigninLogo = styled.h1`
   }
 `;
 
+/**
+ * One desktop navigation tab's classes.
+ *
+ * **`py-header-nav-y` is SCRUM-491's fix and is the only part of this string
+ * that changed**; `px-4` is the horizontal half of the `p-4` that was here
+ * before, at the same 16px. The token caps the vertical padding against the
+ * bar's own height, so a tab is 60px wherever 60px fits and exactly the bar
+ * everywhere else. `breakpoints.js` carries the derivation and the measured
+ * 28px line box it turns on.
+ *
+ * Hoisted into a constant because the six branches below returned two distinct
+ * strings between them, so the padding lived in the file six times and a fix
+ * had to find all six. The branches are otherwise untouched.
+ */
+export const HEADER_NAV_BUTTON_CLASS =
+  "rounded-xl px-4 py-header-nav-y font-medium text-xl text-white";
+
+/** The same tab, underlined, which is how the active one is marked. */
+export const HEADER_NAV_BUTTON_ACTIVE_CLASS = `underline underline-offset-8 ${HEADER_NAV_BUTTON_CLASS}`;
+
 interface HeaderProps {
   data?: {
     sidebarValue: string;
@@ -297,21 +317,21 @@ const Header = (props: HeaderProps) => {
 
   const renderClassName = (sidebarValue: string, sidebarText: string) => {
     if (sidebarValue == "explore" && sidebarText == "explore") {
-      return "underline underline-offset-8 rounded-xl p-4 font-medium text-xl text-white";
+      return HEADER_NAV_BUTTON_ACTIVE_CLASS;
     } else if (sidebarValue == "requests" && sidebarText == "explore") {
-      return "rounded-xl p-4 font-medium text-xl text-white";
+      return HEADER_NAV_BUTTON_CLASS;
     }
 
     if (sidebarValue == "requests" && sidebarText == "requests") {
-      return "underline underline-offset-8 rounded-xl p-4 font-medium text-xl text-white";
+      return HEADER_NAV_BUTTON_ACTIVE_CLASS;
     } else if (sidebarValue == "explore" && sidebarText == "requests") {
-      return "rounded-xl p-4 font-medium text-xl text-white";
+      return HEADER_NAV_BUTTON_CLASS;
     }
 
     if (displayGroup) {
-      return "underline underline-offset-8 rounded-xl p-4 font-medium text-xl text-white";
+      return HEADER_NAV_BUTTON_ACTIVE_CLASS;
     } else {
-      return "rounded-xl p-4 font-medium text-xl text-white";
+      return HEADER_NAV_BUTTON_CLASS;
     }
   };
 

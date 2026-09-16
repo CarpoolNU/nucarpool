@@ -843,17 +843,38 @@ const profileContentColumnWidth: LayoutFixture = {
   ],
 };
 
-const HEADER_NAV_BUTTON_CLASS = "rounded-xl p-4 font-medium text-xl text-white";
+const HEADER_NAV_BUTTON_CLASS =
+  "rounded-xl px-4 py-header-nav-y font-medium text-xl text-white";
 
+/**
+ * The active tab, which is the state one of the four is always in.
+ *
+ * Composed here exactly as `Header.tsx` composes it, so the guard below can
+ * check the *composition* rather than a string that appears nowhere: the
+ * active class is a template literal in that file, so no literal of the joined
+ * result exists to search for.
+ *
+ * Worth measuring rather than assuming, because `underline-offset-8` puts the
+ * rule 8px below the baseline and the padding this ticket shrinks is what used
+ * to sit under it.
+ */
+const HEADER_NAV_BUTTON_ACTIVE_CLASS = `underline underline-offset-8 ${HEADER_NAV_BUTTON_CLASS}`;
+
+/**
+ * The size classes lead here because `prettier-plugin-tailwindcss` sorts them
+ * that way - it moved `flex` behind the pair when the file was formatted, and
+ * the guard below compares against the file as it is written. Worth knowing
+ * before hand-editing either copy.
+ */
 const HEADER_AVATAR_TRIGGER_CLASS =
-  "flex h-14 w-14 items-center justify-center overflow-hidden rounded-full";
+  "h-header-control w-header-control flex items-center justify-center overflow-hidden rounded-full";
 
 const headerControlRow: LayoutFixture = {
   name: "header-control-row",
   summary:
-    "The header's right-hand controls - the tab buttons and the 56px avatar trigger - inside the 8.5% bar",
-  source: "src/components/DropDownMenu.tsx:58",
-  issue: "SCRUM-485",
+    "The header's right-hand controls - the tab buttons and the avatar trigger, both now capped against the bar - inside the 8.5% bar",
+  source: "src/components/DropDownMenu.tsx:76",
+  issue: "SCRUM-491",
   viewportWidth: 667,
   viewportHeight: 375,
   insets: [{ name: "bar padding 0 40px", x: 80 }],
@@ -875,12 +896,12 @@ const headerControlRow: LayoutFixture = {
       <div class="flex items-center">
         <div class="pr-8">
           <button class="${HEADER_NAV_BUTTON_CLASS}" data-probe="nav-button">Explore</button>
-          <button class="${HEADER_NAV_BUTTON_CLASS}">Requests</button>
+          <button class="${HEADER_NAV_BUTTON_ACTIVE_CLASS}" data-probe="nav-button-active">Requests</button>
           <button class="${HEADER_NAV_BUTTON_CLASS}">My Group</button>
         </div>
         <div class="z-30">
           <button class="${HEADER_AVATAR_TRIGGER_CLASS}" data-probe="avatar-trigger">
-            <span class="h-14 w-14 rounded-full bg-gray-400"></span>
+            <span class="h-full w-full rounded-full bg-gray-400"></span>
           </button>
         </div>
       </div>
@@ -899,6 +920,7 @@ const headerControlRow: LayoutFixture = {
       "[data-probe='bar']",
       "[data-probe='logo']",
       "[data-probe='nav-button']",
+      "[data-probe='nav-button-active']",
       "[data-probe='avatar-trigger']",
       "[data-probe='content-row']",
     ],
@@ -906,14 +928,25 @@ const headerControlRow: LayoutFixture = {
     against: ["[data-probe='content-row']"],
   },
   recorded: [
-    "bar rect height 31.875 at 375 tall, and logo rect height 31.875 at top 0 — SCRUM-484's fix still holding. Everything below is what that ticket did not reach.",
-    "avatar-trigger rect height 56 at top -12.0625: the top 12.06px is above the viewport and the bottom 12.06px is below the bar. `overlaps content-row` 0.215.",
-    "nav-button rect height 60 at top -14.0625 — the four desktop tabs are the taller offender, and they are `rounded-xl p-4 text-xl`: 16 + 28 + 16.",
-    "The two differ in whether the overlap is clickable, and the reason is a flex-item rule rather than a z-index one. At y 38 — below the bar, inside the row — elementFromPoint returns the avatar's own span, but for the nav button it returns the row's background div. `DropDownMenu`'s wrapper carries a z-index and is a flex item, and a flex item's z-index creates a stacking context even at `position: static`; the tab group's wrapper has none. So the avatar keeps its full 43.94px of visible target and each tab is left with 31.875px, the bar's height, against the 44px this repository asks of a touch control.",
-    "avatar-trigger footprint skipped 3 of 9 points as outside the viewport and found the remaining 6 reachable and unobstructed.",
-    "Not strictly landscape-specific — the bar is 8.5% of the viewport, so the 60px tab overflows below 706px of viewport height and the 56px trigger below 659px — but the band matters far less than that sounds, and the measurement is what says so. At 1366x660 the bar is 56.094, the tab overhangs by 1.953px each way and the trigger fits exactly (-0.047). Two pixels is not a defect. It is only at a landscape phone's 31.875px bar that the figures become the 12-14px above.",
-    "DESKTOP CONTROL at 1440x900: bar 76.5, both fit with room to spare, overflow 0. So the honest statement is that this degrades continuously as the window shortens and is only worth acting on at the bottom of the range. SCRUM-477's Closeout recorded the same shape for the logo, which overflowed by 17.25px each way even at 1440x900 — this is the milder version of that.",
-    "bar contentWidth 587, matching the predicted chain; the 80px against clientWidth 667 is the bar's own desktop padding.",
+    "AFTER SCRUM-491, at 667x375. Everything down to the BEFORE block is the fixed layout; SCRUM-485's figures are kept at the end so the movement is readable.",
+    "bar rect height 31.875, logo 31.875 at top 0 — SCRUM-484's fix still holding, and untouched by this ticket.",
+    "nav-button rect height 31.875 at top 0, padding 1.9375 top and bottom. Was 60 at top -14.0625. The cap is on the padding, so 2 * 1.9375 + 28 is exactly the bar.",
+    "nav-button-active — the underlined state one of the four tabs is always in, added as its own probe because `Header.tsx` composes it as a second class string that could lose the cap on its own — measures identically: 31.875 at top 0, padding 1.9375.",
+    "avatar-trigger rect 31.875 x 31.875 at top 0, still square. Was 56 x 56 at top -12.0625, hanging 12.06px above the screen and 12.06px into the row.",
+    "`overlaps content-row` is 0, where it was 0.215. The footprint hit test probed all 9 of its points with 0 skipped as outside the viewport, 9 on target, reachable and unobstructed — before the fix it skipped 3 of 9 and found 6.",
+    "**The clicks are back where the paint is, and that is the criterion this ticket turns on.** Sweeping elementFromPoint down each control's centre line at 0.25px: the tab answers from y 0 to y 31.25 and the content row's background from y 31.5 on; the avatar the same. At y 38 — below the bar, inside the row — both now return the row's own background div, where the avatar used to return its own span. Nothing in the bar hit-tests below the bar.",
+    "Before the fix the tab painted a 45.94px visible band of which 31.875px responded, and the avatar's full 43.94px band responded, 12.06px of it inside the content row. After, every control's visible band and its clickable band are the same 31.875px.",
+    "**31.875px is below the 44px Apple's HIG and WCAG 2.5.5 ask of a touch control, and no child of this bar can do better.** The bar is 8.5% of a 375px viewport; a 44px target needs the bar's own height changed, which moves the 91.5% content row on `/`, `/profile` and `/admin`. That is out of this ticket and is filed separately. What is fixed here is the mismatch: the target no longer claims to be 45.94px, and it no longer takes clicks meant for the page.",
+    "**The label does not move at all.** Its content box top is 1.9375 both before and after — a 60px box centred in a 31.875px bar puts its 28px line exactly where a 31.875px box with 1.9375px of padding does. The tabs carry no background or border, so `rounded-xl` paints nothing either; at this viewport the whole change is in what responds to a tap. The avatar is the visible half: a 31.875px circle where a 56px one used to overhang.",
+    "The probe reports nav-button contentHeight 28.125, which is derived from the rounded clientHeight of 32 rather than from the rect. The line box is 28: 31.875 less 2 * 1.9375.",
+    "One thing the fix does not close, measured rather than assumed: `underline-offset-8` puts the active tab's rule 8px under a baseline at 23.4375, so about 0.56px of that 1px decoration paints below the bar's bottom edge. It is unchanged by this ticket — the line box did not move — it is decoration and does not hit-test, and closing it would mean capping `line-height`, which moves the label at every viewport. **That baseline is the one figure here that depends on the missing webfont** (ascent 19, descent 4, measured through canvas TextMetrics on the system fallback this harness serves). The box figures do not: `text-xl`'s line-height is an absolute 1.75rem, so the 28px holds whatever font arrives.",
+    "DESKTOP CONTROL at 1440x900, and it is unchanged rather than merely acceptable: bar 76.5, nav-button 60 at top 8.25 with 16px of padding, nav-button-active 60, avatar-trigger 56 at top 10.25, overflow 0, clickable bands the full 60 and 56. Identical to the figures SCRUM-485 took here before the fix, which is what `min()` against the design size is for.",
+    "MID-RANGE at 1366x660, the viewport SCRUM-485 used to argue this was mild: the bar is 56.094 and the tab now takes exactly that, padding 14.05, overhang 0 — it used to overhang 1.953px each way. The trigger's 56px still fits inside by 0.047px, so its cap has not engaged yet. The two thresholds are 706px of viewport height for the tab and 659px for the trigger, and above them nothing changes.",
+    "bar contentWidth 587, matching the predicted chain; the 80px against clientWidth 667 is the bar's own desktop padding. Unchanged — this ticket touches no horizontal figure, and `px-4` is the horizontal half of the old `p-4` at the same 16px.",
+    "A note for the next selector-set diff on this fixture: `h-14`, `w-14` and `p-4` are all still in the compiled stylesheet afterwards, because the comments explaining their removal name them and Tailwind v4 scans prose. Their absence from the output was never available as a check — see `tailwind.config.js`.",
+    "BEFORE (SCRUM-485, the defect): bar 31.875 with logo 31.875 at top 0; avatar-trigger 56 at top -12.0625 with `overlaps content-row` 0.215 and 3 of 9 footprint points skipped; nav-button 60 at top -14.0625, being `rounded-xl p-4 text-xl` = 16 + 28 + 16.",
+    "BEFORE, and this is the mechanism the fix had to respect: the two differed in whether the overlap was clickable, for a flex-item reason rather than a z-index one. At y 38 elementFromPoint returned the avatar's own span but the row's background div for the tab. `DropDownMenu`'s wrapper carries a z-index and is a flex item, and a flex item's z-index creates a stacking context even at `position: static`; the tab group's wrapper has none, so the positioned row painted and hit-tested above it.",
+    "BEFORE, at 1440x900: bar 76.5, both fit with room to spare, overflow 0 — so this degraded continuously as the window shortened and was only worth acting on at the bottom of the range. SCRUM-477's Closeout recorded the same shape for the logo, which overflowed by 17.25px each way even at 1440x900; this was the milder version of that.",
   ],
   reproduces: [
     {
@@ -923,6 +956,10 @@ const headerControlRow: LayoutFixture = {
     {
       file: "src/components/Header.tsx",
       className: HEADER_NAV_BUTTON_CLASS,
+    },
+    {
+      file: "src/components/Header.tsx",
+      className: "underline underline-offset-8 ${HEADER_NAV_BUTTON_CLASS}",
     },
     {
       file: "src/components/Header.tsx",

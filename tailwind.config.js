@@ -18,6 +18,8 @@ const {
   DESKTOP_TALL_MEDIA_QUERY,
   MOBILE_NAV_SPACE,
   MOBILE_SHEET_MAP_STRIP,
+  HEADER_AVATAR_TRIGGER_SIZE,
+  HEADER_NAV_BUTTON_VERTICAL_PADDING,
 } = require("./src/utils/breakpoints");
 
 /**
@@ -122,6 +124,25 @@ module.exports = {
          */
         "sheet-handle": `calc(100% - ${MOBILE_SHEET_MAP_STRIP} - ${MOBILE_SHEET_HANDLE_LIFT})`,
         "half-sheet-handle": `calc(${MOBILE_NAV_SPACE} + (${MOBILE_SHEET_HEIGHT}) / 2 - ${MOBILE_SHEET_HANDLE_LIFT})`,
+        /**
+         * The two caps SCRUM-491 puts on the header bar's own controls, both
+         * derived in `breakpoints.js` from the same 8.5% the bar declares.
+         *
+         * **Tokens rather than arbitrary values at the call site, and here the
+         * usual reason is joined by a hard one.** The value is composed in
+         * JavaScript from a constant, so the literal class name
+         * `py-[max(0px,min(16px,calc((100dvh*0.085-28px)/2)))]` would have to
+         * appear in the source for Tailwind's scan to emit it - which means
+         * writing the arithmetic out a second time, in a place nothing checks
+         * against the first. The `spacing` block above settles the same
+         * question for the same reason.
+         *
+         * `spacing` and not `height`/`padding` separately: `header-control` is
+         * a square and needs `h-` and `w-` from one figure, which is what
+         * keeps the trigger circular at every viewport.
+         */
+        "header-control": HEADER_AVATAR_TRIGGER_SIZE,
+        "header-nav-y": HEADER_NAV_BUTTON_VERTICAL_PADDING,
       },
       height: {
         /**

@@ -251,6 +251,118 @@ const LOGO_FONT_BOX_RATIO = 1.15;
 const HEADER_LOGO_MAX_FONT_SIZE = `calc(100dvh * ${HEADER_BAR_VIEWPORT_FRACTION} / ${LOGO_FONT_BOX_RATIO})`;
 
 /**
+ * The bar's own height, as an expression a *child* can be sized against.
+ *
+ * **Deliberately not wrapped in `calc()`.** The two constants below need it in
+ * different positions - one inside a `min()`, one inside a larger `calc()` -
+ * and a bare expression composes into both. Wrapping it here would nest a
+ * `calc()` inside a `calc()`, which is valid CSS and reads like an accident.
+ *
+ * It carries `HEADER_LOGO_MAX_FONT_SIZE`'s limitation exactly, and for exactly
+ * the same reason: **`100dvh` reconstructs the bar's basis rather than reading
+ * it,** because a CSS length cannot ask its parent how tall it turned out. So
+ * everything derived from this is true on the pages where the bar's containing
+ * block is the viewport - `/`, `/profile` and `/admin` - and is not a
+ * statement about `/sign-in`, where the bar has no definite height at all.
+ * That page renders neither of the controls below, which is what keeps the
+ * distinction academic here; `Header.test.tsx` pins that.
+ */
+const HEADER_BAR_CONTROL_HEIGHT_EXPRESSION = `100dvh * ${HEADER_BAR_VIEWPORT_FRACTION}`;
+
+/**
+ * The avatar trigger's design size - the 56px `h-14 w-14` that
+ * `DropDownMenu`'s `Menu.Button` declared.
+ */
+const HEADER_AVATAR_DESIGN_SIZE_PX = 56;
+
+/**
+ * The largest square the profile trigger can be and still sit inside the bar.
+ *
+ * **This is SCRUM-491's fix for the avatar, and it is SCRUM-484's shape with
+ * one difference worth stating.** The logo needed a *font* capped; this needs a
+ * box, because the trigger is a circle wrapping a raster and both of its axes
+ * have to move together or it stops being round. So the cap is applied to
+ * `height` and `width` from one token, and the image inside takes `h-full
+ * w-full` rather than a second copy of the 56.
+ *
+ * Measured at 667x375 the bar is 31.875px and the trigger was 56px, centred -
+ * so its top 12.06px was above the screen and its bottom 12.06px hung into the
+ * content row. That lower band was *clickable*, which is the part that made
+ * this a defect rather than a cosmetic overlap: `DropDownMenu`'s wrapper
+ * carries a `z-index` and is a flex item, and per the Flexbox spec a flex
+ * item's `z-index` creates a stacking context even at `position: static`, so
+ * the trigger hit-tested above the content row beneath it. A tap aimed at the
+ * top of the page opened the profile menu.
+ *
+ * **Capped and not replaced**, like the logo: `min()` picks 56px wherever it
+ * fits, so an ordinary desktop window renders exactly what it rendered before
+ * - measured identical at 1440x900 - and only a bar too short to hold the
+ * circle scales it down. 56px stops fitting below 659px of viewport height,
+ * which is where the overflow began.
+ */
+const HEADER_AVATAR_TRIGGER_SIZE = `min(${HEADER_AVATAR_DESIGN_SIZE_PX}px, calc(${HEADER_BAR_CONTROL_HEIGHT_EXPRESSION}))`;
+
+/**
+ * The line box one desktop navigation tab's label occupies, in pixels.
+ *
+ * **Measured, not declared, and it does not follow the font size.** The tabs
+ * are `text-xl`, which in Tailwind v4 is `font-size: 1.25rem` with
+ * `line-height: 1.75rem` - an *absolute* 28px rather than a ratio. Confirmed
+ * as the button's own `contentHeight` in Chromium against the compiled
+ * stylesheet.
+ *
+ * The absoluteness is the reason the cap below is applied to the padding and
+ * not to the font, and it is the one thing to check before reusing any of
+ * this: shrinking `font-size` alone would leave the 28px line box exactly
+ * where it was, so it would buy nothing.
+ */
+const HEADER_NAV_BUTTON_LINE_BOX_PX = 28;
+
+/**
+ * The vertical padding one desktop navigation tab asks for - the 16px half of
+ * the `p-4` those buttons declared.
+ */
+const HEADER_NAV_BUTTON_PADDING_PX = 16;
+
+/**
+ * The vertical padding a desktop navigation tab can actually afford inside the
+ * bar.
+ *
+ * **This is SCRUM-491's fix for the tabs, and the defect it closes is worse
+ * than the avatar's.** `rounded-xl p-4 text-xl` is 16 + 28 + 16 = 60px, so at
+ * 667x375 each tab was 60px in a 31.875px bar, centred, with 14.06px above the
+ * screen and 14.06px below the bar. Unlike the trigger, the tab group's
+ * wrapper has no `z-index` and therefore no stacking context, so the
+ * positioned content row painted *and hit-tested* above that lower band: the
+ * button looked 45.94px tall and 31.875px of it responded. Measured by
+ * sweeping `elementFromPoint` down the button's centre line - it answered the
+ * button from y 0 to y 31.25 and the content row's background from there on.
+ * A tap on the visible bottom third of `Explore` reached whatever the page had
+ * put at the top of its content row.
+ *
+ * **The padding absorbs it and the label does not move**, which is the whole
+ * choice here. The label's line box is 28px and the bar at a landscape phone
+ * is 31.875px, so the line still fits - it is only the 32px of padding around
+ * it that does not. Solving `2p + 28 <= 0.085 * H` for the padding gives the
+ * expression below, and `min()` against the design value means the cap binds
+ * only where the design value does not fit: at 900px tall it computes to
+ * 24.25px and 16px wins, which is why desktop is untouched, and 16px stops
+ * fitting below 706px of viewport height. At 375px tall it is 1.94px and the
+ * tab measures exactly the bar's 31.875.
+ *
+ * **The `max(0px, ...)` is load-bearing rather than defensive.** Below about
+ * 330px of viewport height the bar is shorter than the 28px line box itself,
+ * the inner term goes negative, and a negative `padding` is not merely ignored
+ * - it makes the declaration invalid, so the whole thing would fall back to
+ * the stylesheet's previous value and the 16px would return at the one
+ * viewport least able to hold it. Clamped at zero the tab is 28px against a
+ * 27.2px bar on a 568x320 phone, an overhang of 0.8px. That is recorded rather
+ * than fixed: closing it needs `line-height` capped as well, which changes
+ * where the label sits at every viewport, and 0.8px does not justify it.
+ */
+const HEADER_NAV_BUTTON_VERTICAL_PADDING = `max(0px, min(${HEADER_NAV_BUTTON_PADDING_PX}px, calc((${HEADER_BAR_CONTROL_HEIGHT_EXPRESSION} - ${HEADER_NAV_BUTTON_LINE_BOX_PX}px) / 2)))`;
+
+/**
  * The shortest chart the admin console draws, in pixels - the `h-[500px]` on
  * `BarChartDaysFrequency`. The other two chart blocks are `min-h-[600px]`.
  *
@@ -415,6 +527,12 @@ module.exports = {
   CONTENT_ROW_VIEWPORT_FRACTION,
   LOGO_FONT_BOX_RATIO,
   HEADER_LOGO_MAX_FONT_SIZE,
+  HEADER_BAR_CONTROL_HEIGHT_EXPRESSION,
+  HEADER_AVATAR_DESIGN_SIZE_PX,
+  HEADER_AVATAR_TRIGGER_SIZE,
+  HEADER_NAV_BUTTON_LINE_BOX_PX,
+  HEADER_NAV_BUTTON_PADDING_PX,
+  HEADER_NAV_BUTTON_VERTICAL_PADDING,
   ADMIN_SHORTEST_CHART_HEIGHT_PX,
   ADMIN_DATA_VERTICAL_SPACE_PX,
   ADMIN_CONSOLE_MIN_HEIGHT_PX,
