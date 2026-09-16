@@ -55,7 +55,6 @@ const buildSearch = (
   seatsAvail: 3,
   status: Status.ACTIVE,
   carpoolId: "group-1",
-  groupMessage: "See you at 8:45",
   groupNotes: "Prefer the Green Line stop",
   groupMusicPreference: "Podcasts",
   groupConversationStyle: "Light chat",
@@ -90,7 +89,6 @@ const SENSITIVE_FIELDS = [
   "emailVerified",
   "licenseSigned",
   "isOnboarded",
-  "groupMessage",
   // Group ride preferences are for group members, delivered by `groups.me`.
   // They must not ride along on a map or recommendation result.
   "groupNotes",

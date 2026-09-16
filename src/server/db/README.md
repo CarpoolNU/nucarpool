@@ -88,23 +88,24 @@ An unannotated `String` is `VARCHAR(191)`, which is why so many limits are 191.
 | `carpool_search.group_notes`                            | `VARCHAR(90)`  | `groups.updatePreferences`, the `GroupPage` textarea |
 | `carpool_search.group_music_preference`                 | `VARCHAR(40)`  | `groups.updatePreferences`                           |
 | `carpool_search.group_conversation_style`               | `VARCHAR(40)`  | `groups.updatePreferences`                           |
-| `carpool_search.group_message`                          | `TEXT`         | legacy, read-only — see below                        |
-| `group.message`                                         | `VARCHAR(191)` | never written with content — see below               |
 | `request.message`                                       | `VARCHAR(255)` | never written; `requests.create` stores `""`         |
 | `location.street`, `.street_address`, `.city`, `.state` | `VARCHAR(191)` | parsed from a Mapbox feature, not typed              |
 
 The values live in [`textLimits.ts`](../../utils/textLimits.ts) so the form, the tRPC input and the column cannot drift. **Reference the constants; never write the number inline** — including where a value is only forwarded and not stored, such as the SES `messagePreview`, which is a real case of drift this module exists to prevent.
 
-### The two group-message columns are legacy
+### The two group-message columns are gone
 
-Group ride preferences used to be one JSON blob written to `group.message` and mirrored into `carpool_search.group_message`. They are now three real columns on the driver's own `CarpoolSearch`.
+Group ride preferences used to be one JSON blob written to `group.message` and mirrored into `carpool_search.group_message`. They are three real columns on the driver's own `CarpoolSearch`, and both legacy columns were dropped in SCRUM-287 — `20260916120000_drop_legacy_group_message_columns`.
 
-**Neither legacy column needs widening, and neither should be widened.**
+The sequence is worth keeping, because it is the pattern any column retirement here follows:
 
-- **`group.message`** — `groups.create` writes `""` and nothing reads it. Its width is irrelevant.
-- **`carpool_search.group_message`** — read-only fallback. [`resolveGroupDetails`](../../components/Group/groupDetails.ts) treats all three new columns being null as "never saved" and parses the old blob from here, so an un-backfilled row still renders. Nothing writes it.
+1. **Expand.** Add the new columns, write them, and leave the old one readable. [`resolveGroupDetails`](../../components/Group/groupDetails.ts) treated all three new columns being null as "never saved" and fell back to parsing the old blob, so a row that had not been backfilled still rendered correctly.
+2. **Backfill.** [`backfill-group-preferences.ts`](../../../scripts/README.md#retiring-a-script) moved the history across — 3 rows on staging, 11 on production — and a dry run confirmed nothing was left.
+3. **Contract.** Only then drop the columns and the fallback, because dropping one a row still depends on loses that row's data with no route back but a restore.
 
-**Both should be dropped** once the new columns are deployed everywhere and [`backfill-group-preferences.ts`](../../../scripts/backfill-group-preferences.ts) has run — not before, so that a schema deploy landing ahead of the matching build cannot break the old code. The backfill is **not** finished: staging still holds rows whose preferences exist only in the legacy column, and production has outstanding rows too. Check the [run-state record](../../../scripts/README.md#run-state-record) and a dry run before dropping either.
+Doing 3 before 2 was the risk the whole ticket existed to avoid: every legacy value turned out to be plain text rather than the `GROUP_DETAILS_V1:` encoding, so `parseGroupDetails` mapped all fourteen to real notes a driver could see.
+
+One asymmetry left behind by step 3: `resolveGroupDetails` no longer needs to tell null from `""`, since there is nothing to fall back to. `groups.updatePreferences` still writes all three fields together anyway, which is what keeps a cleared field cleared.
 
 ## Terms acceptance
 

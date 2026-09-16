@@ -77,35 +77,62 @@ const SendBar = ({ onSendMessage }: SendBarProps) => {
 
   return (
     /*
-      The horizontal inset is responsive; the vertical one deliberately is
-      not.
+      Both insets are responsive now, and they are gated on different things:
+      the horizontal one on the panel's width, the vertical one on the
+      viewport's height.
 
       This bar used to nest two unconditional insets - 24px of container
       padding and a further 40px of margin on the row inside it - which is
       64px a side at every viewport. On a 375px phone that left the row 247px
       and the text itself about 170px, under half the screen, to compose a
       message that may run to 255 characters. The desktop inset is
-      deliberate and is unchanged; mobile was simply paying for it.
+      deliberate and is unchanged; mobile was simply paying for it (SCRUM-442).
 
-      **`desktop:` rather than the `ismobile` hook or a `sm` prefix**, and
-      both alternatives are worse here for concrete reasons. The hook is what
-      `MessageHeader` and `MessagePanel` use, but they branch on structure -
-      a different tree per platform - and this is one number; a hook also
-      renders its server snapshot once during hydration, so the padding would
-      visibly change after mount. The `sm` prefix is the trap: this repository
-      overrides Tailwind's screens, so `sm` is 576px, and using it would leave
-      every viewport from 576px to 639px on the desktop inset while
-      `useIsMobile` still called it mobile. `desktop:` is 640px *from the same
-      definition the hook reads*, so the CSS and the layout logic cannot
-      disagree. This is its first use in markup; the screen was registered for
-      exactly this.
+      **`message-panel-tall:` and not `desktop:` on the horizontal inset,
+      which is half of SCRUM-494.** `desktop:` is a width alone, and a
+      landscape phone is 667px wide - so it was handed the 24px desktop inset,
+      out of a panel that is the viewport less a 400px sidebar. The 8px a side
+      that buys back is not a cosmetic gain: it widens the composer from 158px
+      to 174, and `globals.css`'s `.placeholder:empty:before` hint measures
+      144.77px in this font, needing a 160.77px composer for one line - so at
+      158 it wrapped to two. Removing the wrap takes 13px off the bar, because
+      the composer row is the send button's 46px plus 2px of border wherever
+      the composer fits inside it. The row's own margins moved to this screen
+      for the same reason in SCRUM-489, and the two now agree.
 
-      Vertical padding stays at 24px on both platforms. The vertical budget on
-      a phone is tight - the header gained a request-controls row - but that is
-      a different question, and answering both at once would leave a reviewer
-      unable to judge either.
+      The `sm` prefix remains the trap it always was: this repository overrides
+      Tailwind's screens, so `sm` is 576px, and using it would leave every
+      viewport from 576px to 639px on the desktop inset while `useIsMobile`
+      still called it mobile. Both screens used here take their width term from
+      the same constant the hook reads, so the CSS and the layout logic cannot
+      disagree. And not the hook itself: `MessageHeader` and `MessagePanel`
+      branch on structure - a different tree per platform - where this is one
+      number, and a hook renders its server snapshot once during hydration, so
+      the padding would visibly change after mount.
+
+      **`message-panel-short:` on the vertical inset, and it is the first
+      screen in this repository that narrows as a viewport grows.** This is the
+      question the docblock here used to defer by name: 48px of a landscape
+      phone's 375px viewport was vertical padding. It could not move to the
+      base the way every other value in this chrome did, because unlike the
+      header this tree is shared with the mobile branch - so a smaller base
+      would shrink the bar on a phone in portrait too, where the budget is not
+      tight and where most of the traffic is.
+      `MESSAGE_PANEL_SHORT_MEDIA_QUERY` carries the precedent, and why the
+      boundary is a negated `min-height` rather than a `max-height`.
+
+      **12px rather than a figure solved for**, and the reason is that it has to
+      survive the next change to this chrome. The tab strip on the other side of
+      the conversation is already `py-3`, so at 12px the two bars that frame it
+      carry the same vertical inset - a relation that stays true when something
+      else in the panel moves. Solving instead for a target content height would
+      pin this number to every other term in the chrome at once, and the
+      threshold's own docblock is a long account of how often those move. What
+      it buys is measured rather than aimed at: 110px of bar becomes 73 and the
+      conversation's content height goes from 83 to 120, with the newest message
+      whole inside the port and 32px to spare where it had 3.
     */
-    <div className="desktop:px-6 border-t border-gray-200 px-4 py-6">
+    <div className="message-panel-tall:px-6 message-panel-short:py-3 border-t border-gray-200 px-4 py-6">
       {/*
         Flush with the container on mobile, so the row is inset 16px from the
         screen edge - the same 16px the message thread above it uses, which is
@@ -122,13 +149,15 @@ const SendBar = ({ onSendMessage }: SendBarProps) => {
         conversation lost and the bar's last 18.38px went off the bottom of the
         screen (SCRUM-489).
 
-        Dropping it below the threshold returns the composer to 158px and two
-        lines, and the bar to 110. The hint needs about 200px to fit on one
-        line, which a 267px panel cannot give it at any inset - so this
-        relieves the height cost rather than removing it, and the remaining
-        crowding is SCRUM-494, along with the `py-6` below that this ticket
-        could not reach: it is unconditional, so shrinking it would change what
-        a phone in portrait renders.
+        Dropping it below the threshold returned the composer to 158px and the
+        bar to 110, which was still two lines of hint. **SCRUM-489 read that as
+        a cost it could only relieve, on an estimate that the hint needed about
+        200px and that no inset could find it in a 267px panel. The estimate
+        was wrong, and measuring it is what finished this off.** The hint is
+        144.77px of text and wants a 160.77px composer; at 158 it was 2.77px
+        short of one line. So the container's own inset above - 8px a side
+        once it stopped taking the desktop figure - is enough to clear it, and
+        the wrap is gone rather than merely reduced (SCRUM-494).
 
         Nothing changes on either side of the band it was written for: a phone
         in portrait is below the width term and keeps `mx-0`, and a desktop

@@ -4,7 +4,7 @@ Operational scripts, and the record of what has been run where.
 
 Everything here is run **by hand against a real database**. Nothing in CI invokes the `.ts` scripts and nothing schedules them.
 
-> **Before running anything, confirm what `DATABASE_URL` points at.** None of these scripts print the connection string, so none of them will tell you that you are pointed at production. Seven of them write.
+> **Before running anything, confirm what `DATABASE_URL` points at.** None of these scripts print the connection string, so none of them will tell you that you are pointed at production. Six of them write.
 
 ```bash
 npx ts-node scripts/<name>.ts            # every script: report only
@@ -19,15 +19,14 @@ Node 22, per [`.nvmrc`](../.nvmrc). `ts-node` comes from `node_modules`, so run 
 
 All are **dry-run by default**, refuse to proceed past a `--max` ceiling (default 500), and update or delete one row at a time by primary key, so a partial run leaves a consistent database. Re-running any of them is a no-op.
 
-| Script                                                                               | What it changes                                                                              |
-| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| [`backfill-group-preferences.ts`](./backfill-group-preferences.ts)                   | Moves the legacy `GROUP_DETAILS_V1:` blob out of `group_message` into the three real columns |
-| [`backfill-request-status.ts`](./backfill-request-status.ts)                         | Sets `Request.status = ACCEPTED` for pairs who already share a `carpoolId`                   |
-| [`backfill-profile-picture-timestamps.ts`](./backfill-profile-picture-timestamps.ts) | Records `user.profile_picture_updated_at` for every picture already in S3                    |
-| [`cleanup-orphan-locations.ts`](./cleanup-orphan-locations.ts)                       | Deletes `Location` rows no `CarpoolSearch` points at                                         |
-| [`cleanup-orphan-conversations.ts`](./cleanup-orphan-conversations.ts)               | Deletes `conversation` rows whose request is gone, **and the `message` rows in them**        |
-| [`cleanup-self-requests.ts`](./cleanup-self-requests.ts)                             | Deletes `Request` rows whose two ends are the same user, and their thread                    |
-| [`repair-seat-residue.ts`](./repair-seat-residue.ts)                                 | Clamps out-of-range `seats_avail` into `[0, 6]` and deletes member-less `group` rows         |
+| Script                                                                               | What it changes                                                                       |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| [`backfill-request-status.ts`](./backfill-request-status.ts)                         | Sets `Request.status = ACCEPTED` for pairs who already share a `carpoolId`            |
+| [`backfill-profile-picture-timestamps.ts`](./backfill-profile-picture-timestamps.ts) | Records `user.profile_picture_updated_at` for every picture already in S3             |
+| [`cleanup-orphan-locations.ts`](./cleanup-orphan-locations.ts)                       | Deletes `Location` rows no `CarpoolSearch` points at                                  |
+| [`cleanup-orphan-conversations.ts`](./cleanup-orphan-conversations.ts)               | Deletes `conversation` rows whose request is gone, **and the `message` rows in them** |
+| [`cleanup-self-requests.ts`](./cleanup-self-requests.ts)                             | Deletes `Request` rows whose two ends are the same user, and their thread             |
+| [`repair-seat-residue.ts`](./repair-seat-residue.ts)                                 | Clamps out-of-range `seats_avail` into `[0, 6]` and deletes member-less `group` rows  |
 
 Four things to know before using any of them:
 
@@ -114,7 +113,6 @@ Two different questions, and only one of them is answerable from a database:
 
 | Script                                | staging            | production         | Verified   |
 | ------------------------------------- | ------------------ | ------------------ | ---------- |
-| `backfill-group-preferences`          | **3 outstanding**  | **12 outstanding** | 2026-09-09 |
 | `backfill-request-status`             | 0 outstanding      | 0 outstanding      | 2026-09-09 |
 | `backfill-profile-picture-timestamps` | **1,298 null**     | **4,322 null**     | 2026-09-09 |
 | `cleanup-orphan-locations`            | 0 outstanding      | **90 outstanding** | 2026-09-09 |
@@ -126,7 +124,7 @@ Two different questions, and only one of them is answerable from a database:
 | `check-profile-coordinates`           | **521 findings**   | **626 findings**   | 2026-09-09 |
 | `check-seat-counts`                   | **1 finding**      | 0 findings         | 2026-09-09 |
 
-No `--apply` has been run in any shared environment. Every production figure was read as an aggregate count, never row data.
+One `--apply` has been run in a shared environment: `backfill-group-preferences`, on staging (3 rows) and production (11), on 2026-09-16. Its row is gone from the table because the script was retired in the same change — SCRUM-287 dropped the columns it read. Nothing else has been applied anywhere. Every production figure was read as an aggregate count, never row data.
 
 What the non-zero figures actually mean:
 
@@ -144,11 +142,6 @@ What the non-zero figures actually mean:
 Each row is one read-only query, using the same conditions the scripts use, so they are safe to run against production through any SQL console.
 
 ```sql
--- backfill-group-preferences: rows still holding only legacy data
-SELECT COUNT(*) FROM carpool_search
-WHERE group_notes IS NULL AND group_music_preference IS NULL
-  AND group_conversation_style IS NULL AND group_message IS NOT NULL;
-
 -- backfill-request-status: PENDING requests between pairs already carpooling
 SELECT COUNT(*) FROM request r
 JOIN carpool_search f ON f.userId = r.fromUserId
@@ -188,7 +181,7 @@ SELECT COUNT(*) FROM `group` g WHERE NOT EXISTS (
 );
 ```
 
-The dry run is still better where it is practical: the scripts report _which_ rows, and `backfill-group-preferences` distinguishes rows carrying preferences worth writing from rows whose blob parses to nothing.
+The dry run is still better where it is practical: the scripts report _which_ rows, and some of them draw a distinction the SQL cannot. `backfill-group-preferences` did exactly that — it separated rows carrying preferences worth writing from rows whose stored value parsed to nothing, and on production the two figures were 11 and 12. The one row it skipped stayed in the SQL count for good, so the table cell never reached zero even once the work was finished. Trust the script's own report over the cell.
 
 </details>
 
@@ -206,7 +199,9 @@ A one-shot script should not live here forever. Retire it when **all** of these 
 
 Then delete the script, its test and its row, and say in the commit message which environments were verified and when.
 
-`backfill-group-preferences.ts` is the worked example: retiring it means removing the script, the legacy columns and `resolveGroupDetails`'s fallback together — and it cannot proceed until point 1 holds, which today it does not.
+`backfill-group-preferences.ts` is the worked example, now finished: SCRUM-287 removed the script, both legacy columns and `resolveGroupDetails`'s fallback in one change, which is point 3 — a fallback that exists only to tolerate un-migrated rows goes with the thing it was tolerating.
+
+Point 1 is what held it up for six weeks, and the reason is worth keeping. The script's dry run reported candidates in **both** environments the whole time, and the values were not the `GROUP_DETAILS_V1:` blobs anyone expected — every one was plain text, which `parseGroupDetails` mapped to a real note. Dropping the column on the first attempt would have destroyed fourteen drivers' notes. Read point 1 as "the dry run says zero", never as "the backfill has surely run by now".
 
 Read-only `check-*` and `measure-*` scripts are cheaper to keep than to re-derive. Retire those only when the thing they measure is gone.
 
