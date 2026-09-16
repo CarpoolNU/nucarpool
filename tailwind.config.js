@@ -131,17 +131,24 @@ module.exports = {
          * derived in `breakpoints.js` from the same 8.5% the bar declares.
          *
          * **Tokens rather than arbitrary values at the call site, and here the
-         * usual reason is joined by a hard one.** The value is composed in
-         * JavaScript from a constant, so the literal class name
-         * `py-[max(0px,min(16px,calc((100dvh*0.085-28px)/2)))]` would have to
-         * appear in the source for Tailwind's scan to emit it - which means
-         * writing the arithmetic out a second time, in a place nothing checks
-         * against the first. The `spacing` block above settles the same
+         * usual reason is joined by a hard one.** Each value is composed in
+         * JavaScript from a constant, and Tailwind emits an arbitrary value
+         * only if the finished class name appears literally in the source - so
+         * a bracketed padding utility would have to spell the whole nested
+         * `max`/`min`/`calc` expression out a second time, in a place nothing
+         * checks against the first. The `spacing` block above settles the same
          * question for the same reason.
          *
+         * The first draft of this comment made that point by quoting the
+         * bracketed class in full, and the selector-set diff caught it
+         * emitting that rule into the production bundle - dead CSS matching no
+         * element. This file's own docblock is about exactly that, which is
+         * the joke: **naming a utility in prose ships it.** Hence the
+         * description rather than the example.
+         *
          * `spacing` and not `height`/`padding` separately: `header-control` is
-         * a square and needs `h-` and `w-` from one figure, which is what
-         * keeps the trigger circular at every viewport.
+         * a square and needs its two axes from one figure, which is what keeps
+         * the trigger circular at every viewport.
          */
         "header-control": HEADER_AVATAR_TRIGGER_SIZE,
         "header-nav-y": HEADER_NAV_BUTTON_VERTICAL_PADDING,
