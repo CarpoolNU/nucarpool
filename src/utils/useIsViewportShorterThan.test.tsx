@@ -242,9 +242,12 @@ describe("useIsViewportShorterThan under hydration", () => {
  */
 describe("the threshold /admin reads", () => {
   it("is composed from the console's own numbers", () => {
-    /* 500px shortest declared chart plus `my-4`'s 32px, over the content
-       row's 91.5% share. `breakpoints.test.ts` holds the composition; this
-       records the value a reviewer can check the measurements against. */
+    /* 500px shortest chart plus the 32px of `py-4` around the scroll port,
+       over the content row's 91.5% share. `breakpoints.test.ts` holds the
+       composition; this records the value a reviewer can check the
+       measurements against. Both terms were a description of intent rather
+       than of the page until SCRUM-488: the chart was shrunk below its 500 and
+       the 32px was a margin that took nothing out of the row. */
     expect(ADMIN_CONSOLE_MIN_HEIGHT_PX).toBe(582);
   });
 

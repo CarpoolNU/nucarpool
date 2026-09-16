@@ -472,9 +472,9 @@ const ADMIN_CHART_CLASS = "relative min-h-[600px] w-full";
  * comment grew the stylesheet by 52 bytes. This file is more exposed to it
  * than most, because carrying copied markup is its whole purpose.
  */
-const ADMIN_SHORT_CHART_CLASS = "flex h-[500px] w-full flex-col";
+const ADMIN_SHORT_CHART_CLASS = "flex h-[500px] w-full shrink-0 flex-col";
 
-const ADMIN_SCROLL_PORT_CLASS = "my-4 h-full w-full overflow-y-auto";
+const ADMIN_SCROLL_PORT_CLASS = "h-full w-full overflow-y-auto py-4";
 
 const ADMIN_SCROLL_INNER_CLASS = "flex h-full w-full flex-col space-y-4 px-8";
 
@@ -512,6 +512,23 @@ const adminConsoleChartFold: LayoutFixture = {
     { name: "sidebar min-w-[175px]", x: 175 },
     { name: "sidebar border-r-4", x: 4 },
     { name: "AdminData px-8", x: 64 },
+    /*
+     * Not a CSS length, and the only inset here that is not. Before SCRUM-488
+     * the scroll port never scrolled - the column's one shrinkable child
+     * absorbed the whole overflow, so `scrollHeight` equalled `clientHeight`
+     * and no scrollbar was laid out. Stopping that shrink is what gives the
+     * port real scroll range, and a classic scrollbar takes width from the
+     * content when it appears.
+     *
+     * 11px is Chromium's, measured here at both 667 and 1440. It is the one
+     * figure in this fixture that is the environment's rather than the
+     * stylesheet's: a platform with overlay scrollbars - macOS Safari, or
+     * Chrome with them enabled - takes 0 instead, and Windows takes about 15.
+     * It is listed so the predicted width matches the measured one, because a
+     * reader told to treat a mismatch as a broken container chain should not
+     * meet an 11px mismatch that is nobody's mistake.
+     */
+    { name: "scroll port's scrollbar (Chromium's, not CSS)", x: 11 },
   ],
   markup: `
     <style>
@@ -557,12 +574,14 @@ const adminConsoleChartFold: LayoutFixture = {
   },
   recorded: [
     "At 667x582 — the gate, the shortest viewport still served the console — content-row rect top 49.469 and height 532.523, which is 0.915 of 582 to three decimals.",
-    "scroll-port rect top 65.469 and height 532.523: the same height as the row, pushed 16px down by `my-4`. The largest slice of scroll content that can be on screen at once is therefore 516.523, and the 500px chart the gate is derived from fits inside it — scrolled to the top of the port, its axis lands at 581.969 against a viewport of 582.",
+    "scroll-port rect top 49.469 and height 532.523 — the row's box exactly, top and bottom, and `portRect.bottom - rowRect.bottom` is 0. SCRUM-488 moved the 16px inside as `py-4`, so the port is no longer a `h-full` box wearing a margin inside an `overflow-hidden` parent. BEFORE it was top 65.469 for the same height, hanging 16px past the row's clip.",
+    "The port's usable content height at the gate is 501 — `clientHeight` 533 less the 32px of `py-4` — against the 500px chart the gate is derived from. `ADMIN_CONSOLE_MIN_HEIGHT_PX` solves `0.915 * H - 32 >= 500` to 581.4 and rounds to 582, and that arithmetic is now what the box does rather than what it was hoped to do: scrolled to the maximum the short chart sits at rect top 81.969 and bottom 581.969, whole, inside a row that ends at 581.992.",
     "chart (`min-h-[600px]`) rect height 600 at every viewport measured. A minimum is a floor a flex shrink cannot cross, which is what makes this the console's real tallest block.",
-    "short-chart (`h-[500px]`) rect height 24 here and 151.5 at 1440x900 — **not 500 at either**. It is a shrinkable flex item in a column that always overflows, so it renders at whatever is left. Separate defect, filed, not fixed here; `ADMIN_SHORTEST_CHART_HEIGHT_PX` explains why the gate still uses the declared 500.",
-    "chart contentWidth 424, matching the predicted chain. Read the sidebar note on `insets` before reusing this at another width.",
+    "short-chart (`h-[500px] shrink-0`) rect height 500 here and 500 at 1440x900, matching what its class string says. BEFORE, without the `shrink-0` SCRUM-488 added, it was 24 here and 151.5 at 1440x900: a shrinkable flex item in a column that always overflows renders at whatever is left, and `min-height: auto` does not stop it.",
+    "The scroll range is the other half of that change, and it is the tell that the shrink was doing real work. BEFORE, `scrollHeight` equalled `clientHeight` at 824 at 1440x900 — the port did not scroll at all, because crushing one chart was enough to make the column fit. AFTER it is 1188 against 824, so the console scrolls, and an 11px Chromium scrollbar appears that was never laid out before. That is the `insets` entry above, and it is why this fixture's measured contentWidth is 413 at 667 where SCRUM-484 recorded 424.",
+    "chart contentWidth 413, matching the predicted chain once the scrollbar is in it — 424 of CSS less Chromium's 11. Read the sidebar note on `insets` before reusing this at another width, and the scrollbar note before reading the 11 as a constant.",
     "BEFORE, at 667x375 — the viewport that now gets `AdminMobileNotice` instead: row 343.125, port 311.13 of usable window, chart 600, and the axis at rect top 679.875, some 305px below the fold.",
-    "BEFORE, and the more serious half: scrolled fully to the bottom the axis's rect bottom was 390.875 against a viewport of 375, so it was *permanently* unreachable — `my-4` plus `h-full` makes the port 16px taller than the row that clips it, so its last 16px is outside the clip at any scroll position. Measured at 1440x900 too, where it is also 16. Viewport-independent, separate defect, filed.",
+    "BEFORE, and the more serious half: scrolled fully to the bottom the axis's rect bottom was 390.875 against a viewport of 375, so it was *permanently* unreachable — `my-4` plus `h-full` made the port 16px taller than the row that clips it, so its last 16px was outside the clip at any scroll position. Measured at 1440x900 too, where it was also 16. Viewport-independent; fixed in SCRUM-488, and the overhang is 0 at both viewports above.",
   ],
   reproduces: [
     {
