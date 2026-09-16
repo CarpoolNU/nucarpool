@@ -339,11 +339,10 @@ export const groupsRouter = router({
     });
 
     // Preferences belong to the driver's own search and are read through the
-    // group rather than copied into it. `group.message` used to hold
-    // a second copy that could disagree with this one; it is no longer written,
-    // and `groupMessage` rides along only so a row that has not been backfilled
-    // yet still resolves. Riders see the driver's values, which is what the two
-    // separate reads were approximating before.
+    // group rather than copied into it. `group.message` used to hold a second
+    // copy that could disagree with this one; both it and the legacy
+    // `carpool_search.group_message` are gone. Riders see the driver's values,
+    // which is what the two separate reads were approximating before.
     const driverSearch = memberCarpoolSearches.find(
       (search) => search.role === Role.DRIVER,
     );
@@ -364,7 +363,6 @@ export const groupsRouter = router({
         groupNotes: driverSearch?.groupNotes ?? null,
         groupMusicPreference: driverSearch?.groupMusicPreference ?? null,
         groupConversationStyle: driverSearch?.groupConversationStyle ?? null,
-        groupMessage: driverSearch?.groupMessage ?? null,
       },
       // Group members are counterparts: they have agreed to carpool together and
       // the group route is drawn from their home coordinates, so these keep full
@@ -512,16 +510,11 @@ export const groupsRouter = router({
 
         await reserveSeat(tx, input.driverId);
 
-        // `message` is written empty and never read. It used to be
-        // seeded from the driver's `groupMessage`, which made the group a second
-        // home for the same preferences; they are read through the driver's own
-        // search now. The column stays until a follow-up drops it, so that a
-        // schema deploy landing before this build cannot break the old code.
-        const group = await tx.carpoolGroup.create({
-          data: {
-            message: "",
-          },
-        });
+        // `group.message` used to be seeded from the driver's `groupMessage`,
+        // making the group a second home for the same preferences. They are
+        // read through the driver's own search now, and SCRUM-287 dropped the
+        // column, so there is no placeholder left to write.
+        const group = await tx.carpoolGroup.create({ data: {} });
 
         // update driver's CarpoolSearch
         await tx.carpoolSearch.updateMany({
@@ -915,13 +908,14 @@ export const groupsRouter = router({
    * `requireGroupDriver` to police it, whereas this cannot touch anybody else's
    * data. Riders read the driver's values through `groups.me`.
    *
-   * All three fields are always written, including as empty strings, because
-   * `resolveGroupDetails` treats all-null as "never saved" and falls back to the
-   * legacy column. A partial write would leave a cleared field looking
-   * un-migrated and resurrect the old blob.
+   * All three fields are always written, including as empty strings. That was
+   * once load-bearing — `resolveGroupDetails` read all-null as "never saved"
+   * and fell back to the legacy column, so a partial write could resurrect the
+   * old blob. The column is gone, and writing all three is still what keeps a
+   * cleared field cleared.
    *
    * Lengths are validated here rather than truncated silently, which is what
-   * `normalizeDetails` used to do on the way in.
+   * the old clamp-on-write did.
    */
   updatePreferences: protectedRouter
     .input(

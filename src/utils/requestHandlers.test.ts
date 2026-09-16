@@ -163,7 +163,6 @@ const user = (overrides: Partial<User> = {}): User => ({
   groupNotes: null,
   groupMusicPreference: null,
   groupConversationStyle: null,
-  groupMessage: null,
   startCoordLng: -71.1,
   startCoordLat: 42.3,
   startStreet: "1 Home St",

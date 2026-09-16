@@ -305,7 +305,6 @@ const generateGroups = async (
   await prisma.carpoolGroup.createMany({
     data: range(SEED_GROUP_COUNT).map((idx) => ({
       id: idx.toString(),
-      message: "hello",
     })),
   });
 
@@ -477,7 +476,6 @@ const createUserData = async (resolveAddress: AddressResolver) => {
           startDate: userData.coopStartDate,
           endDate: userData.coopEndDate,
           carpoolId: carpoolId,
-          groupMessage: null,
           homeLocationId: homeLocation.id,
           companyLocationId: companyLocation.id,
         },

@@ -145,7 +145,6 @@ export const buildSearch = (options: SearchOptions = {}): SearchFixture => {
     seatsAvail,
     status,
     carpoolId,
-    groupMessage: null,
     groupNotes: null,
     groupMusicPreference: null,
     groupConversationStyle: null,

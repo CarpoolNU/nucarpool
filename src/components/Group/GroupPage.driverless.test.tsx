@@ -135,7 +135,6 @@ const driverlessGroup = (users: PublicUser[]) => ({
     groupNotes: null,
     groupMusicPreference: null,
     groupConversationStyle: null,
-    groupMessage: null,
   },
   users,
 });

@@ -58,14 +58,13 @@ type SearchRow = {
   status?: Status;
   carpoolId: string | null;
   seatsAvail: number;
-  groupMessage: string;
   /** The preference columns. Null until a save writes all three. */
   groupNotes?: string | null;
   groupMusicPreference?: string | null;
   groupConversationStyle?: string | null;
 };
 
-type GroupRow = { id: string; message: string };
+type GroupRow = { id: string };
 
 type RequestPair = [string, string];
 
@@ -76,7 +75,6 @@ const defaultSearches = (): SearchRow[] => [
     role: Role.DRIVER,
     carpoolId: GROUP,
     seatsAvail: 2,
-    groupMessage: "",
   },
   {
     id: "s-rider-1",
@@ -84,7 +82,6 @@ const defaultSearches = (): SearchRow[] => [
     role: Role.RIDER,
     carpoolId: GROUP,
     seatsAvail: 0,
-    groupMessage: "",
   },
   {
     id: "s-rider-2",
@@ -92,7 +89,6 @@ const defaultSearches = (): SearchRow[] => [
     role: Role.RIDER,
     carpoolId: GROUP,
     seatsAvail: 0,
-    groupMessage: "",
   },
   {
     id: "s-outsider",
@@ -100,7 +96,6 @@ const defaultSearches = (): SearchRow[] => [
     role: Role.RIDER,
     carpoolId: null,
     seatsAvail: 0,
-    groupMessage: "",
   },
 ];
 
@@ -111,10 +106,7 @@ const buildGroupsDb = (opts?: {
 }) => {
   const searches = (opts?.searches ?? defaultSearches()).map((s) => ({ ...s }));
   const groups = new Map<string, GroupRow>(
-    (opts?.groups ?? [{ id: GROUP, message: "original message" }]).map((g) => [
-      g.id,
-      { ...g },
-    ]),
+    (opts?.groups ?? [{ id: GROUP }]).map((g) => [g.id, { ...g }]),
   );
   const requests = opts?.requests ?? [[DRIVER, RIDER_1]];
 
@@ -165,7 +157,6 @@ const buildGroupsDb = (opts?: {
       if (typeof data.seatsAvail === "number") row.seatsAvail = data.seatsAvail;
       if (data.seatsAvail?.decrement)
         row.seatsAvail -= data.seatsAvail.decrement;
-      if (data.groupMessage !== undefined) row.groupMessage = data.groupMessage;
       // The preference columns.
       if (data.groupNotes !== undefined) row.groupNotes = data.groupNotes;
       if (data.groupMusicPreference !== undefined)
@@ -190,11 +181,8 @@ const buildGroupsDb = (opts?: {
   };
 
   const carpoolGroup = {
-    create: jest.fn(async ({ data }: any) => {
-      const row = {
-        id: `group-created-${groups.size + 1}`,
-        message: data.message,
-      };
+    create: jest.fn(async () => {
+      const row = { id: `group-created-${groups.size + 1}` };
       groups.set(row.id, row);
       return { ...row };
     }),
@@ -205,7 +193,6 @@ const buildGroupsDb = (opts?: {
     update: jest.fn(async ({ where, data }: any) => {
       const g = groups.get(where.id);
       if (!g) throw new Error(`No group ${where.id}`);
-      if (data.message !== undefined) g.message = data.message;
       return { ...g };
     }),
     delete: jest.fn(async ({ where }: any) => {
@@ -294,7 +281,6 @@ const buildGroupsDb = (opts?: {
       searches.find((r) => r.userId === userId)?.seatsAvail,
     seatsOfSearch: (searchId: string) =>
       searches.find((r) => r.id === searchId)?.seatsAvail,
-    messageOf: (id: string) => groups.get(id)?.message,
     /** The preference columns on a user's own search. */
     preferencesOf: (userId: string) => {
       const row = searches.find((r) => r.userId === userId);
@@ -367,7 +353,6 @@ describe("user.groups.me — no group is not an error", () => {
           role: Role.RIDER,
           carpoolId: null,
           seatsAvail: 0,
-          groupMessage: "",
         },
       ],
     });
@@ -505,7 +490,6 @@ describe("user.groups.updatePreferences — self-scoped, replacing the double wr
 
     await caller.user.groups.updatePreferences(prefs);
 
-    expect(db.messageOf(GROUP)).toBe("original message");
     expect(db.carpoolGroup.update).not.toHaveBeenCalled();
   });
 
@@ -692,10 +676,7 @@ describe("user.groups.edit — adding a member needs an invitation", () => {
   it("refuses when the named group is not that driver's group", async () => {
     const db = buildGroupsDb({
       requests: [[OUTSIDER, DRIVER]],
-      groups: [
-        { id: GROUP, message: "m" },
-        { id: OTHER_GROUP, message: "m" },
-      ],
+      groups: [{ id: GROUP }, { id: OTHER_GROUP }],
     });
     const { caller } = callerFor(sessionFor(DRIVER), db);
 
@@ -729,7 +710,6 @@ describe("user.groups.create — only the two people involved", () => {
           role: Role.DRIVER,
           carpoolId: null,
           seatsAvail: 3,
-          groupMessage: "",
         },
         {
           id: "s-rider-1",
@@ -737,7 +717,6 @@ describe("user.groups.create — only the two people involved", () => {
           role: Role.RIDER,
           carpoolId: null,
           seatsAvail: 0,
-          groupMessage: "",
         },
         {
           id: "s-outsider",
@@ -745,7 +724,6 @@ describe("user.groups.create — only the two people involved", () => {
           role: Role.RIDER,
           carpoolId: null,
           seatsAvail: 0,
-          groupMessage: "",
         },
       ],
       groups: [],
@@ -793,7 +771,6 @@ describe("user.groups.create — only the two people involved", () => {
           role: Role.DRIVER,
           carpoolId: null,
           seatsAvail: 3,
-          groupMessage: "",
         },
         {
           id: "s-outsider",
@@ -801,7 +778,6 @@ describe("user.groups.create — only the two people involved", () => {
           role: Role.RIDER,
           carpoolId: null,
           seatsAvail: 0,
-          groupMessage: "",
         },
       ],
       groups: [],
@@ -836,7 +812,6 @@ describe("accepting a request resolves it", () => {
           role: Role.DRIVER,
           carpoolId: null,
           seatsAvail: 3,
-          groupMessage: "",
         },
         {
           id: "s-rider-1",
@@ -844,7 +819,6 @@ describe("accepting a request resolves it", () => {
           role: Role.RIDER,
           carpoolId: null,
           seatsAvail: 0,
-          groupMessage: "",
         },
       ],
       groups: [],
@@ -906,7 +880,6 @@ describe("accepting a request resolves it", () => {
           role: Role.DRIVER,
           carpoolId: GROUP,
           seatsAvail: 0,
-          groupMessage: "",
         },
         {
           id: "s-outsider",
@@ -914,7 +887,6 @@ describe("accepting a request resolves it", () => {
           role: Role.RIDER,
           carpoolId: null,
           seatsAvail: 0,
-          groupMessage: "",
         },
       ],
       requests: [[OUTSIDER, DRIVER]],
@@ -982,7 +954,6 @@ describe("user.groups — only the person a request was sent to may accept it", 
       role: Role.DRIVER,
       carpoolId: null,
       seatsAvail: 3,
-      groupMessage: "",
     },
     {
       id: "s-outsider",
@@ -990,7 +961,6 @@ describe("user.groups — only the person a request was sent to may accept it", 
       role: Role.RIDER,
       carpoolId: null,
       seatsAvail: 0,
-      groupMessage: "",
     },
   ];
 
@@ -1118,7 +1088,6 @@ describe("user.groups — a used invitation cannot be replayed", () => {
       role: Role.DRIVER,
       carpoolId: null,
       seatsAvail: 3,
-      groupMessage: "",
     },
     {
       id: "s-rider-1",
@@ -1126,7 +1095,6 @@ describe("user.groups — a used invitation cannot be replayed", () => {
       role: Role.RIDER,
       carpoolId: null,
       seatsAvail: 0,
-      groupMessage: "",
     },
   ];
 
@@ -1300,7 +1268,6 @@ describe("user.groups — authentication gate", () => {
     ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
 
     expect(db.groupIds()).toEqual([GROUP]);
-    expect(db.messageOf(GROUP)).toBe("original message");
     expect(db.carpoolGroup.delete).not.toHaveBeenCalled();
   });
 });
@@ -1341,7 +1308,6 @@ describe("seat accounting — deleting restores seats to the driver", () => {
           role: Role.DRIVER,
           carpoolId: null,
           seatsAvail: 1,
-          groupMessage: "",
         },
         {
           id: "s-driver",
@@ -1349,7 +1315,6 @@ describe("seat accounting — deleting restores seats to the driver", () => {
           role: Role.DRIVER,
           carpoolId: GROUP,
           seatsAvail: 2,
-          groupMessage: "",
         },
         {
           id: "s-rider-1",
@@ -1357,7 +1322,6 @@ describe("seat accounting — deleting restores seats to the driver", () => {
           role: Role.RIDER,
           carpoolId: GROUP,
           seatsAvail: 0,
-          groupMessage: "",
         },
       ],
     });
@@ -1378,7 +1342,6 @@ describe("seat accounting — deleting restores seats to the driver", () => {
           role: Role.DRIVER,
           carpoolId: GROUP,
           seatsAvail: 5,
-          groupMessage: "",
         },
         {
           id: "s-rider-1",
@@ -1386,7 +1349,6 @@ describe("seat accounting — deleting restores seats to the driver", () => {
           role: Role.RIDER,
           carpoolId: GROUP,
           seatsAvail: 0,
-          groupMessage: "",
         },
         {
           id: "s-rider-2",
@@ -1394,7 +1356,6 @@ describe("seat accounting — deleting restores seats to the driver", () => {
           role: Role.RIDER,
           carpoolId: GROUP,
           seatsAvail: 0,
-          groupMessage: "",
         },
       ],
     });
@@ -1417,7 +1378,6 @@ describe("seat accounting — a full driver cannot take another rider", () => {
           role: Role.DRIVER,
           carpoolId,
           seatsAvail: 0,
-          groupMessage: "",
         },
         {
           id: "s-outsider",
@@ -1425,10 +1385,9 @@ describe("seat accounting — a full driver cannot take another rider", () => {
           role: Role.RIDER,
           carpoolId: null,
           seatsAvail: 0,
-          groupMessage: "",
         },
       ],
-      groups: carpoolId ? [{ id: GROUP, message: "m" }] : [],
+      groups: carpoolId ? [{ id: GROUP }] : [],
       requests: [[OUTSIDER, DRIVER]],
     });
 
@@ -1475,7 +1434,6 @@ describe("seat accounting — normal joins and leaves", () => {
           role: Role.DRIVER,
           carpoolId: null,
           seatsAvail: 3,
-          groupMessage: "",
         },
         {
           id: "s-rider-1",
@@ -1483,7 +1441,6 @@ describe("seat accounting — normal joins and leaves", () => {
           role: Role.RIDER,
           carpoolId: null,
           seatsAvail: 0,
-          groupMessage: "",
         },
       ],
       groups: [],
@@ -1547,7 +1504,6 @@ describe("seat accounting — normal joins and leaves", () => {
           role: Role.DRIVER,
           carpoolId: GROUP,
           seatsAvail: MAX_SEATS_AVAILABLE,
-          groupMessage: "",
         },
         {
           id: "s-rider-1",
@@ -1555,7 +1511,6 @@ describe("seat accounting — normal joins and leaves", () => {
           role: Role.RIDER,
           carpoolId: GROUP,
           seatsAvail: 0,
-          groupMessage: "",
         },
         {
           id: "s-rider-2",
@@ -1563,7 +1518,6 @@ describe("seat accounting — normal joins and leaves", () => {
           role: Role.RIDER,
           carpoolId: GROUP,
           seatsAvail: 0,
-          groupMessage: "",
         },
       ],
     });
@@ -1634,7 +1588,6 @@ describe("group mutations are atomic", () => {
       role: Role.DRIVER,
       carpoolId: null,
       seatsAvail: 3,
-      groupMessage: "",
     },
     {
       id: "s-rider-1",
@@ -1642,7 +1595,6 @@ describe("group mutations are atomic", () => {
       role: Role.RIDER,
       carpoolId: null,
       seatsAvail: 0,
-      groupMessage: "",
     },
   ];
 
@@ -1789,7 +1741,6 @@ describe("edit — dissolving the group when one member is left", () => {
           role: Role.DRIVER,
           carpoolId: GROUP,
           seatsAvail: 2,
-          groupMessage: "",
         },
         {
           id: "s-rider-1",
@@ -1797,7 +1748,6 @@ describe("edit — dissolving the group when one member is left", () => {
           role: Role.RIDER,
           carpoolId: GROUP,
           seatsAvail: 0,
-          groupMessage: "",
         },
       ],
       requests: [[DRIVER, RIDER_1]],
@@ -1947,7 +1897,6 @@ describe("user.groups.edit — a driver cannot strand the group", () => {
             role: Role.DRIVER,
             carpoolId: GROUP,
             seatsAvail: 1,
-            groupMessage: "",
           },
           {
             id: "s-rider-1",
@@ -1955,7 +1904,6 @@ describe("user.groups.edit — a driver cannot strand the group", () => {
             role: Role.RIDER,
             carpoolId: GROUP,
             seatsAvail: 0,
-            groupMessage: "",
           },
         ],
       }),
@@ -2023,7 +1971,6 @@ describe("user.groups.me — a driverless group is reported, not silently blank"
           role: Role.RIDER,
           carpoolId: GROUP,
           seatsAvail: 0,
-          groupMessage: "",
           groupNotes: "Meet at the garage",
         },
         {
@@ -2032,7 +1979,6 @@ describe("user.groups.me — a driverless group is reported, not silently blank"
           role: Role.RIDER,
           carpoolId: GROUP,
           seatsAvail: 0,
-          groupMessage: "",
         },
       ],
     });
@@ -2156,7 +2102,6 @@ describe("user.groups.edit — the seat credit follows the group", () => {
             role: Role.DRIVER,
             carpoolId: GROUP,
             seatsAvail: 1,
-            groupMessage: "",
           },
           {
             id: "s-rider-1",
@@ -2164,7 +2109,6 @@ describe("user.groups.edit — the seat credit follows the group", () => {
             role: Role.RIDER,
             carpoolId: GROUP,
             seatsAvail: 0,
-            groupMessage: "",
           },
           // The stranger named on the call, so the assertion below reads a real
           // row rather than an absent one.
@@ -2174,7 +2118,6 @@ describe("user.groups.edit — the seat credit follows the group", () => {
             role: Role.RIDER,
             carpoolId: null,
             seatsAvail: 0,
-            groupMessage: "",
           },
         ],
       }),
@@ -2207,7 +2150,6 @@ describe("user.groups.edit — the seat credit follows the group", () => {
             role: Role.RIDER,
             carpoolId: GROUP,
             seatsAvail: 0,
-            groupMessage: "",
           },
           {
             id: "s-rider-1",
@@ -2215,7 +2157,6 @@ describe("user.groups.edit — the seat credit follows the group", () => {
             role: Role.RIDER,
             carpoolId: GROUP,
             seatsAvail: 0,
-            groupMessage: "",
           },
           {
             id: "s-rider-2",
@@ -2223,7 +2164,6 @@ describe("user.groups.edit — the seat credit follows the group", () => {
             role: Role.RIDER,
             carpoolId: GROUP,
             seatsAvail: 0,
-            groupMessage: "",
           },
         ],
       }),
@@ -2272,7 +2212,6 @@ describe("user.groups.edit(add) — one group per rider", () => {
           role: Role.DRIVER,
           carpoolId: GROUP,
           seatsAvail: 2,
-          groupMessage: "",
         },
         // Already carpooling with somebody else. Under the bug this join moved
         // them, and OTHER_GROUP was left holding its driver alone.
@@ -2282,13 +2221,9 @@ describe("user.groups.edit(add) — one group per rider", () => {
           role: Role.RIDER,
           carpoolId: OTHER_GROUP,
           seatsAvail: 0,
-          groupMessage: "",
         },
       ],
-      groups: [
-        { id: GROUP, message: "" },
-        { id: OTHER_GROUP, message: "" },
-      ],
+      groups: [{ id: GROUP }, { id: OTHER_GROUP }],
       requests: [[RIDER_1, DRIVER]],
     });
     const { caller } = callerFor(sessionFor(DRIVER), db);
@@ -2318,7 +2253,6 @@ describe("user.groups.edit(add) — one group per rider", () => {
           role: Role.DRIVER,
           carpoolId: GROUP,
           seatsAvail: 2,
-          groupMessage: "",
         },
         {
           id: "s-rider-1",
@@ -2326,7 +2260,6 @@ describe("user.groups.edit(add) — one group per rider", () => {
           role: Role.RIDER,
           carpoolId: GROUP,
           seatsAvail: 0,
-          groupMessage: "",
         },
       ],
       requests: [[RIDER_1, DRIVER]],
@@ -2355,7 +2288,6 @@ describe("user.groups.edit(add) — one group per rider", () => {
           role: Role.DRIVER,
           carpoolId: GROUP,
           seatsAvail: 2,
-          groupMessage: "",
         },
         {
           id: "s-rider-1",
@@ -2363,7 +2295,6 @@ describe("user.groups.edit(add) — one group per rider", () => {
           role: Role.RIDER,
           carpoolId: null,
           seatsAvail: 0,
-          groupMessage: "",
         },
       ],
       requests: [[RIDER_1, DRIVER]],
@@ -2398,7 +2329,6 @@ describe("user.groups.create — legal states only", () => {
           role: opts.driverRole ?? Role.DRIVER,
           carpoolId: opts.driverCarpoolId ?? null,
           seatsAvail: opts.driverSeats ?? 3,
-          groupMessage: "",
         },
         {
           id: "s-rider-1",
@@ -2406,12 +2336,11 @@ describe("user.groups.create — legal states only", () => {
           role: Role.RIDER,
           carpoolId: opts.riderCarpoolId ?? null,
           seatsAvail: 0,
-          groupMessage: "",
         },
       ],
       groups:
         opts.driverCarpoolId || opts.riderCarpoolId
-          ? [{ id: OTHER_GROUP, message: "" }]
+          ? [{ id: OTHER_GROUP }]
           : [],
       // The rider asked, so the driver is the one who may accept — every test
       // in this block calls as the driver.
@@ -2525,7 +2454,6 @@ describe("a double-clicked Accept is refused the second time", () => {
           role: Role.DRIVER,
           carpoolId: null,
           seatsAvail: 3,
-          groupMessage: "",
         },
         {
           id: "s-rider-1",
@@ -2533,7 +2461,6 @@ describe("a double-clicked Accept is refused the second time", () => {
           role: Role.RIDER,
           carpoolId: null,
           seatsAvail: 0,
-          groupMessage: "",
         },
       ],
       groups: [],
@@ -2573,7 +2500,6 @@ describe("a double-clicked Accept is refused the second time", () => {
           role: Role.DRIVER,
           carpoolId: GROUP,
           seatsAvail: 3,
-          groupMessage: "",
         },
         {
           id: "s-rider-1",
@@ -2581,7 +2507,6 @@ describe("a double-clicked Accept is refused the second time", () => {
           role: Role.RIDER,
           carpoolId: null,
           seatsAvail: 0,
-          groupMessage: "",
         },
       ],
       requests: [[RIDER_1, DRIVER]],
@@ -2648,7 +2573,6 @@ describe("the rider slot holds a rider", () => {
           role: opts.driverRole ?? Role.DRIVER,
           carpoolId: opts.driverInGroup ? GROUP : null,
           seatsAvail: 3,
-          groupMessage: "",
         },
         {
           id: "s-outsider",
@@ -2656,10 +2580,9 @@ describe("the rider slot holds a rider", () => {
           role: opts.riderRole ?? Role.RIDER,
           carpoolId: null,
           seatsAvail: opts.riderRole === Role.DRIVER ? 3 : 0,
-          groupMessage: "",
         },
       ],
-      groups: opts.driverInGroup ? [{ id: GROUP, message: "" }] : [],
+      groups: opts.driverInGroup ? [{ id: GROUP }] : [],
       // `[asker, asked]`, defaulting to the outsider asking the driver so the
       // driver is the one entitled to accept. The one test below that calls as
       // the outsider passes the opposite direction.
@@ -2788,7 +2711,6 @@ describe("the rider slot holds a rider", () => {
           role: Role.DRIVER,
           carpoolId: GROUP,
           seatsAvail: 0,
-          groupMessage: "",
         },
         {
           id: "s-rider-1",
@@ -2796,7 +2718,6 @@ describe("the rider slot holds a rider", () => {
           role: Role.RIDER,
           carpoolId: GROUP,
           seatsAvail: 0,
-          groupMessage: "",
         },
         {
           id: "s-rider-2",
@@ -2805,7 +2726,6 @@ describe("the rider slot holds a rider", () => {
           role: Role.DRIVER,
           carpoolId: GROUP,
           seatsAvail: 0,
-          groupMessage: "",
         },
       ],
       requests: [[DRIVER, RIDER_2]],
@@ -2847,7 +2767,6 @@ describe("a driver at a negative seat count", () => {
           role: Role.DRIVER,
           carpoolId: GROUP,
           seatsAvail: -1,
-          groupMessage: "",
         },
         {
           id: "s-outsider",
@@ -2855,7 +2774,6 @@ describe("a driver at a negative seat count", () => {
           role: Role.RIDER,
           carpoolId: null,
           seatsAvail: 0,
-          groupMessage: "",
         },
       ],
       requests: [[OUTSIDER, DRIVER]],
@@ -2928,7 +2846,6 @@ describe("a driver at a negative seat count", () => {
           role: Role.DRIVER,
           carpoolId: GROUP,
           seatsAvail: 1,
-          groupMessage: "",
         },
         {
           id: "s-outsider",
@@ -2936,7 +2853,6 @@ describe("a driver at a negative seat count", () => {
           role: Role.RIDER,
           carpoolId: null,
           seatsAvail: 0,
-          groupMessage: "",
         },
       ],
       requests: [[OUTSIDER, DRIVER]],
@@ -2990,7 +2906,6 @@ describe("a paused search cannot be built into a group", () => {
           status: opts.driverStatus ?? Status.ACTIVE,
           carpoolId: opts.driverInGroup ? GROUP : null,
           seatsAvail: 3,
-          groupMessage: "",
         },
         {
           id: "s-outsider",
@@ -2999,10 +2914,9 @@ describe("a paused search cannot be built into a group", () => {
           status: opts.riderStatus ?? Status.ACTIVE,
           carpoolId: null,
           seatsAvail: 0,
-          groupMessage: "",
         },
       ],
-      groups: opts.driverInGroup ? [{ id: GROUP, message: "" }] : [],
+      groups: opts.driverInGroup ? [{ id: GROUP }] : [],
       // The outsider asks, so the driver is the one entitled to accept.
       requests: [[OUTSIDER, DRIVER]],
     });
@@ -3099,7 +3013,6 @@ describe("a paused search cannot be built into a group", () => {
           status: Status.ACTIVE,
           carpoolId: GROUP,
           seatsAvail: 1,
-          groupMessage: "",
         },
         {
           id: "s-rider-1",
@@ -3108,7 +3021,6 @@ describe("a paused search cannot be built into a group", () => {
           status: Status.INACTIVE,
           carpoolId: GROUP,
           seatsAvail: 0,
-          groupMessage: "",
         },
       ],
     });

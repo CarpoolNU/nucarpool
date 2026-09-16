@@ -13,8 +13,8 @@
  * Until it has run, nothing is broken and nothing is lost: a null row behaves
  * exactly as it did before. What is missing is the saving. The
  * fallback and this script are retired together, once it reports nothing to do
- * in every environment — the sequence `group_message` follows in
- * the database README.
+ * in every environment — the sequence `group_message` completed in SCRUM-287,
+ * recorded in the database README.
  *
  * **This is the one script here that reads AWS rather than only the database.**
  * It needs `s3:ListBucket` on the configured bucket. It performs no S3 writes,

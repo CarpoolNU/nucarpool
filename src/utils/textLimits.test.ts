@@ -120,8 +120,11 @@ describe("the parser this suite depends on", () => {
   });
 
   it("does not confuse fields of the same name on different models", () => {
-    // `message` exists on both Request and CarpoolGroup with different widths.
+    // `message` exists on both Request and User and means different things:
+    // an annotated VarChar column on one, a relation list on the other. This
+    // used to pair Request with CarpoolGroup, until SCRUM-287 dropped
+    // `group.message`.
     expect(declaredVarCharWidth("Request", "message")).toBe(255);
-    expect(declaredVarCharWidth("CarpoolGroup", "message")).toBeNull();
+    expect(declaredVarCharWidth("User", "message")).toBeNull();
   });
 });

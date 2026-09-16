@@ -21,8 +21,8 @@ import {
  * `carpool_search.group_message` - carrying the same JSON blob to two columns
  * that could then disagree, and `group.message` was VARCHAR(191) so the group
  * copy could fail while the driver's own copy landed. One self-scoped write
- * replaces both, and `groupId` is no longer needed because the group no longer
- * stores a copy.
+ * replaces both, `groupId` is no longer needed because the group no longer
+ * stores a copy, and both columns have since been dropped.
  */
 
 type UseGroupDetailsArgs = {

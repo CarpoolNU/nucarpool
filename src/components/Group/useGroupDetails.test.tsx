@@ -2,7 +2,7 @@
  * The group-details form hook.
  *
  * `groupDetails.test.ts` already covers the pure functions this hook calls -
- * `resolveGroupDetails`, `normalizeDetails`, `trimDetails`. What it cannot
+ * `resolveGroupDetails`, `trimDetails`, `hasAnyDetail`. What it cannot
  * reach is the React wiring those functions were extracted *away* from, which
  * is where the interesting invariants live: a sync effect that must not
  * overwrite what the driver is typing, and a save path whose two previous bugs
@@ -287,8 +287,8 @@ describe("useGroupDetails", () => {
         await result.current.save({ successMessage: "Group details saved" });
       });
 
-      // `normalizeDetails` already trimmed these on the way in, so the
-      // assertion that matters is that `save` does not re-clamp or re-slice -
+      // `resolveGroupDetails` already trimmed these on the way in, so the
+      // assertion that matters is that `save` does not re-trim or clamp -
       // it sends what the form holds.
       expect(mutateAsync).toHaveBeenCalledTimes(1);
       expect(mutateAsync).toHaveBeenCalledWith({
