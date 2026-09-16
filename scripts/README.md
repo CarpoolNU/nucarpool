@@ -141,7 +141,7 @@ What the non-zero figures actually mean:
 <details>
 <summary>Re-checking the table without running the scripts</summary>
 
-Each row is one read-only query, using the same conditions the scripts use, so they are safe to run against production through any SQL console.
+Nine of the table's ten rows are one read-only query below, using the same conditions the scripts use, so they are safe to run against production through any SQL console. `backfill-profile-picture-timestamps` has none — see the note after the block, which explains why.
 
 ```sql
 -- backfill-request-status: PENDING requests between pairs already carpooling
@@ -167,6 +167,39 @@ SELECT COUNT(*) FROM `group` g WHERE NOT EXISTS (
   SELECT 1 FROM carpool_search cs WHERE cs.carpoolId = g.id AND cs.role = 'DRIVER'
 );
 
+-- check-profile-coordinates: findings vs. the actionable subset the script's
+-- exit code is keyed to (SCRUM-408). COALESCE(u.is_onboarded, 1) matches the
+-- script's rule that a dangling emulated foreign key counts as onboarded, so
+-- a search with no user row lands in `actionable` rather than being excused.
+SELECT
+  COUNT(*) AS findings,
+  SUM(missing_location OR out_of_range OR reversed_range OR (unresolved AND onboarded)) AS actionable,
+  SUM(NOT (missing_location OR out_of_range OR reversed_range OR (unresolved AND onboarded))) AS not_actionable,
+  SUM(reversed_range) AS reversed_range,
+  SUM(out_of_range) AS out_of_range,
+  SUM(missing_location) AS missing_location
+FROM (
+  SELECT
+    (h.id IS NULL OR c.id IS NULL) AS missing_location,
+    (
+      (h.id IS NOT NULL AND (h.coord_lat NOT BETWEEN -90 AND 90 OR h.coord_lng NOT BETWEEN -180 AND 180))
+      OR (c.id IS NOT NULL AND (c.coord_lat NOT BETWEEN -90 AND 90 OR c.coord_lng NOT BETWEEN -180 AND 180))
+    ) AS out_of_range,
+    (cs.start_date IS NOT NULL AND cs.end_date IS NOT NULL AND cs.end_date < cs.start_date) AS reversed_range,
+    (
+      cs.role <> 'VIEWER' AND (
+        (h.id IS NOT NULL AND h.coord_lat = 0 AND h.coord_lng = 0)
+        OR (c.id IS NOT NULL AND c.coord_lat = 0 AND c.coord_lng = 0)
+      )
+    ) AS unresolved,
+    (COALESCE(u.is_onboarded, 1) = 1) AS onboarded
+  FROM carpool_search cs
+  LEFT JOIN location h ON h.id = cs.homeLocationId
+  LEFT JOIN location c ON c.id = cs.companyLocationId
+  LEFT JOIN user u ON u.id = cs.userId
+) s
+WHERE missing_location OR out_of_range OR reversed_range OR unresolved;
+
 -- cleanup-orphan-conversations: the provably unreachable population, which
 -- must fail BOTH links. A conversation a live request still reaches through
 -- Request.conversationId is NOT an orphan -- requests.me still reads it.
@@ -182,6 +215,8 @@ SELECT COUNT(*) FROM `group` g WHERE NOT EXISTS (
   SELECT 1 FROM carpool_search cs WHERE cs.carpoolId = g.id
 );
 ```
+
+**`backfill-profile-picture-timestamps` is deliberately script-only.** A `COUNT(*) FROM user WHERE profile_picture_updated_at IS NULL` would just repeat the figure the table above already records, and repeating it here would invite reading it as the outstanding count. It is not: a null row means "ask S3," so the count is every row that predates the column, not every row that predates it **and** still lacks a picture there. Only the script's own dry run lists the bucket and can tell the two apart (SCRUM-366).
 
 The dry run is still better where it is practical: the scripts report _which_ rows, and some of them draw a distinction the SQL cannot. `backfill-group-preferences` did exactly that — it separated rows carrying preferences worth writing from rows whose stored value parsed to nothing, and on production the two figures were 11 and 12. The one row it skipped stayed in the SQL count for good, so the table cell never reached zero even once the work was finished. Trust the script's own report over the cell.
 
