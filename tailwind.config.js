@@ -20,6 +20,8 @@ const {
   MESSAGE_PANEL_TALL_MEDIA_QUERY,
   MOBILE_NAV_SPACE,
   MOBILE_SHEET_MAP_STRIP,
+  HEADER_AVATAR_TRIGGER_SIZE,
+  HEADER_NAV_BUTTON_VERTICAL_PADDING,
 } = require("./src/utils/breakpoints");
 
 /**
@@ -124,6 +126,32 @@ module.exports = {
          */
         "sheet-handle": `calc(100% - ${MOBILE_SHEET_MAP_STRIP} - ${MOBILE_SHEET_HANDLE_LIFT})`,
         "half-sheet-handle": `calc(${MOBILE_NAV_SPACE} + (${MOBILE_SHEET_HEIGHT}) / 2 - ${MOBILE_SHEET_HANDLE_LIFT})`,
+        /**
+         * The two caps SCRUM-491 puts on the header bar's own controls, both
+         * derived in `breakpoints.js` from the same 8.5% the bar declares.
+         *
+         * **Tokens rather than arbitrary values at the call site, and here the
+         * usual reason is joined by a hard one.** Each value is composed in
+         * JavaScript from a constant, and Tailwind emits an arbitrary value
+         * only if the finished class name appears literally in the source - so
+         * a bracketed padding utility would have to spell the whole nested
+         * `max`/`min`/`calc` expression out a second time, in a place nothing
+         * checks against the first. The `spacing` block above settles the same
+         * question for the same reason.
+         *
+         * The first draft of this comment made that point by quoting the
+         * bracketed class in full, and the selector-set diff caught it
+         * emitting that rule into the production bundle - dead CSS matching no
+         * element. This file's own docblock is about exactly that, which is
+         * the joke: **naming a utility in prose ships it.** Hence the
+         * description rather than the example.
+         *
+         * `spacing` and not `height`/`padding` separately: `header-control` is
+         * a square and needs its two axes from one figure, which is what keeps
+         * the trigger circular at every viewport.
+         */
+        "header-control": HEADER_AVATAR_TRIGGER_SIZE,
+        "header-nav-y": HEADER_NAV_BUTTON_VERTICAL_PADDING,
       },
       height: {
         /**
