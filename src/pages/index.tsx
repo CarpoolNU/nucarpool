@@ -1006,7 +1006,28 @@ const Home: NextPage<any> = () => {
           <WelcomeTutorial onComplete={handleTutorialComplete} />
         )}
 
-        <div className="m-0 h-full max-h-screen w-full">
+        {/* A max-height utility named for the viewport used to sit on this div
+            and has been removed rather than converted, because it never
+            constrained anything. It compiled to a `100vh` ceiling, and this
+            element is a direct child of `#__next`, which `globals.css` gives a
+            `100dvh` height - and the dynamic viewport is by definition never
+            larger than the large one, so that ceiling cannot clip this height
+            at any viewport. SCRUM-483 measured it in Chromium, found it inert,
+            and deferred the removal to SCRUM-485.
+
+            It was the last `vh` length in the shipped bundle, and the only one
+            `viewportUnits.test.ts` could not see: that guard reads source
+            spellings, and the source named the viewport instead of the unit.
+            Removing it closes the exemption that file's docblock used to
+            record, and the guard now rejects those aliases outright, so the
+            gap cannot reopen.
+
+            The utility is described here rather than spelled, and that is not
+            squeamishness: Tailwind v4 scans this file, comments included, so
+            writing the name would emit the very declaration being removed.
+            `layoutFixtures.ts` and `breakpoints.js` keep the same discipline
+            for the same reason. */}
+        <div className="m-0 h-full w-full">
           {!isMobile && (
             <Header
               data={{
