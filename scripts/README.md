@@ -19,21 +19,22 @@ Node 22, per [`.nvmrc`](../.nvmrc). `ts-node` comes from `node_modules`, so run 
 
 All are **dry-run by default**, refuse to proceed past a `--max` ceiling (default 500), and update or delete one row at a time by primary key, so a partial run leaves a consistent database. Re-running any of them is a no-op.
 
-| Script                                                                               | What it changes                                                                       |
-| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
-| [`backfill-request-status.ts`](./backfill-request-status.ts)                         | Sets `Request.status = ACCEPTED` for pairs who already share a `carpoolId`            |
-| [`backfill-profile-picture-timestamps.ts`](./backfill-profile-picture-timestamps.ts) | Records `user.profile_picture_updated_at` for every picture already in S3             |
-| [`cleanup-orphan-locations.ts`](./cleanup-orphan-locations.ts)                       | Deletes `Location` rows no `CarpoolSearch` points at                                  |
-| [`cleanup-orphan-conversations.ts`](./cleanup-orphan-conversations.ts)               | Deletes `conversation` rows whose request is gone, **and the `message` rows in them** |
-| [`cleanup-self-requests.ts`](./cleanup-self-requests.ts)                             | Deletes `Request` rows whose two ends are the same user, and their thread             |
-| [`repair-seat-residue.ts`](./repair-seat-residue.ts)                                 | Clamps out-of-range `seats_avail` into `[0, 6]` and deletes member-less `group` rows  |
+| Script                                                                               | What it changes                                                                                                  |
+| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| [`backfill-request-status.ts`](./backfill-request-status.ts)                         | Sets `Request.status = ACCEPTED` for pairs who already share a `carpoolId`                                       |
+| [`backfill-profile-picture-timestamps.ts`](./backfill-profile-picture-timestamps.ts) | Records `user.profile_picture_updated_at` for every picture already in S3                                        |
+| [`cleanup-orphan-locations.ts`](./cleanup-orphan-locations.ts)                       | Deletes `Location` rows no `CarpoolSearch` points at                                                             |
+| [`cleanup-orphan-conversations.ts`](./cleanup-orphan-conversations.ts)               | Deletes `conversation` rows whose request is gone, **and the `message` rows in them**                            |
+| [`cleanup-self-requests.ts`](./cleanup-self-requests.ts)                             | Deletes `Request` rows whose two ends are the same user, and their thread                                        |
+| [`repair-seat-residue.ts`](./repair-seat-residue.ts)                                 | Clamps out-of-range `seats_avail` into `[0, 6]`, deletes member-less `group` rows, and dissolves driverless ones |
 
 Four things to know before using any of them:
 
 - **Two of these destroy message content, and they are not the same decision.** `cleanup-orphan-conversations` deletes words two people typed to each other that nothing can read any more — irreversible, and the privacy-respecting answer rather than a tidy-up. `cleanup-self-requests` deletes a user's own opening message to themselves. **Both print the message count per candidate before deleting; read those numbers before `--apply`.**
 - **`cleanup-orphan-conversations` also takes `--limit N` and `--older-than YYYY-MM-DD`**, so a population larger than the ceiling can be retired in tranches instead of by raising `--max`. It is the only script that logs every row it deletes before deleting it.
 - **`backfill-profile-picture-timestamps` is the only script that reads AWS.** It needs `s3:ListBucket`, performs no S3 writes and deletes nothing. `NEXT_PUBLIC_ENV` selects the key prefix, and pointing it at the wrong environment **lists an empty prefix and reports zero rather than failing** — so confirm that variable as well as `DATABASE_URL`. It writes `LastModified` from the listing rather than `now()`, because the column means "when the picture last changed".
-- **`repair-seat-residue` needs the read-path fix deployed first.** With `hasSeatAvailable` live, a negative row is already out of matching, which makes this data hygiene rather than the fix. Its two halves are one defect's residue rather than two chores: the overwritten-membership bug cost a driver a seat and abandoned their old group in the same event, so finding one is a reason to look for the other.
+- **`repair-seat-residue` needs the read-path fix deployed first.** With `hasSeatAvailable` live, a negative row is already out of matching, which makes this data hygiene rather than the fix. Its first two halves are one defect's residue rather than two chores: the overwritten-membership bug cost a driver a seat and abandoned their old group in the same event, so finding one is a reason to look for the other.
+- **`repair-seat-residue` also dissolves driverless groups, and it never promotes anyone to `DRIVER`.** A dissolve clears `carpoolId` for every member and deletes the group row, touching nothing else — no seat, no role, no profile. Promotion was rejected rather than skipped: `groups.create` did not enforce `Role.DRIVER` until SCRUM-291, and the client named whichever party did not accept the request as the driver without checking, so a group could be **born** driverless and there may be no original driver to restore (SCRUM-406). The dry run prints every candidate group individually, plus the two numbers that matter — groups to delete, and `carpoolId` values to clear.
 
 Neither backfill exists as a Prisma migration on purpose: `prisma/migrations/` is never applied to PlanetScale, so a data migration would be dead text. See [the database docs](../src/server/db/README.md#changing-the-schema).
 
@@ -55,7 +56,9 @@ The `check-*` scripts exit `0` when clean and `1` when not, so they can gate a f
 
 `check-profile-coordinates` draws one distinction inside "clean", because without it the gate was permanently red (SCRUM-408). It reports every finding but exits on the **actionable** ones only, so a database whose only findings are `(0, 0)` rows belonging to users who never finished onboarding exits `0` — those rows are unfinished sign-ups that were never in matching. A reversed co-op range is actionable whatever the user's onboarding state and whatever the search's `status`.
 
-**None of them has an `--apply`, and that is a decision.** For `check-driverless-groups` and `check-profile-coordinates` there is no single correct repair, and only the affected user knows which they want. For the other two the repair exists in a sibling — `repair-seat-residue.ts` and `cleanup-self-requests.ts`. Keeping `check-*` uniformly read-only is what makes every one of them safe to point at production.
+**None of them has an `--apply`, and that is a decision.** For `check-profile-coordinates` there is no single correct repair, and only the affected user knows which they want. For the other three the repair exists in a sibling — `repair-seat-residue.ts` for both `check-seat-counts` and `check-driverless-groups`, and `cleanup-self-requests.ts` for `check-self-requests`. Keeping `check-*` uniformly read-only is what makes every one of them safe to point at production.
+
+`check-driverless-groups` was the standing exception to that until SCRUM-406: its header said the repair could not be automated because "only the affected users know which one they want". That reasoning held only while promoting a member was on the table. Once promotion was rejected outright — there may be no original driver to restore — dissolving is the single correct repair, and it lives in `repair-seat-residue.ts`.
 
 `measure-unread-count.ts` is the odd one out: its useful output is the `EXPLAIN` plan, not its timings. Access types describe the shape of the work rather than its current size, so the plan is worth reading against a local database while the timings are not. For production numbers, PlanetScale Insights is the authority and needs no script.
 
@@ -120,9 +123,9 @@ Two different questions, and only one of them is answerable from a database:
 | `cleanup-orphan-locations`            | 0 outstanding      | **90 outstanding** | 2026-09-09 |
 | `cleanup-orphan-conversations`        | **11 outstanding** | **620 retained**   | 2026-09-09 |
 | `cleanup-self-requests`               | 0 outstanding      | **2 outstanding**  | 2026-09-09 |
-| `repair-seat-residue`                 | **2 outstanding**  | **3 outstanding**  | 2026-09-09 |
+| `repair-seat-residue`                 | **2 outstanding**  | **18 outstanding** | 2026-09-16 |
 | `check-self-requests`                 | 0 findings         | **2 findings**     | 2026-09-09 |
-| `check-driverless-groups`             | **1 finding**      | **18 findings**    | 2026-09-09 |
+| `check-driverless-groups`             | **1 finding**      | **18 findings**    | 2026-09-16 |
 | `check-profile-coordinates`           | **521 findings**   | **626 findings**   | 2026-09-09 |
 | `check-seat-counts`                   | **1 finding**      | 0 findings         | 2026-09-09 |
 
@@ -132,7 +135,8 @@ What the non-zero figures actually mean:
 
 - **`cleanup-orphan-conversations` — production's 620 are retained by decision**, not pending. A figure _above_ 620 would mean the fix that stopped new ones regressed. See [Conversation ownership](../src/server/db/README.md#conversation-ownership).
 - **`check-profile-coordinates` — only 47 of production's 626 are actionable.** Those are reversed co-op ranges. The other 579 are `(0, 0)` rows belonging to users who never finished onboarding and were never in matching; staging's 521 are all of that kind. The script reports both and exits `1` on the actionable set only, so production exits `1` on the 47 and staging exits `0` (SCRUM-408). **Both cells above are the total each run reports**, which is the figure to compare a later run against; the actionable count is the second number the run prints.
-- **`check-seat-counts` and `repair-seat-residue` see the same data from different sides.** Production's seat counts are clean (0 out of range across 4,098 rows), so its `repair-seat-residue` figure is member-less `group` rows only — the same rows `check-driverless-groups` reports as empty.
+- **`check-seat-counts` and `repair-seat-residue` see the same data from different sides.** Production's seat counts are clean (0 out of range across 4,098 rows), so its `repair-seat-residue` figure is `group` rows only: **3 empty and 15 driverless**, which is the same 18 `check-driverless-groups` reports. Staging's 2 is one out-of-range seat and one empty group, with no driverless one.
+- **`check-driverless-groups` — production's 18 is 15 driverless groups plus 3 empty ones**, and staging's 1 is a single empty group with no driverless one, which is why every figure taken from staging understated this. The 15 hold **33 members**: 14 groups of two and one of five; 25 `RIDER` and 8 `VIEWER`, 32 `ACTIVE` and 1 `INACTIVE`. They were created between 2024-10-21 and 2026-01-11 — all of them before `groups.create` began enforcing `Role.DRIVER` in SCRUM-291 (2026-08-27), so some may have been **born** driverless rather than abandoned by a driver. On activity: 30 of the 33 have a co-op end date already past, 2 have none, and exactly one group has a member whose co-op is still running; 16 last held a session over a year ago and 4 within 90 days. All 33 seat values are in `[0, 2]` and none is negative, so a dissolve needs no seat arithmetic. Measured 2026-09-16 (SCRUM-406).
 - **`backfill-profile-picture-timestamps` — a null is not a missing picture.** It means "ask S3", so the figures are the size of the un-migrated population, not a fault count. See [Profile picture presence](../src/server/db/README.md#profile-picture-presence).
 - **`emailtemplate.py` — a republish is outstanding.** The SES templates in AWS are older than the repository's copy.
 
@@ -214,6 +218,18 @@ SELECT COUNT(*) FROM carpool_search WHERE seats_avail < 0 OR seats_avail > 6;
 SELECT COUNT(*) FROM `group` g WHERE NOT EXISTS (
   SELECT 1 FROM carpool_search cs WHERE cs.carpoolId = g.id
 );
+-- repair-seat-residue's third candidate set: driverless groups, and the
+-- memberships a dissolve would clear. These are the two numbers its dry run
+-- prints, and they are deliberately separate -- one is rows deleted, the other
+-- is people returned to matching.
+SELECT COUNT(*) AS driverless_groups, COALESCE(SUM(member_count), 0) AS memberships
+FROM (
+  SELECT g.id, COUNT(*) AS member_count
+  FROM `group` g
+  JOIN carpool_search cs ON cs.carpoolId = g.id
+  GROUP BY g.id
+  HAVING SUM(cs.role = 'DRIVER') = 0
+) t;
 ```
 
 **`backfill-profile-picture-timestamps` is deliberately script-only.** A `COUNT(*) FROM user WHERE profile_picture_updated_at IS NULL` would just repeat the figure the table above already records, and repeating it here would invite reading it as the outstanding count. It is not: a null row means "ask S3," so the count is every row that predates the column, not every row that predates it **and** still lacks a picture there. Only the script's own dry run lists the bucket and can tell the two apart (SCRUM-366).
