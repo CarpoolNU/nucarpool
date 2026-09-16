@@ -1102,7 +1102,7 @@ const GROUP_PANEL_CLASS =
   "flex h-4/6 w-4/6 flex-col content-center justify-start gap-1 overflow-y-auto rounded-md bg-white py-9 shadow-lg";
 
 const UNSAVED_MODAL_PANEL_CLASS =
-  "relative flex w-1/3 flex-col justify-center rounded-lg bg-white px-6 py-16 text-center shadow-lg";
+  "relative flex w-1/3 min-w-[min(22rem,100%)] flex-col justify-center rounded-lg bg-white px-6 py-16 text-center shadow-lg";
 
 const centredDialogPanels: LayoutFixture = {
   name: "centred-dialog-panels",
@@ -1159,9 +1159,13 @@ const centredDialogPanels: LayoutFixture = {
     "compliance-panel and group-panel both measure 423.33x228.66 at top 73.16, bottom 301.83 — **fully inside the viewport**, and that is this fixture's main result.",
     "It falsifies a specific claim: SCRUM-485's opening comment listed all three of these as centred boxes needing `justify-center-safe` alongside a cap. Two of them cannot overflow at all. `h-4/6` is a percentage of the centring container, so the panel is always two thirds of the space available and there is no overflow for safe alignment to rescue. The pairing SCRUM-482 measured is real; it does not apply here.",
     "compliance-scroll clientHeight 53 against scrollHeight 192, and compliance-agree fully inside the viewport. So the terms are readable 53px at a time and the only control is reachable: cramped exactly as the ticket describes, with nothing lost.",
-    "unsaved-panel is the exception and the one that does overflow: rect height 376 at top -0.5, bottom 375.5 against a viewport of 375. Half a pixel each way now, growing on any shorter viewport — this is the centred box `justify-center-safe` would be for.",
-    "Its mechanism is not the one SCRUM-477 recorded. The survey blamed `py-16` and put the clipping threshold at ~280px; the padding is 128px and the panel is 376px, so something else supplies the other 248. It is the width: `w-1/3` is 222.33px here, leaving 174 of content for a button row whose two labels need 196 (scrollWidth 196 against clientWidth 174), so both labels wrap and unsaved-buttons measures 88px tall instead of ~40.",
-    "unsaved-save is fully inside the viewport at 101.32x88, so the modal is answerable — it is the panel's own top and bottom edges that leave the screen, by half a pixel at this height.",
+    "**The three unsaved-* figures below are SCRUM-492's, taken after it fixed this panel.** SCRUM-485 measured it overflowing — rect height 376 at top -0.5, bottom 375.5 against a viewport of 375, half a pixel each way and growing on any shorter viewport. It now measures 352x276 at top 49.5, bottom 325.5: fully inside, with 49.5px of clearance top and bottom.",
+    "unsaved-buttons is 40px tall with contentWidth 304, so neither label wraps. SCRUM-485 had it at 88px in a 174px box.",
+    "unsaved-save is 176.02x40, fully inside the viewport. It was 101.32x88 — the same button, squeezed to 101px and wrapping its label over three lines.",
+    "The mechanism was never the one SCRUM-477 recorded. The survey blamed `py-16` and put the clipping threshold at ~280px; the padding is 128px and the panel was 376px, so something else supplied the other 248. It was the width: `w-1/3` is 222.33px at this viewport, and the panel now carries a floor of `min-w-[min(22rem,100%)]` — 352px, which is the button row's natural single-line width plus the panel's own `px-6`.",
+    "**And the floor is not the arithmetic SCRUM-492's description gives**, which is the one figure here most likely to be re-derived wrongly. That ticket took the wrapped row's scrollWidth of 196, added the 48px of `px-6`, and proposed 244. scrollWidth is the overflow of a row that has *already* wrapped, not the width it needs in order not to; the row's natural single-line width is 293.34 (Continue 101.32 + gap 16 + Save and Continue 176.02), so a 244px panel still wraps both labels. 293.34 + 48 is where 352 comes from.",
+    "The `min()` in that floor is load-bearing and was also measured. An unconditional 22rem floor puts the panel 16px past each edge of a 320px-wide viewport, symmetrically and so unreachably, and a minimum width beats a maximum one in CSS — a cap alongside it is inert. Capped inside the floor, the panel measures exactly 320 wide at that viewport and 352 from 375 upwards.",
+    "This panel was the one centred box in this fixture that genuinely overflowed, and the fix means it no longer does at any viewport at or above 276px tall — so the `justify-center-safe` pairing SCRUM-477's Closeout describes is, in the end, not needed here either. Three for three: nothing in this fixture needs it.",
     "compliance-centring contentWidth 635, matching the predicted chain: 667 less its own `p-4`.",
   ],
   reproduces: [

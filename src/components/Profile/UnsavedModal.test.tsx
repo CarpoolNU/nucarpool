@@ -102,4 +102,32 @@ describe("UnsavedModal", () => {
       screen.getByRole("button", { name: "Save and Continue" }),
     ).toHaveFocus();
   });
+
+  /**
+   * A class request, and nothing more than that.
+   *
+   * **jsdom resolves no CSS and reports every rect as zero** (`src/testing/
+   * viewport.ts`), so this cannot show that the panel fits a viewport, that a
+   * label stops wrapping, or that `min()` resolves the way CSS says it does.
+   * All three were measured in Chromium against the compiled stylesheet
+   * through the `centred-dialog-panels` fixture, and the figures live in that
+   * fixture's `recorded` list.
+   *
+   * What this does catch is the one regression a reader is most likely to
+   * cause: deleting the floor as redundant next to `w-1/3`, or "simplifying"
+   * it to an unconditional 22rem, either of which restores a symmetric
+   * unreachable overflow that no test in `yarn test` can see. The fixture's
+   * drift guard catches the same edit from the other direction - it fails when
+   * the class string here no longer matches the one the fixture reproduces -
+   * so this assertion is the half that still holds if the fixture is ever
+   * retired.
+   */
+  it("floors the panel width without letting the floor exceed the space available", () => {
+    renderModal();
+
+    const panel = screen.getByText("You have unsaved changes!").parentElement;
+
+    expect(panel).toHaveClass("w-1/3");
+    expect(panel).toHaveClass("min-w-[min(22rem,100%)]");
+  });
 });
