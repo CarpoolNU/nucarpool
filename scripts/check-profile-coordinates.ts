@@ -33,11 +33,36 @@
  * for a row with no `Location`; `user.edit` deliberately still permits it.
  * Counting them would bury the real findings.
  *
+ * ## Two populations, one of them not a defect (SCRUM-408)
+ *
+ * A user who picks `RIDER` during onboarding and abandons it before resolving
+ * an address leaves exactly the shape the coordinate check looks for: role
+ * `RIDER`, coordinates `(0, 0)`, `is_onboarded = false`. That row is an
+ * unfinished sign-up rather than an unmatchable user — it was never in
+ * matching, so it cannot have been excluded from it.
+ *
+ * On production that is 579 of 626 reported rows, and on staging all 521 of
+ * them. Exiting `1` on the total made the gate permanently red, which gates
+ * nothing and buried the 47 rows that do need action.
+ *
+ * So every finding is still reported, and each carries `actionable`:
+ *
+ * - **Not actionable**: the `(0, 0)` sentinel on a search whose user never
+ *   finished onboarding. Counted and named in the output, never in the exit
+ *   code.
+ * - **Actionable**: everything else, which is deliberately everything else.
+ *   Out-of-range coordinates and a missing `location` row are not explained by
+ *   an abandoned sign-up whoever owns them, and a **reversed co-op range stays
+ *   actionable regardless of onboarding state or `status`** — the dates are
+ *   wrong now and nothing corrects them when that search goes live. 7 of
+ *   production's 47 are not `ACTIVE`, and a search reactivates without its
+ *   dates being touched.
+ *
  * Usage:
  *   npx ts-node scripts/check-profile-coordinates.ts
  *
- * Confirm `DATABASE_URL` points where you intend first. Exits 0 when the
- * database is clean and 1 when it is not, so it can gate a follow-up.
+ * Confirm `DATABASE_URL` points where you intend first. Exits 0 when there is
+ * nothing actionable and 1 when there is, so it can gate a follow-up.
  */
 
 import { PrismaClient, Role } from "@prisma/client";
@@ -62,18 +87,37 @@ export type SearchRow = {
   id: string;
   userId: string;
   role: Role;
+  /** `user.is_onboarded`, joined. See the two-populations note above. */
+  isOnboarded: boolean;
   startDate: Date | null;
   endDate: Date | null;
   homeLocation: LocationSlot;
   companyLocation: LocationSlot;
 };
 
+/**
+ * One problem line and whether it is something to act on, kept together so the
+ * two cannot drift apart. Internal: callers get the descriptions and one
+ * `actionable` flag per finding, which is the granularity the report and the
+ * exit code both work at.
+ */
+type TaggedProblem = {
+  description: string;
+  actionable: boolean;
+};
+
 export type Finding = {
   searchId: string;
   userId: string;
   role: Role;
+  isOnboarded: boolean;
   /** One human-readable line per problem, in a stable order. */
   problems: string[];
+  /**
+   * True when at least one of `problems` needs action. The exit code is keyed
+   * to this and to nothing else.
+   */
+  actionable: boolean;
 };
 
 const inRange = (lng: number, lat: number): boolean =>
@@ -86,18 +130,26 @@ const describeSlot = (
   slot: LocationSlot,
   label: "home" | "company",
   role: Role,
-): string[] => {
+  isOnboarded: boolean,
+): TaggedProblem[] => {
   // `relationMode = "prisma"` emulates the foreign key, so a search can point
   // at a Location id that no longer exists. Worth reporting rather than
   // skipping: the row is just as unmatchable.
   if (!slot) {
-    return [`${label} location row is missing`];
+    return [
+      { description: `${label} location row is missing`, actionable: true },
+    ];
   }
 
   const at = `(${slot.coordLng}, ${slot.coordLat})`;
 
   if (!inRange(slot.coordLng, slot.coordLat)) {
-    return [`${label} coordinates out of range ${at}`];
+    return [
+      {
+        description: `${label} coordinates out of range ${at}`,
+        actionable: true,
+      },
+    ];
   }
 
   if (
@@ -105,7 +157,13 @@ const describeSlot = (
     role !== Role.VIEWER
   ) {
     const address = slot.streetAddress || "(no address stored)";
-    return [`${label} coordinates unresolved ${at} for "${address}"`];
+    return [
+      {
+        description: `${label} coordinates unresolved ${at} for "${address}"`,
+        // The one problem onboarding state decides. Still reported either way.
+        actionable: isOnboarded,
+      },
+    ];
   }
 
   return [];
@@ -114,28 +172,65 @@ const describeSlot = (
 /**
  * Every problem the check knows how to name, per search. Pure, so the reporting
  * half can be exercised without a database.
+ *
+ * Both populations come back from one pass, tagged rather than filtered — a
+ * caller that wants only the actionable set filters on `actionable`, and the
+ * count of what it dropped is still there to print.
  */
 export const findProfileDataProblems = (
   searches: readonly SearchRow[],
 ): Finding[] =>
   searches
-    .map((search) => ({
-      searchId: search.id,
-      userId: search.userId,
-      role: search.role,
-      problems: [
-        ...describeSlot(search.homeLocation, "home", search.role),
-        ...describeSlot(search.companyLocation, "company", search.role),
+    .map((search) => {
+      const problems: TaggedProblem[] = [
+        ...describeSlot(
+          search.homeLocation,
+          "home",
+          search.role,
+          search.isOnboarded,
+        ),
+        ...describeSlot(
+          search.companyLocation,
+          "company",
+          search.role,
+          search.isOnboarded,
+        ),
+        // Unconditionally actionable: a crossed range is wrong on its own
+        // terms, and an unfinished sign-up that resumes carries it into
+        // matching untouched.
         ...(isReversedCoopRange(search.startDate, search.endDate)
           ? [
-              `co-op range reversed: ` +
-                `${search.startDate?.toISOString().slice(0, 10)} to ` +
-                `${search.endDate?.toISOString().slice(0, 10)}`,
+              {
+                description:
+                  `co-op range reversed: ` +
+                  `${search.startDate?.toISOString().slice(0, 10)} to ` +
+                  `${search.endDate?.toISOString().slice(0, 10)}`,
+                actionable: true,
+              },
             ]
           : []),
-      ],
-    }))
+      ];
+
+      return {
+        searchId: search.id,
+        userId: search.userId,
+        role: search.role,
+        isOnboarded: search.isOnboarded,
+        problems: problems.map((problem) => problem.description),
+        actionable: problems.some((problem) => problem.actionable),
+      };
+    })
     .filter((finding) => finding.problems.length > 0);
+
+/**
+ * The exit status for a run, from the findings alone.
+ *
+ * Separate from `main` so the gate is testable without a database, and called
+ * by `main` rather than re-derived there, so the contract the test pins is the
+ * one an operator gets.
+ */
+export const exitCodeFor = (findings: readonly Finding[]): 0 | 1 =>
+  findings.some((finding) => finding.actionable) ? 1 : 0;
 
 const main = async () => {
   if (process.argv.length > 2) {
@@ -155,6 +250,13 @@ const main = async () => {
         role: true,
         startDate: true,
         endDate: true,
+        // Decides whether a `(0, 0)` row is a defect or an abandoned sign-up.
+        // `status` is deliberately not read: see the note at the top.
+        user: {
+          select: {
+            isOnboarded: true,
+          },
+        },
         homeLocation: {
           select: {
             id: true,
@@ -174,23 +276,55 @@ const main = async () => {
       },
     });
 
-    const findings = findProfileDataProblems(searches);
+    const findings = findProfileDataProblems(
+      searches.map(({ user, ...search }) => ({
+        ...search,
+        // `relationMode = "prisma"` emulates this foreign key too, so the join
+        // can come back empty even though the schema declares the relation
+        // required. A search with no user row counts as onboarded: that keeps
+        // it in the actionable set rather than quietly excusing a row nobody
+        // can explain.
+        isOnboarded: user?.isOnboarded ?? true,
+      })),
+    );
+
+    const actionable = findings.filter((finding) => finding.actionable);
+    const excluded = findings.filter((finding) => !finding.actionable);
+
+    // Taken from the tested function rather than recomputed here.
+    process.exitCode = exitCodeFor(findings);
 
     console.log(`${searches.length} carpool_search row(s)`);
     console.log(`${findings.length} row(s) with a problem`);
+    console.log(`${actionable.length} actionable`);
 
-    if (findings.length === 0) {
+    if (excluded.length > 0) {
       console.log(
-        "\n✓ every search has in-range, resolved coordinates and a forward " +
-          "co-op range.",
+        `${excluded.length} not actionable: the (0, 0) sentinel on a search ` +
+          `whose user never finished onboarding, so it was never in matching`,
       );
+    }
+
+    if (actionable.length === 0) {
+      console.log(
+        "\n✓ every search belonging to an onboarded user has in-range, " +
+          "resolved coordinates, and no search has a reversed co-op range.",
+      );
+      if (excluded.length > 0) {
+        console.log(
+          `  The ${excluded.length} row(s) above need nothing until those ` +
+            `users come back and finish onboarding, at which point the form ` +
+            `makes them resolve an address.`,
+        );
+      }
       return;
     }
 
-    for (const finding of findings) {
+    for (const finding of actionable) {
       console.log(
         `\n    search ${finding.searchId}` +
-          `\n    user   ${finding.userId} (${finding.role})` +
+          `\n    user   ${finding.userId} (${finding.role}` +
+          `${finding.isOnboarded ? "" : ", not onboarded"})` +
           finding.problems.map((problem) => `\n    - ${problem}`).join(""),
       );
     }
@@ -200,7 +334,6 @@ const main = async () => {
         `Nothing here is safe to guess at: ask the affected users to re-save ` +
         `their profile, which is now validated at the boundary.`,
     );
-    process.exitCode = 1;
   } finally {
     await prisma.$disconnect();
   }
