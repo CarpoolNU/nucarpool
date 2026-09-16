@@ -482,18 +482,25 @@ const MESSAGE_PANEL_TAB_STRIP_PX = 53;
  * The send bar's height with its composer on one line, in pixels.
  *
  * **Measured at a wide panel, and that qualifier is load-bearing.** The bar is
- * `py-6` around a row whose height is the send button's 46px plus 2px of
- * border - 97 in total - but only while the composer fits that row. The
- * composer is `flex-1`, so its width is the panel's, and below about 200px of
- * composer the `.placeholder:empty:before` hint in `globals.css` wraps: at a
- * 267px panel the bar measures 110 with two lines of hint and 131.5 with the
- * three that the row's 40px side margins force. (Named as a length rather than
- * as the utility that sets it: Tailwind v4 scans this file, so writing the
- * class out would emit it as real CSS with nothing using it - the effect
- * `tailwind.config.js` describes at length, and one a selector-set diff caught
- * here.) So this figure describes the panel the full-size
- * chrome was designed for, which is the panel a viewport above the threshold
- * below has.
+ * 24px of padding either side of a row whose height is the send button's 46px
+ * plus 2px of border - 97 in total - but only while the composer fits that row.
+ * The composer is `flex-1`, so its width is the panel's, and a composer
+ * narrower than 160.77px wraps the `.placeholder:empty:before` hint in
+ * `globals.css` onto a second line: at 667x489, where the row's 40px side
+ * margins leave it 78px, the hint takes three lines and the bar measures 131.5.
+ *
+ * That band is the only place the figure is still width-dependent. Below the
+ * threshold the compact chrome drops both the margins and 12px of the padding
+ * (SCRUM-494), which leaves the composer 174px at the same 267px panel - one
+ * line of hint, and a 73px bar.
+ *
+ * So this figure describes the panel the full-size chrome was designed for,
+ * which is the panel a viewport above the threshold below has - and it is the
+ * only chrome that threshold is about. (Named as a length rather than as the
+ * utility that sets it, here and in the paragraph above: Tailwind v4 scans this
+ * file, so writing either class out would emit it as real CSS with nothing
+ * using it - the effect `tailwind.config.js` describes at length, and one a
+ * selector-set diff caught here.)
  */
 const MESSAGE_PANEL_SEND_BAR_PX = 97;
 
@@ -594,6 +601,61 @@ const MESSAGE_PANEL_TALL_MEDIA_QUERY =
   `(min-height: ${MESSAGE_PANEL_MIN_HEIGHT_PX}px)`;
 
 /**
+ * The name of the screen that means "wide enough for the desktop message panel
+ * but too *short* for its full-size chrome" - the complement of
+ * `message-panel-tall` inside the same width band.
+ *
+ * **The first `max-`-shaped screen in this repository, and a deliberate
+ * precedent rather than a convenience (SCRUM-494).** Every other screen here is
+ * mobile-first: a compact base, restored inside a `min-` query. That direction
+ * works whenever the compact value can also be the base, which is what
+ * `MESSAGE_PANEL_TALL_MEDIA_QUERY` describes above - and it is exactly what
+ * `SendBar`'s vertical padding cannot do. The padding is declared
+ * unconditionally on a tree shared with the mobile branch, so reducing the base
+ * to reach a landscape phone would reduce it on a phone in portrait too, where
+ * the vertical budget is not tight and where most of the traffic is. A screen
+ * that can say "short" is the only way to reach one without the other.
+ *
+ * So the two screens are not alternatives: `message-panel-tall` restores what a
+ * compact base gave away, and this one takes away what an unconditional base
+ * insists on. Reach for this one only when the value cannot move to the base,
+ * because it is the direction that does not compose.
+ */
+const MESSAGE_PANEL_SHORT_SCREEN_NAME = "message-panel-short";
+
+/**
+ * The same band as a media query: at or above the width breakpoint, below the
+ * height the full-size chrome needs.
+ *
+ * **`not (min-height:)` rather than `max-height:`, and the boundary is the
+ * whole reason.** A `max-height: 488px` term leaves every viewport taller than
+ * 488 and shorter than 489 matching *neither* screen, and fractional viewport
+ * heights are routine rather than hypothetical - a browser zoom or a fractional
+ * device pixel ratio produces them. The usual answer is a fractional bound,
+ * `max-height: 488.98px`, which narrows the gap without closing it (488.99
+ * still matches neither) and writes a magic number next to the constant it was
+ * derived from. Negating the tall screen's own term closes it exactly: every
+ * viewport is on one side or the other by construction, and the two screens
+ * cannot drift apart because there is one figure between them rather than two.
+ *
+ * Valid Media Queries Level 4, and inside Tailwind v4's browser baseline -
+ * Safari 16.4+, Chrome 111+ and Firefox 128+ all support `not` in a media
+ * condition. **Measured rather than assumed**, because a media query a browser
+ * fails to parse is dropped silently and would present as the padding simply
+ * not changing: SCRUM-494 confirmed in Chromium that the query survives
+ * `matchMedia` verbatim rather than collapsing to `not all`, that it matches at
+ * 667x375 while the tall screen does not, and that the layout it gates really
+ * does change at 488 and not at 489.
+ *
+ * The width term stays `min-`, and that is what keeps this screen out of the
+ * mobile tree: a phone in portrait is 375px wide, so it cannot match this
+ * screen however short it is.
+ */
+const MESSAGE_PANEL_SHORT_MEDIA_QUERY =
+  `(min-width: ${MOBILE_BREAKPOINT_PX}px) and ` +
+  `(not (min-height: ${MESSAGE_PANEL_MIN_HEIGHT_PX}px))`;
+
+/**
  * The height of the mobile bottom navigation, in pixels.
  *
  * **Declared, not measured.** `MobileNav` used to set no height at all, so its
@@ -684,6 +746,8 @@ module.exports = {
   ADMIN_CONSOLE_MIN_HEIGHT_PX,
   MESSAGE_PANEL_TALL_SCREEN_NAME,
   MESSAGE_PANEL_TALL_MEDIA_QUERY,
+  MESSAGE_PANEL_SHORT_SCREEN_NAME,
+  MESSAGE_PANEL_SHORT_MEDIA_QUERY,
   MESSAGE_PANEL_HEADER_PX,
   MESSAGE_PANEL_TAB_STRIP_PX,
   MESSAGE_PANEL_SEND_BAR_PX,
