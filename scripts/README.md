@@ -53,6 +53,8 @@ These write nothing. Pointing them at production is safe, and several are only m
 
 The `check-*` scripts exit `0` when clean and `1` when not, so they can gate a follow-up.
 
+`check-profile-coordinates` draws one distinction inside "clean", because without it the gate was permanently red (SCRUM-408). It reports every finding but exits on the **actionable** ones only, so a database whose only findings are `(0, 0)` rows belonging to users who never finished onboarding exits `0` — those rows are unfinished sign-ups that were never in matching. A reversed co-op range is actionable whatever the user's onboarding state and whatever the search's `status`.
+
 **None of them has an `--apply`, and that is a decision.** For `check-driverless-groups` and `check-profile-coordinates` there is no single correct repair, and only the affected user knows which they want. For the other two the repair exists in a sibling — `repair-seat-residue.ts` and `cleanup-self-requests.ts`. Keeping `check-*` uniformly read-only is what makes every one of them safe to point at production.
 
 `measure-unread-count.ts` is the odd one out: its useful output is the `EXPLAIN` plan, not its timings. Access types describe the shape of the work rather than its current size, so the plan is worth reading against a local database while the timings are not. For production numbers, PlanetScale Insights is the authority and needs no script.
@@ -129,7 +131,7 @@ One `--apply` has been run in a shared environment: `backfill-group-preferences`
 What the non-zero figures actually mean:
 
 - **`cleanup-orphan-conversations` — production's 620 are retained by decision**, not pending. A figure _above_ 620 would mean the fix that stopped new ones regressed. See [Conversation ownership](../src/server/db/README.md#conversation-ownership).
-- **`check-profile-coordinates` — only 47 of production's 626 are actionable.** Those are reversed co-op ranges. The other 579 are `(0, 0)` rows belonging to users who never finished onboarding and were never in matching; staging's 521 are all of that kind. The script reports both and exits `1` on the total, which is tracked as a separate defect.
+- **`check-profile-coordinates` — only 47 of production's 626 are actionable.** Those are reversed co-op ranges. The other 579 are `(0, 0)` rows belonging to users who never finished onboarding and were never in matching; staging's 521 are all of that kind. The script reports both and exits `1` on the actionable set only, so production exits `1` on the 47 and staging exits `0` (SCRUM-408). **Both cells above are the total each run reports**, which is the figure to compare a later run against; the actionable count is the second number the run prints.
 - **`check-seat-counts` and `repair-seat-residue` see the same data from different sides.** Production's seat counts are clean (0 out of range across 4,098 rows), so its `repair-seat-residue` figure is member-less `group` rows only — the same rows `check-driverless-groups` reports as empty.
 - **`backfill-profile-picture-timestamps` — a null is not a missing picture.** It means "ask S3", so the figures are the size of the un-migrated population, not a fault count. See [Profile picture presence](../src/server/db/README.md#profile-picture-presence).
 - **`emailtemplate.py` — a republish is outstanding.** The SES templates in AWS are older than the repository's copy.
