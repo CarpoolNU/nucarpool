@@ -110,8 +110,31 @@ const SendBar = ({ onSendMessage }: SendBarProps) => {
         Flush with the container on mobile, so the row is inset 16px from the
         screen edge - the same 16px the message thread above it uses, which is
         what keeps the composer aligned with the bubbles it answers.
+
+        **`message-panel-tall:` rather than `desktop:`, and the reason is a
+        height even though the utility is a width.** This inset is 80px off a
+        row that is only as wide as the panel, and the panel is the viewport
+        less a 400px sidebar - so at 667px wide it left the composer 78px.
+        `globals.css`'s `.placeholder:empty:before` hint then wrapped to three
+        lines and the bar measured 131.5px instead of 97, which on a landscape
+        phone was 131.5 of the 145px the conversation and the bar had to share.
+        A flex item will not shrink below its min-content height, so the
+        conversation lost and the bar's last 18.38px went off the bottom of the
+        screen (SCRUM-489).
+
+        Dropping it below the threshold returns the composer to 158px and two
+        lines, and the bar to 110. The hint needs about 200px to fit on one
+        line, which a 267px panel cannot give it at any inset - so this
+        relieves the height cost rather than removing it, and the remaining
+        crowding is SCRUM-494, along with the `py-6` below that this ticket
+        could not reach: it is unconditional, so shrinking it would change what
+        a phone in portrait renders.
+
+        Nothing changes on either side of the band it was written for: a phone
+        in portrait is below the width term and keeps `mx-0`, and a desktop
+        window tall enough for the panel keeps the 80px it was designed with.
       */}
-      <div className="desktop:mx-10 mx-0 flex items-center overflow-hidden rounded-lg border border-gray-200 bg-gray-100">
+      <div className="message-panel-tall:mx-10 mx-0 flex items-center overflow-hidden rounded-lg border border-gray-200 bg-gray-100">
         <div
           contentEditable="true"
           // The visible "Type a message..." hint is a CSS `:empty:before`
@@ -169,10 +192,12 @@ const SendBar = ({ onSendMessage }: SendBarProps) => {
       </div>
       {messageContent.length > 0 && (
         <div
-          // The same inset as the row, at both widths: this counts the
+          // The same inset as the row, at every viewport: this counts the
           // characters in that box, so it has to sit under its right edge
-          // rather than under the container's.
-          className={`desktop:mx-10 mx-0 mt-1 text-end text-sm ${
+          // rather than under the container's. It therefore moves to the same
+          // screen the row above did - left on `desktop:` it would hang 40px
+          // inboard of the box it belongs to on a landscape phone.
+          className={`message-panel-tall:mx-10 mx-0 mt-1 text-end text-sm ${
             isTooLong ? "text-northeastern-red" : "text-stone-400"
           }`}
         >

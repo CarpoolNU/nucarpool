@@ -299,8 +299,24 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
                     rather than `pre-wrap` because the content arrives trim()-ed
                     from a contentEditable that accumulates incidental spaces:
                     keep the line breaks, still collapse the runs of spaces. */}
+                {/*
+                  The 50% cap is a readability rule for a wide panel, and on a
+                  narrow one it is a height multiplier: the bubble does not
+                  widen, it wraps. Measured, the same 26-character message is
+                  44px tall against a 1040px panel and 112px against the 267px
+                  one a landscape phone gets - four lines inside a conversation
+                  box that had 83px to show it in, so the message the cap was
+                  meant to keep readable could not be read at all (SCRUM-489).
+
+                  So the cap follows the rest of the panel's chrome onto
+                  `message-panel-tall:`, and below that it falls back to the
+                  85% the mobile tree already uses rather than to no cap - a
+                  bubble spanning the full column loses the left-right
+                  asymmetry that says who sent it. Measured at 667x375 that is
+                  64px, which fits.
+                */}
                 <div
-                  className={`desktop:max-w-[50%] max-w-[85%] rounded-lg px-4 py-2 text-base break-words whitespace-pre-line lg:text-xl ${
+                  className={`message-panel-tall:max-w-[50%] max-w-[85%] rounded-lg px-4 py-2 text-base break-words whitespace-pre-line lg:text-xl ${
                     isFromCurrentUser
                       ? "bg-northeastern-red text-white"
                       : "bg-gray-200 text-black"

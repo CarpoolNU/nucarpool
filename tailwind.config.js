@@ -16,6 +16,8 @@ const {
   DESKTOP_SCREEN_NAME,
   DESKTOP_TALL_SCREEN_NAME,
   DESKTOP_TALL_MEDIA_QUERY,
+  MESSAGE_PANEL_TALL_SCREEN_NAME,
+  MESSAGE_PANEL_TALL_MEDIA_QUERY,
   MOBILE_NAV_SPACE,
   MOBILE_SHEET_MAP_STRIP,
 } = require("./src/utils/breakpoints");
@@ -273,6 +275,20 @@ module.exports = {
       // `container` utility; the rule exists at all only because Tailwind v4
       // scans the whole repository and the *word* appears in prose, which is
       // the effect this file's docblock describes.
+      // The same shape as `desktop-tall` and a second height, because the
+      // height a layout needs is the layout's own: 844px is the onboarding
+      // card's figure and means nothing to the conversation panel, whose
+      // full-size chrome stops fitting at 489 (SCRUM-489). Reusing
+      // `desktop-tall` here would compact the panel on a 1366x768 laptop,
+      // which is the mistake `ADMIN_CONSOLE_MIN_HEIGHT_PX` warns about by
+      // name.
+      //
+      // Declared before `desktop-tall` to keep this list ascending: the two
+      // share a width term, and 844 implies 489, so where both ever set one
+      // property the taller screen has to be emitted second to win.
+      [MESSAGE_PANEL_TALL_SCREEN_NAME]: { raw: MESSAGE_PANEL_TALL_MEDIA_QUERY },
+      // => @media (min-width: 640px) and (min-height: 489px) { ... }
+
       [DESKTOP_TALL_SCREEN_NAME]: { raw: DESKTOP_TALL_MEDIA_QUERY },
       // => @media (min-width: 640px) and (min-height: 844px) { ... }
 
