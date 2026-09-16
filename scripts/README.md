@@ -123,22 +123,38 @@ Two different questions, and only one of them is answerable from a database:
 | `cleanup-orphan-locations`            | 0 outstanding      | **90 outstanding** | 2026-09-09 |
 | `cleanup-orphan-conversations`        | **11 outstanding** | **620 retained**   | 2026-09-09 |
 | `cleanup-self-requests`               | 0 outstanding      | **2 outstanding**  | 2026-09-09 |
-| `repair-seat-residue`                 | **2 outstanding**  | **18 outstanding** | 2026-09-16 |
+| `repair-seat-residue`                 | 0 outstanding      | 0 outstanding      | 2026-09-16 |
 | `check-self-requests`                 | 0 findings         | **2 findings**     | 2026-09-09 |
-| `check-driverless-groups`             | **1 finding**      | **18 findings**    | 2026-09-16 |
+| `check-driverless-groups`             | 0 findings         | 0 findings         | 2026-09-16 |
 | `check-profile-coordinates`           | **521 findings**   | **626 findings**   | 2026-09-09 |
-| `check-seat-counts`                   | **1 finding**      | 0 findings         | 2026-09-09 |
+| `check-seat-counts`                   | 0 findings         | 0 findings         | 2026-09-16 |
 
-One `--apply` has been run in a shared environment: `backfill-group-preferences`, on staging (3 rows) and production (11), on 2026-09-16. Its row is gone from the table because the script was retired in the same change — SCRUM-287 dropped the columns it read. Nothing else has been applied anywhere. Every production figure was read as an aggregate count, never row data.
+Two `--apply` runs have been made in a shared environment, both on 2026-09-16:
+
+- **`backfill-group-preferences`** — staging (3 rows) and production (11). Its row is gone from the table because the script was retired in the same change: SCRUM-287 dropped the columns it read.
+- **`repair-seat-residue`** — staging and production, immediately after [#369](https://github.com/CarpoolNU/nucarpool/pull/369) merged (SCRUM-406). **Production: dissolved 15 driverless groups, clearing 33 `carpoolId` associations, and deleted 3 empty group rows** — 18 group rows in total, taking `group` from 67 to 49. **Staging: deleted 1 empty group row and clamped 1 out-of-range seat count**, taking `group` from 11 to 10; it had no driverless group to dissolve. Both environments then reported clean: `check-driverless-groups` exits `0`, and a second `repair-seat-residue` says "nothing to repair".
+
+  Verified read-only afterwards against production, aggregates only: `carpool_search` rows carrying a `carpoolId` fell from 159 to 126 — exactly the 33 cleared — with **0** rows pointing at a `group` row that no longer exists, **0** seat counts out of range, and **0** solo groups. `carpool_search` and `user` row counts were not reduced, so no search, profile or account was deleted: the dissolve wrote `carpoolId` and nothing else, and promoted nobody.
+
+Nothing else has been applied anywhere. Every production figure was read as an aggregate count, never row data.
 
 What the non-zero figures actually mean:
 
 - **`cleanup-orphan-conversations` — production's 620 are retained by decision**, not pending. A figure _above_ 620 would mean the fix that stopped new ones regressed. See [Conversation ownership](../src/server/db/README.md#conversation-ownership).
 - **`check-profile-coordinates` — only 47 of production's 626 are actionable.** Those are reversed co-op ranges. The other 579 are `(0, 0)` rows belonging to users who never finished onboarding and were never in matching; staging's 521 are all of that kind. The script reports both and exits `1` on the actionable set only, so production exits `1` on the 47 and staging exits `0` (SCRUM-408). **Both cells above are the total each run reports**, which is the figure to compare a later run against; the actionable count is the second number the run prints.
-- **`check-seat-counts` and `repair-seat-residue` see the same data from different sides.** Production's seat counts are clean (0 out of range across 4,098 rows), so its `repair-seat-residue` figure is `group` rows only: **3 empty and 15 driverless**, which is the same 18 `check-driverless-groups` reports. Staging's 2 is one out-of-range seat and one empty group, with no driverless one.
-- **`check-driverless-groups` — production's 18 is 15 driverless groups plus 3 empty ones**, and staging's 1 is a single empty group with no driverless one, which is why every figure taken from staging understated this. The 15 hold **33 members**: 14 groups of two and one of five; 25 `RIDER` and 8 `VIEWER`, 32 `ACTIVE` and 1 `INACTIVE`. They were created between 2024-10-21 and 2026-01-11 — all of them before `groups.create` began enforcing `Role.DRIVER` in SCRUM-291 (2026-08-27), so some may have been **born** driverless rather than abandoned by a driver. On activity: 30 of the 33 have a co-op end date already past, 2 have none, and exactly one group has a member whose co-op is still running; 16 last held a session over a year ago and 4 within 90 days. All 33 seat values are in `[0, 2]` and none is negative, so a dissolve needs no seat arithmetic. Measured 2026-09-16 (SCRUM-406).
+- **`check-seat-counts` and `repair-seat-residue` see the same data from different sides**, so they reach zero together, as they did on 2026-09-16.
 - **`backfill-profile-picture-timestamps` — a null is not a missing picture.** It means "ask S3", so the figures are the size of the un-migrated population, not a fault count. See [Profile picture presence](../src/server/db/README.md#profile-picture-presence).
 - **`emailtemplate.py` — a republish is outstanding.** The SES templates in AWS are older than the repository's copy.
+
+### What the driverless repair cleared, 2026-09-16
+
+Kept because a zero cell records that there is nothing left to do, not what was there — and because the shape of this population is the reason the repair dissolves rather than promotes.
+
+Production held **15 driverless groups containing 33 members**: 14 groups of two and one of five; 25 `RIDER` and 8 `VIEWER`, 32 `ACTIVE` and 1 `INACTIVE`. All 33 seat values were in `[0, 2]` and none negative, so the dissolve needed no seat arithmetic. On activity, 30 of the 33 had a co-op end date already past, 2 had none, and exactly one group held a member whose co-op was still running — dissolved with the rest by decision, since both its members were `RIDER`s and no car was being broken up.
+
+Staging held **none of them**, only a single empty group, which is why every figure taken from staging understated this for as long as it was the only environment being measured.
+
+The groups were created between **2024-10-21 and 2026-01-11** — all before `groups.create` began enforcing `Role.DRIVER` in SCRUM-291 (2026-08-27), and before `Role.DRIVER` appeared in that router at all (SCRUM-220, 2026-08-21). `initiateGroup` named whichever party did not accept the request as the group's driver without checking their role, and the server took that id on trust, so **a group could be born driverless with no original driver to restore.** That is why nobody was promoted: promotion would have invented a driver who never existed. Per-group attribution was not achievable either — role history is not stored, and the profile form zeroes `seatsAvail` for any non-`DRIVER` on save, so an ex-driver and a never-driver are indistinguishable.
 
 **Production is readable.** The PlanetScale MCP server's token returns `403` against the `main` branch, but the `pscale` CLI reader role does not — that is the route every production figure above came from, and it is read-only.
 
