@@ -85,8 +85,8 @@ describe("AdminMobileNotice", () => {
    * width with inadequate height, where it renders the in-flow desktop bar.
    *
    * **Both assertions here are class-and-style checks, and that is the ceiling
-   * in jsdom, not a shortcut.** Whether 91.5% plus 8.5% actually lands on the
-   * viewport's bottom edge is a layout question, and jsdom computes no layout
+   * in jsdom, not a shortcut.** Whether the row and the bar actually land on
+   * the viewport's bottom edge is a layout question, and jsdom computes no layout
    * - `getBoundingClientRect` is zeros throughout. The geometry was measured
    * in Chromium through `scripts/measure-layout.ts` and belongs, durably, in
    * SCRUM-264's Playwright suite. What is assertable is that the component
@@ -119,10 +119,19 @@ describe("AdminMobileNotice", () => {
     it("takes the content row's share and reserves nothing when the desktop bar is rendered", () => {
       const element = panel(false);
 
-      /* The desktop bar is in flow at 8.5%, so this sibling gets the 91.5%
-         remainder - the same figure the console's own row takes. `h-full`
-         here would overrun the viewport by the height of the bar. */
-      expect(element).toHaveClass("h-[91.5%]");
+      /* The desktop bar is in flow, so this sibling gets the remainder - the
+         same token the console's own row takes. `h-full` here would overrun
+         the viewport by the height of the bar.
+
+         `h-content-row` and not the bar's percentage complement, which is what
+         this asserted until SCRUM-496 put a 44px floor under the bar: once the
+         bar's height is a `max()` the remainder stops being a second
+         percentage, so it is composed in `breakpoints.js` and registered as a
+         token. **jsdom resolves no percentage and does no layout**, so this
+         still only pins which class is requested - that the resulting box is
+         the complement of the bar's is asserted arithmetically in
+         `breakpoints.test.ts` and measured in Chromium. */
+      expect(element).toHaveClass("h-content-row");
       expect(element).not.toHaveClass("h-full");
 
       /* Absent, not zero. A reserved 60px would push this panel's centred

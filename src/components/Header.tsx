@@ -27,6 +27,7 @@ import {
   DESKTOP_MEDIA_QUERY,
   MOBILE_NAV_SPACE,
   HEADER_BAR_HEIGHT,
+  HEADER_BAR_MIN_HEIGHT,
   HEADER_LOGO_MAX_FONT_SIZE,
 } from "../utils/breakpoints";
 import {
@@ -42,6 +43,35 @@ import {
   HiOutlineUser,
 } from "react-icons/hi";
 
+/**
+ * The header bar.
+ *
+ * **`height` and `min-height` are a pair, and SCRUM-496 added the second one.**
+ * The bar is a percentage of the viewport, which on a landscape phone - 667x375,
+ * which `useIsMobile` treats as desktop because the breakpoint is width-only -
+ * came to 31.875px. Every control in this bar is a child of it, so that was a
+ * ceiling on all of them: SCRUM-491 could cap the tabs and the profile trigger
+ * to *fit* the bar, which is what stopped them taking clicks meant for the
+ * content row, but nothing inside a 31.875px box can be the 44px Apple's HIG
+ * and WCAG 2.5.5 ask of a touch control. Raising the ceiling is this
+ * declaration.
+ *
+ * **Two declarations rather than `height: max(8.5%, 44px)`, and the two are
+ * equivalent** - including on `/sign-in`, which renders this same bar inside an
+ * auto-height flex column where the percentage has no definite containing
+ * block. The expected hazard there was that a `max()` would resolve the
+ * percentage against zero and collapse to the floor; measured in Chromium it
+ * does not, because an unresolvable percentage makes the whole math function
+ * behave as `auto`. That page's bar is 111px before this change and 111px
+ * after it under either spelling. `breakpoints.js` has the measurement and the
+ * reasons this spelling was kept regardless, none of which is that the other
+ * one breaks.
+ *
+ * `breakpoints.js` also carries the band this binds in - below 517.65px of
+ * viewport height, so every desktop window renders the percentage unchanged -
+ * and why the bar's children each needed the same floor repeated rather than
+ * inheriting this one.
+ */
 const HeaderDiv = styled.div`
   display: flex;
   flex-direction: row;
@@ -51,6 +81,7 @@ const HeaderDiv = styled.div`
   padding: 0 20px;
   box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.25);
   height: ${HEADER_BAR_HEIGHT};
+  min-height: ${HEADER_BAR_MIN_HEIGHT};
   width: 100%;
   z-index: 10;
 

@@ -488,7 +488,7 @@ const Index: NextPage = () => {
           </div>
         </div>
       ) : (
-        <div className="relative grid h-[91.5%] w-full grid-cols-[250px_repeat(2,1fr)] overflow-hidden">
+        <div className="h-content-row relative grid w-full grid-cols-[250px_repeat(2,1fr)] overflow-hidden">
           <div className="border-busy-red sticky top-0 col-start-1 col-end-2 h-full w-[250px] border-r-4 bg-stone-100 lg:w-[350px]">
             <ProfileSidebar option={option} setOption={setOption} />
           </div>

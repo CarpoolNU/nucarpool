@@ -174,7 +174,9 @@ const isMobileWidth = (width) => width < MOBILE_BREAKPOINT_PX;
  * Worth knowing before reusing these: **the bar is 8.5% of its containing
  * block, which is only the viewport on the pages that give it one.** On `/`,
  * `/profile` and `/admin` the bar's parent is `100dvh`, so 8.5% is 8.5% of the
- * viewport and the content row beside it is the 91.5% remainder. On
+ * viewport and the content row beside it is the remainder - a remainder that
+ * since SCRUM-496 is `CONTENT_ROW_HEIGHT` rather than a second percentage,
+ * because the bar has a pixel floor under it below 517.65px of height. On
  * `/sign-in` the bar sits inside a `w-fit` card in an auto-height flex column
  * (`sign-in.tsx:68`), so the percentage has no definite height to resolve
  * against and falls back to `auto` - measured in Chromium at 667x375, where
@@ -190,14 +192,145 @@ const HEADER_BAR_VIEWPORT_FRACTION = HEADER_BAR_VIEWPORT_PERCENT / 100;
 const HEADER_BAR_HEIGHT = `${HEADER_BAR_VIEWPORT_PERCENT}%`;
 
 /**
- * The share of the viewport left for a page's content row - the 91.5% the
- * desktop rows in `admin.tsx`, `index.tsx` and `profile/index.tsx` each
- * declare.
+ * The shortest the header bar is allowed to be, in pixels - SCRUM-496's floor,
+ * and the reason every other constant in this section grew a `max()`.
  *
- * Stated as the complement rather than as a fourth copy of the number, so the
- * bar and the row cannot add up to anything but the viewport.
+ * 44px is what Apple's HIG and WCAG 2.5.5 ask of a touch control, and it is the
+ * figure SCRUM-421, SCRUM-432 and SCRUM-480 brought the rest of the mobile UI
+ * up to. **The bar needs it because its children cannot have it otherwise.**
+ * Every control in the bar is a child of it, so the bar's height is a ceiling
+ * on all of them: at 667x375 - a landscape phone, which `useIsMobile` treats as
+ * desktop because the breakpoint is width-only - 8.5% is 31.875px, and SCRUM-491
+ * could cap the tabs and the trigger to *fit* that but could not make any of
+ * them exceed it.
+ *
+ * **The band this binds in is the whole reason it is safe.** The floor wins
+ * only while `8.5% × H < 44`, which is below `44 / 0.085` = **517.65px** of
+ * viewport height. Every phone in landscape is inside that band - 375, 390 and
+ * 430 for the three iPhones `breakpoints.test.ts` names - and every desktop
+ * viewport worth serving is above it, including the ~650px a 1366x768 laptop
+ * leaves. So desktop renders the percentage it has always rendered, and that is
+ * a property of the arithmetic rather than something the screenshots happened
+ * to show.
+ */
+const HEADER_BAR_MIN_HEIGHT_PX = 44;
+
+/**
+ * The floor as a CSS length, which is what `HeaderDiv` declares as its
+ * `min-height`.
+ *
+ * **`min-height` rather than `max()` folded into the `height`, and the two are
+ * equivalent here - which is worth stating plainly, because the obvious reason
+ * to prefer this spelling turns out to be wrong.** The worry was `/sign-in`:
+ * the bar sits in an auto-height flex column there, so its 8.5% has no
+ * definite containing block, and a `max()` cannot contain `auto`. The
+ * expectation was that the percentage would resolve against zero and collapse
+ * the whole expression to this floor, cutting that bar from 111px to 44px.
+ *
+ * **Measured in Chromium, that is not what happens.** Given an *empty* child
+ * of an auto-height parent - no content to take a height from, so the answer is
+ * the declaration and nothing else - `height: 8.5%`, `height: max(8.5%, 44px)`
+ * and `height: calc(100% - 10px)` all compute to `0px`, while `height: 44px`
+ * computes to 44. So Chromium treats a math function whose percentage cannot
+ * be resolved as `auto` for the whole function, rather than substituting zero
+ * into it. Reproducing `/sign-in`'s real chain confirms it end to end: the bar
+ * is 111px with its logo's box ending exactly on its bottom edge, and it is
+ * 111px unchanged under this `min-height` *and* under the `max()` spelling.
+ *
+ * This spelling is kept anyway, for two smaller reasons that do not pretend to
+ * be the first one. It leaves `height` a plain percentage, so the `auto`
+ * fallback on `/sign-in` is the ordinary well-known percentage rule rather than
+ * the subtler one above; and a floor that is declared as a floor cannot be
+ * misread as the bar's height. **Do not reintroduce the claim that `max()`
+ * breaks `/sign-in` - it was checked and it does not.**
+ *
+ * On the three pages that give the bar a definite height the pair composes to
+ * exactly `HEADER_BAR_RESOLVED_HEIGHT`, which is what `CONTENT_ROW_HEIGHT`
+ * subtracts.
+ */
+const HEADER_BAR_MIN_HEIGHT = `${HEADER_BAR_MIN_HEIGHT_PX}px`;
+
+/**
+ * The bar's rendered height on a page that gives it a definite one, as a CSS
+ * length: the percentage and the floor composed into one expression.
+ *
+ * This is what `HeaderDiv`'s `height` and `min-height` amount to together, and
+ * naming it is what lets the content row below subtract the bar rather than
+ * subtract a second guess at it.
+ */
+const HEADER_BAR_RESOLVED_HEIGHT = `max(${HEADER_BAR_VIEWPORT_PERCENT}%, ${HEADER_BAR_MIN_HEIGHT})`;
+
+/**
+ * The share of the viewport left for a page's content row.
+ *
+ * **This is no longer the row's height and is kept because it is still the
+ * row's *share above the floor's band*.** Until SCRUM-496 the bar and the row
+ * were two fractions summing to 1, and 91.5% was what the three desktop rows
+ * declared. Now the bar has a pixel floor, so the row is the bar's complement
+ * as a length (`CONTENT_ROW_HEIGHT`) and this fraction describes it only where
+ * the percentage wins - at or above `HEADER_BAR_MIN_HEIGHT_PX / 0.085`, which
+ * is 517.65px of viewport height.
+ *
+ * That is not a technicality for the two thresholds derived from it below:
+ * `shortestViewportForContentRow` exists because one of them sits inside the
+ * band and one above it, and using this fraction for both would put the inner
+ * one two pixels early.
  */
 const CONTENT_ROW_VIEWPORT_FRACTION = 1 - HEADER_BAR_VIEWPORT_FRACTION;
+
+/**
+ * A page's desktop content row: the viewport, less however tall the bar
+ * actually turned out.
+ *
+ * Reaches the four call sites as the `h-content-row` token registered in
+ * `tailwind.config.js` - `index.tsx`, `admin.tsx`, `profile/index.tsx` and
+ * `AdminMobileNotice.tsx`, which each spelled `91.5%` before SCRUM-496. A token
+ * rather than an arbitrary value for the reason the `spacing` block in that file
+ * gives at length: the value is composed here in JavaScript, and Tailwind emits
+ * a bracketed utility only if the finished class name appears literally in the
+ * source, so four call sites would mean four hand-copied nested expressions
+ * with nothing checking them against this one.
+ *
+ * **`100%` and not `100dvh`.** The row's containing block is the same element
+ * as the bar's - `#__next` is `100dvh` and the wrapper between is `h-full` -
+ * so `100%` is the same quantity the bar's percentage resolves against. Writing
+ * `dvh` here would be correct by accident on those three pages and wrong for
+ * any future caller nested anywhere else, and it is the subtraction that has to
+ * match the bar, not the unit.
+ */
+const CONTENT_ROW_HEIGHT = `calc(100% - ${HEADER_BAR_RESOLVED_HEIGHT})`;
+
+/**
+ * The shortest viewport whose content row still has `neededPx` of height in it.
+ *
+ * **Two cases, because the bar's height is a `max()` and the row is what is
+ * left of the viewport after it.** The row is `H - max(0.085 × H, 44)`, so:
+ *
+ *  - inside the floor's band the bar is a constant 44px and the row is
+ *    `H - 44`, giving `H = neededPx + 44`;
+ *  - above the band the bar is a fraction and the row is `0.915 × H`, giving
+ *    `H = neededPx / 0.915`.
+ *
+ * Which case applies depends on the answer, so the candidate is tested rather
+ * than assumed: if `neededPx + 44` is itself inside the band, the floor is what
+ * that viewport's bar is made of and the first case is the real one.
+ *
+ * **Both callers below need this and they land in different cases**, which is
+ * the whole reason it is a function. `MESSAGE_PANEL_MIN_HEIGHT_PX` is 491 and
+ * inside the band; `ADMIN_CONSOLE_MIN_HEIGHT_PX` is 582 and above it, so the
+ * floor does not reach it and its figure is unchanged by SCRUM-496. A single
+ * `ceil(needed / 0.915)` for both - which is what this replaced - would have
+ * left the message panel gating its compact chrome two pixels before the space
+ * it is measuring actually runs out.
+ */
+const shortestViewportForContentRow = (neededPx) => {
+  const flooredCandidate = neededPx + HEADER_BAR_MIN_HEIGHT_PX;
+
+  return flooredCandidate * HEADER_BAR_VIEWPORT_FRACTION <=
+    HEADER_BAR_MIN_HEIGHT_PX
+    ? Math.ceil(flooredCandidate)
+    : Math.ceil(neededPx / CONTENT_ROW_VIEWPORT_FRACTION);
+};
 
 /**
  * The vertical space Chromium reserves for one line of the logo's font, per
@@ -247,6 +380,21 @@ const LOGO_FONT_BOX_RATIO = 1.15;
  * design size does not fit. At 900px tall it computes to 66.5px and 48px wins,
  * which is why desktop is untouched; 48px stops fitting below about 649px of
  * viewport height, and from there down the logo tracks the bar.
+ *
+ * **Deliberately left on the bare percentage by SCRUM-496, while
+ * `HEADER_BAR_CONTROL_HEIGHT_EXPRESSION` below took the 44px floor.** The two
+ * look like they should move together and should not. This one caps a *font* so
+ * its line box fits the bar, and a floor makes the bar taller - so the cap is
+ * now conservative rather than exact, which is safe in the only direction that
+ * matters: the line box is `font × 1.15`, which this holds at or below
+ * `0.085 × H`, and the bar is `max(0.085 × H, 44)`, which is never smaller. The
+ * logo cannot overflow at any viewport.
+ *
+ * Flooring it too would raise the landscape logo's type from 27.7px to the full
+ * 32px design size, and that is a visible change to the brand mark bought for
+ * no accessibility gain: `Logo` declares `height: 100%`, so its *box* - which
+ * is the tap target - already follows the bar to 44px regardless of what the
+ * text inside it measures. Left alone on purpose, not overlooked.
  */
 const HEADER_LOGO_MAX_FONT_SIZE = `calc(100dvh * ${HEADER_BAR_VIEWPORT_FRACTION} / ${LOGO_FONT_BOX_RATIO})`;
 
@@ -258,6 +406,12 @@ const HEADER_LOGO_MAX_FONT_SIZE = `calc(100dvh * ${HEADER_BAR_VIEWPORT_FRACTION}
  * and a bare expression composes into both. Wrapping it here would nest a
  * `calc()` inside a `calc()`, which is valid CSS and reads like an accident.
  *
+ * Since SCRUM-496 this is a `max()` rather than a bare product, which changes
+ * nothing about that rule and does remove one `calc()` at the call site below:
+ * a complete math function needs no `calc()` wrapper to sit inside a `min()`,
+ * only to have arithmetic done *to* it. The nav padding still wraps it,
+ * because it subtracts and divides; the avatar no longer does.
+ *
  * It carries `HEADER_LOGO_MAX_FONT_SIZE`'s limitation exactly, and for exactly
  * the same reason: **`100dvh` reconstructs the bar's basis rather than reading
  * it,** because a CSS length cannot ask its parent how tall it turned out. So
@@ -266,8 +420,22 @@ const HEADER_LOGO_MAX_FONT_SIZE = `calc(100dvh * ${HEADER_BAR_VIEWPORT_FRACTION}
  * statement about `/sign-in`, where the bar has no definite height at all.
  * That page renders neither of the controls below, which is what keeps the
  * distinction academic here; `Header.test.tsx` pins that.
+ *
+ * **The floor has to be repeated here, and that is SCRUM-496's least obvious
+ * line.** SCRUM-496 filed the bar's height as fixable on its own on the
+ * grounds that the bar's children are "capped against the bar rather than
+ * against a constant, so they would follow it up automatically". That is true
+ * of `Logo`, which declares `height: 100%` and is therefore the bar. It is
+ * false of everything derived from *this*, for the reason the paragraph above
+ * gives: the reconstruction is what a child gets instead of reading its parent,
+ * so raising the bar alone would have left the trigger at `min(56px, 31.875px)`
+ * and each tab at its 1.94px of padding inside a bar that had grown to 44px -
+ * reinstating the mismatch SCRUM-491 closed, with the slack now *inside* the
+ * bar instead of hanging out of it. The floor appears twice because the
+ * relationship is a reconstruction and not a reference; `breakpoints.test.ts`
+ * asserts the two stay equal.
  */
-const HEADER_BAR_CONTROL_HEIGHT_EXPRESSION = `100dvh * ${HEADER_BAR_VIEWPORT_FRACTION}`;
+const HEADER_BAR_CONTROL_HEIGHT_EXPRESSION = `max(100dvh * ${HEADER_BAR_VIEWPORT_FRACTION}, ${HEADER_BAR_MIN_HEIGHT})`;
 
 /**
  * The avatar trigger's design size - the 56px `h-14 w-14` that
@@ -300,7 +468,7 @@ const HEADER_AVATAR_DESIGN_SIZE_PX = 56;
  * circle scales it down. 56px stops fitting below 659px of viewport height,
  * which is where the overflow began.
  */
-const HEADER_AVATAR_TRIGGER_SIZE = `min(${HEADER_AVATAR_DESIGN_SIZE_PX}px, calc(${HEADER_BAR_CONTROL_HEIGHT_EXPRESSION}))`;
+const HEADER_AVATAR_TRIGGER_SIZE = `min(${HEADER_AVATAR_DESIGN_SIZE_PX}px, ${HEADER_BAR_CONTROL_HEIGHT_EXPRESSION})`;
 
 /**
  * The line box one desktop navigation tab's label occupies, in pixels.
@@ -441,10 +609,21 @@ const ADMIN_DATA_VERTICAL_SPACE_PX = 32;
  * untouched: SCRUM-477 records why giving that constant a height term would
  * move all twelve of its survey sites across the line at once, and SCRUM-474
  * is the pattern this follows instead.
+ *
+ * **Re-derived through `shortestViewportForContentRow` by SCRUM-496, and the
+ * figure did not move.** That ticket's acceptance criteria asked for this
+ * constant to be re-derived rather than "left reading a fraction that no longer
+ * describes the row", which was the right instruction aimed at the wrong
+ * threshold. 582 is *above* the 517.65px band the bar's floor binds in, so at
+ * that height the bar is still 8.5% and the row is still 0.915 - the division
+ * this used to do by hand is what the helper returns anyway. Going through the
+ * helper is what makes that a checked property instead of a coincidence: if
+ * either chart term ever shrinks enough to pull this gate under 517.65px, the
+ * helper switches cases on its own. `MESSAGE_PANEL_MIN_HEIGHT_PX` is the
+ * threshold that was actually inside the band, and it moved.
  */
-const ADMIN_CONSOLE_MIN_HEIGHT_PX = Math.ceil(
-  (ADMIN_SHORTEST_CHART_HEIGHT_PX + ADMIN_DATA_VERTICAL_SPACE_PX) /
-    CONTENT_ROW_VIEWPORT_FRACTION,
+const ADMIN_CONSOLE_MIN_HEIGHT_PX = shortestViewportForContentRow(
+  ADMIN_SHORTEST_CHART_HEIGHT_PX + ADMIN_DATA_VERTICAL_SPACE_PX,
 );
 
 /**
@@ -532,17 +711,35 @@ const MESSAGE_PANEL_DATED_MESSAGE_PX = 120;
  * and its header and tab strip come off the top before the conversation and the
  * send bar divide what is left:
  *
- *   0.915 * H - HEADER - TABS - SEND_BAR >= PADDING + DATED_MESSAGE
+ *   ROW(H) - HEADER - TABS - SEND_BAR >= PADDING + DATED_MESSAGE
  *
- * which solves to `H >= 447 / 0.915`, or 489. Below it the newest message
- * cannot be seen whole at any scroll position; below about 395 - SCRUM-485's
- * figure - the conversation has no content height at all and the send bar
- * leaves the screen, which is the defect SCRUM-489 was filed for.
+ * **`ROW(H)` and no longer `0.915 * H`, which is what moved this figure from
+ * 489 to 491 in SCRUM-496.** This is the threshold that ticket's acceptance
+ * criteria missed - they named `ADMIN_CONSOLE_MIN_HEIGHT_PX`, which sits above
+ * the band the bar's new floor binds in and therefore did not move at all.
+ * This one sits *inside* it: a 491px viewport gets a 44px bar rather than a
+ * 41.7px one, so the row is `H - 44` and not `0.915 × H`, and it needs two more
+ * pixels of viewport to leave the same 447 in the row. Derived through
+ * `shortestViewportForContentRow`, which picks that case on its own.
+ *
+ * Left at 489 the gate would have been two pixels optimistic - claiming the
+ * full-size chrome fits at 489 and 490, where after the floor it no longer
+ * does. That is the small end of a real class of bug: the compact chrome exists
+ * because the newest message cannot otherwise be seen whole, and a gate that
+ * fires late is a gate that does not fire in the band it was written for.
+ *
+ * Below it the newest message cannot be seen whole at any scroll position;
+ * below about 395 - SCRUM-485's figure - the conversation has no content height
+ * at all and the send bar leaves the screen, which is the defect SCRUM-489 was
+ * filed for.
  *
  * Verified at the threshold and at the width it was derived for: at 1440x489
- * the conversation measures exactly 120px of content height against a dated
- * message of exactly 120, so the inequality is tight rather than
- * approximately right. One pixel below, the compact chrome takes over.
+ * the conversation measured exactly 120px of content height against a dated
+ * message of exactly 120, so the inequality was tight rather than
+ * approximately right. That measurement predates the floor and its viewport is
+ * now two pixels short of the gate; the arithmetic it confirmed is the term
+ * structure above, which the floor changes only in `ROW(H)`. One pixel below
+ * the gate, wherever the gate is, the compact chrome takes over.
  *
  * **Two of the five terms are width-dependent** (see `MESSAGE_PANEL_SEND_BAR_PX`
  * and `MESSAGE_PANEL_DATED_MESSAGE_PX`), so this is the threshold for a panel
@@ -569,13 +766,12 @@ const MESSAGE_PANEL_DATED_MESSAGE_PX = 120;
  * Opt-in at its own call sites, which are `MessageHeader`, `SendBar` and
  * `MessageContent`; SCRUM-474 is the pattern this follows.
  */
-const MESSAGE_PANEL_MIN_HEIGHT_PX = Math.ceil(
-  (MESSAGE_PANEL_HEADER_PX +
+const MESSAGE_PANEL_MIN_HEIGHT_PX = shortestViewportForContentRow(
+  MESSAGE_PANEL_HEADER_PX +
     MESSAGE_PANEL_TAB_STRIP_PX +
     MESSAGE_PANEL_SEND_BAR_PX +
     MESSAGE_CONTENT_PADDING_PX +
-    MESSAGE_PANEL_DATED_MESSAGE_PX) /
-    CONTENT_ROW_VIEWPORT_FRACTION,
+    MESSAGE_PANEL_DATED_MESSAGE_PX,
 );
 
 /**
@@ -670,7 +866,12 @@ module.exports = {
   HEADER_BAR_VIEWPORT_PERCENT,
   HEADER_BAR_VIEWPORT_FRACTION,
   HEADER_BAR_HEIGHT,
+  HEADER_BAR_MIN_HEIGHT_PX,
+  HEADER_BAR_MIN_HEIGHT,
+  HEADER_BAR_RESOLVED_HEIGHT,
   CONTENT_ROW_VIEWPORT_FRACTION,
+  CONTENT_ROW_HEIGHT,
+  shortestViewportForContentRow,
   LOGO_FONT_BOX_RATIO,
   HEADER_LOGO_MAX_FONT_SIZE,
   HEADER_BAR_CONTROL_HEIGHT_EXPRESSION,
