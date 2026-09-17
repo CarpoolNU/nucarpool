@@ -183,22 +183,11 @@ module.exports = {
         "content-row": CONTENT_ROW_HEIGHT,
         /**
          * The explore page's main row on mobile: the viewport, less the
-         * navigation, less the fixed banner this row is pushed down by.
-         *
-         * `1.5rem` is that banner allowance, and it must stay equal to the top
-         * margin the row carries in `index.tsx`. It was `1.25rem` until
-         * that change's final reconciliation, which is 20px against a banner
-         * that measures 24px - so the fixed bar overlapped the first 4px of
-         * the row. Both figures come from the built stylesheet rather than from
-         * the class names: the banner is a 12px font on a 1/0.75 line height,
-         * 16px, plus 4px of padding either side.
-         *
-         * Deliberately not a token: the banner is still scheduled for removal,
-         * and giving a thing about to be deleted its own name in the design
-         * system would be work done twice. The two sites are instead
-         * cross-referenced, here and there.
+         * navigation. SCRUM-503 removed the "use desktop instead" banner this
+         * row used to be pushed down by, along with the `1.5rem` allowance
+         * that used to sit here and the matching top margin in `index.tsx`.
          */
-        "mobile-row": `calc(100% - 1.5rem - ${MOBILE_NAV_SPACE})`,
+        "mobile-row": `calc(100% - ${MOBILE_NAV_SPACE})`,
         /**
          * The expanded explore sheet. `MOBILE_SHEET_MAP_STRIP` is the strip of
          * map left visible above it, which is what the previous

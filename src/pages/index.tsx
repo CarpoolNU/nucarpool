@@ -52,7 +52,6 @@ import { runViewRouteClick } from "../utils/map/viewRouteClick";
 import { runViewGroupRoute } from "../utils/map/groupRouteClick";
 import clearOtherUserMarkers from "../utils/map/clearOtherUserMarkers";
 import { isValidCoordinates } from "../utils/map/coordinates";
-import { MobileBanner } from "../components/MobileBanner";
 import {
   isSheetDetentView,
   planExploreSidebar,
@@ -995,12 +994,6 @@ const Home: NextPage<any> = () => {
           <title>CarpoolNU</title>
         </Head>
 
-        {/* Always render the banner outside of other containers. It hides
-            itself below the mobile breakpoint; it used to be declared inside
-            this component's render body, which remounted it on every render
-            of this page rather than updating it. */}
-        <MobileBanner />
-
         {/* Tutorial overlay for first-time users */}
         {showTutorial && (
           <WelcomeTutorial onComplete={handleTutorialComplete} />
@@ -1038,16 +1031,10 @@ const Home: NextPage<any> = () => {
               onViewGroupRoute={onViewGroupRoute}
             />
           )}
-          {/* `h-mobile-row` is the viewport less the navigation and less the
-              banner this row is pushed down by - see `tailwind.config.js`.
-
-              The top margin was one step short until the banner's final
-              reconciliation: the banner measures 24px and the margin reserved
-              20px, so the fixed bar overlapped the first 4px of this row. Both
-              numbers are resolved from the built stylesheet rather than read
-              off the class names - the banner is a 12px font on a 1/0.75 line
-              height, which is 16px, plus 4px of padding either side. The
-              matching allowance inside the height token had to move with it.
+          {/* `h-mobile-row` is the viewport less the navigation - see
+              `tailwind.config.js`. It no longer reserves a banner allowance:
+              SCRUM-503 removed the "use desktop instead" bar this row used to
+              be pushed down by.
 
               The desktop arm is `h-content-row`, which is its own token and not
               this one: it reserves the *top* header, a different quantity from
@@ -1064,7 +1051,7 @@ const Home: NextPage<any> = () => {
               percentage. */}
           <div
             className={`flex overflow-hidden ${
-              isMobile ? "h-mobile-row mt-6" : "h-content-row"
+              isMobile ? "h-mobile-row" : "h-content-row"
             }`}
           >
             {/* Shown exactly when the sheet is in a state this handle can

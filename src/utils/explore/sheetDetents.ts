@@ -153,11 +153,11 @@ export const defaultSheetDetent = (role?: Role): SheetDetent =>
  * JavaScript cannot evaluate. So a single constant remains, shared with the CSS
  * through `breakpoints.js` rather than restated here.
  *
- * **Not the containing row**, which was the first suggestion and is off by the
- * banner. The row is `h-mobile-row` with `mt-6`, so its top edge sits 1.5rem
- * down the viewport and `rowHeight - MAP_STRIP` comes out 1.5rem short. The row
- * is not the sheet's containing block either — `overflow` does not establish
- * one, as `index.tsx` records for SCRUM-464.
+ * **Not the containing row**, which was the first suggestion. The row is not
+ * the sheet's containing block — `overflow` does not establish one, as
+ * `index.tsx` records for SCRUM-464 — so its height is not a substitute for
+ * the sheet's own measured bottom edge, regardless of what the row's height
+ * resolves to.
  *
  * Clamped at zero because a `hidden` sheet is `display: none` and measures a
  * bottom edge of 0, which would otherwise make the range negative rather than

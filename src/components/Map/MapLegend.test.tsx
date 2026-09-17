@@ -23,9 +23,9 @@ import {
  * unprompted. A test for only the first would pass against a version that
  * ignored the collapse state entirely.
  *
- * *Not covered:* that the panel clears the banner, the sheet, or Mapbox's own
- * controls. jsdom does no layout and computes no stacking, so every placement
- * claim in the component is arithmetic rather than measurement - see
+ * *Not covered:* that the panel clears the sheet or Mapbox's own controls.
+ * jsdom does no layout and computes no stacking, so every placement claim in
+ * the component is arithmetic rather than measurement - see
  * `src/testing/viewport.ts`.
  */
 
