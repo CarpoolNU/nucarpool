@@ -186,8 +186,9 @@ Step 3 is therefore about the **branch**, not the directory. `.claude/worktrees/
 A sweep that deletes a reference from hundreds of comments can leave a sentence
 standing on the word that introduced whatever it deleted — `until.`, `by.`,
 `exists for.` The reader is told that something happened "until" and never told
-what. **No test can see this**, which is why one such sweep put thirteen of
-them on `main`.
+what. **No test can see this**, which is why one such sweep put nineteen of
+them on `main`, and why the last six outlived the pass that reported the set
+complete.
 
 **This is deliberately not a CI gate.** A word-list scan for comment lines
 ending in a preposition was measured against this repository: 69 hits, 66 of
@@ -209,9 +210,18 @@ And the exact check, which only works while the sweep is still identifiable as
 a commit: compare each removed line with the line that replaced it. A line
 **reworded** to stand on its own is the goal; a line **byte-identical to its
 predecessor minus the reference** is where a fact used to be and no longer is.
-That comparison is what found all thirteen, including the ones no grep pattern
-reached — and it also proves the rest of the sweep clean, which a word list
-cannot.
+That comparison reaches the cases no grep pattern does, and it enumerates the
+whole sweep rather than sampling it, which a word list cannot.
+
+**Read the line before each hit, not just the hit.** The comparison hands you
+the line that _changed_; the sentence that broke is often not on it. Where the
+deleted reference opened a clause, the dangling word is left on the line above
+— `* … which is unchanged reasoning from` followed by `* SCRUM-412: the banner
+is still scheduled for removal` loses its join, and the line that now reads as
+a fragment is the one the sweep never touched, so it appears nowhere in the
+diff. Judging each changed line on its own merits is exactly how six of the
+nineteen survived a pass that had the right method: every one of them was found
+later by reading across the seam instead of down the diff.
 
 ## Discovered-issue workflow
 

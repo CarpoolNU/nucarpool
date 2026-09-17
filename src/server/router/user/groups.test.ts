@@ -853,9 +853,9 @@ describe("accepting a request resolves it", () => {
     //
     // This case used to be written with the *sender* accepting — an OUTSIDER
     // who had asked the driver, calling `edit` themselves — and asserted that
-    // it succeeded. That was it pinned the self-accept as correct
-    // behaviour, which is how the hole survived three rounds of group
-    // authorization hardening. The refusal is now pinned below.
+    // it succeeded. That assertion was itself the defect: it pinned the
+    // self-accept as correct behaviour, which is how the hole survived three
+    // rounds of group authorization hardening. The refusal is now pinned below.
     const db = buildGroupsDb({ requests: [[DRIVER, OUTSIDER]] });
     const { caller } = callerFor(sessionFor(OUTSIDER), db);
 

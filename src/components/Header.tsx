@@ -102,11 +102,15 @@ const HeaderDiv = styled.div`
  *
  * Both properties are needed, not either one. `MOBILE_NAV_SPACE` is
  * `60px + safe-area-inset-bottom`, and Tailwind's preflight makes this
- * `border-box`, so `padding-bottom` of the same inset leaves exactly 60px of
- * content box for the items while the bar itself still covers the home
- * indicator. Setting the height alone would push the icons *into* the
- * indicator; setting the padding alone would grow the bar past what callers
- * subtract.
+ * `border-box`, so `padding-bottom` of the same inset leaves a content box for
+ * the items while the bar itself still covers the home indicator. Setting the
+ * height alone would push the icons *into* the indicator; setting the padding
+ * alone would grow the bar past what callers subtract.
+ *
+ * **That content box is 59px, not 60** - this block's `border-top` is the
+ * difference, and SCRUM-502 is the ticket that had to measure it to find out.
+ * `MobileNavItem` no longer assumes a figure for it at all; see that
+ * component's comment.
  */
 const MobileNav = styled.div`
   position: fixed;
@@ -138,10 +142,35 @@ const MobileNav = styled.div`
 // warning: React caches it per attribute name at module scope, so it appears
 // **once per page load** and never again - not once per element and not once
 // per render, which is why `Header.console.test.tsx` has to be its own file.
+// `height: 100%` plus `justify-content: center` is SCRUM-502's fix, and the
+// point is that it is structural rather than arithmetic. Before this, the
+// item had no declared height at all, so its box was whatever its children
+// summed to: 8px padding + 24px icon span + 24px label span (the label's
+// wrapper sets no font-size, so it inherits `globals.css`'s 24px line-height
+// on a 12px label - an accidental term, not a chosen one) + 8px padding + 4px
+// border-bottom = 68px, against a 59px content box `MobileNav` actually
+// leaves (see that component's comment). `align-items: center` split the 9px
+// excess, so the item overhung the bar 3.5px on top and 4.5px on the bottom -
+// and the border-bottom, the *only* visual difference between the active and
+// inactive states, was the last 4px of that overhang. On a device with no
+// safe-area inset the underline landed entirely below the viewport, which
+// left the active tab with no visible marker at all.
+//
+// `height: 100%` resolves against `MobileNav`'s content box, whatever it
+// measures, so the item's own border-box - and therefore its border-bottom -
+// is pinned to that edge by construction rather than by keeping every child's
+// height summing to a number nobody re-checks when one of them changes. The
+// icon and label still want more room than the content box has once padding
+// and the border are taken out (48px against roughly 39px), but flexbox lets
+// that overflow bleed into the padding rather than past the box itself - so
+// nothing here depends on the label wrapper's inherited line-height either,
+// unlike the arithmetic this replaced.
 const MobileNavItem = styled.button<{ $active: boolean }>`
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
+  height: 100%;
   padding: 8px 0;
   width: 25%;
   background: none;

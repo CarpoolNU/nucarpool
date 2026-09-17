@@ -661,8 +661,8 @@ export const requestsRouter = router({
       // row that no longer existed. 620 of them in production, holding 1,258
       // real messages between them.
       //
-      // Deleting rather than preserving, decided on the thread is
-      // already unreachable the instant the request row goes.
+      // Deleting rather than preserving, deliberately: the thread is already
+      // unreachable the instant the request row goes.
       // `getConversationMessages` looks the request up first and throws
       // NOT_FOUND without it, and the unread count joins through
       // `conversation.request.some(...)`, which matches nothing. So nothing

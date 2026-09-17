@@ -227,6 +227,27 @@ describe("Header navigation at a mobile viewport", () => {
     }
   });
 
+  it("sizes each nav item to the bar rather than to its children (SCRUM-502)", () => {
+    // Not a re-assertion of the border-bottom test above - that one passed
+    // while this was broken, which is the whole reason SCRUM-502 needed a
+    // real browser rather than jsdom to find the defect. Before the fix,
+    // `MobileNavItem` declared no height at all, so its box was an emergent
+    // sum of its children (8px padding + 24px icon + 24px label + 8px padding
+    // + 4px border = 68px) against a 59px bar, and the border-bottom - the
+    // underline - landed off-screen. jsdom cannot measure that sum; it lays
+    // nothing out. What it *can* assert is the structural property the fix
+    // introduces: the item's own declared height is `100%` of its container,
+    // not an omitted declaration that leaves the box to whatever its children
+    // add up to. `layoutFixtures.ts`'s `mobile-nav-active-underline` fixture,
+    // driven through `scripts/measure-layout.ts`, is what proves that
+    // declaration actually keeps the underline on-screen in a real browser.
+    renderHeader();
+
+    expect(getComputedStyle(screen.getByTestId("explore-sidebar")).height).toBe(
+      "100%",
+    );
+  });
+
   it("does not also render the desktop header", () => {
     // The other half of the original defect. Rendering both is what left the
     // 640-768 band with no usable header, and it is invisible to a test that
