@@ -26,6 +26,7 @@ import {
   HEADER_BAR_HEIGHT,
   HEADER_BAR_MIN_HEIGHT,
   HEADER_LOGO_MAX_FONT_SIZE,
+  MOBILE_NAV_SPACE,
 } from "../utils/breakpoints";
 
 /**
@@ -1439,6 +1440,163 @@ const centredDialogPanels: LayoutFixture = {
   ],
 };
 
+/*
+ * SCRUM-502's fixture: `MobileNav` and `MobileNavItem`, `Header.tsx:115` and
+ * `:168`. Both are styled-components, so - as SCRUM-484's comment above
+ * explains for the desktop header - the markup carries its own `<style>` and
+ * the drift guard reads `Header.tsx` for the declaration text rather than a
+ * compiled class string.
+ *
+ * **One fixture covers both insets the criteria ask for, because the inset is
+ * not something the fixture's CSS can vary at all.** The first draft here
+ * tried to fake a 34px inset by giving `env(safe-area-inset-bottom)` a 34px
+ * fallback, reasoning that a browser with no notch leaves the variable
+ * undefined. Measured and wrong: Chromium defines it as an actual `0px`,
+ * fallback or no, so `env(x, 34px)` resolved to `0px` there exactly as it does
+ * with the real `0px` fallback `MobileNav` declares - the two fixtures were
+ * reporting the same number under different names. The only way to make
+ * Chromium report a nonzero inset is to tell it to, with the CDP call this
+ * measures: `session.send("Emulation.setSafeAreaInsetsOverride", { insets: {
+ * bottom: 34, bottomMax: 34 } })`, which `scripts/measure-layout.ts` does not
+ * issue - it is a manual step, taken once per inset, against the one fixture
+ * below. `recorded` carries both results.
+ */
+const MOBILE_NAV_CSS = `
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: ${MOBILE_NAV_SPACE};
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  background-color: #e6e6e6;
+  padding: 0px 0;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  box-shadow: 0px -2px 6px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  border-top: 1px solid #d1d1d1;
+`;
+
+/**
+ * `MobileNavItem`'s shared declarations, `border-bottom` excluded - that one
+ * line is the whole active/inactive difference, and the fixture states it
+ * with two ordinary attribute selectors below rather than trying to
+ * reconstruct styled-components' prop interpolation in static HTML. The
+ * `reproduces` entry for it copies the real conditional text separately.
+ */
+const MOBILE_NAV_ITEM_CSS = `
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 8px 0;
+  width: 25%;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+`;
+
+/**
+ * The literal source of `MobileNavItem`'s conditional `border-bottom`,
+ * `Header.tsx:180`-181 - kept as a plain string, not a template literal, so
+ * writing it here does not itself invoke the arrow function it names.
+ */
+const MOBILE_NAV_ITEM_BORDER_BOTTOM_SOURCE =
+  "border-bottom: ${(props) =>\n" +
+  '    props.$active ? "4px solid #000" : "4px solid transparent"};';
+
+const mobileNavActiveUnderline: LayoutFixture = {
+  name: "mobile-nav-active-underline",
+  summary:
+    "The mobile bottom nav's active-tab underline, against the real MobileNav/MobileNavItem CSS",
+  source: "src/components/Header.tsx:168",
+  issue: "SCRUM-502",
+  viewportWidth: 375,
+  viewportHeight: 667,
+  /* No horizontal chain: the defect and the fix are both vertical, and the
+     item's width (25% of the bar) is unrelated to either. */
+  insets: [],
+  markup: `
+    <style>
+      [data-probe="nav"] {${MOBILE_NAV_CSS}      }
+      [data-probe="nav"] > button {${MOBILE_NAV_ITEM_CSS}      }
+      [data-probe="nav"] > button[data-active="true"] {
+        border-bottom: 4px solid #000;
+      }
+      [data-probe="nav"] > button[data-active="false"] {
+        border-bottom: 4px solid transparent;
+      }
+    </style>
+    <div data-probe="nav">
+      <button type="button" data-active="true" data-probe="item-active">
+        <span style="font-size: 24px; display: flex;" aria-hidden="true">&#9675;</span>
+        <span style="position: relative; display: block;">
+          <span style="font-size: 12px; font-weight: 500;">Explore</span>
+        </span>
+      </button>
+      <button type="button" data-active="false" data-probe="item-inactive">
+        <span style="font-size: 24px; display: flex;" aria-hidden="true">&#9675;</span>
+        <span style="position: relative; display: block;">
+          <span style="font-size: 12px; font-weight: 500;">Requests</span>
+        </span>
+      </button>
+    </div>
+  `,
+  widthProbe: "[data-probe='nav']",
+  probe: {
+    boxes: ["[data-probe='nav']", "[data-probe='item-active']"],
+  },
+  recorded: [
+    "0px inset (Chromium's real default, no CDP override) at 375x667: nav rect top 607 / bottom 667 / height 60. item-active rect top 608 / bottom 667 / height 59 - one pixel inside the bar's own top edge (its 1px border-top), and exactly at the bar's bottom edge. The 4px border-bottom therefore paints from 663 to 667, fully inside a 667-tall viewport. Before the fix this same fixture measured item top 603.5 / bottom 671.5 / height 68, 3.5px above the bar and 4.5px below the viewport's bottom edge - the underline entirely off-screen.",
+    "0px inset at 320x568 (the other required viewport): nav top 508 / bottom 568 / height 60. item-active top 509 / bottom 568 / height 59 - identical shape to 375x667, confirming the fix is width-independent, as the defect was.",
+    "34px inset at 375x667, `Emulation.setSafeAreaInsetsOverride({ bottom: 34, bottomMax: 34 })` applied first so `env(safe-area-inset-bottom, 0px)` resolves to the override rather than its fallback: nav rect top 573 / bottom 667 / height 94 (60 + 34, matching `MOBILE_NAV_SPACE`). item-active top 574 / bottom 633 / height 59 - unchanged from the 0px case except for the bar's own position, because the item's `height: 100%` is what pins it to the content box regardless of how much of the bar's own height the inset consumes. Border-bottom paints 629 to 633, 34px clear of the viewport's bottom edge and inside the band `padding-bottom` reserves for the home indicator - the inversion of the pre-fix figure, which had the underline sitting in that band rather than the tap target's whole box respecting it.",
+    "item-active `clientHeight` 55 and `contentHeight` 39 at every inset and width measured: the tap target (border-box, 59px) still clears the 44px floor SCRUM-421/432/480 established, and the 9px the icon-plus-label still exceed the 39px content box by is absorbed into the item's own 8px top/bottom padding rather than pushing past the button's edges - confirmed by the rect matching the bar's content box exactly rather than overflowing it.",
+  ],
+  reproduces: [
+    {
+      file: "src/components/Header.tsx",
+      className: "height: ${MOBILE_NAV_SPACE};",
+    },
+    {
+      file: "src/components/Header.tsx",
+      className: "padding-bottom: env(safe-area-inset-bottom, 0px);",
+    },
+    {
+      file: "src/components/Header.tsx",
+      className: "border-top: 1px solid #d1d1d1;",
+    },
+    {
+      file: "src/components/Header.tsx",
+      className:
+        "  align-items: center;\n  justify-content: center;\n  height: 100%;\n  padding: 8px 0;\n  width: 25%;",
+    },
+    {
+      file: "src/components/Header.tsx",
+      className: MOBILE_NAV_ITEM_BORDER_BOTTOM_SOURCE,
+    },
+    {
+      file: "src/components/Header.tsx",
+      className: 'style={{ fontSize: "24px", display: "flex" }}',
+    },
+    {
+      file: "src/components/Header.tsx",
+      className: 'style={{ position: "relative", display: "block" }}',
+    },
+    {
+      file: "src/components/Header.tsx",
+      className: 'style={{ fontSize: "12px", fontWeight: "500" }}',
+    },
+    {
+      file: "src/utils/breakpoints.js",
+      className: "const MOBILE_NAV_HEIGHT_PX = 60;",
+    },
+  ],
+};
+
 export const LAYOUT_FIXTURES: readonly LayoutFixture[] = [
   groupMemberCardTrigger,
   headerLogoBar,
@@ -1448,6 +1606,7 @@ export const LAYOUT_FIXTURES: readonly LayoutFixture[] = [
   messagePanelChrome,
   mapOverlayAnchors,
   centredDialogPanels,
+  mobileNavActiveUnderline,
 ];
 
 export const findFixture = (name: string): LayoutFixture | undefined =>
