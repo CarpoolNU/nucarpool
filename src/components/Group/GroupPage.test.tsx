@@ -50,18 +50,6 @@ jest.mock("../../utils/trpc", () => ({
 }));
 
 /**
- * Mutable so the SCRUM-504 cases below can move the route without a second
- * `jest.mock` factory. `mockPathname` rather than a plain name: Jest's
- * hoisting only allows a `jest.mock` factory to close over identifiers
- * prefixed `mock`. Defaults to `"/"`, matching this suite's prior,
- * router-less behaviour for every case that is not about the offset itself.
- */
-let mockPathname = "/";
-jest.mock("next/router", () => ({
-  useRouter: () => ({ pathname: mockPathname }),
-}));
-
-/**
  * The keys are `GroupDetails`', spelled out rather than spread from
  * `DEFAULT_GROUP_DETAILS` - a `jest.mock` factory runs while the module under
  * test is being required, before the imports above are initialised, so it can
@@ -203,39 +191,6 @@ describe("My Group on mobile", () => {
 
     expect(overlay).toHaveClass("fixed", "bottom-mobile-nav", "inset-x-0");
     expect(overlay).not.toHaveClass("inset-0");
-  });
-
-  /**
-   * SCRUM-504: the header's top offset is not unconditional. `MobileBanner`
-   * renders only from `src/pages/index.tsx`, but this overlay portals to
-   * `document.body` on every route (`Header.tsx`'s mobile branch), so a fixed
-   * `mt-6` cleared a banner that was not there everywhere except `/`.
-   *
-   * A class-name proxy, not a measurement: jsdom lays nothing out, so it
-   * cannot see the 24px gap itself, only the class that used to cause it
-   * unconditionally. The real measurement is the ticket's recorded browser
-   * check at 375x667 in both configurations.
-   */
-  describe("the header's offset (SCRUM-504)", () => {
-    afterEach(() => {
-      mockPathname = "/";
-    });
-
-    it("carries mt-6 on /, MobileBanner's only render site", () => {
-      mockPathname = "/";
-      renderGroupPage(() => undefined);
-
-      expect(screen.getByText("My Group").parentElement).toHaveClass("mt-6");
-    });
-
-    it("does not carry mt-6 on a route MobileBanner never reaches", () => {
-      mockPathname = "/profile";
-      renderGroupPage(() => undefined);
-
-      expect(screen.getByText("My Group").parentElement).not.toHaveClass(
-        "mt-6",
-      );
-    });
   });
 });
 

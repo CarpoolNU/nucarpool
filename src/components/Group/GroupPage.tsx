@@ -1,5 +1,4 @@
 import { Dialog } from "@headlessui/react";
-import { useRouter } from "next/router";
 import { useCallback, useContext, useEffect, useState } from "react";
 import { FaTimes } from "react-icons/fa";
 import { GroupMembers } from "./GroupMemberCard";
@@ -230,7 +229,6 @@ export const GroupPage = (props: GroupPageProps) => {
   const [isOpen, setIsOpen] = useState<boolean>(true);
   const curUser = useContext(UserContext);
   const isMobile = useIsMobile();
-  const router = useRouter();
 
   // Destructured out here, not read as `props.onClose` inside the callback
   // below, because depending on `props` would rebuild the callback whenever
@@ -323,18 +321,7 @@ export const GroupPage = (props: GroupPageProps) => {
        * rather than a modal. */
       <div className="bottom-mobile-nav fixed inset-x-0 top-0 z-50 bg-white">
         <div className="flex h-full flex-col bg-gray-50">
-          {/* `mt-6` only on `/`: it clears `MobileBanner`, whose only render
-           * site is `src/pages/index.tsx`. This overlay portals to
-           * `document.body` on every route (`Header.tsx`'s mobile branch), so
-           * unconditional `mt-6` left a 24px empty strip above this header on
-           * every other route - there is no banner there to clear (SCRUM-504).
-           * If `/` gets a banner-free future, this condition is also this
-           * component's only remaining tie to the banner and comes out with it. */}
-          <div
-            className={`flex items-center border-b border-gray-200 bg-white px-4 py-3 shadow-xs ${
-              router.pathname === "/" ? "mt-6" : ""
-            }`}
-          >
+          <div className="flex items-center border-b border-gray-200 bg-white px-4 py-3 shadow-xs">
             {/* The way out. This header held the title alone, so the only exit
              * from My Group on a phone was tapping a different navigation tab -
              * the desktop branch has dismissed on backdrop click and Escape all
