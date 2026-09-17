@@ -38,10 +38,10 @@ import { OnboardingFormInputs, User } from "../types";
  * never calls it. The profile's co-op dates have always come from the antd
  * picker, so the defect was total rather than partial.
  *
- * That dead import is filed separately, and the reason it matters is
- * the profile never adopted the UTC fix `lastDayOfMonthUTC` carries,
- * so east of UTC its picker stores the month *before* the one chosen. Both are
- * about the write; this file is only about detecting a change to it.
+ * That dead import is filed separately, and the reason it matters is that the
+ * profile never adopted the UTC fix `lastDayOfMonthUTC` carries, so east of UTC
+ * its picker stores the month *before* the one chosen. Both are about the
+ * write; this file is only about detecting a change to it.
  *
  * The cost is not only the lost edit. `dateOverlapFilter` and `calculateScore`
  * both read these dates, so the term the user thought they had corrected goes

@@ -193,11 +193,10 @@ module.exports = {
          * the class names: the banner is a 12px font on a 1/0.75 line height,
          * 16px, plus 4px of padding either side.
          *
-         * Deliberately not a token, which is unchanged reasoning from
-         * the banner is still scheduled for removal, and giving a
-         * thing about to be deleted its own name in the design system would be
-         * work done twice. The two sites are instead cross-referenced, here
-         * and there.
+         * Deliberately not a token: the banner is still scheduled for removal,
+         * and giving a thing about to be deleted its own name in the design
+         * system would be work done twice. The two sites are instead
+         * cross-referenced, here and there.
          */
         "mobile-row": `calc(100% - 1.5rem - ${MOBILE_NAV_SPACE})`,
         /**

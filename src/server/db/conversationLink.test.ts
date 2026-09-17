@@ -10,10 +10,10 @@ import type { TransactionClient } from "./client";
  *
  * Two procedures need it and both got it wrong before sharing it:
  * `messages.sendMessage` discarded a first message on a request with no
- * conversation, and `requests.create`'s reopen branch did the same thing on.
- * The repair is two statements in a fixed order against a link
- * stored in two places, so it is worth pinning on its own rather than only
- * through the routers.
+ * conversation, and `requests.create`'s reopen branch did the same thing. The
+ * repair is two statements in a fixed order against a link stored in two
+ * places, so it is worth pinning on its own rather than only through the
+ * routers.
  *
  * What matters here is the *key*. The lookup uses `Conversation.requestId`, the
  * `@unique` and authoritative side, not `Request.conversationId`. Those two can

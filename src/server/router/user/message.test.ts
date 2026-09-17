@@ -519,8 +519,8 @@ describe("sendMessage — content is bounded by its column", () => {
  */
 describe("sendMessage is atomic", () => {
   it("leaves no conversation behind when writing the message fails", async () => {
-    // No conversation yet, so this exercises the repair path added by
-    // the one that writes twice before the message.
+    // No conversation yet, so this exercises the repair path — the one that
+    // writes twice before the message.
     const db = buildMessageDb({ conversation: null });
     const { caller } = callerFor(sessionFor(SENDER), db);
 
