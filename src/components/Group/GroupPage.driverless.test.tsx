@@ -77,6 +77,15 @@ jest.mock("react-toastify/unstyled", () => ({
   toast: { success: jest.fn(), error: jest.fn() },
 }));
 
+/**
+ * `pathname: "/"` so the header's `mt-6` (SCRUM-504) matches this suite's
+ * prior, router-less behaviour - the driverless-group dissolution these cases
+ * cover is unrelated to the banner offset, which has its own suite.
+ */
+jest.mock("next/router", () => ({
+  useRouter: () => ({ pathname: "/" }),
+}));
+
 const mockedTrpc = trpc as unknown as {
   useUtils: jest.Mock;
   user: {
