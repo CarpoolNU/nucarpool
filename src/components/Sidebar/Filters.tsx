@@ -174,15 +174,11 @@ const Filters = ({
           </h2>
           <button
             type="button"
-            className="flex-1 pt-1"
+            className="flex flex-1 justify-end pt-1"
             onClick={onClose}
             aria-label="Close filters"
           >
-            <FaTimes
-              size={20}
-              className="justify-self-end"
-              aria-hidden="true"
-            />
+            <FaTimes size={20} aria-hidden="true" />
           </button>
         </div>
       </div>
