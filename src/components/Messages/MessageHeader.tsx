@@ -263,7 +263,7 @@ const MessageHeader = ({
   // no way to answer a request. `MessageHeader.test.tsx` is the render-level
   // half of that, and asserts both branches.
   //
-  // `none` for a pair already in the same group is that state used
+  // `none` for a pair already in the same group is deliberate: that state used
   // to offer a "Leave Conversation" button wired to `onReject`, so pressing it
   // deleted their accepted request and destroyed a thread they could not get
   // back. See that module for why it was removed rather than repaired.
