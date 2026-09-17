@@ -1439,6 +1439,57 @@ const centredDialogPanels: LayoutFixture = {
   ],
 };
 
+/**
+ * The explore page's mobile content row, after SCRUM-503 removed the
+ * "use desktop instead" banner it used to be pushed down by.
+ *
+ * `h-mobile-row` used to be `calc(100% - 1.5rem - MOBILE_NAV_SPACE)`, and the
+ * row carried a matching `mt-6`. Both are gone: the token is now
+ * `calc(100% - MOBILE_NAV_SPACE)` and the row has no top margin. This fixture
+ * is what SCRUM-503's acceptance criterion asks for directly - the row starts
+ * at y=0 and its height is the viewport less `MOBILE_NAV_SPACE` - measured
+ * rather than read off the class names, per that ticket's own note that a
+ * class no longer appearing in the output is not a valid check (SCRUM-419).
+ *
+ * The wrapper (`m-0 h-full w-full`) is included because the row's `100%` in
+ * `h-mobile-row` resolves against *its* height, not `#__next`'s directly - so
+ * a fixture measuring the row alone, without reproducing that ancestor, would
+ * not actually test the chain the token depends on.
+ */
+const mobileContentRowHeight: LayoutFixture = {
+  name: "mobile-content-row-height",
+  summary:
+    "The explore page's mobile content row, now that the desktop-nudge banner is gone",
+  source: "src/pages/index.tsx:1053",
+  issue: "SCRUM-503",
+  viewportWidth: 375,
+  viewportHeight: 667,
+  insets: [],
+  markup: `
+    <div class="m-0 h-full w-full">
+      <div class="flex overflow-hidden h-mobile-row" data-probe="content-row">
+        <div class="h-full w-full bg-stone-100"></div>
+      </div>
+    </div>
+  `,
+  widthProbe: "[data-probe='content-row']",
+  probe: {
+    boxes: ["[data-probe='content-row']"],
+  },
+  recorded: [
+    "Measured in Chromium at 375x667: content-row rect top 0, height 607, contentWidth 375 (matching the predicted chain, since insets is empty). 607 is the viewport's 667 less MOBILE_NAV_SPACE's 60px, with no banner allowance and no top margin left to account for. env(safe-area-inset-bottom) resolves to its 0px fallback in this headless browser, so MOBILE_NAV_SPACE is exactly 60px here.",
+    "SCRUM-503's own ticket evidence measured the pre-removal chain at this same viewport: banner occupying y 0→24 and the row starting at y 24. This fixture's top 0 is the criterion that comparison was checking for.",
+  ],
+  reproduces: [
+    { file: "src/pages/index.tsx", className: "m-0 h-full w-full" },
+    { file: "src/pages/index.tsx", className: "h-mobile-row" },
+    {
+      file: "tailwind.config.js",
+      className: "calc(100% - ${MOBILE_NAV_SPACE})",
+    },
+  ],
+};
+
 export const LAYOUT_FIXTURES: readonly LayoutFixture[] = [
   groupMemberCardTrigger,
   headerLogoBar,
@@ -1448,6 +1499,7 @@ export const LAYOUT_FIXTURES: readonly LayoutFixture[] = [
   messagePanelChrome,
   mapOverlayAnchors,
   centredDialogPanels,
+  mobileContentRowHeight,
 ];
 
 export const findFixture = (name: string): LayoutFixture | undefined =>

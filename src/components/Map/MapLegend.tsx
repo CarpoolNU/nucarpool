@@ -40,9 +40,7 @@ export const MapLegend = (props: MapLegendProps) => {
    *
    * The top edge is the only side of a mobile map that nothing else claims:
    * the bottom holds the navigation, the explore sheet and Mapbox's own
-   * `NavigationControl`. The banner is not a problem here even though it is
-   * fixed at `z-[9999]` - the row this map sits in is already pushed down by
-   * its height in `index.tsx`, so the map's own top edge is below it.
+   * `NavigationControl`.
    */
   const containerClasses = isMobile
     ? "text-md absolute top-2 left-2 z-10 flex flex-col rounded-xl border border-gray-200 bg-white p-2 md:text-lg"
