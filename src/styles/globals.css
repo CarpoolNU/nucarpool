@@ -26,6 +26,18 @@
      Any browser that can render the rest of this stylesheet understands the
      unit. */
   height: 100dvh;
+
+  /* Every row inside this element clips its own overflow (the mobile map row
+     in `index.tsx` is `overflow-hidden`, for one), but nothing clipped here,
+     at the top. A transient mismatch between this box and the document's
+     actual height - the same URL-bar collapse/expand `useMapInstance.ts`
+     already documents as firing mid-gesture on iOS Safari - let the whole
+     document scroll instead of being contained at the one place sized to the
+     viewport, which is what surfaced as blank space under the map on a
+     pinch-zoom or a stray upward swipe (SCRUM-501). No page relies on
+     document-level scroll; every one of them scrolls its own content in an
+     `overflow-y-auto` container instead. */
+  overflow: hidden;
 }
 
 .custom-marker-popup .mapboxgl-popup-content {
