@@ -31,12 +31,14 @@ const StepTwo = ({
       <div className="space-y-2 text-start">
         {/* Home Address */}
         <EntryLabel
+          htmlFor="startAddress"
           required={true}
           error={errors.startAddress}
           label="Start Address"
         />
 
         <ControlledAddressCombobox
+          id="startAddress"
           isDisabled={false}
           control={control}
           name="startAddress"
@@ -57,6 +59,7 @@ const StepTwo = ({
 
         {/* Workplace Name */}
         <EntryLabel
+          htmlFor="companyName"
           required={true}
           error={errors.companyName}
           label="Workplace Name"
@@ -82,11 +85,13 @@ const StepTwo = ({
           }`}
         >
           <EntryLabel
+            htmlFor="companyAddress"
             required={true}
             error={errors.companyAddress}
             label="Workplace Address"
           />
           <ControlledAddressCombobox
+            id="companyAddress"
             isDisabled={false}
             control={control}
             name="companyAddress"

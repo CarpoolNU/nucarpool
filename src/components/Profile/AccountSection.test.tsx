@@ -1,4 +1,4 @@
-import { act, render } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { useEffect } from "react";
 import { useForm, UseFormReturn } from "react-hook-form";
 import { Role, Status } from "@prisma/client";
@@ -241,6 +241,25 @@ describe("AccountSection co-op date pickers", () => {
  * `src/testing/layoutFixtures.ts`'s `profile-content-column-width`, measured in
  * Chromium; the geometry itself belongs in SCRUM-264's Playwright suite.
  */
+/**
+ * SCRUM-513. `EntryLabel` had no `htmlFor`, so these two pickers announced as
+ * unlabelled despite the visible "Start Date"/"End Date" text beside them.
+ */
+describe("AccountSection accessible names", () => {
+  it("names the co-op date pickers after their visible labels", () => {
+    render(<Harness />);
+
+    // The asterisk is inside the `<label>` for a non-viewer role, so it is
+    // part of the computed accessible name.
+    expect(
+      screen.getByRole("textbox", { name: "Start Date *" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("textbox", { name: "End Date *" }),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("AccountSection widths", () => {
   restoreViewportAfterEach();
 

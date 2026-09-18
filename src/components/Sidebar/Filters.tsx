@@ -210,9 +210,12 @@ const Filters = ({
         toggleOpen={() => setDistanceOpen(!distanceOpen)}
       >
         <div className="mt-3">
-          <label className="mb-2 block">Max distance from start (miles)</label>
+          <label className="mb-2 block" htmlFor="startDistance">
+            Max distance from start (miles)
+          </label>
           <div className="flex flex-col items-center gap-3">
             <input
+              id="startDistance"
               type="range"
               min="0"
               max="20"
@@ -238,11 +241,12 @@ const Filters = ({
             </div>
           </div>
 
-          <label className="mt-4 mb-2 block">
+          <label className="mt-4 mb-2 block" htmlFor="endDistance">
             Max distance from destination (miles)
           </label>
           <div className="flex flex-col items-center gap-3">
             <input
+              id="endDistance"
               type="range"
               min="0"
               max="20"
@@ -283,6 +287,7 @@ const Filters = ({
                   ? "bg-northeastern-red border-2 border-black text-white"
                   : "border-2 border-gray-300 bg-white text-black"
               }`}
+              aria-pressed={filters.days === 0}
               onClick={() =>
                 setFilters((prev) => ({
                   ...prev,
@@ -298,6 +303,7 @@ const Filters = ({
                   ? "bg-northeastern-red border-2 border-black text-white"
                   : "border-2 border-gray-300 bg-white text-black"
               }`}
+              aria-pressed={filters.days === 1}
               onClick={() =>
                 setFilters((prev) => ({
                   ...prev,
@@ -313,6 +319,7 @@ const Filters = ({
                   ? "bg-northeastern-red border-2 border-black text-white"
                   : "border-2 border-gray-300 bg-white text-black"
               }`}
+              aria-pressed={filters.days === 2}
               onClick={() =>
                 setFilters((prev) => ({
                   ...prev,
@@ -407,11 +414,12 @@ const Filters = ({
               `calculateScore` rejects when `startTime > inputs.startTime * 60`,
               a maximum, exactly like the end-time control four labels below,
               which always said so. */}
-          <label className="mb-2 block">
+          <label className="mb-2 block" htmlFor="startTimeDeviation">
             Max deviation in start time (hours)
           </label>
           <div className="flex flex-col items-center gap-3">
             <input
+              id="startTimeDeviation"
               type="range"
               min="0"
               max="4"
@@ -434,11 +442,12 @@ const Filters = ({
                 : filters.startTime}
             </div>
           </div>
-          <label className="mt-4 mb-2 block">
+          <label className="mt-4 mb-2 block" htmlFor="endTimeDeviation">
             Max deviation in end time (hours)
           </label>
           <div className="flex flex-col items-center gap-3">
             <input
+              id="endTimeDeviation"
               type="range"
               min="0"
               max="4"

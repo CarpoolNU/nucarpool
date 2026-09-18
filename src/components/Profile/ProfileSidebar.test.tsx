@@ -178,6 +178,24 @@ describe("the desktop sidebar", () => {
 
     expect(glued).toEqual([]);
   });
+
+  /**
+   * SCRUM-513. Selection here was a colour and weight swap alone - no
+   * `aria-pressed` - so every button announced identically.
+   */
+  it("marks exactly the selected section as pressed", () => {
+    renderSidebar("carpool");
+
+    expect(
+      screen.getByRole("button", { name: "User Profile" }),
+    ).toHaveAttribute("aria-pressed", "false");
+    expect(
+      screen.getByRole("button", { name: "Carpool Details" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("button", { name: "Account Status" }),
+    ).toHaveAttribute("aria-pressed", "false");
+  });
 });
 
 describe("the mobile sidebar", () => {
@@ -230,5 +248,22 @@ describe("the mobile sidebar", () => {
       .filter((token) => token.includes("false") || token.includes("true"));
 
     expect(offenders).toEqual([]);
+  });
+
+  it("marks exactly the selected section as pressed", () => {
+    renderSidebar("carpool");
+
+    expect(screen.getByRole("button", { name: "Profile" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(screen.getByRole("button", { name: "Carpool" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Account" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
   });
 });

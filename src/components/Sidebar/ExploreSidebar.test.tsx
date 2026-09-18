@@ -128,6 +128,29 @@ describe.each([
     expect(screen.getByRole("button", { name: /Sort by/ })).toBeInTheDocument();
   });
 
+  /**
+   * SCRUM-513. The two list-switch buttons signalled the active list by
+   * colour alone - no `aria-pressed` - so both announced identically.
+   */
+  it("marks exactly the active list as pressed", async () => {
+    renderSidebar();
+
+    expect(
+      screen.getByRole("button", { name: "Recommendations" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Favorites" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Favorites" }));
+
+    expect(screen.getByRole("button", { name: "Favorites" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
   it("opens the filter panel from the filter button", async () => {
     renderSidebar();
 

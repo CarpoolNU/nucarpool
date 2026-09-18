@@ -181,6 +181,7 @@ const CarpoolSection = ({
       />
       <EntryLabel label="Locations" className={"!text-2xl"} />
       <EntryLabel
+        htmlFor="startAddress"
         required={!isViewer}
         error={errors.startAddress}
         className={"my-2 !text-lg"}
@@ -188,6 +189,7 @@ const CarpoolSection = ({
       />
       <div className="z-10">
         <ControlledAddressCombobox
+          id="startAddress"
           isDisabled={isViewer}
           control={control}
           name={"startAddress"}
@@ -207,6 +209,7 @@ const CarpoolSection = ({
         <ErrorDisplay>{errors.startAddress.message}</ErrorDisplay>
       )}
       <EntryLabel
+        htmlFor="companyName"
         required={!isViewer}
         error={errors.companyName}
         className={"my-2 !text-lg"}
@@ -225,6 +228,7 @@ const CarpoolSection = ({
         {...register("companyName")}
       />
       <EntryLabel
+        htmlFor="companyAddress"
         required={!isViewer}
         error={errors.companyAddress}
         className={"mt-2 !text-lg"}
@@ -234,6 +238,7 @@ const CarpoolSection = ({
         Note: Select the autocomplete results, even if you typed the address out
       </Note>
       <ControlledAddressCombobox
+        id="companyAddress"
         isDisabled={isViewer}
         control={control}
         name={"companyAddress"}

@@ -206,6 +206,63 @@ describe("the role radios (SCRUM-521)", () => {
   });
 });
 
+/**
+ * SCRUM-513. `EntryLabel` rendered its `<label>` as a sibling with no
+ * `htmlFor`, so every text field here announced as unlabelled despite the
+ * visible text beside it. The positive `getByRole` query is what actually
+ * exercises the association - a negative query would pass whether or not the
+ * name was ever wired up.
+ */
+describe("UserSection accessible names", () => {
+  it("names the always-visible text fields after their labels", () => {
+    render(<Harness checkChanges={jest.fn()} />);
+
+    expect(
+      screen.getByRole("textbox", { name: "Preferred Name" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("textbox", { name: "Pronouns" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("textbox", { name: "About Me" }),
+    ).toBeInTheDocument();
+  });
+
+  it("names Seat Availability once the Driver role reveals it", () => {
+    const Driver = () => {
+      const { register, watch, setValue, formState } =
+        useForm<OnboardingFormInputs>({
+          defaultValues: {
+            role: Role.DRIVER,
+            status: Status.ACTIVE,
+            preferredName: "Riley",
+            pronouns: "",
+            bio: "",
+            seatAvail: 0,
+          },
+        });
+
+      return (
+        <UserSection
+          register={register}
+          watch={watch}
+          setValue={setValue}
+          errors={formState.errors}
+          onSubmit={() => Promise.resolve()}
+          onFileSelect={() => undefined}
+          selectedFile={null}
+          checkChanges={jest.fn()}
+        />
+      );
+    };
+    render(<Driver />);
+
+    expect(
+      screen.getByRole("spinbutton", { name: "Seat Availability *" }),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("Save Changes, the button Sign Out sits under", () => {
   it("still submits, and does not go through the guard", async () => {
     // The guard belongs to leaving the page. Saving stays on it, so routing

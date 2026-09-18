@@ -310,3 +310,59 @@ describe("Filters — control labels", () => {
     ).toBeInTheDocument();
   });
 });
+
+/**
+ * SCRUM-513. Each of the four range sliders had a bare `<label>` followed by
+ * a `<div>`-wrapped input, with no `htmlFor`/`id` pairing between them - so
+ * every one announced as unlabelled despite the visible text above it.
+ */
+describe("Filters — slider accessible names", () => {
+  it("names both distance sliders after their visible labels", () => {
+    render(<Harness activeFilters={{ startDistance: true }} />);
+
+    expect(
+      screen.getByRole("slider", { name: "Max distance from start (miles)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("slider", {
+        name: "Max distance from destination (miles)",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("names both time-deviation sliders after their visible labels", () => {
+    render(<Harness activeFilters={{ startTime: true }} />);
+
+    expect(
+      screen.getByRole("slider", {
+        name: "Max deviation in start time (hours)",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("slider", { name: "Max deviation in end time (hours)" }),
+    ).toBeInTheDocument();
+  });
+});
+
+/**
+ * SCRUM-513. The Any/Exact/Flex buttons signalled the active mode by colour
+ * alone - no `aria-pressed`, so every option announced identically.
+ */
+describe("Filters — Carpool Days Match segmented control", () => {
+  it("marks exactly the selected mode as pressed", () => {
+    render(<Harness initial={{ days: 1 }} activeFilters={{ days: true }} />);
+
+    expect(screen.getByRole("button", { name: "Any days" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(screen.getByRole("button", { name: "Exact days" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Flex days" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+});

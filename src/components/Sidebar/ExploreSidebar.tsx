@@ -138,6 +138,7 @@ const ExploreSidebar = (props: ExploreSidebarProps) => {
                   ? "bg-northeastern-red text-white"
                   : "text-black"
               }`}
+              aria-pressed={curOption === "recommendations"}
               onClick={() => {
                 setCurOption("recommendations");
               }}
@@ -152,6 +153,7 @@ const ExploreSidebar = (props: ExploreSidebarProps) => {
                   ? "bg-northeastern-red text-white"
                   : "text-black"
               }`}
+              aria-pressed={curOption === "favorites"}
               onClick={() => {
                 setCurOption("favorites");
                 setFiltersOpen(false);

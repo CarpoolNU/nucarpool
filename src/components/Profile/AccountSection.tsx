@@ -136,6 +136,7 @@ const AccountSection = ({
         <div className={`flex ${isMobile ? "flex-col gap-4" : "w-full gap-8"}`}>
           <div className="flex flex-1 flex-col">
             <EntryLabel
+              htmlFor="coopStartDate"
               required={!isViewer}
               error={errors.coopStartDate}
               label="Start Date"
@@ -161,6 +162,7 @@ const AccountSection = ({
 
           <div className="flex flex-1 flex-col">
             <EntryLabel
+              htmlFor="coopEndDate"
               required={!isViewer}
               error={errors.coopEndDate}
               label="End Date"

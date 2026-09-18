@@ -61,6 +61,7 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
         <div className="flex w-full justify-between">
           <button
             className={`${baseButton} ${option === "user" ? selectedButton : ""}`}
+            aria-pressed={option === "user"}
             onClick={() => setOption("user")}
           >
             <div className="relative mb-1 h-8 w-8">
@@ -72,6 +73,7 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
 
           <button
             className={`${baseButton} ${option === "carpool" ? selectedButton : ""}`}
+            aria-pressed={option === "carpool"}
             onClick={() => setOption("carpool")}
           >
             <div className="relative mb-1 h-8 w-8">
@@ -83,6 +85,7 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
 
           <button
             className={`${baseButton} ${option === "account" ? selectedButton : ""}`}
+            aria-pressed={option === "account"}
             onClick={() => setOption("account")}
           >
             <div className="relative mb-1 h-8 w-8">
@@ -101,6 +104,7 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
       <div className="mt-6 flex w-full flex-col items-start justify-center gap-6 lg:text-start">
         <button
           className={`${baseButton} ${option === "user" ? selectedButton : ""}`}
+          aria-pressed={option === "user"}
           onClick={() => setOption("user")}
         >
           {option === "user" && (
@@ -122,6 +126,7 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
         </button>
         <button
           className={`${baseButton} ${option === "carpool" ? selectedButton : ""}`}
+          aria-pressed={option === "carpool"}
           onClick={() => setOption("carpool")}
         >
           {option === "carpool" && (
@@ -144,6 +149,7 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
 
         <button
           className={`${baseButton} ${option === "account" ? selectedButton : ""}`}
+          aria-pressed={option === "account"}
           onClick={() => setOption("account")}
         >
           {option === "account" && (

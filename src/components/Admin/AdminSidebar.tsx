@@ -39,12 +39,14 @@ const AdminSidebar = ({ option, setOption }: AdminSidebarProps) => {
           className={`${baseButton} ${
             option === "management" ? selectedButton : ""
           }`}
+          aria-pressed={option === "management"}
           onClick={() => setOption("management")}
         >
           Management
         </button>
         <button
           className={`${baseButton} ${option === "data" ? selectedButton : ""}`}
+          aria-pressed={option === "data"}
           onClick={() => setOption("data")}
         >
           Data
