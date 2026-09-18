@@ -14,7 +14,7 @@
  * matchers are registered, and `user-event` can drive a real click.
  */
 
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import UnsavedModal from "./UnsavedModal";
 
@@ -81,16 +81,62 @@ describe("UnsavedModal", () => {
   it("calls onClose when the dismiss button is clicked, and nothing else", async () => {
     const { onClose, onSave, onContinue } = renderModal();
 
-    // The × has no accessible label, so it can only be reached positionally.
-    // Asserting on that is worth doing: it records the gap rather than hiding
-    // it, and the day someone gives the button an `aria-label` this test fails
-    // and gets updated to use it.
-    const [dismiss] = screen.getAllByRole("button");
+    // The × glyph is not itself an accessible name - `aria-label="Close"` is
+    // what makes this findable by role and name rather than by position.
+    // SCRUM-514.
+    const dismiss = screen.getByRole("button", { name: "Close" });
     await userEvent.click(dismiss);
 
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(onSave).not.toHaveBeenCalled();
     expect(onContinue).not.toHaveBeenCalled();
+  });
+
+  /**
+   * SCRUM-514: the modal used to be a plain `div` with no `role`, so a
+   * screen-reader user got no indication one had opened at all.
+   */
+  it("exposes itself as a modal dialog", () => {
+    renderModal();
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("closes on Escape, with the same effect as the dismiss button", async () => {
+    const { onClose, onSave, onContinue } = renderModal();
+
+    await userEvent.keyboard("{Escape}");
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onSave).not.toHaveBeenCalled();
+    expect(onContinue).not.toHaveBeenCalled();
+  });
+
+  it("returns focus to the control that opened it once it closes", async () => {
+    const opener = document.createElement("button");
+    opener.textContent = "open";
+    document.body.appendChild(opener);
+    opener.focus();
+    expect(opener).toHaveFocus();
+
+    const { unmount } = render(
+      <UnsavedModal
+        onClose={jest.fn()}
+        onSave={jest.fn()}
+        onContinue={jest.fn()}
+      />,
+    );
+    expect(opener).not.toHaveFocus();
+
+    // The parent only ever renders this component while `showModal` is true,
+    // so closing is an unmount - not a prop flip - and Headless UI's own
+    // restore-focus effect runs after that, asynchronously.
+    await act(async () => {
+      unmount();
+    });
+
+    expect(opener).toHaveFocus();
+    document.body.removeChild(opener);
   });
 
   it("focuses Save and Continue on mount", () => {

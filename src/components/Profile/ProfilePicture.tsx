@@ -1,11 +1,11 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import Image from "next/image";
+import { Dialog } from "@headlessui/react";
 import Cropper, { Area, MediaSize } from "react-easy-crop";
 import { AiOutlineUser } from "react-icons/ai";
 import getCroppedImg from "../../utils/cropImage";
 import { CROP_BOX_PX, minZoomToFill } from "../../utils/cropZoom";
 import useProfileImage from "../../utils/useProfileImage";
-import { createPortal } from "react-dom";
 interface ProfilePictureProps {
   /**
    * The cropped file waiting to be uploaded, owned by the parent.
@@ -203,93 +203,98 @@ const ProfilePicture = ({
 
   return (
     <>
-      {showModal &&
-        imageSrc &&
-        createPortal(
-          <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-xs">
-            {/*
-              `max-h` and the column are what keep the button row on screen.
-              The panel is centred in a `fixed inset-0` wrapper, so anything it
-              overflows spills off *both* edges at once, and `#__next` is
-              `height: 100dvh` - there is no page scroll to reach it with. At
-              its natural 476px (384px stage + 16px of border + a 76px button
-              row) it clipped 51px off each end of a 375px viewport, slicing
-              both buttons in half.
+      <Dialog
+        open={showModal && !!imageSrc}
+        onClose={handleCancel}
+        className="relative z-50"
+      >
+        <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-xs">
+          {/*
+            `max-h` and the column are what keep the button row on screen.
+            The panel is centred in a `fixed inset-0` wrapper, so anything it
+            overflows spills off *both* edges at once, and `#__next` is
+            `height: 100dvh` - there is no page scroll to reach it with. At
+            its natural 476px (384px stage + 16px of border + a 76px button
+            row) it clipped 51px off each end of a 375px viewport, slicing
+            both buttons in half.
 
-              `dvh` rather than `vh` for the reason `globals.css` records: `vh`
-              is the viewport with the mobile browser's chrome retracted, so it
-              over-measures on exactly the devices this is for.
-            */}
-            <div className="relative flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border-8 border-gray-400 bg-white">
-              {/*
-                The stage keeps its full `h-96` and this wrapper scrolls
-                instead, deliberately - shrinking it would be the tidier layout
-                but it is the wrong trade here. `cropSize` is a flat
-                `CROP_BOX_PX` (300px), so a stage shorter than that would draw
-                the round crop box overflowing its own container. Holding the
-                stage at 384px also leaves `mediaSize` - which react-easy-crop
-                derives from this container under `objectFit="contain"` - the
-                same value SCRUM-479's fill-zoom arithmetic was measured
-                against.
+            `dvh` rather than `vh` for the reason `globals.css` records: `vh`
+            is the viewport with the mobile browser's chrome retracted, so it
+            over-measures on exactly the devices this is for.
+          */}
+          <Dialog.Panel className="relative flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border-8 border-gray-400 bg-white">
+            {imageSrc && (
+              <>
+                {/*
+                  The stage keeps its full `h-96` and this wrapper scrolls
+                  instead, deliberately - shrinking it would be the tidier layout
+                  but it is the wrong trade here. `cropSize` is a flat
+                  `CROP_BOX_PX` (300px), so a stage shorter than that would draw
+                  the round crop box overflowing its own container. Holding the
+                  stage at 384px also leaves `mediaSize` - which react-easy-crop
+                  derives from this container under `objectFit="contain"` - the
+                  same value SCRUM-479's fill-zoom arithmetic was measured
+                  against.
 
-                `min-h-0` is load-bearing: a flex item's default `min-height`
-                is `auto`, which refuses to shrink below its content, so
-                without it this wrapper would stay 384px tall and push the
-                button row straight back off the screen.
-              */}
-              <div className="min-h-0 flex-1 overflow-y-auto">
-                <div className="relative h-96 w-full">
-                  <Cropper
-                    image={imageSrc}
-                    minZoom={minZoom}
-                    maxZoom={10}
-                    crop={crop}
-                    zoom={zoom}
-                    aspect={1}
-                    showGrid={false}
-                    onCropComplete={onCropComplete}
-                    onZoomChange={setZoom}
-                    onMediaLoaded={onMediaLoaded}
-                    cropSize={{ width: CROP_BOX_PX, height: CROP_BOX_PX }}
-                    cropShape="round"
-                    objectFit="contain"
-                    // `restrictPosition` is deliberately absent, which is the
-                    // library's default of `true`: it clamps the crop rectangle
-                    // inside the photo, so `croppedAreaPixels` can never come
-                    // back with a negative origin. Passing `false` disabled that
-                    // clamp and was half of SCRUM-479's black bands. The
-                    // clamping is the library's to do - it is the only party
-                    // that knows the laid-out media size - so this stores the
-                    // position it asks for rather than bounding it a second
-                    // time against a guess.
-                    onCropChange={setCrop}
-                  />
+                  `min-h-0` is load-bearing: a flex item's default `min-height`
+                  is `auto`, which refuses to shrink below its content, so
+                  without it this wrapper would stay 384px tall and push the
+                  button row straight back off the screen.
+                */}
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                  <div className="relative h-96 w-full">
+                    <Cropper
+                      image={imageSrc}
+                      minZoom={minZoom}
+                      maxZoom={10}
+                      crop={crop}
+                      zoom={zoom}
+                      aspect={1}
+                      showGrid={false}
+                      onCropComplete={onCropComplete}
+                      onZoomChange={setZoom}
+                      onMediaLoaded={onMediaLoaded}
+                      cropSize={{ width: CROP_BOX_PX, height: CROP_BOX_PX }}
+                      cropShape="round"
+                      objectFit="contain"
+                      // `restrictPosition` is deliberately absent, which is the
+                      // library's default of `true`: it clamps the crop rectangle
+                      // inside the photo, so `croppedAreaPixels` can never come
+                      // back with a negative origin. Passing `false` disabled that
+                      // clamp and was half of SCRUM-479's black bands. The
+                      // clamping is the library's to do - it is the only party
+                      // that knows the laid-out media size - so this stores the
+                      // position it asks for rather than bounding it a second
+                      // time against a guess.
+                      onCropChange={setCrop}
+                    />
+                  </div>
                 </div>
-              </div>
-              {/*
-                `shrink-0` so the row keeps its full height as the scroller
-                above it gives way, rather than the two sharing the shortfall.
-              */}
-              <div className="flex w-full shrink-0 items-stretch justify-between p-4">
-                <button
-                  type="button"
-                  onClick={handleCancel}
-                  className="font-montserrat mr-2 rounded-lg bg-gray-300 px-8 py-2 text-lg text-black"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCrop}
-                  className="bg-northeastern-red font-montserrat rounded-lg px-8 py-2 text-lg text-white hover:bg-red-700"
-                >
-                  Crop Image
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body,
-        )}
+                {/*
+                  `shrink-0` so the row keeps its full height as the scroller
+                  above it gives way, rather than the two sharing the shortfall.
+                */}
+                <div className="flex w-full shrink-0 items-stretch justify-between p-4">
+                  <button
+                    type="button"
+                    onClick={handleCancel}
+                    className="font-montserrat mr-2 rounded-lg bg-gray-300 px-8 py-2 text-lg text-black"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCrop}
+                    className="bg-northeastern-red font-montserrat rounded-lg px-8 py-2 text-lg text-white hover:bg-red-700"
+                  >
+                    Crop Image
+                  </button>
+                </div>
+              </>
+            )}
+          </Dialog.Panel>
+        </div>
+      </Dialog>
 
       <div className="mt-2 flex items-center">
         {croppedImageUrl ? (
