@@ -48,7 +48,10 @@ const DropDownMenu = ({ checkChanges }: DropDownMenuProps) => {
   };
 
   return (
-    <div className="z-30">
+    // `relative`: Menu.Items below is `absolute right-0`, and neither this
+    // wrapper nor any ancestor up to the viewport used to be positioned, so
+    // it resolved against the window instead of this trigger (SCRUM-517).
+    <div className="relative z-30">
       {isLoading && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-white">
           <Spinner />
