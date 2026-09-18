@@ -59,7 +59,6 @@ export type OnboardingFormInputs = {
   status: Status;
   seatAvail?: number;
   companyName?: string;
-  profilePicture?: string;
   companyAddress?: string;
   startAddress?: string;
   preferredName?: string;
@@ -76,7 +75,6 @@ export type UserInfo = {
   status: Status;
   seatAvail: number;
   companyName: string;
-  profilePicture: string;
   startAddress: string;
   preferredName: string;
   pronouns: string;

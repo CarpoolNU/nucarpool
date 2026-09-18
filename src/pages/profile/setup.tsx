@@ -202,7 +202,6 @@ const Setup: NextPage = () => {
       companyCity: companyAddressHook.selectedAddress.city || "",
       companyState: companyAddressHook.selectedAddress.state || "",
       companyName: values.companyName ?? "",
-      profilePicture: values.profilePicture ?? "",
       companyAddress: values.companyAddress ?? "",
       startAddress: values.startAddress ?? "",
       preferredName: values.preferredName ?? "",

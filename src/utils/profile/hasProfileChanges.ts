@@ -129,14 +129,12 @@ const daysWorkingDiffer = (
  * reason this takes a third argument at all. Every other profile edit is a
  * form field, so comparing form values against the row answered "is anything
  * unsaved?" completely - until the picture, which `ProfilePicture` hands
- * straight to page state and which only the save handler ever uploads. The
- * `profilePicture` key in `OnboardingFormInputs` and `onboardSchema` looks like
- * it should carry this and does not: nothing ever writes it, `user.edit` does
- * not accept it, and there is no such column - only
- * `User.profilePictureUpdatedAt`, which the upload path sets from the server.
- * So the file cannot be compared against a stored value the way the fourteen
- * fields are; its mere presence *is* the change, which is why this is a
- * presence test rather than a comparison.
+ * straight to page state and which only the save handler ever uploads. There
+ * is no form field for it to live in: `user.edit` does not accept one, and
+ * there is no such column - only `User.profilePictureUpdatedAt`, which the
+ * upload path sets from the server. So the file cannot be compared against a
+ * stored value the way the fourteen fields are; its mere presence *is* the
+ * change, which is why this is a presence test rather than a comparison.
  *
  * Absent, it reports no picture change - which is what every caller that has
  * no picture to lose wants, and what keeps this a drop-in for the two-argument
