@@ -106,6 +106,10 @@ export const userRouter = router({
     // merge CarpoolSearch data into user object for backwards compatibility
     return {
       ...user,
+      // Distinguishes "no CarpoolSearch row yet" from "the stored role really
+      // is VIEWER" - the two collapse to the same `role` below, and a
+      // brand-new user is the former, not a Viewer. SCRUM-508.
+      hasCarpoolSearch: carpoolSearch !== undefined,
       // CarpoolSearch data
       role: carpoolSearch?.role ?? Role.VIEWER,
       status: carpoolSearch?.status ?? Status.ACTIVE,

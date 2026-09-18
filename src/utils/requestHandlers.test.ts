@@ -150,6 +150,7 @@ const user = (overrides: Partial<User> = {}): User => ({
   licenseSigned: true,
   dateCreated: new Date("2026-01-01T00:00:00.000Z"),
   dateModified: new Date("2026-01-01T00:00:00.000Z"),
+  hasCarpoolSearch: true,
   role: Role.DRIVER,
   status: Status.ACTIVE,
   seatAvail: 3,

@@ -226,6 +226,11 @@ export type User = {
   dateCreated: Date;
   dateModified: Date;
   // Fields merged from CarpoolSearch
+  /**
+   * Whether the user has a `CarpoolSearch` row at all, as opposed to `role`
+   * falling back to `VIEWER` because there is none yet. See SCRUM-508.
+   */
+  hasCarpoolSearch: boolean;
   role: Role;
   status: Status;
   seatAvail: number;
