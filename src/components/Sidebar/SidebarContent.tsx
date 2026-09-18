@@ -34,6 +34,8 @@ interface SidebarContentProps {
   onViewRequest: (userId: string) => void;
   mobileSelectedUser?: string | null;
   handleMobileExpand?: (userId?: string) => void;
+  /** Forwarded to the recommendations/favorites `ConnectCard`'s `onClose`, so a caller can react to the connect flow closing (e.g. resetting the active tab after a send). */
+  onConnectClose?: (action: string) => void;
 }
 
 const emptyMessages = {
@@ -103,6 +105,7 @@ const renderUserCard = (
   latestMessage: Message | undefined,
   handleMobileExpand?: (userId?: string) => void,
   mobileSelectedUser?: string | null,
+  onConnectClose?: (action: string) => void,
 ): React.JSX.Element => {
   const handleClick = () => onCardClick(otherUser.id);
 
@@ -129,6 +132,7 @@ const renderUserCard = (
           onViewRequest={onViewRequest}
           handleMobileExpand={handleMobileExpand}
           variant={variant}
+          onClose={onConnectClose}
         />
       );
     case "favorites":
@@ -140,6 +144,7 @@ const renderUserCard = (
           onViewRequest={onViewRequest}
           handleMobileExpand={handleMobileExpand}
           variant={variant}
+          onClose={onConnectClose}
         />
       );
     case "sent":
@@ -250,6 +255,7 @@ export const SidebarContent = (props: SidebarContentProps) => {
         !latestMessage ? undefined : latestMessage,
         props.handleMobileExpand,
         props.mobileSelectedUser,
+        props.onConnectClose,
       ),
   );
 

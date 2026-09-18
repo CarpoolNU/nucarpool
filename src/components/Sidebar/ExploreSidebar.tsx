@@ -230,6 +230,11 @@ const ExploreSidebar = (props: ExploreSidebarProps) => {
             onViewRequest={props.onViewRequest}
             mobileSelectedUser={props.mobileSelectedUser}
             handleMobileExpand={props.handleMobileExpand}
+            onConnectClose={(action) => {
+              if (action === "closeAfterSend") {
+                setCurOption("recommendations");
+              }
+            }}
           />
         )}
       </div>
