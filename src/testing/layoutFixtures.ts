@@ -1648,6 +1648,96 @@ const mobileNavActiveUnderline: LayoutFixture = {
   ],
 };
 
+/**
+ * The profile dropdown, open, at the desktop widths SCRUM-517's Impact section
+ * names - 1280x800 and 1440x900.
+ *
+ * `[data-probe='dropdown-wrapper']` is `relative z-30` - the fix - and is the
+ * only positioned element between `[data-probe='panel']` and the viewport.
+ * Before the fix it was a plain `z-30`, `right-0` resolved against the
+ * viewport instead of the trigger, and the two right edges disagreed by
+ * however far the trigger sat from the window's own right edge. Reproduced
+ * with the fix in place, because a fixture holds the current source
+ * (`layoutFixtures.ts`'s own header says so); the BEFORE figures below were
+ * measured by removing `relative` from this same markup.
+ *
+ * `[data-probe="bar"]` and its inset are carried over from `header-control-row`
+ * unchanged, so the same measurement that proves the panel's own alignment
+ * also confirms this ticket touched no figure SCRUM-491 or SCRUM-484
+ * established for that bar.
+ */
+const profileDropdownPanel: LayoutFixture = {
+  name: "profile-dropdown-panel",
+  summary:
+    "The open profile menu panel, anchored to its trigger rather than the window",
+  source: "src/components/DropDownMenu.tsx:105",
+  issue: "SCRUM-517",
+  viewportWidth: 1280,
+  viewportHeight: 800,
+  insets: [{ name: "bar padding 0 40px", x: 80 }],
+  markup: `
+    <style>
+      [data-probe="bar"] {${HEADER_BAR_CSS}      }
+
+      @media (min-width: 640px) {
+        [data-probe="bar"] {
+          padding: 0 40px;
+        }
+      }
+    </style>
+    <div data-probe="bar">
+      <h1>CarpoolNU</h1>
+      <div class="flex items-center">
+        <div class="relative z-30" data-probe="dropdown-wrapper">
+          <button class="${HEADER_AVATAR_TRIGGER_CLASS}" data-probe="avatar-trigger">
+            <span class="h-full w-full rounded-full bg-gray-400"></span>
+          </button>
+          <div class="absolute right-0 mt-2 w-56 origin-top-right divide-y divide-gray-300 rounded-lg bg-white shadow-lg ring-1 ring-black/5 focus:outline-hidden" data-probe="panel">
+            <div class="flex flex-col items-center justify-center p-6">
+              <h1 class="text-lg font-bold">Jane Doe</h1>
+              <p class="text-sm font-light text-gray-500">jane.doe@example.com</p>
+              <button class="mt-4 w-4/5 rounded-2xl border border-gray-300 bg-white px-3 py-2 text-center hover:bg-gray-100">Profile</button>
+            </div>
+            <div class="flex flex-col items-center justify-center px-2 py-4">
+              <button class="w-4/5 rounded border border-gray-300 bg-white px-3 py-2 text-center hover:bg-gray-100">Sign Out</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `,
+  widthProbe: "[data-probe='bar']",
+  probe: {
+    boxes: [
+      "[data-probe='bar']",
+      "[data-probe='avatar-trigger']",
+      "[data-probe='panel']",
+    ],
+  },
+  recorded: [
+    "AFTER SCRUM-517, at 1280x800: bar rect 1280 x 68, contentWidth 1200 matching the predicted chain. avatar-trigger rect left 1184, width 56 - right edge 1240. panel rect left 1016, width 224 - right edge 1240. **The two right edges agree exactly.** Panel stays fully on screen, left 1016 to right 1240, inside 0-1280.",
+    "AFTER SCRUM-517, at 1440x900: bar rect 1440 x 76.5 (clientHeight rounds to 77), contentWidth 1360 matching the predicted chain. avatar-trigger rect left 1344, width 56 - right edge 1400. panel rect left 1176, width 224 - right edge 1400. **The two right edges agree exactly**, and the bar's own height (76.5) and padding (40 each side) are unchanged from `header-control-row`'s desktop control for this same figure - this ticket touched no property of the bar itself.",
+    "BEFORE (the defect, reproduced by removing `relative` from `[data-probe='dropdown-wrapper']` and otherwise measuring identically): at 1280x800, avatar-trigger right edge 1240, unchanged from AFTER since the trigger itself was never repositioned. panel rect left 1056, width 224 - right edge 1280, exactly the viewport width rather than the trigger's edge. **The two right edges disagree by 40px - the bar's own desktop padding, which is the Proposed Fix section's hypothesis and is now the measured mechanism, not an estimate.**",
+    "BEFORE, at 1440x900: avatar-trigger right edge 1400, unchanged. panel rect left 1216, width 224 - right edge 1440, again exactly the viewport width. Same 40px disagreement at both widths, confirming the mechanism (no positioned ancestor, so `right-0` resolves against the initial containing block) rather than a fixed pixel offset that happened to match one viewport.",
+    "The open transition's origin corner: `origin-top-right` is unchanged by this fix - only the box it pivots now has the right edge the class name assumes.",
+  ],
+  reproduces: [
+    {
+      file: "src/components/DropDownMenu.tsx",
+      className: "relative z-30",
+    },
+    {
+      file: "src/components/DropDownMenu.tsx",
+      className: HEADER_AVATAR_TRIGGER_CLASS,
+    },
+    {
+      file: "src/components/DropDownMenu.tsx",
+      className:
+        "absolute right-0 mt-2 w-56 origin-top-right divide-y divide-gray-300 rounded-lg bg-white shadow-lg ring-1 ring-black/5 focus:outline-hidden",
+    },
+  ],
+};
+
 export const LAYOUT_FIXTURES: readonly LayoutFixture[] = [
   groupMemberCardTrigger,
   headerLogoBar,
@@ -1659,6 +1749,7 @@ export const LAYOUT_FIXTURES: readonly LayoutFixture[] = [
   centredDialogPanels,
   mobileNavActiveUnderline,
   mobileContentRowHeight,
+  profileDropdownPanel,
 ];
 
 export const findFixture = (name: string): LayoutFixture | undefined =>
