@@ -138,6 +138,7 @@ const UserSection = ({
             className={`${isMobile ? "mt-2 w-full" : "flex-1"} flex flex-col`}
           >
             <EntryLabel
+              htmlFor="seatAvail"
               required={true}
               error={errors.seatAvail}
               label="Seat Availability"
@@ -194,6 +195,7 @@ const UserSection = ({
       >
         <div className={`${isMobile ? "w-full" : "w-3/5"} flex flex-col`}>
           <EntryLabel
+            htmlFor="preferredName"
             error={errors.preferredName}
             label="Preferred Name"
             className={"!text-lg"}
@@ -210,6 +212,7 @@ const UserSection = ({
 
         <div className={`${isMobile ? "w-full" : "w-2/6 flex-1"}`}>
           <EntryLabel
+            htmlFor="pronouns"
             error={errors.pronouns}
             label="Pronouns"
             className={"!text-lg"}
@@ -243,11 +246,13 @@ const UserSection = ({
 
       <div className="w-full py-4">
         <EntryLabel
+          htmlFor="bio"
           error={errors.bio}
           label="About Me"
           className={"!text-lg"}
         />
         <textarea
+          id="bio"
           className={`form-input w-full resize-none rounded-md ${
             isViewer ? "border-gray-100 bg-gray-200 text-gray-400" : ""
           } border-black px-3 py-2`}

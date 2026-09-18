@@ -54,7 +54,11 @@ const StepFour = ({
         {/* Preferred Name field  */}
 
         <div className="flex w-3/5 flex-col">
-          <EntryLabel error={errors.preferredName} label="Preferred Name" />
+          <EntryLabel
+            htmlFor="preferredName"
+            error={errors.preferredName}
+            label="Preferred Name"
+          />
 
           <TextField
             id="preferredName"
@@ -68,7 +72,11 @@ const StepFour = ({
 
         {/* Pronouns field  */}
         <div className="w-2/6 flex-1">
-          <EntryLabel error={errors.pronouns} label="Prounouns" />
+          <EntryLabel
+            htmlFor="pronouns"
+            error={errors.pronouns}
+            label="Prounouns"
+          />
           <TextField
             id="pronouns"
             charLimit={20}
@@ -96,8 +104,9 @@ const StepFour = ({
       </div>
       {/* Bio field */}
       <div className="w-full py-4">
-        <EntryLabel error={errors.bio} label="About Me" />
+        <EntryLabel htmlFor="bio" error={errors.bio} label="About Me" />
         <textarea
+          id="bio"
           className="form-input w-full resize-none rounded-md border-black px-3 py-2"
           maxLength={PROFILE_TEXT_MAX_LENGTH}
           disabled={false}

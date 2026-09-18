@@ -29,6 +29,7 @@ import * as React from "react";
 interface ControlledTimePickerProps {
   control: Control<OnboardingFormInputs>;
   name: "startTime" | "endTime";
+  id?: string;
   placeholder?: string;
   value?: Date;
   isDisabled?: boolean;
@@ -77,6 +78,7 @@ const ControlledTimePicker = (props: ControlledTimePickerProps) => {
             <div className={"flex flex-col"}>
               <TimePickerWrapper
                 ref={ref}
+                id={props.id}
                 needConfirm={false}
                 className="form-input w-full rounded-lg border border-black"
                 format="h:mm A"

@@ -6,6 +6,7 @@ interface EntryLabelProps {
   label: string;
   required?: boolean;
   className?: string;
+  htmlFor?: string;
 }
 
 /*
@@ -42,11 +43,17 @@ const StyledLabel = styled.label<{
 
 export const EntryLabel = (props: EntryLabelProps) => {
   return props.required ? (
-    <StyledLabel $error={!!props.error} className={props.className}>
+    <StyledLabel
+      htmlFor={props.htmlFor}
+      $error={!!props.error}
+      className={props.className}
+    >
       {props.label}
       <span className={"text-northeastern-red pl-1"}>*</span>
     </StyledLabel>
   ) : (
-    <StyledLabel className={props.className}>{props.label} </StyledLabel>
+    <StyledLabel htmlFor={props.htmlFor} className={props.className}>
+      {props.label}{" "}
+    </StyledLabel>
   );
 };

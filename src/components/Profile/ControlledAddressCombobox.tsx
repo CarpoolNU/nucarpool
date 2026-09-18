@@ -10,6 +10,7 @@ import {
 interface ControlledAddressComboboxProps {
   control: Control<OnboardingFormInputs>;
   name: "startAddress" | "companyAddress";
+  id?: string;
   addressSelected: CarpoolAddress;
   addressSetter: (val: SetStateAction<CarpoolAddress>) => void;
   addressUpdater: (val: SetStateAction<string>) => void;
@@ -48,6 +49,7 @@ const ControlledAddressCombobox = (props: ControlledAddressComboboxProps) => {
         >
           {props.isDisabled ? (
             <input
+              id={props.id}
               className={`h-12 w-full rounded-md bg-gray-100 px-3 py-2 text-gray-400 shadow-xs ${
                 props.error ? "border-northeastern-red" : "border-gray-200"
               }`}
@@ -57,6 +59,7 @@ const ControlledAddressCombobox = (props: ControlledAddressComboboxProps) => {
             />
           ) : (
             <Combobox.Input
+              id={props.id}
               className={`h-12 w-full rounded-md px-3 py-2 shadow-xs ${
                 props.error ? "border-northeastern-red" : "border-black"
               }`}

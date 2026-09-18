@@ -38,12 +38,14 @@ const SelectTimeRange = ({
         <div className="flex flex-1 flex-col gap-2">
           {showLabels && (
             <EntryLabel
+              htmlFor="startTime"
               required={!isDisabled}
               error={errors?.startTime}
               label="Start Time"
             />
           )}
           <ControlledTimePicker
+            id="startTime"
             isDisabled={isDisabled}
             control={control}
             name="startTime"
@@ -56,12 +58,14 @@ const SelectTimeRange = ({
         <div className="flex flex-1 flex-col gap-2">
           {showLabels && (
             <EntryLabel
+              htmlFor="endTime"
               required={!isDisabled}
               error={errors?.endTime}
               label="End Time"
             />
           )}
           <ControlledTimePicker
+            id="endTime"
             isDisabled={isDisabled}
             control={control}
             name="endTime"

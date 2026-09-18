@@ -1,4 +1,4 @@
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { useForm, UseFormReturn } from "react-hook-form";
 import { Role, Status } from "@prisma/client";
 import StepThree from "./StepThree";
@@ -131,5 +131,29 @@ describe("StepThree co-op date pickers", () => {
 
     expect(monthInput(container, "coopStartDate").value).toBe("");
     expect(monthInput(container, "coopEndDate").value).toBe("");
+  });
+});
+
+/**
+ * SCRUM-513. `EntryLabel` had no `htmlFor`, so every field in this step
+ * announced as unlabelled to a screen reader despite the visible text beside
+ * it - see the ticket for the full inventory. The positive `getByRole` query
+ * is the one that actually exercises the label/input association: a
+ * `queryByRole(..., { hidden: true })` or similar negative form would pass
+ * whether or not the name was ever wired up.
+ */
+describe("StepThree accessible names", () => {
+  it("names the co-op date pickers after their visible labels", () => {
+    const formOut = { current: null };
+    render(<Harness mounted={true} formOut={formOut} />);
+
+    // The asterisk is inside the `<label>`, so it is part of the computed
+    // accessible name alongside the visible text.
+    expect(
+      screen.getByRole("textbox", { name: "Start Date *" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("textbox", { name: "End Date *" }),
+    ).toBeInTheDocument();
   });
 });

@@ -208,8 +208,10 @@ const MessagePanel = ({
         />
 
         {/* Tab Strip */}
-        <div className="flex border-b border-gray-200 bg-white">
+        <div role="tablist" className="flex border-b border-gray-200 bg-white">
           <button
+            role="tab"
+            aria-selected={activeTab === "message"}
             className={`flex-1 py-3 text-center text-lg font-medium ${
               activeTab === "message"
                 ? "border-northeastern-red text-northeastern-red border-b-2"
@@ -220,6 +222,8 @@ const MessagePanel = ({
             Message
           </button>
           <button
+            role="tab"
+            aria-selected={activeTab === "map"}
             className={`flex-1 py-3 text-center text-lg font-medium ${
               activeTab === "map"
                 ? "border-northeastern-red text-northeastern-red border-b-2"

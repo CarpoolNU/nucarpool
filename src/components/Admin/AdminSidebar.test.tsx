@@ -128,3 +128,20 @@ it("keeps the unselected button unmarked", () => {
     expect(tokens).not.toContain(className);
   }
 });
+
+/**
+ * SCRUM-513. Selection here was underline and weight alone - no
+ * `aria-pressed` - so both buttons announced identically.
+ */
+it("marks exactly the selected button as pressed", () => {
+  renderSidebar("data");
+
+  expect(screen.getByRole("button", { name: "Management" })).toHaveAttribute(
+    "aria-pressed",
+    "false",
+  );
+  expect(screen.getByRole("button", { name: "Data" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+});

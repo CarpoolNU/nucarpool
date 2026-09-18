@@ -96,6 +96,7 @@ const StepThree = ({
           {/* Start Date */}
           <div className="flex w-1/2 flex-col">
             <EntryLabel
+              htmlFor="coopStartDate"
               required={true}
               error={errors.coopStartDate}
               label="Start Date"
@@ -115,6 +116,7 @@ const StepThree = ({
           {/* End Date */}
           <div className="flex w-1/2 flex-grow-0 flex-col">
             <EntryLabel
+              htmlFor="coopEndDate"
               required={true}
               error={errors.coopEndDate}
               label="End Date"

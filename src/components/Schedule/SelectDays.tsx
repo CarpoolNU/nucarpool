@@ -61,6 +61,7 @@ const SelectDays = ({
                   height: 1,
                   padding: 0,
                 }}
+                slotProps={{ input: { "aria-label": day } }}
                 disabled={disabled}
                 checked={value}
                 onChange={onChange}
