@@ -548,7 +548,6 @@ const Home: NextPage<any> = () => {
   });
 
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const lastScrollTop = useRef<number>(0);
 
   /**
    * The four card lists, memoised.
@@ -712,33 +711,6 @@ const Home: NextPage<any> = () => {
       setSheetDetent,
     ],
   );
-
-  useEffect(() => {
-    const handleScroll = (e: Event) => {
-      if (!isMobile || !sidebarRef.current || mobileSelectedUserID === null)
-        return;
-
-      const element = e.target as HTMLDivElement;
-      const scrollTop = element.scrollTop;
-
-      if (scrollTop < lastScrollTop.current && scrollTop < 10) {
-        handleMobileSidebarExpand();
-      }
-
-      lastScrollTop.current = scrollTop;
-    };
-
-    const sidebarElement = sidebarRef.current;
-    if (sidebarElement && isMobile) {
-      sidebarElement.addEventListener("scroll", handleScroll);
-    }
-
-    return () => {
-      if (sidebarElement) {
-        sidebarElement.removeEventListener("scroll", handleScroll);
-      }
-    };
-  }, [isMobile, mobileSelectedUserID, sidebarRef, handleMobileSidebarExpand]);
 
   useEffect(() => {
     if (user && user.role !== "VIEWER") {
@@ -1134,6 +1106,10 @@ const Home: NextPage<any> = () => {
                 sidebarView === "desktop"
                   ? "relative w-[25rem]"
                   : `absolute left-0 z-20 w-full overflow-y-auto rounded-t-3xl border-2 border-black bg-white shadow-lg ${
+                      mobileSelectedUserID !== null
+                        ? "overscroll-y-contain"
+                        : ""
+                    } ${
                       sheetDrag.isDragging
                         ? "bottom-mobile-nav"
                         : `transition-all duration-300 ${MOBILE_SIDEBAR_CLASSES[sidebarView]}`
