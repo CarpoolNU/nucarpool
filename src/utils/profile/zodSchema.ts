@@ -31,7 +31,6 @@ export const onboardSchema = z
     endTime: z.date().nullable().optional(),
     coopStartDate: z.date().nullable().optional(),
     coopEndDate: z.date().nullable().optional(),
-    profilePicture: z.string().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.role !== Role.VIEWER) {
@@ -117,7 +116,6 @@ export const profileDefaultValues = {
   status: Status.ACTIVE,
   seatAvail: 0,
   companyName: "",
-  profilePicture: "",
   companyAddress: "",
   startAddress: "",
   preferredName: "",

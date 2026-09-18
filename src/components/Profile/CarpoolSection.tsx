@@ -22,7 +22,6 @@ interface CarpoolSectionProps {
   errors: FieldErrors<OnboardingFormInputs>;
   setValue: UseFormSetValue<OnboardingFormInputs>;
   watch: UseFormWatch<OnboardingFormInputs>;
-  onFileSelect: (file: File | null) => void;
   control: Control<OnboardingFormInputs>;
   onSubmit: ReturnType<UseFormHandleSubmit<OnboardingFormInputs>>;
   startAddressHook: ReturnType<typeof useAddressSelection>;

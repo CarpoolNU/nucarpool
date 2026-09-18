@@ -327,7 +327,6 @@ const Index: NextPage = () => {
       companyState:
         companyAddressHook.selectedAddress.state || user?.companyState || "",
       companyName: values.companyName ?? "",
-      profilePicture: values.profilePicture ?? "",
       companyAddress: values.companyAddress ?? "",
       startAddress: values.startAddress ?? "",
       preferredName: values.preferredName ?? "",
@@ -531,7 +530,6 @@ const Index: NextPage = () => {
               ) : option === "carpool" ? (
                 <CarpoolSection
                   watch={watch}
-                  onFileSelect={setSelectedFile}
                   errors={errors}
                   register={register}
                   setValue={setValue}
@@ -577,7 +575,6 @@ const Index: NextPage = () => {
               ) : option === "carpool" ? (
                 <CarpoolSection
                   watch={watch}
-                  onFileSelect={setSelectedFile}
                   errors={errors}
                   register={register}
                   setValue={setValue}

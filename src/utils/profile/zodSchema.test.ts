@@ -24,7 +24,6 @@ const completeRider = {
   endTime: new Date(2024, 0, 1, 17),
   coopStartDate: new Date(2024, 0, 1),
   coopEndDate: new Date(2024, 5, 1),
-  profilePicture: "",
 };
 
 /** The `path` of every issue the schema raised, for order-independent assertions. */

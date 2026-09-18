@@ -339,18 +339,6 @@ describe("profileChanges", () => {
         profileChanges(form({ bio: "Changed bio" }), user, croppedFile()),
       ).toEqual(["bio", "profilePicture"]);
     });
-
-    it("does not depend on the vestigial profilePicture form field", () => {
-      // `OnboardingFormInputs` and `onboardSchema` both carry a
-      // `profilePicture` string, and nothing ever writes it: there is no such
-      // column and `user.edit` does not accept it. So the form value is not
-      // where a pending picture lives, and setting it must not stand in for
-      // one - otherwise the modal would fire on a value no user can change.
-      expect(profileChanges(form({ profilePicture: "" }), user)).toEqual([]);
-      expect(
-        profileChanges(form({ profilePicture: "blob:something" }), user),
-      ).toEqual([]);
-    });
   });
 
   describe("edge cases carried over unchanged", () => {
