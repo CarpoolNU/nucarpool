@@ -38,6 +38,22 @@ const MessagePanel = ({
       toast.error(`Your message could not be sent: ${error.message}`);
     },
     onSuccess: () => {
+      // The thread's own source, and the reason this line exists: the only
+      // other way the sender's message reached the open conversation was the
+      // Pusher echo, and the server treats that delivery as best-effort -
+      // `message.ts` catches a trigger failure, logs that the row was saved,
+      // and returns success. So a Pusher outage or a refused private-channel
+      // subscription produced a send that cleared the box, raised no toast,
+      // updated the sidebar card's preview (that is `onMessageSent` below) and
+      // left the conversation the user was looking at unchanged. Nothing came
+      // along to correct it either: the global policy sets `refetchOnMount`
+      // and `refetchOnWindowFocus` to false, and the thread's own
+      // `refetchOnMount: "always"` only helps once it is closed and reopened.
+      //
+      // The echo stays as the path for the *recipient*, who has no mutation to
+      // hang an invalidation off. `MessageContent` merges by id, so the two
+      // arriving for the same message is not a duplicate.
+      utils.user.messages.conversation.invalidate();
       onMessageSent(selectedUser.id);
     },
   });
