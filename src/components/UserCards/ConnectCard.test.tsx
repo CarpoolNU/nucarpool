@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import { act } from "react";
 import userEvent from "@testing-library/user-event";
 import { Role, Status } from "@prisma/client";
 import { ConnectCard, ConnectCardVariant } from "./ConnectCard";
@@ -45,6 +46,17 @@ import {
 const mockCreateRequest = jest.fn();
 
 /**
+ * The mock below discards the `useMutation` options object it is called
+ * with, so `onSuccess` - which is where `ConnectModal` flips to its "request
+ * sent" screen - is otherwise unreachable from a test. This holder captures
+ * it at render time so a test can invoke it directly, the same way the real
+ * mutation's response would.
+ */
+const mockRequestOnSuccessHolder: {
+  onSuccess?: (request: { id: string }, variables: { message: string }) => void;
+} = {};
+
+/**
  * `UserCard` favourites through a mutation and reads `trpc.useUtils()`. The
  * subject here is which handler the card is given, so the client is mocked as
  * a shape rather than driven through a real provider — the precedent is
@@ -66,10 +78,18 @@ jest.mock("../../utils/trpc", () => ({
       favorites: { edit: { useMutation: () => ({ mutate: jest.fn() }) } },
       requests: {
         create: {
-          useMutation: () => ({
-            mutate: mockCreateRequest,
-            isPending: false,
-          }),
+          useMutation: (opts: {
+            onSuccess?: (
+              request: { id: string },
+              variables: { message: string },
+            ) => void;
+          }) => {
+            mockRequestOnSuccessHolder.onSuccess = opts?.onSuccess;
+            return {
+              mutate: mockCreateRequest,
+              isPending: false,
+            };
+          },
         },
       },
       emails: {
@@ -203,6 +223,40 @@ describe("Discovery card activation on mobile", () => {
     expect(
       screen.getByRole("button", { name: "Connect!" }),
     ).toBeInTheDocument();
+  });
+
+  it("collapses back to the list once a sent request's sheet is closed", async () => {
+    // A sent request drops its recipient out of `recommendations.me` - the
+    // router excludes anyone with an open request - so the detail sheet,
+    // scoped to this one card, would otherwise be left rendering nothing:
+    // the blank tab this test pins. `handleMobileExpand` with no id is the
+    // same collapse the header's Back button performs.
+    const handleMobileExpand = jest.fn();
+    renderCard({ variant: "detail", handleMobileExpand });
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect!" }));
+    await userEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    act(() => {
+      mockRequestOnSuccessHolder.onSuccess?.({ id: "req-1" }, { message: "" });
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    expect(handleMobileExpand).toHaveBeenCalledWith();
+  });
+
+  it("leaves the sheet as-is when the compose step is cancelled", async () => {
+    // Cancelling before sending is not the case this ticket is about - the
+    // reader has not connected with anyone, so there is no reason to leave
+    // the card they were looking at.
+    const handleMobileExpand = jest.fn();
+    renderCard({ variant: "detail", handleMobileExpand });
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect!" }));
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(handleMobileExpand).not.toHaveBeenCalled();
   });
 });
 
