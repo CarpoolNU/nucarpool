@@ -442,9 +442,11 @@ const Home: NextPage<any> = () => {
     },
   });
 
-  // `isMobile` as the layout key: its flip swaps the whole layout around the
-  // map, and no `resize` event reports that.
-  useMapResize(mapState, isMobile);
+  // Watches `mapContainerRef` directly (SCRUM-518) rather than inferring its
+  // box from `window` - a mobile/desktop flip resizes this container without
+  // any `resize` event, and so does the dynamic-viewport reflow this file's
+  // `useMapInstance.ts` documents.
+  useMapResize(mapState, mapContainerRef);
 
   const [points, setPoints] = useState<[number, number][]>([]);
   const [companyAddressSuggestions, setCompanyAddressSuggestions] = useState<
