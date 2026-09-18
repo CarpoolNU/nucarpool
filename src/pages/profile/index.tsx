@@ -223,11 +223,17 @@ const Index: NextPage = () => {
    * load stays in `Header` where its reason is written down.
    * Absent, the map is the destination, which is what the desktop button
    * asked for before this took an argument.
+   *
+   * `selectedFile` is passed as well as the form values because it is the one
+   * unsaved change that is not a form field. Without it a freshly cropped
+   * picture took the else branch below and the navigation happened at once,
+   * with no modal - the single profile edit the guard could not see, on a page
+   * whose other fourteen it protects (SCRUM-511).
    */
   const checkForChanges = async (proceed?: () => void | Promise<void>) => {
     proceedRef.current = proceed ?? null;
 
-    if (hasProfileChanges(watch(), user)) {
+    if (hasProfileChanges(watch(), user, selectedFile)) {
       setShowModal(true);
     } else {
       setIsLoading(true);
@@ -235,8 +241,26 @@ const Index: NextPage = () => {
       setIsLoading(false);
     }
   };
+  /**
+   * Leave without saving - the modal's Continue, and also the tail of a
+   * successful save.
+   *
+   * Dropping `selectedFile` is what makes "Continue discards the picture" true
+   * of the state rather than only of the navigation. Leaving the page usually
+   * unmounts this component and takes the file with it, but that is a
+   * consequence of the destination rather than a decision made here: `proceed`
+   * is supplied by the caller, and a guard that declined to navigate - or a
+   * destination that re-renders this page rather than replacing it - would
+   * otherwise leave a file the user has just chosen to abandon still queued for
+   * the next save. Clearing it first costs nothing on the paths that do unmount
+   * and closes the one that does not.
+   *
+   * Safe on the save path too: `onSubmitWithContinue` has already awaited the
+   * upload by the time it calls this.
+   */
   const onContinue = async () => {
     setIsLoading(true);
+    setSelectedFile(null);
     await proceedToDestination();
     setIsLoading(false);
     setShowModal(false);
@@ -323,6 +347,22 @@ const Index: NextPage = () => {
     if (selectedFile) {
       try {
         await uploadFile();
+
+        // The bytes are in S3 and `recordProfilePictureUpload` has run, so this
+        // file is saved rather than pending and the guard must stop counting
+        // it - otherwise Save Changes, which leaves the user on this page,
+        // would arm the unsaved-changes modal against a picture that is
+        // already stored, and a second press would re-upload it.
+        //
+        // Only on success. A failed upload leaves the picture genuinely
+        // unsaved, so keeping the file is what makes the modal's warning true
+        // and lets the user retry with the crop they already chose.
+        //
+        // `uploadFile` awaits `invalidateProfileImage` before returning, so the
+        // stored picture has already been refetched by the time the preview
+        // stops deriving from this file - the avatar swaps straight from the
+        // local crop to the uploaded one with nothing in between.
+        setSelectedFile(null);
       } catch (error) {
         console.error("File upload failed:", error);
         pictureUploadFailed = true;
@@ -480,6 +520,7 @@ const Index: NextPage = () => {
                 <UserSection
                   watch={watch}
                   onFileSelect={setSelectedFile}
+                  selectedFile={selectedFile}
                   errors={errors}
                   register={register}
                   onSubmit={handleSubmit(onSubmit, onError)}
@@ -525,6 +566,7 @@ const Index: NextPage = () => {
                 <UserSection
                   watch={watch}
                   onFileSelect={setSelectedFile}
+                  selectedFile={selectedFile}
                   errors={errors}
                   register={register}
                   onSubmit={handleSubmit(onSubmit, onError)}

@@ -28,6 +28,14 @@ interface UserSectionProps {
   onSubmit: ReturnType<UseFormHandleSubmit<OnboardingFormInputs>>;
 
   onFileSelect: (file: File | null) => void;
+
+  /**
+   * The cropped picture waiting to be saved, so `ProfilePicture` can render a
+   * preview derived from it. Held by the page rather than here because the
+   * unsaved-changes guard and the save handler both read it; see the prop's
+   * own note in `ProfilePicture`.
+   */
+  selectedFile: File | null;
   user?: User;
 
   /**
@@ -46,6 +54,7 @@ const UserSection = ({
   onSubmit,
   setValue,
   onFileSelect,
+  selectedFile,
   user,
   checkChanges,
 }: UserSectionProps) => {
@@ -173,7 +182,10 @@ const UserSection = ({
       <div
         className={`mb-12 ${isMobile ? "flex flex-col items-start" : "ml-10"} w-full`}
       >
-        <ProfilePicture onFileSelected={onFileSelect} />
+        <ProfilePicture
+          selectedFile={selectedFile}
+          onFileSelected={onFileSelect}
+        />
       </div>
 
       <div

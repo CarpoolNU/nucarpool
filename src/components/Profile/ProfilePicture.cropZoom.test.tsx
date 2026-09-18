@@ -110,7 +110,10 @@ beforeEach(() => {
 
 /** Opens the cropper the way a user does, and returns the mocked Cropper's props. */
 const openCropperWith = (media: typeof LANDSCAPE_MEDIA) => {
-  render(<ProfilePicture onFileSelected={jest.fn()} />);
+  // `selectedFile` is the parent's *pending* picture, which is null until a
+  // crop is confirmed - and this file never confirms one, it only opens the
+  // cropper. So null is the state every assertion below runs against.
+  render(<ProfilePicture selectedFile={null} onFileSelected={jest.fn()} />);
 
   const input = screen.getByLabelText("Upload Profile Picture");
   const file = new File(["photo"], "photo.jpg", { type: "image/jpeg" });

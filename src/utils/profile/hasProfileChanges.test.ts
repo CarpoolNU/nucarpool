@@ -292,6 +292,67 @@ describe("profileChanges", () => {
     });
   });
 
+  describe("a pending profile picture", () => {
+    /**
+     * A cropped file with nothing else touched.
+     *
+     * This is the case the rule could not see at all: the picture is the one
+     * profile edit that never reaches the form, so `pristine` really is
+     * pristine as far as the fourteen comparisons go, and the page navigated
+     * away without a modal. The upload only ever runs inside the save handler,
+     * so the file was simply dropped (SCRUM-511).
+     *
+     * A `File` rather than a stub because `profileChanges` only tests presence
+     * and a stub would pass an assertion that a plain `{}` also passes - which
+     * would leave the test agreeing with a rule that had stopped looking at the
+     * argument's meaning. Node 22 provides the constructor in the node project.
+     */
+    const croppedFile = () =>
+      new File(["cropped-bytes"], "cropped-image.jpeg", {
+        type: "image/jpeg",
+      });
+
+    it("is reported when no form field has changed", () => {
+      expect(profileChanges(pristine, user, croppedFile())).toEqual([
+        "profilePicture",
+      ]);
+    });
+
+    /**
+     * The control, deliberately beside the assertion above.
+     *
+     * Without it the first test passes just as well against a rule that always
+     * reports a picture change, which would put the modal in front of every
+     * exit from the page and teach users to dismiss it - the failure mode the
+     * `no-change direction` block above guards for the other fourteen.
+     */
+    it("is not reported when there is no pending file", () => {
+      expect(profileChanges(pristine, user, null)).toEqual([]);
+      expect(profileChanges(pristine, user, undefined)).toEqual([]);
+      expect(profileChanges(pristine, user)).toEqual([]);
+    });
+
+    it("is listed after the form fields when both changed", () => {
+      // `profileChanges` names terms so a test can say *which* fired. The
+      // picture is appended last because it is not part of the original chain.
+      expect(
+        profileChanges(form({ bio: "Changed bio" }), user, croppedFile()),
+      ).toEqual(["bio", "profilePicture"]);
+    });
+
+    it("does not depend on the vestigial profilePicture form field", () => {
+      // `OnboardingFormInputs` and `onboardSchema` both carry a
+      // `profilePicture` string, and nothing ever writes it: there is no such
+      // column and `user.edit` does not accept it. So the form value is not
+      // where a pending picture lives, and setting it must not stand in for
+      // one - otherwise the modal would fire on a value no user can change.
+      expect(profileChanges(form({ profilePicture: "" }), user)).toEqual([]);
+      expect(
+        profileChanges(form({ profilePicture: "blob:something" }), user),
+      ).toEqual([]);
+    });
+  });
+
   describe("edge cases carried over unchanged", () => {
     it("treats an unresolved user as everything having changed", () => {
       // `user` is null while the query is in flight. The original compared
@@ -342,6 +403,25 @@ describe("hasProfileChanges", () => {
       expect(hasProfileChanges(values, user)).toBe(
         profileChanges(values, user).length > 0,
       );
+    });
+  });
+
+  /**
+   * The pair `checkForChanges` actually calls, which is what decides whether
+   * `UnsavedModal` appears. The page passes its `selectedFile` straight
+   * through, so these two are the modal's behaviour for a picture-only edit.
+   */
+  describe("a picture-only edit", () => {
+    const croppedFile = new File(["cropped-bytes"], "cropped-image.jpeg", {
+      type: "image/jpeg",
+    });
+
+    it("is true for a pending picture with a pristine form", () => {
+      expect(hasProfileChanges(pristine, user, croppedFile)).toBe(true);
+    });
+
+    it("is false for a pristine form with no pending picture", () => {
+      expect(hasProfileChanges(pristine, user, null)).toBe(false);
     });
   });
 });

@@ -7,9 +7,25 @@ import { CROP_BOX_PX, minZoomToFill } from "../../utils/cropZoom";
 import useProfileImage from "../../utils/useProfileImage";
 import { createPortal } from "react-dom";
 interface ProfilePictureProps {
+  /**
+   * The cropped file waiting to be uploaded, owned by the parent.
+   *
+   * The preview below is *derived* from this rather than stored alongside it,
+   * and that is the whole point of the prop. The file used to live only in the
+   * parent while the preview URL lived only here, so unmounting this component
+   * - switching profile tabs, or stepping back and forward through onboarding -
+   * revoked the preview and left the parent holding a file the user could no
+   * longer see, which a later Save would upload anyway (SCRUM-511). Deriving
+   * makes the two agree by construction: there is one source of truth, and
+   * remounting rebuilds the preview from it.
+   */
+  selectedFile: File | null;
   onFileSelected: (file: File | null) => void;
 }
-const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
+const ProfilePicture = ({
+  selectedFile,
+  onFileSelected,
+}: ProfilePictureProps) => {
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [croppedImageUrl, setCroppedImageUrl] = useState<string>("");
   const [crop, setCrop] = useState({ x: 0, y: 0 });
@@ -31,8 +47,8 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
   const [showModal, setShowModal] = useState<boolean>(false);
 
   /**
-   * The two object URLs this component owns, held in refs rather than read
-   * back out of state.
+   * The full-resolution source the open cropper reads, held in a ref rather
+   * than read back out of state.
    *
    * `URL.createObjectURL` hands out a reference the browser keeps alive - along
    * with the whole underlying blob - until it is revoked or the document is
@@ -40,12 +56,16 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
    * those accumulate across a few selections is exactly the memory the ticket
    * is about.
    *
-   * Refs because the unmount cleanup below has to see the *current* URL: a
+   * A ref because the unmount cleanup below has to see the *current* URL: a
    * cleanup closing over state would revoke whatever was set when the effect
    * was created, which for an empty dependency list is `null` forever.
+   *
+   * The preview URL used to be a second ref beside this one. It is now derived
+   * from `selectedFile` instead - see the effect below - so its lifetime is the
+   * effect's rather than the component's, and nothing here has to remember to
+   * revoke it.
    */
   const sourceUrlRef = useRef<string | null>(null);
-  const croppedUrlRef = useRef<string | null>(null);
 
   /** Releases the full-resolution source, which only the open cropper needs. */
   const revokeSourceUrl = useCallback(() => {
@@ -55,19 +75,37 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
     }
   }, []);
 
-  // Both URLs die with the component. Safe under StrictMode's double-invoke:
-  // the setup does nothing, and on the first mount both refs are still null,
-  // so the extra cleanup pass has nothing to revoke.
+  // The source URL dies with the component. Safe under StrictMode's
+  // double-invoke: the setup does nothing, and on the first mount the ref is
+  // still null, so the extra cleanup pass has nothing to revoke.
   useEffect(
     () => () => {
       revokeSourceUrl();
-      if (croppedUrlRef.current) {
-        URL.revokeObjectURL(croppedUrlRef.current);
-        croppedUrlRef.current = null;
-      }
     },
     [revokeSourceUrl],
   );
+
+  /**
+   * The preview, derived from the parent's pending file.
+   *
+   * One object URL per file, revoked when the file changes or this unmounts,
+   * so at most one is alive at a time - the guarantee the old
+   * revoke-before-replace dance in `handleCrop` was making by hand. Because it
+   * re-runs on mount, a remount after a tab switch rebuilds the preview from
+   * the file the parent still holds, which is what stops a pending upload from
+   * becoming invisible.
+   */
+  useEffect(() => {
+    if (!selectedFile) {
+      setCroppedImageUrl("");
+      return;
+    }
+
+    const url = URL.createObjectURL(selectedFile);
+    setCroppedImageUrl(url);
+
+    return () => URL.revokeObjectURL(url);
+  }, [selectedFile]);
 
   const {
     profileImageUrl,
@@ -120,14 +158,13 @@ const ProfilePicture = ({ onFileSelected }: ProfilePictureProps) => {
     try {
       const { file, url } = await getCroppedImg(imageSrc, croppedAreaPixels);
 
-      // The preview this replaces is about to stop being rendered, so its URL
-      // is dead. Revoking before storing the new one keeps at most one alive.
-      if (croppedUrlRef.current) {
-        URL.revokeObjectURL(croppedUrlRef.current);
-      }
-      croppedUrlRef.current = url;
+      // `getCroppedImg` makes this URL from the same blob as the file, and the
+      // effect above now makes its own from the file the parent stores. So this
+      // one is redundant the moment it exists - revoked here rather than left
+      // to the browser, because holding it would be a leak per crop and
+      // rendering it would reintroduce the preview that outlives its file.
+      URL.revokeObjectURL(url);
 
-      setCroppedImageUrl(url);
       onFileSelected(file);
       setShowModal(false);
 

@@ -549,6 +549,7 @@ const Setup: NextPage = () => {
               setValue={setValue}
               watch={watch}
               onFileSelect={setSelectedFile}
+              selectedFile={selectedFile}
               errors={errors}
               register={register}
             />

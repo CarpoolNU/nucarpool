@@ -54,7 +54,13 @@ import { OnboardingFormInputs, User } from "../types";
  * review and unreachable by a suite that cannot render the page.
  */
 
-/** The form fields this rule compares, in the order the original listed them. */
+/**
+ * The changes this rule can report, in the order the original listed them.
+ *
+ * `profilePicture` is last and is not one of the form comparisons: it is the
+ * one profile change that does not live in the form at all. See the third
+ * parameter of `profileChanges`.
+ */
 export type ProfileField =
   | "role"
   | "seatAvail"
@@ -69,7 +75,8 @@ export type ProfileField =
   | "endTime"
   | "coopStartDate"
   | "coopEndDate"
-  | "bio";
+  | "bio"
+  | "profilePicture";
 
 /**
  * Compares two nullable dates by instant.
@@ -117,10 +124,28 @@ const daysWorkingDiffer = (
  * A `user` of `null` - the query has not resolved - leaves every stored value
  * `undefined`, so the form's own defaults read as changes. Preserved from the
  * original chain, which compared through `user?.`.
+ *
+ * `pendingPicture` is the cropped file waiting to be uploaded, and it is the
+ * reason this takes a third argument at all. Every other profile edit is a
+ * form field, so comparing form values against the row answered "is anything
+ * unsaved?" completely - until the picture, which `ProfilePicture` hands
+ * straight to page state and which only the save handler ever uploads. The
+ * `profilePicture` key in `OnboardingFormInputs` and `onboardSchema` looks like
+ * it should carry this and does not: nothing ever writes it, `user.edit` does
+ * not accept it, and there is no such column - only
+ * `User.profilePictureUpdatedAt`, which the upload path sets from the server.
+ * So the file cannot be compared against a stored value the way the fourteen
+ * fields are; its mere presence *is* the change, which is why this is a
+ * presence test rather than a comparison.
+ *
+ * Absent, it reports no picture change - which is what every caller that has
+ * no picture to lose wants, and what keeps this a drop-in for the two-argument
+ * form.
  */
 export const profileChanges = (
   formValues: OnboardingFormInputs,
   user: User | null | undefined,
+  pendingPicture?: File | null,
 ): ProfileField[] => {
   const changed: ProfileField[] = [];
   const add = (field: ProfileField, differs: boolean) => {
@@ -151,6 +176,9 @@ export const profileChanges = (
     differentInstant(formValues.coopEndDate, user?.coopEndDate),
   );
   add("bio", formValues.bio !== user?.bio);
+  // Last, and outside the form. A cropped file with no field touched is a real
+  // unsaved change and used to be the only one that navigated away silently.
+  add("profilePicture", !!pendingPicture);
 
   return changed;
 };
@@ -159,4 +187,5 @@ export const profileChanges = (
 export const hasProfileChanges = (
   formValues: OnboardingFormInputs,
   user: User | null | undefined,
-): boolean => profileChanges(formValues, user).length > 0;
+  pendingPicture?: File | null,
+): boolean => profileChanges(formValues, user, pendingPicture).length > 0;
