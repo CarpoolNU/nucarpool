@@ -60,3 +60,26 @@ export const combineQueryStates = (...states: QueryState[]): QueryState => ({
     }
   },
 });
+
+/**
+ * The state of a query deliberately held back by `enabled: false`.
+ *
+ * React Query v5 defines `isLoading` as `isPending && isFetching`, and a
+ * disabled query is not fetching - so `toQueryState` reads one as `ready`.
+ * That is right where the gate means "this role never needs the data": a
+ * VIEWER's recommendations on `/` render a sentence, and a spinner there would
+ * be a lie.
+ *
+ * It is wrong where the gate means "not yet". `UserManagement` and `AdminData`
+ * hold their queries for the one render pass that might be hydration, and the
+ * data really is still coming, so `ready` would draw an empty frame for a pass
+ * and then fill it. Before this existed `UserManagement` expressed that with a
+ * `useState(true)` cleared only by data arriving - which is also why a failure
+ * never cleared it, the defect in SCRUM-509.
+ *
+ * `retry` is a no-op because there is nothing to retry: the query has not run.
+ */
+export const HELD_QUERY_STATE: QueryState = {
+  status: "loading",
+  retry: () => undefined,
+};

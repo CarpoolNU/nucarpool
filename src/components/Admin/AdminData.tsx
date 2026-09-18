@@ -1,5 +1,11 @@
 import React, { useEffect, useState } from "react";
 import Spinner from "../Spinner";
+import { QueryError } from "../QueryError";
+import {
+  HELD_QUERY_STATE,
+  combineQueryStates,
+  toQueryState,
+} from "../../utils/queryState";
 import { trpc } from "../../utils/trpc";
 import BarChartUserCounts from "./BarChartUserCounts";
 import LineChartCount from "./LineChartCount";
@@ -49,20 +55,22 @@ function AdminData() {
    */
   const isHydrated = useIsHydrated();
 
-  const { data: dateRange } = trpc.user.admin.getDateRange.useQuery(undefined, {
+  const dateRangeQuery = trpc.user.admin.getDateRange.useQuery(undefined, {
     enabled: isHydrated,
   });
-  const { data: stats } = trpc.user.admin.getDashboardStats.useQuery(
-    undefined,
-    { enabled: isHydrated },
-  );
-  const { data: series } = trpc.user.admin.getDashboardSeries.useQuery(
+  const { data: dateRange } = dateRangeQuery;
+  const statsQuery = trpc.user.admin.getDashboardStats.useQuery(undefined, {
+    enabled: isHydrated,
+  });
+  const { data: stats } = statsQuery;
+  const seriesQuery = trpc.user.admin.getDashboardSeries.useQuery(
     {
       start: new Date(queryRange?.[0] ?? 0),
       end: new Date(queryRange?.[1] ?? 0),
     },
     { enabled: isHydrated && queryRange !== null },
   );
+  const { data: series } = seriesQuery;
 
   useEffect(() => {
     if (!dateRange?.minDate || !dateRange?.maxDate) {
@@ -78,7 +86,57 @@ function AdminData() {
 
   const hasData = !!dateRange?.minDate && !!dateRange?.maxDate;
 
-  if (!dateRange || !stats || (hasData && (!sliderRange || !series))) {
+  /*
+   * "One of these three failed" and "one of these three has not arrived" used
+   * to be the same spinner, so any failure here was a dashboard that never
+   * appeared - and for an ADMIN or MANAGER whose session had lapsed, that was
+   * the whole page (SCRUM-509).
+   *
+   * `combineQueryStates` gives failure priority over loading across all three
+   * and retries all three, because from the reader's side this is one
+   * dashboard that did not appear rather than three requests.
+   *
+   * The series query is counted only when there is data to chart. With an
+   * empty database `dateRange` resolves with null bounds, the effect above
+   * never sets `queryRange`, and the query therefore stays gated for good -
+   * counting it would be a permanent load. `HELD_QUERY_STATE` covers the gated
+   * spells that *are* temporary, since React Query reads a disabled query as
+   * `ready`: the hydration pass for all three, and the wait for the slider
+   * bounds for the series.
+   */
+  const dashboardState = combineQueryStates(
+    isHydrated ? toQueryState(dateRangeQuery) : HELD_QUERY_STATE,
+    isHydrated ? toQueryState(statsQuery) : HELD_QUERY_STATE,
+    ...(hasData
+      ? [
+          isHydrated && queryRange !== null
+            ? toQueryState(seriesQuery)
+            : HELD_QUERY_STATE,
+        ]
+      : []),
+  );
+
+  if (dashboardState.status === "error") {
+    return (
+      <QueryError
+        variant="page"
+        subject="the dashboard"
+        onRetry={dashboardState.retry}
+      />
+    );
+  }
+
+  /*
+   * The data checks stay alongside the status, and not only for narrowing:
+   * `sliderRange` is local state set by the effect above, so it is one tick
+   * behind `dateRange` arriving and is nothing a query state can report.
+   */
+  if (
+    dashboardState.status === "loading" ||
+    !dateRange ||
+    !stats ||
+    (hasData && !sliderRange)
+  ) {
     return <Spinner />;
   }
 

@@ -1,4 +1,9 @@
-import { QueryLike, combineQueryStates, toQueryState } from "./queryState";
+import {
+  HELD_QUERY_STATE,
+  QueryLike,
+  combineQueryStates,
+  toQueryState,
+} from "./queryState";
 
 /**
  * Every page used to destructure `data` alone, so a failed query looked
@@ -84,5 +89,45 @@ describe("combineQueryStates", () => {
 
   it("is ready with nothing to combine, rather than stuck", () => {
     expect(combineQueryStates().status).toBe("ready");
+  });
+});
+
+describe("HELD_QUERY_STATE", () => {
+  /**
+   * The distinction this exists for. React Query v5 defines `isLoading` as
+   * `isPending && isFetching`, so a query held at `enabled: false` is not
+   * fetching and `toQueryState` reads it as `ready` - correct for a gate
+   * meaning "this role never needs the data", wrong for one meaning "not yet".
+   *
+   * This is the measurement rather than a claim about the library: a real
+   * disabled query is asserted to report `ready` in
+   * `queryStateDisabled.test.tsx`, which is what makes the constant necessary.
+   */
+  it("reports loading, which a disabled query does not", () => {
+    expect(HELD_QUERY_STATE.status).toBe("loading");
+  });
+
+  it("combines as a load, so a held query holds the whole view", () => {
+    expect(
+      combineQueryStates(toQueryState(query()), HELD_QUERY_STATE).status,
+    ).toBe("loading");
+  });
+
+  /**
+   * A failure elsewhere still wins. `AdminData` holds its series query until
+   * the slider bounds exist, and a reader whose stats query has already failed
+   * is owed the error then rather than after the hold clears.
+   */
+  it("does not mask a failure in a sibling query", () => {
+    expect(
+      combineQueryStates(
+        toQueryState(query({ isError: true })),
+        HELD_QUERY_STATE,
+      ).status,
+    ).toBe("error");
+  });
+
+  it("retries without throwing, there being nothing to refetch", () => {
+    expect(() => HELD_QUERY_STATE.retry()).not.toThrow();
   });
 });

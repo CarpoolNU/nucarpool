@@ -1,7 +1,9 @@
 import { Permission } from "@prisma/client";
 import { trpc } from "../../utils/trpc";
-import React, { useEffect, useState } from "react";
+import React from "react";
 import Spinner from "../Spinner";
+import { QueryError } from "../QueryError";
+import { HELD_QUERY_STATE, toQueryState } from "../../utils/queryState";
 import { toast } from "react-toastify/unstyled";
 import { ConfigProvider, Select } from "antd";
 import { Note } from "../../styles/profile";
@@ -12,7 +14,6 @@ type UserManagementProps = {
   permission: Permission;
 };
 const UserManagement = ({ permission }: UserManagementProps) => {
-  const [loading, setLoading] = useState<boolean>(true);
   const [selectedUser, setSelectedUser] = React.useState<AdminUser | null>(
     null,
   );
@@ -38,16 +39,26 @@ const UserManagement = ({ permission }: UserManagementProps) => {
    * pass too and then fetches exactly as before. `useProfileImage` gates its
    * presigned-URL call the same way and for the same reason.
    *
-   * Nothing flashes while it is held back: `loading` above starts `true` and
-   * only clears once `users` arrives, so the deferred pass renders the spinner
-   * this component already shows while fetching.
+   * Nothing flashes while it is held back, but that now takes saying so:
+   * React Query reads a disabled query as `ready` rather than as loading, so
+   * `HELD_QUERY_STATE` supplies the spinner for the deferred pass. That used
+   * to be a `useState(true)` cleared only by `users` arriving - which is
+   * precisely why a *failed* query never cleared it either (SCRUM-509).
    */
   const isHydrated = useIsHydrated();
 
-  const { data: users } = trpc.user.admin.getAllUsers.useQuery<AdminUser[]>(
+  const usersQuery = trpc.user.admin.getAllUsers.useQuery<AdminUser[]>(
     undefined,
     { enabled: isHydrated },
   );
+  const { data: users } = usersQuery;
+
+  /*
+   * `HELD_QUERY_STATE` only while the query is gated; `toQueryState` the
+   * moment it is live. Reading the real flags is what lets a failure be a
+   * failure - the previous boolean could only ever count up to "arrived".
+   */
+  const usersState = isHydrated ? toQueryState(usersQuery) : HELD_QUERY_STATE;
   const utils = trpc.useUtils();
 
   const updateUserPermission = trpc.user.admin.updateUserPermission.useMutation(
@@ -61,11 +72,6 @@ const UserManagement = ({ permission }: UserManagementProps) => {
       },
     },
   );
-  useEffect(() => {
-    if (users) {
-      setLoading(false);
-    }
-  }, [users]);
   const handleUserChange = (value: string) => {
     const user = users?.find((user) => user.id === value);
     if (user) {
@@ -108,8 +114,15 @@ const UserManagement = ({ permission }: UserManagementProps) => {
 
   return (
     <div className="relative h-full w-full">
-      {loading && <Spinner />}
-      {!loading && users && (
+      {usersState.status === "error" && (
+        <QueryError
+          variant="page"
+          subject="the user list"
+          onRetry={usersState.retry}
+        />
+      )}
+      {usersState.status === "loading" && <Spinner />}
+      {usersState.status === "ready" && users && (
         <div className="m-auto p-20">
           <div className="flex flex-col gap-10 p-10">
             <h1 className="font-montserrat text-center text-3xl font-bold text-black">

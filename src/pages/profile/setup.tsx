@@ -15,6 +15,7 @@ import {
 } from "../../utils/profile/zodSchema";
 
 import Spinner from "../../components/Spinner";
+import { QueryError } from "../../components/QueryError";
 import InitialStep from "../../components/Setup/InitialStep";
 import { FaArrowRight } from "react-icons/fa";
 import StepTwo from "../../components/Setup/StepTwo";
@@ -75,9 +76,10 @@ const Setup: NextPage = () => {
   const [showViewerConfirm, setShowViewerConfirm] = useState(false);
   const { uploadFile } = useUploadFile(selectedFile);
   const { data: session } = useSession();
-  const { data: user } = trpc.user.me.useQuery(undefined, {
+  const userQuery = trpc.user.me.useQuery(undefined, {
     refetchOnMount: true,
   });
+  const { data: user } = userQuery;
   const editUserMutation = useEditUserMutation(router, () =>
     setIsLoading(false),
   );
@@ -282,6 +284,24 @@ const Setup: NextPage = () => {
     trackFTUEStep(step);
     setStep((prevStep) => prevStep + 1);
   };
+  /*
+   * The same permanent overlay `/profile` carried, for the same reason, and
+   * worse placed: this is the first screen a new account sees, so a lapsed
+   * session or a 500 here is a white page with a spinner before the user has
+   * ever reached the app. See the note on the sibling route (SCRUM-509).
+   */
+  if (userQuery.isError) {
+    return (
+      <QueryError
+        variant="page"
+        subject="your profile"
+        onRetry={() => {
+          void userQuery.refetch();
+        }}
+      />
+    );
+  }
+
   if (isLoading || !user) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-white">

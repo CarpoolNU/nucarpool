@@ -15,6 +15,7 @@ import {
 } from "../../utils/profile/zodSchema";
 
 import Spinner from "../../components/Spinner";
+import { QueryError } from "../../components/QueryError";
 
 import { Role } from "@prisma/client";
 import { trackProfileCompletion } from "../../utils/mixpanel";
@@ -86,9 +87,10 @@ const Index: NextPage = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const { uploadFile } = useUploadFile(selectedFile);
   const { data: session } = useSession();
-  const { data: user } = trpc.user.me.useQuery(undefined, {
+  const userQuery = trpc.user.me.useQuery(undefined, {
     refetchOnMount: true,
   });
+  const { data: user } = userQuery;
   const editUserMutation = useEditUserMutation(
     router,
     () => setIsLoading(false),
@@ -388,6 +390,30 @@ const Index: NextPage = () => {
     }
     toast.error("One or more fields are invalid, please fix and try again.");
   };
+
+  /*
+   * A failed `user.me` used to leave `data` undefined behind the overlay
+   * below forever - and because this guard returns before `Header` renders,
+   * that overlay was the whole page, with no navigation to leave by and no
+   * way out but a manual reload. `/` fixed exactly this for the map page and
+   * the fix was never carried across (SCRUM-509).
+   *
+   * Checked ahead of the spinner for the reason `toQueryState` documents: a
+   * query that has failed is also not loading, and a spinner that is really a
+   * failure is the bug being removed. `isLoading` in the guard below is this
+   * page's *save* state, not the query's, so the two are independent.
+   */
+  if (userQuery.isError) {
+    return (
+      <QueryError
+        variant="page"
+        subject="your profile"
+        onRetry={() => {
+          void userQuery.refetch();
+        }}
+      />
+    );
+  }
 
   if (isLoading || !user) {
     return (

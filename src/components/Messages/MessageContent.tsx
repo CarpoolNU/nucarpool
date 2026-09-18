@@ -15,6 +15,9 @@ import {
   acquirePusherClient,
   releasePusherClient,
 } from "../../utils/pusherClient";
+import Spinner from "../Spinner";
+import { QueryError } from "../QueryError";
+import { toQueryState } from "../../utils/queryState";
 
 interface MessageContentProps {
   selectedUser: EnhancedPublicUser;
@@ -240,6 +243,42 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
   useEffect(() => {
     scrollToBottom();
   }, [lastMessageId, scrollToBottom]);
+
+  /**
+   * Three answers, where this panel used to give one.
+   *
+   * The message list rendered unconditionally, so "nobody has written
+   * anything", "still loading" and "the request failed" were one
+   * pixel-identical empty white panel - with a live send box above it offering
+   * to add to a conversation that might not have loaded (SCRUM-509).
+   *
+   * The empty case is not an edge case, it is the normal first paint.
+   * `requests.create` stores the opening text as a `Message` rather than in
+   * `request.message`, so `request?.message` is `""` for every modern row and
+   * `allMessages` is empty until this query resolves - which, with
+   * `refetchOnMount: "always"`, is every single open.
+   *
+   * Error before loading, per `toQueryState`. A thread with no request behind
+   * it leaves the query gated, which React Query reports as `ready`, so it
+   * lands on the empty copy rather than on a spinner with nothing to wait for.
+   */
+  const threadState = toQueryState(threadQuery);
+
+  if (threadState.status !== "ready" || allMessages.length === 0) {
+    return (
+      <div className="flex h-full flex-1 flex-col items-center justify-center overflow-x-hidden overflow-y-auto bg-white p-4">
+        {threadState.status === "error" ? (
+          <QueryError subject="this conversation" onRetry={threadState.retry} />
+        ) : threadState.status === "loading" ? (
+          <Spinner />
+        ) : (
+          <p className="text-center text-lg font-light text-gray-700">
+            No messages yet. Say hello to start the conversation.
+          </p>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full flex-1 flex-col overflow-x-hidden overflow-y-auto bg-white p-4">
