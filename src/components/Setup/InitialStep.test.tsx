@@ -5,9 +5,18 @@
  * what the primary button was about to commit the user to. This pins that
  * all three roles render on mobile, and that the selected one always has a
  * visible, checked control there - never all three unselected.
+ *
+ * SCRUM-521: those same radios reported the wrong accessible role.
+ * `FormRadioButton` spread its caller's props onto the native
+ * `<input type="radio">`, and `InitialStep` passed `role={Role.X}` alongside
+ * the `value` that actually drives selection - `role` is a real ARIA
+ * attribute, not a naming collision with Prisma's `Role` enum, so it
+ * overwrote the input's implicit `"radio"` role with the literal string
+ * `"VIEWER"` / `"RIDER"` / `"DRIVER"`. `getByRole("radio", { name })` could
+ * not find any of the three controls.
  */
 
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { useForm } from "react-hook-form";
 import { Role } from "@prisma/client";
 import InitialStep from "./InitialStep";
@@ -63,4 +72,23 @@ describe("InitialStep on a mobile viewport (SCRUM-508)", () => {
       expect(checked).toHaveLength(1);
     },
   );
+});
+
+describe("the onboarding role radios (SCRUM-521)", () => {
+  it("are reachable as radios, not as their Role enum value", () => {
+    render(<Harness role={Role.RIDER} />);
+
+    expect(screen.getByRole("radio", { name: "Viewer" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Rider" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Driver" })).toBeInTheDocument();
+  });
+
+  it("carries no explicit role attribute, leaving the browser's implicit one", () => {
+    render(<Harness role={Role.RIDER} />);
+
+    for (const name of ["Viewer", "Rider", "Driver"]) {
+      const input = screen.getByLabelText(name, { selector: "input" });
+      expect(input).not.toHaveAttribute("role");
+    }
+  });
 });

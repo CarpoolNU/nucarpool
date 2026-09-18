@@ -181,6 +181,30 @@ describe("Sign Out and the unsaved-changes guard", () => {
   });
 });
 
+describe("the role radios (SCRUM-521)", () => {
+  // `Radio` already destructured `role` out of its props before spreading
+  // the rest onto the native input, so this call site was never affected by
+  // the sibling bug in `FormRadioButton` - the dead `role={Role.X}` prop
+  // passed here has been removed as the same cleanup, and this guards
+  // against either component starting to forward it.
+  it("are reachable as radios, not as their Role enum value", () => {
+    render(<Harness checkChanges={jest.fn()} />);
+
+    expect(screen.getByRole("radio", { name: "Viewer" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Rider" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Driver" })).toBeInTheDocument();
+  });
+
+  it("carry no explicit role attribute, leaving the browser's implicit one", () => {
+    render(<Harness checkChanges={jest.fn()} />);
+
+    for (const name of ["Viewer", "Rider", "Driver"]) {
+      const input = screen.getByLabelText(name, { selector: "input" });
+      expect(input).not.toHaveAttribute("role");
+    }
+  });
+});
+
 describe("Save Changes, the button Sign Out sits under", () => {
   it("still submits, and does not go through the guard", async () => {
     // The guard belongs to leaving the page. Saving stays on it, so routing

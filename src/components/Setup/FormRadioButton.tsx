@@ -8,7 +8,7 @@ type RadioProps<T extends string | number> = {
   currentlySelected: T;
   error?: FieldError;
   className?: string;
-} & React.ComponentPropsWithoutRef<"input">;
+} & Omit<React.ComponentPropsWithoutRef<"input">, "role">;
 
 const RadioButton = React.forwardRef<
   HTMLInputElement,
