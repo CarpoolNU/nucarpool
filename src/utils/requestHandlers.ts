@@ -47,24 +47,41 @@ export const createRequestHandlers = (
       },
     });
 
+  /**
+   * What an accepted request has just made stale, whichever shape the group
+   * write took.
+   *
+   * One function rather than the same body written out beside each mutation,
+   * because that is how SCRUM-510 happened: the two copies drifted, and both
+   * were missing `groups.me` while `useGroupMembership.ts` - calling the
+   * *same* `groups.edit` procedure - invalidated it. Nothing came along
+   * afterwards to paper over the gap either, since `utils/trpc.ts` sets
+   * `refetchOnMount` and `refetchOnWindowFocus` to false globally.
+   *
+   * `groups.me` is the one that was missing and it is the member list itself.
+   * A driver already in a group who accepts a second rider keeps the same
+   * `carpoolId`, so `GroupPage` does not remount and does not refetch - My
+   * Group showed the pre-accept membership, without the new rider and without
+   * them on "Preview Group Route", for the rest of the session.
+   */
+  const invalidateAcceptedRequestCaches = () => {
+    utils.user.requests.me.invalidate();
+    utils.user.me.invalidate();
+    utils.user.groups.me.invalidate();
+  };
+
   // Neither of these reports its own failure. `handleAcceptRequest` below
   // catches it instead, because the interesting failures here are the server's
   // membership refusals, and "Something went wrong: ..." framed a rule the user
   // can act on as if the app had broken.
   const { mutateAsync: editGroupAsync, isPending: isEditingGroup } =
     trpc.user.groups.edit.useMutation({
-      onSuccess: () => {
-        utils.user.requests.me.invalidate();
-        utils.user.me.invalidate();
-      },
+      onSuccess: invalidateAcceptedRequestCaches,
     });
 
   const { mutateAsync: createGroupAsync, isPending: isCreatingGroup } =
     trpc.user.groups.create.useMutation({
-      onSuccess: () => {
-        utils.user.requests.me.invalidate();
-        utils.user.me.invalidate();
-      },
+      onSuccess: invalidateAcceptedRequestCaches,
     });
 
   const handleDelete = async (requestId: string) => {
