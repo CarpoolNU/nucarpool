@@ -15,6 +15,7 @@ import ProfilePicture from "./ProfilePicture";
 import useIsMobile from "../../utils/useIsMobile";
 import { PROFILE_TEXT_MAX_LENGTH } from "../../utils/textLimits";
 import { registerRoleWithSeatDefault } from "../../utils/profile/roleSeatDefault";
+import { seatAvailValueAs } from "../../utils/carpoolSeats";
 import {
   signOutWithGuard,
   UnsavedChangesGuard,
@@ -149,7 +150,7 @@ const UserSection = ({
                 id="seatAvail"
                 type="number"
                 min="0"
-                {...register("seatAvail", { valueAsNumber: true })}
+                {...register("seatAvail", { setValueAs: seatAvailValueAs })}
               />
             </div>
           </div>

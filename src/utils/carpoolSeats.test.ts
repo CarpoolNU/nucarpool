@@ -5,6 +5,7 @@ import {
   clampSeats,
   hasSeatAvailable,
   isSeatCountInRange,
+  seatAvailValueAs,
 } from "./carpoolSeats";
 
 /**
@@ -91,6 +92,25 @@ describe("isSeatCountInRange", () => {
     for (const seats of SEAT_COUNTS) {
       expect(isSeatCountInRange(clampSeats(seats))).toBe(true);
     }
+  });
+});
+
+describe("seatAvailValueAs", () => {
+  it("reads an emptied box as unset rather than NaN", () => {
+    // `valueAsNumber` parsed an empty string to `NaN`, which reached Zod's own
+    // "expected number, received NaN" on the ordinary gesture of clearing the
+    // box to retype (SCRUM-512). `undefined` is what the rest of the schema
+    // already treats as "no value yet".
+    expect(seatAvailValueAs("")).toBeUndefined();
+  });
+
+  it("still parses an ordinary typed count", () => {
+    expect(seatAvailValueAs("4")).toBe(4);
+  });
+
+  it("passes a fractional entry through as a number, for .int() to reject", () => {
+    // Truncating here would hide the typo instead of reporting it.
+    expect(seatAvailValueAs("1.5")).toBe(1.5);
   });
 });
 
