@@ -32,6 +32,7 @@ jest.mock("mapbox-gl", () => {
     remove = jest.fn();
     resize = jest.fn();
     setMaxZoom = jest.fn();
+    setMinZoom = jest.fn();
 
     constructor(options: Record<string, unknown>) {
       this.options = options;
@@ -97,6 +98,7 @@ type FakeMapInstance = {
   remove: jest.Mock;
   resize: jest.Mock;
   setMaxZoom: jest.Mock;
+  setMinZoom: jest.Mock;
   fire: (event: string) => void;
 };
 
@@ -204,6 +206,40 @@ describe("useMapInstance", () => {
 
     expect(onLoad).toHaveBeenCalledTimes(1);
     expect(onLoad).toHaveBeenCalledWith(lastInstance());
+  });
+
+  /**
+   * The white-box-below-the-map bug (SCRUM-534): with no floor, a user could
+   * zoom out past the point where Mapbox's rendered world still fills the
+   * container, exposing blank canvas past the latitude clamp.
+   */
+  it("caps how far the map can be zoomed out, by default", () => {
+    renderHook(() =>
+      useMapInstance({
+        containerId: "map",
+        containerRef,
+        center: [0, 0],
+      }),
+    );
+
+    act(() => lastInstance().fire("load"));
+
+    expect(lastInstance().setMinZoom).toHaveBeenCalledWith(3);
+  });
+
+  it("honours a caller-supplied zoom-out floor", () => {
+    renderHook(() =>
+      useMapInstance({
+        containerId: "map",
+        containerRef,
+        center: [0, 0],
+        minZoom: 5,
+      }),
+    );
+
+    act(() => lastInstance().fire("load"));
+
+    expect(lastInstance().setMinZoom).toHaveBeenCalledWith(5);
   });
 
   it("destroys the map when the page unmounts", () => {

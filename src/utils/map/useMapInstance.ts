@@ -21,6 +21,27 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 /** Matches the delay the page's hand-rolled `setTimeout` already used. */
 export const MAP_RESIZE_DEBOUNCE_MS = 100;
 
+/**
+ * The zoom-out floor applied when a caller does not supply its own
+ * (SCRUM-534).
+ *
+ * **Derived from Mapbox's tile pyramid, not chosen by feel.** At zoom `z` the
+ * world is rendered into a `512 * 2^z` px square: that width is the Mercator
+ * projection's full longitude range, and the height is equal because the
+ * projection's latitude clamp (~85.0511°, the standard Web Mercator bound) was
+ * itself chosen to make the two match. Below the zoom where that square still
+ * covers the container, the container is taller (or wider) than the rendered
+ * world, and Mapbox has nothing to paint past the clamp - the white box below
+ * the map that this ticket is about.
+ *
+ * So the floor has to satisfy `512 * 2^minZoom >= containerHeightPx` for every
+ * container this map is ever laid out into. 3 gives a 4096px world, which
+ * clears every mobile viewport by a wide margin and still covers desktop
+ * windows well past any ordinary monitor - while still leaving the app free
+ * to zoom out to a regional, multi-city view before the floor engages.
+ */
+export const DEFAULT_MIN_ZOOM = 3;
+
 export type MapInstanceOptions = {
   /** The DOM id Mapbox renders into. */
   containerId: string;
@@ -37,6 +58,11 @@ export type MapInstanceOptions = {
   center: [number, number] | null;
   zoom?: number;
   maxZoom?: number;
+  /**
+   * How far the map can be zoomed out, floored below by `DEFAULT_MIN_ZOOM`'s
+   * derivation - see the comment there before lowering this.
+   */
+  minZoom?: number;
   style?: string;
   /**
    * Run once, when Mapbox reports the style and tiles loaded. Everything that
@@ -57,6 +83,7 @@ export function useMapInstance({
   center,
   zoom = 8,
   maxZoom = 13,
+  minZoom = DEFAULT_MIN_ZOOM,
   style = "mapbox://styles/mapbox/light-v10",
   onLoad,
 }: MapInstanceOptions): MapInstance {
@@ -75,8 +102,8 @@ export function useMapInstance({
    * every marker with it. The flag is gone because the dependencies are now
    * honest: this effect really does run once per mount.
    */
-  const latest = useRef({ center, zoom, maxZoom, style, onLoad });
-  latest.current = { center, zoom, maxZoom, style, onLoad };
+  const latest = useRef({ center, zoom, maxZoom, minZoom, style, onLoad });
+  latest.current = { center, zoom, maxZoom, minZoom, style, onLoad };
 
   const hasCenter = center !== null;
 
@@ -99,6 +126,7 @@ export function useMapInstance({
     newMap.on("load", () => {
       if (!live) return;
       newMap.setMaxZoom(opening.maxZoom);
+      newMap.setMinZoom(opening.minZoom);
       setMap(newMap);
       latest.current.onLoad?.(newMap);
       setIsLoaded(true);
