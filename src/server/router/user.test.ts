@@ -1,4 +1,4 @@
-import { Permission, Role } from "@prisma/client";
+import { Permission, Role, Status } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
 import type { Session } from "next-auth";
 import { appRouter } from "./index";
@@ -242,6 +242,57 @@ describe("user.getPresignedDownloadUrl", () => {
  * treating null as absence would remove the avatar of every user who already
  * had one. That is why the fallback exists and why it is pinned below.
  */
+/**
+ * SCRUM-508: `role: carpoolSearch?.role ?? Role.VIEWER` collapses two
+ * different situations into the same value - a user who has never had a
+ * `CarpoolSearch` row, and a returning user whose row genuinely stores
+ * VIEWER. `hasCarpoolSearch` is what lets a caller (the onboarding wizard)
+ * tell them apart; these pin the merge site that produces it.
+ */
+describe("user.me — hasCarpoolSearch", () => {
+  it("reports hasCarpoolSearch: false, with the VIEWER fallback, for a user with no CarpoolSearch row", async () => {
+    mockUserFindUnique.mockResolvedValueOnce({
+      id: SESSION_USER,
+      carpoolSearches: [],
+    });
+
+    const result = await callerFor(sessionFor(SESSION_USER)).user.me();
+
+    expect(result.hasCarpoolSearch).toBe(false);
+    expect(result.role).toBe(Role.VIEWER);
+  });
+
+  it("reports hasCarpoolSearch: true, with the stored role, for a returning user who chose VIEWER", async () => {
+    mockUserFindUnique.mockResolvedValueOnce({
+      id: SESSION_USER,
+      carpoolSearches: [
+        {
+          role: Role.VIEWER,
+          status: Status.ACTIVE,
+          seatsAvail: 0,
+          companyName: "",
+          daysWorking: "",
+          startTime: null,
+          endTime: null,
+          startDate: null,
+          endDate: null,
+          groupNotes: null,
+          groupMusicPreference: null,
+          groupConversationStyle: null,
+          carpoolId: null,
+          homeLocation: null,
+          companyLocation: null,
+        },
+      ],
+    });
+
+    const result = await callerFor(sessionFor(SESSION_USER)).user.me();
+
+    expect(result.hasCarpoolSearch).toBe(true);
+    expect(result.role).toBe(Role.VIEWER);
+  });
+});
+
 describe("user.getPresignedDownloadUrl — recorded picture state", () => {
   it("signs without any S3 call once an upload has been recorded", async () => {
     mockUserFindUnique.mockResolvedValue({

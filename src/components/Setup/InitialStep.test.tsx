@@ -1,6 +1,12 @@
 /**
- * SCRUM-521: the onboarding role radios reported the wrong accessible role.
+ * SCRUM-508: the Viewer radio used to be wrapped in `!isMobile`, so on a
+ * phone step 1 rendered only Rider and Driver - both drawing unselected
+ * whenever `watch("role")` was VIEWER, with nothing on screen indicating
+ * what the primary button was about to commit the user to. This pins that
+ * all three roles render on mobile, and that the selected one always has a
+ * visible, checked control there - never all three unselected.
  *
+ * SCRUM-521: those same radios reported the wrong accessible role.
  * `FormRadioButton` spread its caller's props onto the native
  * `<input type="radio">`, and `InitialStep` passed `role={Role.X}` alongside
  * the `value` that actually drives selection - `role` is a real ARIA
@@ -12,29 +18,26 @@
 
 import { render, screen } from "@testing-library/react";
 import { useForm } from "react-hook-form";
-import { Role, Status } from "@prisma/client";
+import { Role } from "@prisma/client";
 import InitialStep from "./InitialStep";
 import { OnboardingFormInputs } from "../../utils/types";
+import {
+  MOBILE_WIDTH,
+  restoreViewportAfterEach,
+  setViewportWidth,
+} from "../../testing/viewport";
 
-/**
- * A real `useForm`, the same reasoning as `UserSection.test.tsx`'s `Harness`:
- * `InitialStep` takes `register`, `watch` and `setValue` as props, and
- * `registerRoleWithSeatDefault` drives all three, so mocking that shape would
- * assert against the mock rather than the wiring.
- */
-const Harness = () => {
+restoreViewportAfterEach();
+
+/** A minimal host so `InitialStep` gets real react-hook-form bindings. */
+const Harness = ({ role }: { role: Role }) => {
   const { register, watch, setValue, formState } =
     useForm<OnboardingFormInputs>({
-      defaultValues: {
-        role: Role.RIDER,
-        status: Status.ACTIVE,
-        seatAvail: 0,
-      },
+      defaultValues: { role },
     });
-
   return (
     <InitialStep
-      handleNextStep={() => undefined}
+      handleNextStep={() => {}}
       step={1}
       register={register}
       errors={formState.errors}
@@ -44,20 +47,44 @@ const Harness = () => {
   );
 };
 
-describe("the onboarding role radios", () => {
-  it("are reachable as radios, not as their Role enum value", () => {
-    render(<Harness />);
+const radioFor = (container: HTMLElement, id: "viewer" | "rider" | "driver") =>
+  container.querySelector<HTMLInputElement>(`#${id}`);
 
-    // jsdom's default `window.innerWidth` is desktop-width (1024), so
-    // `useIsMobile` is false and the Viewer radio - gated on `!isMobile` -
-    // renders alongside Rider and Driver.
+describe("InitialStep on a mobile viewport (SCRUM-508)", () => {
+  beforeEach(() => setViewportWidth(MOBILE_WIDTH));
+
+  it("renders the Viewer radio, not only Rider and Driver", () => {
+    const { container } = render(<Harness role={Role.RIDER} />);
+
+    expect(radioFor(container, "viewer")).not.toBeNull();
+    expect(radioFor(container, "rider")).not.toBeNull();
+    expect(radioFor(container, "driver")).not.toBeNull();
+  });
+
+  it.each([Role.VIEWER, Role.RIDER, Role.DRIVER])(
+    "leaves exactly one rendered radio checked for role %s",
+    (role) => {
+      const { container } = render(<Harness role={role} />);
+
+      const checked = (["viewer", "rider", "driver"] as const).filter(
+        (id) => radioFor(container, id)!.checked,
+      );
+      expect(checked).toHaveLength(1);
+    },
+  );
+});
+
+describe("the onboarding role radios (SCRUM-521)", () => {
+  it("are reachable as radios, not as their Role enum value", () => {
+    render(<Harness role={Role.RIDER} />);
+
     expect(screen.getByRole("radio", { name: "Viewer" })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Rider" })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Driver" })).toBeInTheDocument();
   });
 
   it("carries no explicit role attribute, leaving the browser's implicit one", () => {
-    render(<Harness />);
+    render(<Harness role={Role.RIDER} />);
 
     for (const name of ["Viewer", "Rider", "Driver"]) {
       const input = screen.getByLabelText(name, { selector: "input" });
