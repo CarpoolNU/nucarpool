@@ -484,6 +484,7 @@ const Filters = ({
                   ? "bg-northeastern-red border-black text-white"
                   : "border-gray-300 bg-white text-black"
               }`}
+              aria-pressed={filters.dateOverlap === 0}
               onClick={() =>
                 setFilters((prev) => ({
                   ...prev,
@@ -499,6 +500,7 @@ const Filters = ({
                   ? "bg-northeastern-red border-black text-white"
                   : "border-gray-300 bg-white text-black"
               }`}
+              aria-pressed={filters.dateOverlap === 1}
               onClick={() =>
                 setFilters((prev) => ({
                   ...prev,
@@ -514,6 +516,7 @@ const Filters = ({
                   ? "bg-northeastern-red border-black text-white"
                   : "border-gray-300 bg-white text-black"
               }`}
+              aria-pressed={filters.dateOverlap === 2}
               onClick={() =>
                 setFilters((prev) => ({
                   ...prev,
