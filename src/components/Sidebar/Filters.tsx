@@ -150,11 +150,11 @@ const Filters = ({
         : "px-4"
     }`;
   };
-  const startMonthInputClassName = `h-14 text-md ${getMonthInputClassName(
+  const startMonthInputClassName = `h-14 text-base ${getMonthInputClassName(
     filters.startDate,
     filters.dateOverlap,
   )}`;
-  const endMonthInputClassName = `h-14 text-md ${getMonthInputClassName(
+  const endMonthInputClassName = `h-14 text-base ${getMonthInputClassName(
     filters.endDate,
     filters.dateOverlap,
   )}`;
@@ -276,7 +276,7 @@ const Filters = ({
         toggleOpen={() => setDaysMatchOpen(!daysMatchOpen)}
       >
         <div className="mt-3">
-          <div className="text-md flex justify-between gap-2 font-semibold">
+          <div className="flex justify-between gap-2 text-base font-semibold">
             <button
               className={`grow rounded-full px-4 py-2 ${
                 filters.days === 0
@@ -468,7 +468,7 @@ const Filters = ({
         toggleOpen={() => setTermDatesOpen(!termDatesOpen)}
       >
         <div className="mt-3">
-          <div className="text-md mb-4 flex justify-between gap-2 font-semibold">
+          <div className="mb-4 flex justify-between gap-2 text-base font-semibold">
             <button
               className={`grow rounded-full border-2 px-4 py-2 ${
                 filters.dateOverlap === 0
@@ -580,7 +580,7 @@ const Filters = ({
                 },
               }}
             />
-            <span className="text-gray-black">Only show favorites</span>
+            <span className="text-black">Only show favorites</span>
           </label>
 
           <label className="flex cursor-pointer items-center">
@@ -602,9 +602,7 @@ const Filters = ({
                 input: { "aria-label": "Include users I have messaged" },
               }}
             />
-            <span className="text-gray-black">
-              Include users I have messaged
-            </span>
+            <span className="text-black">Include users I have messaged</span>
           </label>
         </div>
       </FilterSection>

@@ -116,7 +116,7 @@ const UserManagement = ({ permission }: UserManagementProps) => {
               Permissions Management
             </h1>
             {permission !== "MANAGER" && (
-              <div className="items-center gap-1 text-center">
+              <div className="flex flex-col items-center gap-1 text-center">
                 <Note>
                   Admins can view user permissions but cannot modify them.
                 </Note>
@@ -173,7 +173,7 @@ const UserManagement = ({ permission }: UserManagementProps) => {
             </div>
             {permission === "MANAGER" && (
               <button
-                className="text-bold bg-northeastern-red font-lato hover:bg-busy-red w-full justify-center rounded-2xl py-2 text-white"
+                className="bg-northeastern-red font-lato hover:bg-busy-red w-full justify-center rounded-2xl py-2 font-bold text-white"
                 onClick={updatePermission}
               >
                 Update Permission

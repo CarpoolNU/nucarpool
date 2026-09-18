@@ -264,7 +264,7 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
         // React keys must be strings or numbers; `date` is a Date (and typed
         // nullable), so it was being coerced on every render.
         <div key={date ? date.toISOString() : `group-${dateIndex}`}>
-          <div className="text-md my-2 text-center text-gray-500">
+          <div className="my-2 text-center text-sm text-gray-500">
             {date ? format(date, "EEEE, MMMM d, yyyy") : ""}
           </div>
           {messages.map((message, messageIndex) => {
