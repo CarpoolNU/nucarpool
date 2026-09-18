@@ -120,17 +120,27 @@ jest.mock("react-toastify/unstyled", () => ({
   },
 }));
 
-const mockInvalidate = jest.fn();
+/**
+ * A spy per cache rather than one shared between them, which is what SCRUM-510
+ * needed: `groups.me` was the cache nobody invalidated, and a single counter
+ * asserting "two calls" could not say *which* two, so adding the missing one
+ * and dropping an existing one would read the same.
+ */
+const mockInvalidateUserMe = jest.fn();
+const mockInvalidateRequestsMe = jest.fn();
+const mockInvalidateRecommendationsMe = jest.fn();
+const mockInvalidateGroupsMe = jest.fn();
 
 /**
- * Only the three caches the mutations' `onSuccess` handlers touch. Cast because
+ * Only the four caches the mutations' `onSuccess` handlers touch. Cast because
  * the real argument is the whole router's worth of query helpers.
  */
 const utils = {
   user: {
-    me: { invalidate: mockInvalidate },
-    requests: { me: { invalidate: mockInvalidate } },
-    recommendations: { me: { invalidate: mockInvalidate } },
+    me: { invalidate: mockInvalidateUserMe },
+    requests: { me: { invalidate: mockInvalidateRequestsMe } },
+    recommendations: { me: { invalidate: mockInvalidateRecommendationsMe } },
+    groups: { me: { invalidate: mockInvalidateGroupsMe } },
   },
 } as unknown as Parameters<typeof createRequestHandlers>[0];
 
@@ -231,7 +241,10 @@ beforeEach(() => {
   mockCreateGroup.reset();
   mockToastError.mockClear();
   mockToastSuccess.mockClear();
-  mockInvalidate.mockClear();
+  mockInvalidateUserMe.mockClear();
+  mockInvalidateRequestsMe.mockClear();
+  mockInvalidateRecommendationsMe.mockClear();
+  mockInvalidateGroupsMe.mockClear();
 });
 
 describe("handleAcceptRequest — a refused acceptance", () => {
@@ -441,14 +454,47 @@ describe("handleAcceptRequest — the writes a real acceptance makes", () => {
     ]);
   });
 
-  it("invalidates the caches the acceptance has just made stale", async () => {
+  it("invalidates the caches a new group has just made stale", async () => {
     const { handleAcceptRequest } = handlers();
 
     await handleAcceptRequest(user(), otherUser(), request);
 
     // `requests.me` and `user.me`: the request's status and the accepter's own
     // carpoolId and seat count have all changed.
-    expect(mockInvalidate).toHaveBeenCalledTimes(2);
+    expect(mockInvalidateRequestsMe).toHaveBeenCalledTimes(1);
+    expect(mockInvalidateUserMe).toHaveBeenCalledTimes(1);
+    // `groups.me` is the member list itself, and it was the one nobody
+    // invalidated here (SCRUM-510).
+    expect(mockInvalidateGroupsMe).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * SCRUM-510 finding 2, and the case the defect was actually reached through.
+   *
+   * A driver already in a group accepts a second rider. That is `groups.edit`,
+   * not `groups.create`, and `carpoolId` does not change - so nothing remounts
+   * and nothing refetches. With `refetchOnMount` and `refetchOnWindowFocus`
+   * both false globally (`utils/trpc.ts`), My Group served its cached
+   * pre-accept membership for the rest of the session: the new rider absent
+   * from the list and from "Preview Group Route".
+   *
+   * `useGroupMembership.ts` calls the *same* `groups.edit` procedure and does
+   * invalidate `groups.me`. The two call sites disagreeing is how this arose,
+   * so both are asserted rather than only the one that was wrong.
+   */
+  it("invalidates the group when a rider joins a driver's existing group", async () => {
+    const { handleAcceptRequest } = handlers();
+
+    const accepted = await handleAcceptRequest(
+      user({ carpoolId: "group-1" }),
+      otherUser(),
+      request,
+    );
+
+    expect(accepted).toBe(true);
+    expect(mockEditGroup.mutateAsync).toHaveBeenCalledTimes(1);
+    expect(mockCreateGroup.mutateAsync).not.toHaveBeenCalled();
+    expect(mockInvalidateGroupsMe).toHaveBeenCalledTimes(1);
   });
 });
 
