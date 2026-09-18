@@ -227,7 +227,10 @@ const SendBar = ({ onSendMessage }: SendBarProps) => {
           // screen the row above did - left on `desktop:` it would hang 40px
           // inboard of the box it belongs to on a landscape phone.
           className={`message-panel-tall:mx-10 mx-0 mt-1 text-end text-sm ${
-            isTooLong ? "text-northeastern-red" : "text-stone-400"
+            // SCRUM-515: text-stone-400 read at 2.52:1 against this panel's
+            // white background, below the 4.5:1 body-text minimum. stone-600
+            // clears it with margin; text-northeastern-red already did.
+            isTooLong ? "text-northeastern-red" : "text-stone-600"
           }`}
         >
           {messageContent.length}/{MESSAGE_MAX_LENGTH}
