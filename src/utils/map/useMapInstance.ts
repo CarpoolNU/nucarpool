@@ -128,20 +128,28 @@ export function useMapInstance({
  * and dozens of times in a few seconds on iOS Safari, which fires `resize` on
  * every URL-bar collapse and expand during an ordinary scroll.
  *
- * `layoutKey` is any value that means "the container's box changed for a
- * reason no `resize` event will report" - the page passes `isMobile`, whose
- * flip swaps the whole layout around the map.
+ * **A `ResizeObserver` on the container itself (SCRUM-518), not a `window`
+ * `resize` listener plus a `layoutKey` the caller had to remember to pass.**
+ * `mapbox-gl` 3.30 has no internal `ResizeObserver` - it never watches its own
+ * container - so this hook was inferring the container's box from the
+ * `window`'s instead, which is only a proxy for it. A `layoutKey` (the page
+ * passed `isMobile`) papered over the gap for the one layout change the page
+ * knew about, but any other container resize with no matching `window` event
+ * - the container settling into its final box after mount, or the row's
+ * height changing for a reason that never reaches `window` - left the canvas
+ * at its previous size until the next `window` `resize` happened to arrive.
+ * A `ResizeObserver` on the container removes the inference entirely: it
+ * fires on the box `mapbox-gl` actually cares about, for any reason that box
+ * changes, so there is no second parameter for a caller to remember.
  */
 export function useMapResize(
   map: mapboxgl.Map | undefined,
-  layoutKey?: unknown,
+  containerRef: RefObject<HTMLElement | null>,
 ): void {
   useEffect(() => {
     if (!map) return;
 
     const resize = debounce(() => map.resize(), MAP_RESIZE_DEBOUNCE_MS);
-
-    window.addEventListener("resize", resize);
 
     // The initial sizing, which the container needs because it is laid out
     // after the map is constructed. It goes through the same debounce, so it
@@ -149,11 +157,21 @@ export function useMapResize(
     // that arrives on top of it.
     resize();
 
+    const container = containerRef.current;
+    const observer = container && new ResizeObserver(resize);
+    if (observer) {
+      observer.observe(container);
+    }
+
     return () => {
       // Cancel before removing: a pending call would otherwise fire against a
       // map this component is about to destroy.
       resize.cancel();
-      window.removeEventListener("resize", resize);
+      observer?.disconnect();
     };
-  }, [map, layoutKey]);
+    // `containerRef` is deliberately absent, for the reason `useMapInstance`
+    // gives for the same omission: a ref object is stable, so depending on its
+    // identity buys nothing a caller that built one inline would notice.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map]);
 }

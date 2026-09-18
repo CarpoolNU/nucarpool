@@ -8,6 +8,25 @@
    media queries and the layout logic cannot drift apart. */
 @config "../../tailwind.config.js";
 
+/* SCRUM-518: `#__next` below is not `document.scrollingElement` - `html` and
+   `body` are, and neither carried a rule of its own until now. That gap is
+   what let SCRUM-501's `overflow: hidden` on `#__next` leave a residual risk:
+   clipping a descendant's overflow does not stop the actual document from
+   becoming a scrollable/bounceable surface, which is what iOS Safari's native
+   rubber-band responds to. `height: 100%` against `100dvh`'s own dynamic
+   viewport keeps both exactly the size `#__next` already targets, and
+   `overflow: hidden` matches its established pattern. `overscroll-behavior:
+   none` is the part `overflow` cannot cover on its own: it suppresses the
+   bounce/scroll-chaining gesture at the document boundary without changing
+   which touches are claimed for panning or scrolling, so Mapbox's own gesture
+   handling and every `overflow-y-auto` sub-container are unaffected. */
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 #__next {
   width: 100vw;
 
@@ -38,6 +57,12 @@
      document-level scroll; every one of them scrolls its own content in an
      `overflow-y-auto` container instead. */
   overflow: hidden;
+
+  /* Belt-and-braces alongside the `html`/`body` rule above, not a duplicate of
+     it: this stops an inner `overflow-y-auto` container's scroll from
+     chaining into whatever sits above `#__next`, on the same reasoning that
+     rule states for the document boundary. */
+  overscroll-behavior: none;
 }
 
 .custom-marker-popup .mapboxgl-popup-content {

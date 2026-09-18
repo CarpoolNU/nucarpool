@@ -54,6 +54,42 @@ jest.mock("mapbox-gl", () => {
 
 const { Map: FakeMap } = jest.requireMock("mapbox-gl");
 
+/**
+ * A fake `ResizeObserver`, because jsdom does not implement one at all -
+ * `typeof window.ResizeObserver` is `"undefined"` here, so `useMapResize`
+ * would throw the instant a test rendered it without this.
+ *
+ * Real box measurement is not the point of these tests, and jsdom could not
+ * give one anyway (`src/testing/viewport.ts` documents that jsdom does no
+ * layout). `trigger()` stands in for the browser deciding the observed
+ * element's box changed, which is the one thing these tests need to control.
+ */
+class FakeResizeObserver {
+  static instances: FakeResizeObserver[] = [];
+
+  observe = jest.fn();
+  unobserve = jest.fn();
+  disconnect = jest.fn();
+
+  constructor(private readonly callback: ResizeObserverCallback) {
+    FakeResizeObserver.instances.push(this);
+  }
+
+  /** Simulates the browser reporting the observed element's box changed. */
+  trigger(): void {
+    this.callback([], this as unknown as ResizeObserver);
+  }
+}
+
+(global as { ResizeObserver: unknown }).ResizeObserver = FakeResizeObserver;
+
+const lastObserver = (): FakeResizeObserver => {
+  const all = FakeResizeObserver.instances;
+  const observer = all[all.length - 1];
+  if (!observer) throw new Error("no ResizeObserver was constructed");
+  return observer;
+};
+
 import { useMapInstance, useMapResize } from "./useMapInstance";
 
 type FakeMapInstance = {
@@ -242,20 +278,54 @@ describe("useMapInstance", () => {
 });
 
 describe("useMapResize", () => {
-  beforeEach(() => jest.useFakeTimers());
+  beforeEach(() => {
+    jest.useFakeTimers();
+    FakeResizeObserver.instances = [];
+  });
   afterEach(() => jest.useRealTimers());
 
-  const resizeWindow = (times: number) => {
+  /** A burst of the observer reporting the same element's box repeatedly. */
+  const triggerObserver = (times: number) => {
     for (let i = 0; i < times; i++) {
-      window.dispatchEvent(new Event("resize"));
+      lastObserver().trigger();
     }
   };
 
   it("sizes the map once on mount", () => {
     const map = new FakeMap({});
-    renderHook(() => useMapResize(map));
+    renderHook(() => useMapResize(map, containerRef));
 
     act(() => {
+      jest.runAllTimers();
+    });
+
+    expect(map.resize).toHaveBeenCalledTimes(1);
+  });
+
+  it("observes the map's own container, not some other element", () => {
+    const map = new FakeMap({});
+    renderHook(() => useMapResize(map, containerRef));
+
+    expect(lastObserver().observe).toHaveBeenCalledWith(containerRef.current);
+  });
+
+  /**
+   * iOS Safari fires this on every URL-bar collapse and expand during an
+   * ordinary scroll - dozens of times in a few seconds. Each one used to queue
+   * its own `setTimeout`, and each of those a full WebGL canvas resize and
+   * tile repaint.
+   */
+  it("collapses a burst of container-resize reports into one map resize", () => {
+    const map = new FakeMap({});
+    renderHook(() => useMapResize(map, containerRef));
+
+    act(() => {
+      jest.runAllTimers();
+    });
+    map.resize.mockClear();
+
+    act(() => {
+      triggerObserver(20);
       jest.runAllTimers();
     });
 
@@ -263,14 +333,14 @@ describe("useMapResize", () => {
   });
 
   /**
-   * iOS Safari fires `resize` on every URL-bar collapse and expand during an
-   * ordinary scroll - dozens of times in a few seconds. Each one used to queue
-   * its own `setTimeout`, and each of those a full WebGL canvas resize and
-   * tile repaint.
+   * The case a `window` `resize` listener could not see at all: the
+   * container's own box changing for a reason - a mobile/desktop layout flip,
+   * the dynamic-viewport reflow this file's docblock describes - that never
+   * dispatches one.
    */
-  it("collapses a burst of resize events into one map resize", () => {
+  it("re-sizes when the container's own box changes, with no window resize event", () => {
     const map = new FakeMap({});
-    renderHook(() => useMapResize(map));
+    renderHook(() => useMapResize(map, containerRef));
 
     act(() => {
       jest.runAllTimers();
@@ -278,27 +348,7 @@ describe("useMapResize", () => {
     map.resize.mockClear();
 
     act(() => {
-      resizeWindow(20);
-      jest.runAllTimers();
-    });
-
-    expect(map.resize).toHaveBeenCalledTimes(1);
-  });
-
-  it("re-sizes when the layout it was given changes", () => {
-    const map = new FakeMap({});
-    const { rerender } = renderHook(
-      ({ isMobile }) => useMapResize(map, isMobile),
-      { initialProps: { isMobile: false } },
-    );
-
-    act(() => {
-      jest.runAllTimers();
-    });
-    map.resize.mockClear();
-
-    rerender({ isMobile: true });
-    act(() => {
+      lastObserver().trigger();
       jest.runAllTimers();
     });
 
@@ -307,7 +357,7 @@ describe("useMapResize", () => {
 
   it("does not resize a map that has already been destroyed", () => {
     const map = new FakeMap({});
-    const { unmount } = renderHook(() => useMapResize(map));
+    const { unmount } = renderHook(() => useMapResize(map, containerRef));
 
     act(() => {
       jest.runAllTimers();
@@ -316,12 +366,25 @@ describe("useMapResize", () => {
 
     // The burst and the unmount race on a real device: the debounce is still
     // pending when React tears the page down, and the map is removed first.
-    resizeWindow(5);
+    triggerObserver(5);
     unmount();
     act(() => {
       jest.runAllTimers();
     });
 
     expect(map.resize).not.toHaveBeenCalled();
+  });
+
+  it("disconnects the observer on unmount", () => {
+    const map = new FakeMap({});
+    const { unmount } = renderHook(() => useMapResize(map, containerRef));
+
+    act(() => {
+      jest.runAllTimers();
+    });
+
+    unmount();
+
+    expect(lastObserver().disconnect).toHaveBeenCalledTimes(1);
   });
 });
