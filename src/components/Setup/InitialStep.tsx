@@ -11,6 +11,7 @@ import useIsMobile from "../../utils/useIsMobile";
 
 import FormRadioButton from "./FormRadioButton";
 import { registerRoleWithSeatDefault } from "../../utils/profile/roleSeatDefault";
+import { seatAvailValueAs } from "../../utils/carpoolSeats";
 interface InitialStepProps {
   handleNextStep: () => void;
   step: number;
@@ -128,12 +129,12 @@ const InitialStep = ({
                     type="number"
                     min="1"
                     defaultValue={1}
-                    {...register("seatAvail", { valueAsNumber: true })}
+                    {...register("seatAvail", { setValueAs: seatAvailValueAs })}
                   />
                 </div>
                 {errors.seatAvail && (
                   <span className="text-northeastern-red mt-1 text-center text-sm">
-                    Enter a number between 1 and 6
+                    {errors.seatAvail.message}
                   </span>
                 )}
               </div>

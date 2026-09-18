@@ -1,6 +1,6 @@
 import React from "react";
 import { UseFormSetValue } from "react-hook-form";
-import type { Dayjs } from "dayjs";
+import dayjs, { Dayjs } from "dayjs";
 import { OnboardingFormInputs } from "./types";
 
 /**
@@ -112,6 +112,45 @@ const formatDateToMonth = (date: Date | null): string | undefined => {
 };
 
 /**
+ * A stored co-op date as an antd month picker's own value, or `null` when the
+ * field is empty.
+ *
+ * **Controlled deliberately.** `AccountSection`'s two month pickers used to
+ * take `defaultValue`, which antd reads once at mount and ignores afterwards.
+ * `src/pages/profile/index.tsx` calls `reset(...)` on every `user` change -
+ * which every save triggers, via a refetch - and `AccountSection` stays
+ * mounted across it, since it is gated on `option === "account"` at a fixed
+ * position in the tree with no `key`. So the form moved to the saved months
+ * and the controls kept displaying the ones they had started with: a user who
+ * had just saved was told their change had not taken, which is the opposite
+ * of what the database held. `UnsavedModal`'s discard is the same
+ * `reset(...)` and had the same outcome (SCRUM-472).
+ *
+ * `StepThree`'s identical pickers had the opposite problem for the same
+ * reason: no `value` at all, so a Previous/Next remount - which unmounts and
+ * remounts the step rather than hiding it - restarted antd's internal state at
+ * `null` while the form went on holding the dates (SCRUM-512).
+ *
+ * **`null` rather than `undefined`, and the empty case never reaches
+ * `dayjs`.** `formatDateToMonth(null)` is `undefined`, and `dayjs(undefined,
+ * format)` is not empty either way: it is `Invalid Date` once
+ * `customParseFormat` is extended - which `@rc-component/picker/generate/dayjs`
+ * does to the shared dayjs singleton, so importing `DatePicker` anywhere is
+ * enough - and *today* when it is not. Neither is "no month chosen". `null` is
+ * antd's documented empty value for a controlled picker, and is also what
+ * `handleMonthPickerChange` writes when the field is cleared, so the round
+ * trip is symmetric.
+ *
+ * The month is parsed in local time and only ever rendered as `YYYY-MM`, so
+ * the displayed month is the stored one in every zone.
+ */
+const toMonthPickerValue = (date: Date | null | undefined): Dayjs | null => {
+  const month = formatDateToMonth(date ?? null);
+
+  return month ? dayjs(month, "YYYY-MM") : null;
+};
+
+/**
  * Message for a co-op range whose end falls before its start. Shared so the
  * form and `user.edit` say the same thing.
  */
@@ -148,4 +187,5 @@ export {
   formatDateToMonth,
   lastDayOfMonthUTC,
   isReversedCoopRange,
+  toMonthPickerValue,
 };

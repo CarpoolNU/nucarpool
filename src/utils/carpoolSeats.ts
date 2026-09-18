@@ -23,6 +23,22 @@ export const NO_SEATS_MESSAGE =
   "Driver does not have space available in their car";
 
 /**
+ * `register("seatAvail", { setValueAs: ... })`'s value coercion, shared by
+ * both profile forms.
+ *
+ * `valueAsNumber` parses an empty box as `NaN` rather than "no value yet",
+ * which reached Zod's own `expected number, received NaN` on every ordinary
+ * clear-and-retype (SCRUM-512). An empty string reads as `undefined` instead,
+ * which the schema's own `optional()` and its "Cannot be empty" refinement
+ * already handle in project copy. Anything else is still handed to `Number`
+ * rather than parsed as an integer, so a fractional entry like `1.5` reaches
+ * `.int()`'s message instead of being silently truncated before validation
+ * ever sees it.
+ */
+export const seatAvailValueAs = (value: string): number | undefined =>
+  value === "" ? undefined : Number(value);
+
+/**
  * "This driver has a seat a rider can take."
  *
  * One definition, because the app used to hold two. `reserveSeat` has always

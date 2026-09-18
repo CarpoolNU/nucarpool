@@ -10,11 +10,20 @@ export const onboardSchema = z
   .object({
     role: z.nativeEnum(Role),
     status: z.nativeEnum(Status),
+    // Every check below needs its own message: with none, zod's own wording
+    // ("Invalid input: expected number, received NaN", "Too big: expected
+    // number to be <=6") reaches the screen verbatim, which is developer
+    // output rather than project copy (SCRUM-512). The bound itself still
+    // comes from `MAX_SEATS_AVAILABLE` alone, so a change to it cannot drift
+    // between the message and the check it describes.
     seatAvail: z
-      .number()
-      .int()
-      .nonnegative()
-      .max(MAX_SEATS_AVAILABLE)
+      .number("Must be a number")
+      .int("Must be a whole number")
+      .nonnegative("Cannot be negative")
+      .max(
+        MAX_SEATS_AVAILABLE,
+        `Cannot be more than ${MAX_SEATS_AVAILABLE} seats`,
+      )
       .optional(),
     // The four `VARCHAR(191)` profile columns are bounded here as well as in
     // `user.edit`, so an over-length value shows up as a field error on the

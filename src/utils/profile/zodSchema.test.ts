@@ -34,6 +34,16 @@ const issuePaths = (input: unknown): string[] => {
     : result.error.issues.map((issue) => String(issue.path[0]));
 };
 
+/** The `message` of every issue raised against one field. */
+const issueMessages = (input: unknown, field: string): string[] => {
+  const result = onboardSchema.safeParse(input);
+  return result.success
+    ? []
+    : result.error.issues
+        .filter((issue) => String(issue.path[0]) === field)
+        .map((issue) => issue.message);
+};
+
 describe("onboardSchema", () => {
   it("accepts a fully completed rider profile", () => {
     expect(onboardSchema.safeParse(completeRider).success).toBe(true);
@@ -132,6 +142,39 @@ describe("onboardSchema", () => {
       issuePaths({ ...completeRider, role: Role.DRIVER, seatAvail }),
     ).toContain("seatAvail");
   });
+
+  /**
+   * `seatAvail` used to be the one field in this schema with no custom
+   * messages, so Zod's own wording reached the screen verbatim -
+   * "Invalid input: expected number, received NaN", "Too big: expected
+   * number to be <=6", "Invalid input: expected int, received number"
+   * (SCRUM-512). Asserting the exact project string, rather than merely that
+   * `seatAvail` has an issue, is what stops a Zod upgrade that changes its
+   * default wording from silently restoring the defect: this schema names
+   * its own message for every check, so an upgrade cannot make one reappear
+   * without also making one of these assertions fail.
+   *
+   * `NaN` here is the schema's own defence, exercised directly. The route a
+   * user actually takes - clearing the box - is intercepted earlier, by
+   * `seatAvailValueAs` reading the empty string as `undefined`; that path is
+   * covered in `carpoolSeats.test.ts` and in `UserSection.test.tsx`.
+   */
+  it.each([
+    { seatAvail: NaN, expected: "Must be a number" },
+    { seatAvail: 7, expected: "Cannot be more than 6 seats" },
+    { seatAvail: 1.5, expected: "Must be a whole number" },
+    { seatAvail: undefined, expected: "Cannot be empty" },
+  ])(
+    "gives seatAvail project copy rather than Zod's own wording ($expected)",
+    ({ seatAvail, expected }) => {
+      expect(
+        issueMessages(
+          { ...completeRider, role: Role.DRIVER, seatAvail },
+          "seatAvail",
+        ),
+      ).toEqual([expected]);
+    },
+  );
 
   it("accepts the six seat maximum", () => {
     expect(
