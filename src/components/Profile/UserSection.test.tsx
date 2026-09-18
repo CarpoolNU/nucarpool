@@ -99,6 +99,7 @@ const Harness = ({
       errors={formState.errors}
       onSubmit={handleSubmit(() => onSubmit?.())}
       onFileSelect={() => undefined}
+      selectedFile={null}
       checkChanges={checkChanges}
     />
   );

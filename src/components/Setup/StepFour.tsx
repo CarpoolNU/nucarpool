@@ -17,11 +17,20 @@ interface StepFourProps {
   register: UseFormRegister<OnboardingFormInputs>;
   watch: UseFormWatch<OnboardingFormInputs>;
   onFileSelect: (file: File | null) => void;
+
+  /**
+   * The cropped picture waiting to be saved, so `ProfilePicture` can derive its
+   * preview from it. Needed here for the same reason as on the profile page:
+   * this step unmounts when the user steps back to step 3, which used to revoke
+   * the preview while `setup.tsx` went on holding the file (SCRUM-511).
+   */
+  selectedFile: File | null;
 }
 const StepFour = ({
   errors,
   register,
   onFileSelect,
+  selectedFile,
   setValue,
   watch,
 }: StepFourProps) => {
@@ -34,7 +43,10 @@ const StepFour = ({
       {/* Pfp Section*/}
 
       <div className="mb-2 w-full">
-        <ProfilePicture onFileSelected={onFileSelect} />
+        <ProfilePicture
+          selectedFile={selectedFile}
+          onFileSelected={onFileSelect}
+        />
       </div>
 
       {/* About Me*/}

@@ -60,7 +60,9 @@ beforeEach(() => {
 
 /** Opens the cropper the way a user does, and returns its panel element. */
 const openCropper = (): HTMLElement => {
-  render(<ProfilePicture onFileSelected={jest.fn()} />);
+  // No crop has been confirmed at this point, so the parent holds no pending
+  // picture. Only the cropper panel's height is under test here either way.
+  render(<ProfilePicture selectedFile={null} onFileSelected={jest.fn()} />);
 
   const input = screen.getByLabelText("Upload Profile Picture");
   const file = new File(["photo"], "photo.jpg", { type: "image/jpeg" });
