@@ -352,7 +352,7 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                 )}
                 {isMobile && (
                   <div className="mb-4 text-center">
-                    View your requests on desktop!
+                    You can view this request from the Requests tab.
                   </div>
                 )}
                 <div className="flex w-full justify-center space-x-7">
