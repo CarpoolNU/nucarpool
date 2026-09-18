@@ -63,6 +63,7 @@ export const ConnectCard = (props: ConnectCardProps): React.JSX.Element => {
   const user = useContext(UserContext);
   const [showModal, setShowModal] = useState(false);
   const isMobile = useIsMobile();
+  const variant = props.variant ?? "list";
 
   const handleConnect = (otherUser: EnhancedPublicUser) => {
     trackEvent("Connect Button Clicked", {
@@ -96,6 +97,15 @@ export const ConnectCard = (props: ConnectCardProps): React.JSX.Element => {
 
   const onClose = (action: string) => {
     props.onClose?.(action);
+    // A sent request drops its recipient out of `recommendations.me` (the
+    // router excludes anyone with an open request), so the mobile detail
+    // sheet - scoped to that one card via `variant === "detail"` - would
+    // otherwise be left pointed at a card no longer in the list: a blank
+    // sheet with only the header's Back button able to leave it. Collapsing
+    // back to the list here does what that Back button already does.
+    if (isMobile && variant === "detail" && action === "closeAfterSend") {
+      props.handleMobileExpand?.();
+    }
     setShowModal(false);
   };
 
@@ -152,8 +162,6 @@ export const ConnectCard = (props: ConnectCardProps): React.JSX.Element => {
           onClickLabel: `Show ${props.otherUser.preferredName}'s full details`,
         }
       : {};
-
-  const variant = props.variant ?? "list";
 
   /**
    * The condensed layout belongs to the detail sheet alone.
