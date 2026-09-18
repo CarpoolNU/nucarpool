@@ -236,28 +236,6 @@ module.exports = {
         "okay-yellow": "#FFCB11",
         "good-green": "#C7EFB3",
       },
-      keyframes: {
-        gradientShift: {
-          "0%": {
-            backgroundSize: "100% 100%, 120% 120%",
-          },
-          "25%": {
-            backgroundSize: "110%% 110%%, 110%% 110%",
-          },
-          "50%": {
-            backgroundSize: "120% 120%, 100% 100%",
-          },
-          "75%": {
-            backgroundSize: "110%% 110%, 110% 110%",
-          },
-          "100%": {
-            backgroundSize: "100% 100%, 120% 120%",
-          },
-        },
-      },
-      animation: {
-        "gradient-shift-15s": "gradientShift 15s ease-in-out infinite",
-      },
       fontFamily: {
         montserrat: ["Montserrat", "sans-serif"],
         lato: ["Lato", "sans-serif"],

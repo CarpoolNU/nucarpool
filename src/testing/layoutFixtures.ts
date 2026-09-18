@@ -1026,7 +1026,7 @@ const MESSAGE_CONTENT_CLASS =
  * `message-content`'s `scrollHeight` an arbitrary number rather than the
  * height of something a user has to be able to read.
  */
-const MESSAGE_DATE_SEPARATOR_CLASS = "text-md my-2 text-center text-gray-500";
+const MESSAGE_DATE_SEPARATOR_CLASS = "my-2 text-center text-sm text-gray-500";
 
 /*
   Two constants and not one, because the component composes the block's class
@@ -1256,7 +1256,7 @@ const RECENTRE_DESKTOP_CLASS =
   "absolute right-[8px] bottom-[150px] z-10 flex h-8 w-8 items-center justify-center rounded-md border-2 border-solid border-gray-300 bg-white shadow-xs hover:bg-gray-200";
 
 const MAP_LEGEND_DESKTOP_CLASS =
-  "text-md absolute bottom-8 left-2 z-10 flex flex-col rounded-xl border border-gray-200 bg-white p-2 md:text-lg";
+  "text-base absolute bottom-8 left-2 z-10 flex flex-col rounded-xl border border-gray-200 bg-white p-2 md:text-lg";
 
 const MAP_CONTAINER_CLASS =
   "pointer-events-auto relative z-0 h-full w-full flex-auto";

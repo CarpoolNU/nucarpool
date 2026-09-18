@@ -169,7 +169,7 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
   return (
     <div
       className={classNames(
-        "align-center relative flex flex-col rounded-xl bg-stone-100 text-left shadow-md",
+        "relative flex flex-col rounded-xl bg-stone-100 text-left shadow-md",
         "border-l-busy-red font-montserrat border-l-[13px]",
         isMobile ? "mx-1 my-2 gap-1 px-3 py-3" : "m-3.5 gap-2 px-4 py-4",
         props.classname,

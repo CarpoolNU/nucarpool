@@ -43,8 +43,8 @@ export const MapLegend = (props: MapLegendProps) => {
    * `NavigationControl`.
    */
   const containerClasses = isMobile
-    ? "text-md absolute top-2 left-2 z-10 flex flex-col rounded-xl border border-gray-200 bg-white p-2 md:text-lg"
-    : "text-md absolute bottom-8 left-2 z-10 flex flex-col rounded-xl border border-gray-200 bg-white p-2 md:text-lg";
+    ? "text-base absolute top-2 left-2 z-10 flex flex-col rounded-xl border border-gray-200 bg-white p-2 md:text-lg"
+    : "text-base absolute bottom-8 left-2 z-10 flex flex-col rounded-xl border border-gray-200 bg-white p-2 md:text-lg";
 
   return (
     <>
