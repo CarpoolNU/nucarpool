@@ -22,6 +22,7 @@ import ProgressBar from "../../components/Setup/ProgressBar";
 import StepThree from "../../components/Setup/StepThree";
 import { SetupContainer } from "../../components/Setup/SetupContainer";
 import StepFour from "../../components/Setup/StepFour";
+import ViewerConfirmModal from "../../components/Setup/ViewerConfirmModal";
 import { Role } from "@prisma/client";
 import { trackFTUECompletion, trackFTUEStep } from "../../utils/mixpanel";
 import { useUploadFile } from "../../utils/profile/useUploadFile";
@@ -71,6 +72,7 @@ const Setup: NextPage = () => {
   const [step, setStep] = useState(0);
   const [initialLoad, setInitialLoad] = useState(true);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [showViewerConfirm, setShowViewerConfirm] = useState(false);
   const { uploadFile } = useUploadFile(selectedFile);
   const { data: session } = useSession();
   const { data: user } = trpc.user.me.useQuery(undefined, {
@@ -119,7 +121,11 @@ const Setup: NextPage = () => {
   useEffect(() => {
     if (initialLoad && user) {
       reset({
-        role: user.role,
+        // A brand-new user has no `CarpoolSearch` row, so `user.role` is only
+        // the `?? Role.VIEWER` fallback in `user.me` - not a stored choice.
+        // Restoring it here is what put every new user on Viewer with one tap
+        // to end onboarding. SCRUM-508.
+        role: user.hasCarpoolSearch ? user.role : profileDefaultValues.role,
         seatAvail: user.seatAvail,
         status: user.status,
         companyName: user.companyName,
@@ -233,7 +239,10 @@ const Setup: NextPage = () => {
     const seatAvail = watch("seatAvail");
     if (step === 1) {
       if (role === Role.VIEWER) {
-        await handleSubmit(onSubmit)();
+        // Confirm before this ends onboarding: `onSubmit` is what sets
+        // `isOnboarded: true`, and step 1 is otherwise a single tap away from
+        // it with no way back into the wizard. SCRUM-508.
+        setShowViewerConfirm(true);
         return;
       }
       if (role === Role.DRIVER && (!seatAvail || seatAvail <= 0)) {
@@ -564,6 +573,15 @@ const Setup: NextPage = () => {
           </div>
         )}
       </div>
+      {showViewerConfirm && (
+        <ViewerConfirmModal
+          onCancel={() => setShowViewerConfirm(false)}
+          onConfirm={async () => {
+            setShowViewerConfirm(false);
+            await handleSubmit(onSubmit)();
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -74,17 +74,15 @@ const InitialStep = ({
           <div
             className={`flex justify-between ${isMobile ? "space-x-3" : "space-x-6"}`}
           >
-            {!isMobile && (
-              <FormRadioButton
-                label="Viewer"
-                id="viewer"
-                error={errors.role}
-                role={Role.VIEWER}
-                value={Role.VIEWER}
-                currentlySelected={watch("role")}
-                {...roleField}
-              />
-            )}
+            <FormRadioButton
+              label="Viewer"
+              id="viewer"
+              error={errors.role}
+              role={Role.VIEWER}
+              value={Role.VIEWER}
+              currentlySelected={watch("role")}
+              {...roleField}
+            />
             <FormRadioButton
               label="Rider"
               id="rider"
