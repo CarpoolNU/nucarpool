@@ -115,7 +115,7 @@ const ExploreSidebar = (props: ExploreSidebarProps) => {
       className="z-10 flex h-full flex-shrink-0 flex-col bg-white text-left"
       data-testid="explore-sidebar"
     >
-      <div className={`flex-row px-5 ${isMobile ? "py-0" : "py-3"}`}>
+      <div className={`flex-row px-5 ${isMobile ? "pt-2 pb-0" : "py-3"}`}>
         {/* Recommendations / Favorites.
          *
          * Rendered on both layouts. This was `!isMobile`, and it holds the only
