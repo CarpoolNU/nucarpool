@@ -79,7 +79,6 @@ const InitialStep = ({
                 label="Viewer"
                 id="viewer"
                 error={errors.role}
-                role={Role.VIEWER}
                 value={Role.VIEWER}
                 currentlySelected={watch("role")}
                 {...roleField}
@@ -89,7 +88,6 @@ const InitialStep = ({
               label="Rider"
               id="rider"
               error={errors.role}
-              role={Role.RIDER}
               value={Role.RIDER}
               currentlySelected={watch("role")}
               {...roleField}
@@ -98,7 +96,6 @@ const InitialStep = ({
               label="Driver"
               id="driver"
               error={errors.role}
-              role={Role.DRIVER}
               value={Role.DRIVER}
               currentlySelected={watch("role")}
               {...roleField}

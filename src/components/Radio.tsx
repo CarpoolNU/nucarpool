@@ -6,12 +6,12 @@ import styled from "styled-components";
 type RadioOwnProps = {
   label?: string;
   error?: FieldError;
-  role?: Role;
   value: Role;
   currentlySelected: Role;
 };
 
-type RadioProps = RadioOwnProps & React.ComponentPropsWithoutRef<"input">;
+type RadioProps = RadioOwnProps &
+  Omit<React.ComponentPropsWithoutRef<"input">, "role">;
 
 const StyledActiveRadioButton = styled.label`
   background-color: #c8102e;
@@ -54,7 +54,6 @@ const Radio = React.forwardRef<HTMLInputElement, RadioProps>(
       error,
       currentlySelected,
       className,
-      role,
       disabled,
       ...rest
     },
