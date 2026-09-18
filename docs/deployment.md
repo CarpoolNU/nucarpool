@@ -50,9 +50,11 @@ Both checks derive their variable list from the `envsafe` modules, so the list c
 `GET /api/version` reports the build identity of whatever is running, so "has this shipped?" is answerable without console access:
 
 ```bash
-curl -s https://<host>/api/version
+curl -s https://carpoolnu.com/api/version
 {"commit":"0f1e2d3…","branch":"main","jobId":"42","environment":"production"}
 ```
+
+`carpoolnu.com` is production, confirmed by whoever holds Amplify console access — not inferred from the `nucarpool.com` fixture in [`cspReport.test.ts`](../src/server/cspReport.test.ts), which is unrelated. There is currently no deployed staging environment to check.
 
 `git branch --contains <sha>` resolves the commit locally; `jobId` finds the build in the console.
 
