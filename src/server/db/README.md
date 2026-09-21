@@ -30,7 +30,13 @@ Both directions go through [`scheduleTime.ts`](../../utils/scheduleTime.ts), whi
 
 Reading the wall clock rather than the instant is what makes writes date-independent — a student onboarding from California stores the schedule they typed, not one shifted three hours.
 
-> **Rows written under daylight saving before this was fixed are an hour early, and cannot be identified from the row.** `13:00` is a correct winter 8:00 AM and an incorrect summer 9:00 AM, and nothing records which. **Do not apply a blanket `+1 hour`** — it would corrupt every correctly stored winter row. The repair is tracked separately.
+**That describes what is written now, not the whole column.** Four successive pickers each stored a Boston 9:00 AM differently, and the table holds the residue of all four — SCRUM-376 has the archaeology and the production counts. Two legacy classes matter, and they need opposite treatment:
+
+> **Wall clock, five hours out.** Two of the four implementations wrote the typed digits straight through, so a 9-to-5 is stored `09:00`–`17:00` and renders as 4:00 AM to 12:00 PM. About 42% of the table. These _are_ identifiable — read as UTC they describe a shift starting before dawn and ending at noon, which no competing reading makes sensible. [`scheduleTimeIntegrity.ts`](./scheduleTimeIntegrity.ts) owns the classifier and [`repair-wallclock-schedule-times.ts`](../../../scripts/repair-wallclock-schedule-times.ts) the repair, scoped to co-ops that are running.
+
+> **Converted under daylight saving, one hour early — and _not_ identifiable from the row.** `13:00` is a correct winter 8:00 AM and an incorrect summer 9:00 AM, and nothing records which. **Do not apply a blanket `+1 hour`** — it would corrupt every correctly stored winter row. Bucketing by `date_modified` is about 82% accurate for rows whose co-op is running and worse elsewhere, which SCRUM-376 records as too weak for an irreversible write. The remedy is asking affected users to re-save, as with coordinates below.
+
+Note that a save **preserves** whatever was stored unless the user retypes the time: `toPickerScheduleTime` → `toStoredScheduleTime` is a deliberate no-op round trip. Legacy values therefore survive profile edits and whole co-op cycles, and `date_modified` records the last save rather than the last time the schedule was authored.
 
 Render only through `formatScheduleTime`, which converts to `America/New_York`. Never format these columns inline. Boston is hardcoded deliberately: a co-op schedule has no meaning in the viewer's own zone.
 
