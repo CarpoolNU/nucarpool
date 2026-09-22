@@ -1,4 +1,5 @@
 import React, { useEffect, useCallback, useRef } from "react";
+import type { SetStateAction } from "react";
 import { useSession } from "next-auth/react";
 import { trpc } from "../utils/trpc";
 import { toast } from "react-toastify/unstyled";
@@ -6,12 +7,42 @@ import { toast } from "react-toastify/unstyled";
 import { driver, type Driver, type DriveStep } from "driver.js";
 import "driver.js/dist/driver.css";
 import useIsMobile from "../utils/useIsMobile";
+import type { SheetDetent } from "../utils/explore/sheetDetents";
+
+/**
+ * What the mobile tour forces the explore sheet to while highlighting two of
+ * its steps, keyed by the step's index in `mobileSteps` below.
+ *
+ * The sidebar step (`[data-testid="explore-sidebar"]`) needs the sheet's
+ * height nonzero: a VIEWER's opening detent is `collapsed`, which
+ * `MOBILE_SIDEBAR_CLASSES.collapsed` in `pages/index.tsx` renders as `h-0
+ * opacity-0 pointer-events-none`, so without this the tour anchors a popover
+ * to an element that is there but invisible. The map step (`#map`) needs the
+ * opposite: a RIDER or DRIVER's own opening detent is `expanded`, which pins
+ * the sheet over roughly 85% of the map, so this collapses it first. SCRUM-528.
+ */
+export const MOBILE_STEP_DETENTS: Partial<Record<number, SheetDetent>> = {
+  1: "expanded",
+  2: "collapsed",
+};
 
 interface WelcomeTutorialProps {
   onComplete?: () => void;
+  /**
+   * The mobile explore sheet's current resting detent, and the setter that
+   * drives it - both undefined on desktop, where no such state exists. The
+   * tour reads `sheetDetent` once, at mount, to know what to restore, and
+   * writes through `setSheetDetent` to force the two steps above into view.
+   */
+  sheetDetent?: SheetDetent;
+  setSheetDetent?: (next: SetStateAction<SheetDetent>) => void;
 }
 
-const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
+const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({
+  onComplete,
+  sheetDetent,
+  setSheetDetent,
+}) => {
   const { data: session, update } = useSession();
   // A ref rather than state: this component renders `null`, so the flag has no
   // bearing on any output, and as state it was both a dependency of the tour
@@ -67,6 +98,33 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
     handleCompleteRef.current = handleComplete;
   }, [handleComplete]);
 
+  /**
+   * Same reasoning as `handleCompleteRef` above, for the same reason: the
+   * mobile steps' `onHighlightStarted` hooks are wired once, when the tour is
+   * built, but must call the *current* `setSheetDetent` - and it cannot be a
+   * dependency of the tour effect without re-running it, and therefore
+   * rebuilding the tour, on every render.
+   */
+  const setSheetDetentRef = useRef(setSheetDetent);
+  useEffect(() => {
+    setSheetDetentRef.current = setSheetDetent;
+  }, [setSheetDetent]);
+
+  /**
+   * `sheetDetent` itself cannot be read directly inside the tour effect
+   * below, for the same reason `handleComplete` is not: the effect's
+   * dependency array does not include it (see `openingDetent` inside), so a
+   * direct reference there is exactly what `react-hooks/exhaustive-deps`
+   * flags as stale. Reading it through a ref sidesteps the lint rule the
+   * same way the codebase already does for `handleComplete`, and is exactly
+   * as correct here, since the effect only ever reads `.current` once, at
+   * the moment it runs.
+   */
+  const sheetDetentRef = useRef(sheetDetent);
+  useEffect(() => {
+    sheetDetentRef.current = sheetDetent;
+  }, [sheetDetent]);
+
   useEffect(() => {
     const userName = session?.user?.name;
     if (!userName) return;
@@ -81,6 +139,15 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
      * to the server. SCRUM-527.
      */
     let isCleaningUp = false;
+
+    /**
+     * The detent the sheet was resting at before this tour touched it - a
+     * snapshot taken once, since this effect does not depend on `sheetDetent`
+     * (that would re-run the whole effect on every step the mobile tour
+     * drives, rebuilding the tour exactly the way SCRUM-527 fixed). `undefined`
+     * on desktop, where the prop is never passed. SCRUM-528.
+     */
+    const openingDetent = sheetDetentRef.current;
 
     const firstName = userName.split(" ")[0];
 
@@ -146,16 +213,28 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
       },
       {
         element: '[data-testid="explore-sidebar"]',
+        // Forces the sheet open before this step is measured or shown - see
+        // `MOBILE_STEP_DETENTS`. Without it a VIEWER's opening `collapsed`
+        // detent leaves this element `h-0 opacity-0`, so the popover anchors
+        // to nothing. SCRUM-528.
+        onHighlightStarted: () =>
+          setSheetDetentRef.current?.(MOBILE_STEP_DETENTS[1]!),
         popover: {
-          title: "These are drivers",
+          title: "This is your sidebar",
           description:
-            "Browse through available drivers in your area. You can view their profiles, ratings, and routes.",
+            "Browse your matches, manage favorites, and track requests here.",
           side: "top",
           align: "center",
         },
       },
       {
         element: "#map",
+        // Collapses the sheet before this step is measured or shown - a
+        // RIDER or DRIVER's opening `expanded` detent otherwise pins the
+        // sheet over roughly 85% of the map this step claims to show.
+        // SCRUM-528.
+        onHighlightStarted: () =>
+          setSheetDetentRef.current?.(MOBILE_STEP_DETENTS[2]!),
         popover: {
           title: "This is the map",
           description:
@@ -200,6 +279,14 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({ onComplete }) => {
       // `h(true)` path, so the ✕ would complete the tutorial without ever
       // closing the tour or asking for confirmation.
       onDestroyed: () => {
+        // Fires on every real teardown - a genuine finish, a confirmed skip,
+        // and the `destroy()` call below that React's own cleanup makes - so
+        // this is the one place that reaches all of them, synchronously,
+        // rather than waiting on `handleComplete`'s round trip to the server.
+        // SCRUM-528.
+        if (isMobile && openingDetent !== undefined) {
+          setSheetDetentRef.current?.(openingDetent);
+        }
         if (isCleaningUp) return;
         handleCompleteRef.current();
       },

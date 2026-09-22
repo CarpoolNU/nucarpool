@@ -55,7 +55,11 @@ import { configure, render } from "@testing-library/react";
 import { useSession } from "next-auth/react";
 import { trpc } from "../utils/trpc";
 import useIsMobile from "../utils/useIsMobile";
-import WelcomeTutorial from "./WelcomeTutorial";
+import {
+  detentHeightPx,
+  type SheetDetent,
+} from "../utils/explore/sheetDetents";
+import WelcomeTutorial, { MOBILE_STEP_DETENTS } from "./WelcomeTutorial";
 
 /**
  * A driver.js instance as the fake models it. `destroyed` is the live/dead
@@ -328,6 +332,123 @@ describe("WelcomeTutorial under StrictMode", () => {
 
     expect(liveInstances()).toHaveLength(0);
     expect(mutateAsync).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The mobile tour's two steps that target something the sheet can cover or
+ * hide, and the detent each is supposed to force before it is measured or
+ * shown. SCRUM-528.
+ *
+ * `reactStrictMode: false` for the same reason the construction-count block
+ * above uses it: these tests read `setSheetDetent`'s call history, and
+ * StrictMode's extra mount-teardown-remount would add calls from a tour that
+ * never really ran, muddying what a test is checking.
+ */
+describe("WelcomeTutorial mobile sheet detent (SCRUM-528)", () => {
+  beforeEach(() => {
+    configure({ reactStrictMode: false });
+    mockedUseIsMobile.mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    configure({ reactStrictMode: true });
+  });
+
+  const renderMobile = (sheetDetent: SheetDetent, setSheetDetent: jest.Mock) =>
+    render(
+      <WelcomeTutorial
+        sheetDetent={sheetDetent}
+        setSheetDetent={setSheetDetent}
+      />,
+    );
+
+  it("expands the sheet before highlighting the sidebar step - the fix for a VIEWER's collapsed opening detent leaving that element h-0 opacity-0", () => {
+    const setSheetDetent = jest.fn();
+    renderMobile("collapsed", setSheetDetent);
+    const tour = currentDriver();
+
+    tour.config.steps[1].onHighlightStarted();
+
+    expect(setSheetDetent).toHaveBeenCalledWith(MOBILE_STEP_DETENTS[1]);
+    // "expanded" is a nonzero fraction of the sheet's height; "collapsed" -
+    // the detent this test starts from, and a VIEWER's opening detent - is
+    // exactly zero. Same arithmetic `MOBILE_SIDEBAR_CLASSES` in `pages/
+    // index.tsx` renders as `h-0 opacity-0`.
+    expect(
+      detentHeightPx({
+        detent: MOBILE_STEP_DETENTS[1]!,
+        expandedHeightPx: 100,
+      }),
+    ).toBeGreaterThan(0);
+  });
+
+  it("collapses the sheet before highlighting the map step - the fix for a RIDER or DRIVER's expanded opening detent covering the map", () => {
+    const setSheetDetent = jest.fn();
+    renderMobile("expanded", setSheetDetent);
+    const tour = currentDriver();
+
+    tour.config.steps[2].onHighlightStarted();
+
+    expect(setSheetDetent).toHaveBeenCalledWith(MOBILE_STEP_DETENTS[2]);
+    expect(
+      detentHeightPx({
+        detent: MOBILE_STEP_DETENTS[2]!,
+        expandedHeightPx: 100,
+      }),
+    ).toBe(0);
+  });
+
+  it("restores the opening detent when the tour finishes", () => {
+    const setSheetDetent = jest.fn();
+    renderMobile("expanded", setSheetDetent);
+    const tour = currentDriver();
+    tour.hasNextStep.mockReturnValue(false);
+
+    tour.simulateGuardedExit();
+
+    expect(setSheetDetent).toHaveBeenCalledWith("expanded");
+  });
+
+  it("restores the opening detent when the user skips and confirms", () => {
+    const setSheetDetent = jest.fn();
+    renderMobile("collapsed", setSheetDetent);
+    const tour = currentDriver();
+
+    tour.simulateCloseButton();
+
+    expect(setSheetDetent).toHaveBeenCalledWith("collapsed");
+  });
+
+  it("restores the opening detent when unmounted mid-tour without finishing", () => {
+    const setSheetDetent = jest.fn();
+    const { unmount } = renderMobile("half", setSheetDetent);
+
+    unmount();
+
+    expect(setSheetDetent).toHaveBeenCalledWith("half");
+  });
+
+  it("does not assert the presence of drivers in the sidebar step's copy, which a VIEWER or a DRIVER is shown none of", () => {
+    const setSheetDetent = jest.fn();
+    renderMobile("collapsed", setSheetDetent);
+    const tour = currentDriver();
+
+    const sidebarStep = tour.config.steps[1];
+    expect(sidebarStep.popover.title.toLowerCase()).not.toContain("driver");
+    expect(sidebarStep.popover.description.toLowerCase()).not.toContain(
+      "driver",
+    );
+  });
+
+  it("leaves the desktop tour's steps and copy unchanged", () => {
+    mockedUseIsMobile.mockReturnValue(false);
+    render(<WelcomeTutorial />);
+    const tour = currentDriver();
+
+    expect(tour.config.steps[1].popover.title).toBe("These are drivers");
+    expect(tour.config.steps[1].onHighlightStarted).toBeUndefined();
+    expect(tour.config.steps[2].onHighlightStarted).toBeUndefined();
   });
 });
 

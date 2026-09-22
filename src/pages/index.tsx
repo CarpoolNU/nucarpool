@@ -972,7 +972,11 @@ const Home: NextPage<any> = () => {
 
         {/* Tutorial overlay for first-time users */}
         {showTutorial && (
-          <WelcomeTutorial onComplete={handleTutorialComplete} />
+          <WelcomeTutorial
+            onComplete={handleTutorialComplete}
+            sheetDetent={sheetDetent}
+            setSheetDetent={setSheetDetent}
+          />
         )}
 
         {/* A max-height utility named for the viewport used to sit on this div
