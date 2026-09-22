@@ -111,6 +111,22 @@ const HeaderDiv = styled.div`
  * difference, and SCRUM-502 is the ticket that had to measure it to find out.
  * `MobileNavItem` no longer assumes a figure for it at all; see that
  * component's comment.
+ *
+ * **`padding-left`/`padding-right` are SCRUM-530's fix, the horizontal
+ * counterpart to the pair above.** In portrait the horizontal insets are 0, so
+ * this bar was very nearly correct with none at all - the gap only shows in
+ * landscape, where a notched or Dynamic Island iPhone reports a nonzero inset
+ * on whichever side the sensor housing has rotated to. Before this, `padding:
+ * 0px 0` zeroed both, so the four `space-around` items divided the full
+ * viewport width and the outermost one's tap target sat partly under the
+ * housing - measured at 667x375 with a 44px override, `item0` spanned
+ * `[0, 166.75]` regardless of the inset, unmoved by it because nothing here
+ * read it. `width: 100%` is unchanged, so the bar's own box - and therefore
+ * its background - still spans the full viewport and covers the housing area;
+ * only the *items*, which live in the padded content box, move clear of it.
+ * The previous `padding: 0px 0` shorthand is replaced with four explicit
+ * longhand properties rather than layered on top of it, because a shorthand
+ * after these would reset them back to `0`.
  */
 const MobileNav = styled.div`
   position: fixed;
@@ -122,8 +138,10 @@ const MobileNav = styled.div`
   justify-content: space-around;
   align-items: center;
   background-color: #e6e6e6;
-  padding: 0px 0;
+  padding-top: 0;
+  padding-right: env(safe-area-inset-right, 0px);
   padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
   box-shadow: 0px -2px 6px rgba(0, 0, 0, 0.15);
   z-index: 100;
   border-top: 1px solid #d1d1d1;
