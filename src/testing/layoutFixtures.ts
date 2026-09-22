@@ -1603,8 +1603,10 @@ const MOBILE_NAV_CSS = `
   justify-content: space-around;
   align-items: center;
   background-color: #e6e6e6;
-  padding: 0px 0;
+  padding-top: 0;
+  padding-right: env(safe-area-inset-right, 0px);
   padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
   box-shadow: 0px -2px 6px rgba(0, 0, 0, 0.15);
   z-index: 100;
   border-top: 1px solid #d1d1d1;
@@ -1730,6 +1732,113 @@ const mobileNavActiveUnderline: LayoutFixture = {
 };
 
 /**
+ * SCRUM-530's fixture: the same `MobileNav`/`MobileNavItem` pair above, all
+ * four real tabs, at a landscape phone (667x375) with a horizontal
+ * safe-area-inset applied.
+ *
+ * `viewport-fit=cover` opts every page into drawing under a notched or
+ * Dynamic Island iPhone's sensor housing, and `env(safe-area-inset-bottom)`
+ * was the only one of the four insets this repository read - `-left` and
+ * `-right` appeared nowhere. In portrait the horizontal insets are 0, so that
+ * was very nearly correct; in landscape a notched iPhone reports roughly 44px
+ * on whichever side the housing rotated to, and before this fix nothing here
+ * moved the four `space-around` tabs out from under it.
+ *
+ * Same reasoning as `mobileNavActiveUnderline` above for why one fixture
+ * covers every inset the criteria ask for: Chromium only reports a nonzero
+ * `env(safe-area-inset-*)` when told to with
+ * `Emulation.setSafeAreaInsetsOverride`, so the BEFORE/AFTER pair below was
+ * measured by hand against that CDP call rather than derived from a chain of
+ * classes. BEFORE was measured by removing the three lines
+ * `padding-right`/`padding-bottom`/`padding-left` from this markup and
+ * restoring the single `padding: 0px 0;` shorthand `MobileNav` used to
+ * declare instead.
+ */
+const mobileNavHorizontalSafeArea: LayoutFixture = {
+  name: "mobile-nav-horizontal-safe-area",
+  summary:
+    "The mobile bottom nav's four tabs against a left/right safe-area inset in landscape",
+  source: "src/components/Header.tsx:131",
+  issue: "SCRUM-530",
+  viewportWidth: 667,
+  viewportHeight: 375,
+  /* No Tailwind container chain above the bar - it is `position: fixed` and
+     its own box is the viewport width. The safe-area inset is not a
+     `ContainerInset`: it is a CDP override applied by hand, not a class this
+     chain can name, which is why `insets` stays empty and the derivation this
+     produces is only the zero-inset case. */
+  insets: [],
+  markup: `
+    <style>
+      [data-probe="nav"] {${MOBILE_NAV_CSS}      }
+      [data-probe="nav"] > button {${MOBILE_NAV_ITEM_CSS}      }
+    </style>
+    <div data-probe="nav">
+      <button type="button" data-probe="item-0">
+        <span style="font-size: 24px; display: flex;" aria-hidden="true">&#9675;</span>
+        <span style="position: relative; display: block;">
+          <span style="font-size: 12px; font-weight: 500;">Explore</span>
+        </span>
+      </button>
+      <button type="button" data-probe="item-1">
+        <span style="font-size: 24px; display: flex;" aria-hidden="true">&#9675;</span>
+        <span style="position: relative; display: block;">
+          <span style="font-size: 12px; font-weight: 500;">Requests</span>
+        </span>
+      </button>
+      <button type="button" data-probe="item-2">
+        <span style="font-size: 24px; display: flex;" aria-hidden="true">&#9675;</span>
+        <span style="position: relative; display: block;">
+          <span style="font-size: 12px; font-weight: 500;">My Group</span>
+        </span>
+      </button>
+      <button type="button" data-probe="item-3">
+        <span style="font-size: 24px; display: flex;" aria-hidden="true">&#9675;</span>
+        <span style="position: relative; display: block;">
+          <span style="font-size: 12px; font-weight: 500;">Profile</span>
+        </span>
+      </button>
+    </div>
+  `,
+  widthProbe: "[data-probe='nav']",
+  probe: {
+    boxes: [
+      "[data-probe='nav']",
+      "[data-probe='item-0']",
+      "[data-probe='item-3']",
+    ],
+  },
+  recorded: [
+    "0px inset (no CDP override) at 667x375: nav rect left 0 / right 667, height 60. item-0 left 0 / right 166.75. item-3 left 500.25 / right 667. Identical whether measured before or after this fix - the zero-inset control the criteria require.",
+    "AFTER, 44px left / 34px bottom (housing rotated to the left edge, home indicator band at the reduced landscape height SCRUM-502 already accounts for vertically): nav rect left 0 / right 667 - the bar's own box, and therefore its background, still spans the full viewport and covers the housing band. item-0 left 44 / right 199.75, width 155.75 - entirely inside the safe content box `[44, 667]` and well clear of the 44px WCAG/HIG floor. item-3 left 511.25 / right 667, also entirely inside.",
+    "AFTER, 44px right / 34px bottom (housing rotated to the right edge): item-0 left 0 / right 155.75 - unaffected side, unchanged shape. item-3 left 467.25 / right 623, entirely inside the safe content box `[0, 623]`.",
+    "BEFORE (the defect, reproduced by removing this fixture's `padding-right`/`padding-left` and restoring the single `padding: 0px 0;` MobileNav used to declare): 44px left / 34px bottom at 667x375 - item-0 left 0 / right 166.75, **unmoved by the inset**, because nothing in the unfixed CSS read it. 44px of that tab's 166.75px width sits under the housing band. 44px right / 34px bottom: item-3 left 500.25 / right 667, the same 44px of its width under the housing on the opposite edge. The bar's own rect was already full-width before the fix, so the background-coverage half of the criteria held even before this ticket - only the items were wrong.",
+  ],
+  reproduces: [
+    {
+      file: "src/components/Header.tsx",
+      className: "padding-top: 0;",
+    },
+    {
+      file: "src/components/Header.tsx",
+      className: "padding-right: env(safe-area-inset-right, 0px);",
+    },
+    {
+      file: "src/components/Header.tsx",
+      className: "padding-left: env(safe-area-inset-left, 0px);",
+    },
+    {
+      file: "src/components/Header.tsx",
+      className: "justify-content: space-around;",
+    },
+    {
+      file: "src/components/Header.tsx",
+      className: "width: 25%;",
+    },
+  ],
+};
+
+/**
  * The profile dropdown, open, at the desktop widths SCRUM-517's Impact section
  * names - 1280x800 and 1440x900.
  *
@@ -1829,6 +1938,7 @@ export const LAYOUT_FIXTURES: readonly LayoutFixture[] = [
   mapOverlayAnchors,
   centredDialogPanels,
   mobileNavActiveUnderline,
+  mobileNavHorizontalSafeArea,
   mobileContentRowHeight,
   mobileTourMapStepSheetOverlap,
   profileDropdownPanel,

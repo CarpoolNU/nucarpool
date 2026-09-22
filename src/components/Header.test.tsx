@@ -595,6 +595,77 @@ describe("Header styling across the breakpoint", () => {
 });
 
 /**
+ * `MobileNav`'s horizontal safe-area padding (SCRUM-530).
+ *
+ * The bar read `env(safe-area-inset-bottom)` and nothing else, so on a
+ * notched or Dynamic Island iPhone rotated to landscape the outermost tab sat
+ * partly under the sensor housing - the housing's inset lands on a horizontal
+ * edge in that orientation, and this bar had no horizontal padding at all to
+ * clear it with.
+ *
+ * **This can only prove the declaration exists, not that it does anything.**
+ * jsdom resolves no `env()` and does no layout (`testing/viewport.ts`), so
+ * reading `getComputedStyle(...).paddingLeft` here would report whatever the
+ * fallback happens to parse to, not a pixel a real device would produce. The
+ * same `rulesFor`-style read the breakpoint suite above uses - the injected
+ * stylesheet's raw `cssText`, not a computed value - sidesteps that: it
+ * proves the rule reached the cascade without asking jsdom to resolve it.
+ * The pixel proof is `mobile-nav-horizontal-safe-area` in
+ * `src/testing/layoutFixtures.ts`, driven through
+ * `scripts/measure-layout.ts` against the real compiled stylesheet with
+ * `Emulation.setSafeAreaInsetsOverride` - its `recorded` lines carry the
+ * before/after figures this file cannot measure.
+ */
+describe("Header — MobileNav horizontal safe-area padding", () => {
+  beforeEach(() => {
+    setViewportWidth(MOBILE_WIDTH);
+  });
+
+  const cssTextFor = (element: Element): string => {
+    const selectors = Array.from(element.classList).map((name) => `.${name}`);
+
+    return Array.from(document.styleSheets)
+      .flatMap((sheet) => Array.from(sheet.cssRules))
+      .filter(
+        (rule): rule is CSSStyleRule =>
+          typeof (rule as CSSStyleRule).selectorText === "string" &&
+          selectors.includes((rule as CSSStyleRule).selectorText),
+      )
+      .map((rule) => rule.style.cssText)
+      .join(" ");
+  };
+
+  it("declares padding-left and padding-right from the horizontal safe-area insets", () => {
+    renderHeader();
+
+    const nav = screen.getByTestId("navigation");
+    const css = cssTextFor(nav);
+
+    // Non-empty first, the same vacuous-negative guard the breakpoint suite
+    // above uses: an empty read would trivially "pass" every assertion below.
+    expect(css.length).toBeGreaterThan(0);
+
+    expect(css).toContain("padding-left: env(safe-area-inset-left, 0px)");
+    expect(css).toContain("padding-right: env(safe-area-inset-right, 0px)");
+
+    // The vertical inset this bar already handled, unchanged by this fix.
+    expect(css).toContain("padding-bottom: env(safe-area-inset-bottom, 0px)");
+  });
+
+  it("still spans the full viewport width, so its background covers the housing band", () => {
+    // The other half of the criteria: the padding narrows the *content* box
+    // the items sit in, not the bar's own box. `width: 100%` is what keeps
+    // the bar's background opaque under the housing even though its tabs
+    // move clear of it - jsdom cannot resolve what 100% computes to, but it
+    // can confirm the declaration survived the same edit that added padding.
+    renderHeader();
+
+    const nav = screen.getByTestId("navigation");
+    expect(cssTextFor(nav)).toContain("width: 100%");
+  });
+});
+
+/**
  * The bar's *other* children, which SCRUM-484 did not reach.
  *
  * `Logo` above is a percentage-height bar's child that declared a fixed pixel
