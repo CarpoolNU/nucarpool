@@ -211,6 +211,49 @@ export const dragHeightPx = ({
 }): number => Math.min(Math.max(startHeightPx + deltaPx, 0), expandedHeightPx);
 
 /**
+ * Where the drag handle's pill sits, mid-gesture: the sheet's top edge held
+ * at the same clearance its resting classes hold - `MOBILE_SHEET_HANDLE_LIFT`
+ * in `tailwind.config.js` - floored at the clearance `collapsed` rests at
+ * above the navigation.
+ *
+ * The floor exists because the two clearances are not the same relationship
+ * at every height. `half` and `expanded` sit the lift *above the sheet's own
+ * top edge*, and at those heights that edge is real: the sheet has positive
+ * height, so there is something to clear. `collapsed`'s sheet has zero
+ * height, so its top edge *is* the navigation's top edge, and sitting the
+ * lift above that edge would put the pill on top of the navigation rather
+ * than clear of it - which is why that class adds the lift instead of
+ * subtracting it. The two agree once the drag has travelled at least twice
+ * the lift up from `collapsed`; below that, this floors at the collapsed rest
+ * instead of dipping past it.
+ *
+ * Before this existed the drag wrote `sheetBottomInsetPx + heightPx` with no
+ * lift term at all, so the pill sat exactly on the sheet's edge for the whole
+ * gesture and corrected by the lift the instant the finger lifted - dropping
+ * 8px at `half` and `expanded`, and jumping up 8px at `collapsed` (SCRUM-529).
+ */
+export const handleBottomPx = ({
+  sheetBottomInsetPx,
+  heightPx,
+  liftPx,
+}: {
+  /**
+   * Distance from the viewport's bottom edge to the sheet's bottom edge - the
+   * same figure in every detent, since only the height class differs between
+   * them.
+   */
+  sheetBottomInsetPx: number;
+  /** The sheet's height, mid-drag or at rest. */
+  heightPx: number;
+  /**
+   * `MOBILE_SHEET_HANDLE_LIFT` converted to pixels by the caller, which has
+   * the root font size a gesture needs it read against.
+   */
+  liftPx: number;
+}): number =>
+  Math.max(sheetBottomInsetPx + heightPx - liftPx, sheetBottomInsetPx + liftPx);
+
+/**
  * The detent a release lands on: whichever is nearest the height the sheet was
  * dragged to.
  *

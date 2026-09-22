@@ -916,6 +916,23 @@ const MOBILE_SHEET_MAP_STRIP_REM = 5.5;
 /** The same strip as a CSS length, which is what `tailwind.config.js` composes. */
 const MOBILE_SHEET_MAP_STRIP = `${MOBILE_SHEET_MAP_STRIP_REM}rem`;
 
+/**
+ * How far the drag handle's pill rests above the top edge of the sheet it
+ * belongs to, in rem.
+ *
+ * Lived only in `tailwind.config.js` until `useSheetDrag` needed the same
+ * figure as a number. That hook writes the handle's `bottom` on every pointer
+ * move, and without this term the pill sat exactly on the sheet's edge for the
+ * whole gesture and corrected by this distance the instant the finger lifted -
+ * dropping 8px at `half` and `expanded`, and jumping up 8px at `collapsed`
+ * (SCRUM-529). See `handleBottomPx` in `sheetDetents.ts` for why the drag
+ * floors at `collapsed`'s clearance rather than applying this uniformly.
+ */
+const MOBILE_SHEET_HANDLE_LIFT_REM = 0.5;
+
+/** The same lift as a CSS length, which is what `tailwind.config.js` composes. */
+const MOBILE_SHEET_HANDLE_LIFT = `${MOBILE_SHEET_HANDLE_LIFT_REM}rem`;
+
 module.exports = {
   MOBILE_BREAKPOINT_PX,
   DESKTOP_SCREEN_NAME,
@@ -960,4 +977,6 @@ module.exports = {
   MOBILE_NAV_SPACE,
   MOBILE_SHEET_MAP_STRIP_REM,
   MOBILE_SHEET_MAP_STRIP,
+  MOBILE_SHEET_HANDLE_LIFT_REM,
+  MOBILE_SHEET_HANDLE_LIFT,
 };

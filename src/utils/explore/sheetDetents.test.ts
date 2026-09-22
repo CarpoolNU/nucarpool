@@ -5,6 +5,7 @@ import {
   detentHeightPx,
   dragHeightPx,
   expandedSheetHeightPx,
+  handleBottomPx,
   isTap,
   snapToDetent,
   TAP_SLOP_PX,
@@ -253,6 +254,57 @@ describe("dragHeightPx", () => {
         expandedHeightPx: EXPANDED,
       }),
     ).toBe(200);
+  });
+});
+
+describe("handleBottomPx", () => {
+  /**
+   * SCRUM-529's regression. The table mirrors the resting classes in
+   * `HANDLE_POSITION_CLASSES` (`src/pages/index.tsx`) at the same NAV,
+   * expanded height and lift used elsewhere in this file - a NAV of 60, an
+   * expanded height of 400 and, at a 16px root, an 8px lift. Before the fix
+   * every row here was off by exactly that 8px: `collapsed` low, `half` and
+   * `expanded` high.
+   */
+  const NAV = 60;
+  const LIFT = 8;
+
+  const bottomAt = (heightPx: number) =>
+    handleBottomPx({ sheetBottomInsetPx: NAV, heightPx, liftPx: LIFT });
+
+  it("matches each detent's resting bottom, with no discontinuity on release", () => {
+    // Resting values, composed the same way `tailwind.config.js` composes
+    // them: `bottom-above-mobile-nav` is NAV + LIFT; `bottom-half-sheet-handle`
+    // and `bottom-sheet-handle` are NAV + height - LIFT.
+    expect(
+      bottomAt(
+        detentHeightPx({ detent: "collapsed", expandedHeightPx: EXPANDED }),
+      ),
+    ).toBe(NAV + LIFT);
+    expect(
+      bottomAt(detentHeightPx({ detent: "half", expandedHeightPx: EXPANDED })),
+    ).toBe(NAV + EXPANDED / 2 - LIFT);
+    expect(
+      bottomAt(
+        detentHeightPx({ detent: "expanded", expandedHeightPx: EXPANDED }),
+      ),
+    ).toBe(NAV + EXPANDED - LIFT);
+  });
+
+  it("floors at collapsed's clearance rather than dipping below it", () => {
+    // Below twice the lift (16px) of travel, `NAV + heightPx - LIFT` would
+    // undercut the navigation clearance `collapsed` rests at; the floor holds
+    // the pill there instead of letting it dip beneath it.
+    expect(bottomAt(0)).toBe(NAV + LIFT);
+    expect(bottomAt(4)).toBe(NAV + LIFT);
+    expect(bottomAt(2 * LIFT)).toBe(NAV + LIFT);
+  });
+
+  it("rides the sheet's edge, less the lift, past the floor", () => {
+    // One pixel beyond where the floor and the unclamped formula meet, the
+    // formula is back in charge - continuously, with no jump at the seam.
+    expect(bottomAt(2 * LIFT + 1)).toBe(NAV + 2 * LIFT + 1 - LIFT);
+    expect(bottomAt(300)).toBe(NAV + 300 - LIFT);
   });
 });
 

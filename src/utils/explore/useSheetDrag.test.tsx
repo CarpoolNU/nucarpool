@@ -1,6 +1,9 @@
 import { useRef } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { MOBILE_SHEET_MAP_STRIP_REM } from "../breakpoints";
+import {
+  MOBILE_SHEET_HANDLE_LIFT_REM,
+  MOBILE_SHEET_MAP_STRIP_REM,
+} from "../breakpoints";
 import { useSheetDrag } from "./useSheetDrag";
 import type { ExploreSidebarView } from "./exploreSidebarView";
 import type { SheetDetent } from "./sheetDetents";
@@ -57,6 +60,13 @@ const ROOT_FONT_SIZE_PX = 16;
 
 /** 5.5rem of map left visible above an expanded sheet: 88px. */
 const MAP_STRIP_PX = MOBILE_SHEET_MAP_STRIP_REM * ROOT_FONT_SIZE_PX;
+
+/**
+ * 0.5rem of clearance the handle holds above the edge it is riding: 8px.
+ * SCRUM-529 - before the fix the drag held none of this, so the handle
+ * landed exactly on the edge and corrected by this figure on release.
+ */
+const LIFT_PX = MOBILE_SHEET_HANDLE_LIFT_REM * ROOT_FONT_SIZE_PX;
 
 const VIEWPORT_HEIGHT = 548;
 const NAV_SPACE = 60;
@@ -344,8 +354,10 @@ describe("a drag", () => {
 
     expect(sheet.style.height).toBe("300px");
     // 60px of viewport below the sheet's bottom edge - the navigation - plus
-    // the 300px the sheet now stands at: the pill rides the top edge.
-    expect(handle.style.bottom).toBe(`${NAV_SPACE + 300}px`);
+    // the 300px the sheet now stands at, less the 8px clearance the pill
+    // holds above that edge (SCRUM-529): the pill rides the top edge, not
+    // sits on it.
+    expect(handle.style.bottom).toBe(`${NAV_SPACE + 300 - LIFT_PX}px`);
     expect(handle).toHaveTextContent("dragging");
   });
 

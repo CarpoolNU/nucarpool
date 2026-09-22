@@ -159,8 +159,10 @@ const MOBILE_SIDEBAR_CLASSES: Record<
  * `expanded` and `half` both sit the pill's clearance above their sheet's top
  * edge, composed from one figure in `tailwind.config.js`; `collapsed` has no
  * sheet to sit above, so it clears the navigation instead. While a drag is in
- * flight none of these apply: `useSheetDrag` writes the handle's `bottom`
- * directly so it can ride the edge between detents.
+ * flight none of these classes apply: `useSheetDrag` writes the handle's
+ * `bottom` directly, holding it to the same clearance these classes encode
+ * rather than to the sheet's bare edge - see `handleBottomPx` in
+ * `sheetDetents.ts` (SCRUM-529).
  */
 const HANDLE_POSITION_CLASSES: Record<SheetDetent, string> = {
   collapsed: "bottom-above-mobile-nav",

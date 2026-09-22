@@ -1,15 +1,19 @@
 /**
  * `MOBILE_SHEET_MAP_STRIP` is the strip of map left visible above the expanded
- * explore sheet, and it is read by four tokens below.
+ * explore sheet, and it is read by four tokens below. `MOBILE_SHEET_HANDLE_LIFT`
+ * is how far the drag handle's pill rests above whichever edge it is clearing.
  *
- * It was a local constant here, hoisted out of the `h-mobile-sheet` token once
- * the sheet gained a second open height. It moved into `breakpoints.js` for
- * SCRUM-459, which needs the same figure as a number in JavaScript: the drag
- * gesture derives the sheet's expanded height from its measured bottom edge
- * less this strip, so the range is known in every detent rather than only after
- * an expanded render. Defining it twice would let the gesture and the CSS drift
- * apart silently, which is the failure this file's other constants already
- * avoid by coming from the same place.
+ * Both were local constants here, hoisted out of the `h-mobile-sheet` and
+ * `sheet-handle` tokens once the sheet gained a second open height. Each moved
+ * into `breakpoints.js` once the drag gesture needed the same figure as a
+ * number in JavaScript - the map strip for SCRUM-459, so the sheet's expanded
+ * height is known in every detent rather than only after an expanded render;
+ * the lift for SCRUM-529, so the handle's `bottom` holds the same clearance
+ * while dragging that these classes hold at rest, instead of riding the sheet's
+ * bare edge and correcting by the lift the instant the gesture ends. Defining
+ * either twice would let the gesture and the CSS drift apart silently, which is
+ * the failure this file's other constants already avoid by coming from the
+ * same place.
  */
 const {
   MOBILE_BREAKPOINT_PX,
@@ -22,21 +26,11 @@ const {
   MESSAGE_PANEL_SHORT_MEDIA_QUERY,
   MOBILE_NAV_SPACE,
   MOBILE_SHEET_MAP_STRIP,
+  MOBILE_SHEET_HANDLE_LIFT,
   HEADER_AVATAR_TRIGGER_SIZE,
   HEADER_NAV_BUTTON_VERTICAL_PADDING,
   CONTENT_ROW_HEIGHT,
 } = require("./src/utils/breakpoints");
-
-/**
- * How far the handle's pill sits above the top edge of the sheet it belongs
- * to.
- *
- * This is not a new number: the expanded handle was positioned with
- * `bottom-[calc(100%-6rem)]`, and 6rem is exactly this map strip plus this
- * 0.5rem. Naming it is what lets the half detent's handle be placed by the
- * same rule rather than by a second hand-computed `calc()`.
- */
-const MOBILE_SHEET_HANDLE_LIFT = "0.5rem";
 
 /** The expanded sheet's height, which the half detent is half of. */
 const MOBILE_SHEET_HEIGHT = `calc(100% - ${MOBILE_SHEET_MAP_STRIP} - ${MOBILE_NAV_SPACE})`;
