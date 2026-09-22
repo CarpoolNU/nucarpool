@@ -1491,6 +1491,87 @@ const mobileContentRowHeight: LayoutFixture = {
   ],
 };
 
+/**
+ * SCRUM-528's fixture: how much of the explore map the mobile explore sheet
+ * covers, expanded versus collapsed - the two detents the mobile tour's
+ * second and third steps meet.
+ *
+ * The ticket's own arithmetic (519 of the map row's 607px, 85.5%) was CSS
+ * arithmetic rather than a rect measurement, and its evidence says so
+ * directly: "the exact rect driver.js computes for a zero-height element...
+ * was not measured." This is that measurement.
+ *
+ * Reuses `mobile-content-row-height`'s wrapper and row, and adds the sheet as
+ * two siblings of it rather than one toggled element, so a single page load
+ * measures both detents at once - the two the fix forces the sheet through
+ * (`WelcomeTutorial.tsx`'s `MOBILE_STEP_DETENTS`). Both are `absolute` with no
+ * positioned ancestor between them and `#__next`, exactly as `sidebarRef`'s
+ * div is in `pages/index.tsx` - see `expandedSheetHeightPx`'s docblock in
+ * `sheetDetents.ts` for why that is load-bearing: an ancestor with its own
+ * `position` would change what `bottom-mobile-nav` and `h-mobile-sheet`
+ * resolve against.
+ */
+/**
+ * The two literal fragments below are separate rather than one concatenated
+ * string because that is how they actually sit in `pages/index.tsx`: an
+ * interpolated conditional (`overscroll-y-contain`) sits between them, so a
+ * single joined string would never match the drift guard's `toContain` -
+ * the fixture would silently stop proving anything the moment it drifted,
+ * which is exactly the failure mode `reproduces` exists to catch.
+ */
+const MOBILE_SHEET_BASE_CLASS =
+  "absolute left-0 z-20 w-full overflow-y-auto rounded-t-3xl border-2 border-black bg-white shadow-lg";
+const MOBILE_SHEET_TRANSITION_CLASS = "transition-all duration-300";
+
+const mobileTourMapStepSheetOverlap: LayoutFixture = {
+  name: "mobile-tour-map-step-sheet-overlap",
+  summary:
+    'How much of the mobile explore map the explore sheet covers, expanded vs. collapsed - the "This is the map" tour step',
+  source: "src/pages/index.tsx:1107",
+  issue: "SCRUM-528",
+  viewportWidth: 375,
+  viewportHeight: 667,
+  insets: [],
+  markup: `
+    <div class="m-0 h-full w-full">
+      <div class="flex overflow-hidden h-mobile-row" data-probe="content-row">
+        <div class="h-full w-full bg-stone-100"></div>
+      </div>
+      <div class="${MOBILE_SHEET_BASE_CLASS} ${MOBILE_SHEET_TRANSITION_CLASS} bottom-mobile-nav h-mobile-sheet" data-probe="sheet-expanded"></div>
+      <div class="${MOBILE_SHEET_BASE_CLASS} ${MOBILE_SHEET_TRANSITION_CLASS} bottom-mobile-nav pointer-events-none h-0 opacity-0" data-probe="sheet-collapsed"></div>
+    </div>
+  `,
+  widthProbe: "[data-probe='content-row']",
+  probe: {
+    boxes: [
+      "[data-probe='content-row']",
+      "[data-probe='sheet-expanded']",
+      "[data-probe='sheet-collapsed']",
+    ],
+    footprint: "[data-probe='content-row']",
+    against: [
+      "[data-probe='sheet-expanded']",
+      "[data-probe='sheet-collapsed']",
+    ],
+  },
+  recorded: [
+    'Measured in Chromium at 375x667: content-row rect top 0, height 607 (same as mobile-content-row-height). sheet-expanded rect top 88, height 519 - the overlap fraction against content-row is 0.8550, matching the ticket\'s hand arithmetic of 519/607 = 85.5% almost exactly. sheet-collapsed rect height 4, not 0: `border-2` puts a 2px border on each edge even at `h-0`, since `clientHeight` (which is 0) excludes the border but `getBoundingClientRect()` does not. The overlap fraction against that 4px strip is 0.0066 (0.66%) - a residual sliver `h-0` cannot remove, negligible against the 85.50% it replaces, and the reason this fixture reports a measured rect rather than asserting the idealised "exactly 0" the class names alone would suggest.',
+    "This is the rect measurement the ticket's evidence explicitly says was missing: the CSS-token arithmetic predicted 85.5% but was not checked against what driver.js's overlay cutout - and this fixture's overlapFraction - actually computes from the live boxes. It also caught something the arithmetic could not: the 4px border residue above.",
+  ],
+  reproduces: [
+    { file: "src/pages/index.tsx", className: MOBILE_SHEET_BASE_CLASS },
+    { file: "src/pages/index.tsx", className: MOBILE_SHEET_TRANSITION_CLASS },
+    {
+      file: "src/pages/index.tsx",
+      className: "bottom-mobile-nav h-mobile-sheet",
+    },
+    {
+      file: "src/pages/index.tsx",
+      className: "bottom-mobile-nav pointer-events-none h-0 opacity-0",
+    },
+  ],
+};
+
 /*
  * SCRUM-502's fixture: `MobileNav` and `MobileNavItem`, `Header.tsx:115` and
  * `:168`. Both are styled-components, so - as SCRUM-484's comment above
@@ -1749,6 +1830,7 @@ export const LAYOUT_FIXTURES: readonly LayoutFixture[] = [
   centredDialogPanels,
   mobileNavActiveUnderline,
   mobileContentRowHeight,
+  mobileTourMapStepSheetOverlap,
   profileDropdownPanel,
 ];
 
