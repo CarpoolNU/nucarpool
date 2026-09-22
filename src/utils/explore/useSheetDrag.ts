@@ -4,9 +4,11 @@ import {
   isSheetDetentView,
   type ExploreSidebarView,
 } from "./exploreSidebarView";
+import { MOBILE_SHEET_HANDLE_LIFT_REM } from "../breakpoints";
 import {
   dragHeightPx,
   expandedSheetHeightPx,
+  handleBottomPx,
   isTap,
   snapToDetent,
   type SheetDetent,
@@ -49,7 +51,10 @@ import {
  * release hands the height back to the class.
  *
  * The handle's own `bottom` is written the same way and for the same reason,
- * so the pill rides the sheet's top edge instead of waiting at a detent.
+ * held to the same clearance its resting classes hold rather than to the
+ * sheet's bare edge - see `handleBottomPx` in `sheetDetents.ts` for that
+ * arithmetic and why `collapsed` floors it instead of matching the others
+ * exactly (SCRUM-529).
  *
  * ---
  *
@@ -151,6 +156,14 @@ type Gesture = {
   expandedHeightPx: number;
   /** Distance from the bottom of the viewport to the sheet's bottom edge. */
   sheetBottomInsetPx: number;
+  /**
+   * `MOBILE_SHEET_HANDLE_LIFT_REM` in pixels, at the root font size this
+   * gesture started with. Cached rather than read per move for the same
+   * reason `expandedHeightPx` is: `getComputedStyle` on every `pointermove`
+   * is a cost the gesture does not need to pay for a figure that cannot
+   * change mid-drag.
+   */
+  liftPx: number;
   /** The handle, so the pill can ride the sheet's edge. */
   handle: HTMLElement;
   /** True once the pointer has travelled beyond the tap slop. */
@@ -193,9 +206,10 @@ export const useSheetDrag = ({
 
       const rect = sheet.getBoundingClientRect();
       const handle = event.currentTarget;
+      const rootFont = rootFontSizePx();
       const expandedHeightPx = expandedSheetHeightPx({
         sheetBottomPx: rect.bottom,
-        rootFontSizePx: rootFontSizePx(),
+        rootFontSizePx: rootFont,
       });
 
       // A range of nothing is a sheet that cannot be dragged anywhere, and
@@ -212,6 +226,7 @@ export const useSheetDrag = ({
         startHeightPx: rect.height,
         expandedHeightPx,
         sheetBottomInsetPx: window.innerHeight - rect.bottom,
+        liftPx: MOBILE_SHEET_HANDLE_LIFT_REM * rootFont,
         handle,
         moved: false,
       };
@@ -241,10 +256,17 @@ export const useSheetDrag = ({
         sheet.style.height = `${heightPx}px`;
       }
 
-      // The pill rides the sheet's top edge. Its resting positions are class
-      // names measured from the same edge, so this is the same relationship
-      // held continuously rather than a second one invented for the drag.
-      gesture.handle.style.bottom = `${gesture.sheetBottomInsetPx + heightPx}px`;
+      // The pill rides the sheet's top edge, held at the same clearance its
+      // resting classes hold and floored at `collapsed`'s clearance above the
+      // navigation - `handleBottomPx` in `sheetDetents.ts` has the arithmetic
+      // and why the floor is needed rather than a uniform offset. Before
+      // SCRUM-529 this wrote the edge itself with no clearance, which was a
+      // second relationship the docblocks here used to claim was the same one.
+      gesture.handle.style.bottom = `${handleBottomPx({
+        sheetBottomInsetPx: gesture.sheetBottomInsetPx,
+        heightPx,
+        liftPx: gesture.liftPx,
+      })}px`;
 
       return heightPx;
     },
