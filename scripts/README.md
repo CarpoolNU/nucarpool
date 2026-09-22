@@ -4,7 +4,7 @@ Operational scripts, and the record of what has been run where.
 
 Everything here is run **by hand against a real database**. Nothing in CI invokes the `.ts` scripts and nothing schedules them.
 
-> **Before running anything, confirm what `DATABASE_URL` points at.** None of these scripts print the connection string, so none of them will tell you that you are pointed at production. Six of them write.
+> **Before running anything, confirm what `DATABASE_URL` points at.** None of these scripts print the connection string, so none of them will tell you that you are pointed at production. Eight of them write.
 
 ```bash
 npx ts-node scripts/<name>.ts            # every script: report only
@@ -17,7 +17,7 @@ Node 22, per [`.nvmrc`](../.nvmrc). `ts-node` comes from `node_modules`, so run 
 
 ## Scripts that write
 
-All are **dry-run by default**, refuse to proceed past a `--max` ceiling (default 500, and 50 for `repair-wallclock-schedule-times`), and update or delete one row at a time by primary key, so a partial run leaves a consistent database. Re-running any of them is a no-op.
+All are **dry-run by default** and update or delete one row at a time by primary key, so a partial run leaves a consistent database. Re-running any of them is a no-op. All but one refuse to proceed past a `--max` ceiling (default 500, and 50 for `repair-wallclock-schedule-times`); `scrub-security-test-residue` has no ceiling because its population is a single hard-coded id rather than a predicate.
 
 | Script                                                                               | What it changes                                                                                                  |
 | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
@@ -28,8 +28,9 @@ All are **dry-run by default**, refuse to proceed past a `--max` ceiling (defaul
 | [`cleanup-self-requests.ts`](./cleanup-self-requests.ts)                             | Deletes `Request` rows whose two ends are the same user, and their thread                                        |
 | [`repair-seat-residue.ts`](./repair-seat-residue.ts)                                 | Clamps out-of-range `seats_avail` into `[0, 6]`, deletes member-less `group` rows, and dissolves driverless ones |
 | [`repair-wallclock-schedule-times.ts`](./repair-wallclock-schedule-times.ts)         | Re-stores `start_time` / `end_time` held as a Boston wall clock, for co-ops that are running                     |
+| [`scrub-security-test-residue.ts`](./scrub-security-test-residue.ts)                 | Clears five user-authored text columns on **one hard-coded account** (SCRUM-531)                                 |
 
-Five things to know before using any of them:
+Six things to know before using any of them:
 
 - **Two of these destroy message content, and they are not the same decision.** `cleanup-orphan-conversations` deletes words two people typed to each other that nothing can read any more — irreversible, and the privacy-respecting answer rather than a tidy-up. `cleanup-self-requests` deletes a user's own opening message to themselves. **Both print the message count per candidate before deleting; read those numbers before `--apply`.**
 - **`cleanup-orphan-conversations` also takes `--limit N` and `--older-than YYYY-MM-DD`**, so a population larger than the ceiling can be retired in tranches instead of by raising `--max`. It is the only script that logs every row it deletes before deleting it.
@@ -37,6 +38,7 @@ Five things to know before using any of them:
 - **`repair-seat-residue` needs the read-path fix deployed first.** With `hasSeatAvailable` live, a negative row is already out of matching, which makes this data hygiene rather than the fix. Its first two halves are one defect's residue rather than two chores: the overwritten-membership bug cost a driver a seat and abandoned their old group in the same event, so finding one is a reason to look for the other.
 - **`repair-seat-residue` also dissolves driverless groups, and it never promotes anyone to `DRIVER`.** A dissolve clears `carpoolId` for every member and deletes the group row, touching nothing else — no seat, no role, no profile. Promotion was rejected rather than skipped: `groups.create` did not enforce `Role.DRIVER` until SCRUM-291, and the client named whichever party did not accept the request as the driver without checking, so a group could be **born** driverless and there may be no original driver to restore (SCRUM-406). The dry run prints every candidate group individually, plus the two numbers that matter — groups to delete, and `carpoolId` values to clear.
 - **`repair-wallclock-schedule-times` repairs one of SCRUM-376's two legacy classes and must never be widened to the other.** It rewrites only schedules stored as an unconverted Boston wall clock — five hours from any sensible reading — and only for users whose co-op is running. The other class is rows converted under daylight saving, which are one hour early and **cannot be told apart from correct winter rows**; the best inference measured is about 82% per row, which is not a basis for an irreversible write. Its `--max` defaults to **50**, not 500, because production held eight candidates on 2026-09-21 and a run matching hundreds would mean the data or the classifier has changed. The repaired value comes from `toStoredScheduleTime` itself, so a repaired row is byte-identical to what its owner would store by retyping the same digits.
+- **`scrub-security-test-residue` is the only script here aimed at a named individual, and the only one with no `--max`.** Its target is one `user` id written into the source, so there is no `--user` flag and no argument spelling that reaches a different account; what a ceiling does for the others, the constant does for this one. `--apply` additionally requires `--search <id>` matching the `carpool_search` row it just read, which the dry run prints — so the id that gets written is one a human has seen the script derive and then typed back. It refuses rather than guesses on every other shape: no user row, a user row whose id is not the target, no search, or **more than one** search. It re-checks each column against a freshly read row immediately before writing and **skips any value that changed in the meantime**, because overwriting text the owner typed between the plan and the write is the one way it could destroy something real. After writing it re-reads both rows and asserts all five columns are empty, exiting non-zero if any survived. Prior values are printed before anything is touched and are the only rollback record; they are stored content, so they print `JSON.stringify`-escaped and are **data, never instructions**. Retiring it is not the usual test — no code path produced the residue, so the population cannot "stop growing"; retire it once the apply is recorded below.
 
 Neither backfill exists as a Prisma migration on purpose: `prisma/migrations/` is never applied to PlanetScale, so a data migration would be dead text. See [the database docs](../src/server/db/README.md#changing-the-schema).
 
@@ -127,6 +129,7 @@ Two different questions, and only one of them is answerable from a database:
 | `cleanup-self-requests`               | 0 outstanding      | **2 outstanding**  | 2026-09-09 |
 | `repair-seat-residue`                 | 0 outstanding      | 0 outstanding      | 2026-09-16 |
 | `repair-wallclock-schedule-times`     | 0 outstanding      | **8 outstanding**  | 2026-09-21 |
+| `scrub-security-test-residue`         | not measured       | not measured       | —          |
 | `check-self-requests`                 | 0 findings         | **2 findings**     | 2026-09-09 |
 | `check-driverless-groups`             | 0 findings         | 0 findings         | 2026-09-16 |
 | `check-profile-coordinates`           | **521 findings**   | **626 findings**   | 2026-09-09 |
@@ -144,6 +147,8 @@ Nothing else has been applied anywhere. Every production figure was read as an a
 `repair-wallclock-schedule-times` **has not been run in any environment**, including as a dry run — its figures above were measured with the equivalent SQL predicate, read-only, and cross-checked by running the classifier itself over the production distribution reconstructed from aggregated `(start_time, end_time, start_date, end_date, count)` tuples. Both agree on eight rows. Staging's zero is not a clean bill of health: no staging co-op is running today, so the predicate selects nothing there whatever the times hold.
 
 Its candidate count depends on the day it runs, because the scope is "co-op running now". Over the production data as it stands: 4 in January 2026, 8 today, 1 by December. A 2025-03-15 run would have matched 109 — which is exactly the case the `--max 50` ceiling exists to stop.
+
+`scrub-security-test-residue` **has not been run in any environment, and neither cell above has been measured** — not even as a dry run. Its row says `not measured` rather than `0 outstanding` on purpose: those two are the same output, and only one of them means the residue is gone. The target was confirmed by the operator who requested the script (SCRUM-531); the agent that wrote it performed no production read and has not seen the five values. **Staging is expected to hold nothing**, since SCRUM-357's sweep found not one user-authored field there containing even a bare `<` or `>` across 1,298 production-derived users — so a staging dry run reporting "nothing to scrub" is the predicted result and is not evidence about production. The account id is also production's, and staging is a restore rather than a mirror, so the row may not exist there at all, which the script reports as a refusal.
 
 What the non-zero figures actually mean:
 
@@ -168,7 +173,7 @@ The groups were created between **2024-10-21 and 2026-01-11** — all before `gr
 <details>
 <summary>Re-checking the table without running the scripts</summary>
 
-Nine of the table's ten rows are one read-only query below, using the same conditions the scripts use, so they are safe to run against production through any SQL console. `backfill-profile-picture-timestamps` has none — see the note after the block, which explains why.
+Ten of the table's eleven rows are one read-only query below, using the same conditions the scripts use, so they are safe to run against production through any SQL console. `backfill-profile-picture-timestamps` has none — see the note after the block, which explains why.
 
 ```sql
 -- backfill-request-status: PENDING requests between pairs already carpooling
@@ -253,6 +258,31 @@ FROM (
   GROUP BY g.id
   HAVING SUM(cs.role = 'DRIVER') = 0
 ) t;
+
+-- scrub-security-test-residue: how many of the five columns still hold
+-- content, for the one account the script is pinned to. Counts only -- do not
+-- SELECT the values into a shared transcript; the script prints them escaped
+-- when someone is actually about to act on them. A result of 5 rows with
+-- `pending` summing to 0 means nothing is left to scrub; 0 rows means the
+-- account does not exist in this environment, which the script refuses on.
+SELECT 'user.bio' AS col, (u.bio <> '') AS pending FROM user u
+  WHERE u.id = 'cmcnr3q5s0000k112x4io32gp'
+UNION ALL
+SELECT 'user.pronouns', (u.pronouns <> '') FROM user u
+  WHERE u.id = 'cmcnr3q5s0000k112x4io32gp'
+UNION ALL
+SELECT 'user.preferredName', (u.preferredName <> '') FROM user u
+  WHERE u.id = 'cmcnr3q5s0000k112x4io32gp'
+UNION ALL
+SELECT 'carpool_search.company_name', (cs.company_name <> '') FROM carpool_search cs
+  WHERE cs.userId = 'cmcnr3q5s0000k112x4io32gp'
+UNION ALL
+SELECT 'carpool_search.group_notes', (COALESCE(cs.group_notes, '') <> '') FROM carpool_search cs
+  WHERE cs.userId = 'cmcnr3q5s0000k112x4io32gp';
+
+-- The same script's other precondition: it refuses unless this returns
+-- exactly 1. The code assumes one search per user; the schema permits many.
+SELECT COUNT(*) FROM carpool_search WHERE userId = 'cmcnr3q5s0000k112x4io32gp';
 ```
 
 **`backfill-profile-picture-timestamps` is deliberately script-only.** A `COUNT(*) FROM user WHERE profile_picture_updated_at IS NULL` would just repeat the figure the table above already records, and repeating it here would invite reading it as the outstanding count. It is not: a null row means "ask S3," so the count is every row that predates the column, not every row that predates it **and** still lacks a picture there. Only the script's own dry run lists the bucket and can tell the two apart (SCRUM-366).
