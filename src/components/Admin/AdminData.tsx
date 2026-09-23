@@ -16,6 +16,12 @@ import { ConfigProvider, Slider } from "antd";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
 import useIsHydrated from "../../utils/useIsHydrated";
+import {
+  buildDaysFrequencyCSV,
+  buildLineChartCSV,
+  buildQuickStatsCSV,
+  buildUserCountsCSV,
+} from "../../utils/adminDashboardCsv";
 
 /**
  * The admin dashboard.
@@ -189,108 +195,29 @@ function AdminData() {
 
   const formatter = (value: any) => format(new Date(value), "MMM dd, yyyy");
 
-  // line chart
-  const buildLineChartCSV = () => {
-    const headers = [
-      "Date",
-      "ActiveUserCount",
-      "InactiveUserCount",
-      "GroupCounts",
-      "RequestCount",
-      "DriverRequestCount",
-      "RiderRequestCount",
-    ];
-    const csvRows = [headers.join(",")];
-
-    weekLabels.forEach((dateLabel, index) => {
-      const row = [
-        format(dateLabel, "MMM dd yyyy"),
-        activeUserCount[index] ?? "",
-        inactiveUserCount[index] ?? "",
-        groupCounts[index] ?? "",
-        requestCount[index] ?? "",
-        driverRequestCount[index] ?? "",
-        riderRequestCount[index] ?? "",
-      ];
-      csvRows.push(row.join(","));
-    });
-
-    return csvRows.join("\n");
-  };
-
-  // user counts
-  const buildUserCountsCSV = () => {
-    const headers = [
-      "Type",
-      "Active Onboarded",
-      "Active Not Onboarded",
-      "Inactive Onboarded",
-      "Inactive Not Onboarded",
-    ];
-    const csvRows = [headers.join(",")];
-
-    csvRows.push(["Total", totalAO, totalANO, totalIO, totalINO].join(","));
-    csvRows.push(
-      ["Driver", driverAO, driverANO, driverIO, driverINO].join(","),
-    );
-    csvRows.push(["Rider", riderAO, riderANO, riderIO, riderINO].join(","));
-    csvRows.push(
-      ["Viewer", viewerAO, viewerANO, viewerIO, viewerINO].join(","),
-    );
-
-    return csvRows.join("\n");
-  };
-
-  // days frequency
-  const buildDaysFrequencyCSV = () => {
-    const headers = ["Day", "RiderCount", "DriverCount"];
-    const csvRows = [headers.join(",")];
-    const days = ["Su", "M", "Tu", "W", "Th", "F", "S"];
-
-    days.forEach((day, i) => {
-      csvRows.push(
-        [day, riderDayCount[i] ?? "", driverDayCount[i] ?? ""].join(","),
-      );
-    });
-
-    return csvRows.join("\n");
-  };
-
-  // quick stats
-  const buildQuickStatsCSV = () => {
-    const headers = [
-      "Total Conversations",
-      "Total Conversations With > 1 Message",
-      "Avg Messages Per Conversation with > 1 Message",
-      "Avg Messages",
-      "Total Groups",
-      "PercentDriversInGroup",
-      "PercentRidersInGroup",
-      "AverageRidersPerGroup",
-    ];
-
-    const row = [
-      totalConversationCount,
-      totalWithMsgCount,
-      avgConvWithMsg,
-      avgMsg,
-      groupCount,
-      percentDriversInGroup,
-      percentRidersInGroup,
-      averageRidersPerGroup,
-    ].join(",");
-
-    return [headers.join(","), row].join("\n");
-  };
-
   const handleDownloadData = async () => {
     const zip = new JSZip();
     const dateRaw = new Date().toLocaleDateString();
     const date = dateRaw.replace(/\//g, "_");
-    zip.file(`line_chart_${date}.csv`, buildLineChartCSV());
-    zip.file(`user_counts_${date}.csv`, buildUserCountsCSV());
-    zip.file(`days_frequency_${date}.csv`, buildDaysFrequencyCSV());
-    zip.file(`quick_stats_${date}.csv`, buildQuickStatsCSV());
+    zip.file(`line_chart_${date}.csv`, buildLineChartCSV(series));
+    zip.file(`user_counts_${date}.csv`, buildUserCountsCSV(stats.userCounts));
+    zip.file(
+      `days_frequency_${date}.csv`,
+      buildDaysFrequencyCSV(stats.daysFrequency),
+    );
+    zip.file(
+      `quick_stats_${date}.csv`,
+      buildQuickStatsCSV({
+        totalConversationCount,
+        totalWithMsgCount,
+        avgConvWithMsg,
+        avgMsg,
+        groupCount,
+        percentDriversInGroup,
+        percentRidersInGroup,
+        averageRidersPerGroup,
+      }),
+    );
     const content = await zip.generateAsync({ type: "blob" });
     saveAs(content, `all_data_${date}.zip`);
   };

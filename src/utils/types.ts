@@ -54,6 +54,12 @@ export type ConversationStats = {
   avgMsg: number;
 };
 
+/** What `user.admin.getDashboardStats`/`getDashboardSeries` resolve, for the CSV export. */
+export type AdminDashboardStats =
+  RouterOutput["user"]["admin"]["getDashboardStats"];
+export type AdminDashboardSeries =
+  RouterOutput["user"]["admin"]["getDashboardSeries"];
+
 export type OnboardingFormInputs = {
   role: Role;
   status: Status;
