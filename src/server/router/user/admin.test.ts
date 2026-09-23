@@ -22,28 +22,50 @@ import { MAX_DASHBOARD_WEEKS } from "../../adminDataUtils";
 /** What a `MIN`/`MAX` aggregate answers for an empty table. */
 const NO_DATES = { _min: { dateCreated: null }, _max: { dateCreated: null } };
 
-const buildPrismaMock = () => ({
-  user: {
-    findMany: jest.fn().mockResolvedValue([]),
-    aggregate: jest.fn().mockResolvedValue(NO_DATES),
-    update: jest.fn().mockResolvedValue({}),
-  },
-  carpoolGroup: {
-    findMany: jest.fn().mockResolvedValue([]),
-    count: jest.fn().mockResolvedValue(0),
-    aggregate: jest.fn().mockResolvedValue(NO_DATES),
-  },
-  conversation: { count: jest.fn().mockResolvedValue(0) },
-  message: {
-    findMany: jest.fn().mockResolvedValue([]),
-    groupBy: jest.fn().mockResolvedValue([]),
-  },
-  request: {
-    findMany: jest.fn().mockResolvedValue([]),
-    aggregate: jest.fn().mockResolvedValue(NO_DATES),
-  },
-  carpoolSearch: { findMany: jest.fn().mockResolvedValue([]) },
-});
+const buildPrismaMock = () => {
+  const client = {
+    user: {
+      findMany: jest.fn().mockResolvedValue([]),
+      aggregate: jest.fn().mockResolvedValue(NO_DATES),
+      update: jest.fn().mockResolvedValue({}),
+    },
+    carpoolGroup: {
+      findMany: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
+      aggregate: jest.fn().mockResolvedValue(NO_DATES),
+    },
+    conversation: { count: jest.fn().mockResolvedValue(0) },
+    message: {
+      findMany: jest.fn().mockResolvedValue([]),
+      groupBy: jest.fn().mockResolvedValue([]),
+    },
+    request: {
+      findMany: jest.fn().mockResolvedValue([]),
+      aggregate: jest.fn().mockResolvedValue(NO_DATES),
+    },
+    carpoolSearch: { findMany: jest.fn().mockResolvedValue([]) },
+    adminAuditLog: {
+      create: jest.fn().mockResolvedValue({}),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+  };
+
+  // `updateUserPermission` writes its update and its audit entry inside
+  // `ctx.prisma.$transaction(async (tx) => ...)`. A pass-through is enough
+  // here: this file asserts query *shape*, and `tx.user.update` /
+  // `tx.adminAuditLog.create` are the same jest.fn()s as `client.user.update`
+  // / `client.adminAuditLog.create`, so existing assertions on those still
+  // see the calls. Atomicity itself is proven for real in `admin.db.test.ts`.
+  //
+  // Defined non-enumerable so `everyCallArgument`'s `Object.values(prisma)`
+  // still walks only real delegate objects — a plain spread would hand it a
+  // bare jest.fn() as one of those "delegates" and it would fail reading
+  // `.mock.calls` off jest's own internal mock-state object.
+  return Object.defineProperty({ ...client }, "$transaction", {
+    value: jest.fn((fn: (tx: typeof client) => unknown) => fn(client)),
+    enumerable: false,
+  });
+};
 
 type PrismaMock = ReturnType<typeof buildPrismaMock>;
 
@@ -489,5 +511,61 @@ describe("updateUserPermission", () => {
       }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("writes exactly one audit log entry naming the actor, action and target (SCRUM-541)", async () => {
+    const { caller, prisma } = callerFor(adminSession(Permission.MANAGER));
+
+    await caller.user.admin.updateUserPermission({
+      userId: "someone-else",
+      permission: Permission.ADMIN,
+    });
+
+    expect(prisma.adminAuditLog.create).toHaveBeenCalledTimes(1);
+    expect(prisma.adminAuditLog.create).toHaveBeenCalledWith({
+      data: {
+        actorId: "admin-1",
+        action: "user.admin.updateUserPermission",
+        targetId: "someone-else",
+        metadata: JSON.stringify({ permission: Permission.ADMIN }),
+      },
+    });
+  });
+
+  it("writes no audit entry when the permission change itself is refused", async () => {
+    const { caller, prisma } = callerFor(adminSession(Permission.ADMIN));
+
+    await expect(
+      caller.user.admin.updateUserPermission({
+        userId: "someone-else",
+        permission: Permission.MANAGER,
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(prisma.adminAuditLog.create).not.toHaveBeenCalled();
+  });
+
+  it("writes both the update and its audit entry through the same transaction", async () => {
+    const { caller, prisma } = callerFor(adminSession(Permission.MANAGER));
+
+    await caller.user.admin.updateUserPermission({
+      userId: "someone-else",
+      permission: Permission.USER,
+    });
+
+    expect(prisma.user.update).toHaveBeenCalledTimes(1);
+    expect(prisma.adminAuditLog.create).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("getAuditLog", () => {
+  it("reads the most recent entries first, bounded rather than paginated", async () => {
+    const { caller, prisma } = callerFor();
+
+    await caller.user.admin.getAuditLog();
+
+    expect(prisma.adminAuditLog.findMany).toHaveBeenCalledWith({
+      orderBy: { dateCreated: "desc" },
+      take: 500,
+    });
   });
 });

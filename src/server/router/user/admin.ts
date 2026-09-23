@@ -12,6 +12,12 @@ import {
   weeksSpanned,
 } from "../../adminDataUtils";
 import { AdminUserRow } from "../../../utils/types";
+import { AdminAuditAction, buildAuditLogEntry } from "../../adminAuditLog";
+
+/** How many rows the audit log's list view reads back. Static — there is no
+ * client-supplied window here, unlike `dashboardWindow` above, so a fixed
+ * ceiling is sufficient rather than a validated one. */
+const AUDIT_LOG_PAGE_SIZE = 500;
 
 /**
  * Admin dashboard queries. `adminRouter` already restricts these to ADMIN and
@@ -342,13 +348,55 @@ export const adminDataRouter = router({
         });
       }
 
-      return ctx.prisma.user.update({
-        where: {
-          id: input.userId,
-        },
-        data: {
-          permission: input.permission,
-        },
+      // The audit log names an actor, and `ctx.session.user.id` is optional
+      // only in its type (a session predating some field's introduction) —
+      // `isAdmin` middleware already guarantees a session exists here, so a
+      // missing id means something is unexpectedly wrong rather than that
+      // this caller lacks permission, hence UNAUTHORIZED rather than FORBIDDEN.
+      const actorId = ctx.session.user?.id;
+      if (!actorId) {
+        throw new TRPCError({ code: "UNAUTHORIZED" });
+      }
+
+      // One transaction so the permission change and its audit entry either
+      // both land or neither does — SCRUM-541 exists precisely so a
+      // permission change can never happen without a corresponding record.
+      return ctx.prisma.$transaction(async (tx) => {
+        const updated = await tx.user.update({
+          where: {
+            id: input.userId,
+          },
+          data: {
+            permission: input.permission,
+          },
+        });
+
+        await tx.adminAuditLog.create({
+          data: buildAuditLogEntry({
+            actorId,
+            action: AdminAuditAction.UPDATE_USER_PERMISSION,
+            targetId: input.userId,
+            metadata: { permission: input.permission },
+          }),
+        });
+
+        return updated;
       });
     }),
+
+  /**
+   * The audit log's list view. Most recent first, and bounded rather than
+   * paginated — SCRUM-541 asks for "a simple list view", and admin mutations
+   * are rare enough that a static ceiling is sufficient for now.
+   *
+   * Returns raw `actorId`/`targetId`; the client resolves those to emails
+   * through `getAllUsers`, which it already fetches for `UserManagement`,
+   * rather than this procedure joining and denormalizing that itself.
+   */
+  getAuditLog: adminRouter.query(async ({ ctx }) => {
+    return ctx.prisma.adminAuditLog.findMany({
+      orderBy: { dateCreated: "desc" },
+      take: AUDIT_LOG_PAGE_SIZE,
+    });
+  }),
 });

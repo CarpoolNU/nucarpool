@@ -18,6 +18,10 @@ export type AdminUser = {
   permission: Permission;
 };
 
+/** One row of `AdminAuditLog`, as `getAuditLog` returns it (SCRUM-541). */
+export type AdminAuditLogEntry =
+  RouterOutput["user"]["admin"]["getAuditLog"][number];
+
 /** The narrow per-user projection `summariseUsers` reduces, one row per user. */
 export type AdminUserRow = {
   isOnboarded: boolean;

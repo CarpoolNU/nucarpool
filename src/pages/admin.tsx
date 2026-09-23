@@ -8,6 +8,7 @@ import UserManagement from "../components/Admin/UserManagement";
 import Spinner from "../components/Spinner";
 import { Permission } from "@prisma/client";
 import AdminData from "../components/Admin/AdminData";
+import AdminAuditLog from "../components/Admin/AdminAuditLog";
 import AdminMobileNotice from "../components/Admin/AdminMobileNotice";
 import useIsHydrated from "../utils/useIsHydrated";
 import useIsMobile from "../utils/useIsMobile";
@@ -160,6 +161,8 @@ const Admin: NextPage<AdminProps> = ({ userPermission }) => {
           <div className="h-full w-full flex-[3]">
             {option === "management" ? (
               <UserManagement permission={userPermission} />
+            ) : option === "audit" ? (
+              <AdminAuditLog />
             ) : (
               <AdminData />
             )}

@@ -19,36 +19,50 @@ import type { Context } from "./context";
 const NO_DATES = { _min: { dateCreated: null }, _max: { dateCreated: null } };
 
 /** Only the delegate methods the procedures under test actually reach for. */
-const buildPrismaMock = () => ({
-  user: {
-    findUnique: jest.fn(),
-    findMany: jest.fn().mockResolvedValue([]),
-    update: jest.fn(),
-    aggregate: jest.fn().mockResolvedValue(NO_DATES),
-  },
-  carpoolSearch: {
-    findFirst: jest.fn().mockResolvedValue(null),
-    findMany: jest.fn().mockResolvedValue([]),
-  },
-  carpoolGroup: {
-    findMany: jest.fn().mockResolvedValue([]),
-    count: jest.fn().mockResolvedValue(0),
-    aggregate: jest.fn().mockResolvedValue(NO_DATES),
-  },
-  conversation: {
-    findMany: jest.fn().mockResolvedValue([]),
-    count: jest.fn().mockResolvedValue(0),
-  },
-  message: {
-    findMany: jest.fn().mockResolvedValue([]),
-    count: jest.fn().mockResolvedValue(0),
-    groupBy: jest.fn().mockResolvedValue([]),
-  },
-  request: {
-    findMany: jest.fn().mockResolvedValue([]),
-    aggregate: jest.fn().mockResolvedValue(NO_DATES),
-  },
-});
+const buildPrismaMock = () => {
+  const client = {
+    user: {
+      findUnique: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
+      update: jest.fn(),
+      aggregate: jest.fn().mockResolvedValue(NO_DATES),
+    },
+    carpoolSearch: {
+      findFirst: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+    carpoolGroup: {
+      findMany: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
+      aggregate: jest.fn().mockResolvedValue(NO_DATES),
+    },
+    conversation: {
+      findMany: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
+    },
+    message: {
+      findMany: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
+      groupBy: jest.fn().mockResolvedValue([]),
+    },
+    request: {
+      findMany: jest.fn().mockResolvedValue([]),
+      aggregate: jest.fn().mockResolvedValue(NO_DATES),
+    },
+    // `updateUserPermission` writes its audit entry alongside the update
+    // (SCRUM-541), both inside `ctx.prisma.$transaction`.
+    adminAuditLog: {
+      create: jest.fn().mockResolvedValue({}),
+    },
+  };
+
+  // Non-enumerable so `allPrismaCalls`'s `Object.values(prisma)` still walks
+  // only real delegate objects, matching the same fix in `admin.test.ts`.
+  return Object.defineProperty({ ...client }, "$transaction", {
+    value: jest.fn((fn: (tx: typeof client) => unknown) => fn(client)),
+    enumerable: false,
+  });
+};
 
 type PrismaMock = ReturnType<typeof buildPrismaMock>;
 

@@ -68,6 +68,10 @@ jest.mock("../../components/Admin/AdminData", () => ({
   __esModule: true,
   default: () => <div>data</div>,
 }));
+jest.mock("../../components/Admin/AdminAuditLog", () => ({
+  __esModule: true,
+  default: () => <div>audit log</div>,
+}));
 
 /**
  * A marker like the rest. The notice's own behaviour - that its "Back to map"

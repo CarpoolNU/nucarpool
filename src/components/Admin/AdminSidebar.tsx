@@ -51,6 +51,15 @@ const AdminSidebar = ({ option, setOption }: AdminSidebarProps) => {
         >
           Data
         </button>
+        <button
+          className={`${baseButton} ${
+            option === "audit" ? selectedButton : ""
+          }`}
+          aria-pressed={option === "audit"}
+          onClick={() => setOption("audit")}
+        >
+          Audit Log
+        </button>
       </div>
     </div>
   );
