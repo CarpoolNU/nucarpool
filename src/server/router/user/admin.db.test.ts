@@ -256,3 +256,70 @@ describe("the admin dashboard CSV export against a real database", () => {
     }
   });
 });
+
+/**
+ * SCRUM-541: `updateUserPermission`'s audit trail against a real database.
+ *
+ * `admin.test.ts` proves the shape against a mocked Prisma with a pass-through
+ * `$transaction`; it cannot prove the two writes actually land as one
+ * transaction against real MySQL. This drives the real procedure and reads
+ * the row back, rather than trusting what a mock was told to return.
+ */
+describe("updateUserPermission's audit trail against a real database", () => {
+  it("writes exactly one audit log row alongside the permission change", async () => {
+    const target = await prisma.user.create({
+      data: {
+        name: "Target User",
+        email: "target@northeastern.edu",
+        isOnboarded: true,
+        permission: Permission.USER,
+      },
+    });
+
+    const caller = callerFor(managerSession());
+    await caller.user.admin.updateUserPermission({
+      userId: target.id,
+      permission: Permission.ADMIN,
+    });
+
+    const updated = await prisma.user.findUniqueOrThrow({
+      where: { id: target.id },
+    });
+    expect(updated.permission).toBe(Permission.ADMIN);
+
+    const logs = await prisma.adminAuditLog.findMany({
+      where: { targetId: target.id },
+    });
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatchObject({
+      actorId: "manager-1",
+      action: "user.admin.updateUserPermission",
+      targetId: target.id,
+      metadata: JSON.stringify({ permission: Permission.ADMIN }),
+    });
+  });
+
+  it("surfaces through getAuditLog, most recent first", async () => {
+    const target = await prisma.user.create({
+      data: {
+        name: "Second Target",
+        email: "target2@northeastern.edu",
+        isOnboarded: true,
+        permission: Permission.USER,
+      },
+    });
+
+    const caller = callerFor(managerSession());
+    await caller.user.admin.updateUserPermission({
+      userId: target.id,
+      permission: Permission.MANAGER,
+    });
+
+    const log = await caller.user.admin.getAuditLog();
+    expect(log[0]).toMatchObject({
+      actorId: "manager-1",
+      action: "user.admin.updateUserPermission",
+      targetId: target.id,
+    });
+  });
+});

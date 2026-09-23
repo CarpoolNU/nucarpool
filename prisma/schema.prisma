@@ -252,6 +252,29 @@ model CarpoolSearch {
   @@map("carpool_search")
 }
 
+// Records who performed an admin/manager mutation, on whom, and when.
+// `actorId` and `targetId` are plain ids rather than relations: the point of
+// an audit trail is to outlive the rows it describes, so it must not cascade
+// when a `User` is deleted, and future admin mutations (SCRUM-541) may not
+// target a `User` at all. Readers resolve ids to emails through
+// `user.admin.getAllUsers`, the same list `UserManagement` already fetches.
+model AdminAuditLog {
+  id          String   @id @default(cuid())
+  actorId     String   @map("actor_id")
+  action      String
+  targetId    String   @map("target_id")
+  // JSON-serialized, action-specific detail (e.g. the permission a user was
+  // changed to). `@db.Text` because this is server-constructed, not a
+  // Zod-bounded user input, so `textLimits.ts`'s VARCHAR conventions don't
+  // apply here.
+  metadata    String?  @db.Text
+  dateCreated DateTime @default(now()) @map("date_created")
+
+  @@index([actorId])
+  @@index([targetId])
+  @@map("admin_audit_log")
+}
+
 // Represents a VerificationToken--need this for NextAuth.
 model VerificationToken {
   identifier String
