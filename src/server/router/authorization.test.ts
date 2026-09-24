@@ -54,6 +54,7 @@ const buildPrismaMock = () => {
     adminAuditLog: {
       create: jest.fn().mockResolvedValue({}),
     },
+    report: { findMany: jest.fn().mockResolvedValue([]) },
   };
 
   // Non-enumerable so `allPrismaCalls`'s `Object.values(prisma)` still walks
@@ -159,6 +160,9 @@ const adminProcedures: Array<{
         permission: Permission.ADMIN,
       }),
   },
+  // The report queue carries message text from reported conversations, so
+  // a USER reaching it would read other people's threads (SCRUM-555).
+  { path: "getReports", invoke: (c) => c.user.admin.getReports() },
 ];
 
 describe("protectedRouter", () => {
@@ -287,6 +291,7 @@ describe("adminRouter", () => {
           end: new Date("2024-01-08"),
         }),
       ).resolves.toMatchObject({ signupCount: [0, null] });
+      await expect(caller.user.admin.getReports()).resolves.toEqual([]);
       expect(prisma.user.findMany).toHaveBeenCalled();
     },
   );

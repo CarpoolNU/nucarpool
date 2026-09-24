@@ -13,11 +13,20 @@ import {
 } from "../../adminDataUtils";
 import { AdminUserRow } from "../../../utils/types";
 import { AdminAuditAction, buildAuditLogEntry } from "../../adminAuditLog";
+import { parseConversationSnapshot } from "../../reportSnapshot";
 
 /** How many rows the audit log's list view reads back. Static — there is no
  * client-supplied window here, unlike `dashboardWindow` above, so a fixed
  * ceiling is sufficient rather than a validated one. */
 const AUDIT_LOG_PAGE_SIZE = 500;
+
+/**
+ * How many reports the queue reads back. The same static ceiling as the audit
+ * log. The worst case is 500 reports each carrying a full 50-message
+ * snapshot, a few megabytes. Reports are rare enough that this is far off, and
+ * a lower cap would hide the oldest unresolved reports, which is worse.
+ */
+const REPORT_QUEUE_PAGE_SIZE = 500;
 
 /**
  * Admin dashboard queries. `adminRouter` already restricts these to ADMIN and
@@ -387,5 +396,41 @@ export const adminDataRouter = router({
       orderBy: { dateCreated: "desc" },
       take: AUDIT_LOG_PAGE_SIZE,
     });
+  }),
+
+  /**
+   * The report queue (SCRUM-555). Read-only, most recent first, and bounded
+   * like `getAuditLog`. Resolving a report is SCRUM-552.
+   *
+   * **This is the one admin read that returns message text**, and it is the
+   * exception the header's rule allows for. A snapshot is a copy of a thread
+   * that one of its two parties chose to submit for review, made when they
+   * filed the report. Nothing here reads the `message` table.
+   *
+   * Like `getAuditLog`, it returns raw user ids, and the client resolves them
+   * through `getAllUsers`. The snapshot is parsed here, so the client gets
+   * typed messages rather than a JSON string.
+   */
+  getReports: adminRouter.query(async ({ ctx }) => {
+    const rows = await ctx.prisma.report.findMany({
+      orderBy: { dateCreated: "desc" },
+      take: REPORT_QUEUE_PAGE_SIZE,
+      select: {
+        id: true,
+        reporterId: true,
+        reportedUserId: true,
+        reason: true,
+        message: true,
+        requestId: true,
+        conversationSnapshot: true,
+        status: true,
+        dateCreated: true,
+      },
+    });
+
+    return rows.map(({ conversationSnapshot, ...row }) => ({
+      ...row,
+      conversationSnapshot: parseConversationSnapshot(conversationSnapshot),
+    }));
   }),
 });

@@ -4,14 +4,14 @@ This directory is the server-side API. Every endpoint the app exposes is a tRPC 
 
 ## Files
 
-| File                                   | Purpose                                                                                                         |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| [`createRouter.ts`](./createRouter.ts) | Initializes tRPC and exports the router/procedure builders and auth middleware                                  |
-| [`context.ts`](./context.ts)           | Builds the per-request context                                                                                  |
-| [`index.ts`](./index.ts)               | Merges subrouters into `appRouter` and exports its type                                                         |
-| [`user.ts`](./user.ts)                 | Core user procedures; mounts everything in [`user/`](./user)                                                    |
-| [`mapbox.ts`](./mapbox.ts)             | Address search, map user list, and directions                                                                   |
-| [`user/`](./user)                      | Feature subrouters: `admin`, `blocks`, `email`, `favorites`, `groups`, `message`, `recommendations`, `requests` |
+| File                                   | Purpose                                                                                                                    |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| [`createRouter.ts`](./createRouter.ts) | Initializes tRPC and exports the router/procedure builders and auth middleware                                             |
+| [`context.ts`](./context.ts)           | Builds the per-request context                                                                                             |
+| [`index.ts`](./index.ts)               | Merges subrouters into `appRouter` and exports its type                                                                    |
+| [`user.ts`](./user.ts)                 | Core user procedures; mounts everything in [`user/`](./user)                                                               |
+| [`mapbox.ts`](./mapbox.ts)             | Address search, map user list, and directions                                                                              |
+| [`user/`](./user)                      | Feature subrouters: `admin`, `blocks`, `email`, `favorites`, `groups`, `message`, `recommendations`, `reports`, `requests` |
 
 `appRouter` is served over HTTP by [`[trpc].ts`](../../pages/api/trpc/%5Btrpc%5D.ts).
 

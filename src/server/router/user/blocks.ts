@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedRouter, router } from "../createRouter";
+import type { PrismaOrTransaction } from "../../db/client";
 
 /**
  * Blocking another user (SCRUM-554).
@@ -31,6 +32,64 @@ const requireCallerId = (userId: string | undefined): string => {
     });
   }
   return userId;
+};
+
+/**
+ * Records `blockerId`'s block of `blockedId`, or throws the refusal.
+ *
+ * Shared by `user.blocks.block` and by `user.reports.create`'s "Also block"
+ * (SCRUM-555), so a report cannot place a block the Block button would have
+ * refused. Takes the client as a parameter because the report path runs it
+ * inside the transaction that writes the report. Every refusal is thrown before
+ * the upsert, so a caller inside a transaction can catch one and carry on.
+ */
+export const applyBlock = async (
+  prisma: PrismaOrTransaction,
+  blockerId: string,
+  blockedId: string,
+): Promise<void> => {
+  if (blockedId === blockerId) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "You can't block yourself.",
+    });
+  }
+
+  // `relationMode = "prisma"` emulates the relation, which covers cascades
+  // but does not check that `blockedId` exists on insert. Without this, any
+  // string would be stored as a block.
+  const target = await prisma.user.findUnique({
+    where: { id: blockedId },
+    select: { id: true },
+  });
+
+  if (!target) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "User not found." });
+  }
+
+  const searches = await prisma.carpoolSearch.findMany({
+    where: { userId: { in: [blockerId, blockedId] } },
+    select: { userId: true, carpoolId: true },
+  });
+  const callerGroup = searches.find((s) => s.userId === blockerId)?.carpoolId;
+  const targetGroup = searches.find((s) => s.userId === blockedId)?.carpoolId;
+
+  // The same shape as `requests.create`'s guard: `callerGroup &&` covers
+  // null and undefined together, so two ungrouped users never match.
+  if (callerGroup && callerGroup === targetGroup) {
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: BLOCK_GROUP_MEMBER_MESSAGE,
+    });
+  }
+
+  // An upsert on the unique pair is what makes this idempotent. The empty
+  // `update` leaves an existing row, and its `dateCreated`, as they were.
+  await prisma.block.upsert({
+    where: { blockerId_blockedId: { blockerId, blockedId } },
+    create: { blockerId, blockedId },
+    update: {},
+  });
 };
 
 const targetInput = z.object({ userId: z.string().min(1) }).strict();
@@ -77,52 +136,7 @@ export const blocksRouter = router({
   block: protectedRouter.input(targetInput).mutation(async ({ ctx, input }) => {
     const userId = requireCallerId(ctx.session.user?.id);
 
-    if (input.userId === userId) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "You can't block yourself.",
-      });
-    }
-
-    // `relationMode = "prisma"` emulates the relation, which covers cascades
-    // but does not check that `blockedId` exists on insert. Without this, any
-    // string would be stored as a block.
-    const target = await ctx.prisma.user.findUnique({
-      where: { id: input.userId },
-      select: { id: true },
-    });
-
-    if (!target) {
-      throw new TRPCError({ code: "NOT_FOUND", message: "User not found." });
-    }
-
-    const searches = await ctx.prisma.carpoolSearch.findMany({
-      where: { userId: { in: [userId, input.userId] } },
-      select: { userId: true, carpoolId: true },
-    });
-    const callerGroup = searches.find((s) => s.userId === userId)?.carpoolId;
-    const targetGroup = searches.find(
-      (s) => s.userId === input.userId,
-    )?.carpoolId;
-
-    // The same shape as `requests.create`'s guard: `callerGroup &&` covers
-    // null and undefined together, so two ungrouped users never match.
-    if (callerGroup && callerGroup === targetGroup) {
-      throw new TRPCError({
-        code: "CONFLICT",
-        message: BLOCK_GROUP_MEMBER_MESSAGE,
-      });
-    }
-
-    // An upsert on the unique pair is what makes this idempotent. The empty
-    // `update` leaves an existing row, and its `dateCreated`, as they were.
-    await ctx.prisma.block.upsert({
-      where: {
-        blockerId_blockedId: { blockerId: userId, blockedId: input.userId },
-      },
-      create: { blockerId: userId, blockedId: input.userId },
-      update: {},
-    });
+    await applyBlock(ctx.prisma, userId, input.userId);
 
     return { blocked: true as const };
   }),

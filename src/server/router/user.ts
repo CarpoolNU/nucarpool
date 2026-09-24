@@ -14,6 +14,7 @@ import { messageRouter } from "./user/message";
 import { recommendationsRouter } from "./user/recommendations";
 import { emailsRouter } from "./user/email";
 import { blocksRouter } from "./user/blocks";
+import { reportsRouter } from "./user/reports";
 import {
   generatePresignedUrl,
   getPresignedImageUrl,
@@ -623,4 +624,5 @@ export const userRouter = router({
   emails: emailsRouter,
   admin: adminDataRouter,
   blocks: blocksRouter,
+  reports: reportsRouter,
 });
