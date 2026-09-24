@@ -64,3 +64,16 @@ deny	@P@  deploy-request   deploy  nucarpool 26
 pass	@P@ sql nucarpool main --role reader --query "EXPLAIN SELECT * FROM user"
 pass	@P@ sql 'nucarpool' 'main' --role reader --query 'SELECT 1'
 pass	@P@ sql "nucarpool" "main" --query "SHOW TABLES"
+
+# --- session brief (SCRUM-447) -------------------------------------------
+# A CLI command that nothing objects to is the moment the session is known
+# to be talking to a real database, so it carries the brief.
+ctx	@P@ insights nucarpool main
+ctx	@P@ branch show nucarpool staging
+# The PlanetScale MCP read tools carry no shell command at all.
+ctx	mcp:mcp__planetscale__planetscale_execute_read_query
+ctx	mcp:mcp__planetscale__planetscale_get_insights
+# Everything else stays silent - the zero-always-on-cost property.
+noctx	ls -la
+noctx	yarn lint
+noctx	mcp:mcp__atlassian__getJiraIssue
