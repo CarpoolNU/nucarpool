@@ -254,6 +254,17 @@
             "statusMessage": "Checking PlanetScale guardrails..."
           }
         ]
+      },
+      {
+        "matcher": "mcp__planetscale__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/pscale-guard.sh",
+            "timeout": 10,
+            "statusMessage": "Checking PlanetScale guardrails..."
+          }
+        ]
       }
     ]
   }
