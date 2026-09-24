@@ -258,12 +258,13 @@ const coopYearMessage = (now: Date = new Date()): string => {
  * Which co-op date fields hold an implausible year, for the two schemas to
  * attach an issue to each.
  *
- * **A VIEWER is exempt**, unlike the ordering check. Both pickers are
- * `disabled` for a VIEWER, yet every profile save re-sends the stored dates, so
- * refusing a VIEWER's stored year would reject every save they make and give
- * them nothing on the page to change. Two of production's 22 are VIEWERs. A
- * VIEWER is browsing rather than matching, so the dates do nothing meanwhile;
- * switching to RIDER or DRIVER enables the pickers and the check with them.
+ * **A VIEWER is exempt**, as from the ordering check in
+ * `reversedCoopRangeFields`. Both pickers are `disabled` for a VIEWER, yet
+ * every profile save re-sends the stored dates, so refusing a VIEWER's stored
+ * year would reject every save they make and give them nothing on the page to
+ * change. Two of production's 22 are VIEWERs. A VIEWER is browsing rather than
+ * matching, so the dates do nothing meanwhile; switching to RIDER or DRIVER
+ * enables the pickers and the check with them.
  */
 const implausibleCoopYearFields = ({
   role,
@@ -290,6 +291,33 @@ const implausibleCoopYearFields = ({
   return fields;
 };
 
+/**
+ * Which co-op date field a reversed range is reported against, for the two
+ * schemas and the profile page's notice: the end date, or nothing.
+ *
+ * **A VIEWER is exempt (SCRUM-551)**, for the reason
+ * `implausibleCoopYearFields` gives. The same trap caught more than the one
+ * VIEWER among production's 47 reversed rows: `isViewer` reads the live form
+ * role, so a RIDER or DRIVER holding a reversed range who picked Viewer had
+ * their pickers disabled under them and could not save either.
+ *
+ * `isReversedCoopRange` itself stays role-blind. A reversed range is still
+ * wrong whoever stores it, and `check-profile-coordinates.ts` reports it as
+ * such; this decides only when refusing it gives the user something to act on.
+ */
+const reversedCoopRangeFields = ({
+  role,
+  coopStartDate,
+  coopEndDate,
+}: {
+  role: Role;
+  coopStartDate: Date | null | undefined;
+  coopEndDate: Date | null | undefined;
+}): "coopEndDate"[] =>
+  role !== Role.VIEWER && isReversedCoopRange(coopStartDate, coopEndDate)
+    ? ["coopEndDate"]
+    : [];
+
 export {
   handleMonthChange,
   handleMonthPickerChange,
@@ -300,5 +328,6 @@ export {
   isImplausibleCoopYear,
   coopYearMessage,
   implausibleCoopYearFields,
+  reversedCoopRangeFields,
   toMonthPickerValue,
 };
