@@ -121,7 +121,27 @@ One asymmetry left behind by step 3: `resolveGroupDetails` no longer needs to te
 
 > **The column is trustworthy only for rows written by `user.acceptTerms`.** It previously got set as a side effect of _any_ profile save, and the modal only rendered during onboarding — so an already-onboarded user could have `true` without ever seeing the terms. Pre-existing rows were deliberately left alone rather than forcing re-consent.
 
-There is no timestamp and no terms version, so the two cohorts are indistinguishable. **Do not treat an older `true` as evidence for a specific user.**
+### The two cohorts are now distinguishable
+
+`license_signed_at` and `license_version` record **when** the acceptance happened and **which wording** was accepted. `user.acceptTerms` writes all three columns together and is still their only writer.
+
+| `license_signed` | `license_signed_at` | `license_version` | What the row means                                                       |
+| ---------------- | ------------------- | ----------------- | ------------------------------------------------------------------------ |
+| `false`          | null                | null              | Never accepted. The gate shows the dialog.                               |
+| `true`           | a timestamp         | a date string     | A real acceptance of known wording, recorded by `user.acceptTerms`.      |
+| `true`           | **null**            | **null**          | **The legacy cohort.** Accepted, or merely saved a profile — unknowable. |
+
+**Null is the record, not a gap.** There was no timestamp to recover and no version to infer, so the migration backfills nothing; the nullness _is_ what identifies the untrusted cohort, which is what makes a targeted re-consent possible for the first time. As of the migration that is every `license_signed = true` row on production — 3,341 of 4,486 users.
+
+**Do not treat a null-version `true` as evidence for a specific user.** That has not changed; what changed is that you can now tell which rows those are.
+
+The boolean was kept rather than replaced because it is the only acceptance record the legacy cohort has, so the usual expand/backfill/contract cycle has nothing to backfill from and no contract phase to reach.
+
+### Re-consent is a policy, not a consequence of a version bump
+
+[`src/utils/termsAcceptance.ts`](../../utils/termsAcceptance.ts) is the canonical home for `CURRENT_TERMS_VERSION`, the gate condition, and a separate `TERMS_REQUIRE_REACCEPTANCE_ON_UPDATE` flag that ships **off**. Bumping the version records what new acceptances agreed to; it does not re-prompt anybody. Turning the flag on re-prompts every stale and every legacy row, which is a university and legal decision rather than an engineering one — the terms themselves currently say continued use constitutes acknowledgment of updates.
+
+The version string names the **text**, not the release: it is the date the prose in `CompliancePortal.tsx` last changed. A test fingerprints that prose and fails if it moves without the version moving with it.
 
 ## One request per pair, and why it is not a constraint
 

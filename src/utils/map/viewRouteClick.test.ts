@@ -1,6 +1,7 @@
 import { Permission, Role, Status } from "@prisma/client";
 import type { FeatureCollection } from "geojson";
 import type { CarpoolAddress, GeoJsonUsers, PublicUser, User } from "../types";
+import { CURRENT_TERMS_VERSION } from "../termsAcceptance";
 import { runViewRouteClick } from "./viewRouteClick";
 import { viewRoute } from "./viewRoute";
 import clearOtherUserMarkers from "./clearOtherUserMarkers";
@@ -53,6 +54,8 @@ const buildUser = (overrides: Partial<User> = {}): User => ({
   permission: Permission.USER,
   isOnboarded: true,
   licenseSigned: true,
+  licenseSignedAt: new Date("2026-01-01T00:00:00.000Z"),
+  licenseVersion: CURRENT_TERMS_VERSION,
   dateCreated: new Date("2026-01-01T00:00:00.000Z"),
   dateModified: new Date("2026-01-01T00:00:00.000Z"),
   hasCarpoolSearch: true,

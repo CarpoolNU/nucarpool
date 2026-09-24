@@ -3,6 +3,7 @@ import { z } from "zod";
 import { protectedRouter, router } from "./createRouter";
 import { MAX_SEATS_AVAILABLE } from "../../utils/carpoolSeats";
 import { PROFILE_TEXT_MAX_LENGTH } from "../../utils/textLimits";
+import { CURRENT_TERMS_VERSION } from "../../utils/termsAcceptance";
 import { Role } from "@prisma/client";
 import { Status } from "@prisma/client";
 import _ from "lodash";
@@ -537,9 +538,15 @@ export const userRouter = router({
    * on acceptance at all: the "I Agree" button fired a Mixpanel event and
    * closed the dialog, and the flag was set as a side effect of `user.edit`.
    *
-   * Note on reading the column: it is trustworthy as evidence of acceptance only
-   * for values written here. Rows that already had it set may have got it from a
-   * profile save - see "Terms acceptance" in `src/server/db/README.md`.
+   * Note on reading the columns: they are trustworthy as evidence of acceptance
+   * only for values written here. Rows that already had the boolean set may have
+   * got it from a profile save - see "Terms acceptance" in
+   * `src/server/db/README.md`. Those rows are exactly the ones whose
+   * `licenseSignedAt` and `licenseVersion` are null.
+   *
+   * All three columns are written together, so the record always says when and
+   * to what. The version comes from the server rather than from the client:
+   * what a caller claims to have read is not evidence of what was rendered.
    */
   acceptTerms: protectedRouter.mutation(async ({ ctx }) => {
     const userId = ctx.session.user?.id;
@@ -555,6 +562,8 @@ export const userRouter = router({
       where: { id: userId },
       data: {
         licenseSigned: true,
+        licenseSignedAt: new Date(),
+        licenseVersion: CURRENT_TERMS_VERSION,
       },
     });
 

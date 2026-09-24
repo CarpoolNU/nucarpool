@@ -4,6 +4,7 @@ import type { Session } from "next-auth";
 import { appRouter } from "./index";
 import type { Context } from "./context";
 import { PROFILE_TEXT_MAX_LENGTH } from "../../utils/textLimits";
+import { CURRENT_TERMS_VERSION } from "../../utils/termsAcceptance";
 import { MAX_PROFILE_IMAGE_BYTES } from "../../utils/profileImage";
 import { cloneState, withTransaction } from "./transactionMock";
 import dayjs from "dayjs";
@@ -782,6 +783,11 @@ const editInput = (overrides: Record<string, unknown> = {}) =>
  * It used to be set to `true` by every profile save, which made
  * `licenseSigned` a record of "this user saved a profile" rather than of consent
  * to a liability disclaimer written on behalf of the university.
+ *
+ * It now records *when* and *to what* as well, and all three columns move
+ * together. A row with the boolean set and the other two null is not a partial
+ * write from here - it is a row that predates the columns, and the only thing
+ * that distinguishes the untrusted legacy cohort. SCRUM-280.
  */
 describe("user.acceptTerms", () => {
   const acceptCallerFor = (session: Session | null, prisma: unknown) =>
@@ -806,8 +812,44 @@ describe("user.acceptTerms", () => {
     expect(update).toHaveBeenCalledTimes(1);
     expect(update).toHaveBeenCalledWith({
       where: { id: SESSION_USER },
-      data: { licenseSigned: true },
+      data: {
+        licenseSigned: true,
+        licenseSignedAt: expect.any(Date),
+        licenseVersion: CURRENT_TERMS_VERSION,
+      },
     });
+  });
+
+  it("stamps the version the server is serving, not one a caller chose", async () => {
+    // `acceptTerms` takes no input at all, which is what makes the stored
+    // version evidence rather than a claim. Pinned because adding a `version`
+    // parameter would look harmless and would let a stale or hostile client
+    // record agreement to wording it never displayed.
+    const update = jest.fn(async ({ where }: any) => ({ id: where.id }));
+
+    await (
+      acceptCallerFor(sessionFor(SESSION_USER), {
+        user: { update },
+      }).user.acceptTerms as (input?: unknown) => Promise<unknown>
+    )({ licenseVersion: "1999-01-01" });
+
+    expect(update.mock.calls[0][0].data.licenseVersion).toBe(
+      CURRENT_TERMS_VERSION,
+    );
+  });
+
+  it("writes a timestamp at the moment of acceptance", async () => {
+    const update = jest.fn(async ({ where }: any) => ({ id: where.id }));
+
+    const before = Date.now();
+    await acceptCallerFor(sessionFor(SESSION_USER), {
+      user: { update },
+    }).user.acceptTerms();
+    const after = Date.now();
+
+    const signedAt: Date = update.mock.calls[0][0].data.licenseSignedAt;
+    expect(signedAt.getTime()).toBeGreaterThanOrEqual(before);
+    expect(signedAt.getTime()).toBeLessThanOrEqual(after);
   });
 
   it("cannot be used to record an acceptance for somebody else", async () => {
@@ -822,7 +864,11 @@ describe("user.acceptTerms", () => {
 
     expect(update).toHaveBeenCalledWith({
       where: { id: OTHER_USER },
-      data: { licenseSigned: true },
+      data: {
+        licenseSigned: true,
+        licenseSignedAt: expect.any(Date),
+        licenseVersion: CURRENT_TERMS_VERSION,
+      },
     });
   });
 
@@ -849,6 +895,8 @@ describe("user.edit — terms acceptance is not a profile field", () => {
     expect(db.prisma.user.update).toHaveBeenCalled();
     for (const call of db.prisma.user.update.mock.calls) {
       expect((call[0] as any).data).not.toHaveProperty("licenseSigned");
+      expect((call[0] as any).data).not.toHaveProperty("licenseSignedAt");
+      expect((call[0] as any).data).not.toHaveProperty("licenseVersion");
     }
   });
 });

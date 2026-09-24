@@ -231,6 +231,15 @@ export type User = {
   permission: Permission;
   isOnboarded: boolean;
   licenseSigned: boolean;
+  /**
+   * When the terms were accepted and which wording was accepted. Both null for
+   * every row that accepted before these columns existed, which is the only
+   * thing that separates that untrusted cohort from a real acceptance. Read
+   * them through `needsTermsAcceptance` in `src/utils/termsAcceptance.ts`
+   * rather than comparing versions at a call site.
+   */
+  licenseSignedAt: Date | null;
+  licenseVersion: string | null;
   dateCreated: Date;
   dateModified: Date;
   // Fields merged from CarpoolSearch
