@@ -97,6 +97,7 @@ An unannotated `String` is `VARCHAR(191)`, which is why so many limits are 191.
 | `carpool_search.group_music_preference`                 | `VARCHAR(40)`  | `groups.updatePreferences`                           |
 | `carpool_search.group_conversation_style`               | `VARCHAR(40)`  | `groups.updatePreferences`                           |
 | `request.message`                                       | `VARCHAR(255)` | never written; `requests.create` stores `""`         |
+| `report.message`                                        | `VARCHAR(500)` | nothing yet; the report mutation lands in SCRUM-555  |
 | `location.street`, `.street_address`, `.city`, `.state` | `VARCHAR(191)` | parsed from a Mapbox feature, not typed              |
 
 The values live in [`textLimits.ts`](../../utils/textLimits.ts) so the form, the tRPC input and the column cannot drift. **Reference the constants; never write the number inline** — including where a value is only forwarded and not stored, such as the SES `messagePreview`, which is a real case of drift this module exists to prevent.
@@ -306,13 +307,17 @@ Reversing the decision needs a new decision, not an `--apply` run on the strengt
 
 **There is no delete-my-account feature, and that is a decision rather than an omission.** Nothing needs fixing to allow one, and the schema should not be changed to make one possible without revisiting the decision. This section exists so the cascade question is not rediscovered and assumed to be a bug.
 
-`User` has six incoming relations; three cascade and three restrict:
+`User` has ten incoming relations; five cascade and five restrict:
 
 | Relation                                             | On user delete      |
 | ---------------------------------------------------- | ------------------- |
 | `Account.user`, `Session.user`, `CarpoolSearch.user` | `Cascade`           |
+| `Block.blocker` / `Block.blocked`                    | `Cascade`           |
 | `Request.fromUser` / `Request.toUser`                | emulated `Restrict` |
 | `Message.User`                                       | emulated `Restrict` |
+| `Report.reporter` / `Report.reportedUser`            | emulated `Restrict` |
+
+A block means nothing once either user is gone, so it cascades. A report is evidence, and restricts for the same reason messages do. See the comments on both models in `schema.prisma`.
 
 `relationMode = "prisma"` makes `Restrict` the default when no `onDelete` is declared, enforced in application code. So deleting a user who has ever sent a request or message — every real user — fails. **Under this decision that is correct**, and the absent `onDelete` is what stops an accidental delete taking message history with it.
 

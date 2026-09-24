@@ -49,6 +49,28 @@ enum RequestStatus {
   ACCEPTED
 }
 
+// Why a user reported another user (SCRUM-532). The reporter picks one; the
+// free-text `Report.message` carries the detail. `OTHER` exists so a report
+// never has to be forced into a category that does not fit.
+enum ReportReason {
+  SAFETY_CONCERN
+  HARASSMENT
+  INAPPROPRIATE_MESSAGES
+  FAKE_PROFILE
+  NO_SHOW
+  OTHER
+}
+
+// Where a report stands in the admin queue. Every report is created `OPEN`,
+// and nothing moves it yet: the queue is read-only until the suspension work
+// (SCRUM-552) gives an admin something to resolve it with. `REVIEWED` and
+// `DISMISSED` ship now so that ticket needs no second Deploy Request.
+enum ReportStatus {
+  OPEN
+  REVIEWED
+  DISMISSED
+}
+
 // Represents an Account--need this for NextAuth.
 model Account {
   id                String  @id @default(cuid()) // primary key
@@ -189,6 +211,10 @@ model User {
   sentRequests            Request[]       @relation("sentRequests")
   receivedRequests        Request[]       @relation("receivedRequests")
   message                 Message[]
+  blocksMade              Block[]         @relation("blocksMade")
+  blocksReceived          Block[]         @relation("blocksReceived")
+  reportsMade             Report[]        @relation("reportsMade")
+  reportsReceived         Report[]        @relation("reportsReceived")
   dateCreated             DateTime        @default(now())
   dateModified            DateTime        @default(now()) @updatedAt
   carpoolSearches         CarpoolSearch[]
@@ -286,6 +312,65 @@ model AdminAuditLog {
   @@index([actorId])
   @@index([targetId])
   @@map("admin_audit_log")
+}
+
+// One user blocking another (SCRUM-532). A row is one direction, but the
+// effect is symmetric: the server treats a pair as blocked if a row exists
+// either way round, so neither user sees or reaches the other. Only the
+// blocker can remove the row.
+//
+// Both relations cascade because a block means nothing without both users.
+// That differs from `Report`, below, which must outlive them.
+model Block {
+  id          String   @id @default(cuid())
+  blockerId   String   @map("blocker_id")
+  blockedId   String   @map("blocked_id")
+  blocker     User     @relation("blocksMade", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked     User     @relation("blocksReceived", fields: [blockedId], references: [id], onDelete: Cascade)
+  dateCreated DateTime @default(now()) @map("date_created")
+
+  // The unique pair makes blocking idempotent and leads with `blockerId`, so
+  // it also serves "who have I blocked". `blockedId` needs its own index for
+  // the reverse lookup "who has blocked me", which every block check makes.
+  @@unique([blockerId, blockedId])
+  @@index([blockedId])
+  @@map("block")
+}
+
+// A user's report about another user, read by admins (SCRUM-532).
+//
+// **A report must outlive what it describes.** Either party can delete the
+// request a report was made from, and `requests.delete` takes the conversation
+// and every message with it. So:
+//   - `requestId` is a plain id, not a relation, as `AdminAuditLog` does and
+//     for the same reason. It may point at nothing.
+//   - `conversationSnapshot` is a server-built JSON copy of the thread's recent
+//     messages, taken when the report is filed. That copy is the evidence.
+//   - The two `User` relations declare no `onDelete`, so the emulated default
+//     is `Restrict`: a user with reports cannot be deleted from under them,
+//     matching `Request` and `Message`.
+model Report {
+  id                   String       @id @default(cuid())
+  reporterId           String       @map("reporter_id")
+  reportedUserId       String       @map("reported_user_id")
+  reporter             User         @relation("reportsMade", fields: [reporterId], references: [id])
+  reportedUser         User         @relation("reportsReceived", fields: [reportedUserId], references: [id])
+  reason               ReportReason
+  // The reporter's own words. Width matches `REPORT_MESSAGE_MAX_LENGTH`.
+  message              String?      @db.VarChar(500)
+  requestId            String?      @map("request_id")
+  // `@db.Text` because the server builds it, not a Zod-bounded user input.
+  conversationSnapshot String?      @map("conversation_snapshot") @db.Text
+  status               ReportStatus @default(OPEN)
+  dateCreated          DateTime     @default(now()) @map("date_created")
+  dateModified         DateTime     @default(now()) @updatedAt @map("date_modified")
+
+  @@index([reporterId])
+  @@index([reportedUserId])
+  // The admin queue lists reports newest first, and will filter by status
+  // once reports can be resolved.
+  @@index([status, dateCreated])
+  @@map("report")
 }
 
 // Represents a VerificationToken--need this for NextAuth.
