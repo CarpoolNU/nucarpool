@@ -9,6 +9,7 @@ import Spinner from "../components/Spinner";
 import { Permission } from "@prisma/client";
 import AdminData from "../components/Admin/AdminData";
 import AdminAuditLog from "../components/Admin/AdminAuditLog";
+import AdminReports from "../components/Admin/AdminReports";
 import AdminMobileNotice from "../components/Admin/AdminMobileNotice";
 import useIsHydrated from "../utils/useIsHydrated";
 import useIsMobile from "../utils/useIsMobile";
@@ -163,6 +164,8 @@ const Admin: NextPage<AdminProps> = ({ userPermission }) => {
               <UserManagement permission={userPermission} />
             ) : option === "audit" ? (
               <AdminAuditLog />
+            ) : option === "reports" ? (
+              <AdminReports />
             ) : (
               <AdminData />
             )}

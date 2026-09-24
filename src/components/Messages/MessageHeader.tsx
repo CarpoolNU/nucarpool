@@ -297,6 +297,12 @@ const MessageHeader = ({
   const handleClose = () => {
     onClose("");
   };
+
+  // The request this thread belongs to, chosen the way `MessagePanel` chooses
+  // it to send, so a report made here snapshots the thread on screen.
+  const requestId = (
+    selectedUser.incomingRequest || selectedUser.outgoingRequest
+  )?.id;
   /*
     Only the desktop branch below draws an avatar, so only it pays for one.
     Ungated, this fired an authenticated presigned-URL request - and an S3
@@ -386,6 +392,7 @@ const MessageHeader = ({
               key={selectedUser.id}
               userId={selectedUser.id}
               userName={selectedUser.preferredName}
+              requestId={requestId}
               onBlocked={handleClose}
             />
           </div>
@@ -505,6 +512,7 @@ const MessageHeader = ({
           key={selectedUser.id}
           userId={selectedUser.id}
           userName={selectedUser.preferredName}
+          requestId={requestId}
           onBlocked={handleClose}
         />
 

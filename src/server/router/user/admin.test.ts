@@ -48,6 +48,7 @@ const buildPrismaMock = () => {
       create: jest.fn().mockResolvedValue({}),
       findMany: jest.fn().mockResolvedValue([]),
     },
+    report: { findMany: jest.fn().mockResolvedValue([]) },
   };
 
   // `updateUserPermission` writes its update and its audit entry inside
@@ -580,5 +581,69 @@ describe("getAuditLog", () => {
       orderBy: { dateCreated: "desc" },
       take: 500,
     });
+  });
+});
+
+describe("getReports", () => {
+  it("reads the most recent reports first, bounded rather than paginated", async () => {
+    const { caller, prisma } = callerFor();
+
+    await caller.user.admin.getReports();
+
+    expect(prisma.report.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderBy: { dateCreated: "desc" },
+        take: 500,
+      }),
+    );
+  });
+
+  it("never reads the message table, only the copy the report kept", async () => {
+    const { caller, prisma } = callerFor();
+
+    await caller.user.admin.getReports();
+
+    expect(prisma.message.findMany).not.toHaveBeenCalled();
+    for (const args of everyCallArgument(prisma)) {
+      expect(selectsField(args, "content")).toBe(false);
+    }
+  });
+
+  it("returns the snapshot parsed, and null where it cannot be", async () => {
+    const { caller, prisma } = callerFor();
+    const base = {
+      reporterId: "user-1",
+      reportedUserId: "user-2",
+      reason: "HARASSMENT",
+      message: null,
+      requestId: "req-1",
+      status: "OPEN",
+      dateCreated: new Date(2026, 8, 1),
+    };
+    prisma.report.findMany.mockResolvedValue([
+      {
+        ...base,
+        id: "report-1",
+        conversationSnapshot: JSON.stringify([
+          {
+            senderId: "user-2",
+            content: "hello",
+            sentAt: "2026-09-01T12:00:00.000Z",
+          },
+        ]),
+      },
+      { ...base, id: "report-2", conversationSnapshot: "not json" },
+    ]);
+
+    const reports = await caller.user.admin.getReports();
+
+    expect(reports[0].conversationSnapshot).toEqual([
+      {
+        senderId: "user-2",
+        content: "hello",
+        sentAt: new Date("2026-09-01T12:00:00.000Z"),
+      },
+    ]);
+    expect(reports[1].conversationSnapshot).toBeNull();
   });
 });

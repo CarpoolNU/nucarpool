@@ -97,7 +97,7 @@ An unannotated `String` is `VARCHAR(191)`, which is why so many limits are 191.
 | `carpool_search.group_music_preference`                 | `VARCHAR(40)`  | `groups.updatePreferences`                           |
 | `carpool_search.group_conversation_style`               | `VARCHAR(40)`  | `groups.updatePreferences`                           |
 | `request.message`                                       | `VARCHAR(255)` | never written; `requests.create` stores `""`         |
-| `report.message`                                        | `VARCHAR(500)` | nothing yet; the report mutation lands in SCRUM-555  |
+| `report.message`                                        | `VARCHAR(500)` | `reports.create`, the `ReportDialog` textarea        |
 | `location.street`, `.street_address`, `.city`, `.state` | `VARCHAR(191)` | parsed from a Mapbox feature, not typed              |
 
 The values live in [`textLimits.ts`](../../utils/textLimits.ts) so the form, the tRPC input and the column cannot drift. **Reference the constants; never write the number inline** — including where a value is only forwarded and not stored, such as the SES `messagePreview`, which is a real case of drift this module exists to prevent.
@@ -311,6 +311,15 @@ A `Block` row is one user's choice, but its effect is symmetric: every check in 
 - **Where it is enforced.** Discovery (`candidateExclusions`, shared by recommendations and the map), `favorites.me` and adding a favourite, `requests.me` and `requests.create`, both group join paths, `messages.conversation`, `sendMessage` and the unread count, all three notification emails, and Pusher conversation-channel auth.
 - **Where it deliberately is not.** `requests.delete`, removing a favourite, and leaving or dissolving a group. A user must always be able to get out.
 - **A blocked pair never shares a group.** `user.blocks.block` refuses someone in the caller's group ("Leave the group first"), and `groups.edit` checks a joining rider against every member, not only the driver. The two checks are separate reads, so a block and a join racing each other can still both succeed. There is no constraint behind it, for the same reason as [one request per pair](#one-request-per-pair-and-why-it-is-not-a-constraint).
+
+## Reports
+
+A report is filed through `user.reports.create` and read by admins through `user.admin.getReports` (SCRUM-555). Nothing about it is shown to the reported user.
+
+- **A report made from a conversation keeps its own copy.** The server writes the last 50 messages into `conversation_snapshot`, because either party can delete the request, and `requests.delete` takes the conversation and every message with it. `request_id` is a plain id for the same reason. The copy is built on the server, never accepted from the client.
+- **One OPEN report per reporter and person.** It is a read before the insert, not a constraint, because it depends on `status`. Two simultaneous submissions can both pass.
+- **"Also block" goes through the same `applyBlock` as the Block button.** The report and the block commit together. A refusal for someone in the reporter's group is the one exception: the report still saves and the refusal is returned as a note.
+- **The snapshot is the one place admins read message text.** `getReports` reads the copy on the report, never the `message` table.
 
 ## Account deletion
 

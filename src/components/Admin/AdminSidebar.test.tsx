@@ -133,6 +133,17 @@ it("keeps the unselected button unmarked", () => {
  * SCRUM-513. Selection here was underline and weight alone - no
  * `aria-pressed` - so both buttons announced identically.
  */
+it("offers the Reports tab, and selecting it asks for the reports option (SCRUM-555)", () => {
+  const setOption = jest.fn();
+  render(<AdminSidebar option="reports" setOption={setOption} />);
+
+  const reports = screen.getByRole("button", { name: "Reports" });
+  expect(reports).toHaveAttribute("aria-pressed", "true");
+
+  reports.click();
+  expect(setOption).toHaveBeenCalledWith("reports");
+});
+
 it("marks exactly the selected button as pressed", () => {
   renderSidebar("data");
 

@@ -18,6 +18,7 @@ import { BLOCK_GROUP_MEMBER_MESSAGE } from "../../server/router/user/blocks";
  */
 
 const mockBlock = jest.fn();
+const mockReport = jest.fn();
 const mockMutationOptions: {
   onSuccess?: () => Promise<void>;
   onError?: (error: { message: string }) => void;
@@ -57,6 +58,11 @@ jest.mock("../../utils/trpc", () => ({
             Object.assign(mockMutationOptions, options);
             return { mutate: mockBlock, isPending: false };
           },
+        },
+      },
+      reports: {
+        create: {
+          useMutation: () => ({ mutate: mockReport, isPending: false }),
         },
       },
     },
@@ -179,5 +185,63 @@ describe("UserActionsMenu", () => {
     expect(mockToast.error).toHaveBeenCalledWith(BLOCK_GROUP_MEMBER_MESSAGE);
     expect(onBlocked).not.toHaveBeenCalled();
     expect(mockInvalidations.blocks).not.toHaveBeenCalled();
+  });
+});
+
+describe("UserActionsMenu Report (SCRUM-555)", () => {
+  const openReport = async (requestId?: string) => {
+    render(
+      <UserActionsMenu
+        userId="user-taylor"
+        userName="Taylor"
+        requestId={requestId}
+      />,
+    );
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole("button", { name: "More actions for Taylor" }),
+    );
+    await user.click(await screen.findByRole("menuitem", { name: "Report" }));
+    await screen.findByRole("dialog", { name: "Report Taylor" });
+    return user;
+  };
+
+  it("opens the report form, and sends nothing until it is submitted", async () => {
+    await openReport();
+
+    expect(mockReport).not.toHaveBeenCalled();
+    expect(mockBlock).not.toHaveBeenCalled();
+  });
+
+  it("reports from the conversation the menu sits on", async () => {
+    const user = await openReport("req-1");
+
+    await user.selectOptions(screen.getByLabelText("Reason"), "Harassment");
+    await user.click(screen.getByRole("button", { name: "Report" }));
+
+    expect(mockReport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reportedUserId: "user-taylor",
+        requestId: "req-1",
+      }),
+    );
+  });
+
+  it("starts with an empty form each time it is opened", async () => {
+    const user = await openReport();
+    await user.type(screen.getByLabelText("What happened? (optional)"), "abc");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "More actions for Taylor" }),
+    );
+    await user.click(await screen.findByRole("menuitem", { name: "Report" }));
+
+    expect(
+      await screen.findByLabelText("What happened? (optional)"),
+    ).toHaveValue("");
   });
 });
