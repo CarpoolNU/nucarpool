@@ -4,14 +4,14 @@ This directory is the server-side API. Every endpoint the app exposes is a tRPC 
 
 ## Files
 
-| File                                   | Purpose                                                                                               |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| [`createRouter.ts`](./createRouter.ts) | Initializes tRPC and exports the router/procedure builders and auth middleware                        |
-| [`context.ts`](./context.ts)           | Builds the per-request context                                                                        |
-| [`index.ts`](./index.ts)               | Merges subrouters into `appRouter` and exports its type                                               |
-| [`user.ts`](./user.ts)                 | Core user procedures; mounts everything in [`user/`](./user)                                          |
-| [`mapbox.ts`](./mapbox.ts)             | Address search, map user list, and directions                                                         |
-| [`user/`](./user)                      | Feature subrouters: `admin`, `email`, `favorites`, `groups`, `message`, `recommendations`, `requests` |
+| File                                   | Purpose                                                                                                         |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| [`createRouter.ts`](./createRouter.ts) | Initializes tRPC and exports the router/procedure builders and auth middleware                                  |
+| [`context.ts`](./context.ts)           | Builds the per-request context                                                                                  |
+| [`index.ts`](./index.ts)               | Merges subrouters into `appRouter` and exports its type                                                         |
+| [`user.ts`](./user.ts)                 | Core user procedures; mounts everything in [`user/`](./user)                                                    |
+| [`mapbox.ts`](./mapbox.ts)             | Address search, map user list, and directions                                                                   |
+| [`user/`](./user)                      | Feature subrouters: `admin`, `blocks`, `email`, `favorites`, `groups`, `message`, `recommendations`, `requests` |
 
 `appRouter` is served over HTTP by [`[trpc].ts`](../../pages/api/trpc/%5Btrpc%5D.ts).
 
@@ -71,6 +71,7 @@ This is not hypothetical: `favorites.edit` shipped without the first of these an
 Where a router's rules are more than "the caller owns the row", they live next to the code so they cannot drift from it:
 
 - The carpool group rules — who may delete a group, evict a rider, or edit the group message — are tabulated at the top of [`user/groups.ts`](./user/groups.ts).
+- Blocking is checked in every procedure where two users meet, in both directions, through [`db/blocks.ts`](../db/blocks.ts). A new procedure that returns, contacts or joins another user needs the same check; the [db README](../db/README.md#blocks) lists where it applies and where it deliberately does not.
 - `getPresignedDownloadUrl` is the one procedure that deliberately serves **any** user's data to **any** signed-in caller: a profile picture is uploaded to be seen by strangers, and avatars render on the map and in recommendations where no relationship exists yet. The reasoning is at the input schema in [`user.ts`](./user.ts). Read it before copying the pattern — it is an exception, not a precedent.
 
 ## Composition and frontend access

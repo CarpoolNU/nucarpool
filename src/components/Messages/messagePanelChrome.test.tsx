@@ -168,6 +168,9 @@ jest.mock("../../utils/trpc", () => ({
         conversation: { useInfiniteQuery: () => mockThreadQuery },
         markMessagesAsRead: { useMutation: () => mockMarkAsRead },
       },
+      blocks: {
+        block: { useMutation: () => ({ mutate: jest.fn(), isPending: false }) },
+      },
     },
   },
 }));

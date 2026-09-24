@@ -2,6 +2,9 @@ import { Permission } from "@prisma/client";
 import type { Session } from "next-auth";
 import { appRouter } from "../index";
 import type { Context } from "../context";
+import { BLOCKED_PAIR_MESSAGE } from "../../db/blocks";
+import { fakeBlockDelegate } from "../../../testing/blockFake";
+import type { BlockRow } from "../../../testing/blockFake";
 
 /**
  * `user.messages.conversation` — the paginated thread source.
@@ -51,6 +54,7 @@ const buildDb = (opts?: {
   request?: { id: string; fromUserId: string; toUserId: string } | null;
   messages?: MessageRow[];
   conversationRequestId?: string;
+  blocks?: BlockRow[];
 }) => {
   const request =
     opts?.request === undefined
@@ -85,10 +89,15 @@ const buildDb = (opts?: {
     return ordered.slice(start, start + args.take).map((m) => ({ ...m }));
   });
 
+  const block = fakeBlockDelegate(opts?.blocks);
+
   return {
     findUnique,
     findMany,
+    /** Live, so a test can unblock by splicing a row out. */
+    blocks: block.rows,
     prisma: {
+      block,
       request: { findUnique },
       message: { findMany },
     },
@@ -196,6 +205,87 @@ describe("only participants may read a conversation", () => {
     expect(db.findUnique).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: REQUEST_ID } }),
     );
+  });
+});
+
+describe("a blocked pair's thread is hidden, not deleted (SCRUM-554)", () => {
+  // Either direction of block, read by either party.
+  const cases: [string, BlockRow, string][] = [
+    [
+      "the sender, who blocked",
+      { blockerId: OWNER, blockedId: COUNTERPART },
+      OWNER,
+    ],
+    [
+      "the recipient, who was blocked",
+      { blockerId: OWNER, blockedId: COUNTERPART },
+      COUNTERPART,
+    ],
+    [
+      "the recipient, who blocked",
+      { blockerId: COUNTERPART, blockedId: OWNER },
+      COUNTERPART,
+    ],
+    [
+      "the sender, who was blocked",
+      { blockerId: COUNTERPART, blockedId: OWNER },
+      OWNER,
+    ],
+  ];
+
+  it.each(cases)(
+    "refuses %s with FORBIDDEN, reading no messages",
+    async (_label, block, reader) => {
+      const { caller, db } = callerFor(
+        sessionFor(reader),
+        buildDb({ blocks: [block] }),
+      );
+
+      await expect(
+        caller.user.messages.conversation({ requestId: REQUEST_ID }),
+      ).rejects.toMatchObject({
+        code: "FORBIDDEN",
+        message: BLOCKED_PAIR_MESSAGE,
+      });
+
+      // As with a stranger: the refusal comes before the message table.
+      expect(db.findMany).not.toHaveBeenCalled();
+    },
+  );
+
+  it("still serves the thread when the only block is with somebody else", async () => {
+    const { caller } = callerFor(
+      sessionFor(OWNER),
+      buildDb({ blocks: [{ blockerId: OWNER, blockedId: STRANGER }] }),
+    );
+
+    const result = await caller.user.messages.conversation({
+      requestId: REQUEST_ID,
+    });
+
+    expect(result.messages).toHaveLength(5);
+  });
+
+  it("restores the same messages once the block is removed", async () => {
+    const db = buildDb();
+    const { caller } = callerFor(sessionFor(COUNTERPART), db);
+
+    const before = await caller.user.messages.conversation({
+      requestId: REQUEST_ID,
+    });
+
+    db.blocks.push({ blockerId: OWNER, blockedId: COUNTERPART });
+    await expect(
+      caller.user.messages.conversation({ requestId: REQUEST_ID }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    db.blocks.splice(0, db.blocks.length);
+    const after = await caller.user.messages.conversation({
+      requestId: REQUEST_ID,
+    });
+
+    expect(before.messages).toHaveLength(5);
+    expect(after).toEqual(before);
   });
 });
 

@@ -12,6 +12,7 @@ import {
   findOrCreateConversation,
 } from "../../db/conversationLink";
 import { MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
+import { assertNotBlocked, blockedCounterpartIds } from "../../db/blocks";
 
 /**
  * The message columns a conversation is actually read through.
@@ -264,9 +265,20 @@ export const requestsRouter = router({
     // What the null check covers now is a genuine absence: a counterpart with
     // no `CarpoolSearch` at all, who never finished onboarding. There is no
     // `PublicUser` to build a card from, and no hidden row behind it.
+    //
+    // A request with someone the caller has a block with, in either direction,
+    // is hidden as well (SCRUM-554). Hidden, not deleted: the row, its
+    // conversation and its messages all survive, so unblocking brings the
+    // card back as it was.
+    const blockedIds = new Set(await blockedCounterpartIds(ctx.prisma, userId));
+
     return {
-      sent: sent.filter((req) => req.toUser !== null),
-      received: received.filter((req) => req.fromUser !== null),
+      sent: sent.filter(
+        (req) => req.toUser !== null && !blockedIds.has(req.toUserId),
+      ),
+      received: received.filter(
+        (req) => req.fromUser !== null && !blockedIds.has(req.fromUserId),
+      ),
     };
   }),
 
@@ -374,6 +386,13 @@ export const requestsRouter = router({
       // `src/server/db/README.md` for why, and for what would have to change to
       // make it structural.
       const request = await ctx.prisma.$transaction(async (tx) => {
+        // Before anything else in here, so a refused request writes nothing.
+        // Read inside the transaction rather than before it, for the same
+        // narrowing of the race the lookup below gets. A hidden request
+        // between a blocked pair is the reason this cannot be left to the
+        // duplicate guard: it would answer CONFLICT, or reopen the row.
+        await assertNotBlocked(tx, userId, input.toId);
+
         const existingRequest = await tx.request.findFirst({
           where: {
             OR: [

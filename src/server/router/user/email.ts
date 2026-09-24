@@ -14,6 +14,7 @@ import type { PrismaClient } from "@prisma/client";
 // anyone. The bound itself still matters — the preview reaches an
 // SES template — so this is a change of source, not a removal.
 import { MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
+import { assertNotBlocked } from "../../db/blocks";
 
 /**
  * Notification email.
@@ -169,6 +170,14 @@ const resolveRequestParties = async (
 
   const otherUserId =
     request.fromUserId === callerId ? request.toUserId : request.fromUserId;
+
+  // No mail between a blocked pair, in either direction (SCRUM-554). Here
+  // rather than in each procedure because all three resolve their parties
+  // through this, so a fourth added later cannot forget it. Thrown rather
+  // than returned as `sent: false`: the request, message or acceptance it
+  // would announce has already been refused, so reaching this is a direct
+  // call, not a flow the client needs to degrade gracefully from.
+  await assertNotBlocked(prisma, callerId, otherUserId);
 
   const [sender, recipient] = await Promise.all([
     loadParty(prisma, callerId),

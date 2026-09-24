@@ -6,6 +6,9 @@ import {
   notificationChannel,
 } from "../../../utils/pusherChannels";
 import { MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
+import { BLOCKED_PAIR_MESSAGE } from "../../db/blocks";
+import { fakeBlockDelegate } from "../../../testing/blockFake";
+import type { BlockRow } from "../../../testing/blockFake";
 import { cloneState, withTransaction } from "../transactionMock";
 
 /**
@@ -56,6 +59,7 @@ type ConversationRow = { id: string; requestId: string };
 const buildMessageDb = (opts?: {
   request?: { id: string; fromUserId: string; toUserId: string } | null;
   conversation?: ConversationRow | null;
+  blocks?: BlockRow[];
 }) => {
   const request =
     opts?.request === undefined
@@ -77,6 +81,9 @@ const buildMessageDb = (opts?: {
   let linkedConversationId: string | null = conversation?.id ?? null;
 
   const delegates = {
+    // Read-only here: nothing in `sendMessage` writes a block, so the
+    // transaction snapshot below does not need to cover it.
+    block: fakeBlockDelegate(opts?.blocks),
     request: {
       findUnique: jest.fn(async ({ where }: any) =>
         request && request.id === where.id ? { ...request } : null,
@@ -133,6 +140,8 @@ const buildMessageDb = (opts?: {
     messages: () => [...messages],
     conversationId: () => conversation?.id ?? null,
     linkedConversationId: () => linkedConversationId,
+    /** Live, so a test can unblock by splicing a row out. */
+    blocks: delegates.block.rows,
   };
 };
 
@@ -389,6 +398,120 @@ describe("sendMessage — only participants may write", () => {
   });
 });
 
+describe("sendMessage — a blocked pair cannot write to each other (SCRUM-554)", () => {
+  // Every combination of who blocked whom and who is writing. A block is one
+  // row but a symmetric effect, so all four must be refused alike.
+  const cases: [string, BlockRow, string][] = [
+    [
+      "the sender, who blocked the recipient",
+      { blockerId: SENDER, blockedId: RECIPIENT },
+      SENDER,
+    ],
+    [
+      "the sender, whom the recipient blocked",
+      { blockerId: RECIPIENT, blockedId: SENDER },
+      SENDER,
+    ],
+    [
+      "the recipient, who blocked the sender",
+      { blockerId: RECIPIENT, blockedId: SENDER },
+      RECIPIENT,
+    ],
+    [
+      "the recipient, whom the sender blocked",
+      { blockerId: SENDER, blockedId: RECIPIENT },
+      RECIPIENT,
+    ],
+  ];
+
+  it.each(cases)(
+    "refuses %s, writing nothing and broadcasting nothing",
+    async (_label, block, author) => {
+      const db = buildMessageDb({ blocks: [block] });
+      const { caller } = callerFor(sessionFor(author), db);
+
+      await expect(
+        caller.user.messages.sendMessage({
+          requestId: REQUEST_ID,
+          content: "hello",
+        }),
+      ).rejects.toMatchObject({
+        code: "FORBIDDEN",
+        message: BLOCKED_PAIR_MESSAGE,
+      });
+
+      expect(db.messages()).toEqual([]);
+      expect(db.prisma.message.create).not.toHaveBeenCalled();
+      // The load-bearing half: a Pusher event cannot be rolled back, so the
+      // refusal has to land before either trigger, not merely before success.
+      expect(mockTrigger).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not create a conversation for a blocked pair either", async () => {
+    // The first-message repair path writes twice before the message, so the
+    // check has to precede it too.
+    const db = buildMessageDb({
+      conversation: null,
+      blocks: [{ blockerId: RECIPIENT, blockedId: SENDER }],
+    });
+    const { caller } = callerFor(sessionFor(SENDER), db);
+
+    await expect(
+      caller.user.messages.sendMessage({
+        requestId: REQUEST_ID,
+        content: "hello",
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(db.prisma.conversation.create).not.toHaveBeenCalled();
+    expect(db.prisma.request.update).not.toHaveBeenCalled();
+  });
+
+  it("still sends when the only block is with somebody else", async () => {
+    // Control: a block the sender holds against a third party must not leak
+    // into an unrelated thread.
+    const db = buildMessageDb({
+      blocks: [{ blockerId: SENDER, blockedId: OUTSIDER }],
+    });
+    const { caller } = callerFor(sessionFor(SENDER), db);
+
+    await caller.user.messages.sendMessage({
+      requestId: REQUEST_ID,
+      content: "hello",
+    });
+
+    expect(db.messages()).toHaveLength(1);
+    expect(notificationChannels()).toEqual([notificationChannel(RECIPIENT)]);
+  });
+
+  it("sends again once the block is removed", async () => {
+    const db = buildMessageDb({
+      blocks: [{ blockerId: RECIPIENT, blockedId: SENDER }],
+    });
+    const { caller } = callerFor(sessionFor(SENDER), db);
+
+    await expect(
+      caller.user.messages.sendMessage({
+        requestId: REQUEST_ID,
+        content: "hello",
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    db.blocks.splice(0, db.blocks.length);
+
+    await caller.user.messages.sendMessage({
+      requestId: REQUEST_ID,
+      content: "hello again",
+    });
+
+    expect(db.messages()).toEqual([
+      expect.objectContaining({ content: "hello again", userId: SENDER }),
+    ]);
+    expect(triggeredChannels()).toContain(conversationChannel(REQUEST_ID));
+  });
+});
+
 describe("user.messages.getMessages — removed rather than scoped", () => {
   it("is no longer exposed by the router", async () => {
     // It returned an entire conversation for any conversation id, having read
@@ -605,6 +728,7 @@ const buildUnreadDb = (
   users: UnreadUser[],
   requests: UnreadRequest[],
   messages: UnreadMessage[],
+  blocks: BlockRow[] = [],
 ) => {
   const roleOf = (id: string) => users.find((u) => u.id === id)?.role;
 
@@ -638,7 +762,16 @@ const buildUnreadDb = (
       if (where?.isRead !== undefined && message.isRead !== where.isRead) {
         return false;
       }
+      // `notIn` is the caller plus every blocked counterpart (SCRUM-554).
+      // `not` is still understood, so a regression back to it is caught by
+      // the counts below rather than by a crash in this double.
       if (where?.userId?.not && message.userId === where.userId.not) {
+        return false;
+      }
+      if (
+        Array.isArray(where?.userId?.notIn) &&
+        where.userId.notIn.includes(message.userId)
+      ) {
         return false;
       }
 
@@ -661,13 +794,17 @@ const buildUnreadDb = (
     return role === undefined ? null : { role };
   });
 
+  const block = fakeBlockDelegate(blocks);
+
   return {
     prisma: {
+      block,
       message: { count },
       carpoolSearch: { findFirst: carpoolSearchFindFirst },
     } as unknown as Context["prisma"],
     count,
     carpoolSearchFindFirst,
+    block,
   };
 };
 
@@ -676,8 +813,9 @@ const unreadCallerFor = (
   users: UnreadUser[],
   requests: UnreadRequest[],
   messages: UnreadMessage[],
+  blocks: BlockRow[] = [],
 ) => {
-  const db = buildUnreadDb(users, requests, messages);
+  const db = buildUnreadDb(users, requests, messages, blocks);
   const ctx = {
     req: undefined,
     res: undefined,
@@ -857,6 +995,80 @@ describe("getUnreadMessageCount - the badge and the Requests tab agree", () => {
   });
 });
 
+describe("getUnreadMessageCount - a blocked counterpart's messages are not counted (SCRUM-554)", () => {
+  // Two threads for SENDER: one with RECIPIENT, who is blocked in the cases
+  // below, and one with OUTSIDER, the control counterpart who never is.
+  const users: UnreadUser[] = [
+    { id: SENDER, role: Role.RIDER },
+    { id: RECIPIENT, role: Role.DRIVER },
+    { id: OUTSIDER, role: Role.DRIVER },
+  ];
+  const requests: UnreadRequest[] = [
+    { fromUserId: SENDER, toUserId: RECIPIENT },
+    { fromUserId: SENDER, toUserId: OUTSIDER },
+  ];
+  const messages: UnreadMessage[] = [
+    {
+      conversationId: conversationOf(SENDER, RECIPIENT),
+      userId: RECIPIENT,
+      isRead: false,
+    },
+    {
+      conversationId: conversationOf(SENDER, RECIPIENT),
+      userId: RECIPIENT,
+      isRead: false,
+    },
+    {
+      conversationId: conversationOf(SENDER, OUTSIDER),
+      userId: OUTSIDER,
+      isRead: false,
+    },
+  ];
+
+  /** The `userId` filter the resolver handed to `message.count`. */
+  const userIdFilter = (db: ReturnType<typeof buildUnreadDb>) =>
+    db.count.mock.calls[0]?.[0]?.where?.userId;
+
+  it("excludes only the caller when nobody is blocked", async () => {
+    const { caller, db } = unreadCallerFor(SENDER, users, requests, messages);
+
+    await expect(caller.user.messages.getUnreadMessageCount()).resolves.toBe(3);
+    expect(userIdFilter(db)).toEqual({ notIn: [SENDER] });
+  });
+
+  it.each([
+    ["the caller blocked", { blockerId: SENDER, blockedId: RECIPIENT }],
+    ["the caller was blocked by", { blockerId: RECIPIENT, blockedId: SENDER }],
+  ])(
+    "drops a counterpart %s, and still counts the control's",
+    async (_label, block) => {
+      const { caller, db } = unreadCallerFor(
+        SENDER,
+        users,
+        requests,
+        messages,
+        [block],
+      );
+
+      // RECIPIENT's two unread are gone; OUTSIDER's one remains.
+      await expect(caller.user.messages.getUnreadMessageCount()).resolves.toBe(
+        1,
+      );
+      expect(userIdFilter(db)).toEqual({ notIn: [SENDER, RECIPIENT] });
+    },
+  );
+
+  it("is unaffected by a block between two other people", async () => {
+    // A row that names neither the caller nor anyone they talk to.
+    const { caller, db } = unreadCallerFor(SENDER, users, requests, messages, [
+      { blockerId: RECIPIENT, blockedId: OUTSIDER },
+    ]);
+
+    await expect(caller.user.messages.getUnreadMessageCount()).resolves.toBe(3);
+    expect(userIdFilter(db)).toEqual({ notIn: [SENDER] });
+  });
+});
+
 /**
  * The size of what `markMessagesAsRead` will accept.
  *
@@ -872,7 +1084,12 @@ describe("markMessagesAsRead — the id list is bounded", () => {
   const buildMarkReadDb = () => {
     const updateMany = jest.fn(async () => ({ count: 0 }));
     return {
-      prisma: { message: { updateMany } } as unknown as Context["prisma"],
+      // `block` is supplied for parity with the other fakes; this procedure
+      // does not consult it, since marking your own thread read reaches no one.
+      prisma: {
+        block: fakeBlockDelegate(),
+        message: { updateMany },
+      } as unknown as Context["prisma"],
       updateMany,
     };
   };

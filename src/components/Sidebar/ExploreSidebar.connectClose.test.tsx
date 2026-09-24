@@ -39,6 +39,9 @@ jest.mock("../../utils/trpc", () => ({
     }),
     user: {
       favorites: { edit: { useMutation: () => ({ mutate: jest.fn() }) } },
+      blocks: {
+        block: { useMutation: () => ({ mutate: jest.fn(), isPending: false }) },
+      },
       requests: {
         create: {
           useMutation: (options?: {

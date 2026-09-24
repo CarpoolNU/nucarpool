@@ -20,6 +20,7 @@ import { trackViewRoute } from "../../utils/mixpanel";
 import useProfileImage from "../../utils/useProfileImage";
 import { AiOutlineUser } from "react-icons/ai";
 import useIsMobile from "../../utils/useIsMobile";
+import UserActionsMenu from "../UserActions/UserActionsMenu";
 
 /**
  * The card's activation, as a pair that cannot be half-supplied.
@@ -218,14 +219,19 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
 
         {/* Rating — a sibling of the activation button rather than a
             descendant, which is the whole point. `z-20` keeps it
-            above the stretched button; `relative` is what makes `z-20` apply. */}
-        <div className="relative z-20 ml-auto">
+            above the stretched button; `relative` is what makes `z-20` apply.
+            The actions menu shares the raised slot for the same reason. */}
+        <div className="relative z-20 ml-auto flex items-center">
           <Rating
             name=""
             size="large"
             onChange={(_, value) => handleFavorite(props.otherUser.id, !!value)}
             value={props.otherUser.isFavorited ? 1 : 0}
             max={1}
+          />
+          <UserActionsMenu
+            userId={props.otherUser.id}
+            userName={props.otherUser.preferredName}
           />
         </div>
       </div>

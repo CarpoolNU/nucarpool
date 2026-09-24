@@ -14,6 +14,7 @@ import {
   GROUP_NOTES_MAX_LENGTH,
   GROUP_OPTION_MAX_LENGTH,
 } from "../../../utils/textLimits";
+import { assertNotBlocked } from "../../db/blocks";
 
 /**
  * Carpool group authorization.
@@ -49,6 +50,11 @@ import {
  * `markRequestAccepted` run inside the same transaction as the membership. The
  * cost of keeping it is that a resolved row is indistinguishable from a live
  * invitation unless `status` is read, which is exactly what was fixed.
+ *
+ * Neither join path admits a pair with a block between them (SCRUM-554), and
+ * `edit` checks the joining rider against every member rather than the driver
+ * alone. The remove path and `delete` deliberately ignore blocks, because
+ * leaving must always work.
  */
 
 /** Just the Prisma surface these helpers touch, so they are easy to test. */
@@ -508,6 +514,12 @@ export const groupsRouter = router({
           );
         }
 
+        // A blocked pair cannot share a group (SCRUM-554). Last among the
+        // refusals and before the seat, so nothing has been written when it
+        // throws. `user.blocks.block` enforces the other half: it refuses to
+        // block someone the caller already shares a group with.
+        await assertNotBlocked(tx, input.driverId, input.riderId);
+
         await reserveSeat(tx, input.driverId);
 
         // `group.message` used to be seeded from the driver's `groupMessage`,
@@ -774,6 +786,20 @@ export const groupsRouter = router({
                 "it before joining yours.",
             );
           }
+
+          // Against every current member, not only the driver. A rider who
+          // blocked another rider, or was blocked by one, would otherwise
+          // share a group with them through the driver, which is the state
+          // `user.blocks.block` refuses to create from the other side.
+          const members = await tx.carpoolSearch.findMany({
+            where: { carpoolId: input.groupId },
+            select: { userId: true },
+          });
+          await assertNotBlocked(
+            tx,
+            input.riderId,
+            members.map((member) => member.userId),
+          );
 
           // Reserve the seat before linking the rider: the compare-and-swap
           // both rejects a full driver and prevents two simultaneous accepts

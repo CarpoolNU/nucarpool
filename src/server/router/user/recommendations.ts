@@ -1,7 +1,10 @@
 import { TRPCError } from "@trpc/server";
 import { protectedRouter, router } from "../createRouter";
 import { convertCarpoolSearchToPublic } from "../../publicUser";
-import { fetchRankedCandidates } from "../../db/candidateSearch";
+import {
+  candidateExclusions,
+  fetchRankedCandidates,
+} from "../../db/candidateSearch";
 import { z } from "zod";
 
 /** Recommendations shown in the explore sidebar. */
@@ -65,13 +68,16 @@ export const recommendationsRouter = router({
       const { favorites, sentRequests, receivedRequests } =
         currentUserSearch.user;
 
-      const excludedUserIds: string[] = [userId];
-      if (!input.filters.messaged) {
-        excludedUserIds.push(
-          ...sentRequests.map((r) => r.toUserId),
-          ...receivedRequests.map((r) => r.fromUserId),
-        );
-      }
+      // The reader, anyone with a block either way, and - when the filter
+      // asks - anyone they have a request with. Shared with
+      // `mapbox.geoJsonUserList`.
+      const excludedUserIds = await candidateExclusions({
+        prisma: ctx.prisma,
+        userId,
+        messaged: input.filters.messaged,
+        sentRequests,
+        receivedRequests,
+      });
 
       // Bounded candidate query plus scoring, shared with
       // `mapbox.geoJsonUserList`.

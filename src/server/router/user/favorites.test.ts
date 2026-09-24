@@ -3,6 +3,8 @@ import { TRPCError } from "@trpc/server";
 import type { Session } from "next-auth";
 import { appRouter } from "../index";
 import type { Context } from "../context";
+import { BLOCKED_PAIR_MESSAGE } from "../../db/blocks";
+import { fakeBlockDelegate } from "../../../testing/blockFake";
 
 /**
  * Authorization tests for `user.favorites.edit`.
@@ -60,8 +62,13 @@ const buildFavoritesDb = (
     return { id: where.id };
   });
 
+  // No blocks unless a test adds one.
+  const block = fakeBlockDelegate();
+
   return {
-    prisma: { user: { update } },
+    prisma: { user: { update }, block },
+    /** Live block rows: push to block, splice to unblock. */
+    blocks: block.rows,
     /** Final favorites for a user, sorted so assertions are order-independent. */
     favoritesOf: (userId: string) => [...(favorites.get(userId) ?? [])].sort(),
     update,
@@ -299,7 +306,12 @@ const buildMeDb = ({
   callerSearch?: boolean;
   favorites: ReturnType<typeof favoriteSearch>[];
 }) => {
-  const findMany = jest.fn(async () => favorites);
+  // Honours the `in` it is given, so a favourite the resolver leaves out of
+  // the id list is really absent from the result.
+  const findMany = jest.fn(async ({ where }: any) =>
+    favorites.filter((f) => where.userId.in.includes(f.userId)),
+  );
+  const block = fakeBlockDelegate();
 
   return {
     prisma: {
@@ -315,7 +327,9 @@ const buildMeDb = ({
         })),
         update: jest.fn(),
       },
+      block,
     },
+    blocks: block.rows,
     findMany,
   };
 };
@@ -494,5 +508,105 @@ describe("user.favorites.edit — a newly-visible favourite can be removed", () 
     await caller.user.favorites.edit({ favoriteId: "same-role", add: false });
 
     expect(db.favoritesOf(CALLER)).toEqual([]);
+  });
+});
+
+/**
+ * Blocks (SCRUM-554). A favourite with a block either way is hidden from
+ * `me` and cannot be added, but the `_Favorites` row is kept and removing one
+ * stays open.
+ */
+describe("user.favorites.me — a blocked favourite is hidden, not removed", () => {
+  const threeFavourites = () =>
+    buildMeDb({
+      favorites: [
+        favoriteSearch("blocked-by-me"),
+        favoriteSearch("blocked-me"),
+        favoriteSearch("control"),
+      ],
+    });
+
+  it("hides a favourite the caller blocked", async () => {
+    const db = threeFavourites();
+    db.blocks.push({ blockerId: CALLER, blockedId: "blocked-by-me" });
+
+    expect(await idsFrom(db)).toEqual(["blocked-me", "control"]);
+  });
+
+  it("hides a favourite who blocked the caller", async () => {
+    const db = threeFavourites();
+    db.blocks.push({ blockerId: "blocked-me", blockedId: CALLER });
+
+    expect(await idsFrom(db)).toEqual(["blocked-by-me", "control"]);
+  });
+
+  it("leaves the blocked id out of the query rather than filtering afterwards", async () => {
+    const db = threeFavourites();
+    db.blocks.push(
+      { blockerId: CALLER, blockedId: "blocked-by-me" },
+      { blockerId: "blocked-me", blockedId: CALLER },
+    );
+
+    await meCallerFor(db).user.favorites.me();
+
+    const [{ where }] = db.findMany.mock.calls[0] as any[];
+    expect(where).toEqual({ userId: { in: ["control"] } });
+  });
+
+  it("brings the favourite back once the block is removed", async () => {
+    const db = threeFavourites();
+    db.blocks.push({ blockerId: CALLER, blockedId: "blocked-by-me" });
+    expect(await idsFrom(db)).toEqual(["blocked-me", "control"]);
+
+    db.blocks.splice(0, db.blocks.length);
+
+    expect(await idsFrom(db)).toEqual([
+      "blocked-by-me",
+      "blocked-me",
+      "control",
+    ]);
+  });
+});
+
+describe("user.favorites.edit — adding is refused across a block, removing is not", () => {
+  it.each([
+    ["the caller blocked the target", { blockerId: USER_A, blockedId: TARGET }],
+    ["the target blocked the caller", { blockerId: TARGET, blockedId: USER_A }],
+  ])("refuses to add when %s, writing nothing", async (_case, row) => {
+    const { caller, db } = callerFor(sessionFor(USER_A));
+    db.blocks.push(row);
+
+    const attempt = caller.user.favorites.edit({
+      favoriteId: TARGET,
+      add: true,
+    });
+
+    await expect(attempt).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      message: BLOCKED_PAIR_MESSAGE,
+    });
+    expect(db.update).not.toHaveBeenCalled();
+    expect(db.favoritesOf(USER_A)).toEqual([]);
+  });
+
+  it("still removes a favourite across a block", async () => {
+    // An existing favourite from before the block must stay removable.
+    const db = buildFavoritesDb({ [USER_A]: [TARGET] });
+    db.blocks.push({ blockerId: TARGET, blockedId: USER_A });
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await caller.user.favorites.edit({ favoriteId: TARGET, add: false });
+
+    expect(db.favoritesOf(USER_A)).toEqual([]);
+  });
+
+  it("still adds a favourite with no block between the pair", async () => {
+    // Control: someone else's block does not reach this pair.
+    const { caller, db } = callerFor(sessionFor(USER_A));
+    db.blocks.push({ blockerId: USER_B, blockedId: TARGET });
+
+    await caller.user.favorites.edit({ favoriteId: TARGET, add: true });
+
+    expect(db.favoritesOf(USER_A)).toEqual([TARGET]);
   });
 });

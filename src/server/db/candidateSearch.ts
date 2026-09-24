@@ -7,6 +7,8 @@ import {
 import type { FInputs, Recommendation } from "../../utils/recommendation";
 import type { PrismaOrTransaction } from "./client";
 import { SEAT_AVAILABLE_FILTER } from "../../utils/carpoolSeats";
+import { blockedCounterpartIds } from "./blocks";
+import type { BlockReader } from "./blocks";
 
 /**
  * The candidate query behind both matching endpoints.
@@ -372,6 +374,50 @@ export const rankCandidates = <T extends Parameters<typeof calculateScore>[0]>(
   );
 
   return _.compact(scores.map((score) => byUserId.get(score.id)));
+};
+
+/**
+ * The users the candidate query must never return to `userId`.
+ *
+ * `user.recommendations.me` and `mapbox.geoJsonUserList` used to build this
+ * list inline, as two copies of the same few lines. It moved here when blocks
+ * joined it (SCRUM-554), because a third concern added to two copies is how
+ * one of them ends up missing it.
+ *
+ *   - **The reader.** Always.
+ *   - **Anyone with a block against the reader, in either direction.** Always,
+ *     whatever the filters say. Blocking is not a filter the user toggles.
+ *   - **Anyone the reader has a request with.** Only when the "messaged"
+ *     filter is off, which is the filter's whole meaning.
+ *
+ * The requests are passed in rather than read here, because both callers
+ * already load them through the reader's own search in the same query.
+ */
+export const candidateExclusions = async ({
+  prisma,
+  userId,
+  messaged,
+  sentRequests,
+  receivedRequests,
+}: {
+  prisma: BlockReader;
+  userId: string;
+  messaged: boolean;
+  sentRequests: { toUserId: string }[] | undefined;
+  receivedRequests: { fromUserId: string }[] | undefined;
+}): Promise<string[]> => {
+  const excluded = [userId, ...(await blockedCounterpartIds(prisma, userId))];
+
+  // `?? []` because both callers include the requests only when `messaged`
+  // is false, and Prisma omits the key entirely for a false include.
+  if (!messaged) {
+    excluded.push(
+      ...(sentRequests ?? []).map((r) => r.toUserId),
+      ...(receivedRequests ?? []).map((r) => r.fromUserId),
+    );
+  }
+
+  return excluded;
 };
 
 /**

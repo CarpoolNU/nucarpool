@@ -56,7 +56,13 @@ jest.mock("../../utils/trpc", () => {
   const reactQuery = jest.requireActual("@tanstack/react-query");
   return {
     trpc: {
+      useUtils: () => ({}),
       user: {
+        blocks: {
+          block: {
+            useMutation: () => ({ mutate: jest.fn(), isPending: false }),
+          },
+        },
         getPresignedDownloadUrl: {
           useQuery: (input: { userId?: string }, options: object) =>
             reactQuery.useQuery({
@@ -84,6 +90,14 @@ const SELECTED_USER = {
   carpoolId: null,
   isFavorited: false,
 } as unknown as EnhancedPublicUser;
+
+/** Every svg except the actions menu's icon (SCRUM-554), which is no avatar. */
+const avatarSlotSvgs = (container: HTMLElement) => {
+  const menu = screen.getByRole("button", { name: "More actions for Riley" });
+  return Array.from(container.querySelectorAll("svg")).filter(
+    (svg) => !menu.contains(svg),
+  );
+};
 
 const renderHeader = (width: number) => {
   setViewportWidth(width);
@@ -129,8 +143,9 @@ describe("the mobile conversation header", () => {
 
     expect(container.querySelector("img")).toBeNull();
     // `AiOutlineUser`, the "no picture" fallback, is the only svg the desktop
-    // branch draws in that slot; the back arrow is the only one here.
-    expect(container.querySelectorAll("svg")).toHaveLength(1);
+    // branch draws in that slot; the back arrow is the only one here, bar the
+    // actions menu's icon.
+    expect(avatarSlotSvgs(container)).toHaveLength(1);
   });
 });
 
@@ -166,7 +181,7 @@ describe("the desktop conversation header", () => {
 
     // The placeholder is a bare div; the fallback is an svg. On the first
     // render the URL is unknown, so it must be the former.
-    expect(container.querySelector("svg")).toBeNull();
+    expect(avatarSlotSvgs(container)).toHaveLength(0);
     expect(container.querySelector("img")).toBeNull();
   });
 });

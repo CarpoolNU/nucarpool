@@ -7,6 +7,7 @@ import Image from "next/image";
 import useProfileImage from "../../utils/useProfileImage";
 import useIsMobile from "../../utils/useIsMobile";
 import { HeaderControls, messageHeaderControls } from "./messageHeaderControls";
+import UserActionsMenu from "../UserActions/UserActionsMenu";
 
 /**
  * How a button in flight looks. The same `opacity-40` `SendBar` already uses, so
@@ -377,6 +378,17 @@ const MessageHeader = ({
               {selectedUser.preferredName}
             </span>
           </div>
+
+          {/* Mirrors the back button on the other edge. The name's `pr-10`
+              already keeps it clear of the text. */}
+          <div className="absolute right-1.5">
+            <UserActionsMenu
+              key={selectedUser.id}
+              userId={selectedUser.id}
+              userName={selectedUser.preferredName}
+              onBlocked={handleClose}
+            />
+          </div>
         </div>
 
         {/*
@@ -484,6 +496,16 @@ const MessageHeader = ({
           onReject={onReject}
           isMutating={isMutating}
           classes={DESKTOP_CONTROL_CLASSES}
+        />
+
+        {/* Blocking closes the thread, which has just become unavailable
+            to both people. Keyed like `RequestControls`, so a Block dialog
+            left open cannot carry over to the next person's conversation. */}
+        <UserActionsMenu
+          key={selectedUser.id}
+          userId={selectedUser.id}
+          userName={selectedUser.preferredName}
+          onBlocked={handleClose}
         />
 
         {/*

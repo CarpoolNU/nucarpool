@@ -4,6 +4,8 @@ import {
   notificationChannel,
   parseChannel,
 } from "../utils/pusherChannels";
+import { fakeBlockDelegate } from "../testing/blockFake";
+import type { BlockRow } from "../testing/blockFake";
 
 /**
  * Realtime access control.
@@ -29,7 +31,9 @@ const prismaWith = (
     fromUserId: ALICE,
     toUserId: BOB,
   },
+  blocks: BlockRow[] = [],
 ) => ({
+  block: fakeBlockDelegate(blocks),
   request: {
     findUnique: jest.fn(async ({ where }: any) =>
       request && where.id === REQUEST_ID ? { ...request } : null,
@@ -91,6 +95,89 @@ describe("canSubscribe — conversation channels", () => {
     await expect(
       canSubscribe(prismaWith(null) as any, ALICE, conversationChannel("nope")),
     ).resolves.toBe(false);
+  });
+});
+
+describe("canSubscribe — a blocked pair's conversation channel (SCRUM-554)", () => {
+  // `messages.conversation` refuses a blocked pair's thread, so its realtime
+  // channel must close too, or new messages would still arrive live. Every
+  // combination of who blocked whom and who is subscribing.
+  const cases: [string, BlockRow, string][] = [
+    ["the sender, who blocked", { blockerId: ALICE, blockedId: BOB }, ALICE],
+    [
+      "the recipient, who was blocked",
+      { blockerId: ALICE, blockedId: BOB },
+      BOB,
+    ],
+    ["the recipient, who blocked", { blockerId: BOB, blockedId: ALICE }, BOB],
+    [
+      "the sender, who was blocked",
+      { blockerId: BOB, blockedId: ALICE },
+      ALICE,
+    ],
+  ];
+
+  it.each(cases)("refuses %s", async (_label, block, userId) => {
+    const prisma = prismaWith(undefined, [block]);
+
+    await expect(
+      canSubscribe(prisma as any, userId, conversationChannel(REQUEST_ID)),
+    ).resolves.toBe(false);
+  });
+
+  it("still admits both parties when the only block is with somebody else", async () => {
+    // Control: Alice's block on a third party says nothing about Bob.
+    const prisma = prismaWith(undefined, [
+      { blockerId: ALICE, blockedId: MALLORY },
+    ]);
+
+    for (const userId of [ALICE, BOB]) {
+      await expect(
+        canSubscribe(prisma as any, userId, conversationChannel(REQUEST_ID)),
+      ).resolves.toBe(true);
+    }
+  });
+
+  it("admits the pair again once the block is removed", async () => {
+    const prisma = prismaWith(undefined, [
+      { blockerId: BOB, blockedId: ALICE },
+    ]);
+
+    await expect(
+      canSubscribe(prisma as any, ALICE, conversationChannel(REQUEST_ID)),
+    ).resolves.toBe(false);
+
+    prisma.block.rows.splice(0, prisma.block.rows.length);
+
+    await expect(
+      canSubscribe(prisma as any, ALICE, conversationChannel(REQUEST_ID)),
+    ).resolves.toBe(true);
+  });
+
+  it("leaves each party's own notification feed alone", async () => {
+    // The feed carries every thread, not this one, so a block does not close it.
+    const prisma = prismaWith(undefined, [
+      { blockerId: ALICE, blockedId: BOB },
+    ]);
+
+    for (const userId of [ALICE, BOB]) {
+      await expect(
+        canSubscribe(prisma as any, userId, notificationChannel(userId)),
+      ).resolves.toBe(true);
+    }
+    expect(prisma.block.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("still refuses an outsider, who is turned away before any block is read", async () => {
+    // Mallory is blocked by nobody; the participant check alone refuses her.
+    const prisma = prismaWith(undefined, [
+      { blockerId: ALICE, blockedId: BOB },
+    ]);
+
+    await expect(
+      canSubscribe(prisma as any, MALLORY, conversationChannel(REQUEST_ID)),
+    ).resolves.toBe(false);
+    expect(prisma.block.findFirst).not.toHaveBeenCalled();
   });
 });
 

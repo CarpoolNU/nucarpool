@@ -1,6 +1,9 @@
 import { Permission, RequestStatus } from "@prisma/client";
 import type { Session } from "next-auth";
 import type { Context } from "../context";
+import { BLOCKED_PAIR_MESSAGE } from "../../db/blocks";
+import { fakeBlockDelegate } from "../../../testing/blockFake";
+import type { BlockRow } from "../../../testing/blockFake";
 
 /**
  * `NEXT_PUBLIC_ENV` is validated by envsafe at import time now, so
@@ -112,6 +115,8 @@ const buildEmailDb = (opts?: {
    * over the caller's whole recent history, not the one row being announced.
    */
   senderRequests?: { fromUserId: string; dateCreated: Date }[];
+  /** Block rows, either direction. None by default: nobody has blocked anybody. */
+  blocks?: BlockRow[];
 }) => {
   const users = new Map((opts?.users ?? defaultUsers).map((u) => [u.id, u]));
   const rawRequest =
@@ -191,6 +196,7 @@ const buildEmailDb = (opts?: {
 
   return {
     prisma: {
+      block: fakeBlockDelegate(opts?.blocks),
       user: { findUnique: userFindUnique },
       carpoolSearch: { findFirst: carpoolSearchFindFirst },
       request: { findUnique: requestFindUnique, count: requestCount },
@@ -795,6 +801,150 @@ describe("user.emails.sendAcceptanceNotification — only the party who accepted
       "bob@example.com",
     ]);
     expect(db.sentParams().Template).toBe("DriverAcceptanceTemplate");
+  });
+});
+
+/**
+ * No mail between a blocked pair (SCRUM-554).
+ *
+ * All three procedures resolve their parties through one shared helper, which
+ * is where the check sits, so each is pinned here separately: a fourth path
+ * that bypassed the helper, or a refactor that moved the check into only one
+ * procedure, fails the other cases. As everywhere in this file, the
+ * load-bearing assertion is that SES was never called.
+ */
+describe("user.emails — a blocked pair cannot mail each other", () => {
+  const bothDirections: [string, BlockRow][] = [
+    ["Alice blocked Bob", { blockerId: ALICE, blockedId: BOB }],
+    ["Bob blocked Alice", { blockerId: BOB, blockedId: ALICE }],
+  ];
+  // Control: a block with a third party, which must not silence this pair.
+  const unrelated: BlockRow = { blockerId: ALICE, blockedId: MALLORY };
+
+  /** The accepted Alice -> Bob request the acceptance flow needs. */
+  const acceptedDb = (blocks: BlockRow[]) =>
+    buildEmailDb({
+      request: {
+        id: REQUEST_ID,
+        fromUserId: ALICE,
+        toUserId: BOB,
+        conversationId: CONVERSATION_ID,
+        status: RequestStatus.ACCEPTED,
+      },
+      blocks,
+    });
+
+  /** Alice has written in the thread, so there is something to notify. */
+  const withMessageDb = (blocks: BlockRow[]) =>
+    buildEmailDb({
+      messages: [
+        {
+          id: "message-1",
+          conversationId: CONVERSATION_ID,
+          userId: ALICE,
+          content: "hello",
+          dateCreated: new Date("2026-08-21T12:00:00Z"),
+        },
+      ],
+      blocks,
+    });
+
+  describe("sendRequestNotification", () => {
+    it.each(bothDirections)(
+      "refuses when %s, without contacting SES",
+      async (_label, block) => {
+        const db = buildEmailDb({ blocks: [block] });
+        const { caller } = callerFor(sessionFor(ALICE), db);
+
+        await expect(
+          caller.user.emails.sendRequestNotification({
+            requestId: REQUEST_ID,
+            messagePreview: "x",
+          }),
+        ).rejects.toMatchObject({
+          code: "FORBIDDEN",
+          message: BLOCKED_PAIR_MESSAGE,
+        });
+
+        expect(db.ses).not.toHaveBeenCalled();
+      },
+    );
+
+    it("still sends when the only block is with somebody else", async () => {
+      const db = buildEmailDb({ blocks: [unrelated] });
+      const { caller } = callerFor(sessionFor(ALICE), db);
+
+      await expect(
+        caller.user.emails.sendRequestNotification({
+          requestId: REQUEST_ID,
+          messagePreview: "x",
+        }),
+      ).resolves.toEqual({ sent: true });
+      expect(db.ses).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("sendMessageNotification", () => {
+    it.each(bothDirections)(
+      "refuses when %s, without contacting SES",
+      async (_label, block) => {
+        const db = withMessageDb([block]);
+        const { caller } = callerFor(sessionFor(ALICE), db);
+
+        await expect(
+          caller.user.emails.sendMessageNotification({ requestId: REQUEST_ID }),
+        ).rejects.toMatchObject({
+          code: "FORBIDDEN",
+          message: BLOCKED_PAIR_MESSAGE,
+        });
+
+        expect(db.ses).not.toHaveBeenCalled();
+      },
+    );
+
+    it("still sends when the only block is with somebody else", async () => {
+      const db = withMessageDb([unrelated]);
+      const { caller } = callerFor(sessionFor(ALICE), db);
+
+      await caller.user.emails.sendMessageNotification({
+        requestId: REQUEST_ID,
+      });
+
+      expect(db.ses).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("sendAcceptanceNotification", () => {
+    it.each(bothDirections)(
+      "refuses when %s, without contacting SES",
+      async (_label, block) => {
+        // Bob is the party who accepted, so every other check here passes.
+        const db = acceptedDb([block]);
+        const { caller } = callerFor(sessionFor(BOB), db);
+
+        await expect(
+          caller.user.emails.sendAcceptanceNotification({
+            requestId: REQUEST_ID,
+          }),
+        ).rejects.toMatchObject({
+          code: "FORBIDDEN",
+          message: BLOCKED_PAIR_MESSAGE,
+        });
+
+        expect(db.ses).not.toHaveBeenCalled();
+      },
+    );
+
+    it("still sends when the only block is with somebody else", async () => {
+      const db = acceptedDb([unrelated]);
+      const { caller } = callerFor(sessionFor(BOB), db);
+
+      await caller.user.emails.sendAcceptanceNotification({
+        requestId: REQUEST_ID,
+      });
+
+      expect(db.ses).toHaveBeenCalledTimes(1);
+    });
   });
 });
 
