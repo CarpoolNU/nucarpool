@@ -1,6 +1,10 @@
 import { Role, Status } from "@prisma/client";
 import { onboardSchema, profileDefaultValues } from "./zodSchema";
-import { COOP_DATE_ORDER_MESSAGE } from "../dateUtils";
+import {
+  COOP_DATE_ORDER_MESSAGE,
+  coopYearBounds,
+  coopYearMessage,
+} from "../dateUtils";
 import { PROFILE_TEXT_MAX_LENGTH } from "../textLimits";
 
 /**
@@ -325,5 +329,97 @@ describe("onboardSchema — co-op date ordering", () => {
         endTime: new Date(2024, 0, 1, 6, 0),
       }).success,
     ).toBe(true);
+  });
+});
+
+/**
+ * Production holds 1901→1908 and 2069→2073 ranges, which run forwards and so
+ * passed the ordering check above (SCRUM-550).
+ *
+ * The schema reads the real clock, so the ceiling edge is computed from it
+ * rather than written down; `dateUtils.test.ts` pins the bound itself against
+ * a fixed `now`.
+ */
+describe("onboardSchema — co-op year bound", () => {
+  const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
+  const { earliest, latest } = coopYearBounds();
+
+  const withRange = (start: Date, end: Date, role: Role = Role.RIDER) => ({
+    ...completeRider,
+    role,
+    seatAvail: role === Role.DRIVER ? 2 : 0,
+    coopStartDate: start,
+    coopEndDate: end,
+  });
+
+  it("refuses production's commonest shape on both dates", () => {
+    const input = withRange(day("1901-01-31"), day("1908-06-30"));
+    expect(issueMessages(input, "coopStartDate")).toContain(coopYearMessage());
+    expect(issueMessages(input, "coopEndDate")).toContain(coopYearMessage());
+  });
+
+  it("refuses a year past the ceiling", () => {
+    expect(
+      issueMessages(
+        withRange(day("2026-01-31"), day(`${latest + 1}-01-31`)),
+        "coopEndDate",
+      ),
+    ).toContain(coopYearMessage());
+  });
+
+  it("refuses the last day before the floor", () => {
+    expect(
+      issueMessages(
+        withRange(day(`${earliest - 1}-12-31`), day("2026-06-30")),
+        "coopStartDate",
+      ),
+    ).toContain(coopYearMessage());
+  });
+
+  it("accepts a range spanning exactly the bound", () => {
+    // The failure mode of a year bound is refusing a real co-op, so both edges
+    // must be inside it.
+    expect(
+      onboardSchema.safeParse(
+        withRange(day(`${earliest}-01-31`), day(`${latest}-12-31`)),
+      ).success,
+    ).toBe(true);
+  });
+
+  it("refuses it for a DRIVER too", () => {
+    expect(
+      issuePaths(withRange(day("1902-01-31"), day("1908-06-30"), Role.DRIVER)),
+    ).toEqual(expect.arrayContaining(["coopStartDate", "coopEndDate"]));
+  });
+
+  it("exempts a VIEWER, whose pickers are disabled", () => {
+    // Every profile save re-sends the stored dates, so refusing a VIEWER's
+    // would fail every save they make with nothing they could change.
+    const paths = issuePaths(
+      withRange(day("1901-01-31"), day("1906-06-30"), Role.VIEWER),
+    );
+    expect(paths).not.toContain("coopStartDate");
+    expect(paths).not.toContain("coopEndDate");
+  });
+
+  it("still refuses a plausible reversed range on its own", () => {
+    // Regression for the ordering check: both touch the same two fields, and
+    // the new one must not have displaced the old.
+    const input = withRange(day("2027-01-31"), day("2026-01-31"));
+    expect(issueMessages(input, "coopEndDate")).toEqual([
+      COOP_DATE_ORDER_MESSAGE,
+    ]);
+    expect(issueMessages(input, "coopStartDate")).toEqual([]);
+  });
+
+  it("reports both for a range that is absurd and reversed, year first", () => {
+    // Production's 1913 → 1907 row. The resolver shows a field's first issue,
+    // and swapping the two dates would not fix this one, so the year leads.
+    expect(
+      issueMessages(
+        withRange(day("1913-01-31"), day("1907-06-30")),
+        "coopEndDate",
+      ),
+    ).toEqual([coopYearMessage(), COOP_DATE_ORDER_MESSAGE]);
   });
 });

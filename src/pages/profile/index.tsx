@@ -167,9 +167,11 @@ const Index: NextPage = () => {
       // A stored co-op range that runs backwards makes this user invisible in
       // matching, and the form is `mode: "onChange"` — so nothing would say so
       // until they changed a field or pressed Save. Neither is likely when the
-      // only symptom is an empty explore map. `planCoopRangeNotice` decides;
+      // only symptom is an empty explore map. A stored year like 1901 is the
+      // same problem at lower cost (SCRUM-550). `planCoopRangeNotice` decides;
       // the latch is here because the effect above re-runs on every refetch.
       const notice = planCoopRangeNotice({
+        role: user.role,
         coopStartDate: user.coopStartDate,
         coopEndDate: user.coopEndDate,
         alreadyShown: coopRangeNoticeShown.current,
@@ -178,11 +180,11 @@ const Index: NextPage = () => {
       if (notice) {
         coopRangeNoticeShown.current = true;
         setOption(notice.tab);
-        // `trigger` on the one field rather than the whole form: with a zod
-        // resolver this still runs the entire schema, but surfaces only this
-        // field's issue — so a user carrying some other incomplete state does
-        // not get it thrown at them on open as well.
-        void trigger(notice.field);
+        // `trigger` on the notice's fields rather than the whole form: with a
+        // zod resolver this still runs the entire schema, but surfaces only
+        // those fields' issues — so a user carrying some other incomplete
+        // state does not get it thrown at them on open as well.
+        void trigger(notice.fields);
         toast.error(notice.message, { autoClose: false });
       }
     }

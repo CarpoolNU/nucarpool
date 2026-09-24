@@ -21,6 +21,13 @@
  *
  * So this fires on load, and only for the defect it names.
  *
+ * **A second defect, the same remedy (SCRUM-550).** Production also holds
+ * searches whose years are absurd — 1901→1908, 2069→2073 — and whose ordering
+ * is fine, so the check above never saw them. Rewriting them would be a guess,
+ * since adding a century still lands before this platform existed; only the
+ * student knows what they meant. So they get the same treatment: told on load,
+ * gated on the stored year actually falling outside `coopYearBounds`.
+ *
  * **Deliberately not "validate the whole form on mount".** That would have been
  * one `trigger()` call, and it would show red errors on open to every user
  * carrying any other incomplete state — a change to everyone's experience in
@@ -39,7 +46,8 @@
  * left inline there is a decision nothing can test.
  */
 
-import { isReversedCoopRange } from "../dateUtils";
+import { Role } from "@prisma/client";
+import { implausibleCoopYearFields, isReversedCoopRange } from "../dateUtils";
 
 /**
  * What the page should do about it.
@@ -51,8 +59,13 @@ import { isReversedCoopRange } from "../dateUtils";
 export type CoopRangeNotice = {
   /** The profile tab holding the co-op date pickers. */
   tab: "account";
-  /** The field `onboardSchema` attaches the ordering issue to. */
-  field: "coopEndDate";
+  /**
+   * The fields `onboardSchema` attaches this defect's issues to, for the page
+   * to `trigger`. Plural because an implausible year is usually on both dates
+   * — 1901→1908 is the commonest production shape — and marking only one
+   * would leave the user to discover the other on save.
+   */
+  fields: ("coopStartDate" | "coopEndDate")[];
   message: string;
 };
 
@@ -69,6 +82,18 @@ export const REVERSED_COOP_RANGE_NOTICE =
   "in anyone's matches. Pick the right months below and save to fix it.";
 
 /**
+ * The same, for a year outside `coopYearBounds` (SCRUM-550). Production holds
+ * searches dated like 1901→1908, and those users drop out of any search
+ * filtered on term-date overlap. That filter defaults to "Any", so unlike the
+ * reversed case they are not invisible by default — the toast says only what
+ * is true.
+ */
+export const IMPLAUSIBLE_COOP_YEAR_NOTICE =
+  "Your co-op dates are set to a year that cannot be right, so your profile " +
+  "shows the wrong dates and you are left out of searches that filter by " +
+  "co-op dates. Pick the right months below and save to fix it.";
+
+/**
  * The decision.
  *
  * `alreadyShown` is the caller's, not ours: the effect that reads the user also
@@ -82,16 +107,41 @@ export const REVERSED_COOP_RANGE_NOTICE =
  * twice.
  */
 export const planCoopRangeNotice = ({
+  role,
   coopStartDate,
   coopEndDate,
   alreadyShown,
+  now,
 }: {
+  role: Role;
   coopStartDate: Date | null | undefined;
   coopEndDate: Date | null | undefined;
   alreadyShown: boolean;
+  /** Only for tests: the ceiling of `coopYearBounds` moves with the clock. */
+  now?: Date;
 }): CoopRangeNotice | null => {
   if (alreadyShown) {
     return null;
+  }
+
+  // One notice, never two. The year is checked first because it is the more
+  // complete description: a range reading 1913→1907 is also reversed, but
+  // swapping the two would not fix it. `onboardSchema` orders its issues the
+  // same way, so the field shows the message the toast explains. A VIEWER
+  // gets no year notice, for the reason `implausibleCoopYearFields` gives.
+  const implausible = implausibleCoopYearFields({
+    role,
+    coopStartDate,
+    coopEndDate,
+    now,
+  });
+
+  if (implausible.length > 0) {
+    return {
+      tab: "account",
+      fields: implausible,
+      message: IMPLAUSIBLE_COOP_YEAR_NOTICE,
+    };
   }
 
   if (!isReversedCoopRange(coopStartDate, coopEndDate)) {
@@ -100,7 +150,7 @@ export const planCoopRangeNotice = ({
 
   return {
     tab: "account",
-    field: "coopEndDate",
+    fields: ["coopEndDate"],
     message: REVERSED_COOP_RANGE_NOTICE,
   };
 };

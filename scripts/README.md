@@ -46,19 +46,19 @@ Neither backfill exists as a Prisma migration on purpose: `prisma/migrations/` i
 
 These write nothing. Pointing them at production is safe, and several are only meaningful there — a local database holds too little data to say anything.
 
-| Script                                                           | What it reports                                                       |
-| ---------------------------------------------------------------- | --------------------------------------------------------------------- |
-| [`check-self-requests.ts`](./check-self-requests.ts)             | `Request` rows whose two ends are the same user                       |
-| [`check-driverless-groups.ts`](./check-driverless-groups.ts)     | `CarpoolGroup` rows with no `DRIVER` member                           |
-| [`check-profile-coordinates.ts`](./check-profile-coordinates.ts) | Searches unmatchable via `(0, 0)` coordinates or reversed co-op dates |
-| [`check-seat-counts.ts`](./check-seat-counts.ts)                 | `CarpoolSearch` rows with `seats_avail` outside `[0, 6]`              |
-| [`measure-candidate-rows.ts`](./measure-candidate-rows.ts)       | Rows read by the explore page's candidate query                       |
-| [`measure-requests-payload.ts`](./measure-requests-payload.ts)   | Rows and payload bytes for `user.requests.me`                         |
-| [`measure-unread-count.ts`](./measure-unread-count.ts)           | Query plan, generated SQL and timings for the unread badge            |
+| Script                                                           | What it reports                                                                                   |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| [`check-self-requests.ts`](./check-self-requests.ts)             | `Request` rows whose two ends are the same user                                                   |
+| [`check-driverless-groups.ts`](./check-driverless-groups.ts)     | `CarpoolGroup` rows with no `DRIVER` member                                                       |
+| [`check-profile-coordinates.ts`](./check-profile-coordinates.ts) | Searches unmatchable via `(0, 0)` coordinates, or reversed co-op dates or implausible co-op years |
+| [`check-seat-counts.ts`](./check-seat-counts.ts)                 | `CarpoolSearch` rows with `seats_avail` outside `[0, 6]`                                          |
+| [`measure-candidate-rows.ts`](./measure-candidate-rows.ts)       | Rows read by the explore page's candidate query                                                   |
+| [`measure-requests-payload.ts`](./measure-requests-payload.ts)   | Rows and payload bytes for `user.requests.me`                                                     |
+| [`measure-unread-count.ts`](./measure-unread-count.ts)           | Query plan, generated SQL and timings for the unread badge                                        |
 
 The `check-*` scripts exit `0` when clean and `1` when not, so they can gate a follow-up.
 
-`check-profile-coordinates` draws one distinction inside "clean", because without it the gate was permanently red (SCRUM-408). It reports every finding but exits on the **actionable** ones only, so a database whose only findings are `(0, 0)` rows belonging to users who never finished onboarding exits `0` — those rows are unfinished sign-ups that were never in matching. A reversed co-op range is actionable whatever the user's onboarding state and whatever the search's `status`.
+`check-profile-coordinates` draws one distinction inside "clean", because without it the gate was permanently red (SCRUM-408). It reports every finding but exits on the **actionable** ones only, so a database whose only findings are `(0, 0)` rows belonging to users who never finished onboarding exits `0` — those rows are unfinished sign-ups that were never in matching. A reversed co-op range is actionable whatever the user's onboarding state and whatever the search's `status`, and so is an implausible co-op year (SCRUM-550) — except on a VIEWER's search, which is not a finding at all, just as a VIEWER at `(0, 0)` is not.
 
 **None of them has an `--apply`, and that is a decision.** For `check-profile-coordinates` there is no single correct repair, and only the affected user knows which they want. For the other three the repair exists in a sibling — `repair-seat-residue.ts` for both `check-seat-counts` and `check-driverless-groups`, and `cleanup-self-requests.ts` for `check-self-requests`. Keeping `check-*` uniformly read-only is what makes every one of them safe to point at production.
 

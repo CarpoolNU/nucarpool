@@ -182,11 +182,13 @@ const AccountSection = ({
           </div>
         </div>
 
-        {/* The reason a range was rejected, not just a red label. Ordering is
-            the one date error whose message a user cannot infer. */}
-        {errors.coopEndDate?.message && (
+        {/* The reason a range was rejected, not just a red label. Ordering and
+            the year bound are the date errors whose message a user cannot
+            infer, and the year bound can land on the start date alone - so
+            that field's message is the fallback. */}
+        {(errors.coopEndDate?.message || errors.coopStartDate?.message) && (
           <ErrorDisplay className="pt-2">
-            {errors.coopEndDate.message}
+            {errors.coopEndDate?.message || errors.coopStartDate?.message}
           </ErrorDisplay>
         )}
 

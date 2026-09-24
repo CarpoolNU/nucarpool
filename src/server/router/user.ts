@@ -37,6 +37,8 @@ import {
 } from "../../utils/scheduleTime";
 import {
   COOP_DATE_ORDER_MESSAGE,
+  coopYearMessage,
+  implausibleCoopYearFields,
   isReversedCoopRange,
 } from "../../utils/dateUtils";
 
@@ -196,6 +198,23 @@ export const userRouter = router({
         // below line up with the field names `onboardSchema` uses - the profile
         // page routes a failed save to the right tab by reading them.
         .superRefine((data, ctx) => {
+          // A year outside `coopYearBounds` runs forwards and so passed the
+          // ordering check below: production holds 22 like 1901→1908. The two
+          // checks are independent, so a range that is both absurd and
+          // reversed reports both. A VIEWER is exempt, for the reason
+          // `implausibleCoopYearFields` gives.
+          for (const field of implausibleCoopYearFields({
+            role: data.role,
+            coopStartDate: data.coopStartDate,
+            coopEndDate: data.coopEndDate,
+          })) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [field],
+              message: coopYearMessage(),
+            });
+          }
+
           if (isReversedCoopRange(data.coopStartDate, data.coopEndDate)) {
             ctx.addIssue({
               code: z.ZodIssueCode.custom,
