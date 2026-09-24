@@ -7,6 +7,7 @@ import React, { Fragment, useState } from "react";
 import { AiOutlineUser } from "react-icons/ai";
 import { useRouter } from "next/router";
 import useProfileImage from "../utils/useProfileImage";
+import { FEEDBACK_FORM_URL } from "../utils/feedbackForm";
 import {
   signOutWithGuard,
   UnsavedChangesGuard,
@@ -118,7 +119,7 @@ const DropDownMenu = ({ checkChanges }: DropDownMenuProps) => {
                   Profile
                 </button>
                 <Link
-                  href="https://carpoolnu.atlassian.net/jira/software/form/dfa5383a-5436-4a1c-b434-2c4f56428623?atlOrigin=eyJpIjoiMzkwYjU1YzQwNmIzNDI0Zjk4N2NiMGQwNzAzZGE3ZWYiLCJwIjoiaiJ9"
+                  href={FEEDBACK_FORM_URL}
                   className="mt-4 w-4/5 rounded-2xl border border-gray-300 bg-white px-3 py-2 text-center hover:bg-gray-100"
                 >
                   Feedback
