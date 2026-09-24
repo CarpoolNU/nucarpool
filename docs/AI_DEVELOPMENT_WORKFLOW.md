@@ -253,6 +253,8 @@ Do not file trivial observations, speculation, duplicates, or anything the activ
 
 [`.claude/settings.json`](../.claude/settings.json) is the only permission authority, and it is deliberately restrictive: read-only inspection runs freely, pushes and PR writes prompt, merges and destructive database commands are denied. A refused call with no prompt matched a `deny` pattern — that is intentional, and routing around it is not an option. Never weaken or edit permissions to make a task easier.
 
+**File rules are matched on `Edit(path)`, never `Write(path)`.** `Edit(...)` already covers every file-editing tool, `Write` included, and a `Write(...)` rule matches nothing — Claude Code prints a warning at every session start saying so. That is why the deny list carries `Edit(.env)` with no `Write(.env)` beside it: the absence is deliberate, not an oversight, and re-adding one would restore the warning without adding any protection. `Read(path)` is a separate matcher and is unaffected.
+
 **Git safety:**
 
 - Feature branches off a freshly fetched `origin/main`; PRs target `main`.
