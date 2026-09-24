@@ -126,7 +126,6 @@
       "Read(.env)",
       "Read(.env.*)",
       "Edit(.env)",
-      "Write(.env)",
 
       "mcp__atlassian__addWorklogToJiraIssue",
       "mcp__atlassian__createCompassComponent",
