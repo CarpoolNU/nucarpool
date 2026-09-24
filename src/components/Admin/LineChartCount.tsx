@@ -14,6 +14,10 @@ import {
   ChartOptions,
 } from "chart.js";
 import "chartjs-adapter-date-fns";
+import {
+  IMPORTED_SIGNUP_DATE_NOTE,
+  LINE_CHART_LABELS,
+} from "../../utils/adminDashboardLabels";
 
 ChartJS.register(
   CategoryScale,
@@ -27,8 +31,7 @@ ChartJS.register(
 );
 
 interface LineChartCountProps {
-  activeUserCount: (number | null)[];
-  inactiveUserCount: (number | null)[];
+  signupCount: (number | null)[];
   groupCounts: (number | null)[];
   requestCount: (number | null)[];
   driverRequestCount: (number | null)[];
@@ -37,8 +40,7 @@ interface LineChartCountProps {
 }
 
 function LineChartCount({
-  activeUserCount,
-  inactiveUserCount,
+  signupCount,
   groupCounts,
   requestCount,
   driverRequestCount,
@@ -49,8 +51,8 @@ function LineChartCount({
     labels: weekLabels,
     datasets: [
       {
-        label: "Active Users",
-        data: activeUserCount,
+        label: LINE_CHART_LABELS.signupCount,
+        data: signupCount,
         fill: false,
         backgroundColor: "#000000",
         borderColor: "#000000",
@@ -59,18 +61,7 @@ function LineChartCount({
         spanGaps: true,
       },
       {
-        label: "Inactive Users",
-        data: inactiveUserCount,
-        fill: false,
-        hidden: true,
-        backgroundColor: "#808080",
-        borderColor: "#808080",
-        tension: 0.1,
-        pointRadius: 10,
-        spanGaps: true,
-      },
-      {
-        label: "Groups",
+        label: LINE_CHART_LABELS.groupCounts,
         data: groupCounts,
         fill: false,
         showLine: true,
@@ -81,7 +72,7 @@ function LineChartCount({
         spanGaps: true,
       },
       {
-        label: "Requests",
+        label: LINE_CHART_LABELS.requestCount,
         data: requestCount,
         fill: false,
         showLine: true,
@@ -92,7 +83,7 @@ function LineChartCount({
         spanGaps: true,
       },
       {
-        label: "Rider Sent Requests",
+        label: LINE_CHART_LABELS.riderRequestCount,
         data: riderRequestCount,
         fill: false,
         showLine: true,
@@ -104,7 +95,7 @@ function LineChartCount({
         spanGaps: true,
       },
       {
-        label: "Driver Sent Requests",
+        label: LINE_CHART_LABELS.driverRequestCount,
         data: driverRequestCount,
         fill: false,
         showLine: true,
@@ -217,9 +208,12 @@ function LineChartCount({
   return (
     <div className="w-full">
       {weekLabels.length > 0 ? (
-        <div className="relative min-h-[600px] w-full">
-          <Line data={lineData} options={lineOptions} />
-        </div>
+        <>
+          <div className="relative min-h-[600px] w-full">
+            <Line data={lineData} options={lineOptions} />
+          </div>
+          <p className="text-sm">{IMPORTED_SIGNUP_DATE_NOTE}</p>
+        </>
       ) : (
         <div>No data available for the selected date range.</div>
       )}

@@ -149,8 +149,7 @@ function AdminData() {
   const [rangeStart, rangeEnd] = sliderRange ?? [0, 0];
   const {
     weekLabels = [],
-    activeUserCount = [],
-    inactiveUserCount = [],
+    signupCount = [],
     groupCounts = [],
     requestCount = [],
     driverRequestCount = [],
@@ -276,8 +275,7 @@ function AdminData() {
           viewerINO={viewerINO}
         />
         <LineChartCount
-          activeUserCount={activeUserCount}
-          inactiveUserCount={inactiveUserCount}
+          signupCount={signupCount}
           groupCounts={groupCounts}
           requestCount={requestCount}
           driverRequestCount={driverRequestCount}

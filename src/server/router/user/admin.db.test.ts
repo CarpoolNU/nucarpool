@@ -223,8 +223,7 @@ describe("the admin dashboard CSV export against a real database", () => {
       expect(lineChartRows[index + 1]).toBe(
         [
           format(label, "MMM dd yyyy"),
-          series.activeUserCount[index] ?? "",
-          series.inactiveUserCount[index] ?? "",
+          series.signupCount[index] ?? "",
           series.groupCounts[index] ?? "",
           series.requestCount[index] ?? "",
           series.driverRequestCount[index] ?? "",
@@ -233,13 +232,13 @@ describe("the admin dashboard CSV export against a real database", () => {
       );
     });
     // Sanity: the week `midWindow` falls in is where every seeded row lands,
-    // so its active-user bucket must be non-zero rather than the CSV round
+    // so its signup bucket must be non-zero rather than the CSV round
     // trip trivially passing on all-null data.
     const midWeekIndex = series.weekLabels.findIndex(
       (label) => label.getTime() === startOfWeek(midWindow).getTime(),
     );
     expect(midWeekIndex).toBeGreaterThanOrEqual(0);
-    expect(series.activeUserCount[midWeekIndex]).toBe(2);
+    expect(series.signupCount[midWeekIndex]).toBe(2);
 
     // Privacy decision (SCRUM-540): the export is aggregate-only. No message
     // body or other individual-level field can appear in any of the four

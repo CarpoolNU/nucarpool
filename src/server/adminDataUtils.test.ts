@@ -220,8 +220,11 @@ describe("weeksSpanned", () => {
 describe("buildLineChartData", () => {
   it("keeps each series on its own key", () => {
     const result = buildLineChartData(
-      [{ dateCreated: on(2024, 1, 8) }],
-      [{ dateCreated: on(2024, 1, 8) }, { dateCreated: on(2024, 1, 9) }],
+      [
+        { dateCreated: on(2024, 1, 8) },
+        { dateCreated: on(2024, 1, 8) },
+        { dateCreated: on(2024, 1, 9) },
+      ],
       [{ dateCreated: on(2024, 1, 15) }],
       [{ dateCreated: on(2024, 1, 8) }, { dateCreated: on(2024, 1, 15) }],
       [{ dateCreated: on(2024, 1, 8) }],
@@ -230,8 +233,7 @@ describe("buildLineChartData", () => {
     );
 
     expect(result).toEqual({
-      activeUserCount: [1, null],
-      inactiveUserCount: [2, null],
+      signupCount: [3, null],
       groupCounts: [0, 1],
       requestCount: [1, 2],
       driverRequestCount: [1, null],
@@ -366,18 +368,40 @@ describe("summariseUsers", () => {
     });
   });
 
-  it("counts every active non-driver as a rider, viewers included", () => {
-    // Long-standing dashboard definition: the percentage denominators are
-    // "active users who are not drivers", not "users whose role is RIDER".
+  it("counts only RIDERs towards totalRiders, leaving viewers out", () => {
+    // SCRUM-548: this used to be "every active user who is not a driver", so
+    // VIEWERs - a third of production - roughly halved "Riders In a Group".
     const { membership } = summariseUsers([
       user({ role: Role.DRIVER }),
+      user({ role: Role.RIDER, carpoolId: "group-1" }),
       user({ role: Role.RIDER }),
+      user({ role: Role.VIEWER }),
       user({ role: Role.VIEWER }),
       user({ role: Role.RIDER, status: Status.INACTIVE }),
     ]);
 
-    expect(membership.totalDrivers).toBe(1);
+    expect(membership.ridersInGroup).toBe(1);
     expect(membership.totalRiders).toBe(2);
+  });
+
+  it("defines totalDrivers and totalRiders the same way, by role", () => {
+    // The two percentages sit side by side on one card, so they must share a
+    // definition. The driver side was already right and must stay unchanged.
+    const { membership } = summariseUsers([
+      user({ role: Role.DRIVER, carpoolId: "group-1" }),
+      user({ role: Role.DRIVER }),
+      user({ role: Role.RIDER, carpoolId: "group-1" }),
+      user({ role: Role.RIDER }),
+      user({ role: Role.VIEWER }),
+      user({ role: Role.DRIVER, status: Status.INACTIVE }),
+    ]);
+
+    expect(membership).toEqual({
+      driversInGroup: 1,
+      ridersInGroup: 1,
+      totalDrivers: 2,
+      totalRiders: 2,
+    });
   });
 
   it("reports zeroes for an empty platform rather than throwing", () => {
