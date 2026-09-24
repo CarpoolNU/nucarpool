@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { toast } from "react-toastify/unstyled";
 import { trpc } from "../../utils/trpc";
+import { toastCarpoolEnded } from "./CarpoolEndedToast";
 
 /**
  * Deleting a group and removing a rider from it, owned in one place.
@@ -81,7 +82,7 @@ export const useGroupMembership = ({
       onSuccess: () => {
         utils.user.me.invalidate();
         utils.user.groups.me.invalidate();
-        toast.success("Group has been successfully deleted");
+        toastCarpoolEnded("Group has been successfully deleted");
         onLeftGroup?.();
       },
     });
@@ -106,7 +107,9 @@ export const useGroupMembership = ({
         const callerLeft = variables.riderId === currentUserId;
         const groupDissolved = data === null;
 
-        toast.success(
+        // Every outcome here ends a pairing the caller was in, so each one
+        // carries the feedback prompt. See `CarpoolEndedToast`.
+        toastCarpoolEnded(
           callerLeft
             ? "You have left the group"
             : groupDissolved

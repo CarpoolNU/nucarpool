@@ -1,6 +1,7 @@
 # Product decision: post-match feedback
 
 **Status:** decision record. SCRUM-534. No production code changes.
+**Superseded in part by SCRUM-545** — see [What shipped](#what-shipped).
 **Evidence base:** `origin/main` at dafc040, plus read-only counts against
 production `main` via the `reader` role.
 
@@ -22,6 +23,7 @@ codebase and the production data settle on their own.
 - [At this group size, aggregate does not mean anonymous](#at-this-group-size-aggregate-does-not-mean-anonymous)
 - [Options](#options)
 - [Decision](#decision)
+- [What shipped](#what-shipped)
 - [What building option (a) would involve](#what-building-option-a-would-involve)
 - [Open questions](#open-questions)
 - [Follow-up](#follow-up)
@@ -230,6 +232,37 @@ closed rather than left open:
 Point 4 is the part most likely to be forgotten. Filing the `Feedback` model
 without it produces a table whose rows reference nothing.
 
+## What shipped
+
+SCRUM-545 built a lighter version of option (a) than the section below
+describes. It does **not** add a `Feedback` model, a pairing record or a
+migration. It points users at the existing feedback form instead.
+
+- Every success toast from `useGroupMembership` now carries a link, "Tell us
+  how the carpool went", to the Jira form that the Feedback button in
+  `DropDownMenu` already opened. That covers a member leaving, a driver
+  removing a rider, and a driver deleting the group. Both entry points read the
+  one `FEEDBACK_FORM_URL` in `src/utils/feedbackForm.ts`.
+- **Admin-only holds by construction.** Submissions go into Jira, and nothing
+  in the app reads them back. There is no badge, count or ranking input that
+  could reveal feedback to the person it is about, which is the strict reading
+  the anonymity section says is the only one that works.
+- **What the lighter version gives up**, compared with the design below:
+  - No once-per-pairing constraint. Someone can submit as often as they like.
+  - No session-verified rater. The form knows only what the submitter types.
+  - No link to a specific pairing. Admins have to match a submission to people
+    by reading it.
+  - **Reach is only the member who acted.** A rider the driver removed, or the
+    member left alone when a group dissolves under them, is not in the app at
+    that moment and gets no prompt.
+- The triggers in [Decision](#decision) point 3 did not fire. This went ahead
+  because it costs no schema change, so the reason for waiting, which was paying
+  for a sparse signal with writes inside three `groups.ts` transactions, does
+  not apply to it.
+
+If the lighter version proves too weak, the design below is still the way to
+build the full one, and the pairing record still comes first.
+
 ## What building option (a) would involve
 
 Recorded so the follow-up ticket does not have to rediscover it.
@@ -289,8 +322,8 @@ Deliberately unanswered; they belong to whoever picks up the follow-up.
 
 ## Follow-up
 
-- **SCRUM-545** — implement option (a), including the durable pairing record it
-  depends on. Left in `To Do`; it should not be started before one of the
-  triggers in [Decision](#decision) point 3 fires.
+- **SCRUM-545** — shipped as a prompt to the existing feedback form rather than
+  the in-app model; see [What shipped](#what-shipped). The durable pairing
+  record and the `Feedback` model below remain unbuilt.
 - SCRUM-534 is satisfied by this document: the product decision is recorded,
   and the two conditional criteria are carried into the follow-up unchanged.
