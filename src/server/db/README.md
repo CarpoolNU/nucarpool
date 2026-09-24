@@ -303,6 +303,15 @@ Reversing the decision needs a new decision, not an `--apply` run on the strengt
 - **`Conversation.request` is a list** (`Request[]`), because the relation is declared from the nullable child side. Nothing stops two requests pointing at one conversation.
 - **A null `Request.conversationId` is legitimate**, not corruption — every request predating the conversation model has one. They are repaired lazily by `findOrCreateConversation` on the first write that needs a conversation, never backfilled.
 
+## Blocks
+
+A `Block` row is one user's choice, but its effect is symmetric: every check in [`blocks.ts`](./blocks.ts) matches a row in either direction (SCRUM-554).
+
+- **Hidden, never deleted.** Requests, favourites and conversations between a blocked pair are filtered where they are read. Unblocking restores them exactly, and nothing a report might later need is lost.
+- **Where it is enforced.** Discovery (`candidateExclusions`, shared by recommendations and the map), `favorites.me` and adding a favourite, `requests.me` and `requests.create`, both group join paths, `messages.conversation`, `sendMessage` and the unread count, all three notification emails, and Pusher conversation-channel auth.
+- **Where it deliberately is not.** `requests.delete`, removing a favourite, and leaving or dissolving a group. A user must always be able to get out.
+- **A blocked pair never shares a group.** `user.blocks.block` refuses someone in the caller's group ("Leave the group first"), and `groups.edit` checks a joining rider against every member, not only the driver. The two checks are separate reads, so a block and a join racing each other can still both succeed. There is no constraint behind it, for the same reason as [one request per pair](#one-request-per-pair-and-why-it-is-not-a-constraint).
+
 ## Account deletion
 
 **There is no delete-my-account feature, and that is a decision rather than an omission.** Nothing needs fixing to allow one, and the schema should not be changed to make one possible without revisiting the decision. This section exists so the cascade question is not rediscovered and assumed to be a bug.

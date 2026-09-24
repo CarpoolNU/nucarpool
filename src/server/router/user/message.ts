@@ -8,6 +8,7 @@ import {
   notificationChannel,
 } from "../../../utils/pusherChannels";
 import { MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
+import { assertNotBlocked, blockedCounterpartIds } from "../../db/blocks";
 
 /**
  * Messages per page in the open thread.
@@ -119,11 +120,19 @@ export const messageRouter = router({
     // re-run `scripts/measure-unread-count.ts` and read
     // `src/server/db/README.md` — the numbers and the thresholds are recorded
     // there rather than restated here.
+    //
+    // Messages written by anyone with a block against the caller, in either
+    // direction, are not counted (SCRUM-554), because `requests.me` hides the
+    // thread they sit in. A conversation has exactly two parties, so leaving
+    // out the counterpart's messages leaves out the conversation. `notIn` is
+    // a negation like the `not` it replaces, so the plan described above holds.
+    const blockedIds = await blockedCounterpartIds(ctx.prisma, userId);
+
     return ctx.prisma.message.count({
       where: {
         isRead: false,
         userId: {
-          not: userId,
+          notIn: [userId, ...blockedIds],
         },
         conversation: {
           request: {
@@ -229,6 +238,11 @@ export const messageRouter = router({
         });
       }
 
+      // A thread between a blocked pair is hidden, not deleted (SCRUM-554),
+      // so it is refused here for either party with the same generic answer
+      // and comes back intact on unblock.
+      await assertNotBlocked(ctx.prisma, request.fromUserId, request.toUserId);
+
       // One extra row, to learn whether another page exists without a second
       // round trip or a `count` over the whole thread.
       const rows = await ctx.prisma.message.findMany({
@@ -295,6 +309,10 @@ export const messageRouter = router({
           message: "You are not a participant in this conversation.",
         });
       }
+
+      // Before the write and so before either Pusher event: a refused
+      // message is neither stored nor delivered (SCRUM-554).
+      await assertNotBlocked(ctx.prisma, request.fromUserId, request.toUserId);
 
       // Find or create the conversation. This used to be two exclusive
       // branches where only the "already exists" one wrote the message, so a

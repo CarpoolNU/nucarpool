@@ -18,6 +18,9 @@ import {
 } from "../../../utils/textLimits";
 import type { Context } from "../context";
 import { cloneState, withTransaction } from "../transactionMock";
+import { fakeBlockDelegate } from "../../../testing/blockFake";
+import type { BlockRow } from "../../../testing/blockFake";
+import { BLOCKED_PAIR_MESSAGE } from "../../db/blocks";
 
 /**
  * Authorization tests for the carpool groups router.
@@ -103,6 +106,8 @@ const buildGroupsDb = (opts?: {
   searches?: SearchRow[];
   groups?: GroupRow[];
   requests?: RequestPair[];
+  /** Block rows, `blockerId` first. None by default: nobody has blocked anybody. */
+  blocks?: BlockRow[];
 }) => {
   const searches = (opts?.searches ?? defaultSearches()).map((s) => ({ ...s }));
   const groups = new Map<string, GroupRow>(
@@ -250,11 +255,14 @@ const buildGroupsDb = (opts?: {
     }),
   };
 
+  // Read-only here: groups never writes a block, so it needs no snapshot.
+  const block = fakeBlockDelegate(opts?.blocks ?? []);
+
   // The groups mutations wrap their writes in `prisma.$transaction`,
   // so the mock rolls back on a throw. Restoring in place matters:
   // the delegates above close over these exact references.
   const prisma = withTransaction(
-    { carpoolSearch, carpoolGroup, request },
+    { carpoolSearch, carpoolGroup, request, block },
     () => ({
       searches: cloneState(searches),
       groups: cloneState(groups),
@@ -300,6 +308,7 @@ const buildGroupsDb = (opts?: {
     carpoolGroup,
     carpoolSearch,
     request,
+    block,
   };
 };
 
@@ -3034,5 +3043,197 @@ describe("a paused search cannot be built into a group", () => {
     });
 
     expect(db.seatsOf(DRIVER)).toBe(2);
+  });
+});
+
+/**
+ * A blocked pair cannot share a group (SCRUM-554).
+ *
+ * A block is one row but a symmetric effect, so every refusal here is checked
+ * with the row pointing each way. `edit` checks the joining rider against every
+ * current member, not only the driver: a rider who blocked another rider would
+ * otherwise end up in a car with them through a driver neither had a problem
+ * with. The exits deliberately ignore blocks, because leaving must always work.
+ */
+describe("a blocked pair cannot share a group", () => {
+  const STRANGER = "user-stranger";
+
+  /** Two ungrouped users; the rider asked, so the driver may accept. */
+  const freshPair = (blocks: BlockRow[]) =>
+    buildGroupsDb({
+      searches: [
+        {
+          id: "s-driver",
+          userId: DRIVER,
+          role: Role.DRIVER,
+          carpoolId: null,
+          seatsAvail: 3,
+        },
+        {
+          id: "s-rider-1",
+          userId: RIDER_1,
+          role: Role.RIDER,
+          carpoolId: null,
+          seatsAvail: 0,
+        },
+      ],
+      groups: [],
+      requests: [[RIDER_1, DRIVER]],
+      blocks,
+    });
+
+  /** The default three-member group, with the outsider asking to join it. */
+  const joining = (blocks: BlockRow[]) =>
+    buildGroupsDb({ requests: [[OUTSIDER, DRIVER]], blocks });
+
+  const join = {
+    driverId: DRIVER,
+    riderId: OUTSIDER,
+    groupId: GROUP,
+    add: true,
+  };
+
+  it("creates the group for a pair whose blocks are only with other people", async () => {
+    // The control. Seeding unrelated rows, rather than none, shows the check
+    // matches on the pair and does not refuse because *a* block exists.
+    const db = freshPair([
+      { blockerId: DRIVER, blockedId: STRANGER },
+      { blockerId: STRANGER, blockedId: RIDER_1 },
+    ]);
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await caller.user.groups.create({ driverId: DRIVER, riderId: RIDER_1 });
+
+    expect(db.groupIds()).toHaveLength(1);
+    expect(db.seatsOf(DRIVER)).toBe(2);
+  });
+
+  it.each([
+    ["the driver blocked the rider", { blockerId: DRIVER, blockedId: RIDER_1 }],
+    ["the rider blocked the driver", { blockerId: RIDER_1, blockedId: DRIVER }],
+  ])("refuses create when %s", async (_label, row) => {
+    const db = freshPair([row]);
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    // The same generic message both ways, so the blocked user cannot learn
+    // from the error who blocked whom.
+    await expect(
+      caller.user.groups.create({ driverId: DRIVER, riderId: RIDER_1 }),
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      message: BLOCKED_PAIR_MESSAGE,
+    });
+
+    // Nothing written: no group, no seat, nobody linked, and the invitation
+    // still pending rather than spent on a group that was never built.
+    expect(db.groupIds()).toEqual([]);
+    expect(db.carpoolGroup.create).not.toHaveBeenCalled();
+    expect(db.seatsOf(DRIVER)).toBe(3);
+    expect(db.carpoolIdOf(DRIVER)).toBeNull();
+    expect(db.carpoolIdOf(RIDER_1)).toBeNull();
+    expect(db.requestStatusOf(RIDER_1, DRIVER)).toBe(RequestStatus.PENDING);
+  });
+
+  it("admits a rider to a group whose members' blocks are only with other people", async () => {
+    // The control for the member check: every member and the joiner has a
+    // block, just none with each other.
+    const db = joining([
+      { blockerId: DRIVER, blockedId: STRANGER },
+      { blockerId: RIDER_1, blockedId: STRANGER },
+      { blockerId: STRANGER, blockedId: RIDER_2 },
+      { blockerId: OUTSIDER, blockedId: STRANGER },
+    ]);
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await caller.user.groups.edit(join);
+
+    expect(db.carpoolIdOf(OUTSIDER)).toBe(GROUP);
+    expect(db.seatsOf(DRIVER)).toBe(1);
+  });
+
+  it.each([
+    [
+      "the driver blocked the joining rider",
+      { blockerId: DRIVER, blockedId: OUTSIDER },
+    ],
+    [
+      "the joining rider blocked the driver",
+      { blockerId: OUTSIDER, blockedId: DRIVER },
+    ],
+    // The important pair: the driver is fine with both of them, so a check
+    // against the driver alone lets these two into the same car.
+    [
+      "a rider already in the group blocked the joining rider",
+      { blockerId: RIDER_2, blockedId: OUTSIDER },
+    ],
+    [
+      "the joining rider blocked a rider already in the group",
+      { blockerId: OUTSIDER, blockedId: RIDER_2 },
+    ],
+  ])("refuses edit-add when %s", async (_label, row) => {
+    const db = joining([row]);
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await expect(caller.user.groups.edit(join)).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      message: BLOCKED_PAIR_MESSAGE,
+    });
+
+    expect(db.carpoolIdOf(OUTSIDER)).toBeNull();
+    expect(db.seatsOf(DRIVER)).toBe(2);
+    expect(db.requestStatusOf(OUTSIDER, DRIVER)).toBe(RequestStatus.PENDING);
+  });
+
+  describe("the exits stay open", () => {
+    // `user.blocks.block` refuses to block a groupmate, so these rows cannot
+    // normally arise, but rows can predate that guard. Both directions, so a
+    // check in either one on an exit would fire.
+    const blockedGroup = () =>
+      buildGroupsDb({
+        blocks: [
+          { blockerId: DRIVER, blockedId: RIDER_1 },
+          { blockerId: RIDER_1, blockedId: DRIVER },
+          { blockerId: RIDER_1, blockedId: RIDER_2 },
+          { blockerId: RIDER_2, blockedId: RIDER_1 },
+        ],
+      });
+
+    const remove = {
+      driverId: DRIVER,
+      riderId: RIDER_1,
+      groupId: GROUP,
+      add: false,
+    };
+
+    it("lets a rider leave a group holding someone they have a block with", async () => {
+      const db = blockedGroup();
+      const { caller } = callerFor(sessionFor(RIDER_1), db);
+
+      await caller.user.groups.edit(remove);
+
+      expect(db.carpoolIdOf(RIDER_1)).toBeNull();
+      expect(db.seatsOf(DRIVER)).toBe(3);
+    });
+
+    it("lets the driver remove a rider they have a block with", async () => {
+      const db = blockedGroup();
+      const { caller } = callerFor(sessionFor(DRIVER), db);
+
+      await caller.user.groups.edit(remove);
+
+      expect(db.carpoolIdOf(RIDER_1)).toBeNull();
+      expect(db.carpoolIdOf(RIDER_2)).toBe(GROUP);
+    });
+
+    it("lets the driver dissolve a group holding someone they have a block with", async () => {
+      const db = blockedGroup();
+      const { caller } = callerFor(sessionFor(DRIVER), db);
+
+      await caller.user.groups.delete({ groupId: GROUP });
+
+      expect(db.groupIds()).toEqual([]);
+      expect(db.carpoolIdOf(RIDER_1)).toBeNull();
+      expect(db.carpoolIdOf(RIDER_2)).toBeNull();
+    });
   });
 });

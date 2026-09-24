@@ -2,6 +2,7 @@ import { Permission, Role, Status } from "@prisma/client";
 import type { Session } from "next-auth";
 import { appRouter } from "./index";
 import type { Context } from "./context";
+import { fakeBlockDelegate } from "../../testing/blockFake";
 
 /**
  * Router-level coverage for the two endpoints that drive the explore page:
@@ -32,6 +33,9 @@ const FAVORITE_A = "favorite-a";
 const FAVORITE_B = "favorite-b";
 const MESSAGED_TO = "messaged-to";
 const MESSAGED_FROM = "messaged-from";
+const BLOCKED_BY_ME = "blocked-by-me";
+const BLOCKED_ME = "blocked-me";
+const BYSTANDER = "bystander";
 
 const session: Session = {
   expires: "2099-01-01T00:00:00.000Z",
@@ -109,8 +113,14 @@ const buildPrisma = () => {
     return { ...search, user };
   });
 
+  // No blocks by default, which is what every test above the block section
+  // was written against.
+  const block = fakeBlockDelegate();
+
   return {
-    prisma: { carpoolSearch: { findFirst, findMany } },
+    prisma: { carpoolSearch: { findFirst, findMany }, block },
+    /** Live block rows: push to block, splice to unblock. */
+    blocks: block.rows,
     /** The `where` the candidate query was built with. */
     candidateWhere: (): any => findMany.mock.calls[0]?.[0]?.where,
     findFirst,
@@ -213,5 +223,99 @@ describe.each([
 
     expect(userId.in).toEqual([FAVORITE_A, FAVORITE_B]);
     expect(userId.notIn).toEqual([USER_ID, MESSAGED_TO, MESSAGED_FROM]);
+  });
+});
+
+/**
+ * Blocks (SCRUM-554). Both endpoints get their exclusion list from
+ * `candidateExclusions`, so these run against each of them: a copy that
+ * dropped the block lookup would otherwise pass through the other's tests.
+ */
+describe.each([
+  [
+    "user.recommendations.me",
+    (prisma: unknown, overrides: Record<string, unknown>) =>
+      caller(prisma).user.recommendations.me({
+        sort: "distance",
+        filters: filters(overrides),
+      }),
+  ],
+  [
+    "mapbox.geoJsonUserList",
+    (prisma: unknown, overrides: Record<string, unknown>) =>
+      caller(prisma).mapbox.geoJsonUserList(filters(overrides) as any),
+  ],
+])("%s — blocked users are excluded", (_name, call) => {
+  /** Blocks in both directions, plus one between two other people. */
+  const withBlocks = () => {
+    const db = buildPrisma();
+    db.blocks.push(
+      { blockerId: USER_ID, blockedId: BLOCKED_BY_ME },
+      { blockerId: BLOCKED_ME, blockedId: USER_ID },
+      // Not the caller's block, so it must not exclude anyone from their view.
+      { blockerId: BYSTANDER, blockedId: MESSAGED_TO },
+    );
+    return db;
+  };
+
+  it("excludes both directions, even with the messaged filter showing everyone", async () => {
+    // `messaged: true` is the default and excludes nobody on its own, so this
+    // is the case where a block rides on nothing else.
+    const { prisma, candidateWhere } = withBlocks();
+
+    await call(prisma, { messaged: true });
+
+    expect(candidateWhere().userId.notIn).toEqual([
+      USER_ID,
+      BLOCKED_BY_ME,
+      BLOCKED_ME,
+    ]);
+  });
+
+  it("does not exclude a user whose only block is with someone else", async () => {
+    const { prisma, candidateWhere } = withBlocks();
+
+    await call(prisma, { messaged: true });
+
+    expect(candidateWhere().userId.notIn).not.toContain(BYSTANDER);
+    expect(candidateWhere().userId.notIn).not.toContain(MESSAGED_TO);
+  });
+
+  it("adds the blocks to the messaged exclusions rather than replacing them", async () => {
+    const { prisma, candidateWhere } = withBlocks();
+
+    await call(prisma, { messaged: false });
+
+    expect(candidateWhere().userId.notIn).toEqual([
+      USER_ID,
+      BLOCKED_BY_ME,
+      BLOCKED_ME,
+      MESSAGED_TO,
+      MESSAGED_FROM,
+    ]);
+  });
+
+  it("still excludes a blocked favourite when the favorites filter is on", async () => {
+    // The favorites narrowing is an `in`; the block has to sit beside it as a
+    // `notIn`, or a favourite would bypass it.
+    const { prisma, blocks, candidateWhere } = buildPrisma();
+    blocks.push({ blockerId: FAVORITE_A, blockedId: USER_ID });
+
+    await call(prisma, { favorites: true });
+
+    expect(candidateWhere().userId.in).toEqual([FAVORITE_A, FAVORITE_B]);
+    expect(candidateWhere().userId.notIn).toEqual([USER_ID, FAVORITE_A]);
+  });
+
+  it("stops excluding a user once the block is removed", async () => {
+    const { prisma, blocks, findMany } = withBlocks();
+    const whereOfCall = (n: number): any => findMany.mock.calls[n]?.[0]?.where;
+
+    await call(prisma, { messaged: true });
+    blocks.splice(0, blocks.length);
+    await call(prisma, { messaged: true });
+
+    expect(whereOfCall(0).userId.notIn).toContain(BLOCKED_ME);
+    expect(whereOfCall(1).userId.notIn).toEqual([USER_ID]);
   });
 });

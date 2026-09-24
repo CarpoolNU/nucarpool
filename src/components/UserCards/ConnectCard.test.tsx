@@ -76,6 +76,9 @@ jest.mock("../../utils/trpc", () => ({
     }),
     user: {
       favorites: { edit: { useMutation: () => ({ mutate: jest.fn() }) } },
+      blocks: {
+        block: { useMutation: () => ({ mutate: jest.fn(), isPending: false }) },
+      },
       requests: {
         create: {
           useMutation: (opts: {
@@ -211,7 +214,11 @@ describe("Discovery card activation on mobile", () => {
     // that exact mutation survived an earlier version of this file.
     renderCard();
 
-    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    // Bar the actions menu every `UserCard` carries (SCRUM-554), pinned by
+    // element so any other button still fails this.
+    expect(screen.queryAllByRole("button")).toEqual([
+      screen.getByRole("button", { name: "More actions for Riley" }),
+    ]);
   });
 
   it("offers Connect once the card is expanded", () => {
@@ -280,7 +287,13 @@ describe("Discovery card activation on desktop", () => {
     // match.
     renderCard({ handleMobileExpand: () => undefined });
 
-    const labels = screen.getAllByRole("button").map((b) => b.textContent);
+    // The actions menu (SCRUM-554) is icon-only too, so it is excluded by
+    // element, not by its empty text, or the overlay would be excluded with it.
+    const menu = screen.getByRole("button", { name: "More actions for Riley" });
+    const labels = screen
+      .getAllByRole("button")
+      .filter((b) => b !== menu)
+      .map((b) => b.textContent);
 
     expect(labels).toEqual(["View Route", "Connect"]);
     // The activation overlay is the only button in a card with no text of its

@@ -37,6 +37,7 @@ import UserSection from "../../components/Profile/UserSection";
 import Header from "../../components/Header";
 import CarpoolSection from "../../components/Profile/CarpoolSection";
 import AccountSection from "../../components/Profile/AccountSection";
+import BlockedUsersSection from "../../components/Profile/BlockedUsersSection";
 import UnsavedModal from "../../components/Profile/UnsavedModal";
 import useIsMobile from "../../utils/useIsMobile";
 
@@ -541,13 +542,18 @@ const Index: NextPage = () => {
                   control={control}
                 />
               ) : option === "account" ? (
-                <AccountSection
-                  control={control}
-                  watch={watch}
-                  onSubmit={handleSubmit(onSubmit, onError)}
-                  errors={errors}
-                  setValue={setValue}
-                />
+                <>
+                  <AccountSection
+                    control={control}
+                    watch={watch}
+                    onSubmit={handleSubmit(onSubmit, onError)}
+                    errors={errors}
+                    setValue={setValue}
+                  />
+                  {/* Beside the form rather than in it: unblocking takes
+                      effect immediately and is not part of Save Changes. */}
+                  <BlockedUsersSection />
+                </>
               ) : (
                 <></>
               )}
@@ -586,13 +592,18 @@ const Index: NextPage = () => {
                   control={control}
                 />
               ) : option === "account" ? (
-                <AccountSection
-                  control={control}
-                  watch={watch}
-                  onSubmit={handleSubmit(onSubmit, onError)}
-                  errors={errors}
-                  setValue={setValue}
-                />
+                <>
+                  <AccountSection
+                    control={control}
+                    watch={watch}
+                    onSubmit={handleSubmit(onSubmit, onError)}
+                    errors={errors}
+                    setValue={setValue}
+                  />
+                  {/* Beside the form rather than in it: unblocking takes
+                      effect immediately and is not part of Save Changes. */}
+                  <BlockedUsersSection />
+                </>
               ) : (
                 <></>
               )}

@@ -5,6 +5,8 @@ import { appRouter } from "../index";
 import type { Context } from "../context";
 import { MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
 import { cloneState, withTransaction } from "../transactionMock";
+import { BLOCKED_PAIR_MESSAGE } from "../../db/blocks";
+import { fakeBlockDelegate } from "../../../testing/blockFake";
 
 /**
  * Authorization tests for the `user.requests` router.
@@ -277,6 +279,10 @@ const buildRequestsDb = (
     }));
   });
 
+  // No blocks unless a test adds one. Read, never written, so it is left out
+  // of the transaction snapshot.
+  const block = fakeBlockDelegate();
+
   // `requests.create` commits its four writes as one transaction,
   // so the mock rolls back on a throw rather than merely passing through.
   const prisma = withTransaction(
@@ -298,6 +304,7 @@ const buildRequestsDb = (
         deleteMany: conversationDeleteMany,
       },
       message: { create: messageCreate, deleteMany: messageDeleteMany },
+      block,
     },
     () => ({
       requests: cloneState(requests),
@@ -321,6 +328,8 @@ const buildRequestsDb = (
     messages: () => [...messages],
     /** Conversation rows, for asserting the `Conversation.requestId` side. */
     conversations: () => [...conversations.values()],
+    /** Live block rows: push to block, splice to unblock. */
+    blocks: block.rows,
     create,
     destroy,
     update,
@@ -1652,6 +1661,8 @@ const buildRequestsMeDb = (
       );
   });
 
+  const block = fakeBlockDelegate();
+
   return {
     prisma: {
       user: { findUnique: userFindUnique },
@@ -1659,7 +1670,10 @@ const buildRequestsMeDb = (
         findFirst: carpoolSearchFindFirst,
         findMany: carpoolSearchFindMany,
       },
+      block,
     } as unknown as Context["prisma"],
+    /** Live block rows: push to block, splice to unblock. */
+    blocks: block.rows,
     carpoolSearchFindMany,
     userFindUnique,
   };
@@ -2440,5 +2454,196 @@ describe("user.requests.me - the status is read per request, not per response", 
       COARSE_HOME.coordLat,
     );
     expect(byId.get("request-2")!.toUser).not.toHaveProperty("email");
+  });
+});
+
+/**
+ * Blocks (SCRUM-554). `create` refuses across a block in either direction,
+ * before it reads or writes anything else in its transaction. `me` hides a
+ * request with a blocked counterpart without deleting it, and `delete` does
+ * not consult blocks at all, because a user must always be able to leave.
+ */
+const USER_D = "user-d";
+
+const blockCases = [
+  [
+    "the caller blocked the recipient",
+    { blockerId: USER_A, blockedId: USER_B },
+  ],
+  [
+    "the recipient blocked the caller",
+    { blockerId: USER_B, blockedId: USER_A },
+  ],
+] as const;
+
+describe("user.requests.create — refused across a block", () => {
+  it.each(blockCases)(
+    "refuses with FORBIDDEN when %s, writing nothing",
+    async (_case, row) => {
+      const db = buildRequestsDb();
+      db.blocks.push({ ...row });
+      const { caller } = callerFor(sessionFor(USER_A), db);
+
+      await expect(
+        caller.user.requests.create({ toId: USER_B, message: "hello" }),
+      ).rejects.toMatchObject({
+        code: "FORBIDDEN",
+        message: BLOCKED_PAIR_MESSAGE,
+      });
+
+      expect(db.create).not.toHaveBeenCalled();
+      expect(db.conversationCreate).not.toHaveBeenCalled();
+      expect(db.rows()).toEqual([]);
+      expect(db.conversations()).toEqual([]);
+      expect(db.messages()).toEqual([]);
+    },
+  );
+
+  it.each(blockCases)(
+    "does not reopen a hidden accepted request when %s",
+    async (_case, row) => {
+      // Without the block check this is the reopen path: it would flip the
+      // row back to PENDING and append to the pair's old conversation.
+      const seeded = requestRow("old", USER_A, USER_B, {
+        status: RequestStatus.ACCEPTED,
+        conversationId: "conversation-old",
+      });
+      const db = buildRequestsDb([seeded]);
+      db.blocks.push({ ...row });
+      const { caller } = callerFor(sessionFor(USER_A), db);
+
+      await expect(
+        caller.user.requests.create({ toId: USER_B, message: "round two" }),
+      ).rejects.toMatchObject({
+        code: "FORBIDDEN",
+        message: BLOCKED_PAIR_MESSAGE,
+      });
+
+      expect(db.update).not.toHaveBeenCalled();
+      expect(db.rows()).toEqual([seeded]);
+      expect(db.messages()).toEqual([]);
+    },
+  );
+
+  it("answers a hidden pending request with FORBIDDEN, not CONFLICT", async () => {
+    // CONFLICT would tell the caller a request exists that `me` no longer
+    // shows them.
+    const seeded = requestRow("live", USER_B, USER_A);
+    const db = buildRequestsDb([seeded]);
+    db.blocks.push({ blockerId: USER_B, blockedId: USER_A });
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await expect(
+      caller.user.requests.create({ toId: USER_B, message: "again" }),
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      message: BLOCKED_PAIR_MESSAGE,
+    });
+    expect(db.rows()).toEqual([seeded]);
+  });
+
+  it("still creates a request when the only blocks are with someone else", async () => {
+    const db = buildRequestsDb();
+    db.blocks.push(
+      { blockerId: USER_A, blockedId: USER_C },
+      { blockerId: USER_C, blockedId: USER_B },
+    );
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await caller.user.requests.create({ toId: USER_B, message: "hello" });
+
+    expect(db.rows()).toEqual([
+      expect.objectContaining({ fromUserId: USER_A, toUserId: USER_B }),
+    ]);
+  });
+});
+
+describe("user.requests.delete — still open across a block", () => {
+  it.each([
+    ["the sender", USER_A],
+    ["the recipient", USER_B],
+  ])("lets %s clear the request", async (_who, actor) => {
+    const db = buildRequestsDb([requestRow("req-1", USER_A, USER_B)]);
+    db.blocks.push(
+      { blockerId: USER_A, blockedId: USER_B },
+      { blockerId: USER_B, blockedId: USER_A },
+    );
+    const { caller } = callerFor(sessionFor(actor), db);
+
+    await caller.user.requests.delete({ invitationId: "req-1" });
+
+    expect(db.rows()).toEqual([]);
+  });
+});
+
+describe("user.requests.me - a request with a blocked counterpart is hidden", () => {
+  /** A sends to B and D, and receives from C. D is never blocked. */
+  const seed = [
+    requestRow("to-b", USER_A, USER_B),
+    requestRow("from-c", USER_C, USER_A),
+    requestRow("to-d", USER_A, USER_D),
+  ];
+  const roles = {
+    [USER_A]: Role.RIDER,
+    [USER_B]: Role.DRIVER,
+    [USER_C]: Role.DRIVER,
+    [USER_D]: Role.DRIVER,
+  };
+
+  const idsOf = async (caller: ReturnType<typeof appRouter.createCaller>) => {
+    const result = await caller.user.requests.me();
+    return {
+      sent: result.sent.map((req) => req.id),
+      received: result.received.map((req) => req.id),
+    };
+  };
+
+  it("hides a sent request to someone the caller blocked", async () => {
+    const { caller, db } = meCallerFor(USER_A, seed, roles);
+    db.blocks.push({ blockerId: USER_A, blockedId: USER_B });
+
+    expect(await idsOf(caller)).toEqual({
+      sent: ["to-d"],
+      received: ["from-c"],
+    });
+  });
+
+  it("hides a sent request to someone who blocked the caller", async () => {
+    const { caller, db } = meCallerFor(USER_A, seed, roles);
+    db.blocks.push({ blockerId: USER_B, blockedId: USER_A });
+
+    expect(await idsOf(caller)).toEqual({
+      sent: ["to-d"],
+      received: ["from-c"],
+    });
+  });
+
+  it.each([
+    ["the caller blocked the sender", { blockerId: USER_A, blockedId: USER_C }],
+    ["the sender blocked the caller", { blockerId: USER_C, blockedId: USER_A }],
+  ])("hides a received request when %s", async (_case, row) => {
+    const { caller, db } = meCallerFor(USER_A, seed, roles);
+    db.blocks.push(row);
+
+    expect(await idsOf(caller)).toEqual({
+      sent: ["to-b", "to-d"],
+      received: [],
+    });
+  });
+
+  it("restores every request once the blocks are removed", async () => {
+    const { caller, db } = meCallerFor(USER_A, seed, roles);
+    db.blocks.push(
+      { blockerId: USER_A, blockedId: USER_B },
+      { blockerId: USER_C, blockedId: USER_A },
+    );
+    expect(await idsOf(caller)).toEqual({ sent: ["to-d"], received: [] });
+
+    db.blocks.splice(0, db.blocks.length);
+
+    expect(await idsOf(caller)).toEqual({
+      sent: ["to-b", "to-d"],
+      received: ["from-c"],
+    });
   });
 });

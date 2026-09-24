@@ -59,6 +59,9 @@ jest.mock("../../utils/trpc", () => ({
     }),
     user: {
       favorites: { edit: { useMutation: () => ({ mutate: jest.fn() }) } },
+      blocks: {
+        block: { useMutation: () => ({ mutate: jest.fn(), isPending: false }) },
+      },
       requests: {
         create: {
           useMutation: () => ({
@@ -294,7 +297,13 @@ describe("a map pin click at a desktop viewport", () => {
     // than buttons, so it is absent from this list either way.
     renderPortal();
 
-    const labels = screen.getAllByRole("button").map((b) => b.textContent);
+    // The actions menu (SCRUM-554) is icon-only too, so it is excluded by
+    // element, not by its empty text, or an overlay would be excluded with it.
+    const menu = screen.getByRole("button", { name: "More actions for Riley" });
+    const labels = screen
+      .getAllByRole("button")
+      .filter((b) => b !== menu)
+      .map((b) => b.textContent);
 
     expect(labels).toEqual(["View Route", "Connect"]);
   });

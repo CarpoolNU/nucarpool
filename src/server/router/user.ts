@@ -13,6 +13,7 @@ import { requestsRouter } from "./user/requests";
 import { messageRouter } from "./user/message";
 import { recommendationsRouter } from "./user/recommendations";
 import { emailsRouter } from "./user/email";
+import { blocksRouter } from "./user/blocks";
 import {
   generatePresignedUrl,
   getPresignedImageUrl,
@@ -621,4 +622,5 @@ export const userRouter = router({
   groups: groupsRouter,
   emails: emailsRouter,
   admin: adminDataRouter,
+  blocks: blocksRouter,
 });

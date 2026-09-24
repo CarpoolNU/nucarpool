@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { RequestStatus, Role, Status } from "@prisma/client";
 import MessageHeader from "./MessageHeader";
@@ -56,12 +56,40 @@ jest.mock("../../utils/useProfileImage", () => ({
   }),
 }));
 
+/**
+ * The header renders `UserActionsMenu`, whose closed Block dialog calls the
+ * block mutation hook. It never fires here, so a bare shape is enough.
+ */
+jest.mock("../../utils/trpc", () => ({
+  trpc: {
+    useUtils: () => ({}),
+    user: {
+      blocks: {
+        block: {
+          useMutation: () => ({ mutate: jest.fn(), isPending: false }),
+        },
+      },
+    },
+  },
+}));
+
+// `MenuItems anchor` positions through Floating UI, which observes the
+// trigger's size once the menu opens. jsdom has no `ResizeObserver`, and does
+// no layout for one to report anyway, so an inert stand-in is enough.
+(global as { ResizeObserver: unknown }).ResizeObserver = class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+
 restoreViewportAfterEach();
 
 /** The mobile header's own control, and the baseline every mobile set starts with. */
 const BACK = "Back to conversations";
 /** The desktop header's own control. It is a bare `×` carrying an aria-label. */
 const CLOSE = "Close";
+/** The actions menu (SCRUM-554): beside the name on mobile, before Close on desktop. */
+const MENU = "More actions for Riley";
 
 const PENDING = { id: "req-1", status: RequestStatus.PENDING } as const;
 
@@ -142,7 +170,7 @@ describe("Conversation header controls on mobile", () => {
   it("offers Reject and Accept for a pending incoming request", () => {
     renderHeader({ selectedUser: otherUser({ incomingRequest: PENDING }) });
 
-    expect(buttonNames()).toEqual([BACK, "Reject", "Accept"]);
+    expect(buttonNames()).toEqual([BACK, MENU, "Reject", "Accept"]);
   });
 
   it("offers Withdraw Request for a pending outgoing request", () => {
@@ -151,7 +179,7 @@ describe("Conversation header controls on mobile", () => {
     // And no Accept: accepting your own request is not a thing, and the
     // outlined button is the same element in both states, so the label is the
     // only thing that distinguishes them.
-    expect(buttonNames()).toEqual([BACK, "Withdraw Request"]);
+    expect(buttonNames()).toEqual([BACK, MENU, "Withdraw Request"]);
   });
 
   it("withholds Accept and explains why when the roles no longer fit", () => {
@@ -164,7 +192,7 @@ describe("Conversation header controls on mobile", () => {
       }),
     });
 
-    expect(buttonNames()).toEqual([BACK, "Reject"]);
+    expect(buttonNames()).toEqual([BACK, MENU, "Reject"]);
     expect(
       screen.getByText(/You and Riley are both riders/),
     ).toBeInTheDocument();
@@ -182,7 +210,7 @@ describe("Conversation header controls on mobile", () => {
       groupId: "group-1",
     });
 
-    expect(buttonNames()).toEqual([BACK]);
+    expect(buttonNames()).toEqual([BACK, MENU]);
   });
 
   it("refuses a second tap while a mutation is in flight", async () => {
@@ -251,13 +279,13 @@ describe("Conversation header controls on desktop", () => {
 
     // The exact list, so a control rendered by both the shared component and
     // a leftover copy of the old JSX fails here rather than looking fine.
-    expect(buttonNames()).toEqual(["Reject", "Accept", CLOSE]);
+    expect(buttonNames()).toEqual(["Reject", "Accept", MENU, CLOSE]);
   });
 
   it("offers Withdraw Request exactly once for a pending outgoing request", () => {
     renderHeader({ selectedUser: otherUser({ outgoingRequest: PENDING }) });
 
-    expect(buttonNames()).toEqual(["Withdraw Request", CLOSE]);
+    expect(buttonNames()).toEqual(["Withdraw Request", MENU, CLOSE]);
   });
 
   it("keeps the role-mismatch explanation it already had", () => {
@@ -268,7 +296,7 @@ describe("Conversation header controls on desktop", () => {
       }),
     });
 
-    expect(buttonNames()).toEqual(["Reject", CLOSE]);
+    expect(buttonNames()).toEqual(["Reject", MENU, CLOSE]);
     expect(
       screen.getByText(/You and Riley are both riders/),
     ).toBeInTheDocument();
@@ -283,7 +311,7 @@ describe("Conversation header controls on desktop", () => {
       groupId: "group-1",
     });
 
-    expect(buttonNames()).toEqual([CLOSE]);
+    expect(buttonNames()).toEqual([MENU, CLOSE]);
   });
 });
 
@@ -337,7 +365,7 @@ describe("Clearing a request asks first", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Reject" }));
 
-    expect(buttonNames()).toEqual([BACK, "Cancel", "Confirm"]);
+    expect(buttonNames()).toEqual([BACK, MENU, "Cancel", "Confirm"]);
   });
 
   it("does not dress Confirm as Accept", async () => {
@@ -373,13 +401,18 @@ describe("Clearing a request asks first", () => {
       onReject,
     });
 
-    const row = () => screen.getAllByRole("button")[1];
+    // The first slot of the request row, not of the header, which also holds
+    // the back control and the actions menu.
+    const requestRow = screen.getByRole("button", {
+      name: "Reject",
+    }).parentElement!;
+    const row = () => within(requestRow).getAllByRole("button")[0];
 
     await userEvent.click(row());
     await userEvent.click(row());
 
     expect(onReject).not.toHaveBeenCalled();
-    expect(buttonNames()).toEqual([BACK, "Reject", "Accept"]);
+    expect(buttonNames()).toEqual([BACK, MENU, "Reject", "Accept"]);
   });
 
   it("deletes once Confirm is pressed, exactly once", async () => {
@@ -406,7 +439,7 @@ describe("Clearing a request asks first", () => {
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(onReject).not.toHaveBeenCalled();
-    expect(buttonNames()).toEqual([BACK, "Reject", "Accept"]);
+    expect(buttonNames()).toEqual([BACK, MENU, "Reject", "Accept"]);
   });
 
   it("asks before withdrawing too, in the words of that state", async () => {
@@ -443,7 +476,7 @@ describe("Clearing a request asks first", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Reject" }));
 
-    expect(buttonNames()).toEqual([BACK, "Cancel", "Confirm"]);
+    expect(buttonNames()).toEqual([BACK, MENU, "Cancel", "Confirm"]);
     expect(
       screen.queryByText(/You and Riley are both riders/),
     ).not.toBeInTheDocument();
@@ -469,7 +502,7 @@ describe("Clearing a request asks first", () => {
     await userEvent.click(reject);
 
     expect(onReject).not.toHaveBeenCalled();
-    expect(buttonNames()).toEqual([BACK, "Reject", "Accept"]);
+    expect(buttonNames()).toEqual([BACK, MENU, "Reject", "Accept"]);
   });
 
   it("does not carry a half-answered question into the next conversation", async () => {
@@ -489,11 +522,16 @@ describe("Clearing a request asks first", () => {
     const { rerender } = renderHeader({ selectedUser: first, onReject });
 
     await userEvent.click(screen.getByRole("button", { name: "Reject" }));
-    expect(buttonNames()).toEqual([BACK, "Cancel", "Confirm"]);
+    expect(buttonNames()).toEqual([BACK, MENU, "Cancel", "Confirm"]);
 
     rerender(headerElement({ selectedUser: second, onReject }));
 
-    expect(buttonNames()).toEqual([BACK, "Reject", "Accept"]);
+    expect(buttonNames()).toEqual([
+      BACK,
+      "More actions for Sam",
+      "Reject",
+      "Accept",
+    ]);
     expect(onReject).not.toHaveBeenCalled();
   });
 
@@ -507,7 +545,7 @@ describe("Clearing a request asks first", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Reject" }));
 
-    expect(buttonNames()).toEqual(["Cancel", "Confirm", CLOSE]);
+    expect(buttonNames()).toEqual(["Cancel", "Confirm", MENU, CLOSE]);
     expect(onReject).not.toHaveBeenCalled();
 
     await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
@@ -591,5 +629,36 @@ describe("The mobile back control", () => {
       screen.queryByRole("button", { name: BACK }),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: CLOSE })).toBeInTheDocument();
+  });
+});
+
+describe.each([
+  ["mobile", MOBILE_WIDTH],
+  ["desktop", DESKTOP_WIDTH],
+])("The Block dialog on %s", (_label, width) => {
+  it("does not carry over to the next conversation", async () => {
+    // The same hazard as the half-answered Reject above. Without the key, the
+    // open dialog would survive the swap with its `userId` now pointing at
+    // the next person, and its Block button would block someone the reader
+    // never chose.
+    setViewportWidth(width);
+    const first = otherUser({ id: "other-1" });
+    const second = otherUser({ id: "other-2", preferredName: "Sam" });
+
+    const { rerender } = renderHeader({ selectedUser: first });
+
+    await userEvent.click(screen.getByRole("button", { name: MENU }));
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: "Block" }),
+    );
+    // The positive control, so the absence below is not vacuous.
+    expect(
+      await screen.findByRole("dialog", { name: "Block Riley?" }),
+    ).toBeInTheDocument();
+
+    rerender(headerElement({ selectedUser: second }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByText("Block Sam?")).not.toBeInTheDocument();
   });
 });

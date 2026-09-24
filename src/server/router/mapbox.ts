@@ -6,7 +6,10 @@ import { serverEnv } from "../../utils/env/server";
 import { Role } from "@prisma/client";
 import { DirectionsResponse } from "../../utils/types";
 import { convertCarpoolSearchToPublic, roundCoord } from "../publicUser";
-import { fetchRankedCandidates } from "../db/candidateSearch";
+import {
+  candidateExclusions,
+  fetchRankedCandidates,
+} from "../db/candidateSearch";
 import { parseMapboxFeature } from "../../utils/map/parseAddress";
 import {
   MAPBOX_DIRECTIONS_MAX_POINTS,
@@ -195,15 +198,16 @@ export const mapboxRouter = router({
       const { favorites, sentRequests, receivedRequests } =
         currentUserSearch.user;
 
-      let excludedUserIds: string[] = [userId];
-
-      // Hide users user has messaged
-      if (!input.messaged) {
-        excludedUserIds.push(
-          ...sentRequests.map((r) => r.toUserId),
-          ...receivedRequests.map((r) => r.fromUserId),
-        );
-      }
+      // The reader, anyone with a block either way, and - when the filter
+      // asks - anyone they have messaged. Shared with
+      // `user.recommendations.me`.
+      const excludedUserIds = await candidateExclusions({
+        prisma: ctx.prisma,
+        userId,
+        messaged: input.messaged,
+        sentRequests,
+        receivedRequests,
+      });
 
       // Bounded candidate query plus scoring, shared with
       // `user.recommendations.me`. The two used to hold separate

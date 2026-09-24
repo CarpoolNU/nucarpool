@@ -3,6 +3,7 @@ import { z } from "zod";
 import { router, protectedRouter } from "../createRouter";
 import _ from "lodash";
 import { convertCarpoolSearchToPublic } from "../../publicUser";
+import { assertNotBlocked, blockedCounterpartIds } from "../../db/blocks";
 
 export const favoritesRouter = router({
   me: protectedRouter.query(async ({ ctx }) => {
@@ -48,7 +49,13 @@ export const favoritesRouter = router({
     }
 
     // get CarpoolSearches for all favorited users
-    const favoritedUserIds = user.favorites.map((f) => f.id);
+    //
+    // Minus anyone with a block either way (SCRUM-554). The `_Favorites` row
+    // is kept, not removed, so unblocking brings the favourite back.
+    const blockedIds = new Set(await blockedCounterpartIds(ctx.prisma, userId));
+    const favoritedUserIds = user.favorites
+      .map((f) => f.id)
+      .filter((id) => !blockedIds.has(id));
     const favoriteCarpoolSearches = await ctx.prisma.carpoolSearch.findMany({
       where: {
         userId: { in: favoritedUserIds },
@@ -115,6 +122,13 @@ export const favoritesRouter = router({
           code: "UNAUTHORIZED",
           message: "User not authenticated.",
         });
+      }
+
+      // Adding a favourite is reaching toward someone, so a block either way
+      // refuses it. Removing one is not, and stays open: a user can always
+      // take someone off their own list.
+      if (input.add) {
+        await assertNotBlocked(ctx.prisma, userId, input.favoriteId);
       }
 
       await ctx.prisma.user.update({

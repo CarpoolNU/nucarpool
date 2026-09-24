@@ -46,6 +46,9 @@ jest.mock("../../utils/trpc", () => ({
     }),
     user: {
       favorites: { edit: { useMutation: () => ({ mutate: jest.fn() }) } },
+      blocks: {
+        block: { useMutation: () => ({ mutate: jest.fn(), isPending: false }) },
+      },
     },
   },
 }));
@@ -126,8 +129,14 @@ describe.each(CARDS)("%s controls", (_name, Card) => {
       // The exact set, not a presence check. A View Route or Connect button
       // reappearing here is the regression this file exists to catch, and
       // either would slip past `getByRole(…, { name: OPEN_CONVERSATION })`.
+      // Bar the actions menu every `UserCard` carries (SCRUM-554), which is
+      // pinned by element so the set stays exact.
+      const menu = screen.getByRole("button", {
+        name: "More actions for Riley",
+      });
       const labels = screen
         .getAllByRole("button")
+        .filter((b) => b !== menu)
         .map((b) => b.getAttribute("aria-label") ?? b.textContent);
 
       expect(labels).toEqual([OPEN_CONVERSATION]);

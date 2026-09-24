@@ -1,7 +1,9 @@
 import type { PrismaClient } from "@prisma/client";
 import { parseChannel } from "../utils/pusherChannels";
+import { isBlockedPair } from "./db/blocks";
+import type { BlockReader } from "./db/blocks";
 
-type PrismaLike = Pick<PrismaClient, "request">;
+type PrismaLike = Pick<PrismaClient, "request"> & BlockReader;
 
 /**
  * May `userId` subscribe to `channelName`?
@@ -35,7 +37,17 @@ export const canSubscribe = async (
       });
 
       if (!request) return false;
-      return request.fromUserId === userId || request.toUserId === userId;
+      if (request.fromUserId !== userId && request.toUserId !== userId) {
+        return false;
+      }
+
+      // A blocked pair's thread is hidden from `messages.conversation`, so
+      // the realtime door to it closes too (SCRUM-554), for either party.
+      return !(await isBlockedPair(
+        prisma,
+        request.fromUserId,
+        request.toUserId,
+      ));
     }
 
     case "unknown":
