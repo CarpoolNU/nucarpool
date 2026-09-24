@@ -156,6 +156,19 @@ model User {
   isOnboarded             Boolean         @default(false) @map("is_onboarded")
   tutorialCompleted       Boolean         @default(false) @map("tutorial_completed")
   licenseSigned           Boolean         @default(false) @map("license_signed")
+  // When the terms were accepted, and which wording was accepted. Written
+  // together with `licenseSigned` by `user.acceptTerms`, which is their only
+  // writer. See `src/utils/termsAcceptance.ts` for the version string and the
+  // re-consent policy, and "Terms acceptance" in `src/server/db/README.md`.
+  //
+  // **Null on both is the legacy cohort**, not an error: every row predating
+  // these columns accepted something at an unknown time, and some of those
+  // rows only ever saved a profile. `licenseSigned` alone stays the record for
+  // them, and it is not trustworthy. Their nullness is the signal that makes a
+  // targeted re-consent possible, which is why the boolean was kept rather
+  // than replaced.
+  licenseSignedAt         DateTime?       @map("license_signed_at")
+  licenseVersion          String?         @map("license_version") @db.VarChar(32)
   // When this user's profile picture was last uploaded, and null when they have
   // never uploaded one. Set by `user.recordProfilePictureUpload` after the
   // client's presigned PUT succeeds, since the PUT goes straight to S3 and the

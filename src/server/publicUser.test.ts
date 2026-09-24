@@ -88,6 +88,10 @@ const SENSITIVE_FIELDS = [
   "permission",
   "emailVerified",
   "licenseSigned",
+  // When and to what they consented. Nobody else's business, and a timestamp
+  // is a behavioural fingerprint the map has no use for. SCRUM-280.
+  "licenseSignedAt",
+  "licenseVersion",
   "isOnboarded",
   // Group ride preferences are for group members, delivered by `groups.me`.
   // They must not ride along on a map or recommendation result.

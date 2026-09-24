@@ -1,6 +1,7 @@
 import dynamic from "next/dynamic";
 import { useSession } from "next-auth/react";
 import { trpc } from "../utils/trpc";
+import { needsTermsAcceptance } from "../utils/termsAcceptance";
 
 /**
  * Loaded on demand, not statically.
@@ -33,6 +34,12 @@ const ComplianceModal = dynamic(
  * Deliberately renders nothing until `user.me` has answered. Guessing "not
  * consented" while the query is in flight would flash a blocking dialog at users
  * who have already agreed.
+ *
+ * The condition is `needsTermsAcceptance` rather than the raw boolean, so that
+ * re-consent on a terms update is one flag away and is not decided here. See
+ * `src/utils/termsAcceptance.ts`: while that policy is off this behaves exactly
+ * as the boolean check did, which is the point - adding a version must not
+ * re-prompt anybody by itself.
  */
 export const ComplianceGate = () => {
   const { status } = useSession();
@@ -42,7 +49,7 @@ export const ComplianceGate = () => {
     enabled: isAuthenticated,
   });
 
-  if (!isAuthenticated || !user || user.licenseSigned) {
+  if (!isAuthenticated || !user || !needsTermsAcceptance(user)) {
     return null;
   }
 
