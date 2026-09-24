@@ -52,6 +52,8 @@ A calendar day taken from the **UTC** date of whatever `Date` Prisma is handed. 
 
 **Equality is allowed**, and has to be: both pickers are month-granularity and store the last day, so a one-month co-op is the same date twice.
 
+**The year must be plausible.** Production holds 22 searches dated like 1901→1908 or 2069→2073 — they run forwards, so the ordering rule never saw them (SCRUM-550). [`coopYearBounds`](../../utils/dateUtils.ts) allows 2022, the year this repository began, through ten years past the current one. The floor is fixed so a real co-op never ages into a rejection; the ceiling moves so it never expires. `user.edit` and `onboardSchema` both refuse a year outside it, **except for a VIEWER**, whose pickers are disabled while every save re-sends the stored dates — refusing theirs would reject every save they make. The stored rows are not rewritten: adding a century still lands before the platform existed, so the profile page asks the user instead, through [`planCoopRangeNotice`](../../utils/profile/coopRangeNotice.ts).
+
 ## Coordinates
 
 `location.coord_lat` / `coord_lng` are plain `Float` columns, so the database accepts anything — and out-of-range values fail _silently_ downstream rather than loudly, since `locationWithin` adds a degree delta and `milesBetween` feeds the value through `Math.cos`. A nonsense row is simply unmatchable.

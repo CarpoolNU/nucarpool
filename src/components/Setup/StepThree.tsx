@@ -133,11 +133,13 @@ const StepThree = ({
           </div>
         </div>
 
-        {/* The reason a range was rejected, not just a red label. Ordering is
-            the one date error whose message a user cannot infer. */}
-        {errors.coopEndDate?.message && (
+        {/* The reason a range was rejected, not just a red label. Ordering and
+            the year bound are the date errors whose message a user cannot
+            infer, and the year bound can land on the start date alone - so
+            that field's message is the fallback. */}
+        {(errors.coopEndDate?.message || errors.coopStartDate?.message) && (
           <ErrorDisplay className="text-xs">
-            {errors.coopEndDate.message}
+            {errors.coopEndDate?.message || errors.coopStartDate?.message}
           </ErrorDisplay>
         )}
 

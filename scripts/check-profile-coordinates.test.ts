@@ -292,6 +292,88 @@ describe("findProfileDataProblems", () => {
   });
 });
 
+/**
+ * SCRUM-550: 22 production searches store years like 1901 and 2069, and every
+ * one runs forwards, so the reversed-range line above never named them. `now`
+ * is pinned because the ceiling moves with the clock.
+ */
+describe("findProfileDataProblems — implausible co-op years", () => {
+  const now = new Date("2026-09-24T12:00:00.000Z");
+  const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
+
+  it("flags production's commonest shape, actionably", () => {
+    const [finding] = findProfileDataProblems(
+      [search({ startDate: day("1901-01-31"), endDate: day("1908-06-30") })],
+      now,
+    );
+
+    expect(finding.problems).toEqual([
+      "co-op year implausible: 1901-01-31 to 1908-06-30 (allowed 2022–2036)",
+    ]);
+    expect(finding.actionable).toBe(true);
+  });
+
+  it("flags a year past the ceiling", () => {
+    expect(
+      findProfileDataProblems(
+        [search({ startDate: day("2069-01-31"), endDate: day("2073-06-30") })],
+        now,
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("reports both lines for a range that is absurd and reversed", () => {
+    const [finding] = findProfileDataProblems(
+      [search({ startDate: day("1913-01-31"), endDate: day("1907-06-30") })],
+      now,
+    );
+
+    expect(finding.problems).toEqual([
+      "co-op range reversed: 1913-01-31 to 1907-06-30",
+      "co-op year implausible: 1913-01-31 to 1907-06-30 (allowed 2022–2036)",
+    ]);
+  });
+
+  it("keeps it actionable for a non-onboarded user", () => {
+    const [finding] = findProfileDataProblems(
+      [
+        search({
+          isOnboarded: false,
+          startDate: day("1902-01-31"),
+          endDate: day("1908-06-30"),
+        }),
+      ],
+      now,
+    );
+
+    expect(finding.actionable).toBe(true);
+  });
+
+  it("does not flag a VIEWER, exactly as it does not flag one at (0, 0)", () => {
+    expect(
+      findProfileDataProblems(
+        [
+          search({
+            role: Role.VIEWER,
+            startDate: day("1901-01-31"),
+            endDate: day("1906-06-30"),
+          }),
+        ],
+        now,
+      ),
+    ).toEqual([]);
+  });
+
+  it("accepts a range spanning exactly the bound", () => {
+    expect(
+      findProfileDataProblems(
+        [search({ startDate: day("2022-01-31"), endDate: day("2036-12-31") })],
+        now,
+      ),
+    ).toEqual([]);
+  });
+});
+
 describe("exitCodeFor", () => {
   it("exits 0 on a clean database", () => {
     expect(exitCodeFor(findProfileDataProblems([search()]))).toBe(0);

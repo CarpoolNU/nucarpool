@@ -2,7 +2,12 @@ import { z } from "zod";
 import { Role, Status } from "@prisma/client";
 import { MAX_SEATS_AVAILABLE } from "../carpoolSeats";
 import { PROFILE_TEXT_MAX_LENGTH } from "../textLimits";
-import { COOP_DATE_ORDER_MESSAGE, isReversedCoopRange } from "../dateUtils";
+import {
+  COOP_DATE_ORDER_MESSAGE,
+  coopYearMessage,
+  implausibleCoopYearFields,
+  isReversedCoopRange,
+} from "../dateUtils";
 
 const custom = z.ZodIssueCode.custom;
 const tooLong = `Cannot be longer than ${PROFILE_TEXT_MAX_LENGTH} characters`;
@@ -112,6 +117,23 @@ export const onboardSchema = z
     // round the clock and takes the short way, so an overnight pair is scored
     // correctly rather than tolerated - see the note in
     // `src/server/db/README.md`.
+    //
+    // The year bound goes first so its message is the one a field shows when
+    // both apply: `user.edit` refuses both, and a range reading 1913→1907 is
+    // not fixed by swapping the two. VIEWERs are exempt, since their pickers
+    // are disabled - see `implausibleCoopYearFields`.
+    for (const field of implausibleCoopYearFields({
+      role: data.role,
+      coopStartDate: data.coopStartDate,
+      coopEndDate: data.coopEndDate,
+    })) {
+      ctx.addIssue({
+        code: custom,
+        path: [field],
+        message: coopYearMessage(),
+      });
+    }
+
     if (isReversedCoopRange(data.coopStartDate, data.coopEndDate)) {
       ctx.addIssue({
         code: custom,

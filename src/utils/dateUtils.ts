@@ -1,6 +1,7 @@
 import React from "react";
 import { UseFormSetValue } from "react-hook-form";
 import dayjs, { Dayjs } from "dayjs";
+import { Role } from "@prisma/client";
 import { OnboardingFormInputs } from "./types";
 
 /**
@@ -181,11 +182,123 @@ const isReversedCoopRange = (
   end: Date | null | undefined,
 ): boolean => !!start && !!end && end.getTime() < start.getTime();
 
+/**
+ * The first calendar year a co-op date may fall in. **Fixed, deliberately.**
+ *
+ * Production carries 22 searches with years in 1901–1926 and 2069–2074 — the
+ * shape of a two-digit year read against the wrong century pivot, though which
+ * input produced them is not recorded (SCRUM-550). Nothing refused them:
+ * `isReversedCoopRange` catches inversion only, and a 1901→1908 range runs
+ * forwards perfectly well.
+ *
+ * 2022 is the year this repository began, so no co-op in this table can
+ * predate it; the earliest real year production holds is 2024 (measured
+ * 2026-09-24), and every value below that is 1926 or earlier.
+ *
+ * Not "ten years ago". A floor that moves with the clock would eventually
+ * condemn real co-ops that have simply ended, and `planCoopRangeNotice` would
+ * then interrupt those users' profile page to tell them something false.
+ */
+const EARLIEST_COOP_YEAR = 2022;
+
+/**
+ * How far past the current year a co-op date may fall. **Relative,
+ * deliberately** — a fixed ceiling would start rejecting real co-ops the year
+ * it was overtaken.
+ *
+ * The latest real year production holds is 2028 and the earliest absurd one
+ * 2069, so any width in between separates them. Ten is generous on purpose: a
+ * year bound's failure mode is refusing a legitimate co-op, which is worse than
+ * admitting an unlikely one.
+ */
+const COOP_YEARS_AHEAD = 10;
+
+/**
+ * The inclusive range of UTC years a co-op date may fall in, as of `now`.
+ *
+ * UTC because these are `@db.Date` columns written by `lastDayOfMonthUTC`, so
+ * the UTC year is the stored one.
+ */
+const coopYearBounds = (
+  now: Date = new Date(),
+): { earliest: number; latest: number } => ({
+  earliest: EARLIEST_COOP_YEAR,
+  latest: now.getUTCFullYear() + COOP_YEARS_AHEAD,
+});
+
+/**
+ * True when a co-op date's year falls outside `coopYearBounds`.
+ *
+ * `null` is not this function's problem, for the reason `isReversedCoopRange`
+ * gives.
+ */
+const isImplausibleCoopYear = (
+  date: Date | null | undefined,
+  now: Date = new Date(),
+): boolean => {
+  if (!date) {
+    return false;
+  }
+
+  const year = date.getUTCFullYear();
+  const { earliest, latest } = coopYearBounds(now);
+  return year < earliest || year > latest;
+};
+
+/**
+ * Shared so the form and `user.edit` say the same thing. It names the bounds
+ * rather than calling the date wrong, because the user can act on a range.
+ */
+const coopYearMessage = (now: Date = new Date()): string => {
+  const { earliest, latest } = coopYearBounds(now);
+  return `Pick a year between ${earliest} and ${latest}`;
+};
+
+/**
+ * Which co-op date fields hold an implausible year, for the two schemas to
+ * attach an issue to each.
+ *
+ * **A VIEWER is exempt**, unlike the ordering check. Both pickers are
+ * `disabled` for a VIEWER, yet every profile save re-sends the stored dates, so
+ * refusing a VIEWER's stored year would reject every save they make and give
+ * them nothing on the page to change. Two of production's 22 are VIEWERs. A
+ * VIEWER is browsing rather than matching, so the dates do nothing meanwhile;
+ * switching to RIDER or DRIVER enables the pickers and the check with them.
+ */
+const implausibleCoopYearFields = ({
+  role,
+  coopStartDate,
+  coopEndDate,
+  now = new Date(),
+}: {
+  role: Role;
+  coopStartDate: Date | null | undefined;
+  coopEndDate: Date | null | undefined;
+  now?: Date;
+}): ("coopStartDate" | "coopEndDate")[] => {
+  if (role === Role.VIEWER) {
+    return [];
+  }
+
+  const fields: ("coopStartDate" | "coopEndDate")[] = [];
+  if (isImplausibleCoopYear(coopStartDate, now)) {
+    fields.push("coopStartDate");
+  }
+  if (isImplausibleCoopYear(coopEndDate, now)) {
+    fields.push("coopEndDate");
+  }
+  return fields;
+};
+
 export {
   handleMonthChange,
   handleMonthPickerChange,
   formatDateToMonth,
   lastDayOfMonthUTC,
   isReversedCoopRange,
+  coopYearBounds,
+  isImplausibleCoopYear,
+  coopYearMessage,
+  implausibleCoopYearFields,
   toMonthPickerValue,
 };

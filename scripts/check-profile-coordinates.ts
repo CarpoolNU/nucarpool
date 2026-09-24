@@ -17,6 +17,10 @@
  * - **Reversed co-op ranges.** `dateOverlapFilter`'s full-overlap branch wants
  *   `startDate <= theirs AND endDate >= theirs`, which no candidate satisfies
  *   once the two are crossed. The partial-overlap negation is arbitrary.
+ * - **Implausible co-op years** (SCRUM-550). A range like 1901→1908 runs
+ *   forwards, so the check above passes it, and it then fails every
+ *   term-date-overlap search. Bounded by `coopYearBounds`; a VIEWER is not a
+ *   finding, for the reason `implausibleCoopYearFields` gives.
  *
  * **Read-only. This script writes nothing.**
  *
@@ -73,7 +77,11 @@ import {
   MIN_LONGITUDE,
   isUnresolvedCoordinate,
 } from "../src/utils/coordinates";
-import { isReversedCoopRange } from "../src/utils/dateUtils";
+import {
+  coopYearBounds,
+  implausibleCoopYearFields,
+  isReversedCoopRange,
+} from "../src/utils/dateUtils";
 
 /** The two `Location` slots of a search, as much as the check reads. */
 type LocationSlot = {
@@ -179,8 +187,11 @@ const describeSlot = (
  */
 export const findProfileDataProblems = (
   searches: readonly SearchRow[],
-): Finding[] =>
-  searches
+  now: Date = new Date(),
+): Finding[] => {
+  const { earliest, latest } = coopYearBounds(now);
+
+  return searches
     .map((search) => {
       const problems: TaggedProblem[] = [
         ...describeSlot(
@@ -209,6 +220,26 @@ export const findProfileDataProblems = (
               },
             ]
           : []),
+        // Actionable for the same reason as the line above. A VIEWER is not a
+        // finding, exactly as a VIEWER at `(0, 0)` is not: see
+        // `implausibleCoopYearFields`, which both schemas use too.
+        ...(implausibleCoopYearFields({
+          role: search.role,
+          coopStartDate: search.startDate,
+          coopEndDate: search.endDate,
+          now,
+        }).length > 0
+          ? [
+              {
+                description:
+                  `co-op year implausible: ` +
+                  `${search.startDate?.toISOString().slice(0, 10)} to ` +
+                  `${search.endDate?.toISOString().slice(0, 10)} ` +
+                  `(allowed ${earliest}–${latest})`,
+                actionable: true,
+              },
+            ]
+          : []),
       ];
 
       return {
@@ -221,6 +252,7 @@ export const findProfileDataProblems = (
       };
     })
     .filter((finding) => finding.problems.length > 0);
+};
 
 /**
  * The exit status for a run, from the findings alone.
@@ -308,7 +340,8 @@ const main = async () => {
     if (actionable.length === 0) {
       console.log(
         "\n✓ every search belonging to an onboarded user has in-range, " +
-          "resolved coordinates, and no search has a reversed co-op range.",
+          "resolved coordinates, and no search has a reversed co-op range " +
+          "or an implausible co-op year.",
       );
       if (excluded.length > 0) {
         console.log(

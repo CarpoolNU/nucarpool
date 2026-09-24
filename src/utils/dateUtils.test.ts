@@ -1,7 +1,12 @@
 import dayjs from "dayjs";
+import { Role } from "@prisma/client";
 import {
+  coopYearBounds,
+  coopYearMessage,
   formatDateToMonth,
   handleMonthPickerChange,
+  implausibleCoopYearFields,
+  isImplausibleCoopYear,
   isReversedCoopRange,
   lastDayOfMonthUTC,
 } from "./dateUtils";
@@ -240,5 +245,127 @@ describe("isReversedCoopRange", () => {
     expect(isReversedCoopRange(day, null)).toBe(false);
     expect(isReversedCoopRange(null, null)).toBe(false);
     expect(isReversedCoopRange(undefined, undefined)).toBe(false);
+  });
+});
+
+/**
+ * A two-digit-year parse stored 1901→1908 and 2069→2073 in production, and a
+ * forward range passes `isReversedCoopRange`. A year bound's own failure mode
+ * is refusing a real co-op, so the edges get as much attention as the junk.
+ *
+ * Every case pins `now`: the ceiling moves with the clock, and a test that read
+ * it would pass today and change meaning next year.
+ */
+describe("isImplausibleCoopYear", () => {
+  const now = new Date("2026-09-24T12:00:00.000Z");
+  const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
+
+  it("allows 2022 through ten years past the current one", () => {
+    expect(coopYearBounds(now)).toEqual({ earliest: 2022, latest: 2036 });
+  });
+
+  it.each([
+    // Production's real co-ops, measured 2026-09-24: every one is 2024-2028.
+    ["a current co-op", "2026-06-30", false],
+    ["the earliest real year production holds", "2024-01-31", false],
+    ["the latest real year production holds", "2028-12-31", false],
+    // The edges. The floor is the first month anyone could have picked, the
+    // ceiling the last day of the last allowed year.
+    ["the first month of the floor year", "2022-01-31", false],
+    ["the last day before the floor", "2021-12-31", true],
+    ["the last day of the ceiling year", "2036-12-31", false],
+    ["the first month past the ceiling", "2037-01-31", true],
+    // Production's junk, both directions.
+    ["1901, the commonest production start", "1901-01-31", true],
+    ["1926, the latest low production year", "1926-06-30", true],
+    ["2069, the earliest high production year", "2069-01-31", true],
+    ["2074, the latest production year", "2074-12-31", true],
+  ])("%s (%s) is implausible: %s", (_name, iso, expected) => {
+    expect(isImplausibleCoopYear(day(iso), now)).toBe(expected);
+  });
+
+  it("reads the stored UTC year, not the local one", () => {
+    // `@db.Date` holds midnight UTC on 1 Jan 2022, which is still 2021 west
+    // of UTC. Reading the local year would refuse the floor's first day in
+    // America/New_York, where CI runs this suite a second time.
+    expect(isImplausibleCoopYear(day("2022-01-01"), now)).toBe(false);
+    expect(isImplausibleCoopYear(day("2036-12-31"), now)).toBe(false);
+  });
+
+  it("moves the ceiling with the clock and keeps the floor still", () => {
+    // A fixed ceiling would start refusing real co-ops the year it was
+    // overtaken; a moving floor would eventually condemn ones that have simply
+    // ended.
+    const later = new Date("2040-03-01T00:00:00.000Z");
+    expect(isImplausibleCoopYear(day("2045-06-30"), later)).toBe(false);
+    expect(isImplausibleCoopYear(day("2022-06-30"), later)).toBe(false);
+  });
+
+  it("says nothing about a missing date", () => {
+    expect(isImplausibleCoopYear(null, now)).toBe(false);
+    expect(isImplausibleCoopYear(undefined, now)).toBe(false);
+  });
+
+  it("names the bounds in its message", () => {
+    expect(coopYearMessage(now)).toBe("Pick a year between 2022 and 2036");
+  });
+});
+
+describe("implausibleCoopYearFields", () => {
+  const now = new Date("2026-09-24T12:00:00.000Z");
+  const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
+
+  it.each([Role.RIDER, Role.DRIVER])("names both dates for a %s", (role) => {
+    expect(
+      implausibleCoopYearFields({
+        role,
+        coopStartDate: day("1901-01-31"),
+        coopEndDate: day("1908-06-30"),
+        now,
+      }),
+    ).toEqual(["coopStartDate", "coopEndDate"]);
+  });
+
+  it("names only the date that is wrong", () => {
+    expect(
+      implausibleCoopYearFields({
+        role: Role.RIDER,
+        coopStartDate: day("2026-01-31"),
+        coopEndDate: day("2073-06-30"),
+        now,
+      }),
+    ).toEqual(["coopEndDate"]);
+    expect(
+      implausibleCoopYearFields({
+        role: Role.RIDER,
+        coopStartDate: day("1902-01-31"),
+        coopEndDate: day("2026-06-30"),
+        now,
+      }),
+    ).toEqual(["coopStartDate"]);
+  });
+
+  it("names nothing for a plausible range", () => {
+    expect(
+      implausibleCoopYearFields({
+        role: Role.RIDER,
+        coopStartDate: day("2026-01-31"),
+        coopEndDate: day("2026-06-30"),
+        now,
+      }),
+    ).toEqual([]);
+  });
+
+  it("exempts a VIEWER, whose pickers are disabled", () => {
+    // Every profile save re-sends the stored dates, so refusing a VIEWER's
+    // would reject every save they make with nothing on the page to change.
+    expect(
+      implausibleCoopYearFields({
+        role: Role.VIEWER,
+        coopStartDate: day("1901-01-31"),
+        coopEndDate: day("1906-06-30"),
+        now,
+      }),
+    ).toEqual([]);
   });
 });

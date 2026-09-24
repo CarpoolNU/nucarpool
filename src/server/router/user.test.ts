@@ -14,6 +14,11 @@ import {
   SCHEDULE_TIMEZONE,
   toStoredScheduleTime,
 } from "../../utils/scheduleTime";
+import {
+  COOP_DATE_ORDER_MESSAGE,
+  coopYearBounds,
+  coopYearMessage,
+} from "../../utils/dateUtils";
 
 dayjs.extend(utcPlugin);
 dayjs.extend(timezonePlugin);
@@ -779,6 +784,35 @@ const editInput = (overrides: Record<string, unknown> = {}) =>
   }) as any;
 
 /**
+ * The input issues a refused `user.edit` carries, as `{ path, message }`.
+ *
+ * Read off `cause` because the procedure's message is the serialised list,
+ * which is not something to assert against. Throws if the call resolved, so a
+ * validation that stopped firing fails loudly rather than as an empty list.
+ */
+const editIssues = async (
+  call: Promise<unknown>,
+): Promise<{ path: PropertyKey[]; message: string }[]> => {
+  const error = await call.then(
+    () => {
+      throw new Error("expected user.edit to refuse this input");
+    },
+    (rejection: unknown) => rejection,
+  );
+
+  expect(error).toBeInstanceOf(TRPCError);
+  const issues = (
+    (error as TRPCError).cause as unknown as {
+      issues?: { path: PropertyKey[]; message: string }[];
+    }
+  )?.issues;
+  if (!issues) {
+    throw new Error("user.edit refused the input without zod issues");
+  }
+  return issues.map(({ path, message }) => ({ path: [...path], message }));
+};
+
+/**
  * Terms acceptance is recorded by `user.acceptTerms` and by nothing else.
  * It used to be set to `true` by every profile save, which made
  * `licenseSigned` a record of "this user saved a profile" rather than of consent
@@ -1394,6 +1428,25 @@ describe("user.edit - co-op dates must run forwards", () => {
     ).resolves.toBeDefined();
   });
 
+  it("still refuses a plausible reversed range, independently of the year bound", async () => {
+    // Regression: both checks touch the same two fields. This range is inside
+    // the year bound, so the ordering check alone must refuse it.
+    const db = buildEditDb();
+
+    const issues = await editIssues(
+      editCallerFor(SESSION_USER, db).user.edit(
+        editInput({
+          coopStartDate: day("2027-01-31"),
+          coopEndDate: day("2026-01-31"),
+        }),
+      ),
+    );
+
+    expect(issues).toEqual([
+      { path: ["coopEndDate"], message: COOP_DATE_ORDER_MESSAGE },
+    ]);
+  });
+
   it("accepts an overnight shift", async () => {
     // Deliberately not checked: startTime/endTime are times of day rather than
     // a range, and `minutesApart` measures them round the clock. A night shift
@@ -1408,6 +1461,102 @@ describe("user.edit - co-op dates must run forwards", () => {
         }),
       ),
     ).resolves.toBeDefined();
+  });
+});
+
+/**
+ * A range like 1901→1908 runs forwards, so the ordering check above passed it,
+ * and production holds 22 (SCRUM-550). The procedure reads the real clock, so
+ * the ceiling edge is computed from `coopYearBounds` rather than written down.
+ */
+describe("user.edit - co-op years must be plausible", () => {
+  const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
+  const { earliest, latest } = coopYearBounds();
+
+  it("refuses production's commonest shape on both dates, writing nothing", async () => {
+    const db = buildEditDb();
+
+    const issues = await editIssues(
+      editCallerFor(SESSION_USER, db).user.edit(
+        editInput({
+          coopStartDate: day("1901-01-31"),
+          coopEndDate: day("1908-06-30"),
+        }),
+      ),
+    );
+
+    expect(issues).toEqual([
+      { path: ["coopStartDate"], message: coopYearMessage() },
+      { path: ["coopEndDate"], message: coopYearMessage() },
+    ]);
+    expect(db.prisma.user.update).not.toHaveBeenCalled();
+    expect(db.prisma.carpoolSearch.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["the last day before the floor", `${earliest - 1}-12-31`, "2026-06-30"],
+    ["the first month past the ceiling", "2026-01-31", `${latest + 1}-01-31`],
+  ])("refuses %s", async (_name, start, end) => {
+    const db = buildEditDb();
+
+    await expect(
+      editCallerFor(SESSION_USER, db).user.edit(
+        editInput({ coopStartDate: day(start), coopEndDate: day(end) }),
+      ),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    expect(db.prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("accepts a range spanning exactly the bound", async () => {
+    // A year bound's failure mode is refusing a real co-op.
+    const db = buildEditDb();
+
+    await expect(
+      editCallerFor(SESSION_USER, db).user.edit(
+        editInput({
+          coopStartDate: day(`${earliest}-01-31`),
+          coopEndDate: day(`${latest}-12-31`),
+        }),
+      ),
+    ).resolves.toBeDefined();
+  });
+
+  it("exempts a VIEWER, whose save re-sends dates they cannot edit", async () => {
+    // Refusing a VIEWER's stored year would reject every save they make.
+    const db = buildEditDb();
+
+    await expect(
+      editCallerFor(SESSION_USER, db).user.edit(
+        editInput({
+          role: Role.VIEWER,
+          seatAvail: 0,
+          coopStartDate: day("1901-01-31"),
+          coopEndDate: day("1906-06-30"),
+        }),
+      ),
+    ).resolves.toBeDefined();
+  });
+
+  it("reports both checks for a range that is absurd and reversed", async () => {
+    // Production's 1913 → 1907 row trips both predicates; neither hides the
+    // other.
+    const db = buildEditDb();
+
+    const issues = await editIssues(
+      editCallerFor(SESSION_USER, db).user.edit(
+        editInput({
+          coopStartDate: day("1913-01-31"),
+          coopEndDate: day("1907-06-30"),
+        }),
+      ),
+    );
+
+    expect(issues).toEqual([
+      { path: ["coopStartDate"], message: coopYearMessage() },
+      { path: ["coopEndDate"], message: coopYearMessage() },
+      { path: ["coopEndDate"], message: COOP_DATE_ORDER_MESSAGE },
+    ]);
   });
 });
 
