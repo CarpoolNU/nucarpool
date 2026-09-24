@@ -6,7 +6,7 @@ import {
   COOP_DATE_ORDER_MESSAGE,
   coopYearMessage,
   implausibleCoopYearFields,
-  isReversedCoopRange,
+  reversedCoopRangeFields,
 } from "../dateUtils";
 
 const custom = z.ZodIssueCode.custom;
@@ -106,10 +106,9 @@ export const onboardSchema = z
         });
     }
 
-    // Ordering, checked for every role rather than inside the non-VIEWER block
-    // above: a reversed range is wrong whoever stored it, and the block above is
-    // about which fields are *required*. `user.edit` refuses the same thing, so
-    // this exists to name the field instead of failing the save.
+    // Ordering, outside the non-VIEWER block above because that block is about
+    // which fields are *required*. `user.edit` refuses the same thing, so this
+    // exists to name the field instead of failing the save.
     //
     // Deliberately absent: any equivalent check on `startTime` / `endTime`.
     // Those are times of day, not a range, and finishing before you started is
@@ -120,8 +119,8 @@ export const onboardSchema = z
     //
     // The year bound goes first so its message is the one a field shows when
     // both apply: `user.edit` refuses both, and a range reading 1913→1907 is
-    // not fixed by swapping the two. VIEWERs are exempt, since their pickers
-    // are disabled - see `implausibleCoopYearFields`.
+    // not fixed by swapping the two. VIEWERs are exempt from both, since their
+    // pickers are disabled - see `implausibleCoopYearFields`.
     for (const field of implausibleCoopYearFields({
       role: data.role,
       coopStartDate: data.coopStartDate,
@@ -134,10 +133,14 @@ export const onboardSchema = z
       });
     }
 
-    if (isReversedCoopRange(data.coopStartDate, data.coopEndDate)) {
+    for (const field of reversedCoopRangeFields({
+      role: data.role,
+      coopStartDate: data.coopStartDate,
+      coopEndDate: data.coopEndDate,
+    })) {
       ctx.addIssue({
         code: custom,
-        path: ["coopEndDate"],
+        path: [field],
         message: COOP_DATE_ORDER_MESSAGE,
       });
     }

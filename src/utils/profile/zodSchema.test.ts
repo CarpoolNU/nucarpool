@@ -290,17 +290,29 @@ describe("onboardSchema — co-op date ordering", () => {
     }
   });
 
-  it("checks the ordering for a VIEWER too", () => {
-    // The role decides which fields are *required*; a backwards range is wrong
-    // whoever stored it.
+  it.each([Role.RIDER, Role.DRIVER])(
+    "refuses a reversed range for a %s",
+    (role) => {
+      expect(
+        issueMessages(
+          { ...withRange("2027-01-31", "2026-01-31"), role },
+          "coopEndDate",
+        ),
+      ).toEqual([COOP_DATE_ORDER_MESSAGE]);
+    },
+  );
+
+  it("exempts a VIEWER, whose pickers are disabled (SCRUM-551)", () => {
+    // It used to check a VIEWER too. But both pickers are `disabled` for a
+    // VIEWER and every save re-sends the stored dates, so a VIEWER holding a
+    // reversed range could save nothing at all - name, bio, role - and was
+    // routed to fields they could not change.
     expect(
-      issuePaths({
-        ...completeRider,
+      onboardSchema.safeParse({
+        ...withRange("2027-01-31", "2026-01-31"),
         role: Role.VIEWER,
-        coopStartDate: day("2027-01-31"),
-        coopEndDate: day("2026-01-31"),
-      }),
-    ).toContain("coopEndDate");
+      }).success,
+    ).toBe(true);
   });
 
   it("does not complain about ordering when a date is missing", () => {

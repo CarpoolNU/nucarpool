@@ -1388,6 +1388,23 @@ describe("user.edit - co-op dates must run forwards", () => {
     expect(db.prisma.carpoolSearch.create).not.toHaveBeenCalled();
   });
 
+  it("exempts a VIEWER, whose save re-sends a range they cannot edit", async () => {
+    // SCRUM-551: both pickers are disabled for a VIEWER, so refusing their
+    // stored range would reject every save they make, whatever they changed.
+    const db = buildEditDb();
+
+    await expect(
+      editCallerFor(SESSION_USER, db).user.edit(
+        editInput({
+          role: Role.VIEWER,
+          seatAvail: 0,
+          coopStartDate: day("2027-01-31"),
+          coopEndDate: day("2026-01-31"),
+        }),
+      ),
+    ).resolves.toBeDefined();
+  });
+
   it("accepts a forward range", async () => {
     const db = buildEditDb();
 

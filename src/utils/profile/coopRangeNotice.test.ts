@@ -58,6 +58,30 @@ describe("planCoopRangeNotice", () => {
     expect(notice?.message).toContain("not appearing");
   });
 
+  it.each([Role.RIDER, Role.DRIVER])("flags it for a %s", (role) => {
+    expect(
+      planCoopRangeNotice({
+        role,
+        coopStartDate: june,
+        coopEndDate: march,
+        alreadyShown: false,
+      })?.message,
+    ).toBe(REVERSED_COOP_RANGE_NOTICE);
+  });
+
+  it("stays quiet for a VIEWER, whose pickers are disabled (SCRUM-551)", () => {
+    // The notice routes to the Account tab, where a VIEWER's pickers are
+    // greyed out: an instruction they could not follow, on every load.
+    expect(
+      planCoopRangeNotice({
+        role: Role.VIEWER,
+        coopStartDate: june,
+        coopEndDate: march,
+        alreadyShown: false,
+      }),
+    ).toBeNull();
+  });
+
   it("stays quiet for a forward range", () => {
     expect(
       planCoopRangeNotice({

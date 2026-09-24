@@ -48,7 +48,7 @@ A calendar day taken from the **UTC** date of whatever `Date` Prisma is handed. 
 
 **Never write a picker value straight to the form.** Both controls go through a handler that calls `lastDayOfMonthUTC`. Writing `date.toDate()` directly gives local midnight on the _first_ of the month, which breaks two rules at once: the UTC one, and the convention that these columns hold the **last** day of the chosen month. The consequence is silent — `dateOverlapFilter` compares a first-of-month value against a last-of-month one and drops exact matches.
 
-**The range must run forwards.** A reversed range used to be stored as submitted and then fail silently at match time, because the full-overlap branch asks for `startDate <= theirs AND endDate >= theirs`, which nothing can satisfy once crossed. `user.edit` and [`onboardSchema`](../../utils/profile/zodSchema.ts) both refuse it via [`isReversedCoopRange`](../../utils/dateUtils.ts).
+**The range must run forwards.** A reversed range used to be stored as submitted and then fail silently at match time, because the full-overlap branch asks for `startDate <= theirs AND endDate >= theirs`, which nothing can satisfy once crossed. `user.edit` and [`onboardSchema`](../../utils/profile/zodSchema.ts) both refuse it via [`reversedCoopRangeFields`](../../utils/dateUtils.ts) — **except for a VIEWER**, whose date pickers are disabled while every save re-sends the stored dates, so refusing theirs would block every save they make (SCRUM-551). The check returns when they switch role and the pickers enable.
 
 **Equality is allowed**, and has to be: both pickers are month-granularity and store the last day, so a one-month co-op is the same date twice.
 

@@ -47,7 +47,10 @@
  */
 
 import { Role } from "@prisma/client";
-import { implausibleCoopYearFields, isReversedCoopRange } from "../dateUtils";
+import {
+  implausibleCoopYearFields,
+  reversedCoopRangeFields,
+} from "../dateUtils";
 
 /**
  * What the page should do about it.
@@ -128,7 +131,8 @@ export const planCoopRangeNotice = ({
   // complete description: a range reading 1913→1907 is also reversed, but
   // swapping the two would not fix it. `onboardSchema` orders its issues the
   // same way, so the field shows the message the toast explains. A VIEWER
-  // gets no year notice, for the reason `implausibleCoopYearFields` gives.
+  // gets neither notice, for the reason `implausibleCoopYearFields` gives:
+  // both would send them to pickers they cannot change.
   const implausible = implausibleCoopYearFields({
     role,
     coopStartDate,
@@ -144,13 +148,19 @@ export const planCoopRangeNotice = ({
     };
   }
 
-  if (!isReversedCoopRange(coopStartDate, coopEndDate)) {
+  const reversed = reversedCoopRangeFields({
+    role,
+    coopStartDate,
+    coopEndDate,
+  });
+
+  if (reversed.length === 0) {
     return null;
   }
 
   return {
     tab: "account",
-    fields: ["coopEndDate"],
+    fields: reversed,
     message: REVERSED_COOP_RANGE_NOTICE,
   };
 };

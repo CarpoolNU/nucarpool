@@ -9,6 +9,7 @@ import {
   isImplausibleCoopYear,
   isReversedCoopRange,
   lastDayOfMonthUTC,
+  reversedCoopRangeFields,
 } from "./dateUtils";
 import type { OnboardingFormInputs } from "./types";
 import type { UseFormSetValue } from "react-hook-form";
@@ -367,5 +368,49 @@ describe("implausibleCoopYearFields", () => {
         now,
       }),
     ).toEqual([]);
+  });
+});
+
+describe("reversedCoopRangeFields", () => {
+  const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
+
+  it.each([Role.RIDER, Role.DRIVER])("names the end date for a %s", (role) => {
+    expect(
+      reversedCoopRangeFields({
+        role,
+        coopStartDate: day("2027-01-31"),
+        coopEndDate: day("2026-01-31"),
+      }),
+    ).toEqual(["coopEndDate"]);
+  });
+
+  it("names nothing for a forward range", () => {
+    expect(
+      reversedCoopRangeFields({
+        role: Role.RIDER,
+        coopStartDate: day("2026-01-31"),
+        coopEndDate: day("2026-06-30"),
+      }),
+    ).toEqual([]);
+  });
+
+  it("exempts a VIEWER, whose pickers are disabled (SCRUM-551)", () => {
+    // Every profile save re-sends the stored dates, so refusing a VIEWER's
+    // would reject every save they make with nothing on the page to change.
+    expect(
+      reversedCoopRangeFields({
+        role: Role.VIEWER,
+        coopStartDate: day("2027-01-31"),
+        coopEndDate: day("2026-01-31"),
+      }),
+    ).toEqual([]);
+  });
+
+  it("leaves isReversedCoopRange itself role-blind", () => {
+    // The report script still counts a VIEWER's reversed range; only the
+    // refusal is exempt.
+    expect(isReversedCoopRange(day("2027-01-31"), day("2026-01-31"))).toBe(
+      true,
+    );
   });
 });
