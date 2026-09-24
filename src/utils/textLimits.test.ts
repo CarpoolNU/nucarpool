@@ -5,6 +5,7 @@ import {
   GROUP_OPTION_MAX_LENGTH,
   MESSAGE_MAX_LENGTH,
   PROFILE_TEXT_MAX_LENGTH,
+  REPORT_MESSAGE_MAX_LENGTH,
 } from "./textLimits";
 
 /**
@@ -73,6 +74,7 @@ describe("the limits match the columns they guard", () => {
     ["CarpoolSearch", "groupNotes", GROUP_NOTES_MAX_LENGTH],
     ["CarpoolSearch", "groupMusicPreference", GROUP_OPTION_MAX_LENGTH],
     ["CarpoolSearch", "groupConversationStyle", GROUP_OPTION_MAX_LENGTH],
+    ["Report", "message", REPORT_MESSAGE_MAX_LENGTH],
   ])("%s.%s is VarChar(%i)", (model, field, limit) => {
     expect(declaredVarCharWidth(model, field)).toBe(limit);
   });

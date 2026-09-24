@@ -42,6 +42,13 @@ const prisma = new PrismaClient();
  *      `UPDATE`s on rows that are about to be deleted anyway; deleting
  *      `carpoolSearch` first makes it a no-op.
  *
+ * `report` and `block` lead the list though the seed writes to neither: a local
+ * database can hold rows in them from manual testing, and `user` cannot be
+ * deleted while they do. `Report.reporter` / `reportedUser` are required
+ * relations with no `onDelete`, so fact 1 applies and they would fail the run.
+ * `Block` cascades from `User`, so it would not, but deleting it explicitly
+ * keeps what this list says and what gets deleted the same.
+ *
  * `conversation` is in the list because it was once missed. With no
  * database-level foreign key, orphaned conversations simply survived a re-seed
  * pointing at deleted requests — and since `Conversation.requestId` is
@@ -55,6 +62,8 @@ const prisma = new PrismaClient();
  * between a documented order and an executed one.
  */
 export const SEED_DELETE_ORDER = [
+  "report",
+  "block",
   "request",
   "message",
   "conversation",
@@ -91,6 +100,8 @@ export type SeedDeleteClient = Record<SeededModel, Deletable> & {
 const deletableModels = (
   client: SeedDeleteClient,
 ): Record<SeededModel, Deletable> => ({
+  report: client.report,
+  block: client.block,
   request: client.request,
   message: client.message,
   conversation: client.conversation,
