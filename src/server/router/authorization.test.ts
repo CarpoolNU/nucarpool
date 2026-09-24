@@ -286,7 +286,7 @@ describe("adminRouter", () => {
           start: new Date("2024-01-01"),
           end: new Date("2024-01-08"),
         }),
-      ).resolves.toMatchObject({ activeUserCount: [0, null] });
+      ).resolves.toMatchObject({ signupCount: [0, null] });
       expect(prisma.user.findMany).toHaveBeenCalled();
     },
   );

@@ -139,9 +139,20 @@ export function generateWeekLabels(allDates: Date[]): Date[] {
   return weekLabels;
 }
 
+/**
+ * The growth chart's series.
+ *
+ * Users are one series, not an active/inactive pair (SCRUM-548). Nothing records
+ * when a user's status changed, so splitting past signups by the status they
+ * hold today drew a user who lapsed last week as inactive in every earlier
+ * week. Only the point-in-time bar chart can make that split honestly.
+ *
+ * The two request splits have the same limitation and are kept, labelled for
+ * what they are: a `Request` row does not record its sender's role, so they
+ * classify each request by the role its sender holds now.
+ */
 export function buildLineChartData(
-  activeUsers: ItemWithDate[],
-  inactiveUsers: ItemWithDate[],
+  users: ItemWithDate[],
   groups: ItemWithDate[],
   requests: ItemWithDate[],
   driverRequests: ItemWithDate[],
@@ -149,8 +160,7 @@ export function buildLineChartData(
   weekLabels: Date[],
 ) {
   return {
-    activeUserCount: countCumulativeItemsPerWeek(activeUsers, weekLabels),
-    inactiveUserCount: countCumulativeItemsPerWeek(inactiveUsers, weekLabels),
+    signupCount: countCumulativeItemsPerWeek(users, weekLabels),
     groupCounts: countCumulativeItemsPerWeek(groups, weekLabels),
     requestCount: countCumulativeItemsPerWeek(requests, weekLabels),
     driverRequestCount: countCumulativeItemsPerWeek(driverRequests, weekLabels),
@@ -260,9 +270,10 @@ export function summariseUsers(rows: AdminUserRow[]) {
       driversInGroup: drivers.filter(inGroup).length,
       ridersInGroup: riders.filter(inGroup).length,
       totalDrivers: drivers.length,
-      // Mirrors the dashboard's long-standing definition: every active user who
-      // is not a driver, so VIEWERs are counted here too.
-      totalRiders: activeUsers.length - drivers.length,
+      // Active RIDERs only, defined the same way as `totalDrivers`. This used to
+      // be every active non-driver, so VIEWERs - about a third of production -
+      // roughly halved "Riders In a Group" (SCRUM-548).
+      totalRiders: riders.length,
     },
   };
 }

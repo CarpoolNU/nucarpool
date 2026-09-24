@@ -214,10 +214,7 @@ export const adminDataRouter = router({
       const [users, groups, requests] = await Promise.all([
         ctx.prisma.user.findMany({
           where: { email: { not: null }, dateCreated },
-          select: {
-            dateCreated: true,
-            carpoolSearches: { select: { status: true }, ...FIRST_SEARCH },
-          },
+          select: { dateCreated: true },
         }),
         ctx.prisma.carpoolGroup.findMany({
           where: { ...MIXED_ROLE_GROUP, dateCreated },
@@ -236,15 +233,8 @@ export const adminDataRouter = router({
         }),
       ]);
 
-      // A user with no CarpoolSearch counts as inactive, matching the defaults
-      // the rest of the app applies when it flattens a user.
-      const activeUsers = users.filter(
-        (user) => user.carpoolSearches[0]?.status === Status.ACTIVE,
-      );
-      const inactiveUsers = users.filter(
-        (user) => user.carpoolSearches[0]?.status !== Status.ACTIVE,
-      );
-
+      // The sender's role *today*: a Request row does not record the role it
+      // was sent under. See `buildLineChartData`.
       const requestsByRole = (role: Role) =>
         requests.filter(
           (request) =>
@@ -254,8 +244,7 @@ export const adminDataRouter = router({
       return {
         weekLabels,
         ...buildLineChartData(
-          activeUsers,
-          inactiveUsers,
+          users,
           groups,
           requests,
           requestsByRole(Role.DRIVER),

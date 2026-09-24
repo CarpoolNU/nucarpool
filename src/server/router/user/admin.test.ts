@@ -230,18 +230,31 @@ describe("getDashboardSeries", () => {
     expect(series.weekLabels).toEqual([startOfWeek(start), startOfWeek(end)]);
   });
 
-  it("splits users on their first search's status, defaulting to inactive", async () => {
+  it("counts every signup as one series, whatever its status today", async () => {
+    // SCRUM-548: a user's status history is not recorded, so splitting past
+    // signups by today's status drew every lapsed user as inactive all along.
     const { caller, prisma } = callerFor();
     prisma.user.findMany.mockResolvedValue([
-      { dateCreated: start, carpoolSearches: [{ status: Status.ACTIVE }] },
-      { dateCreated: start, carpoolSearches: [{ status: Status.INACTIVE }] },
-      { dateCreated: start, carpoolSearches: [] },
+      { dateCreated: start },
+      { dateCreated: start },
+      { dateCreated: start },
     ]);
 
     const series = await caller.user.admin.getDashboardSeries({ start, end });
 
-    expect(series.activeUserCount[0]).toBe(1);
-    expect(series.inactiveUserCount[0]).toBe(2);
+    expect(series.signupCount[0]).toBe(3);
+    expect(series).not.toHaveProperty("activeUserCount");
+    expect(series).not.toHaveProperty("inactiveUserCount");
+  });
+
+  it("reads no status for the signup series", async () => {
+    const { caller, prisma } = callerFor();
+
+    await caller.user.admin.getDashboardSeries({ start, end });
+
+    expect(prisma.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ select: { dateCreated: true } }),
+    );
   });
 
   it("splits requests on the sender's role, defaulting to viewer", async () => {

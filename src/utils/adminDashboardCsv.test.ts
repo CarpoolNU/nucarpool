@@ -37,15 +37,14 @@ const userCounts: AdminDashboardStats["userCounts"] = {
 describe("buildLineChartCSV", () => {
   it("emits one header row and no data rows for an empty series", () => {
     expect(buildLineChartCSV(undefined)).toBe(
-      "Date,ActiveUserCount,InactiveUserCount,GroupCounts,RequestCount,DriverRequestCount,RiderRequestCount",
+      "Date,Users Signed Up,Groups,Requests,Requests From Current Drivers,Requests From Current Riders",
     );
   });
 
   it("formats each week label and lines up every column by index", () => {
     const csv = buildLineChartCSV({
       weekLabels: [new Date(2026, 0, 4), new Date(2026, 0, 11)],
-      activeUserCount: [3, 5],
-      inactiveUserCount: [1, 2],
+      signupCount: [3, 5],
       groupCounts: [0, 1],
       requestCount: [2, 4],
       driverRequestCount: [1, 2],
@@ -54,24 +53,23 @@ describe("buildLineChartCSV", () => {
 
     const rows = csv.split("\n");
     expect(rows[0]).toBe(
-      "Date,ActiveUserCount,InactiveUserCount,GroupCounts,RequestCount,DriverRequestCount,RiderRequestCount",
+      "Date,Users Signed Up,Groups,Requests,Requests From Current Drivers,Requests From Current Riders",
     );
-    expect(rows[1]).toBe("Jan 04 2026,3,1,0,2,1,1");
-    expect(rows[2]).toBe("Jan 11 2026,5,2,1,4,2,2");
+    expect(rows[1]).toBe("Jan 04 2026,3,0,2,1,1");
+    expect(rows[2]).toBe("Jan 11 2026,5,1,4,2,2");
   });
 
   it("renders a null bucket as an empty field rather than the literal 'null'", () => {
     const csv = buildLineChartCSV({
       weekLabels: [new Date(2026, 0, 4)],
-      activeUserCount: [null],
-      inactiveUserCount: [null],
+      signupCount: [null],
       groupCounts: [null],
       requestCount: [null],
       driverRequestCount: [null],
       riderRequestCount: [null],
     });
 
-    expect(csv.split("\n")[1]).toBe("Jan 04 2026,,,,,,");
+    expect(csv.split("\n")[1]).toBe("Jan 04 2026,,,,,");
   });
 });
 

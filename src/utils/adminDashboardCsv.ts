@@ -1,4 +1,5 @@
 import { format } from "date-fns";
+import { LINE_CHART_LABELS } from "./adminDashboardLabels";
 import { AdminDashboardSeries, AdminDashboardStats } from "./types";
 
 /**
@@ -22,30 +23,29 @@ export function buildLineChartCSV(
 ): string {
   const {
     weekLabels = [],
-    activeUserCount = [],
-    inactiveUserCount = [],
+    signupCount = [],
     groupCounts = [],
     requestCount = [],
     driverRequestCount = [],
     riderRequestCount = [],
   } = series ?? {};
 
+  // The chart's own legend labels, so a column is named for what the chart
+  // says it is rather than for a series that no longer exists.
   const headers = [
     "Date",
-    "ActiveUserCount",
-    "InactiveUserCount",
-    "GroupCounts",
-    "RequestCount",
-    "DriverRequestCount",
-    "RiderRequestCount",
+    LINE_CHART_LABELS.signupCount,
+    LINE_CHART_LABELS.groupCounts,
+    LINE_CHART_LABELS.requestCount,
+    LINE_CHART_LABELS.driverRequestCount,
+    LINE_CHART_LABELS.riderRequestCount,
   ];
   const csvRows = [headers.join(",")];
 
   weekLabels.forEach((dateLabel, index) => {
     const row = [
       format(dateLabel, "MMM dd yyyy"),
-      activeUserCount[index] ?? "",
-      inactiveUserCount[index] ?? "",
+      signupCount[index] ?? "",
       groupCounts[index] ?? "",
       requestCount[index] ?? "",
       driverRequestCount[index] ?? "",

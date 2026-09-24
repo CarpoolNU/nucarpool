@@ -119,8 +119,7 @@ const STATS = {
 
 const SERIES = {
   weekLabels: [MIN_DATE, MAX_DATE],
-  activeUserCount: [1, 3],
-  inactiveUserCount: [0, null],
+  signupCount: [1, 3],
   groupCounts: [1, 2],
   requestCount: [1, 1],
   driverRequestCount: [1, null],
