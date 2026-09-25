@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { format } from "date-fns";
+import { ReportStatus } from "@prisma/client";
 import { trpc } from "../../utils/trpc";
 import Spinner from "../Spinner";
 import { QueryError } from "../QueryError";
@@ -10,9 +12,19 @@ import {
 import useIsHydrated from "../../utils/useIsHydrated";
 import { REPORT_REASON_LABELS } from "../../utils/reports";
 
+/** The status filter options, plus "every status" as `null`. */
+const STATUS_FILTERS = [
+  { label: "Open", value: ReportStatus.OPEN },
+  { label: "Reviewed", value: ReportStatus.REVIEWED },
+  { label: "Dismissed", value: ReportStatus.DISMISSED },
+  { label: "All", value: null },
+] as const;
+
 /**
- * The report queue (SCRUM-555): every report, most recent first. Read-only.
- * Resolving a report is SCRUM-552.
+ * The report queue (SCRUM-555): most recent first, defaulting to OPEN and
+ * paginated (SCRUM-562) so a flood of reports makes the queue longer rather
+ * than pushing genuinely unresolved ones out of what `getReports`'s bounded
+ * page carries. Read-only. Resolving a report is SCRUM-552.
  *
  * Modelled on `AdminAuditLog`. `getReports` returns raw user ids, and this
  * resolves them through `getAllUsers`, the query `UserManagement` already
@@ -27,9 +39,15 @@ const AdminReports = () => {
   // and a phone's hydration pass can mount this for one discarded render.
   const isHydrated = useIsHydrated();
 
-  const reportsQuery = trpc.user.admin.getReports.useQuery(undefined, {
-    enabled: isHydrated,
-  });
+  const [status, setStatus] = useState<ReportStatus | null>(ReportStatus.OPEN);
+
+  const reportsQuery = trpc.user.admin.getReports.useInfiniteQuery(
+    { status },
+    {
+      enabled: isHydrated,
+      getNextPageParam: (lastPage) => lastPage.nextCursor,
+    },
+  );
   const usersQuery = trpc.user.admin.getAllUsers.useQuery(undefined, {
     enabled: isHydrated,
   });
@@ -37,6 +55,10 @@ const AdminReports = () => {
   const state = isHydrated
     ? combineQueryStates(toQueryState(reportsQuery), toQueryState(usersQuery))
     : HELD_QUERY_STATE;
+
+  const reports = (reportsQuery.data?.pages ?? []).flatMap(
+    (page) => page.reports,
+  );
 
   const emailById = new Map(
     (usersQuery.data ?? []).map((user) => [user.id, user.email]),
@@ -58,7 +80,23 @@ const AdminReports = () => {
           <h1 className="font-montserrat mb-6 text-center text-3xl font-bold text-black">
             Reports
           </h1>
-          {reportsQuery.data.length === 0 ? (
+          <div className="font-lato mb-4 flex justify-center gap-4">
+            {STATUS_FILTERS.map((filter) => (
+              <button
+                key={filter.label}
+                type="button"
+                onClick={() => setStatus(filter.value)}
+                className={
+                  filter.value === status
+                    ? "font-bold text-black underline"
+                    : "text-stone-500 hover:text-black"
+                }
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
+          {reports.length === 0 ? (
             <p className="font-lato text-center">No reports yet.</p>
           ) : (
             <table className="font-lato w-full text-left text-sm">
@@ -73,7 +111,7 @@ const AdminReports = () => {
                 </tr>
               </thead>
               <tbody>
-                {reportsQuery.data.map((report) => {
+                {reports.map((report) => {
                   const senderLabel = (senderId: string) =>
                     senderId === report.reporterId
                       ? "Reporter"
@@ -136,6 +174,20 @@ const AdminReports = () => {
                 })}
               </tbody>
             </table>
+          )}
+          {reportsQuery.hasNextPage && (
+            <div className="mt-4 flex justify-center">
+              <button
+                type="button"
+                onClick={() => void reportsQuery.fetchNextPage()}
+                disabled={reportsQuery.isFetchingNextPage}
+                className="font-lato hover:text-northeastern-red rounded-full px-4 py-1 text-sm text-stone-600 underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-60"
+              >
+                {reportsQuery.isFetchingNextPage
+                  ? "Loading more…"
+                  : "Load more"}
+              </button>
+            </div>
           )}
         </div>
       )}

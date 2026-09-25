@@ -21,6 +21,25 @@ import { applyBlock } from "./blocks";
 export const DUPLICATE_REPORT_MESSAGE =
   "You already have an open report about this user. An admin will review it.";
 
+/**
+ * How many reports one reporter may file inside `REPORT_RATE_LIMIT_WINDOW_MS`
+ * (SCRUM-562). Every user id is visible in every map and recommendation
+ * payload, so nothing before this stopped a script from filing an OPEN
+ * report - each carrying up to the full reason text - against every user it
+ * can see, with no prior interaction. `getReports` reads back only the
+ * newest `REPORT_QUEUE_PAGE_SIZE` rows, so a flood like that pushes real
+ * reports out of what admins can see. Matches the shape of
+ * `REQUEST_NOTIFICATIONS_PER_WINDOW` in `email.ts`: a plain `count` over a
+ * rolling window, not a token bucket, because reports are rare enough that
+ * the difference does not matter.
+ */
+const REPORT_RATE_LIMIT_WINDOW_MS = 24 * 60 * 60 * 1000;
+const REPORTS_PER_WINDOW = 20;
+
+/** What filing past the per-reporter rate limit is refused with. */
+export const REPORT_RATE_LIMIT_MESSAGE =
+  "You've filed a lot of reports recently. Try again later.";
+
 /** What a report naming someone else's conversation is refused with. */
 export const REPORT_REQUEST_MISMATCH_MESSAGE =
   "That conversation isn't with this user.";
@@ -80,6 +99,24 @@ export const reportsRouter = router({
       });
       if (!target) {
         throw new TRPCError({ code: "NOT_FOUND", message: "User not found." });
+      }
+
+      // Cheap and early, before the requestId/snapshot work below: a script
+      // filing reports against every user it can see should not get to pay
+      // for a message read on every one of them.
+      const recentReportCount = await ctx.prisma.report.count({
+        where: {
+          reporterId,
+          dateCreated: {
+            gte: new Date(Date.now() - REPORT_RATE_LIMIT_WINDOW_MS),
+          },
+        },
+      });
+      if (recentReportCount >= REPORTS_PER_WINDOW) {
+        throw new TRPCError({
+          code: "TOO_MANY_REQUESTS",
+          message: REPORT_RATE_LIMIT_MESSAGE,
+        });
       }
 
       if (input.requestId) {

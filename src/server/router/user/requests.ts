@@ -600,6 +600,20 @@ export const requestsRouter = router({
         });
       }
 
+      // A blocked pair may not delete their thread either (SCRUM-562).
+      // `requests.me` already hides this row for both parties the moment a
+      // block exists (SCRUM-554), so refusing the delete strands nobody's
+      // exit - the "exits stay open" case `blocks.ts` documents is a pair who
+      // can still see their conversation, and this one already cannot. What
+      // it does protect is the report that hasn't been filed yet: without
+      // this, the blocked party could hard-delete the conversation - and
+      // every message in it - before the blocker gets to `reports.create`,
+      // which then fails with "This conversation no longer exists" and the
+      // report captures no snapshot at all.
+      await assertNotBlocked(ctx.prisma, invitation.fromUserId, [
+        invitation.toUserId,
+      ]);
+
       // Two people who are currently carpooling together may not delete the
       // request that carries their conversation.
       //

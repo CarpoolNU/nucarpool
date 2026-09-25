@@ -5,6 +5,7 @@ import type { Context } from "../context";
 import { BLOCK_GROUP_MEMBER_MESSAGE } from "./blocks";
 import {
   DUPLICATE_REPORT_MESSAGE,
+  REPORT_RATE_LIMIT_MESSAGE,
   REPORT_REQUEST_MISMATCH_MESSAGE,
 } from "./reports";
 import { REPORT_MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
@@ -32,6 +33,7 @@ type ReportRow = {
   requestId: string | null;
   conversationSnapshot: string | null;
   status: ReportStatus;
+  dateCreated?: Date;
 };
 type BlockRow = { blockerId: string; blockedId: string };
 type MessageRow = {
@@ -88,10 +90,23 @@ const buildReportsDb = (opts?: {
         );
         return match ? { id: match.id } : null;
       }),
+      // A missing `dateCreated` reads as "now": every existing fixture in
+      // this file seeds reports with no timestamp at all, and they represent
+      // reports that are still current for whatever that test is checking.
+      count: jest.fn(
+        async ({ where }: any) =>
+          reports.filter(
+            (r) =>
+              r.reporterId === where.reporterId &&
+              (r.dateCreated ?? new Date()).getTime() >=
+                where.dateCreated.gte.getTime(),
+          ).length,
+      ),
       create: jest.fn(async ({ data }: any) => {
         const row = {
           id: `report-${reports.length + 1}`,
           status: ReportStatus.OPEN,
+          dateCreated: new Date(),
           ...data,
         };
         reports.push(row);
@@ -428,6 +443,60 @@ describe("duplicate reports", () => {
     await caller.user.reports.create(baseInput);
 
     expect(db.reports).toHaveLength(2);
+  });
+});
+
+describe("per-reporter rate limit (SCRUM-562)", () => {
+  const reportsFor = (
+    reporterId: string,
+    count: number,
+    dateCreated: Date,
+  ): ReportRow[] =>
+    Array.from({ length: count }, (_, i) => ({
+      id: `report-old-${i}`,
+      reporterId,
+      reportedUserId: OTHER,
+      reason: ReportReason.OTHER,
+      message: null,
+      requestId: null,
+      conversationSnapshot: null,
+      status: ReportStatus.DISMISSED,
+      dateCreated,
+    }));
+
+  const NOW = new Date();
+  const OUTSIDE_WINDOW = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
+
+  it("refuses the 21st report inside the window, writing nothing", async () => {
+    const db = buildReportsDb({ reports: reportsFor(ME, 20, NOW) });
+    const { caller } = callerFor(sessionFor(ME), db);
+
+    await expect(caller.user.reports.create(baseInput)).rejects.toMatchObject({
+      code: "TOO_MANY_REQUESTS",
+      message: REPORT_RATE_LIMIT_MESSAGE,
+    });
+
+    expect(db.reports).toHaveLength(20);
+  });
+
+  it("does not count reports from outside the window", async () => {
+    const db = buildReportsDb({
+      reports: reportsFor(ME, 20, OUTSIDE_WINDOW),
+    });
+    const { caller } = callerFor(sessionFor(ME), db);
+
+    await caller.user.reports.create(baseInput);
+
+    expect(db.reports).toHaveLength(21);
+  });
+
+  it("does not count another reporter's reports against this one", async () => {
+    const db = buildReportsDb({ reports: reportsFor(OTHER, 20, NOW) });
+    const { caller } = callerFor(sessionFor(ME), db);
+
+    await caller.user.reports.create(baseInput);
+
+    expect(db.reports).toHaveLength(21);
   });
 });
 

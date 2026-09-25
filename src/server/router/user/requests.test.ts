@@ -2460,8 +2460,14 @@ describe("user.requests.me - the status is read per request, not per response", 
 /**
  * Blocks (SCRUM-554). `create` refuses across a block in either direction,
  * before it reads or writes anything else in its transaction. `me` hides a
- * request with a blocked counterpart without deleting it, and `delete` does
- * not consult blocks at all, because a user must always be able to leave.
+ * request with a blocked counterpart without deleting it.
+ *
+ * `delete` used to let either party clear the row regardless - "a user must
+ * always be able to leave" - but `me` already hides this exact row for both
+ * parties the moment a block exists, so nothing is actually stranded by
+ * refusing the delete too. What refusing protects is the report that has not
+ * been filed yet: the blocked party could otherwise erase the thread before
+ * the blocker gets to `reports.create` (SCRUM-562).
  */
 const USER_D = "user-d";
 
@@ -2558,17 +2564,30 @@ describe("user.requests.create — refused across a block", () => {
   });
 });
 
-describe("user.requests.delete — still open across a block", () => {
-  it.each([
-    ["the sender", USER_A],
-    ["the recipient", USER_B],
-  ])("lets %s clear the request", async (_who, actor) => {
+describe("user.requests.delete — refused across a block", () => {
+  it.each(blockCases)(
+    "refuses when %s, leaving the request in place",
+    async (_case, row) => {
+      const seeded = requestRow("req-1", USER_A, USER_B);
+      const db = buildRequestsDb([seeded]);
+      db.blocks.push({ ...row });
+      const { caller } = callerFor(sessionFor(USER_A), db);
+
+      await expect(
+        caller.user.requests.delete({ invitationId: "req-1" }),
+      ).rejects.toMatchObject({
+        code: "FORBIDDEN",
+        message: BLOCKED_PAIR_MESSAGE,
+      });
+
+      expect(db.rows()).toEqual([seeded]);
+    },
+  );
+
+  it("still lets either party clear a request blocked with someone else", async () => {
     const db = buildRequestsDb([requestRow("req-1", USER_A, USER_B)]);
-    db.blocks.push(
-      { blockerId: USER_A, blockedId: USER_B },
-      { blockerId: USER_B, blockedId: USER_A },
-    );
-    const { caller } = callerFor(sessionFor(actor), db);
+    db.blocks.push({ blockerId: USER_A, blockedId: USER_D });
+    const { caller } = callerFor(sessionFor(USER_B), db);
 
     await caller.user.requests.delete({ invitationId: "req-1" });
 

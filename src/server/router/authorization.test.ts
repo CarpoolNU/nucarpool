@@ -291,7 +291,10 @@ describe("adminRouter", () => {
           end: new Date("2024-01-08"),
         }),
       ).resolves.toMatchObject({ signupCount: [0, null] });
-      await expect(caller.user.admin.getReports()).resolves.toEqual([]);
+      await expect(caller.user.admin.getReports()).resolves.toEqual({
+        reports: [],
+        nextCursor: null,
+      });
       expect(prisma.user.findMany).toHaveBeenCalled();
     },
   );

@@ -42,6 +42,23 @@ const requireCallerId = (userId: string | undefined): string => {
  * refused. Takes the client as a parameter because the report path runs it
  * inside the transaction that writes the report. Every refusal is thrown before
  * the upsert, so a caller inside a transaction can catch one and carry on.
+ *
+ * **Known, accepted race (SCRUM-562, not fixed here).** The group-membership
+ * read a few lines down and `groups.create`/`groups.edit`'s own
+ * `assertNotBlocked` calls are both plain, non-locking reads inside their own
+ * transaction. A block landing at the same moment as a request being accepted
+ * can have each side check against the other's pre-race state and have both
+ * commit, leaving a blocked pair sharing a group. SCRUM-562's audit called
+ * this "plausible; needs simultaneous timing" - it has never been observed,
+ * and closing it for real needs the same real-MySQL-verified locking reads
+ * SCRUM-563/565 used for the *other* races here (a plain `SELECT` under
+ * REPEATABLE READ answers from this transaction's starting snapshot, not the
+ * current row, so the fix is a raw `FOR UPDATE` read timed against the
+ * carpoolId claim in `groups.ts` - not something to land unverified). Even
+ * landed, the pair still cannot message each other and either can leave, so
+ * the accepted exposure is a blocked pair briefly sharing a group roster,
+ * not a channel between them. Tracked for the real fix rather than fixed
+ * here: see the ticket filed alongside SCRUM-562.
  */
 export const applyBlock = async (
   prisma: PrismaOrTransaction,

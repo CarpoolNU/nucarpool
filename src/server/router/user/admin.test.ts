@@ -585,17 +585,75 @@ describe("getAuditLog", () => {
 });
 
 describe("getReports", () => {
-  it("reads the most recent reports first, bounded rather than paginated", async () => {
+  it("reads the most recent OPEN reports first by default, one page at a time", async () => {
     const { caller, prisma } = callerFor();
 
     await caller.user.admin.getReports();
 
     expect(prisma.report.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        orderBy: { dateCreated: "desc" },
-        take: 500,
+        where: { status: "OPEN" },
+        orderBy: [{ dateCreated: "desc" }, { id: "desc" }],
+        take: 501,
       }),
     );
+  });
+
+  it("reads every status when status is explicitly null", async () => {
+    const { caller, prisma } = callerFor();
+
+    await caller.user.admin.getReports({ status: null });
+
+    expect(prisma.report.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: undefined }),
+    );
+  });
+
+  it("reads a specific status when asked for one", async () => {
+    const { caller, prisma } = callerFor();
+
+    await caller.user.admin.getReports({ status: "DISMISSED" });
+
+    expect(prisma.report.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { status: "DISMISSED" } }),
+    );
+  });
+
+  it("pages with a cursor, and reports whether another page exists", async () => {
+    const { caller, prisma } = callerFor();
+    const row = (id: string) => ({
+      id,
+      reporterId: "user-1",
+      reportedUserId: "user-2",
+      reason: "HARASSMENT",
+      message: null,
+      requestId: null,
+      conversationSnapshot: null,
+      status: "OPEN",
+      dateCreated: new Date(2026, 8, 1),
+    });
+
+    prisma.report.findMany.mockResolvedValueOnce([
+      row("report-1"),
+      row("report-2"),
+    ]);
+    const firstPage = await caller.user.admin.getReports({ limit: 1 });
+    expect(firstPage.reports.map((r) => r.id)).toEqual(["report-1"]);
+    expect(firstPage.nextCursor).toBe("report-1");
+
+    prisma.report.findMany.mockResolvedValueOnce([row("report-2")]);
+    await caller.user.admin.getReports({ limit: 1, cursor: "report-1" });
+    expect(prisma.report.findMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        take: 2,
+        cursor: { id: "report-1" },
+        skip: 1,
+      }),
+    );
+
+    prisma.report.findMany.mockResolvedValueOnce([row("report-3")]);
+    const lastPage = await caller.user.admin.getReports({ limit: 1 });
+    expect(lastPage.nextCursor).toBeNull();
   });
 
   it("never reads the message table, only the copy the report kept", async () => {
@@ -635,7 +693,7 @@ describe("getReports", () => {
       { ...base, id: "report-2", conversationSnapshot: "not json" },
     ]);
 
-    const reports = await caller.user.admin.getReports();
+    const { reports } = await caller.user.admin.getReports();
 
     expect(reports[0].conversationSnapshot).toEqual([
       {
