@@ -40,25 +40,30 @@ const requireCallerId = (userId: string | undefined): string => {
  * Shared by `user.blocks.block` and by `user.reports.create`'s "Also block"
  * (SCRUM-555), so a report cannot place a block the Block button would have
  * refused. Takes the client as a parameter because the report path runs it
- * inside the transaction that writes the report. Every refusal is thrown before
- * the upsert, so a caller inside a transaction can catch one and carry on.
+ * inside the transaction that writes the report, and `user.blocks.block`
+ * below now opens one of its own for the same reason. Every refusal is
+ * thrown before the upsert, so a caller inside a transaction can catch one
+ * and carry on.
  *
- * **Known, accepted race (SCRUM-562, not fixed here).** The group-membership
- * read a few lines down and `groups.create`/`groups.edit`'s own
- * `assertNotBlocked` calls are both plain, non-locking reads inside their own
- * transaction. A block landing at the same moment as a request being accepted
- * can have each side check against the other's pre-race state and have both
- * commit, leaving a blocked pair sharing a group. SCRUM-562's audit called
- * this "plausible; needs simultaneous timing" - it has never been observed,
- * and closing it for real needs the same real-MySQL-verified locking reads
- * SCRUM-563/565 used for the *other* races here (a plain `SELECT` under
- * REPEATABLE READ answers from this transaction's starting snapshot, not the
- * current row, so the fix is a raw `FOR UPDATE` read timed against the
- * carpoolId claim in `groups.ts` - not something to land unverified). Even
- * landed, the pair still cannot message each other and either can leave, so
- * the accepted exposure is a blocked pair briefly sharing a group roster,
- * not a channel between them. Tracked for the real fix rather than fixed
- * here: see the ticket filed alongside SCRUM-562.
+ * **The race SCRUM-562's audit left open, closed (SCRUM-566).** The
+ * group-membership read a few lines down used to be a plain, non-locking
+ * `findMany`, and `groups.create`/`groups.edit`'s own `assertNotBlocked`
+ * call was the only check on their side - both plain reads inside their own
+ * transaction. A block landing at the same moment as a request being
+ * accepted could have each side check against the other's pre-race state and
+ * both commit, leaving a blocked pair sharing a group. Closed the way
+ * SCRUM-563/565 closed the sibling `carpool_search` races: a plain `SELECT`
+ * under REPEATABLE READ answers from this transaction's starting snapshot,
+ * not the current row, so the read below is now a raw `SELECT ... FOR
+ * UPDATE` over both users' `carpool_search` rows - the same rows
+ * `groups.create`/`groups.edit`'s raw `UPDATE` claims - which serializes this
+ * transaction against theirs instead of racing it. That alone only protects
+ * *this* side: `groups.create`/`groups.edit` re-check with their own locking
+ * read, `assertNotBlockedForUpdate` in `../../db/blocks.ts`, immediately
+ * after their `carpoolId` claim succeeds, so a block that commits in the gap
+ * is still caught there. Verified against a real MySQL in
+ * `blockGroupJoinRace.db.test.ts`, using the same barrier-proxy technique as
+ * `groupRoleRace.db.test.ts`.
  */
 export const applyBlock = async (
   prisma: PrismaOrTransaction,
@@ -84,10 +89,19 @@ export const applyBlock = async (
     throw new TRPCError({ code: "NOT_FOUND", message: "User not found." });
   }
 
-  const searches = await prisma.carpoolSearch.findMany({
-    where: { userId: { in: [blockerId, blockedId] } },
-    select: { userId: true, carpoolId: true },
-  });
+  // A locking current read, not `carpoolSearch.findMany` (SCRUM-566): see the
+  // long comment above. `groups.create`/`groups.edit` claim a rider's row
+  // here with a raw `UPDATE`, so locking it first makes a concurrent accept
+  // wait behind this transaction rather than pass its own check against this
+  // pair's pre-block state. Raw SQL bypasses Prisma's field mapping, but
+  // `userId` and `carpoolId` on this table have none.
+  const searches = await prisma.$queryRaw<
+    { userId: string; carpoolId: string | null }[]
+  >`
+    SELECT userId, carpoolId FROM carpool_search
+    WHERE userId IN (${blockerId}, ${blockedId})
+    FOR UPDATE
+  `;
   const callerGroup = searches.find((s) => s.userId === blockerId)?.carpoolId;
   const targetGroup = searches.find((s) => s.userId === blockedId)?.carpoolId;
 
@@ -149,11 +163,17 @@ export const blocksRouter = router({
    *
    * Nothing between the pair is deleted. See `blocks.ts` for why hiding is
    * the rule.
+   *
+   * Runs inside an explicit transaction (SCRUM-566), unlike before: `applyBlock`
+   * now takes a `FOR UPDATE` lock on `carpool_search` rows, which only
+   * serializes against a concurrent group-join if it is held until the block
+   * itself commits, rather than released at the end of one autocommitted
+   * statement.
    */
   block: protectedRouter.input(targetInput).mutation(async ({ ctx, input }) => {
     const userId = requireCallerId(ctx.session.user?.id);
 
-    await applyBlock(ctx.prisma, userId, input.userId);
+    await ctx.prisma.$transaction((tx) => applyBlock(tx, userId, input.userId));
 
     return { blocked: true as const };
   }),

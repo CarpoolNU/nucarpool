@@ -10,7 +10,7 @@ import {
   GROUP_NOTES_MAX_LENGTH,
   GROUP_OPTION_MAX_LENGTH,
 } from "../../../utils/textLimits";
-import { assertNotBlocked } from "../../db/blocks";
+import { assertNotBlocked, assertNotBlockedForUpdate } from "../../db/blocks";
 
 /**
  * Carpool group authorization.
@@ -550,12 +550,13 @@ export const groupsRouter = router({
         // throws. `user.blocks.block` enforces the other half: it refuses to
         // block someone the caller already shares a group with.
         //
-        // This read and that one are both plain, non-locking reads in their
-        // own transaction, so a block landing at the same moment as this
-        // accept can have each side pass its own check against the other's
-        // pre-race state - a known, accepted race, not fixed here. See the
-        // long comment on `applyBlock` in `blocks.ts` for why, and the ticket
-        // filed alongside SCRUM-562 for the real fix.
+        // This is a plain, non-locking read, and stays one: it is cheap and
+        // catches the ordinary case before anything is reserved. It answers
+        // from this transaction's snapshot, so a block landing after this
+        // point but before the claim below commits would be invisible to it
+        // - closed by the locking recheck after `riderLinked`, not here. See
+        // the long comment on `applyBlock` in `blocks.ts` for the full
+        // picture (SCRUM-566).
         await assertNotBlocked(tx, input.driverId, input.riderId);
 
         await reserveSeat(tx, input.driverId);
@@ -594,6 +595,16 @@ export const groupsRouter = router({
               "request was being accepted. Ask them to send a new request.",
           );
         }
+
+        // A second, locking check against the pair just linked (SCRUM-566):
+        // `assertNotBlocked` above answered from this transaction's snapshot,
+        // taken before this point, so a block a concurrent transaction
+        // committed afterward would be invisible to it. This one forces a
+        // current read and holds a lock `applyBlock`'s own upsert has to wait
+        // behind - see the long comment on `assertNotBlockedForUpdate` in
+        // `../../db/blocks.ts` for why that is what actually closes the race
+        // rather than merely narrowing it.
+        await assertNotBlockedForUpdate(tx, input.driverId, input.riderId);
 
         await markRequestAccepted(tx, input.driverId, input.riderId);
 
@@ -847,9 +858,10 @@ export const groupsRouter = router({
           // share a group with them through the driver, which is the state
           // `user.blocks.block` refuses to create from the other side.
           //
-          // Same accepted race as `create`'s equivalent check above: a block
-          // landing at the same instant is not closed by this read. See the
-          // comment on `applyBlock` in `blocks.ts`.
+          // Same plain read as `create`'s equivalent check above, and the
+          // same reason it stays one: cheap, and closed for the racing case
+          // by the locking recheck after `riderLinked` below rather than
+          // here. See the comment on `applyBlock` in `blocks.ts` (SCRUM-566).
           const members = await tx.carpoolSearch.findMany({
             where: { carpoolId: input.groupId },
             select: { userId: true },
@@ -885,6 +897,17 @@ export const groupsRouter = router({
                 "request was being accepted. Ask them to send a new request.",
             );
           }
+
+          // Same recheck as `create`, against every current member rather
+          // than only the driver - see the comment on `assertNotBlocked`
+          // above and on `assertNotBlockedForUpdate` in `../../db/blocks.ts`
+          // for why a locking read is what actually closes SCRUM-566 rather
+          // than merely narrowing it.
+          await assertNotBlockedForUpdate(
+            tx,
+            input.riderId,
+            members.map((member) => member.userId),
+          );
 
           await markRequestAccepted(tx, input.driverId, input.riderId);
         } else {

@@ -133,3 +133,55 @@ export const assertNotBlocked = async (
     throw new TRPCError({ code: "FORBIDDEN", message: BLOCKED_PAIR_MESSAGE });
   }
 };
+
+/**
+ * Same refusal as `assertNotBlocked`, but a locking current read rather than
+ * a plain one (SCRUM-566).
+ *
+ * A plain `SELECT` inside an interactive transaction answers from that
+ * transaction's REPEATABLE READ snapshot - taken at its first consistent
+ * read - so a block another transaction commits afterward stays invisible to
+ * it for the rest of the transaction, however much later this runs. `FOR
+ * UPDATE` makes MySQL read the latest committed row regardless of the
+ * snapshot, and holds a lock a concurrent `block.upsert` on the same pair has
+ * to wait behind - the same "raw query forces a current read" fix
+ * SCRUM-563/565 used for the sibling `carpool_search` races, applied here to
+ * the `block` table so a group-join can catch a block that lands mid-race.
+ * `applyBlock` in `../router/user/blocks.ts` is the other half: its own new
+ * locking read, over `carpool_search` instead, is what makes a concurrent
+ * block wait behind a group-join in progress rather than the reverse.
+ *
+ * One query per counterpart id rather than a single `IN (...)`: every real
+ * caller passes at most a handful of ids, and this keeps each statement the
+ * same fixed shape as `applyBlock`'s. Sequential awaits, not `Promise.all`,
+ * because an interactive transaction is one connection.
+ *
+ * Column names are the raw ones - `block` maps `blockerId`/`blockedId` to
+ * `blocker_id`/`blocked_id` - because raw SQL bypasses Prisma's field
+ * mapping.
+ *
+ * Run this as late as practical: immediately after the write that would
+ * otherwise let a blocked pair end up sharing a group, so the lock covers the
+ * smallest window that still closes the race.
+ */
+export const assertNotBlockedForUpdate = async (
+  tx: { $queryRaw: PrismaClient["$queryRaw"] },
+  userId: string,
+  counterpartIds: string | readonly string[],
+): Promise<void> => {
+  const ids =
+    typeof counterpartIds === "string" ? [counterpartIds] : counterpartIds;
+
+  for (const counterpartId of ids) {
+    const rows = await tx.$queryRaw<{ id: string }[]>`
+      SELECT id FROM block
+      WHERE (blocker_id = ${userId} AND blocked_id = ${counterpartId})
+         OR (blocker_id = ${counterpartId} AND blocked_id = ${userId})
+      FOR UPDATE
+    `;
+
+    if (rows.length > 0) {
+      throw new TRPCError({ code: "FORBIDDEN", message: BLOCKED_PAIR_MESSAGE });
+    }
+  }
+};

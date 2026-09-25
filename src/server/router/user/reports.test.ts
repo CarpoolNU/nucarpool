@@ -113,13 +113,15 @@ const buildReportsDb = (opts?: {
         return { id: row.id };
       }),
     },
-    carpoolSearch: {
-      findMany: jest.fn(async ({ where }: any) =>
-        (where.userId.in as string[])
-          .filter((id) => id in carpoolIds)
-          .map((userId) => ({ userId, carpoolId: carpoolIds[userId] })),
-      ),
-    },
+    // `applyBlock`'s group-membership check is a locking `$queryRaw`
+    // (SCRUM-566), not `carpoolSearch.findMany` - always exactly two
+    // interpolated values, `blockerId` then `blockedId`.
+    $queryRaw: jest.fn(async (_strings: unknown, ...values: unknown[]) => {
+      const [blockerId, blockedId] = values as [string, string];
+      return [blockerId, blockedId]
+        .filter((id) => id in carpoolIds)
+        .map((userId) => ({ userId, carpoolId: carpoolIds[userId] }));
+    }),
     block: {
       upsert: jest.fn(async ({ create }: any) => {
         if (opts?.upsertFails) {
