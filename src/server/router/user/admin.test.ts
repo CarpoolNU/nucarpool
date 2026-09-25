@@ -656,6 +656,46 @@ describe("getReports", () => {
     expect(lastPage.nextCursor).toBeNull();
   });
 
+  /**
+   * `AdminReports` reaches this through `useInfiniteQuery`, and tRPC's client
+   * does not send the input the component wrote. `getClientArgs` merges
+   * `direction` into every infinite-query input - `"forward"` on the first
+   * page, before any cursor exists - and the server never strips it, so the
+   * schema is what has to accept it.
+   *
+   * Every other test in this block calls the caller with a hand-written
+   * input, which is why a `.strict()` schema passed all of them while the
+   * queue failed to load in a browser for every admin. The literal below is
+   * the wire input, cast because the procedure's own types describe what the
+   * component passes rather than what the client sends.
+   */
+  it("accepts the input tRPC's useInfiniteQuery actually sends", async () => {
+    const { caller, prisma } = callerFor();
+
+    await caller.user.admin.getReports({
+      status: "OPEN",
+      direction: "forward",
+    } as Parameters<typeof caller.user.admin.getReports>[0]);
+
+    expect(prisma.report.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { status: "OPEN" } }),
+    );
+  });
+
+  it("accepts it on a later page too, alongside the cursor", async () => {
+    const { caller, prisma } = callerFor();
+
+    await caller.user.admin.getReports({
+      status: "OPEN",
+      cursor: "report-1",
+      direction: "forward",
+    } as Parameters<typeof caller.user.admin.getReports>[0]);
+
+    expect(prisma.report.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ cursor: { id: "report-1" }, skip: 1 }),
+    );
+  });
+
   it("never reads the message table, only the copy the report kept", async () => {
     const { caller, prisma } = callerFor();
 

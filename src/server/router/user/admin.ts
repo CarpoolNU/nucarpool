@@ -40,12 +40,28 @@ const REPORT_QUEUE_PAGE_SIZE = 500;
  * queue an admin actually needs to act on, and `null` is the explicit way to
  * ask for every status instead. `cursor`/`limit` follow `messages.conversation`
  * and `getReports`'s own `dateCreated, id` ordering below.
+ *
+ * `direction` is not something any caller writes, and the resolver never reads
+ * it. It is declared because tRPC's `useInfiniteQuery` client adds it to the
+ * input of every infinite query it sends - `getClientArgs` merges
+ * `direction: "forward"` in on the very first page, before a cursor exists -
+ * and nothing between there and here strips it. Under `.strict()` that made
+ * the report queue fail to load for every admin with a BAD_REQUEST
+ * (`Unrecognized key: "direction"`), which the UI can only show as "we could
+ * not load the reports".
+ *
+ * Declaring it beats dropping `.strict()`, which is load-bearing here for the
+ * reason the router README gives: unknown keys are rejected rather than
+ * silently ignored, so a field cannot creep back into the resolver. Paging is
+ * forward-only - the component sets no `getPreviousPageParam` - so
+ * `"backward"` is accepted and ignored rather than being a second code path.
  */
 const getReportsInput = z
   .object({
     status: z.nativeEnum(ReportStatus).nullable().optional(),
     cursor: z.string().optional(),
     limit: z.number().int().min(1).max(REPORT_QUEUE_PAGE_SIZE).optional(),
+    direction: z.enum(["forward", "backward"]).optional(),
   })
   .strict()
   .optional();
