@@ -81,7 +81,7 @@ yarn db:schema                        # prisma migrate dev && prisma generate
 - The API returns a **flattened** shape: `user.me` spreads `carpoolSearches[0]` and both locations onto the user object. Flat in the frontend does not mean flat in storage.
 - Field names change across that boundary: `seatsAvail` → `seatAvail`, `startDate`/`endDate` → `coopStartDate`/`coopEndDate`.
 - The merged shapes are hand-maintained types in [`types.ts`](src/utils/types.ts), not inferred from Prisma. **Adding a field means updating `schema.prisma`, the merge site, the converters, and the type.**
-- Code assumes one `CarpoolSearch` per user (`findFirst`, `carpoolSearches[0]`) even though the schema allows many.
+- **One `CarpoolSearch` per user, enforced by a unique index on `userId`** — so `findFirst` and `carpoolSearches[0]` with no `orderBy` are correct, not merely assumed. `user.edit` retries a first save that loses the race to create it. Lifting this is a design decision, not a one-line revert: read [the multi-search design](docs/design/multi-carpool-search.md) first.
 
 ## Auth and permissions
 

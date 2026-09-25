@@ -1,4 +1,4 @@
-import { Permission, Role, Status } from "@prisma/client";
+import { Permission, Prisma, Role, Status } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
 import type { Session } from "next-auth";
 import { appRouter } from "./index";
@@ -1024,6 +1024,112 @@ describe("user.edit — Location ownership", () => {
     // Same row rewritten, so the second save left nothing behind.
     expect(db.searchFor(SESSION_USER)?.homeLocationId).toBe(firstHomeId);
     expect(db.prisma.location.create).toHaveBeenCalledTimes(2);
+  });
+});
+
+/**
+ * A first-time save that loses the race to create the user's only
+ * CarpoolSearch (SCRUM-544).
+ *
+ * The race itself, and the unique index that decides it, only exist against a
+ * real MySQL - `user.db.test.ts` has those. What this covers is the router's
+ * half: which refusal it retries, and that it retries the whole save once.
+ */
+describe("user.edit — losing the first-save race", () => {
+  /** A P2002, with `meta.target` as MySQL (a string) or others (fields) report it. */
+  const uniqueViolation = (target: string | string[]) =>
+    new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
+      code: "P2002",
+      clientVersion: Prisma.prismaVersion.client,
+      meta: { target },
+    });
+
+  /** Locations belonging to the save that won, committed by the time it lost. */
+  const WINNER_LOCATIONS: LocationRow[] = [
+    {
+      id: "loc-winner-home",
+      street: "Elm St",
+      city: "Somerville",
+      state: "Massachusetts",
+      streetAddress: "Elm St, Somerville, Massachusetts",
+      coordLng: -71.12,
+      coordLat: 42.39,
+    },
+    {
+      id: "loc-winner-company",
+      street: "Main St",
+      city: "Cambridge",
+      state: "Massachusetts",
+      streetAddress: "Main St, Cambridge, Massachusetts",
+      coordLng: -71.09,
+      coordLat: 42.36,
+    },
+  ];
+
+  /**
+   * The first `create` is refused with `refusal`, and the winner's search
+   * commits while this save's attempt is rolling back - the order a real lost
+   * race has.
+   */
+  const losingDb = (refusal: Error) => {
+    const db = buildEditDb(WINNER_LOCATIONS);
+    const { create } = db.prisma.carpoolSearch;
+    const commitWinner = create.getMockImplementation()!;
+    create.mockImplementationOnce(async () => {
+      throw refusal;
+    });
+
+    const attempt = db.prisma.$transaction;
+    const transaction = jest.fn(async (fn: Parameters<typeof attempt>[0]) => {
+      try {
+        return await attempt(fn);
+      } catch (error) {
+        await commitWinner({
+          data: {
+            userId: SESSION_USER,
+            homeLocationId: "loc-winner-home",
+            companyLocationId: "loc-winner-company",
+          },
+        });
+        throw error;
+      }
+    });
+    db.prisma.$transaction = transaction as typeof attempt;
+    return { db, transaction };
+  };
+
+  it.each([
+    ["the index name", "carpool_search_userId_key"],
+    ["the field list", ["userId"]],
+  ])(
+    "retries on %s, and the retry updates the winner's search",
+    async (_label, target) => {
+      const { db, transaction } = losingDb(uniqueViolation(target));
+
+      await editCallerFor(SESSION_USER, db).user.edit(editInput());
+
+      expect(transaction).toHaveBeenCalledTimes(2);
+      // One search - the winner's row - now holding this save's values.
+      const search = db.searchFor(SESSION_USER);
+      expect(search?.homeLocationId).toBe("loc-winner-home");
+      expect(search).toMatchObject({ companyName: "Acme" });
+      expect(db.homeOf(SESSION_USER)).toMatchObject({
+        coordLng: -71.1,
+        coordLat: 42.31,
+      });
+    },
+  );
+
+  it.each([
+    ["a unique violation on another index", uniqueViolation("location_key")],
+    ["any other error", new Error("connection reset")],
+  ])("does not retry %s", async (_label, refusal) => {
+    const { db, transaction } = losingDb(refusal);
+
+    await expect(
+      editCallerFor(SESSION_USER, db).user.edit(editInput()),
+    ).rejects.toMatchObject({ cause: refusal });
+    expect(transaction).toHaveBeenCalledTimes(1);
   });
 });
 
