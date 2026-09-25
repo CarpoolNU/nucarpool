@@ -1,4 +1,4 @@
-import { Permission, RequestStatus } from "@prisma/client";
+import { Permission, RequestStatus, Role, Status } from "@prisma/client";
 import type { Session } from "next-auth";
 import { integrationPrisma } from "../../../testing/integrationDatabase";
 import type { Context } from "../context";
@@ -307,6 +307,140 @@ describe("message notifications are one-shot", () => {
     await expect(
       asAlice.user.emails.sendMessageNotification({ requestId: request.id }),
     ).resolves.toEqual({ sent: false, reason: "already_notified" });
+    expect(ses).not.toHaveBeenCalled();
+  });
+});
+
+describe("acceptance notifications are one-shot (SCRUM-564)", () => {
+  const seedLocation = async (streetAddress: string) =>
+    prisma.location.create({
+      data: {
+        city: "Boston",
+        state: "MA",
+        street: streetAddress,
+        streetAddress,
+        coordLng: -71.05,
+        coordLat: 42.36,
+      },
+    });
+
+  /**
+   * A driver and a rider, a pending request from the rider to the driver,
+   * and both `CarpoolSearch` rows `groups.create` requires to accept it. The
+   * request email's SES call is cleared before returning, so this suite's
+   * count reflects only the acceptance email.
+   */
+  const seedAcceptableRequest = async () => {
+    const rider = await prisma.user.create({
+      data: { name: "Rider Rae", email: "rider-rae@northeastern.edu" },
+    });
+    const driver = await prisma.user.create({
+      data: { name: "Driver Dan", email: "driver-dan@northeastern.edu" },
+    });
+    const [riderHome, riderCompany, driverHome, driverCompany] =
+      await Promise.all([
+        seedLocation("1 Mass Ave"),
+        seedLocation("2 Boylston St"),
+        seedLocation("3 Elm St"),
+        seedLocation("4 Congress St"),
+      ]);
+    await prisma.carpoolSearch.create({
+      data: {
+        userId: rider.id,
+        role: Role.RIDER,
+        status: Status.ACTIVE,
+        daysWorking: "0,1,1,1,1,1,0",
+        seatsAvail: 0,
+        homeLocationId: riderHome.id,
+        companyLocationId: riderCompany.id,
+      },
+    });
+    await prisma.carpoolSearch.create({
+      data: {
+        userId: driver.id,
+        role: Role.DRIVER,
+        status: Status.ACTIVE,
+        daysWorking: "0,1,1,1,1,1,0",
+        seatsAvail: 2,
+        homeLocationId: driverHome.id,
+        companyLocationId: driverCompany.id,
+      },
+    });
+
+    const ses = newSes();
+    const asRider = callerFor(rider.id, ses);
+    const asDriver = callerFor(driver.id, ses);
+    const request = await asRider.user.requests.create({
+      toId: driver.id,
+      message: "Carpool?",
+    });
+    ses.mockClear();
+
+    return { rider, driver, asRider, asDriver, request, ses };
+  };
+
+  it("sends one email for a genuine acceptance, however many times it is called", async () => {
+    const { driver, rider, asDriver, request, ses } =
+      await seedAcceptableRequest();
+
+    await asDriver.user.groups.create({
+      driverId: driver.id,
+      riderId: rider.id,
+    });
+
+    await expect(
+      asDriver.user.emails.sendAcceptanceNotification({
+        requestId: request.id,
+      }),
+    ).resolves.toEqual({ sent: true });
+    for (let i = 0; i < 3; i++) {
+      await expect(
+        asDriver.user.emails.sendAcceptanceNotification({
+          requestId: request.id,
+        }),
+      ).resolves.toEqual({ sent: false, reason: "already_notified" });
+    }
+
+    expect(ses).toHaveBeenCalledTimes(1);
+    expect(templateText(ses)).toContain("Rider Rae");
+    const row = await prisma.request.findUniqueOrThrow({
+      where: { id: request.id },
+    });
+    expect(row.acceptanceNotificationPendingSince).toBeNull();
+  });
+
+  it("sends one email when several calls race on the same acceptance", async () => {
+    const { driver, rider, asDriver, request, ses } =
+      await seedAcceptableRequest();
+
+    await asDriver.user.groups.create({
+      driverId: driver.id,
+      riderId: rider.id,
+    });
+
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () =>
+        asDriver.user.emails.sendAcceptanceNotification({
+          requestId: request.id,
+        }),
+      ),
+    );
+
+    expect(results.filter((r) => r.sent)).toHaveLength(1);
+    expect(ses).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends nothing before the request is actually accepted", async () => {
+    const { asDriver, request, ses } = await seedAcceptableRequest();
+
+    await expect(
+      asDriver.user.emails.sendAcceptanceNotification({
+        requestId: request.id,
+      }),
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      message: "That carpool request has not been accepted.",
+    });
     expect(ses).not.toHaveBeenCalled();
   });
 });

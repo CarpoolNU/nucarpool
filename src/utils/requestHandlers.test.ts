@@ -231,6 +231,7 @@ const request: PrismaRequest = {
   conversationId: "conversation-1",
   dateCreated: new Date("2026-02-01T00:00:00.000Z"),
   notificationPendingSince: null,
+  acceptanceNotificationPendingSince: null,
 };
 
 /** No group write of either shape reached the server. */

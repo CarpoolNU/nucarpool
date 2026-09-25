@@ -233,6 +233,14 @@ const requireAcceptableRequest = async (
  * and request state cannot disagree: either both land or neither does.
  * `updateMany` over the pair rather than an id captured earlier, so the write is
  * idempotent and does not depend on a read taken before the transaction opened.
+ *
+ * Also marks the acceptance email as owed, in the same statement that flips
+ * `status`: `acceptanceNotificationPendingSince` (SCRUM-564).
+ * `requireAcceptableRequest` above only reaches here for a request that is
+ * still `PENDING`, so this write is always a genuine new acceptance, never a
+ * repeat of one already recorded. `sendAcceptanceNotification` clears the
+ * marker in one conditional `UPDATE` before it sends, the same primitive
+ * `sendRequestNotification` and `sendMessageNotification` use.
  */
 const markRequestAccepted = async (
   prisma: PrismaClientLike,
@@ -246,7 +254,10 @@ const markRequestAccepted = async (
         { fromUserId: riderId, toUserId: driverId },
       ],
     },
-    data: { status: RequestStatus.ACCEPTED },
+    data: {
+      status: RequestStatus.ACCEPTED,
+      acceptanceNotificationPendingSince: new Date(),
+    },
   });
 };
 

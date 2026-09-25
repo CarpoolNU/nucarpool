@@ -123,6 +123,11 @@ model Request {
   // it creates or reopens the request, cleared when the email goes out. Null on
   // every row older than the column. See `sendRequestNotification`.
   notificationPendingSince DateTime?
+  // Non-null while this request's acceptance email is owed: set by
+  // `markRequestAccepted` when it flips status to ACCEPTED, cleared when the
+  // email goes out. Null on every row older than the column and on every
+  // request never accepted. See `sendAcceptanceNotification`. SCRUM-564.
+  acceptanceNotificationPendingSince DateTime?
 
   @@index([fromUserId])
   @@index([toUserId])
