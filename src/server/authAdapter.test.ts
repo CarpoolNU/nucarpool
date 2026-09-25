@@ -80,7 +80,7 @@ describe("createAuthAdapter — deleteUser", () => {
 
 describe("createAuthAdapter — createUser", () => {
   it("discards the identity provider's image", async () => {
-    // Profile pictures come from S3 via `profileImageLookup.ts`, never from the
+    // Profile pictures come from S3 via `user.getPresignedDownloadUrl`, never from the
     // provider. Storing the provider's URL would give a user a picture they
     // never chose and cannot change in this app. Previously untested.
     const { client, create } = clientStub();

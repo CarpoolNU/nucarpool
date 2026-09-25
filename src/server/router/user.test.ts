@@ -43,13 +43,10 @@ dayjs.extend(timezonePlugin);
  * S3 mocked out. No network, no AWS quota, no database.
  */
 
-const mockGetPresignedImageUrl = jest.fn();
 const mockGeneratePresignedUrl = jest.fn();
 const mockSignProfileImageUrl = jest.fn();
 
 jest.mock("../../utils/uploadToS3", () => ({
-  getPresignedImageUrl: (...args: unknown[]) =>
-    mockGetPresignedImageUrl(...args),
   generatePresignedUrl: (...args: unknown[]) =>
     mockGeneratePresignedUrl(...args),
   signProfileImageUrl: (...args: unknown[]) => mockSignProfileImageUrl(...args),
@@ -71,12 +68,11 @@ const sessionFor = (id: string): Session => ({
 
 /**
  * `getPresignedDownloadUrl` reads `User.profilePictureUpdatedAt` to decide
- * whether it can skip S3, so the caller needs a `user.findUnique`.
+ * whether the user has a picture at all, so the caller needs a
+ * `user.findUnique`.
  *
- * The default is `null`, which is deliberately the *fallback* path: every row
- * that predates the column has it, so that is what production mostly looks
- * like until the backfill runs, and it is the behaviour the tests below this
- * were originally written against.
+ * The default is `null` - no picture - which is what most users look like.
+ * A test that wants a picture records one with `withRecordedPicture`.
  */
 const mockUserFindUnique = jest.fn();
 const mockUserUpdate = jest.fn();
@@ -101,20 +97,25 @@ beforeEach(() => {
   mockUserUpdate.mockResolvedValue({});
 });
 
+const withRecordedPicture = () =>
+  mockUserFindUnique.mockResolvedValue({
+    profilePictureUpdatedAt: new Date("2026-09-03T12:00:00Z"),
+  });
+
 describe("user.getPresignedDownloadUrl", () => {
   it("returns the signed URL for a user who has a picture", async () => {
-    mockGetPresignedImageUrl.mockResolvedValueOnce(SIGNED);
+    withRecordedPicture();
+    mockSignProfileImageUrl.mockResolvedValueOnce(SIGNED);
     const caller = callerFor(sessionFor(SESSION_USER));
 
     await expect(
       caller.user.getPresignedDownloadUrl({ userId: OTHER_USER }),
     ).resolves.toEqual({ url: SIGNED });
 
-    expect(mockGetPresignedImageUrl).toHaveBeenCalledWith(OTHER_USER);
+    expect(mockSignProfileImageUrl).toHaveBeenCalledWith(OTHER_USER);
   });
 
   it("resolves { url: null } — never undefined — for a user with no picture", async () => {
-    mockGetPresignedImageUrl.mockResolvedValueOnce(null);
     const caller = callerFor(sessionFor(SESSION_USER));
 
     const result = await caller.user.getPresignedDownloadUrl({
@@ -130,14 +131,19 @@ describe("user.getPresignedDownloadUrl", () => {
   });
 
   it("falls back to the session user when no userId is supplied", async () => {
-    mockGetPresignedImageUrl.mockResolvedValueOnce(SIGNED);
+    withRecordedPicture();
+    mockSignProfileImageUrl.mockResolvedValueOnce(SIGNED);
     const caller = callerFor(sessionFor(SESSION_USER));
 
     await expect(caller.user.getPresignedDownloadUrl({})).resolves.toEqual({
       url: SIGNED,
     });
 
-    expect(mockGetPresignedImageUrl).toHaveBeenCalledWith(SESSION_USER);
+    expect(mockUserFindUnique).toHaveBeenCalledWith({
+      where: { id: SESSION_USER },
+      select: { profilePictureUpdatedAt: true },
+    });
+    expect(mockSignProfileImageUrl).toHaveBeenCalledWith(SESSION_USER);
   });
 
   it('refuses a session with no user rather than calling it "no picture"', async () => {
@@ -157,14 +163,13 @@ describe("user.getPresignedDownloadUrl", () => {
       { code: "UNAUTHORIZED" },
     );
 
-    expect(mockGetPresignedImageUrl).not.toHaveBeenCalled();
+    expect(mockUserFindUnique).not.toHaveBeenCalled();
+    expect(mockSignProfileImageUrl).not.toHaveBeenCalled();
   });
 
   it("still resolves { url: null } for a real user with no picture", async () => {
     // The positive control for the test above: the cacheable shape has to
     // survive the change that made a broken session throw.
-    mockGetPresignedImageUrl.mockResolvedValueOnce(null);
-
     await expect(
       callerFor(sessionFor(SESSION_USER)).user.getPresignedDownloadUrl({}),
     ).resolves.toEqual({ url: null });
@@ -181,7 +186,7 @@ describe("user.getPresignedDownloadUrl", () => {
       ).rejects.toMatchObject({ code: "BAD_REQUEST" });
     }
 
-    expect(mockGetPresignedImageUrl).not.toHaveBeenCalled();
+    expect(mockSignProfileImageUrl).not.toHaveBeenCalled();
   });
 
   it("rejects unknown input keys", async () => {
@@ -199,11 +204,13 @@ describe("user.getPresignedDownloadUrl", () => {
       caller.user.getPresignedDownloadUrl({ userId: OTHER_USER }),
     ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
 
-    expect(mockGetPresignedImageUrl).not.toHaveBeenCalled();
+    expect(mockSignProfileImageUrl).not.toHaveBeenCalled();
   });
 
-  it("surfaces an S3 failure as INTERNAL_SERVER_ERROR", async () => {
-    mockGetPresignedImageUrl.mockRejectedValueOnce(new Error("s3 exploded"));
+  it("surfaces a failed lookup as INTERNAL_SERVER_ERROR", async () => {
+    // The column read is the only thing here that can throw: signing catches
+    // its own failures and resolves null.
+    mockUserFindUnique.mockRejectedValueOnce(new Error("database exploded"));
     const caller = callerFor(sessionFor(SESSION_USER));
 
     const rejection = caller.user.getPresignedDownloadUrl({
@@ -235,18 +242,18 @@ describe("user.getPresignedDownloadUrl", () => {
  * `src/utils/uploadToS3.signature.test.ts`.
  */
 /**
- * the recorded picture timestamp replaces the S3 `HeadObject`.
+ * The recorded picture timestamp is the only answer to "has a picture?".
  *
- * `HeadObject` was the entire AWS cost of rendering an avatar - `getSignedUrl`
- * is a local HMAC and calls nothing - so the acceptance criterion is literally
- * "zero S3 API calls", and that is assertable here: the mocked
- * `getPresignedImageUrl` is the only thing in this file that would talk to S3,
- * so `not.toHaveBeenCalled()` is the criterion.
+ * It used to be one of two: a null column fell back to an S3 `HeadObject`,
+ * because every row predating the column was null whether or not an object
+ * existed (SCRUM-276). The backfill recorded all of those, so a null column now
+ * means "no picture" and resolves `{ url: null }` without signing (SCRUM-366).
+ * Signing is a local HMAC, so no path here makes an S3 request - pinned
+ * against the real module in `uploadToS3.test.ts`.
  *
- * The other half matters more. `null` must **not** be read as "no picture":
- * every row predating the column has it while the object may well exist, so
- * treating null as absence would remove the avatar of every user who already
- * had one. That is why the fallback exists and why it is pinned below.
+ * The half that still matters most is the negative one: nothing that is not a
+ * recorded timestamp may produce a signed URL, because signing for an object
+ * nobody uploaded shows a broken image instead of the fallback icon.
  */
 /**
  * SCRUM-508: `role: carpoolSearch?.role ?? Role.VIEWER` collapses two
@@ -312,8 +319,6 @@ describe("user.getPresignedDownloadUrl — recorded picture state", () => {
     ).resolves.toEqual({ url: SIGNED });
 
     expect(mockSignProfileImageUrl).toHaveBeenCalledWith(OTHER_USER);
-    // The acceptance criterion, stated as an absence.
-    expect(mockGetPresignedImageUrl).not.toHaveBeenCalled();
   });
 
   it("reads the state of the user being asked about, not the caller", async () => {
@@ -333,27 +338,24 @@ describe("user.getPresignedDownloadUrl — recorded picture state", () => {
     });
   });
 
-  it("falls back to S3 when nothing has been recorded", async () => {
-    // The un-backfilled row. Not an edge case - it is every row that existed
-    // before the column, so it is the majority until the backfill runs.
+  it("returns { url: null } without signing when nothing has been recorded", async () => {
+    // Was the S3 fallback until the backfill ran everywhere. A null column is
+    // now a user who has never uploaded a picture, which is most of them.
     mockUserFindUnique.mockResolvedValue({ profilePictureUpdatedAt: null });
-    mockGetPresignedImageUrl.mockResolvedValueOnce(SIGNED);
     const caller = callerFor(sessionFor(SESSION_USER));
 
     await expect(
       caller.user.getPresignedDownloadUrl({ userId: OTHER_USER }),
-    ).resolves.toEqual({ url: SIGNED });
+    ).resolves.toEqual({ url: null });
 
-    expect(mockGetPresignedImageUrl).toHaveBeenCalledWith(OTHER_USER);
     expect(mockSignProfileImageUrl).not.toHaveBeenCalled();
   });
 
-  it("falls back to S3 for a user row that does not exist at all", async () => {
+  it("returns { url: null } without signing for a user row that does not exist", async () => {
     // `findUnique` resolves null, so the procedure reads
     // `owner?.profilePictureUpdatedAt` as undefined. Signing on that would
     // hand out a URL for an object nobody uploaded.
     mockUserFindUnique.mockResolvedValue(null);
-    mockGetPresignedImageUrl.mockResolvedValueOnce(null);
     const caller = callerFor(sessionFor(SESSION_USER));
 
     await expect(

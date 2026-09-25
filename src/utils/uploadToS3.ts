@@ -1,6 +1,5 @@
 import {
   GetObjectCommand,
-  HeadObjectCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -81,22 +80,6 @@ export async function generatePresignedUrl(
  */
 export const PRESIGNED_DOWNLOAD_EXPIRY_SECONDS = 3600;
 
-/**
- * A 404 from HeadObject is the normal answer for every user who has never
- * uploaded a picture, so it is not logged - it used to produce a
- * console.error per avatar per page view.
- *
- * Deliberately narrow: a 403 can also mean "key absent" when the caller lacks
- * s3:ListBucket, but it equally means broken credentials, which is worth
- * seeing in the logs. Both still return null, so the UI behaviour is the same
- * either way; only the logging differs.
- */
-function isObjectNotFound(error: unknown): boolean {
-  const status = (error as { $metadata?: { httpStatusCode?: number } })
-    ?.$metadata?.httpStatusCode;
-  return status === 404 || (error as { name?: string })?.name === "NotFound";
-}
-
 /** The object key a user's profile picture lives at, in this environment. */
 function profileImageKey(fileName: string): string {
   return `${profilePicturePrefix(browserEnv.NEXT_PUBLIC_ENV)}${fileName}`;
@@ -106,9 +89,11 @@ function profileImageKey(fileName: string): string {
  * Signs a GET URL without asking S3 whether the object is there.
  *
  * **This makes no network call.** `getSignedUrl` is a local HMAC computation,
- * which is the fact the timestamp column turns on: once
- * `User.profilePictureUpdatedAt` says a picture exists, the `HeadObject` below
- * is pure cost and this is all that is needed.
+ * which is the fact the timestamp column turns on: `getPresignedDownloadUrl`
+ * calls this only once `User.profilePictureUpdatedAt` says a picture exists,
+ * so rendering an avatar makes no S3 request at all. It used to be preceded by
+ * a `HeadObject` asking S3 the same question, which was the entire AWS cost of
+ * an avatar (SCRUM-276, removed in SCRUM-366).
  *
  * Returns null only if signing itself fails, which means misconfigured
  * credentials rather than a missing picture. The caller cannot tell those apart
@@ -128,37 +113,4 @@ export async function signProfileImageUrl(fileName: string) {
     console.error("Error signing image url", error);
     return null;
   }
-}
-
-/**
- * Returns a presigned GET URL for the user's profile picture, or null if they
- * do not have one, asking S3 which it is.
- *
- * Note on cost: the HeadObject here is the only AWS API request, and it exists
- * purely to tell "no picture" apart from "picture exists" so the UI can show
- * its fallback icon instead of a broken image.
- *
- * **Now the fallback rather than the default path.**
- * `getPresignedDownloadUrl` calls `signProfileImageUrl` instead whenever
- * `User.profilePictureUpdatedAt` is set, and only reaches this when the column
- * is null - a row that predates it, whose object may or may not exist. Once
- * `scripts/backfill-profile-picture-timestamps.ts` has run everywhere there are
- * no such rows and this function can go; see `resolveImageLookup`.
- */
-export async function getPresignedImageUrl(fileName: string) {
-  const key = profileImageKey(fileName);
-
-  try {
-    // Check if the object exists
-    await s3Client.send(
-      new HeadObjectCommand({ Bucket: serverEnv.S3_BUCKET_NAME, Key: key }),
-    );
-  } catch (error) {
-    if (!isObjectNotFound(error)) {
-      console.error("Error getting image url", error);
-    }
-    return null;
-  }
-
-  return signProfileImageUrl(fileName);
 }

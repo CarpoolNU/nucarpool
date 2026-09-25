@@ -30,7 +30,7 @@ export const ACCOUNT_DELETION_UNSUPPORTED =
  * NextAuth's Prisma adapter, with two deliberate departures.
  *
  * **`createUser` discards the provider's `image`.** Profile pictures are
- * resolved from S3 by `profileImageLookup.ts`, not from the identity provider,
+ * resolved from S3 by `user.getPresignedDownloadUrl`, not from the identity provider,
  * so storing the provider's URL would give a user a picture they never chose
  * and cannot change here.
  *

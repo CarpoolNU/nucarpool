@@ -18,10 +18,8 @@ import { blocksRouter } from "./user/blocks";
 import { reportsRouter } from "./user/reports";
 import {
   generatePresignedUrl,
-  getPresignedImageUrl,
   signProfileImageUrl,
 } from "../../utils/uploadToS3";
-import { resolveImageLookup } from "../../utils/profileImageLookup";
 import {
   MAX_PROFILE_IMAGE_BYTES,
   PROFILE_IMAGE_CONTENT_TYPES,
@@ -529,25 +527,24 @@ export const userRouter = router({
         });
       }
       try {
-        // the whole point. A primary-key lookup on an already-open
-        // connection replaces an S3 `HeadObject` over the network, for every
-        // user whose picture state has been recorded.
+        // A primary-key lookup on an already-open connection is the whole cost
+        // of an avatar: signing is a local HMAC, so no S3 request is made for
+        // anyone. The column is the only record that a picture exists, and a
+        // null one - including a user row that does not exist - means none.
         //
-        // `null` does **not** mean "no picture": every row predating the column
-        // has it, whether or not an object exists, so those fall through to the
-        // old path. `resolveImageLookup` owns that distinction and says why
-        // reading `null` as "no picture" would have deleted the avatar of
-        // everyone who already had one.
+        // That reading became safe only once the backfill had recorded every
+        // picture uploaded before the column existed; until then a null row
+        // asked S3 with a `HeadObject` instead (SCRUM-276, SCRUM-366).
         const owner = await ctx.prisma.user.findUnique({
           where: { id: userId },
           select: { profilePictureUpdatedAt: true },
         });
 
-        if (resolveImageLookup(owner?.profilePictureUpdatedAt) === "sign") {
-          return { url: await signProfileImageUrl(userId) };
+        if (!owner?.profilePictureUpdatedAt) {
+          return { url: null };
         }
 
-        return { url: await getPresignedImageUrl(userId) };
+        return { url: await signProfileImageUrl(userId) };
       } catch (error) {
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
