@@ -196,8 +196,8 @@ const buildEmailDb = (opts?: {
     ).length;
   });
 
-  // A compare-and-swap, as MySQL would run it: matches only while every
-  // condition in `where` still holds, and reports how many rows it changed.
+  // Only the SES-failure path writes through here now: it restores a marker
+  // the claim cleared. Matches only while every condition in `where` holds.
   const requestUpdateMany = jest.fn(async ({ where, data }: any) => {
     if (
       !request ||
@@ -254,6 +254,40 @@ const buildEmailDb = (opts?: {
     return { count: 1 };
   });
 
+  /**
+   * The two claim statements, which `email.ts` runs as raw SQL because
+   * `updateMany` is not atomic under `relationMode = "prisma"`. Each checks the
+   * marker and clears it in one synchronous step, as the single InnoDB
+   * `UPDATE` does, and returns the rows changed. Anything else is an error, so
+   * a new raw statement cannot pass here unnoticed.
+   */
+  const executeRaw = jest.fn(
+    async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      const sql = strings.join("?");
+      const [id] = values;
+      if (sql.includes("UPDATE `request`")) {
+        if (
+          !request ||
+          request.id !== id ||
+          !request.notificationPendingSince
+        ) {
+          return 0;
+        }
+        request.notificationPendingSince = null;
+        return 1;
+      }
+      if (sql.includes("UPDATE `message`")) {
+        const target = messages.find(
+          (m) => m.id === id && m.notificationPending,
+        );
+        if (!target) return 0;
+        target.notificationPending = false;
+        return 1;
+      }
+      throw new Error(`Unexpected raw SQL in a test: ${sql}`);
+    },
+  );
+
   // Declares the command parameter so `mock.calls[n][0]` is typed; without it
   // the call tuple is empty and `tsc` rejects the index.
   const ses = jest.fn(async (_command: unknown) => {
@@ -263,6 +297,7 @@ const buildEmailDb = (opts?: {
 
   return {
     prisma: {
+      $executeRaw: executeRaw,
       block: fakeBlockDelegate(opts?.blocks),
       user: { findUnique: userFindUnique },
       carpoolSearch: { findFirst: carpoolSearchFindFirst },

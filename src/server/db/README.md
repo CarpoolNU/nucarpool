@@ -331,7 +331,8 @@ The request and message emails each send at most once (SCRUM-559). Each is backe
 | `request.notificationPendingSince` | `requests.create`, on create and reopen | `sendRequestNotification` |
 | `message.notificationPending`      | `messages.sendMessage`                  | `sendMessageNotification` |
 
-- **The claim is a conditional `updateMany`**, and the email goes out only if it changed a row. Two concurrent calls cannot both send. If SES refuses the send, the marker is restored.
+- **The claim is one raw conditional `UPDATE`**, and the email goes out only if it changed a row, so concurrent calls cannot both send. If SES refuses the send, the marker is restored.
+- **`updateMany` is not a compare-and-swap here.** With `relationMode = "prisma"` it reads the matching ids and then updates by id, so concurrent calls all pass a filter that only one should. Five concurrent claims sent five emails in the database suite, while the mocked suite passed. Any "only one caller wins" guard needs a single `UPDATE … WHERE`, meaning `$executeRaw`, or a unique constraint.
 - **Both default to "nothing owed"**, so every row written before the columns existed can never send. The opening message `requests.create` writes is left unmarked, because the request email announces it.
 - **`notificationPendingSince` is also how the request email finds its body.** `requests.create` writes the same instant to it and to the opening message's `dateCreated`, and the email quotes the requester's message with exactly that timestamp. `request.message` is not the body. It is always `""`, and `MessageContent` renders it as an extra first message whenever it is non-empty.
 - **A reopen keeps `dateCreated`.** It is the date of first contact, and the admin request series and every sort by it read it that way. A reopened request is therefore absent from that series.

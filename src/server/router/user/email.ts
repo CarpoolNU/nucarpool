@@ -32,7 +32,7 @@ import { assertNotBlocked } from "../../db/blocks";
  * **Request and message emails are one-shot** (SCRUM-559). The write that
  * creates the thing being announced also marks an email as owed:
  * `Request.notificationPendingSince` or `Message.notificationPending`. The
- * procedure clears that marker with a conditional `updateMany` before it sends.
+ * procedure clears that marker in one conditional `UPDATE` before it sends.
  * Only one caller's update can match, so calling the procedure again, or twice
  * at once, sends nothing more. Each email costs one real write by the caller.
  * These were time windows before, and inside one the procedure sent on every
@@ -180,6 +180,41 @@ const resolveRequestParties = async (
 };
 
 /**
+ * The claims: each clears a one-shot marker and reports whether *this* call
+ * was the one that cleared it.
+ *
+ * Raw SQL on purpose. `updateMany` looks like the same statement and is not
+ * one here: with `relationMode = "prisma"` it reads the matching ids first and
+ * then updates by id, so concurrent calls all read the row before any of them
+ * clears it, and every one reports `count: 1`. `notifications.db.test.ts`
+ * caught exactly that, with five concurrent calls sending five emails. A single
+ * `UPDATE … WHERE` is atomic in InnoDB. The second statement waits on the
+ * first one's row lock, re-reads the row, and changes nothing, and the return
+ * value is the number of rows it changed.
+ *
+ * The request claim tests `IS NOT NULL`, not the value read earlier. A reopen
+ * can only replace the value after an accept, and an accept cannot land
+ * between the read and the claim of a single call in any real flow.
+ */
+const claimRequestNotification = async (
+  prisma: PrismaClient,
+  requestId: string,
+) =>
+  (await prisma.$executeRaw`
+    UPDATE \`request\` SET \`notificationPendingSince\` = NULL
+    WHERE \`id\` = ${requestId} AND \`notificationPendingSince\` IS NOT NULL
+  `) === 1;
+
+const claimMessageNotification = async (
+  prisma: PrismaClient,
+  messageId: string,
+) =>
+  (await prisma.$executeRaw`
+    UPDATE \`message\` SET \`notificationPending\` = false
+    WHERE \`id\` = ${messageId} AND \`notificationPending\` = true
+  `) === 1;
+
+/**
  * Sends an email whose one-shot marker the caller has already cleared.
  *
  * If SES refuses, `release` puts the marker back and the error is rethrown.
@@ -281,15 +316,9 @@ export const emailsRouter = router({
 
       assertDeliverable(recipient.email);
 
-      // The claim. The update matches only while the marker still holds the
-      // value read above, so of two concurrent calls exactly one gets
-      // `count: 1`. Matching on the value, not just on non-null, also means a
-      // reopen landing in between is not consumed by this call.
-      const claim = await ctx.prisma.request.updateMany({
-        where: { id: request.id, notificationPendingSince: pendingSince },
-        data: { notificationPendingSince: null },
-      });
-      if (claim.count === 0) {
+      // Of any number of concurrent calls, exactly one gets past this. See
+      // `claimRequestNotification`.
+      if (!(await claimRequestNotification(ctx.prisma, request.id))) {
         return { sent: false as const, reason: "already_notified" };
       }
 
@@ -405,13 +434,9 @@ export const emailsRouter = router({
 
       assertDeliverable(recipient.email);
 
-      // The claim, as in `sendRequestNotification`: only one caller's update
-      // can match.
-      const claim = await ctx.prisma.message.updateMany({
-        where: { id: latest.id, notificationPending: true },
-        data: { notificationPending: false },
-      });
-      if (claim.count === 0) {
+      // As in `sendRequestNotification`: of any number of concurrent calls,
+      // exactly one gets past this.
+      if (!(await claimMessageNotification(ctx.prisma, latest.id))) {
         return { sent: false as const, reason: "already_notified" };
       }
 
