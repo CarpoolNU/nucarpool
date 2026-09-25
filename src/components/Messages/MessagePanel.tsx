@@ -16,13 +16,62 @@ interface MessagePanelProps {
   onViewRouteClick: (user: User, otherUser: PublicUser) => void;
 }
 
-const MessagePanel = ({
+type MessagePanelTab = "message" | "map";
+
+interface ConversationPanelProps extends MessagePanelProps {
+  activeTab: MessagePanelTab;
+  onTabChange: (tab: MessagePanelTab) => void;
+}
+
+/**
+ * One conversation's state lives and dies with that conversation (SCRUM-558).
+ *
+ * On desktop the Requests sidebar stays beside the open panel, so clicking a
+ * second card swaps `selectedUser` under a panel that stays mounted. Nothing
+ * keyed it, so everything below survived the switch: `MessageContent`'s
+ * merge-by-id kept the first thread's messages - they are not in the second
+ * thread's fetch, which is exactly what the merge preserves - and drew them as
+ * the new person's; `SendBar` kept the half-typed draft in its state and its
+ * contentEditable, and `handleSendMessage` reads the *current* `selectedUser`,
+ * so the next Enter sent A's draft to B; and `hasCalculatedRoute` stayed true,
+ * so on the Map tab B's route was never drawn.
+ *
+ * Keyed here rather than at the call site so that no caller can forget it, and
+ * so that `MessagePanel.conversationSwitch.test.tsx` can exercise the real key
+ * rather than one of its own. **The key is the request, not the object**: a
+ * send refetches `user.requests.me`, which rebuilds `selectedUser` for the
+ * same conversation, and remounting on that would throw away the thread's
+ * Pusher-only messages and the next draft.
+ *
+ * The tab is the one piece of state held outside the key, deliberately. It is
+ * the user's choice of view, not the conversation's, and keeping it is what
+ * makes a switch on the Map tab draw the new route instead of dropping back to
+ * the thread; the remount resets `hasCalculatedRoute`, so the route effect
+ * below runs for the new person.
+ */
+const MessagePanel = (props: MessagePanelProps) => {
+  const [activeTab, setActiveTab] = useState<MessagePanelTab>("message");
+  const request =
+    props.selectedUser.incomingRequest || props.selectedUser.outgoingRequest;
+
+  return (
+    <ConversationPanel
+      key={request?.id ?? props.selectedUser.id}
+      {...props}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+    />
+  );
+};
+
+const ConversationPanel = ({
   selectedUser,
   onMessageSent,
   onCloseConversation,
   onViewRouteClick,
-}: MessagePanelProps) => {
-  const [activeTab, setActiveTab] = useState<"message" | "map">("message");
+  activeTab,
+  onTabChange,
+}: ConversationPanelProps) => {
   const utils = trpc.useUtils();
   const user = useContext(UserContext);
   const [hasCalculatedRoute, setHasCalculatedRoute] = useState(false);
@@ -179,7 +228,7 @@ const MessagePanel = ({
     await handleRejectRequest(user, selectedUser, request);
   };
   const handleMapSwitch = () => {
-    setActiveTab("map");
+    onTabChange("map");
     setHasCalculatedRoute(false);
   };
   useEffect(() => {
@@ -217,7 +266,7 @@ const MessagePanel = ({
                 ? "border-northeastern-red text-northeastern-red border-b-2"
                 : ""
             }`}
-            onClick={() => setActiveTab("message")}
+            onClick={() => onTabChange("message")}
           >
             Message
           </button>
