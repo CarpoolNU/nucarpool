@@ -258,6 +258,21 @@ const buildGroupsDb = (opts?: {
   // Read-only here: groups never writes a block, so it needs no snapshot.
   const block = fakeBlockDelegate(opts?.blocks ?? []);
 
+  // `assertNotBlockedForUpdate`'s locking recheck (SCRUM-566) routes through
+  // `$queryRaw` rather than `block.findFirst`, one call per counterpart id,
+  // always exactly two interpolated values (`userId`, `counterpartId`) - it
+  // reads `block.rows` directly rather than duplicating `fakeBlockDelegate`'s
+  // matching logic, so the two checks cannot silently disagree.
+  const queryRaw = jest.fn(async (_strings: unknown, ...values: unknown[]) => {
+    const [userId, counterpartId] = values as [string, string];
+    const hit = block.rows.some(
+      (row) =>
+        (row.blockerId === userId && row.blockedId === counterpartId) ||
+        (row.blockerId === counterpartId && row.blockedId === userId),
+    );
+    return hit ? [{ id: `${userId}->${counterpartId}` }] : [];
+  });
+
   // Two raw `UPDATE`s now route through `$executeRaw`, distinguished below by
   // how many interpolated values each carries - neither compiles to the
   // other's shape, so this is unambiguous:
@@ -304,7 +319,14 @@ const buildGroupsDb = (opts?: {
   // so the mock rolls back on a throw. Restoring in place matters:
   // the delegates above close over these exact references.
   const prisma = withTransaction(
-    { carpoolSearch, carpoolGroup, request, block, $executeRaw: executeRaw },
+    {
+      carpoolSearch,
+      carpoolGroup,
+      request,
+      block,
+      $executeRaw: executeRaw,
+      $queryRaw: queryRaw,
+    },
     () => ({
       searches: cloneState(searches),
       groups: cloneState(groups),

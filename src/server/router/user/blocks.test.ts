@@ -35,19 +35,21 @@ const buildBlocksDb = (opts?: {
   };
   const carpoolIds = opts?.carpoolIds ?? {};
 
-  const prisma = {
+  const client = {
     user: {
       findUnique: jest.fn(async ({ where }: any) =>
         users[where.id] ? { id: where.id } : null,
       ),
     },
-    carpoolSearch: {
-      findMany: jest.fn(async ({ where }: any) =>
-        (where.userId.in as string[])
-          .filter((id) => id in carpoolIds)
-          .map((userId) => ({ userId, carpoolId: carpoolIds[userId] })),
-      ),
-    },
+    // `applyBlock`'s group-membership check is a locking `$queryRaw`
+    // (SCRUM-566), not `carpoolSearch.findMany` - always exactly two
+    // interpolated values, `blockerId` then `blockedId`.
+    $queryRaw: jest.fn(async (_strings: unknown, ...values: unknown[]) => {
+      const [blockerId, blockedId] = values as [string, string];
+      return [blockerId, blockedId]
+        .filter((id) => id in carpoolIds)
+        .map((userId) => ({ userId, carpoolId: carpoolIds[userId] }));
+    }),
     block: {
       findMany: jest.fn(async ({ where }: any) =>
         rows
@@ -83,6 +85,18 @@ const buildBlocksDb = (opts?: {
       }),
     },
   };
+
+  // `user.blocks.block` now runs `applyBlock` inside an explicit transaction
+  // (SCRUM-566), so the fake has to support one. Nothing here needs
+  // rollback: every refusal in `applyBlock` throws before its one write, the
+  // upsert above. `enumerable: false`, the same as `reports.test.ts`'s
+  // equivalent fake, so a `{ ...prisma }` spread would not carry it along.
+  const prisma = Object.defineProperty({ ...client }, "$transaction", {
+    value: jest.fn(async (fn: (tx: typeof client) => Promise<unknown>) =>
+      fn(client),
+    ),
+    enumerable: false,
+  });
 
   return { prisma, rows };
 };
