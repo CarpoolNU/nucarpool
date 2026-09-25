@@ -1204,6 +1204,10 @@ describe("markMessagesAsRead — the id list is bounded", () => {
     // that change's predicate, asserted here because this ticket touches the
     // input that feeds it and must leave the `where` clause alone. Note it does
     // not depend on the array: an id the caller does not own matches nothing.
+    //
+    // `userId: { not: ... }` was added by SCRUM-559: only the recipient may
+    // mark a message read, so the caller's own messages are never matched.
+    // `message.db.test.ts` shows it against a real database.
     const { caller, db } = markReadCallerFor(SENDER);
 
     await caller.user.messages.markMessagesAsRead({ messageIds: ids(2) });
@@ -1211,6 +1215,7 @@ describe("markMessagesAsRead — the id list is bounded", () => {
     expect(db.updateMany).toHaveBeenCalledWith({
       where: {
         id: { in: ["message-0", "message-1"] },
+        userId: { not: SENDER },
         conversation: {
           request: {
             some: {

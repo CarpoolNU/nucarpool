@@ -344,6 +344,11 @@ export const messageRouter = router({
             conversationId: conversation.id,
             content: input.content,
             userId: userId,
+            // `sendMessageNotification` sends at most one email per message
+            // it finds marked here (SCRUM-559). The opening message
+            // `requests.create` writes is left unmarked: the request email
+            // announces that one.
+            notificationPending: true,
           },
         });
       });
@@ -399,6 +404,11 @@ export const messageRouter = router({
    *
    * `.strict()` for the same reason the other hardened inputs have it: a
    * mistyped or re-added key should be a `BAD_REQUEST`, not silently dropped.
+   *
+   * "Unread" means unread by the recipient, so the caller's own messages are
+   * excluded here. Only `MessageContent` used to filter them out, so a direct
+   * call could mark a sender's own messages read before the other person
+   * had seen them (SCRUM-559).
    */
   markMessagesAsRead: protectedRouter
     .input(
@@ -422,6 +432,7 @@ export const messageRouter = router({
       return ctx.prisma.message.updateMany({
         where: {
           id: { in: input.messageIds },
+          userId: { not: userId },
           conversation: {
             request: {
               some: {

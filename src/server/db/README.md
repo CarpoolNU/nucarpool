@@ -322,6 +322,21 @@ A report is filed through `user.reports.create` and read by admins through `user
 - **"Also block" goes through the same `applyBlock` as the Block button.** The report and the block commit together. A refusal for someone in the reporter's group is the one exception: the report still saves and the refusal is returned as a note.
 - **The snapshot is the one place admins read message text.** `getReports` reads the copy on the report, never the `message` table.
 
+## Notification markers
+
+The request and message emails each send at most once (SCRUM-559). Each is backed by a column that means "an email is still owed":
+
+| Column                             | Set by                                  | Cleared by                |
+| ---------------------------------- | --------------------------------------- | ------------------------- |
+| `request.notificationPendingSince` | `requests.create`, on create and reopen | `sendRequestNotification` |
+| `message.notificationPending`      | `messages.sendMessage`                  | `sendMessageNotification` |
+
+- **The claim is a conditional `updateMany`**, and the email goes out only if it changed a row. Two concurrent calls cannot both send. If SES refuses the send, the marker is restored.
+- **Both default to "nothing owed"**, so every row written before the columns existed can never send. The opening message `requests.create` writes is left unmarked, because the request email announces it.
+- **`notificationPendingSince` is also how the request email finds its body.** `requests.create` writes the same instant to it and to the opening message's `dateCreated`, and the email quotes the requester's message with exactly that timestamp. `request.message` is not the body. It is always `""`, and `MessageContent` renders it as an extra first message whenever it is non-empty.
+- **A reopen keeps `dateCreated`.** It is the date of first contact, and the admin request series and every sort by it read it that way. A reopened request is therefore absent from that series.
+- **The acceptance email has no marker yet**, so it can still be replayed within an accepted request.
+
 ## Account deletion
 
 **There is no delete-my-account feature, and that is a decision rather than an omission.** Nothing needs fixing to allow one, and the schema should not be changed to make one possible without revisiting the decision. This section exists so the cascade question is not rediscovered and assumed to be a bug.

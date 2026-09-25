@@ -109,16 +109,20 @@ model Session {
 
 // Represents an Invitation to a user
 model Request {
-  id             String        @id @default(cuid()) // primary key
-  message        String        @db.VarChar(255)
-  status         RequestStatus @default(PENDING)
-  fromUserId     String // foreign key
-  toUserId       String // foreign key
-  fromUser       User          @relation("sentRequests", fields: [fromUserId], references: [id])
-  toUser         User          @relation("receivedRequests", fields: [toUserId], references: [id])
-  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  dateCreated    DateTime      @default(now())
-  conversationId String?
+  id                       String        @id @default(cuid()) // primary key
+  message                  String        @db.VarChar(255)
+  status                   RequestStatus @default(PENDING)
+  fromUserId               String // foreign key
+  toUserId                 String // foreign key
+  fromUser                 User          @relation("sentRequests", fields: [fromUserId], references: [id])
+  toUser                   User          @relation("receivedRequests", fields: [toUserId], references: [id])
+  conversation             Conversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  dateCreated              DateTime      @default(now())
+  conversationId           String?
+  // Non-null while this request's email is owed: set by `requests.create` when
+  // it creates or reopens the request, cleared when the email goes out. Null on
+  // every row older than the column. See `sendRequestNotification`.
+  notificationPendingSince DateTime?
 
   @@index([fromUserId])
   @@index([toUserId])
@@ -139,14 +143,17 @@ model Conversation {
 
 // Represents a Message sent by a User
 model Message {
-  id             String       @id @default(cuid()) // Primary key
-  conversationId String // Foreign key
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  content        String       @db.VarChar(255)
-  isRead         Boolean      @default(false)
-  User           User         @relation(fields: [userId], references: [id])
-  userId         String
-  dateCreated    DateTime     @default(now())
+  id                  String       @id @default(cuid()) // Primary key
+  conversationId      String // Foreign key
+  conversation        Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  content             String       @db.VarChar(255)
+  isRead              Boolean      @default(false)
+  User                User         @relation(fields: [userId], references: [id])
+  userId              String
+  dateCreated         DateTime     @default(now())
+  // True while this message's email is owed: set by `sendMessage`, cleared when
+  // the email goes out. See `sendMessageNotification`.
+  notificationPending Boolean      @default(false)
 
   @@index([conversationId])
   @@index([userId])

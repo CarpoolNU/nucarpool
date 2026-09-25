@@ -416,6 +416,15 @@ export const requestsRouter = router({
           });
         }
 
+        // Both branches below write this to two places: the request's
+        // `notificationPendingSince`, which marks the email as owed, and the
+        // opening message's `dateCreated`. That shared value is how
+        // `sendRequestNotification` finds the text to quote. It looks up the
+        // requester's message with exactly this timestamp, so it quotes what
+        // was stored and never what the client sends. A reopen with no text
+        // writes no message, so its email quotes nothing (SCRUM-559).
+        const requestedAt = new Date();
+
         // An accepted request the pair have since left behind. Reopening it,
         // rather than adding a second row, is what lets two people who once
         // carpooled together do so again. It also keeps the pair to
@@ -427,6 +436,12 @@ export const requestsRouter = router({
         // sender now, regardless of who asked the first time. The conversation
         // is not touched: it hangs off the request id, which does not change,
         // so the pair keep the thread they already had.
+        //
+        // The request is owed an email again. That used to be read from
+        // `dateCreated`, which this update leaves alone, so a reopened request
+        // was never "recent" and its email was silently skipped.
+        // `dateCreated` stays the date of first contact on purpose: the admin
+        // request series and every sort by it read it that way.
         if (existingRequest) {
           const reopened = await tx.request.update({
             where: { id: existingRequest.id },
@@ -434,6 +449,7 @@ export const requestsRouter = router({
               status: RequestStatus.PENDING,
               fromUserId: userId,
               toUserId: input.toId,
+              notificationPendingSince: requestedAt,
             },
           });
 
@@ -474,6 +490,7 @@ export const requestsRouter = router({
                 conversationId: conversation.id,
                 content: input.message,
                 userId,
+                dateCreated: requestedAt,
               },
             });
 
@@ -505,6 +522,7 @@ export const requestsRouter = router({
         const created = await tx.request.create({
           data: {
             message: "",
+            notificationPendingSince: requestedAt,
             fromUser: {
               connect: { id: userId },
             },
@@ -526,6 +544,7 @@ export const requestsRouter = router({
               create: {
                 content: input.message,
                 userId: userId,
+                dateCreated: requestedAt,
               },
             },
           },

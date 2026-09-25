@@ -4,16 +4,12 @@ import { router, protectedRouter } from "../createRouter";
 import { generateEmailParams } from "../../emailParams";
 import { browserEnv } from "../../../utils/env/browser";
 import { SendTemplatedEmailCommand } from "@aws-sdk/client-ses";
+import type {
+  SESClient,
+  SendTemplatedEmailCommandInput,
+} from "@aws-sdk/client-ses";
 import { RequestStatus } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
-// The preview is the connect message itself, so it is bounded by the column
-// that message is written to and by nothing else. This used to be a local
-// constant of 250, mirroring a number ConnectModal once hardcoded before it was
-// replaced with this one; the server was left three days behind, and a
-// 251-255 character message created its request and then failed to notify
-// anyone. The bound itself still matters — the preview reaches an
-// SES template — so this is a change of source, not a removal.
-import { MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
 import { assertNotBlocked } from "../../db/blocks";
 
 /**
@@ -27,39 +23,35 @@ import { assertNotBlocked } from "../../db/blocks";
  *  - the sender is `ctx.session.user.id`, looked up for its stored name/address;
  *  - the recipient is resolved from the referenced request, never from an
  *    address in the input, and never from a bare user id;
- *  - the body comes from the stored `Message` row where one exists.
+ *  - every body comes from a stored `Message` row. None is taken from input.
  *
  * The client therefore chooses *which* of its own conversations to notify about,
  * and nothing else. Bodies are rendered by SES templates through Handlebars
  * `{{ }}`, which HTML-escapes, so no additional escaping is applied here.
+ *
+ * **Request and message emails are one-shot** (SCRUM-559). The write that
+ * creates the thing being announced also marks an email as owed:
+ * `Request.notificationPendingSince` or `Message.notificationPending`. The
+ * procedure clears that marker with a conditional `updateMany` before it sends.
+ * Only one caller's update can match, so calling the procedure again, or twice
+ * at once, sends nothing more. Each email costs one real write by the caller.
+ * These were time windows before, and inside one the procedure sent on every
+ * call.
  */
 
 /** Per-sender, per-conversation cooldown for message notifications. */
 const MESSAGE_NOTIFICATION_COOLDOWN_MS = 5 * 60 * 1000;
 
 /**
- * A request notification announces a request that was *just* created, so it
- * only fires for a fresh one.
+ * Sender budget: at most this many request notifications per hour.
  *
- * This is the control that matters. Without it the procedure can be called
- * over and over for one long-lived request row, mailing the same person as
- * many times as the caller likes. With it, an email costs a request creation —
- * and `user.requests.create` rejects a second request between the same pair
- * with CONFLICT, so repeating it means deleting and re-creating the request
- * each time.
- */
-const REQUEST_NOTIFICATION_MAX_AGE_MS = 5 * 60 * 1000;
-
-/**
- * Sender budget layered on top: at most this many request notifications per
- * hour.
- *
- * Derived from `Request.dateCreated`, which is the only durable timestamp
- * available — nothing records that a notification was sent. That makes this
- * weaker than it looks: `user.requests.delete` removes the row, so a caller
- * willing to delete and re-create can reset the count. It raises the cost of
- * abuse rather than capping it. The control that would actually cap it needs
- * shared state this deployment does not have.
+ * The one-shot marker already limits a request to one email. This limits how
+ * fast new requests can be made to earn one, since deleting and re-creating a
+ * request marks it owed again. Counted from `Request.dateCreated`, so
+ * `user.requests.delete` removes rows from the count, and a reopen, which keeps
+ * the original `dateCreated`, is never in it. It raises the cost of abuse and
+ * is not a cap. A reopen needs the other person to have accepted first, so it
+ * is not something a caller can repeat on their own.
  */
 const REQUEST_NOTIFICATION_WINDOW_MS = 60 * 60 * 1000;
 const REQUEST_NOTIFICATIONS_PER_WINDOW = 10;
@@ -149,7 +141,7 @@ const resolveRequestParties = async (
       fromUserId: true,
       toUserId: true,
       conversationId: true,
-      dateCreated: true,
+      notificationPendingSince: true,
       status: true,
     },
   });
@@ -187,6 +179,29 @@ const resolveRequestParties = async (
   return { request, sender, recipient };
 };
 
+/**
+ * Sends an email whose one-shot marker the caller has already cleared.
+ *
+ * If SES refuses, `release` puts the marker back and the error is rethrown.
+ * Otherwise a failed send would still use up the one email, and the recipient
+ * would never be told. Putting it back cannot cause an extra email, because no
+ * email went out.
+ */
+const sendOrRelease = async (
+  ses: Pick<SESClient, "send">,
+  params: SendTemplatedEmailCommandInput,
+  release: () => Promise<unknown>,
+) => {
+  try {
+    await ses.send(new SendTemplatedEmailCommand(params));
+  } catch (error) {
+    await release().catch((releaseError: unknown) => {
+      console.error("Could not re-mark a notification as owed", releaseError);
+    });
+    throw error;
+  }
+};
+
 export const emailsRouter = router({
   /**
    * Notifies the other party that the caller has requested to carpool with
@@ -203,16 +218,18 @@ export const emailsRouter = router({
    * row to reference. That was reordered, and the request now exists
    * first, so this can verify the relationship the same way the other two
    * procedures do.
+   *
+   * The body is read from the database too. The input used to carry a
+   * `messagePreview` that went to SES unchecked. Called in a loop, that let a
+   * requester send the recipient NUCarpool-branded mail containing any text,
+   * and because the text was never stored, a report could not capture it. It
+   * is now the message `requests.create` stored when it opened the request
+   * (see `requestedAt` there). It is not `Request.message`: that column is
+   * always `""`, and `MessageContent` would render it as a second copy of the
+   * first message if it were ever filled in.
    */
   sendRequestNotification: protectedRouter
-    .input(
-      z
-        .object({
-          requestId: z.string(),
-          messagePreview: z.string().max(MESSAGE_MAX_LENGTH),
-        })
-        .strict(),
-    )
+    .input(z.object({ requestId: z.string() }).strict())
     .mutation(async ({ ctx, input }) => {
       const callerId = requireSessionUserId(ctx.session.user?.id);
       const { request, sender, recipient } = await resolveRequestParties(
@@ -243,9 +260,10 @@ export const emailsRouter = router({
         return { sent: false as const, reason: "missing_email_address" };
       }
 
-      const age = Date.now() - request.dateCreated.getTime();
-      if (age > REQUEST_NOTIFICATION_MAX_AGE_MS) {
-        return { sent: false as const, reason: "request_not_recent" };
+      // Null once announced, and on every request older than the column.
+      const pendingSince = request.notificationPendingSince;
+      if (!pendingSince) {
+        return { sent: false as const, reason: "already_notified" };
       }
 
       const recentRequests = await ctx.prisma.request.count({
@@ -263,6 +281,29 @@ export const emailsRouter = router({
 
       assertDeliverable(recipient.email);
 
+      // The claim. The update matches only while the marker still holds the
+      // value read above, so of two concurrent calls exactly one gets
+      // `count: 1`. Matching on the value, not just on non-null, also means a
+      // reopen landing in between is not consumed by this call.
+      const claim = await ctx.prisma.request.updateMany({
+        where: { id: request.id, notificationPendingSince: pendingSince },
+        data: { notificationPendingSince: null },
+      });
+      if (claim.count === 0) {
+        return { sent: false as const, reason: "already_notified" };
+      }
+
+      const opening = request.conversationId
+        ? await ctx.prisma.message.findFirst({
+            where: {
+              conversationId: request.conversationId,
+              userId: callerId,
+              dateCreated: pendingSince,
+            },
+            select: { content: true },
+          })
+        : null;
+
       // Template choice follows the *recipient's* role, matching what the
       // connect modal used to send from the client.
       const emailParams = generateEmailParams(
@@ -272,13 +313,18 @@ export const emailsRouter = router({
           receiverName: recipient.name,
           receiverEmail: recipient.email,
           recipientIsDriver: await isDriver(ctx.prisma, recipient.id),
-          messagePreview: input.messagePreview,
+          messagePreview: opening?.content ?? "",
         },
         "request",
         false,
       );
 
-      await ctx.sesClient.send(new SendTemplatedEmailCommand(emailParams));
+      await sendOrRelease(ctx.sesClient, emailParams, () =>
+        ctx.prisma.request.updateMany({
+          where: { id: request.id, notificationPendingSince: null },
+          data: { notificationPendingSince: pendingSince },
+        }),
+      );
       return { sent: true as const };
     }),
 
@@ -286,6 +332,12 @@ export const emailsRouter = router({
    * Notifies the caller's counterpart about the caller's latest message in the
    * conversation attached to `requestId`. The body is read from the stored
    * `Message` row, so the client cannot supply text of its own.
+   *
+   * At most one email per message: `sendMessage` marks the message, and this
+   * clears the mark before sending. The cooldown below used to be the only
+   * control, and it counts the caller's *other* recent messages. So one message
+   * followed by N calls passed it N times, because each call saw no prior
+   * message.
    */
   sendMessageNotification: protectedRouter
     .input(z.object({ requestId: z.string() }).strict())
@@ -308,19 +360,32 @@ export const emailsRouter = router({
       const latest = await ctx.prisma.message.findFirst({
         where: { conversationId: request.conversationId, userId: callerId },
         orderBy: { dateCreated: "desc" },
-        select: { id: true, content: true, dateCreated: true },
+        select: {
+          id: true,
+          content: true,
+          dateCreated: true,
+          notificationPending: true,
+        },
       });
 
       if (!latest) {
         return { sent: false as const, reason: "no_message_to_notify" };
       }
 
-      // Per-sender, per-conversation rate limit. If the caller already sent
+      // Already announced, or never owed an email: the request's opening
+      // message, and every message older than the column.
+      if (!latest.notificationPending) {
+        return { sent: false as const, reason: "already_notified" };
+      }
+
+      // Per-sender, per-conversation burst limit. If the caller already sent
       // another message here within the cooldown, a notification has very
       // likely just gone out, so this one is dropped. Derived from stored
       // Message rows, so it survives a page reload and cannot be bypassed by
       // calling the procedure directly — unlike the client-side check in
-      // MessagePanel, which is a UX nicety rather than a control.
+      // MessagePanel, which is a UX nicety rather than a control. This limits
+      // how often new messages earn an email. The marker above stops one
+      // message from being mailed twice.
       const recentPriorMessages = await ctx.prisma.message.count({
         where: {
           conversationId: request.conversationId,
@@ -340,6 +405,16 @@ export const emailsRouter = router({
 
       assertDeliverable(recipient.email);
 
+      // The claim, as in `sendRequestNotification`: only one caller's update
+      // can match.
+      const claim = await ctx.prisma.message.updateMany({
+        where: { id: latest.id, notificationPending: true },
+        data: { notificationPending: false },
+      });
+      if (claim.count === 0) {
+        return { sent: false as const, reason: "already_notified" };
+      }
+
       const emailParams = generateEmailParams(
         {
           senderName: sender.name,
@@ -352,7 +427,12 @@ export const emailsRouter = router({
         false,
       );
 
-      await ctx.sesClient.send(new SendTemplatedEmailCommand(emailParams));
+      await sendOrRelease(ctx.sesClient, emailParams, () =>
+        ctx.prisma.message.updateMany({
+          where: { id: latest.id },
+          data: { notificationPending: true },
+        }),
+      );
       return { sent: true as const };
     }),
 
@@ -381,17 +461,17 @@ export const emailsRouter = router({
    * accepted" call for different things from the caller, and collapsing them
    * would leave both unclear.
    *
-   * **Deliberately not rate limited.** The limit on `sendRequestNotification`
-   * above keys off `Request.dateCreated`, because a request notification
-   * announces a brand new row. Acceptance has no equivalent timestamp — the
-   * status is a flag, not a time — so a window keyed on `dateCreated` would
-   * refuse to announce the acceptance of a request made yesterday.
+   * **Not yet one-shot.** The request and message emails above each clear a
+   * marker set by the write they announce (SCRUM-559). Acceptance was left out
+   * of that ticket: it is written by `markRequestAccepted` in `groups.ts`,
+   * which would have to set the marker, and nothing records that an acceptance
+   * was announced.
    *
    * Replay is therefore still possible, but the checks above bound it to
    * requests genuinely accepted with the caller as their recipient, which is a
    * real relationship rather than an unbounded set. That is a large reduction
-   * and not a cap; a per-user cap across `user.emails.*` does not exist yet
-   * and is tracked separately.
+   * and not a cap. Both the missing marker and the missing per-user cap
+   * across `user.emails.*` are SCRUM-564.
    */
   sendAcceptanceNotification: protectedRouter
     .input(z.object({ requestId: z.string() }).strict())

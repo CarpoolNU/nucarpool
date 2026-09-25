@@ -91,20 +91,16 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
       // success toast fired on click, so a CONFLICT — routine, since accepting
       // never clears a request — produced a success toast, an error
       // toast, and an email for a request that was never created.
-      onSuccess: (request, variables) => {
+      onSuccess: (request) => {
         setRequestSent(true);
         toast.success(
           "A request to carpool has been sent to " +
             props.otherUser.preferredName,
         );
         // The id comes from the row the mutation just created, so the server
-        // can check the caller is party to it. The preview is taken from
-        // the mutation variables rather than component state, so it is exactly
-        // the text that was submitted.
-        sendConnectEmail({
-          requestId: request.id,
-          messagePreview: variables.message,
-        });
+        // can check the caller is party to it. There is no preview to pass:
+        // the server quotes the message it stored with the request.
+        sendConnectEmail({ requestId: request.id });
       },
     });
 

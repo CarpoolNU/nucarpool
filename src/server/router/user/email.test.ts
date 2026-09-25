@@ -72,7 +72,31 @@ type MessageRow = {
   userId: string;
   content: string;
   dateCreated: Date;
+  /** Defaults to true: a message `sendMessage` wrote and nobody has announced. */
+  notificationPending?: boolean;
 };
+
+/**
+ * When the fixture request was opened. It is also the `dateCreated` of the
+ * opening message, since `requests.create` writes the same value to both.
+ */
+const OPENED_AT = new Date("2026-09-25T12:00:00.000Z");
+
+/** The message `requests.create` stores with the fixture request. */
+const openingMessage = (content: string): MessageRow => ({
+  id: "opening-message",
+  conversationId: CONVERSATION_ID,
+  userId: ALICE,
+  content,
+  dateCreated: OPENED_AT,
+  notificationPending: false,
+});
+
+/** Null and Date both compare by value, the way MySQL compares the column. */
+const sameInstant = (a: Date | null | undefined, b: Date | null | undefined) =>
+  (a ?? null) === null || (b ?? null) === null
+    ? (a ?? null) === (b ?? null)
+    : a!.getTime() === b!.getTime();
 
 const defaultUsers: UserRow[] = [
   {
@@ -105,10 +129,12 @@ const buildEmailDb = (opts?: {
     fromUserId: string;
     toUserId: string;
     conversationId: string | null;
-    dateCreated?: Date;
+    notificationPendingSince?: Date | null;
     status?: RequestStatus;
   } | null;
   messages?: MessageRow[];
+  /** Makes SES reject every send, as a throttle or an outage would. */
+  sesFails?: boolean;
   /**
    * Rows behind `request.count`, which backs the per-sender budget on
    * `sendRequestNotification`. Separate from `request` because the count is
@@ -128,16 +154,25 @@ const buildEmailDb = (opts?: {
           conversationId: CONVERSATION_ID,
         }
       : opts?.request;
-  // Fresh and pending unless a test says otherwise: a request notification
-  // only fires for a request that was just created, and a request that was
-  // just created has not been accepted. Acceptance cases opt in explicitly —
-  // defaulting to ACCEPTED here would let a procedure that never reads
-  // `status` pass every test in the file.
+  // Just opened, unannounced and pending unless a test says otherwise. A
+  // request that was just created has not been accepted. Acceptance cases opt
+  // in explicitly — defaulting to ACCEPTED here would let a procedure that
+  // never reads `status` pass every test in the file.
+  //
+  // Mutable, because the claim is a write: `request.updateMany` below changes
+  // this row, so a second call sees what the first one left.
   const request = rawRequest
-    ? { dateCreated: new Date(), status: RequestStatus.PENDING, ...rawRequest }
+    ? {
+        notificationPendingSince: OPENED_AT,
+        status: RequestStatus.PENDING,
+        ...rawRequest,
+      }
     : rawRequest;
   const senderRequests = opts?.senderRequests ?? [];
-  const messages = opts?.messages ?? [];
+  const messages = (opts?.messages ?? []).map((m) => ({
+    notificationPending: true,
+    ...m,
+  }));
 
   const userFindUnique = jest.fn(
     async ({ where }: any) => users.get(where.id) ?? null,
@@ -161,12 +196,31 @@ const buildEmailDb = (opts?: {
     ).length;
   });
 
+  // A compare-and-swap, as MySQL would run it: matches only while every
+  // condition in `where` still holds, and reports how many rows it changed.
+  const requestUpdateMany = jest.fn(async ({ where, data }: any) => {
+    if (
+      !request ||
+      request.id !== where.id ||
+      !sameInstant(
+        request.notificationPendingSince,
+        where.notificationPendingSince,
+      )
+    ) {
+      return { count: 0 };
+    }
+    Object.assign(request, data);
+    return { count: 1 };
+  });
+
   const messageFindFirst = jest.fn(async ({ where, orderBy }: any) => {
     const matching = messages
       .filter(
         (m) =>
           m.conversationId === where.conversationId &&
-          m.userId === where.userId,
+          m.userId === where.userId &&
+          (where.dateCreated === undefined ||
+            sameInstant(m.dateCreated, where.dateCreated)),
       )
       .sort((a, b) =>
         orderBy?.dateCreated === "desc"
@@ -188,20 +242,44 @@ const buildEmailDb = (opts?: {
     ).length;
   });
 
+  const messageUpdateMany = jest.fn(async ({ where, data }: any) => {
+    const target = messages.find(
+      (m) =>
+        m.id === where.id &&
+        (where.notificationPending === undefined ||
+          m.notificationPending === where.notificationPending),
+    );
+    if (!target) return { count: 0 };
+    Object.assign(target, data);
+    return { count: 1 };
+  });
+
   // Declares the command parameter so `mock.calls[n][0]` is typed; without it
   // the call tuple is empty and `tsc` rejects the index.
-  const ses = jest.fn(async (_command: unknown) => ({
-    MessageId: "ses-message-id",
-  }));
+  const ses = jest.fn(async (_command: unknown) => {
+    if (opts?.sesFails) throw new Error("Throttling: Maximum sending rate");
+    return { MessageId: "ses-message-id" };
+  });
 
   return {
     prisma: {
       block: fakeBlockDelegate(opts?.blocks),
       user: { findUnique: userFindUnique },
       carpoolSearch: { findFirst: carpoolSearchFindFirst },
-      request: { findUnique: requestFindUnique, count: requestCount },
-      message: { findFirst: messageFindFirst, count: messageCount },
+      request: {
+        findUnique: requestFindUnique,
+        count: requestCount,
+        updateMany: requestUpdateMany,
+      },
+      message: {
+        findFirst: messageFindFirst,
+        count: messageCount,
+        updateMany: messageUpdateMany,
+      },
     },
+    /** The fixture rows, as the procedures have left them. */
+    request,
+    messages,
     ses,
     /** Params of the nth SendTemplatedEmailCommand handed to SES. */
     sentParams: (n = 0) => (ses.mock.calls[n]?.[0] as any)?.input,
@@ -240,7 +318,6 @@ describe("user.emails.sendRequestNotification — participants only, addresses f
 
     await caller.user.emails.sendRequestNotification({
       requestId: REQUEST_ID,
-      messagePreview: "hello",
     });
 
     expect(db.ses).toHaveBeenCalledTimes(1);
@@ -261,7 +338,6 @@ describe("user.emails.sendRequestNotification — participants only, addresses f
       caller.user.emails.sendRequestNotification(
         asAny({
           requestId: REQUEST_ID,
-          messagePreview: "x",
           receiverEmail: "attacker@evil.test",
         }),
       ),
@@ -277,7 +353,6 @@ describe("user.emails.sendRequestNotification — participants only, addresses f
       caller.user.emails.sendRequestNotification(
         asAny({
           requestId: REQUEST_ID,
-          messagePreview: "x",
           senderName: "NUCarpool Security",
         }),
       ),
@@ -291,7 +366,6 @@ describe("user.emails.sendRequestNotification — participants only, addresses f
 
     await caller.user.emails.sendRequestNotification({
       requestId: REQUEST_ID,
-      messagePreview: "x",
     });
 
     // Bob drives, so the recipient gets the driver-facing request template.
@@ -313,7 +387,6 @@ describe("user.emails.sendRequestNotification — participants only, addresses f
 
     await caller.user.emails.sendRequestNotification({
       requestId: REQUEST_ID,
-      messagePreview: "x",
     });
 
     expect(db.sentParams().Destination.ToAddresses).toEqual([
@@ -338,42 +411,64 @@ describe("user.emails.sendRequestNotification — participants only, addresses f
     await expect(
       caller.user.emails.sendRequestNotification({
         requestId: REQUEST_ID,
-        messagePreview: "x",
       }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
 
     expect(db.ses).not.toHaveBeenCalled();
   });
 
-  it("accepts a preview as long as the column the message is written to", async () => {
-    // 255 is `MESSAGE_MAX_LENGTH`, the width of `message.content`. The numbers
-    // are written out rather than imported so this pins the boundary instead
-    // of restating whatever the constant happens to say.
-    const { caller, db } = callerFor(sessionFor(ALICE));
-
-    await caller.user.emails.sendRequestNotification({
-      requestId: REQUEST_ID,
-      messagePreview: "x".repeat(255),
-    });
-
-    expect(db.ses).toHaveBeenCalledTimes(1);
-  });
-
-  it("caps the preview length rather than relaying an unbounded body", async () => {
-    // This asserted 251 until the server capped the preview at 250
-    // while ConnectModal's textarea and counter allowed 255, so a message in
-    // that window created its request and then failed to notify the recipient.
-    // The cap is now `MESSAGE_MAX_LENGTH`, so 256 is the first rejected length.
-    const { caller, db } = callerFor(sessionFor(ALICE));
+  /**
+   * The body used to be `input.messagePreview`, sent to SES unchecked. With the
+   * replay below, that let a requester mail the recipient any text they liked,
+   * repeatedly, and none of it was stored where a report could capture it
+   * (SCRUM-559).
+   */
+  it("no longer accepts a preview from the client", async () => {
+    const db = buildEmailDb({ messages: [openingMessage("stored text")] });
+    const { caller } = callerFor(sessionFor(ALICE), db);
 
     await expect(
-      caller.user.emails.sendRequestNotification({
-        requestId: REQUEST_ID,
-        messagePreview: "x".repeat(256),
-      }),
+      caller.user.emails.sendRequestNotification(
+        asAny({ requestId: REQUEST_ID, messagePreview: "anything at all" }),
+      ),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
 
     expect(db.ses).not.toHaveBeenCalled();
+  });
+
+  it("quotes the message stored with the request", async () => {
+    const db = buildEmailDb({
+      messages: [openingMessage("Happy to split gas")],
+    });
+    const { caller } = callerFor(sessionFor(ALICE), db);
+
+    await caller.user.emails.sendRequestNotification({ requestId: REQUEST_ID });
+
+    // `messageVariables` emits the same text under more than one key.
+    expect(JSON.stringify(db.templateData())).toContain("Happy to split gas");
+  });
+
+  it("quotes nothing when no message was stored with the request", async () => {
+    // A reopen with an empty box writes no message, so there is nothing to
+    // quote. Anything else in the thread — here Alice's message from the
+    // pair's last carpool — belongs to an earlier request and must not be
+    // presented as this one's.
+    const db = buildEmailDb({
+      messages: [
+        {
+          ...openingMessage("See you Monday!"),
+          id: "old-message",
+          dateCreated: new Date("2026-01-10T09:00:00.000Z"),
+        },
+      ],
+    });
+    const { caller } = callerFor(sessionFor(ALICE), db);
+
+    await expect(
+      caller.user.emails.sendRequestNotification({ requestId: REQUEST_ID }),
+    ).resolves.toEqual({ sent: true });
+
+    expect(JSON.stringify(db.templateData())).not.toContain("See you Monday!");
   });
 
   it("refuses a caller who is not part of the request", async () => {
@@ -385,7 +480,6 @@ describe("user.emails.sendRequestNotification — participants only, addresses f
     await expect(
       caller.user.emails.sendRequestNotification({
         requestId: REQUEST_ID,
-        messagePreview: "x",
       }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
 
@@ -401,7 +495,6 @@ describe("user.emails.sendRequestNotification — participants only, addresses f
     await expect(
       caller.user.emails.sendRequestNotification({
         requestId: REQUEST_ID,
-        messagePreview: "x",
       }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
 
@@ -414,56 +507,82 @@ describe("user.emails.sendRequestNotification — participants only, addresses f
     await expect(
       caller.user.emails.sendRequestNotification({
         requestId: "no-such-request",
-        messagePreview: "x",
       }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
 
     expect(db.ses).not.toHaveBeenCalled();
   });
 
-  it("will not re-announce a request that is no longer new", async () => {
-    // Without this the procedure can be called over and over against one
-    // long-lived row, mailing the same person as many times as the caller
-    // likes — the volume half of the problem.
+  /**
+   * The replay these cases pin (SCRUM-559). The only control used to be "the
+   * request is under five minutes old", so inside that window every call sent
+   * another email. The count of SES calls is the assertion that matters.
+   */
+  it("sends one email for a request however many times it is called", async () => {
+    const { caller, db } = callerFor(sessionFor(ALICE));
+
+    await expect(
+      caller.user.emails.sendRequestNotification({ requestId: REQUEST_ID }),
+    ).resolves.toEqual({ sent: true });
+    for (let i = 0; i < 3; i++) {
+      await expect(
+        caller.user.emails.sendRequestNotification({ requestId: REQUEST_ID }),
+      ).resolves.toEqual({ sent: false, reason: "already_notified" });
+    }
+
+    expect(db.ses).toHaveBeenCalledTimes(1);
+    expect(db.request?.notificationPendingSince).toBeNull();
+  });
+
+  it("sends one email when two calls race", async () => {
+    // Both read the marker before either clears it. The conditional update is
+    // what lets only one through.
+    const { caller, db } = callerFor(sessionFor(ALICE));
+
+    const results = await Promise.all([
+      caller.user.emails.sendRequestNotification({ requestId: REQUEST_ID }),
+      caller.user.emails.sendRequestNotification({ requestId: REQUEST_ID }),
+    ]);
+
+    expect(results).toContainEqual({ sent: true });
+    expect(results).toContainEqual({
+      sent: false,
+      reason: "already_notified",
+    });
+    expect(db.ses).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends nothing for a request with no email owed", async () => {
+    // Every row older than the marker column, and every request already
+    // announced. Such a request can be years old; its age is not what matters.
     const db = buildEmailDb({
       request: {
         id: REQUEST_ID,
         fromUserId: ALICE,
         toUserId: BOB,
         conversationId: CONVERSATION_ID,
-        dateCreated: new Date(Date.now() - 6 * 60 * 1000),
+        notificationPendingSince: null,
       },
     });
     const { caller } = callerFor(sessionFor(ALICE), db);
 
     const result = await caller.user.emails.sendRequestNotification({
       requestId: REQUEST_ID,
-      messagePreview: "x",
     });
 
-    expect(result).toEqual({ sent: false, reason: "request_not_recent" });
+    expect(result).toEqual({ sent: false, reason: "already_notified" });
     expect(db.ses).not.toHaveBeenCalled();
   });
 
-  it("still announces a request created moments ago", async () => {
-    const db = buildEmailDb({
-      request: {
-        id: REQUEST_ID,
-        fromUserId: ALICE,
-        toUserId: BOB,
-        conversationId: CONVERSATION_ID,
-        dateCreated: new Date(Date.now() - 30 * 1000),
-      },
-    });
+  it("keeps the email owed when SES refuses it, so a retry can still send", async () => {
+    const db = buildEmailDb({ sesFails: true });
     const { caller } = callerFor(sessionFor(ALICE), db);
 
     await expect(
-      caller.user.emails.sendRequestNotification({
-        requestId: REQUEST_ID,
-        messagePreview: "x",
-      }),
-    ).resolves.toEqual({ sent: true });
-    expect(db.ses).toHaveBeenCalledTimes(1);
+      caller.user.emails.sendRequestNotification({ requestId: REQUEST_ID }),
+    ).rejects.toThrow("Throttling");
+
+    expect(db.request?.notificationPendingSince).toEqual(OPENED_AT);
   });
 
   it("stops a sender who has made more than ten requests in the last hour", async () => {
@@ -478,7 +597,6 @@ describe("user.emails.sendRequestNotification — participants only, addresses f
 
     const result = await caller.user.emails.sendRequestNotification({
       requestId: REQUEST_ID,
-      messagePreview: "x",
     });
 
     expect(result).toEqual({ sent: false, reason: "rate_limited" });
@@ -506,7 +624,6 @@ describe("user.emails.sendRequestNotification — participants only, addresses f
     await expect(
       caller.user.emails.sendRequestNotification({
         requestId: REQUEST_ID,
-        messagePreview: "x",
       }),
     ).resolves.toEqual({ sent: true });
     expect(db.ses).toHaveBeenCalledTimes(1);
@@ -529,7 +646,6 @@ describe("user.emails.sendRequestNotification — participants only, addresses f
 
     const result = await caller.user.emails.sendRequestNotification({
       requestId: REQUEST_ID,
-      messagePreview: "x",
     });
 
     expect(result).toEqual({ sent: false, reason: "missing_email_address" });
@@ -639,6 +755,81 @@ describe("user.emails.sendMessageNotification — participants only, stored body
 
     expect(db.ses).toHaveBeenCalledTimes(1);
     expect(db.templateData().message).toBe("second, six minutes later");
+  });
+
+  /**
+   * The replay (SCRUM-559). The cooldown counts the caller's *other* recent
+   * messages, so after one message every call saw none and sent. The marker
+   * is what stops that; the cooldown only limits bursts of new messages.
+   */
+  it("sends one email for a message however many times it is called", async () => {
+    const db = withMessage();
+    const { caller } = callerFor(sessionFor(ALICE), db);
+
+    await expect(
+      caller.user.emails.sendMessageNotification({ requestId: REQUEST_ID }),
+    ).resolves.toEqual({ sent: true });
+    for (let i = 0; i < 3; i++) {
+      await expect(
+        caller.user.emails.sendMessageNotification({ requestId: REQUEST_ID }),
+      ).resolves.toEqual({ sent: false, reason: "already_notified" });
+    }
+
+    expect(db.ses).toHaveBeenCalledTimes(1);
+    expect(db.messages[0]?.notificationPending).toBe(false);
+  });
+
+  it("sends one email when two calls race", async () => {
+    const db = withMessage();
+    const { caller } = callerFor(sessionFor(ALICE), db);
+
+    const results = await Promise.all([
+      caller.user.emails.sendMessageNotification({ requestId: REQUEST_ID }),
+      caller.user.emails.sendMessageNotification({ requestId: REQUEST_ID }),
+    ]);
+
+    expect(results).toContainEqual({ sent: true });
+    expect(results).toContainEqual({
+      sent: false,
+      reason: "already_notified",
+    });
+    expect(db.ses).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends nothing for a message no email is owed for", async () => {
+    // The request's opening message, which the request email announces, and
+    // every message older than the marker column.
+    const db = buildEmailDb({ messages: [openingMessage("hi")] });
+    const { caller } = callerFor(sessionFor(ALICE), db);
+
+    const result = await caller.user.emails.sendMessageNotification({
+      requestId: REQUEST_ID,
+    });
+
+    expect(result).toEqual({ sent: false, reason: "already_notified" });
+    expect(db.ses).not.toHaveBeenCalled();
+  });
+
+  it("keeps the email owed when SES refuses it", async () => {
+    const db = buildEmailDb({
+      sesFails: true,
+      messages: [
+        {
+          id: "message-1",
+          conversationId: CONVERSATION_ID,
+          userId: ALICE,
+          content: "hello",
+          dateCreated: new Date("2026-08-21T12:00:00Z"),
+        },
+      ],
+    });
+    const { caller } = callerFor(sessionFor(ALICE), db);
+
+    await expect(
+      caller.user.emails.sendMessageNotification({ requestId: REQUEST_ID }),
+    ).rejects.toThrow("Throttling");
+
+    expect(db.messages[0]?.notificationPending).toBe(true);
   });
 
   it("sends nothing when the caller has no message in the thread", async () => {
@@ -859,7 +1050,6 @@ describe("user.emails — a blocked pair cannot mail each other", () => {
         await expect(
           caller.user.emails.sendRequestNotification({
             requestId: REQUEST_ID,
-            messagePreview: "x",
           }),
         ).rejects.toMatchObject({
           code: "FORBIDDEN",
@@ -877,7 +1067,6 @@ describe("user.emails — a blocked pair cannot mail each other", () => {
       await expect(
         caller.user.emails.sendRequestNotification({
           requestId: REQUEST_ID,
-          messagePreview: "x",
         }),
       ).resolves.toEqual({ sent: true });
       expect(db.ses).toHaveBeenCalledTimes(1);
@@ -956,7 +1145,6 @@ describe("user.emails — staging still restricts recipients", () => {
     await expect(
       caller.user.emails.sendRequestNotification({
         requestId: REQUEST_ID,
-        messagePreview: "x",
       }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
 
@@ -981,7 +1169,6 @@ describe("user.emails — staging still restricts recipients", () => {
 
     await caller.user.emails.sendRequestNotification({
       requestId: REQUEST_ID,
-      messagePreview: "x",
     });
 
     expect(db.ses).toHaveBeenCalledTimes(1);
@@ -995,7 +1182,6 @@ describe("user.emails — authentication gate and removed surface", () => {
     await expect(
       caller.user.emails.sendRequestNotification({
         requestId: REQUEST_ID,
-        messagePreview: "x",
       }),
     ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
 
