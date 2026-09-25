@@ -6,6 +6,7 @@ import { PROFILE_TEXT_MAX_LENGTH } from "../../utils/textLimits";
 import { CURRENT_TERMS_VERSION } from "../../utils/termsAcceptance";
 import { Role } from "@prisma/client";
 import { Status } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import _ from "lodash";
 import { favoritesRouter } from "./user/favorites";
 import { groupsRouter } from "./user/groups";
@@ -71,6 +72,27 @@ const getPresignedDownloadUrlInput = z
       .optional(),
   })
   .strict();
+
+/**
+ * Whether `error` is MySQL refusing a second `carpool_search` row for one user.
+ *
+ * Only the unique index on `userId` counts. MySQL names the index in
+ * `meta.target`; other connectors list the fields, which is also accepted so
+ * that the check does not depend on which of the two Prisma reports.
+ */
+const isDuplicateCarpoolSearch = (error: unknown) => {
+  if (
+    !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+    error.code !== "P2002"
+  ) {
+    return false;
+  }
+  const target = error.meta?.target;
+  return (
+    target === "carpool_search_userId_key" ||
+    (Array.isArray(target) && target.length === 1 && target[0] === "userId")
+  );
+};
 
 // user router to get information about or edit users
 export const userRouter = router({
@@ -292,7 +314,7 @@ export const userRouter = router({
       // What this protects on the read side: `user.me` above spreads
       // `carpoolSearches[0]` and both its Locations onto one flat object, so it
       // assumes the search and the rows it points at agree.
-      const updatedUser = await ctx.prisma.$transaction(async (tx) => {
+      const saveProfile = async (tx: Prisma.TransactionClient) => {
         await tx.user.update({
           where: { id },
           data: {
@@ -406,9 +428,28 @@ export const userRouter = router({
             },
           },
         });
-      });
+      };
 
-      return updatedUser;
+      // Two first-time saves for one user can both find no search and both
+      // create one. The unique index on `carpool_search.userId` refuses the
+      // second insert, and that save is retried from the top so that it
+      // becomes an update of the row that won - a lost race is a successful
+      // save, not a 500. SCRUM-544.
+      //
+      // The whole transaction, not just the insert. Under MySQL's REPEATABLE
+      // READ the losing transaction keeps the snapshot it took before the
+      // winner committed, so re-reading inside it would still find nothing.
+      // Rolling back also discards the Location rows it created for a search
+      // that never existed. Once is enough: the retry finds the winner's row
+      // and takes the update branch, which cannot conflict.
+      try {
+        return await ctx.prisma.$transaction(saveProfile);
+      } catch (error) {
+        if (!isDuplicateCarpoolSearch(error)) {
+          throw error;
+        }
+        return await ctx.prisma.$transaction(saveProfile);
+      }
     }),
 
   /**

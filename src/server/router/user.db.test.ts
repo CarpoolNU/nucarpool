@@ -1,4 +1,4 @@
-import { Role, Status } from "@prisma/client";
+import { Prisma, Role, Status } from "@prisma/client";
 import type { Session } from "next-auth";
 import { integrationPrisma } from "../../testing/integrationDatabase";
 import type { Context } from "./context";
@@ -192,5 +192,134 @@ describe('referential actions under relationMode = "prisma"', () => {
     expect(
       await prisma.location.findUnique({ where: { id: company.id } }),
     ).not.toBeNull();
+  });
+});
+
+describe("one CarpoolSearch per user", () => {
+  /** A first-time profile save: a DRIVER with both addresses resolved. */
+  const firstSave = (companyName: string) => ({
+    role: Role.DRIVER,
+    status: Status.ACTIVE,
+    seatAvail: 3,
+    companyName,
+    preferredName: "Ada",
+    pronouns: "",
+    isOnboarded: true,
+    daysWorking: "0,1,1,1,1,1,0",
+    coopStartDate: null,
+    coopEndDate: null,
+    bio: "",
+    startStreet: "Elm St",
+    startCity: "Somerville",
+    startState: "MA",
+    startAddress: "12 Elm St",
+    startCoordLng: -71.1,
+    startCoordLat: 42.39,
+    companyStreet: "Congress St",
+    companyCity: "Boston",
+    companyState: "MA",
+    companyAddress: "1 Congress St",
+    companyCoordLng: -71.05,
+    companyCoordLat: 42.36,
+  });
+
+  it("rejects a second search for the same user", async () => {
+    // The unique index is a real MySQL index even under
+    // `relationMode = "prisma"`, so this is the database refusing, not Prisma.
+    // The target is asserted too: it is the string `user.edit` matches on to
+    // decide that a refused save lost the race and should be retried.
+    const { user, home, company } = await seedDriver();
+
+    const error = await prisma.carpoolSearch
+      .create({
+        data: {
+          userId: user.id,
+          homeLocationId: home.id,
+          companyLocationId: company.id,
+        },
+      })
+      .then(
+        () => null,
+        (rejection: unknown) => rejection,
+      );
+
+    expect(error).toBeInstanceOf(Prisma.PrismaClientKnownRequestError);
+    expect(error).toMatchObject({
+      code: "P2002",
+      meta: { target: "carpool_search_userId_key" },
+    });
+    expect(await prisma.carpoolSearch.count()).toBe(1);
+  });
+
+  it("resolves two concurrent first-time saves to one search", async () => {
+    // The race SCRUM-544 closes. Two saves for a user with no search both read
+    // "none" and both create one. Left to timing the race rarely fires, so the
+    // test forces it: each save's first attempt takes its snapshot and then
+    // waits at a barrier until the other has taken one too. From there the
+    // interleaving is MySQL's - one save wins, the other's insert is refused
+    // by the unique index, and `user.edit` retries it.
+    const user = await prisma.user.create({
+      data: { name: "Ada Lovelace", email: "ada@northeastern.edu" },
+    });
+
+    let attempts = 0;
+    let arrived = 0;
+    let release: () => void = () => undefined;
+    const bothSnapshotted = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    const racing = new Proxy(prisma, {
+      get(target, property) {
+        if (property !== "$transaction") {
+          return Reflect.get(target, property);
+        }
+        return (save: (tx: Prisma.TransactionClient) => Promise<unknown>) => {
+          const attempt = ++attempts;
+          return target.$transaction(async (tx) => {
+            if (attempt <= 2) {
+              // InnoDB fixes a transaction's snapshot at its first plain read.
+              await tx.$queryRaw`SELECT 1 FROM carpool_search LIMIT 1`;
+              if (++arrived === 2) release();
+              await bothSnapshotted;
+            }
+            return save(tx);
+          });
+        };
+      },
+    });
+
+    const callerOver = (client: typeof prisma) =>
+      appRouter.createCaller({
+        req: undefined,
+        res: undefined,
+        session: sessionFor(user.id),
+        prisma: client,
+        sesClient: { send: jest.fn() },
+      } as unknown as Context);
+
+    const results = await Promise.allSettled([
+      callerOver(racing).user.edit(firstSave("First Co")),
+      callerOver(racing).user.edit(firstSave("Second Co")),
+    ]);
+
+    // Neither save surfaced the refusal.
+    expect(results.map((result) => result.status)).toEqual([
+      "fulfilled",
+      "fulfilled",
+    ]);
+    // Exactly one save lost and was retried. Two attempts would mean the race
+    // never fired, and this test proved nothing.
+    expect(attempts).toBe(3);
+
+    const searches = await prisma.carpoolSearch.findMany({
+      where: { userId: user.id },
+    });
+    expect(searches).toHaveLength(1);
+    // The retry updated the winner's row. Which save won is MySQL's choice.
+    expect(["First Co", "Second Co"]).toContain(searches[0]?.companyName);
+    // The losing attempt's Location rows rolled back with it, and the retry
+    // rewrote the winner's in place, so the save stranded nothing.
+    expect(await prisma.location.count()).toBe(2);
   });
 });

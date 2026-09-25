@@ -8,6 +8,7 @@ This directory holds the shared Prisma client. The schema, migrations and seed s
 ## Data model
 
 - **A user's carpool details are not on `User`.** `User` holds identity and profile only. Role, company, schedule, seats, status and group membership live on `CarpoolSearch`, which links to two `Location` rows (home and company). `user.me` merges the first `CarpoolSearch` onto the returned user, so **a flat-looking result does not mean flat storage**.
+- **A user has at most one `CarpoolSearch`.** `@@unique([userId])` is a real MySQL index — unlike the relations, `relationMode = "prisma"` does not emulate it — so every read that takes "the" search by `userId` with no `orderBy` is well defined. `user.edit` creates the row on a first save, and retries a save the index refuses because a concurrent one won. Why one and not many: [the multi-search design](../../../docs/design/multi-carpool-search.md) (SCRUM-543, SCRUM-544).
 - **A `Location` belongs to one slot of one `CarpoolSearch`** — never shared between users, nor between a single user's two slots. Anything writing locations must go through [`locationOwnership.ts`](./locationOwnership.ts). See [Location ownership](#location-ownership).
 - **`relationMode = "prisma"`** — foreign keys are emulated by Prisma, not enforced by MySQL. Relation scalar fields need explicit `@@index` entries, and `onDelete` is carried out by Prisma.
 - `Account`, `Session`, `User` and `VerificationToken` back NextAuth through the Prisma adapter. Changing them can break sign-in.

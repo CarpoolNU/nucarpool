@@ -371,6 +371,10 @@ spike.
 
 ## Follow-up
 
-SCRUM-544 carries the implementation scope for Phase 1. Option 3 gets its own
+SCRUM-544 implements Phase 1: `@@unique([userId])` in `schema.prisma`, migration
+`20260925120000_unique_carpool_search_user`, and a retry in `user.edit`. The
+race described above is reproduced deterministically in
+`src/server/router/user.db.test.ts`. The redundant `@@index([userId])` was kept
+and remains a separate decision. Option 3 gets its own
 ticket if and when a feature requires it; this document is the input to that
 design.

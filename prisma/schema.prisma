@@ -280,6 +280,16 @@ model CarpoolSearch {
   dateCreated            DateTime      @default(now()) @map("date_created")
   dateModified           DateTime      @default(now()) @updatedAt @map("date_modified")
 
+  // One search per user, enforced rather than assumed. Every reader selects
+  // "the" search with `findFirst` or `carpoolSearches[0]` and no `orderBy`, so
+  // a second row would make those reads disagree with each other. Unlike the
+  // relations, a unique index is real under `relationMode = "prisma"`: MySQL
+  // enforces it. See docs/design/multi-carpool-search.md for why this is one
+  // search and not many (SCRUM-543, SCRUM-544).
+  //
+  // `@@index([userId])` is now redundant with it and is kept for the moment:
+  // dropping it is a separate decision with its own Deploy Request.
+  @@unique([userId])
   @@index([userId])
   @@index([companyLocationId])
   @@index([homeLocationId])
