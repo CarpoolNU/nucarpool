@@ -506,10 +506,19 @@ const Home: NextPage<any> = () => {
     [favorites, requests],
   );
 
-  const handleMessageSent = (selectedUserId: string) => {
+  /**
+   * Refreshes the sidebar's card previews, and deliberately selects nothing.
+   *
+   * This also called `setSelectedUserId` with the id it was given, which only
+   * ever re-selected the conversation already open - until `MessagePanel` was
+   * keyed per conversation (SCRUM-558). React Query runs a mutation's own
+   * `onSuccess` after its component unmounts, so a send to A that landed after
+   * the user had clicked B came back from A's unmounted panel and switched the
+   * page back to A. Closing the conversation mid-send reopened it the same way.
+   */
+  const handleMessageSent = () => {
     utils.user.requests.me.invalidate();
     requestsQuery.refetch();
-    setSelectedUserId(selectedUserId);
   };
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
