@@ -1,4 +1,22 @@
 import { signOut } from "next-auth/react";
+import { resetIdentity } from "../mixpanel";
+
+/**
+ * Leave, and stop being this user as far as Mixpanel is concerned.
+ *
+ * The reset runs *before* `signOut`, which navigates: anything queued behind
+ * that call may never run. It is also deliberately here rather than beside
+ * either button - `DropDownMenu` and `UserSection` both reach sign-out through
+ * this module, and the set of exits from the profile page is precisely the
+ * thing that was discovered one at a time across SCRUM-384 and SCRUM-468.
+ *
+ * Only reached once the guard below has let the sign-out through, so cancelling
+ * `UnsavedModal` leaves the identity intact along with the unsaved edits.
+ */
+const signOutAndForget = async (): Promise<void> => {
+  resetIdentity();
+  await signOut();
+};
 
 /**
  * The profile page's unsaved-changes guard, as the things that consume it see
@@ -36,15 +54,15 @@ export type UnsavedChangesGuard = (
  *
  * `checkChanges` is optional because most of the app has nothing to lose:
  * `DropDownMenu` is mounted on every signed-in page and only the profile page
- * supplies a guard. Without one this is exactly the bare `signOut()` both call
- * sites used to make, which is why adding the guard to one of them could not
- * change behaviour anywhere else.
+ * supplies a guard. Without one this is the bare sign-out both call sites used
+ * to make, which is why adding the guard to one of them could not change
+ * behaviour anywhere else.
  */
 export const signOutWithGuard = async (
   checkChanges?: UnsavedChangesGuard,
 ): Promise<void> => {
   if (!checkChanges) {
-    await signOut();
+    await signOutAndForget();
     return;
   }
 
@@ -53,5 +71,5 @@ export const signOutWithGuard = async (
   // something unsaved it holds it until the user answers `UnsavedModal`, and
   // if they cancel it drops the callback entirely - leaving them signed in
   // with their edits still in the form.
-  await checkChanges(() => signOut());
+  await checkChanges(() => signOutAndForget());
 };
