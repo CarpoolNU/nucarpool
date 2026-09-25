@@ -386,15 +386,24 @@ const Index: NextPage = () => {
         toast.success("User profile updated successfully!");
       }
     } catch (error) {
-      toast.error("Failed to update user profile. Please try again.");
+      // No toast here: `useEditUserMutation`'s `onError` has already shown one
+      // carrying the server's reason, and this one used to stack a second,
+      // vaguer message on top of it.
+      //
+      // `false`, because the save did not happen. This used to fall through to
+      // the `return true` below, so the unsaved-changes modal's Save and
+      // Continue navigated away - or signed out - on a refused save and threw
+      // away the very edits it had offered to keep (SCRUM-561).
+      return false;
     } finally {
       setIsLoading(false);
     }
     return true;
   };
-  // Leaving the page is conditional on the save having been attempted at all.
-  // The guard above returns without saving, and navigating away regardless would
-  // have discarded the field error it just set.
+  // Leaving the page is conditional on the save having succeeded. The guard
+  // above returns without saving and the catch returns on a refused save, and
+  // navigating away regardless would have discarded the field error or the
+  // edits.
   const onSubmitWithContinue: SubmitHandler<OnboardingFormInputs> = async (
     values,
   ) => {

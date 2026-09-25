@@ -37,13 +37,28 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
   } = useProfileImage(props.otherUser.id);
   const isMobile = useIsMobile();
 
+  /**
+   * Whether a request went out decides what closing means, not which control
+   * closed the dialog. Only the explicit Close button used to pass
+   * `closeAfterSend`; Esc and a backdrop click arrive through `Dialog`'s
+   * `onClose` as `close`, so they skipped the invalidation and left the
+   * Requests tab without the sent card, the explore card still offering
+   * Connect, and a second Send heading for the server's CONFLICT (SCRUM-561).
+   *
+   * The action forwarded to the parent is corrected too, not only the
+   * invalidation. `ConnectCard` collapses the mobile detail sheet on
+   * `closeAfterSend` because the recipient is about to drop out of
+   * `recommendations.me` - invalidating while still reporting `close` would
+   * refresh that list out from under a sheet left pointing at them.
+   */
   const onClose = async (action: string) => {
-    if (action === "closeAfterSend") {
+    const resolved = requestSent ? "closeAfterSend" : action;
+    if (resolved === "closeAfterSend") {
       await utils.user.recommendations.me.invalidate();
       await utils.user.requests.me.invalidate();
     }
     setIsOpen(false);
-    props.onClose(action);
+    props.onClose(resolved);
   };
   const handleViewRequest = async () => {
     await utils.user.recommendations.me.invalidate();
