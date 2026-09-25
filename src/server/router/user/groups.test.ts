@@ -258,11 +258,33 @@ const buildGroupsDb = (opts?: {
   // Read-only here: groups never writes a block, so it needs no snapshot.
   const block = fakeBlockDelegate(opts?.blocks ?? []);
 
+  // The rider-linking compare-and-swap in `create` and `edit`'s add path
+  // (SCRUM-563). A raw `UPDATE`, not `tx.carpoolSearch.updateMany` -
+  // `updateMany`'s WHERE was verified against a real MySQL to match this
+  // transaction's own snapshot rather than the current row on this Prisma
+  // version, so it did not actually close the race. `$executeRaw` is a
+  // template-tag call: `values` holds, in order, the `carpoolId` being set
+  // and the `userId`/`role` from the WHERE, from `UPDATE carpool_search SET
+  // carpoolId = ${...} WHERE userId = ${...} AND role = ${...} AND
+  // carpoolId IS NULL`. Both call sites compile to the same shape, so one
+  // implementation covers them.
+  const executeRaw = jest.fn(async (_strings: unknown, ...values: unknown[]) => {
+    const [groupIdToSet, riderId, roleToMatch] = values;
+    const row = searches.find((r) =>
+      matches(r, { userId: riderId, role: roleToMatch, carpoolId: null }),
+    );
+    if (!row) {
+      return 0;
+    }
+    row.carpoolId = groupIdToSet as string;
+    return 1;
+  });
+
   // The groups mutations wrap their writes in `prisma.$transaction`,
   // so the mock rolls back on a throw. Restoring in place matters:
   // the delegates above close over these exact references.
   const prisma = withTransaction(
-    { carpoolSearch, carpoolGroup, request, block },
+    { carpoolSearch, carpoolGroup, request, block, $executeRaw: executeRaw },
     () => ({
       searches: cloneState(searches),
       groups: cloneState(groups),
@@ -309,6 +331,7 @@ const buildGroupsDb = (opts?: {
     carpoolSearch,
     request,
     block,
+    executeRaw,
   };
 };
 
@@ -1607,25 +1630,6 @@ describe("group mutations are atomic", () => {
     },
   ];
 
-  /**
-   * Fails the nth call to a mocked delegate, letting the earlier ones through.
-   *
-   * `mockImplementationOnce` is not enough here: `reserveSeat` is itself a
-   * `carpoolSearch.updateMany`, so failing the *first* call stops at the
-   * reservation and the test proves nothing — the seat was never spent and no
-   * group was ever built. The interesting failures are the later writes, once
-   * there is partial state to leave behind.
-   */
-  const failOnCall = (mock: jest.Mock, callNumber: number) => {
-    const real = mock.getMockImplementation()!;
-    let calls = 0;
-    mock.mockImplementation(async (args: any) => {
-      calls += 1;
-      if (calls === callNumber) throw new Error("connection lost");
-      return real(args);
-    });
-  };
-
   it("create leaves no group and no spent seat when linking the rider fails", async () => {
     const db = buildGroupsDb({
       searches: twoUnlinkedUsers(),
@@ -1634,10 +1638,13 @@ describe("group mutations are atomic", () => {
     });
     const { caller } = callerFor(sessionFor(DRIVER), db);
 
-    // updateMany #1 reserves the seat and #2 links the driver, so failing #3
-    // means the seat is already spent, the group already exists and the driver
-    // is already linked. That is the state that used to survive.
-    failOnCall(db.carpoolSearch.updateMany, 3);
+    // By the time the rider link runs, the seat is already spent, the group
+    // already exists and the driver is already linked. That is the state
+    // that used to survive a failure here. The rider link is the raw
+    // `$executeRaw` claim (SCRUM-563), not a `carpoolSearch.updateMany`.
+    db.executeRaw.mockImplementationOnce(async () => {
+      throw new Error("connection lost");
+    });
 
     await expect(
       caller.user.groups.create({ driverId: DRIVER, riderId: RIDER_1 }),
@@ -1690,9 +1697,12 @@ describe("group mutations are atomic", () => {
     const { caller } = callerFor(sessionFor(DRIVER), db);
     const seatsBefore = db.seatsOf(DRIVER)!;
 
-    // #1 is the reservation, #2 links the rider — so fail #2, with the seat
-    // already taken.
-    failOnCall(db.carpoolSearch.updateMany, 2);
+    // The seat reservation (`updateMany`) already went through by the time
+    // the rider link - the raw `$executeRaw` claim, SCRUM-563 - runs, so
+    // this fails with the seat already taken.
+    db.executeRaw.mockImplementationOnce(async () => {
+      throw new Error("connection lost");
+    });
 
     await expect(
       caller.user.groups.edit({
@@ -2758,22 +2768,12 @@ describe("the rider slot holds a rider", () => {
  * `user.edit` moving this same rider to DRIVER can still commit in between,
  * which the mock cannot model (see `groupRoleRace.db.test.ts` for the real
  * one). What it can model is the linking write losing that race: SCRUM-563
- * re-checks `role` and `carpoolId` in the `updateMany`'s WHERE rather than
- * trusting the earlier read, so forcing that call to match nothing is
- * exactly what the real compare-and-swap does when `user.edit` won.
+ * re-checks `role` and `carpoolId` in the raw `$executeRaw` claim's WHERE
+ * rather than trusting the earlier read, so forcing that call to match
+ * nothing is exactly what the real compare-and-swap does when `user.edit`
+ * won.
  */
 describe("the rider slot is re-checked at write time, not just at read time (SCRUM-563)", () => {
-  /** Fails the nth `updateMany` call with a lost compare-and-swap, not an error. */
-  const loseTheRaceOnCall = (mock: jest.Mock, callNumber: number) => {
-    const real = mock.getMockImplementation()!;
-    let calls = 0;
-    mock.mockImplementation(async (args: any) => {
-      calls += 1;
-      if (calls === callNumber) return { count: 0 };
-      return real(args);
-    });
-  };
-
   it("create throws CONFLICT and rolls back the seat and group", async () => {
     const db = buildGroupsDb({
       searches: [
@@ -2797,9 +2797,9 @@ describe("the rider slot is re-checked at write time, not just at read time (SCR
     });
     const { caller } = callerFor(sessionFor(DRIVER), db);
 
-    // #1 reserves the seat, #2 links the driver, #3 links the rider - the
-    // call a concurrent `user.edit` would have raced.
-    loseTheRaceOnCall(db.carpoolSearch.updateMany, 3);
+    // The rider link - the call a concurrent `user.edit` would have raced -
+    // loses the compare-and-swap.
+    db.executeRaw.mockImplementationOnce(async () => 0);
 
     await expect(
       caller.user.groups.create({ driverId: DRIVER, riderId: RIDER_1 }),
@@ -2821,8 +2821,9 @@ describe("the rider slot is re-checked at write time, not just at read time (SCR
     const { caller } = callerFor(sessionFor(DRIVER), db);
     const seatsBefore = db.seatsOf(DRIVER)!;
 
-    // #1 reserves the seat, #2 links the rider.
-    loseTheRaceOnCall(db.carpoolSearch.updateMany, 2);
+    // The seat reservation goes through; the rider link's compare-and-swap
+    // then loses the race.
+    db.executeRaw.mockImplementationOnce(async () => 0);
 
     await expect(
       caller.user.groups.edit({

@@ -711,27 +711,31 @@ const buildEditDb = (
         );
         return row;
       }),
-      // The role-change branch's compare-and-swap (SCRUM-563): `where` can
-      // carry `carpoolId` alongside `id`, and a real `updateMany` matches
-      // only rows where every clause holds, so a stale `carpoolId` has to
-      // make this find nothing rather than writing anyway.
-      updateMany: jest.fn(async ({ where, data }: any) => {
-        const matching = searches.filter(
-          (s) =>
-            (where.id === undefined || s.id === where.id) &&
-            (!("carpoolId" in where) || s.carpoolId === where.carpoolId),
-        );
-        for (const row of matching) {
-          Object.assign(row, data);
-        }
-        return { count: matching.length };
-      }),
       create: jest.fn(async ({ data }: any) => {
         const row = { id: `search-created-${++created}`, ...data };
         searches.push(row);
         return row;
       }),
     },
+    // The role-change branch's compare-and-swap (SCRUM-563). This is a raw
+    // `UPDATE`, not `tx.carpoolSearch.updateMany` - `updateMany`'s WHERE was
+    // verified against a real MySQL to match this transaction's own
+    // snapshot rather than the current row on this Prisma version, so it did
+    // not actually close the race. `$executeRaw` is a template-tag call:
+    // `values` holds the interpolated `role` and `id`, in that order, from
+    // `UPDATE carpool_search SET role = ${input.role} WHERE id =
+    // ${existingSearch.id} AND carpoolId IS NULL`.
+    $executeRaw: jest.fn(async (_strings: unknown, ...values: unknown[]) => {
+      const [role, id] = values;
+      const row = searches.find((s) => s.id === id);
+      // Falsy, not strictly `=== null`, matching the same convention the
+      // FORBIDDEN guard above this uses for "not in a group".
+      if (!row || row.carpoolId) {
+        return 0;
+      }
+      row.role = role as Role;
+      return 1;
+    }),
   };
 
   // `user.edit` commits the user row, both Locations and the CarpoolSearch as
@@ -1191,7 +1195,7 @@ describe("user.edit — a schedule time can be cleared", () => {
    * is what `update` receives.
    *
    * `role` has to match what each test then submits: SCRUM-563 routes a role
-   * *change* through a separate compare-and-swap `updateMany`, which would
+   * *change* through a separate raw-SQL compare-and-swap claim, which would
    * make `dataFor` below read from the wrong mock and every assertion here
    * about nothing at all.
    */
@@ -2174,10 +2178,14 @@ describe("user.edit — a grouped user's seat count is left alone", () => {
  * before linking a rider into a group, but only against a read taken inside
  * their *own* transaction — a snapshot under MySQL REPEATABLE READ, so it can
  * still say RIDER after this save already committed DRIVER. The mock cannot
- * model the isolation level itself (see `user.db.test.ts` for the real one),
- * but it can model the write losing the race by having `updateMany` find
- * nothing, exactly as the real compare-and-swap does when the group side has
- * already moved `carpoolId`.
+ * model the isolation level itself (see `groupRoleRace.db.test.ts` for the
+ * real one), but it can model the write losing the race by having the raw
+ * `$executeRaw` claim find nothing, exactly as the real compare-and-swap does
+ * when the group side has already moved `carpoolId`. It is `$executeRaw`
+ * rather than `tx.carpoolSearch.updateMany` because `updateMany`'s WHERE
+ * turned out, against a real MySQL, to match this transaction's own
+ * snapshot on this Prisma version instead of the current row — see the
+ * comment on the guard itself in `user.ts`.
  */
 describe("user.edit — a role change re-checks carpoolId at write time (SCRUM-563)", () => {
   const ridingLocations = (): LocationRow[] => [
@@ -2217,9 +2225,7 @@ describe("user.edit — a role change re-checks carpoolId at write time (SCRUM-5
     // Stands in for `groups.create` linking this same rider into a group
     // between this transaction's read of `existingSearch` and its write.
     const db = riderWithNoGroup();
-    db.prisma.carpoolSearch.updateMany.mockImplementationOnce(async () => ({
-      count: 0,
-    }));
+    db.prisma.$executeRaw.mockImplementationOnce(async () => 0);
 
     await expect(
       editCallerFor(SESSION_USER, db).user.edit(
@@ -2251,7 +2257,7 @@ describe("user.edit — a role change re-checks carpoolId at write time (SCRUM-5
   it("does not take the compare-and-swap path when the role is unchanged", async () => {
     // Only a role change needs the extra check. Every other column on this
     // row is exclusively this user's to write, so routing an ordinary save
-    // through `updateMany` as well would just be a chance for it to be
+    // through the raw claim as well would just be a chance for it to be
     // refused by a concurrent write to some other field.
     const db = riderWithNoGroup();
 
@@ -2259,7 +2265,7 @@ describe("user.edit — a role change re-checks carpoolId at write time (SCRUM-5
       editInput({ role: Role.RIDER, seatAvail: 0 }),
     );
 
-    expect(db.prisma.carpoolSearch.updateMany).not.toHaveBeenCalled();
+    expect(db.prisma.$executeRaw).not.toHaveBeenCalled();
     expect(db.prisma.carpoolSearch.update).toHaveBeenCalled();
     expect(db.searchFor(SESSION_USER)).toMatchObject({ role: Role.RIDER });
   });

@@ -479,29 +479,41 @@ export const userRouter = router({
           // already committed DRIVER. SCRUM-557 keeps a stray DRIVER-in-group
           // out of the ordinary path; this closes the concurrent one.
           //
-          // `updateMany`'s WHERE performs a current read in InnoDB rather
-          // than reading the snapshot, so this is a compare-and-swap on
-          // `carpoolId`: it only writes the role change if the row's
-          // `carpoolId` still matches what this transaction saw when it read
-          // `existingSearch` above. If a concurrent accept moved it in
-          // between, `count` comes back 0 and the throw below rolls back the
-          // whole transaction, including the `user.update` — leaving the
-          // caller to reload and decide again with current data, rather than
-          // silently landing a DRIVER inside the group the accept just built.
+          // This has to be a raw `UPDATE`, not `tx.carpoolSearch.updateMany`.
+          // The obvious Prisma-idiomatic compare-and-swap is `updateMany`'s
+          // WHERE re-checking `carpoolId` - the same shape `reserveSeat` in
+          // `groups.ts` uses for seats - but verified against a real MySQL
+          // (a throwaway container, forcing the exact interleaving): on this
+          // Prisma version, `updateMany`'s WHERE matched against this
+          // transaction's own REPEATABLE READ snapshot instead of the
+          // current committed row, so it happily "won" a race it should have
+          // lost. A raw `UPDATE ... WHERE ...` does not have that problem -
+          // InnoDB gives it a current read - which the same throwaway
+          // database confirmed. `reserveSeat`'s use of `updateMany` is
+          // believed to have the identical defect; see SCRUM-563's ticket
+          // discussion for why fixing that is out of this ticket's scope.
           //
-          // Scoped to role changes only: every other field on this row is
-          // exclusively this user's to write, so there is nothing for a
-          // plain `update` to race there.
+          // Reachable only with `existingSearch.carpoolId === null`: the
+          // FORBIDDEN guard above already threw if it was truthy and the
+          // role is changing, so the WHERE below hardcodes `IS NULL` rather
+          // than parameterizing a value that can only ever be null here.
+          //
+          // Written as a single-column claim rather than the full
+          // `carpoolSearchData`, so the raw SQL does not have to be kept in
+          // sync with every field this procedure writes. Once the claim
+          // succeeds, this transaction holds the row's lock until commit, so
+          // the ordinary `update` that follows cannot be raced - anyone
+          // still competing for `carpoolId` blocks on that lock and then
+          // loses their own compare-and-swap against the row this just
+          // committed.
           if (input.role !== existingSearch.role) {
-            const roleChangeApplied = await tx.carpoolSearch.updateMany({
-              where: {
-                id: existingSearch.id,
-                carpoolId: existingSearch.carpoolId,
-              },
-              data: carpoolSearchData,
-            });
+            const claimed = await tx.$executeRaw`
+              UPDATE carpool_search
+              SET role = ${input.role}
+              WHERE id = ${existingSearch.id} AND carpoolId IS NULL
+            `;
 
-            if (roleChangeApplied.count === 0) {
+            if (claimed === 0) {
               throw new TRPCError({
                 code: "CONFLICT",
                 message:
@@ -509,12 +521,12 @@ export const userRouter = router({
                   "was in progress. Reload your profile and try again.",
               });
             }
-          } else {
-            await tx.carpoolSearch.update({
-              where: { id: existingSearch.id },
-              data: carpoolSearchData,
-            });
           }
+
+          await tx.carpoolSearch.update({
+            where: { id: existingSearch.id },
+            data: carpoolSearchData,
+          });
         } else {
           await tx.carpoolSearch.create({
             data: {
