@@ -546,11 +546,28 @@ export const groupsRouter = router({
           data: { carpoolId: group.id },
         });
 
-        // update rider's CarpoolSearch
-        await tx.carpoolSearch.updateMany({
-          where: { userId: input.riderId },
-          data: { carpoolId: group.id },
-        });
+        // Re-checks role and membership against the current row rather than
+        // trusting `riderSearch` above, which is this transaction's snapshot
+        // and can be stale by now: a concurrent `user.edit` can flip this
+        // same rider to DRIVER between that read and this write (SCRUM-563).
+        //
+        // A raw `UPDATE`, not `tx.carpoolSearch.updateMany` - see the long
+        // comment on the equivalent guard in `user.ts`'s `saveProfile` for
+        // why: verified against a real MySQL, `updateMany`'s WHERE matched
+        // this transaction's own snapshot on this Prisma version rather than
+        // the current committed row, so it did not actually close the race.
+        const riderLinked = await tx.$executeRaw`
+          UPDATE carpool_search
+          SET carpoolId = ${group.id}
+          WHERE userId = ${input.riderId} AND role = ${Role.RIDER} AND carpoolId IS NULL
+        `;
+
+        if (riderLinked === 0) {
+          throw membershipConflict(
+            "That rider's role or group membership changed while this " +
+              "request was being accepted. Ask them to send a new request.",
+          );
+        }
 
         await markRequestAccepted(tx, input.driverId, input.riderId);
 
@@ -819,11 +836,25 @@ export const groupsRouter = router({
           // that could do neither reliably.
           await reserveSeat(tx, input.driverId);
 
-          // when adding rider, set carpoolId for the rider
-          await tx.carpoolSearch.updateMany({
-            where: { userId: input.riderId },
-            data: { carpoolId: input.groupId },
-          });
+          // Re-checks role and membership against the current row rather
+          // than trusting `riderSearch` above, for the same reason as
+          // `create`: this transaction's snapshot of it can be stale by now,
+          // because a concurrent `user.edit` can flip this rider to DRIVER
+          // in between (SCRUM-563). A raw `UPDATE`, not
+          // `tx.carpoolSearch.updateMany` - see the comment on `create`'s
+          // equivalent guard above.
+          const riderLinked = await tx.$executeRaw`
+            UPDATE carpool_search
+            SET carpoolId = ${input.groupId}
+            WHERE userId = ${input.riderId} AND role = ${Role.RIDER} AND carpoolId IS NULL
+          `;
+
+          if (riderLinked === 0) {
+            throw membershipConflict(
+              "That rider's role or group membership changed while this " +
+                "request was being accepted. Ask them to send a new request.",
+            );
+          }
 
           await markRequestAccepted(tx, input.driverId, input.riderId);
         } else {
