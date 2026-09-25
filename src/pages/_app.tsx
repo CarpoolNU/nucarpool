@@ -23,6 +23,7 @@ import { SessionProvider } from "next-auth/react";
 import Head from "next/head";
 import { trpc } from "../utils/trpc";
 import { ComplianceGate } from "../components/ComplianceGate";
+import { MixpanelIdentity } from "../components/MixpanelIdentity";
 
 export function MyApp({
   Component,
@@ -55,6 +56,12 @@ export function MyApp({
       </Head>
       <SessionProvider session={session} refetchOnWindowFocus={false}>
         <Component {...pageProps} />
+        {/* Renders nothing; mounted here because analytics identity belongs to
+            the session rather than to any one page. Every event the app emits
+            was anonymous before this, so the referrer and UTM properties
+            Mixpanel already collects could not be joined to a signup. It has
+            to sit inside `SessionProvider` to read the session at all. */}
+        <MixpanelIdentity />
         {/* One gate for the whole app, so a signed-in user who has not accepted
             the terms is shown them on whichever page they land on. */}
         <ComplianceGate />

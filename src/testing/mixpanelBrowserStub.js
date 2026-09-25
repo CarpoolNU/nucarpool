@@ -33,9 +33,15 @@
  * `trackX is not a function`, which reads like a broken component.
  *
  * Stubbing `mixpanel-browser` instead lets `utils/mixpanel` load *for real*.
- * Its exports cannot drift from themselves, and the surface pinned here is two
- * methods of a third-party contract rather than six of ours. `init` and
- * `track` are all that module uses.
+ * Its exports cannot drift from themselves, and the surface pinned here is
+ * four methods of a third-party contract rather than eight of ours. `init`,
+ * `track`, `identify` and `reset` are all that module uses.
+ *
+ * `identify` and `reset` arrived with the analytics identity work: `_app`
+ * mounts `MixpanelIdentity` app-wide, so *every* component test that renders a
+ * page tree now reaches them. Omitting one is the failure this file's shape is
+ * meant to prevent, and it would surface as `mixpanel.identify is not a
+ * function` from inside an effect rather than as anything resembling its cause.
  *
  * Plain no-ops rather than `jest.fn()`, deliberately: this module is required
  * once per suite and `clearMocks` is not configured, so shared spies would
@@ -51,4 +57,6 @@
 module.exports = {
   init: () => undefined,
   track: () => undefined,
+  identify: () => undefined,
+  reset: () => undefined,
 };
