@@ -230,6 +230,7 @@ const request: PrismaRequest = {
   toUserId: "user-1",
   conversationId: "conversation-1",
   dateCreated: new Date("2026-02-01T00:00:00.000Z"),
+  notificationPendingSince: null,
 };
 
 /** No group write of either shape reached the server. */
@@ -510,12 +511,13 @@ describe("handleRejectRequest", () => {
    */
   it("says the request was withdrawn when the caller is the sender", async () => {
     const { handleRejectRequest } = handlers();
-
-    await handleRejectRequest(user(), otherUser(), {
+    const sentByCaller: PrismaRequest = {
       ...request,
       fromUserId: "user-1",
       toUserId: "user-2",
-    });
+    };
+
+    await handleRejectRequest(user(), otherUser(), sentByCaller);
 
     expect(mockToastSuccess).toHaveBeenCalledWith(
       "Your carpool request to Robin has been withdrawn.",

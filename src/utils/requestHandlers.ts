@@ -1,5 +1,14 @@
 import { User, EnhancedPublicUser } from "../utils/types";
 import { Request, Role } from "@prisma/client";
+
+/**
+ * The two request fields the handlers read. The parameters are typed as this
+ * rather than as the whole Prisma row, because callers hold what
+ * `user.requests.me` returns, typed by `utils/types.ts`, not a database row.
+ * The two stopped matching when the row gained a column that type does not
+ * declare (SCRUM-559).
+ */
+type RequestRef = Pick<Request, "id" | "fromUserId">;
 import { trpc } from "./trpc";
 import { toast } from "react-toastify/unstyled";
 import { requestUnavailableExplanation } from "./roleCompatibility";
@@ -17,12 +26,12 @@ interface RequestHandlers {
   handleAcceptRequest: (
     user: User,
     otherUser: EnhancedPublicUser,
-    request: Request,
+    request: RequestRef,
   ) => Promise<boolean>;
   handleRejectRequest: (
     user: User,
     otherUser: EnhancedPublicUser,
-    request: Request,
+    request: RequestRef,
   ) => Promise<void>;
   /**
    * True while any of the three mutations is in flight, so the buttons that
@@ -214,7 +223,7 @@ export const createRequestHandlers = (
   const handleAcceptRequest = async (
     user: User,
     otherUser: EnhancedPublicUser,
-    request: Request,
+    request: RequestRef,
   ) => {
     if (!validateRequestAcceptance(user, otherUser)) {
       return false;
@@ -245,7 +254,7 @@ export const createRequestHandlers = (
   const handleRejectRequest = async (
     user: User,
     otherUser: EnhancedPublicUser,
-    request: Request,
+    request: RequestRef,
   ) => {
     try {
       await handleDelete(request.id);
