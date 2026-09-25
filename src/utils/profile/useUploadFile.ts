@@ -11,8 +11,9 @@ export const useUploadFile = (selectedFile: File | null) => {
   const invalidateProfileImage = useInvalidateProfileImage();
   const uploadable = !!selectedFile && isUploadableProfileImage(selectedFile);
   // The server is not otherwise told the PUT happened - the client uploads
-  // straight to S3 - so this is what records the picture's existence and lets
-  // `getPresignedDownloadUrl` skip its S3 HeadObject.
+  // straight to S3 - so this is what records the picture's existence. It is
+  // the only record: `getPresignedDownloadUrl` never asks S3, so a picture
+  // whose upload is not recorded here is never shown.
   const { mutateAsync: recordUpload } =
     trpc.user.recordProfilePictureUpload.useMutation();
 

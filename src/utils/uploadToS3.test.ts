@@ -1,18 +1,13 @@
 /**
- * Tests for `getPresignedImageUrl`.
+ * Tests for `signProfileImageUrl`, the whole server-side cost of rendering an
+ * avatar.
  *
- * This helper is the entire server-side cost of rendering an avatar. Signing a
- * URL is a local HMAC and makes no network call, so the `HeadObject` it issues
- * first is the only AWS request involved — and a 404 from it is the *normal*
- * result for every user who has never uploaded a picture.
- *
- * Two things are pinned here:
- *
- *   1. A missing object resolves to `null` and is not logged as an error. It
- *      used to emit a `console.error` per avatar per page view.
- *   2. A genuine S3 failure still resolves to `null` — so the UI keeps showing
- *      its fallback icon rather than breaking — but *is* logged, because that
- *      one is worth seeing.
+ * The acceptance criterion SCRUM-366 turns on is "zero S3 API calls", and this
+ * is where it is assertable: the S3 client's `send` is the only way this module
+ * could reach AWS, so an avatar signed without calling it made no request.
+ * Signing a URL is a local HMAC. It used to be preceded by a `HeadObject`
+ * asking S3 whether the object existed; `User.profilePictureUpdatedAt` answers
+ * that now, and `getPresignedDownloadUrl` calls this only when it is set.
  *
  * The AWS SDK is mocked; nothing here touches S3 or consumes quota.
  */
@@ -22,9 +17,6 @@ const mockGetSignedUrl = jest.fn();
 
 jest.mock("@aws-sdk/client-s3", () => ({
   S3Client: jest.fn().mockImplementation(() => ({ send: mockSend })),
-  HeadObjectCommand: jest
-    .fn()
-    .mockImplementation((input) => ({ command: "HeadObject", input })),
   GetObjectCommand: jest
     .fn()
     .mockImplementation((input) => ({ command: "GetObject", input })),
@@ -57,10 +49,10 @@ jest.mock("./env/browser", () => ({
   },
 }));
 
-import { GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
 import {
   PRESIGNED_DOWNLOAD_EXPIRY_SECONDS,
-  getPresignedImageUrl,
+  signProfileImageUrl,
 } from "./uploadToS3";
 import {
   PRESIGNED_URL_CACHE_TIME_MS,
@@ -80,13 +72,6 @@ const BUCKET = serverEnv.S3_BUCKET_NAME;
 const USER_ID = "user-with-a-picture";
 const SIGNED = "https://carpoolnubucket.s3.us-east-2.amazonaws.com/x?sig=abc";
 
-/** How the AWS SDK v3 reports a HeadObject against a key that is not there. */
-const notFound = () =>
-  Object.assign(new Error("NotFound"), {
-    name: "NotFound",
-    $metadata: { httpStatusCode: 404 },
-  });
-
 let errorSpy: jest.SpyInstance;
 
 beforeEach(() => {
@@ -98,68 +83,38 @@ afterEach(() => {
   errorSpy.mockRestore();
 });
 
-describe("getPresignedImageUrl", () => {
-  it("returns a signed URL when the object exists", async () => {
-    mockSend.mockResolvedValueOnce({});
+describe("signProfileImageUrl", () => {
+  it("signs a GET for the user's key without any S3 request", async () => {
     mockGetSignedUrl.mockResolvedValueOnce(SIGNED);
 
-    await expect(getPresignedImageUrl(USER_ID)).resolves.toBe(SIGNED);
+    await expect(signProfileImageUrl(USER_ID)).resolves.toBe(SIGNED);
 
-    expect(HeadObjectCommand).toHaveBeenCalledWith({
-      Bucket: BUCKET,
-      Key: `profile-pictures/${DEPLOY_ENV}/${USER_ID}`,
-    });
     expect(GetObjectCommand).toHaveBeenCalledWith({
       Bucket: BUCKET,
       Key: `profile-pictures/${DEPLOY_ENV}/${USER_ID}`,
     });
+    // The acceptance criterion, stated as an absence.
+    expect(mockSend).not.toHaveBeenCalled();
     expect(errorSpy).not.toHaveBeenCalled();
   });
 
   it("signs for the declared expiry", async () => {
-    mockSend.mockResolvedValueOnce({});
     mockGetSignedUrl.mockResolvedValueOnce(SIGNED);
 
-    await getPresignedImageUrl(USER_ID);
+    await signProfileImageUrl(USER_ID);
 
     const [, , options] = mockGetSignedUrl.mock.calls[0];
     expect(options.expiresIn).toBe(PRESIGNED_DOWNLOAD_EXPIRY_SECONDS);
   });
 
-  it("returns null without logging when the user has no picture", async () => {
-    mockSend.mockRejectedValueOnce(notFound());
-
-    await expect(
-      getPresignedImageUrl("user-with-no-picture"),
-    ).resolves.toBeNull();
-
-    // The common case. Logging it turned every avatar into console noise.
-    expect(errorSpy).not.toHaveBeenCalled();
-    // No point signing a URL for an object that is not there.
-    expect(mockGetSignedUrl).not.toHaveBeenCalled();
-  });
-
-  it("returns null and logs when S3 fails for any other reason", async () => {
-    mockSend.mockRejectedValueOnce(
-      Object.assign(new Error("AccessDenied"), {
-        name: "AccessDenied",
-        $metadata: { httpStatusCode: 403 },
-      }),
-    );
-
-    await expect(getPresignedImageUrl(USER_ID)).resolves.toBeNull();
-
-    // Broken credentials look like this, and silently showing everyone the
-    // fallback icon is exactly the failure mode worth a log line.
-    expect(errorSpy).toHaveBeenCalledTimes(1);
-  });
-
   it("returns null and logs when signing itself fails", async () => {
-    mockSend.mockResolvedValueOnce({});
+    // Misconfigured credentials, not a missing picture. The UI shows the same
+    // fallback icon either way, which is why the log line is the only signal.
     mockGetSignedUrl.mockRejectedValueOnce(new Error("signing blew up"));
 
-    await expect(getPresignedImageUrl(USER_ID)).resolves.toBeNull();
+    await expect(signProfileImageUrl(USER_ID)).resolves.toBeNull();
     expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(mockSend).not.toHaveBeenCalled();
   });
 });
 

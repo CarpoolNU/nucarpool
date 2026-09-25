@@ -6,7 +6,7 @@ import useIsHydrated from "./useIsHydrated";
  * How long a presigned download URL may be served from the React Query cache
  * before it is refetched.
  *
- * getPresignedImageUrl signs for 3600s, so a 15 minute staleTime guarantees
+ * signProfileImageUrl signs for 3600s, so a 15 minute staleTime guarantees
  * every URL handed to <Image> has at least 45 minutes of validity left, even
  * for the last consumer to read it out of the cache. gcTime - what react-query
  * v4 called cacheTime - is longer, so a URL survives a brief period with no

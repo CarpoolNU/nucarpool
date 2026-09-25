@@ -201,10 +201,10 @@ model User {
   // A timestamp rather than a boolean: it also records when the
   // picture last changed, and can serve as a cache-busting key later.
   //
-  // **Null still means "ask S3"**, not "no picture", until
-  // `scripts/backfill-profile-picture-timestamps.ts` has run everywhere -- every
-  // row predating this column is null while the object may well exist. See
-  // `resolveImageLookup`.
+  // It is the only record that a picture exists: null means "no picture", and
+  // the download path signs nothing for it. Rows predating the column were
+  // filled from S3 `LastModified` by a one-off backfill before that became true
+  // (SCRUM-366).
   profilePictureUpdatedAt DateTime?       @map("profile_picture_updated_at")
   favoritedBy             User[]          @relation("Favorites")
   favorites               User[]          @relation("Favorites")
