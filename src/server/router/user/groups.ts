@@ -5,11 +5,7 @@ import _ from "lodash";
 import { Role, RequestStatus, Status } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import { convertCarpoolSearchToPublicWithExactHome } from "../../publicUser";
-import {
-  NO_SEATS_MESSAGE,
-  SEAT_AVAILABLE_FILTER,
-  clampSeats,
-} from "../../../utils/carpoolSeats";
+import { NO_SEATS_MESSAGE, clampSeats } from "../../../utils/carpoolSeats";
 import {
   GROUP_NOTES_MAX_LENGTH,
   GROUP_OPTION_MAX_LENGTH,
@@ -58,7 +54,10 @@ import { assertNotBlocked } from "../../db/blocks";
  */
 
 /** Just the Prisma surface these helpers touch, so they are easy to test. */
-type PrismaClientLike = Pick<PrismaClient, "carpoolSearch" | "request">;
+type PrismaClientLike = Pick<
+  PrismaClient,
+  "carpoolSearch" | "request" | "$executeRaw"
+>;
 
 const forbidden = (message: string) =>
   new TRPCError({ code: "FORBIDDEN", message });
@@ -254,25 +253,34 @@ const markRequestAccepted = async (
 /**
  * Takes one seat from the driver, atomically.
  *
- * `SEAT_AVAILABLE_FILTER` in the filter makes this a compare-and-swap: the
- * database decrements only if a seat is actually free, and `count` tells us
- * whether it did. The old shape — read the row, compare in JS, then decrement —
- * could not go below zero only by luck of timing, and `create` skipped the
- * comparison entirely, so the first rider added to a full driver left
- * `seatsAvail` at -1. Two riders accepting at the same instant could do the
- * same even where the check existed.
+ * A raw `UPDATE`, not `carpoolSearch.updateMany` - the same defect SCRUM-563
+ * found and fixed for the rider-linking compare-and-swaps below, and this one
+ * uses the identical primitive. Verified against a real MySQL there:
+ * `updateMany`'s `WHERE` matched a concurrent transaction's own REPEATABLE
+ * READ snapshot rather than the row's current committed state, so two riders
+ * accepted at the same instant could both see a seat free and both decrement
+ * (SCRUM-565) - the exact failure this function's old doc comment claimed it
+ * prevented. The old JS read-compare-decrement shape this replaced had the
+ * same hole for the same reason, just without a name for it yet.
  *
- * The filter is imported rather than spelled `{ gt: 0 }` here so that this and
- * the candidate query cannot drift apart again. They already had: this side
- * refused a negative count while the read path advertised it.
+ * `> 0` has to keep meaning what `SEAT_AVAILABLE_FILTER` (`{ gt: 0 }`, in
+ * `carpoolSeats.ts`) means, the same way that filter already has to agree
+ * with `hasSeatAvailable` - there is no Prisma filter object left to import
+ * once the query is raw SQL, so this is the one site that predicate has to be
+ * re-stated rather than shared.
+ *
+ * `seats_avail`, not `seatsAvail`: raw SQL bypasses Prisma's field mapping, and
+ * this column has one (`@map("seats_avail")`) where `userId` and `carpoolId`
+ * on the sibling raw queries below do not.
  */
 const reserveSeat = async (prisma: PrismaClientLike, driverUserId: string) => {
-  const reserved = await prisma.carpoolSearch.updateMany({
-    where: { userId: driverUserId, seatsAvail: SEAT_AVAILABLE_FILTER },
-    data: { seatsAvail: { decrement: 1 } },
-  });
+  const reserved = await prisma.$executeRaw`
+    UPDATE carpool_search
+    SET seats_avail = seats_avail - 1
+    WHERE userId = ${driverUserId} AND seats_avail > 0
+  `;
 
-  if (reserved.count === 0) {
+  if (reserved === 0) {
     throw new TRPCError({ code: "BAD_REQUEST", message: NO_SEATS_MESSAGE });
   }
 };
