@@ -95,7 +95,19 @@ const membershipOf = async (
     select: { id: true, role: true, status: true },
   });
 
-/** Throws unless the caller is the DRIVER of `groupId`. */
+/**
+ * Throws unless the caller is the DRIVER of `groupId`.
+ *
+ * This reads the caller's own role and nothing else, which is sound only while
+ * a group can hold one DRIVER. Nothing else can say which of two is the real
+ * one, because `CarpoolGroup` stores no owner. Two things keep it at one:
+ * `create` and `edit` refuse anyone but a RIDER in the rider slot, and
+ * `user.edit` - the only procedure that writes `role` - refuses every role
+ * change while the caller is in a group. That second guard used to cover only
+ * a driver leaving the role, so a grouped rider could promote themselves and
+ * pass this check (SCRUM-557). A new path that writes `role` has to keep the
+ * same rule, or this check stops meaning anything.
+ */
 const requireGroupDriver = async (
   prisma: PrismaClientLike,
   callerId: string,

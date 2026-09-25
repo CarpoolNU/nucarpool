@@ -11,6 +11,9 @@ import dayjs from "dayjs";
 import utcPlugin from "dayjs/plugin/utc";
 import timezonePlugin from "dayjs/plugin/timezone";
 import {
+  DAYS_WORKING_INVALID_MESSAGE,
+  DAYS_WORKING_REQUIRED_MESSAGE,
+  SCHEDULE_TIME_INVALID_MESSAGE,
   SCHEDULE_TIMEZONE,
   toStoredScheduleTime,
 } from "../../utils/scheduleTime";
@@ -634,6 +637,8 @@ type SearchRow = {
   /** Only the group guard reads these. */
   role?: Role;
   carpoolId?: string | null;
+  /** Left alone for a grouped caller, which the seat tests assert. */
+  seatsAvail?: number;
   /** Written by `user.edit`, and asserted on by the schedule-time tests. */
   startTime?: Date | null;
   endTime?: Date | null;
@@ -696,7 +701,14 @@ const buildEditDb = (
         if (!row) {
           throw new Error(`No carpoolSearch matching where.id=${where.id}`);
         }
-        Object.assign(row, data);
+        // `undefined` in an `update` is Prisma's "omit this field", so it
+        // leaves the stored value alone rather than overwriting it.
+        Object.assign(
+          row,
+          Object.fromEntries(
+            Object.entries(data).filter(([, value]) => value !== undefined),
+          ),
+        );
         return row;
       }),
       create: jest.fn(async ({ data }: any) => {
@@ -1266,6 +1278,87 @@ describe("user.edit — a schedule time can be cleared", () => {
       caller.user.edit(editInput({ role: Role.DRIVER })),
     ).resolves.not.toThrow();
   });
+
+  it.each([
+    ["an empty string", ""],
+    ["an unparseable string", "not a time"],
+  ])(
+    "refuses %s as a time rather than clearing the schedule",
+    async (_label, value) => {
+      // `fromScheduleTimeInput` maps both to `null`, so before SCRUM-557 they
+      // cleared a RIDER's schedule by another route than the explicit null
+      // refused above. Refused for a VIEWER too: neither is a time, and a
+      // VIEWER who means "clear" sends `null`.
+      for (const role of [Role.RIDER, Role.VIEWER]) {
+        for (const field of ["startTime", "endTime"] as const) {
+          const db = withExistingSearch();
+
+          expect(
+            await editIssues(
+              editCallerFor(SESSION_USER, db).user.edit(
+                editInput({ role, [field]: value }),
+              ),
+            ),
+          ).toEqual([
+            { path: [field], message: SCHEDULE_TIME_INVALID_MESSAGE },
+          ]);
+          expect(db.prisma.carpoolSearch.update).not.toHaveBeenCalled();
+        }
+      }
+    },
+  );
+});
+
+/**
+ * `daysWorking` was `z.string()`, so any string was stored and then read as
+ * whatever `split(",")` made of it - the same gap as the schedule times.
+ */
+describe("user.edit — working days are validated", () => {
+  it.each(["", "1,1,1,1,1", "0,1,1,1,1,1,0,1", "0,1,2,1,1,1,0", "yes"])(
+    "refuses the malformed %p, writing nothing",
+    async (daysWorking) => {
+      const db = buildEditDb();
+
+      expect(
+        await editIssues(
+          editCallerFor(SESSION_USER, db).user.edit(
+            editInput({ role: Role.VIEWER, daysWorking }),
+          ),
+        ),
+      ).toEqual([
+        { path: ["daysWorking"], message: DAYS_WORKING_INVALID_MESSAGE },
+      ]);
+      expect(db.prisma.carpoolSearch.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it("refuses a RIDER or DRIVER with no days, in the form's own copy", async () => {
+    for (const role of [Role.RIDER, Role.DRIVER]) {
+      const db = buildEditDb();
+
+      expect(
+        await editIssues(
+          editCallerFor(SESSION_USER, db).user.edit(
+            editInput({ role, daysWorking: "0,0,0,0,0,0,0" }),
+          ),
+        ),
+      ).toEqual([
+        { path: ["daysWorking"], message: DAYS_WORKING_REQUIRED_MESSAGE },
+      ]);
+    }
+  });
+
+  it("lets a VIEWER save with no days, which is what their form sends", async () => {
+    const db = buildEditDb();
+
+    await editCallerFor(SESSION_USER, db).user.edit(
+      editInput({ role: Role.VIEWER, daysWorking: "0,0,0,0,0,0,0" }),
+    );
+
+    expect(db.searchFor(SESSION_USER)).toMatchObject({
+      daysWorking: "0,0,0,0,0,0,0",
+    });
+  });
 });
 
 describe("user.edit — profile text is bounded by its columns", () => {
@@ -1790,8 +1883,13 @@ describe("user.edit is atomic", () => {
  * These tests exist so the next refactor of the profile page cannot silently
  * take the guard with it: the invariant is asserted against the procedure, not
  * against the form.
+ *
+ * The rider direction is the other half (SCRUM-557). The guard used to fire
+ * only for a driver leaving the role, so a grouped rider could make themselves
+ * DRIVER, pass `requireGroupDriver`, and dissolve the group or evict its real
+ * driver. Any role change while grouped is refused now.
  */
-describe("user.edit — a driver in a group cannot change role", () => {
+describe("user.edit — nobody in a group can change role", () => {
   const GROUP = "group-1";
 
   /**
@@ -1905,6 +2003,139 @@ describe("user.edit — a driver in a group cannot change role", () => {
     );
 
     expect(db.searchFor(SESSION_USER)).toMatchObject({ role: Role.RIDER });
+  });
+
+  it.each([Role.DRIVER, Role.VIEWER])(
+    "refuses a rider in a group switching to %s, and writes nothing",
+    async (role) => {
+      // DRIVER is the escalation SCRUM-557 closes: the promoted rider would
+      // pass `requireGroupDriver`. VIEWER is refused on purpose - a viewer in
+      // a group is not a coherent member, and Leave Group is always open to a
+      // rider.
+      const db = callerWith(Role.RIDER, GROUP);
+
+      await expect(
+        editCallerFor(SESSION_USER, db).user.edit(
+          editInput({ role, seatAvail: 3, bio: "Driving now" }),
+        ),
+      ).rejects.toMatchObject({
+        code: "FORBIDDEN",
+        message:
+          "You are in a carpool group. Leave the group before changing your role.",
+      });
+
+      expect(db.searchFor(SESSION_USER)).toMatchObject({
+        role: Role.RIDER,
+        carpoolId: GROUP,
+      });
+      // Refused before the search is written at all, so neither the role nor
+      // the seat count the request carried reached it.
+      expect(db.prisma.carpoolSearch.update).not.toHaveBeenCalled();
+    },
+  );
+
+  it("names the driver's way out when it is the driver who is refused", async () => {
+    const db = driverInGroup();
+
+    await expect(
+      editCallerFor(SESSION_USER, db).user.edit(
+        editInput({ role: Role.RIDER, seatAvail: 0 }),
+      ),
+    ).rejects.toMatchObject({
+      message:
+        "You are the driver of a carpool group. Leave or dissolve the group before changing your role.",
+    });
+  });
+
+  it("allows a rider with no group to become a driver", async () => {
+    // The ungrouped half of the regression: the guard is about the group, so
+    // a rider who has left one - or never joined - changes role freely.
+    const db = callerWith(Role.RIDER, null);
+
+    await editCallerFor(SESSION_USER, db).user.edit(
+      editInput({ role: Role.DRIVER, seatAvail: 2 }),
+    );
+
+    expect(db.searchFor(SESSION_USER)).toMatchObject({
+      role: Role.DRIVER,
+      seatsAvail: 2,
+    });
+  });
+});
+
+/**
+ * A grouped driver's profile save cannot hand back a seat a rider has taken.
+ *
+ * `seatsAvail` is the *remaining* count once a group exists, moved by
+ * `reserveSeat` and `releaseSeats`. The profile form sends back whatever it
+ * loaded, so a rider joining after the driver opened the page was undone by the
+ * driver's next save of anything - and the car could then take more riders
+ * than it seats. SCRUM-557.
+ */
+describe("user.edit — a grouped user's seat count is left alone", () => {
+  const withSearch = (role: Role, carpoolId: string | null, seats: number) =>
+    buildEditDb(
+      [
+        {
+          id: "loc-home",
+          street: "Huntington Ave",
+          city: "Boston",
+          state: "Massachusetts",
+          streetAddress: "Huntington Ave, Boston, Massachusetts",
+          coordLng: -71.1,
+          coordLat: 42.31,
+        },
+        {
+          id: "loc-company",
+          street: "Congress St",
+          city: "Boston",
+          state: "Massachusetts",
+          streetAddress: "Congress St, Boston, Massachusetts",
+          coordLng: -71.05,
+          coordLat: 42.36,
+        },
+      ],
+      [
+        {
+          id: "search-mine",
+          userId: SESSION_USER,
+          homeLocationId: "loc-home",
+          companyLocationId: "loc-company",
+          role,
+          carpoolId,
+          seatsAvail: seats,
+        },
+      ],
+    );
+
+  it("keeps the stored count when a stale form sends the old one back", async () => {
+    // The form loaded 3; a rider has since joined and taken one. The driver
+    // saves their bio, and the form's 3 comes along with it.
+    const db = withSearch(Role.DRIVER, "group-1", 2);
+
+    await editCallerFor(SESSION_USER, db).user.edit(
+      editInput({ role: Role.DRIVER, seatAvail: 3, bio: "New bio" }),
+    );
+
+    expect(db.searchFor(SESSION_USER)?.seatsAvail).toBe(2);
+    // Omitted from the write - `undefined` is what Prisma reads as "leave it"
+    // - rather than re-read and written back, which would still race a
+    // concurrent `reserveSeat`.
+    expect(
+      db.prisma.carpoolSearch.update.mock.calls[0][0].data.seatsAvail,
+    ).toBeUndefined();
+  });
+
+  it("still writes the count for a driver with no group", async () => {
+    // Before a group exists the column is the capacity the driver entered,
+    // and editing it is the only way to change it.
+    const db = withSearch(Role.DRIVER, null, 2);
+
+    await editCallerFor(SESSION_USER, db).user.edit(
+      editInput({ role: Role.DRIVER, seatAvail: 4 }),
+    );
+
+    expect(db.searchFor(SESSION_USER)?.seatsAvail).toBe(4);
   });
 });
 

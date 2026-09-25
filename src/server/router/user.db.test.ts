@@ -323,3 +323,189 @@ describe("one CarpoolSearch per user", () => {
     expect(await prisma.location.count()).toBe(2);
   });
 });
+
+/**
+ * A rider cannot take a group away from its driver (SCRUM-557).
+ *
+ * `requireGroupDriver` reads only the caller's own role, because `CarpoolGroup`
+ * stores no owner. That is sound only while a group holds one DRIVER, and
+ * `user.edit` - the one procedure that writes `role` - used to let a grouped
+ * rider make themselves the second. This is the whole escalation run end to
+ * end: the promotion is refused, nothing it carried is written, and the
+ * management actions it was the key to stay closed.
+ */
+describe("a grouped rider cannot promote themselves to driver", () => {
+  const seedGroup = async () => {
+    const { user: driver, search: driverSearch } = await seedDriver();
+
+    const rider = await prisma.user.create({
+      data: {
+        name: "Grace Hopper",
+        email: "grace@northeastern.edu",
+        bio: "Rider bio",
+      },
+    });
+    const riderHome = await prisma.location.create({
+      data: {
+        city: "Cambridge",
+        state: "MA",
+        street: "Main St",
+        streetAddress: "5 Main St",
+        coordLng: -71.09,
+        coordLat: 42.36,
+      },
+    });
+    const riderCompany = await prisma.location.create({
+      data: {
+        city: "Boston",
+        state: "MA",
+        street: "Congress St",
+        streetAddress: "1 Congress St",
+        coordLng: -71.05,
+        coordLat: 42.36,
+      },
+    });
+
+    const group = await prisma.carpoolGroup.create({ data: {} });
+    await prisma.carpoolSearch.update({
+      where: { id: driverSearch.id },
+      // One of the driver's three seats, taken by the rider below.
+      data: { carpoolId: group.id, seatsAvail: 2 },
+    });
+    const riderSearch = await prisma.carpoolSearch.create({
+      data: {
+        userId: rider.id,
+        role: Role.RIDER,
+        status: Status.ACTIVE,
+        companyName: "Acme Robotics",
+        daysWorking: "0,1,1,1,1,1,0",
+        seatsAvail: 0,
+        carpoolId: group.id,
+        homeLocationId: riderHome.id,
+        companyLocationId: riderCompany.id,
+      },
+    });
+
+    return { driver, rider, riderSearch, group };
+  };
+
+  /** The rider's own profile, resubmitted with the role and seats changed. */
+  const promotion = {
+    role: Role.DRIVER,
+    status: Status.ACTIVE,
+    seatAvail: 4,
+    companyName: "Acme Robotics",
+    preferredName: "Grace",
+    pronouns: "",
+    isOnboarded: true,
+    daysWorking: "0,1,1,1,1,1,0",
+    coopStartDate: null,
+    coopEndDate: null,
+    bio: "Driving now",
+    startStreet: "Main St",
+    startCity: "Cambridge",
+    startState: "MA",
+    startAddress: "5 Main St",
+    startCoordLng: -71.09,
+    startCoordLat: 42.36,
+    companyStreet: "Congress St",
+    companyCity: "Boston",
+    companyState: "MA",
+    companyAddress: "1 Congress St",
+    companyCoordLng: -71.05,
+    companyCoordLat: 42.36,
+  };
+
+  it("refuses the promotion and writes none of the save", async () => {
+    const { rider, riderSearch } = await seedGroup();
+
+    await expect(
+      callerFor(rider.id).user.edit(promotion),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(
+      await prisma.carpoolSearch.findUniqueOrThrow({
+        where: { id: riderSearch.id },
+      }),
+    ).toMatchObject({
+      role: Role.RIDER,
+      seatsAvail: 0,
+      carpoolId: riderSearch.carpoolId,
+    });
+    // `user.update` runs ahead of the guard in the same transaction, so this is
+    // MySQL rolling it back - the half the mocked suite cannot show.
+    expect(
+      (await prisma.user.findUniqueOrThrow({ where: { id: rider.id } })).bio,
+    ).toBe("Rider bio");
+  });
+
+  it("leaves one DRIVER in the group, and its management closed to the rider", async () => {
+    const { driver, rider, group } = await seedGroup();
+
+    await callerFor(rider.id)
+      .user.edit(promotion)
+      .catch(() => undefined);
+
+    expect(
+      await prisma.carpoolSearch.count({
+        where: { carpoolId: group.id, role: Role.DRIVER },
+      }),
+    ).toBe(1);
+
+    await expect(
+      callerFor(rider.id).user.groups.delete({ groupId: group.id }),
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      message: "Only the group's driver can perform this action.",
+    });
+    await expect(
+      callerFor(rider.id).user.groups.edit({
+        driverId: driver.id,
+        riderId: driver.id,
+        groupId: group.id,
+        add: false,
+      }),
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      message: "Only the group's driver can remove another member.",
+    });
+
+    expect(
+      await prisma.carpoolGroup.findUnique({ where: { id: group.id } }),
+    ).not.toBeNull();
+    expect(
+      await prisma.carpoolSearch.count({ where: { carpoolId: group.id } }),
+    ).toBe(2);
+  });
+
+  it("does not let the driver's own save hand the rider's seat back", async () => {
+    // The ticket's item 3, against the real column: the driver's form loaded
+    // before the rider joined, so it still says 3.
+    const { driver } = await seedGroup();
+
+    await callerFor(driver.id).user.edit({
+      ...promotion,
+      seatAvail: 3,
+      preferredName: "Ada",
+      bio: "New bio",
+      startStreet: "Elm St",
+      startCity: "Somerville",
+      startAddress: "12 Elm St",
+      startCoordLng: -71.1,
+      startCoordLat: 42.39,
+    });
+
+    expect(
+      (
+        await prisma.carpoolSearch.findFirstOrThrow({
+          where: { userId: driver.id },
+        })
+      ).seatsAvail,
+    ).toBe(2);
+    // And the rest of the save went through, which is the point of ignoring
+    // the stale value rather than refusing it.
+    expect(
+      (await prisma.user.findUniqueOrThrow({ where: { id: driver.id } })).bio,
+    ).toBe("New bio");
+  });
+});

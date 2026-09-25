@@ -159,6 +159,37 @@ export const SCHEDULE_TIME_REQUIRED_MESSAGE =
   "A schedule is required unless you are browsing as a viewer";
 
 /**
+ * `CarpoolSearch.daysWorking`: seven `0`/`1` flags, comma-separated, Sunday
+ * first. What `updateUser` serialises the form's seven checkboxes into.
+ */
+export const DAYS_WORKING_PATTERN = /^[01](,[01]){6}$/;
+
+export const DAYS_WORKING_INVALID_MESSAGE =
+  "Working days must be seven comma-separated 0 or 1 flags";
+
+/** `onboardSchema`'s copy for the same refusal, so both sides read alike. */
+export const DAYS_WORKING_REQUIRED_MESSAGE = "Select at least one day";
+
+/** Message for a schedule time that is a string but not a time. */
+export const SCHEDULE_TIME_INVALID_MESSAGE = "Not a valid time";
+
+/**
+ * True when a string on its way into `user.edit` reads as an instant.
+ *
+ * `""` and anything `Date.parse` rejects are not times, and they are refused
+ * rather than stored. `fromScheduleTimeInput` below maps both to `null`, which
+ * is "clear the schedule" - so before this check a hand-built request could
+ * clear a RIDER's or DRIVER's schedule by sending `""`, walking straight past
+ * the explicit-null refusal that exists to stop exactly that. A search with no
+ * times then passes every time filter. SCRUM-557.
+ *
+ * The app's own client never sends either: `toScheduleTimeInput` produces an
+ * ISO string or `null`.
+ */
+export const isScheduleTimeString = (value: string): boolean =>
+  value !== "" && !Number.isNaN(Date.parse(value));
+
+/**
  * A schedule time on its way to `user.edit`, preserving the difference between
  * "not supplied" and "clear it".
  *
@@ -187,8 +218,9 @@ export const toScheduleTimeInput = (
  *
  * An unparseable string yields `null` rather than an `Invalid Date`, which
  * MySQL would reject at write time with a `P2000`-style failure well after the
- * UI reported success. The input is `z.string()`, so this is the malformed
- * rather than the missing case.
+ * UI reported success. `user.edit` refuses both shapes with
+ * `isScheduleTimeString` before this runs, so there they cannot reach it; the
+ * fallback stays so the function is total for any other caller.
  */
 export const fromScheduleTimeInput = (
   value: string | null | undefined,

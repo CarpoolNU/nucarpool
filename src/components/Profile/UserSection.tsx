@@ -67,11 +67,24 @@ const UserSection = ({
   // `seatAvail`, because populating the form is not a role change.
   const roleField = registerRoleWithSeatDefault({ register, watch, setValue });
 
-  // A driver in a carpool group cannot change role until they leave it -
-  // dropping the group's only driver leaves it unmanageable for everyone in
-  // it. `user.edit` refuses this server-side; the form says so up front so
-  // the answer is not a failed save.
-  const lockedToDriver = user?.role === Role.DRIVER && !!user?.carpoolId;
+  // Nobody in a carpool group can change role until they leave it.
+  // `user.edit` refuses it server-side, in both directions: a driver leaving
+  // the role strands the group, and a rider taking it gains control of the
+  // group from its real driver (SCRUM-557). The form says so up front so the
+  // answer is not a failed save.
+  //
+  // Every radio but the stored role is disabled, as the driver-only lock
+  // this replaces did. The current one is inert anyway, and `Radio` dims a
+  // disabled button, which would make the user's own role look unselected.
+  const lockedRole = user?.carpoolId ? user.role : undefined;
+  const roleDisabled = (role: Role) =>
+    lockedRole !== undefined && role !== lockedRole;
+
+  // The seat count is locked with it. Inside a group it is the number of
+  // seats *left*, which joining and leaving move, and `user.edit` no longer
+  // writes it from this form - a value loaded before a rider joined would
+  // hand their seat back.
+  const seatsLocked = lockedRole !== undefined;
 
   // Through the guard the header already uses, rather than straight to
   // `signOut`. This button is 20px under Save Changes and is the only route to
@@ -90,11 +103,18 @@ const UserSection = ({
         I am a... <span className="text-northeastern-red">*</span>
       </div>
 
-      {lockedToDriver && (
+      {lockedRole === Role.DRIVER && (
         <Note className="!mt-0 !mb-2 max-w-xl">
-          You are the driver of a carpool group, so your role is locked to
-          Driver. Leave or dissolve the group from the Group page to change it -
-          switching now would leave your riders in a group with no driver.
+          You are the driver of a carpool group, so your role and seats are
+          locked. Leave or dissolve the group from the Group page to change them
+          - switching now would leave your riders in a group with no driver.
+        </Note>
+      )}
+      {lockedRole !== undefined && lockedRole !== Role.DRIVER && (
+        <Note className="!mt-0 !mb-2 max-w-xl">
+          You are in a carpool group, so your role is locked. Leave the group
+          from the Group page to change it - a group has exactly one driver, and
+          it is already set.
         </Note>
       )}
 
@@ -110,7 +130,7 @@ const UserSection = ({
             error={errors.role}
             value={Role.VIEWER}
             currentlySelected={watch("role")}
-            disabled={lockedToDriver}
+            disabled={roleDisabled(Role.VIEWER)}
             {...roleField}
           />
           <Radio
@@ -119,7 +139,7 @@ const UserSection = ({
             error={errors.role}
             value={Role.RIDER}
             currentlySelected={watch("role")}
-            disabled={lockedToDriver}
+            disabled={roleDisabled(Role.RIDER)}
             {...roleField}
           />
           <Radio
@@ -128,6 +148,7 @@ const UserSection = ({
             error={errors.role}
             value={Role.DRIVER}
             currentlySelected={watch("role")}
+            disabled={roleDisabled(Role.DRIVER)}
             {...roleField}
           />
         </div>
@@ -151,6 +172,7 @@ const UserSection = ({
                 id="seatAvail"
                 type="number"
                 min="0"
+                isDisabled={seatsLocked}
                 {...register("seatAvail", { setValueAs: seatAvailValueAs })}
               />
             </div>

@@ -33,8 +33,13 @@ import {
   unresolvedAddressFields,
 } from "../../utils/coordinates";
 import {
+  DAYS_WORKING_INVALID_MESSAGE,
+  DAYS_WORKING_PATTERN,
+  DAYS_WORKING_REQUIRED_MESSAGE,
+  SCHEDULE_TIME_INVALID_MESSAGE,
   SCHEDULE_TIME_REQUIRED_MESSAGE,
   fromScheduleTimeInput,
+  isScheduleTimeString,
 } from "../../utils/scheduleTime";
 import {
   COOP_DATE_ORDER_MESSAGE,
@@ -196,12 +201,35 @@ export const userRouter = router({
           preferredName: z.string().max(PROFILE_TEXT_MAX_LENGTH),
           pronouns: z.string().max(PROFILE_TEXT_MAX_LENGTH),
           isOnboarded: z.boolean(),
-          daysWorking: z.string(),
+          // Seven comma-separated flags, Sunday first - the shape every reader
+          // (`adminDataUtils`, `recommendation.ts`) splits on and the only one
+          // the profile form produces. It was `z.string()`, so any string was
+          // stored and then read as whatever `split(",")` made of it.
+          //
+          // Production's only other shape is `""`, the column default, on
+          // searches that never saved a schedule. The form reads that as seven
+          // unticked days and sends them back in this format, so no existing
+          // row is locked out of saving by it.
+          daysWorking: z.string().regex(DAYS_WORKING_PATTERN, {
+            message: DAYS_WORKING_INVALID_MESSAGE,
+          }),
           // Nullable as well as optional, and the two mean different things:
           // omitted leaves the column alone, explicit `null` clears it.
           // Without `.nullable()` a cleared schedule is unexpressible.
-          startTime: z.string().nullable().optional(),
-          endTime: z.string().nullable().optional(),
+          //
+          // A string has to be a time. `""` or an unparseable value used to be
+          // converted to `null` and so cleared the schedule by another route -
+          // see `isScheduleTimeString`.
+          startTime: z
+            .string()
+            .refine(isScheduleTimeString, SCHEDULE_TIME_INVALID_MESSAGE)
+            .nullable()
+            .optional(),
+          endTime: z
+            .string()
+            .refine(isScheduleTimeString, SCHEDULE_TIME_INVALID_MESSAGE)
+            .nullable()
+            .optional(),
           coopStartDate: z.date().nullable(),
           coopEndDate: z.date().nullable(),
           bio: z.string().max(PROFILE_TEXT_MAX_LENGTH),
@@ -265,6 +293,17 @@ export const userRouter = router({
                   message: SCHEDULE_TIME_REQUIRED_MESSAGE,
                 });
               }
+            }
+
+            // The days half of the same rule, in `onboardSchema`'s copy. Seven
+            // zeros is well formed, so the pattern above admits it, but it is
+            // a schedule with no days in it.
+            if (!data.daysWorking.includes("1")) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["daysWorking"],
+                message: DAYS_WORKING_REQUIRED_MESSAGE,
+              });
             }
           }
 
@@ -333,28 +372,46 @@ export const userRouter = router({
           where: { userId: id },
         });
 
-        // A driver who is in a group cannot change role out of it. Dropping a
-        // group's only DRIVER leaves a state nothing can get out of:
-        // `requireGroupDriver` then throws FORBIDDEN for every member, so
-        // nobody can remove anybody or dissolve the group, and the riders'
-        // shared preferences - read through the driver's own search - vanish.
+        // Nobody in a group can change role while they are in it, in either
+        // direction. A group's roles are what the group routes authorize
+        // against - `groups.ts` stores no owner, so "the driver" is whichever
+        // member's search reads DRIVER - and this is the only procedure that
+        // writes `role`.
         //
-        // This was once a toast in the profile page and the profile
-        // redesign deleted it; it was never server-side at all, so a direct
-        // call always bypassed it. It lives here now because this is the only
-        // place the invariant cannot be routed around.
+        // Away from DRIVER, dropping a group's only DRIVER leaves a state
+        // nothing can get out of: `requireGroupDriver` then throws FORBIDDEN
+        // for every member, so nobody can remove anybody or dissolve the
+        // group, and the riders' shared preferences - read through the
+        // driver's own search - vanish.
+        //
+        // *Towards* DRIVER is the mirror image, and was open until SCRUM-557:
+        // the guard used to fire only for a driver leaving the role. A rider
+        // who made themselves DRIVER then passed `requireGroupDriver`, and
+        // could dissolve the group, evict the real driver, or add riders
+        // against their own seat count. The profile form offered it as one
+        // click on the Driver radio.
+        //
+        // RIDER to VIEWER is refused too, deliberately. A viewer has no
+        // Locations and cannot request a ride, so a viewer in a group is not a
+        // coherent member, and a rider has a way out that always works: Leave
+        // Group, which the remove path in `groups.edit` never refuses a rider.
+        // Changing role afterwards is then unrestricted.
+        //
+        // The toast this once was in the profile page was deleted by the
+        // profile redesign; it was never server-side at all, so a direct call
+        // always bypassed it. It lives here because this is the only place the
+        // invariant cannot be routed around.
         //
         // Throwing inside the transaction rolls back the `user.update` above.
-        if (
-          existingSearch?.carpoolId &&
-          existingSearch.role === Role.DRIVER &&
-          input.role !== Role.DRIVER
-        ) {
+        if (existingSearch?.carpoolId && input.role !== existingSearch.role) {
           throw new TRPCError({
             code: "FORBIDDEN",
             message:
-              "You are the driver of a carpool group. Leave or dissolve the " +
-              "group before changing your role.",
+              existingSearch.role === Role.DRIVER
+                ? "You are the driver of a carpool group. Leave or dissolve " +
+                  "the group before changing your role."
+                : "You are in a carpool group. Leave the group before " +
+                  "changing your role.",
           });
         }
 
@@ -388,7 +445,21 @@ export const userRouter = router({
         const carpoolSearchData = {
           role: input.role,
           status: input.status,
-          seatsAvail: input.seatAvail,
+          // Left alone while the caller is in a group. `seatsAvail` is the
+          // *remaining* count once a group exists, and `reserveSeat` and
+          // `releaseSeats` in `groups.ts` move it as riders join and leave.
+          // The profile form sends back whatever it loaded, so a rider joining
+          // after the driver opened the page was undone by the driver's next
+          // save of anything at all - the bio, say - and the car could then
+          // take more riders than it seats. SCRUM-557.
+          //
+          // Ignored rather than refused: a stale value is exactly what the
+          // form sends in that case, and it is indistinguishable from an
+          // intended change, so refusing a mismatch would fail the bio save
+          // instead. The form locks the field for a grouped user to match.
+          // `undefined` is Prisma's "omit this field" in an `update`; the
+          // `create` path never has a group, so it always writes the input.
+          seatsAvail: existingSearch?.carpoolId ? undefined : input.seatAvail,
           companyName: input.companyName,
           daysWorking: input.daysWorking,
           startTime: startTimeDate,
