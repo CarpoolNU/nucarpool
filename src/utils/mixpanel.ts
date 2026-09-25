@@ -60,3 +60,34 @@ export const trackRequestResponse = (
     role,
   });
 };
+
+/**
+ * How many candidates a search returned — the supply signal (SCRUM-570).
+ *
+ * **One event carrying a count, rather than a separate "empty" event.** Zero
+ * results and two results are the same question asked of Mixpanel, and the
+ * interesting cohort is not fixed at zero: a rider offered one driver 90 miles
+ * away is barely better served than one offered none. A numeric property keeps
+ * that a filter rather than a second instrumentation path.
+ *
+ * **`companyCity`/`companyState`, and deliberately nothing finer.** The
+ * question this exists to answer is which corridor to recruit drivers in, and
+ * a city answers it. The home coordinate would answer it slightly better and
+ * is a home address; `companyAddress` is a street address too. Both are more
+ * than a third party needs, so neither is sent — see the acceptance criteria
+ * on SCRUM-570.
+ *
+ * An object rather than this file's usual positional arguments: `companyCity`
+ * and `companyState` are adjacent strings, and a call site that transposed
+ * them would typecheck and be wrong for as long as anyone read the dashboard.
+ *
+ * Emitted through `useRecommendationsLoadedEvent`, which owns *when* it fires.
+ */
+export const trackRecommendationsLoaded = (properties: {
+  resultCount: number;
+  role: string;
+  companyCity: string;
+  companyState: string;
+}) => {
+  trackEvent("Recommendations Loaded", properties);
+};
