@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form";
 import { Role, Status } from "@prisma/client";
 import { signOut } from "next-auth/react";
 import UserSection from "./UserSection";
-import { OnboardingFormInputs } from "../../utils/types";
+import { OnboardingFormInputs, User } from "../../utils/types";
 import { UnsavedChangesGuard } from "../../utils/profile/signOutWithGuard";
 import {
   MOBILE_WIDTH,
@@ -203,6 +203,122 @@ describe("the role radios (SCRUM-521)", () => {
       const input = screen.getByLabelText(name, { selector: "input" });
       expect(input).not.toHaveAttribute("role");
     }
+  });
+});
+
+/**
+ * SCRUM-557. The role lock used to cover a grouped *driver* only, so the Driver
+ * radio stayed live for a grouped rider - one click from taking the group away
+ * from its real driver. `user.edit` refuses any role change while grouped now,
+ * and the form has to say so before the save rather than after it.
+ */
+describe("the role lock for a user in a carpool group", () => {
+  /** A form populated for `user`, the way the profile page resets it. */
+  const Grouped = ({
+    user,
+    onValues,
+  }: {
+    user: { role: Role; carpoolId: string | null; seatAvail: number };
+    onValues?: (values: OnboardingFormInputs) => void;
+  }) => {
+    const { register, watch, setValue, handleSubmit, formState } =
+      useForm<OnboardingFormInputs>({
+        defaultValues: {
+          role: user.role,
+          status: Status.ACTIVE,
+          preferredName: "Riley",
+          pronouns: "",
+          bio: "",
+          seatAvail: user.seatAvail,
+        },
+      });
+
+    return (
+      <UserSection
+        register={register}
+        watch={watch}
+        setValue={setValue}
+        errors={formState.errors}
+        onSubmit={handleSubmit((values) => onValues?.(values))}
+        onFileSelect={() => undefined}
+        selectedFile={null}
+        // Only the two fields the lock reads; the rest of `User` is irrelevant.
+        user={user as unknown as User}
+        checkChanges={jest.fn()}
+      />
+    );
+  };
+
+  const radio = (name: string) => screen.getByRole("radio", { name });
+
+  it("disables Viewer and Driver for a grouped rider, and says why", () => {
+    render(
+      <Grouped
+        user={{ role: Role.RIDER, carpoolId: "group-1", seatAvail: 0 }}
+      />,
+    );
+
+    expect(radio("Viewer")).toBeDisabled();
+    expect(radio("Driver")).toBeDisabled();
+    // The stored role stays enabled: it is inert, and dimming it would make
+    // the user's own role look unselected.
+    expect(radio("Rider")).toBeEnabled();
+    expect(
+      screen.getByText(/You are in a carpool group, so your role is locked/),
+    ).toBeInTheDocument();
+  });
+
+  it("disables Viewer and Rider for a grouped driver, and locks the seats", () => {
+    render(
+      <Grouped
+        user={{ role: Role.DRIVER, carpoolId: "group-1", seatAvail: 2 }}
+      />,
+    );
+
+    expect(radio("Viewer")).toBeDisabled();
+    expect(radio("Rider")).toBeDisabled();
+    expect(radio("Driver")).toBeEnabled();
+    expect(
+      screen.getByRole("spinbutton", { name: "Seat Availability *" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText(/your role and seats are\s+locked/),
+    ).toBeInTheDocument();
+  });
+
+  it("still submits the role and seats of a locked driver", async () => {
+    // A locked field must not drop out of the submitted values: an undefined
+    // `seatAvail` fails `onboardSchema` on the page, and the driver could not
+    // save anything. The native `disabled` attribute keeps the value;
+    // react-hook-form's own `disabled` register option would drop it, so this
+    // is what catches a switch to that.
+    const onValues = jest.fn();
+    render(
+      <Grouped
+        user={{ role: Role.DRIVER, carpoolId: "group-1", seatAvail: 2 }}
+        onValues={onValues}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    expect(onValues).toHaveBeenCalledWith(
+      expect.objectContaining({ role: Role.DRIVER, seatAvail: 2 }),
+    );
+  });
+
+  it("leaves every radio and the seats open for a user with no group", () => {
+    render(
+      <Grouped user={{ role: Role.DRIVER, carpoolId: null, seatAvail: 2 }} />,
+    );
+
+    for (const name of ["Viewer", "Rider", "Driver"]) {
+      expect(radio(name)).toBeEnabled();
+    }
+    expect(
+      screen.getByRole("spinbutton", { name: "Seat Availability *" }),
+    ).toBeEnabled();
+    expect(screen.queryByText(/is locked|are\s+locked/)).toBeNull();
   });
 });
 
