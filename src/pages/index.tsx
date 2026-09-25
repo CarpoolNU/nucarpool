@@ -58,6 +58,7 @@ import {
   resolveMobileSelectedUser,
   type ExploreSidebarView,
 } from "../utils/explore/exploreSidebarView";
+import { useRecommendationsLoadedEvent } from "../utils/explore/useRecommendationsLoadedEvent";
 import {
   defaultSheetDetent,
   toggleSheetDetent,
@@ -331,6 +332,13 @@ const Home: NextPage<any> = () => {
     },
   );
   const { data: recommendations = NO_USERS } = recommendationsQuery;
+
+  // How many candidates that search returned, to Mixpanel (SCRUM-570). Read
+  // from the query rather than from the sidebar that draws it, because
+  // `SidebarContent` is unmounted and remounted by the filter panel and by the
+  // Recommendations/Favorites toggle — see the hook for why that would turn a
+  // supply measurement into a count of UI fiddling.
+  useRecommendationsLoadedEvent(recommendationsQuery, user);
 
   const favoritesQuery = trpc.user.favorites.me.useQuery(undefined, {
     refetchOnMount: true,
