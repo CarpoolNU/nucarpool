@@ -6,7 +6,10 @@ import {
 } from "../../utils/recommendation";
 import type { FInputs, Recommendation } from "../../utils/recommendation";
 import type { PrismaOrTransaction } from "./client";
-import { SEAT_AVAILABLE_FILTER } from "../../utils/carpoolSeats";
+import {
+  SEAT_AVAILABLE_FILTER,
+  hasSeatAvailable,
+} from "../../utils/carpoolSeats";
 import { blockedCounterpartIds } from "./blocks";
 import type { BlockReader } from "./blocks";
 
@@ -248,6 +251,7 @@ const dateOverlapFilter = (
 export type CurrentSearch = {
   role: Role;
   carpoolId: string | null;
+  seatsAvail: number;
   homeLocation: { coordLat: number; coordLng: number } | null;
   companyLocation: { coordLat: number; coordLng: number } | null;
 };
@@ -298,13 +302,38 @@ export const buildCandidateWhere = ({
     where.seatsAvail = SEAT_AVAILABLE_FILTER;
   }
 
-  // Already carpooling together. `carpoolId` is nullable and SQL's `!=` drops
-  // NULLs, so the ungrouped have to be re-admitted explicitly.
-  if (currentSearch.carpoolId) {
-    where.OR = [
-      { carpoolId: null },
-      { carpoolId: { not: currentSearch.carpoolId } },
-    ];
+  // Every accept path requires the rider's own row to hold `carpoolId: null`
+  // before it links them (`groups.ts`'s `create` and `add`), which makes two
+  // candidate sets unreachable no matter what the SQL above already
+  // narrowed to:
+  //
+  //   - A grouped RIDER can never join a group, theirs or anyone else's, so
+  //     no DRIVER is a valid candidate for them. `where.id = { in: [] }`
+  //     empties the result rather than adding a predicate that would have to
+  //     be threaded through every branch below.
+  //   - A RIDER who already has a `carpoolId` can never be accepted by any
+  //     DRIVER, whichever group holds them. The previous `OR` here compared
+  //     groups (`carpoolId: null` or `not: currentSearch.carpoolId`), which
+  //     excluded only the viewer's own group and still offered riders from
+  //     every other one - all of which `connectAction` refuses with
+  //     CONFLICT.
+  //
+  // A DRIVER's own group membership is not the mirror of that: a grouped
+  // DRIVER with a seat left is still a valid candidate for an ungrouped
+  // RIDER, which is why this narrows the *candidate's* group state rather
+  // than comparing it to the viewer's own `carpoolId`.
+  if (currentSearch.role === Role.RIDER && currentSearch.carpoolId) {
+    where.id = { in: [] };
+  } else if (currentSearch.role === Role.DRIVER) {
+    // A driver with no seats left cannot accept anyone either -
+    // `connectAction` refuses every rider with "no seats" today, so the
+    // recommendation list and the map should not offer any in the first
+    // place.
+    if (!hasSeatAvailable(currentSearch.seatsAvail)) {
+      where.id = { in: [] };
+    } else {
+      where.carpoolId = null;
+    }
   }
 
   if (homeWithin) {

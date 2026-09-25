@@ -166,19 +166,97 @@ describe("calculateScore", () => {
       ).toBeUndefined();
     });
 
-    it("includes a candidate who belongs to a different carpool group", () => {
+    // SCRUM-560: every accept path requires the rider's own row to hold
+    // `carpoolId: null` before it links them, so a grouped rider can never
+    // join *any* group - not only the one they are not already in. This used
+    // to score 0 (a perfect match) and rank at the top of a driver's results,
+    // for a request that would dead-end at accept with CONFLICT.
+    it("excludes every driver for a rider already in a different carpool group", () => {
       expect(
         score(
           rider({ carpoolId: "group-1" }),
           driver({ carpoolId: "group-2" }),
         ),
-      ).toBeCloseTo(0);
+      ).toBeUndefined();
     });
 
     it("does not treat two users without a group as sharing one", () => {
       expect(
         score(rider({ carpoolId: null }), driver({ carpoolId: null })),
       ).toBeCloseTo(0);
+    });
+
+    // The mirror image: a rider already in a group could still be offered as
+    // a candidate to a driver, since the old exclusion only compared the two
+    // parties' own groups.
+    it("excludes a rider already in a group from a driver's results, whichever group", () => {
+      const currentDriver = buildSearch({
+        id: "current",
+        role: Role.DRIVER,
+        seatsAvail: 4,
+        carpoolId: null,
+      });
+
+      expect(
+        isMatch(
+          currentDriver,
+          buildSearch({
+            id: "candidate",
+            role: Role.RIDER,
+            carpoolId: "some-other-group",
+          }),
+        ),
+      ).toBe(false);
+    });
+
+    it("still offers an ungrouped rider to a driver who already has a group", () => {
+      const currentDriver = buildSearch({
+        id: "current",
+        role: Role.DRIVER,
+        seatsAvail: 4,
+        carpoolId: "current-driver-group",
+      });
+
+      expect(
+        isMatch(
+          currentDriver,
+          buildSearch({
+            id: "candidate",
+            role: Role.RIDER,
+            carpoolId: null,
+          }),
+        ),
+      ).toBe(true);
+    });
+
+    // A driver with no seats left cannot accept anyone - `connectAction`
+    // refuses every rider with "no seats" today, so discovery should not
+    // offer any rider in the first place.
+    it("excludes every rider for a driver with no seats left", () => {
+      const fullDriver = buildSearch({
+        id: "current",
+        role: Role.DRIVER,
+        seatsAvail: 0,
+      });
+
+      expect(
+        isMatch(fullDriver, buildSearch({ id: "candidate", role: Role.RIDER })),
+      ).toBe(false);
+    });
+
+    it("still offers riders to a driver who has at least one seat", () => {
+      const driverWithSeat = buildSearch({
+        id: "current",
+        role: Role.DRIVER,
+        seatsAvail: 1,
+      });
+
+      expect(
+        isMatch(
+          driverWithSeat,
+          buildSearch({ id: "candidate", role: Role.RIDER }),
+        ),
+      ).toBe(true);
     });
   });
 

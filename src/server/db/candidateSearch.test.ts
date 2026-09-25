@@ -265,6 +265,7 @@ describe("date overlap agrees with calculateScore", () => {
           currentSearch: {
             role: Role.RIDER,
             carpoolId: null,
+            seatsAvail: 0,
             homeLocation: null,
             companyLocation: null,
           },
@@ -291,6 +292,7 @@ describe("buildCandidateWhere — role compatibility", () => {
     ({
       role,
       carpoolId: null,
+      seatsAvail: 4,
       homeLocation: null,
       companyLocation: null,
       ...overrides,
@@ -349,6 +351,7 @@ describe("buildCandidateWhere — group, favorites, bounds", () => {
   const base = {
     role: Role.RIDER,
     carpoolId: null,
+    seatsAvail: 0,
     homeLocation: { coordLat: BOSTON.lat, coordLng: BOSTON.lng },
     companyLocation: { coordLat: BOSTON.lat, coordLng: BOSTON.lng },
   } satisfies CurrentSearch;
@@ -366,19 +369,18 @@ describe("buildCandidateWhere — group, favorites, bounds", () => {
       favoriteUserIds,
     });
 
-  it("excludes the caller's own group while keeping ungrouped users", () => {
+  // SCRUM-560: every accept path requires the rider's own row to hold
+  // `carpoolId: null`, whichever group they would be joining, so a grouped
+  // rider has no reachable candidate at all - not merely the driver in their
+  // own group, which is what this used to test for.
+  it("returns no candidates for a grouped rider, since no driver could ever accept them", () => {
     const result = build({ ...base, carpoolId: "group-1" });
 
-    // The ungrouped branch matters: SQL's `!=` drops NULLs, so without it every
-    // user without a group would vanish from the results.
-    expect(result.OR).toEqual([
-      { carpoolId: null },
-      { carpoolId: { not: "group-1" } },
-    ]);
+    expect(result.id).toEqual({ in: [] });
   });
 
-  it("adds no group filter when the caller has no group", () => {
-    expect(build(base).OR).toBeUndefined();
+  it("adds no exclusion when the caller has no group", () => {
+    expect(build(base).id).toBeUndefined();
   });
 
   it("narrows to favorites only when the filter asks", () => {
@@ -435,12 +437,80 @@ describe("buildCandidateWhere — group, favorites, bounds", () => {
   });
 });
 
+/**
+ * SCRUM-560: every accept path (`groups.ts`'s `create` and `add`) requires the
+ * rider's own row to hold `carpoolId: null` before it links them. These pin
+ * the two candidate sets that leaves unreachable, and the one case that stays
+ * reachable on purpose - a grouped driver with a seat is still valid for an
+ * ungrouped rider.
+ */
+describe("buildCandidateWhere — unreachable candidates (SCRUM-560)", () => {
+  const build = (currentSearch: CurrentSearch) =>
+    buildCandidateWhere({
+      currentSearch,
+      filters: { ...anyFilters(), favorites: false },
+      excludedUserIds: ["me"],
+      favoriteUserIds: [],
+    });
+
+  describe("a driver's own seats", () => {
+    const base = {
+      role: Role.DRIVER,
+      carpoolId: null,
+      seatsAvail: 4,
+      homeLocation: null,
+      companyLocation: null,
+    } satisfies CurrentSearch;
+
+    it("offers only ungrouped riders, whether or not the driver already has a group", () => {
+      expect(build(base).carpoolId).toBeNull();
+      expect(build({ ...base, carpoolId: "group-1" }).carpoolId).toBeNull();
+    });
+
+    it("returns no candidates for a driver with no seats left", () => {
+      expect(build({ ...base, seatsAvail: 0 }).id).toEqual({ in: [] });
+      // Non-positive is unavailable everywhere - see `hasSeatAvailable`.
+      expect(build({ ...base, seatsAvail: -1 }).id).toEqual({ in: [] });
+    });
+
+    it("still returns riders for a driver who has seats", () => {
+      expect(build(base).id).toBeUndefined();
+    });
+  });
+
+  describe("a grouped rider", () => {
+    const base = {
+      role: Role.RIDER,
+      carpoolId: "group-1",
+      seatsAvail: 0,
+      homeLocation: null,
+      companyLocation: null,
+    } satisfies CurrentSearch;
+
+    it("returns no candidates at all, not merely the driver in their own group", () => {
+      const result = build(base);
+
+      expect(result.id).toEqual({ in: [] });
+    });
+
+    it("still offers a grouped driver with a seat to an ungrouped rider", () => {
+      const result = build({ ...base, carpoolId: null });
+
+      expect(result.id).toBeUndefined();
+      // No filter on the candidate's own group state for a RIDER viewer -
+      // a grouped DRIVER with a seat is a valid candidate.
+      expect(result.carpoolId).toBeUndefined();
+    });
+  });
+});
+
 describe("buildCandidateWhere — date overlap", () => {
   const build = (dateOverlap: number) =>
     buildCandidateWhere({
       currentSearch: {
         role: Role.RIDER,
         carpoolId: null,
+        seatsAvail: 0,
         homeLocation: null,
         companyLocation: null,
       },
