@@ -64,6 +64,7 @@ import {
   type SheetDetent,
 } from "../utils/explore/sheetDetents";
 import { useSheetDrag } from "../utils/explore/useSheetDrag";
+import { useProfileFilterSeed } from "../utils/explore/useProfileFilterSeed";
 
 mapboxgl.accessToken = browserEnv.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
 
@@ -723,17 +724,9 @@ const Home: NextPage<any> = () => {
     ],
   );
 
-  useEffect(() => {
-    if (user && user.role !== "VIEWER") {
-      // update filter params
-      setFilters((prev) => ({
-        ...prev,
-        startDate: user.coopStartDate ? user.coopStartDate : prev.startDate,
-        endDate: user.coopEndDate ? user.coopEndDate : prev.endDate,
-        daysWorking: user.daysWorking,
-      }));
-    }
-  }, [user]);
+  // Once per change to the profile's values, not per `user.me` refetch - see
+  // the hook for what re-seeding on every refetch used to overwrite.
+  useProfileFilterSeed(user, setFilters);
 
   useEffect(() => {
     if (mapState && geoJsonUsers && mapStateLoaded) {

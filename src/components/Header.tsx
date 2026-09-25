@@ -517,7 +517,7 @@ const Header = (props: HeaderProps) => {
   };
 
   useEffect(() => {
-    const { tab, showGroup } = router.query;
+    const { showGroup } = router.query;
 
     // Handle showGroup parameter (from profile -> My Group navigation)
     if (showGroup === "true") {
@@ -532,17 +532,36 @@ const Header = (props: HeaderProps) => {
         router.replace("/", undefined, { shallow: true });
       }
     }
+  }, [router.query, router]);
 
-    // Handle tab parameter (explore/requests/mygroup navigation)
+  /*
+   * Handle the tab parameter (explore/requests/mygroup navigation) - once per
+   * value the URL carries, not once per render.
+   *
+   * This used to share the effect above and list `props.data` among its
+   * dependencies. `pages/index.tsx` passes `data` as an object literal, so it
+   * is a new object on every render and the effect re-ran on every one,
+   * re-applying `?tab=` each time. The desktop tab buttons only swap the
+   * sidebar and leave the URL alone, so with the param set - which the mobile
+   * nav's `/?tab=requests` leaves behind for a tablet rotated or a window
+   * resized across `md` - clicking Explore re-rendered, the effect put
+   * Requests back, and the click did nothing (SCRUM-561).
+   *
+   * Keyed on the tab string and the setter instead. `data.setSidebar` is a
+   * `useState` setter and stable; `tab` is a string, so a re-render that
+   * carries the same value is not a change.
+   */
+  const { tab } = router.query;
+  const setSidebarFromUrl = props.data?.setSidebar;
+  useEffect(() => {
     if (
-      tab &&
       (tab === "explore" || tab === "requests" || tab === "mygroup") &&
-      props.data?.setSidebar
+      setSidebarFromUrl
     ) {
-      props.data.setSidebar(tab as HeaderOptions);
-      setActiveNav(tab as string);
+      setSidebarFromUrl(tab);
+      setActiveNav(tab);
     }
-  }, [router.query, props.data?.setSidebar, props.data, router]);
+  }, [tab, setSidebarFromUrl]);
 
   const renderSidebarOptions = ({
     sidebarValue,
