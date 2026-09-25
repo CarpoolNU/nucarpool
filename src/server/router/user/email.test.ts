@@ -130,6 +130,7 @@ const buildEmailDb = (opts?: {
     toUserId: string;
     conversationId: string | null;
     notificationPendingSince?: Date | null;
+    acceptanceNotificationPendingSince?: Date | null;
     status?: RequestStatus;
   } | null;
   messages?: MessageRow[];
@@ -157,13 +158,17 @@ const buildEmailDb = (opts?: {
   // Just opened, unannounced and pending unless a test says otherwise. A
   // request that was just created has not been accepted. Acceptance cases opt
   // in explicitly — defaulting to ACCEPTED here would let a procedure that
-  // never reads `status` pass every test in the file.
+  // never reads `status` pass every test in the file. The acceptance marker
+  // defaults to owed too, matching `markRequestAccepted`, which sets it in
+  // the same statement that sets `status: ACCEPTED` — so any fixture that
+  // does not override it behaves like a request genuinely just accepted.
   //
   // Mutable, because the claim is a write: `request.updateMany` below changes
   // this row, so a second call sees what the first one left.
   const request = rawRequest
     ? {
         notificationPendingSince: OPENED_AT,
+        acceptanceNotificationPendingSince: OPENED_AT,
         status: RequestStatus.PENDING,
         ...rawRequest,
       }
@@ -198,13 +203,27 @@ const buildEmailDb = (opts?: {
 
   // Only the SES-failure path writes through here now: it restores a marker
   // the claim cleared. Matches only while every condition in `where` holds.
+  // Two markers share this delegate — `notificationPendingSince` (request
+  // email) and `acceptanceNotificationPendingSince` (acceptance email) — each
+  // checked only when the release call's `where` actually names it.
   const requestUpdateMany = jest.fn(async ({ where, data }: any) => {
+    if (!request || request.id !== where.id) {
+      return { count: 0 };
+    }
     if (
-      !request ||
-      request.id !== where.id ||
+      "notificationPendingSince" in where &&
       !sameInstant(
         request.notificationPendingSince,
         where.notificationPendingSince,
+      )
+    ) {
+      return { count: 0 };
+    }
+    if (
+      "acceptanceNotificationPendingSince" in where &&
+      !sameInstant(
+        request.acceptanceNotificationPendingSince,
+        where.acceptanceNotificationPendingSince,
       )
     ) {
       return { count: 0 };
@@ -255,16 +274,31 @@ const buildEmailDb = (opts?: {
   });
 
   /**
-   * The two claim statements, which `email.ts` runs as raw SQL because
+   * The three claim statements, which `email.ts` runs as raw SQL because
    * `updateMany` is not atomic under `relationMode = "prisma"`. Each checks the
    * marker and clears it in one synchronous step, as the single InnoDB
    * `UPDATE` does, and returns the rows changed. Anything else is an error, so
    * a new raw statement cannot pass here unnoticed.
+   *
+   * `acceptanceNotificationPendingSince` is checked before the plain
+   * `notificationPendingSince` branch below, since both templates start with
+   * `UPDATE \`request\``.
    */
   const executeRaw = jest.fn(
     async (strings: TemplateStringsArray, ...values: unknown[]) => {
       const sql = strings.join("?");
       const [id] = values;
+      if (sql.includes("acceptanceNotificationPendingSince")) {
+        if (
+          !request ||
+          request.id !== id ||
+          !request.acceptanceNotificationPendingSince
+        ) {
+          return 0;
+        }
+        request.acceptanceNotificationPendingSince = null;
+        return 1;
+      }
       if (sql.includes("UPDATE `request`")) {
         if (
           !request ||
@@ -1027,6 +1061,117 @@ describe("user.emails.sendAcceptanceNotification — only the party who accepted
       "bob@example.com",
     ]);
     expect(db.sentParams().Template).toBe("DriverAcceptanceTemplate");
+  });
+
+  /**
+   * The replay this ticket exists to close (SCRUM-564). Before, the procedure
+   * checked only direction and status, both of which stay true forever once a
+   * request is accepted, so every call after the first sent another copy of
+   * "<name> accepted your carpool request". The marker is what stops that.
+   */
+  it("sends one email for an acceptance however many times it is called", async () => {
+    const { caller, db } = callerFor(sessionFor(BOB), acceptedRequestDb());
+
+    await expect(
+      caller.user.emails.sendAcceptanceNotification({
+        requestId: REQUEST_ID,
+      }),
+    ).resolves.toEqual({ sent: true });
+    for (let i = 0; i < 3; i++) {
+      await expect(
+        caller.user.emails.sendAcceptanceNotification({
+          requestId: REQUEST_ID,
+        }),
+      ).resolves.toEqual({ sent: false, reason: "already_notified" });
+    }
+
+    expect(db.ses).toHaveBeenCalledTimes(1);
+    expect(db.request?.acceptanceNotificationPendingSince).toBeNull();
+  });
+
+  it("sends one email when two calls race on the same acceptance", async () => {
+    // Both read the marker before either clears it. The conditional update is
+    // what lets only one through, as with the request and message emails.
+    const { caller, db } = callerFor(sessionFor(BOB), acceptedRequestDb());
+
+    const results = await Promise.all([
+      caller.user.emails.sendAcceptanceNotification({
+        requestId: REQUEST_ID,
+      }),
+      caller.user.emails.sendAcceptanceNotification({
+        requestId: REQUEST_ID,
+      }),
+    ]);
+
+    expect(results).toContainEqual({ sent: true });
+    expect(results).toContainEqual({
+      sent: false,
+      reason: "already_notified",
+    });
+    expect(db.ses).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends nothing for a request accepted before the marker column existed", async () => {
+    // Every row `markRequestAccepted` resolved before this migration: the
+    // column defaults to null, and null means no email is owed.
+    const db = buildEmailDb({
+      request: {
+        id: REQUEST_ID,
+        fromUserId: ALICE,
+        toUserId: BOB,
+        conversationId: CONVERSATION_ID,
+        status: RequestStatus.ACCEPTED,
+        acceptanceNotificationPendingSince: null,
+      },
+    });
+    const { caller } = callerFor(sessionFor(BOB), db);
+
+    const result = await caller.user.emails.sendAcceptanceNotification({
+      requestId: REQUEST_ID,
+    });
+
+    expect(result).toEqual({ sent: false, reason: "already_notified" });
+    expect(db.ses).not.toHaveBeenCalled();
+  });
+
+  it("keeps the email owed when SES refuses it, so a retry can still send", async () => {
+    const db = buildEmailDb({
+      sesFails: true,
+      request: {
+        id: REQUEST_ID,
+        fromUserId: ALICE,
+        toUserId: BOB,
+        conversationId: CONVERSATION_ID,
+        status: RequestStatus.ACCEPTED,
+      },
+    });
+    const { caller } = callerFor(sessionFor(BOB), db);
+
+    await expect(
+      caller.user.emails.sendAcceptanceNotification({
+        requestId: REQUEST_ID,
+      }),
+    ).rejects.toThrow("Throttling");
+
+    expect(db.request?.acceptanceNotificationPendingSince).toEqual(OPENED_AT);
+  });
+
+  /**
+   * The three refusal cases above (wrong caller, not accepted, wrong
+   * direction) must still send nothing even though every one of them reaches
+   * this procedure with the marker owed — the marker is not itself the
+   * authorization check.
+   */
+  it("still sends nothing on a refused accept even though the marker is owed", async () => {
+    const db = buildEmailDb(); // Alice -> Bob, PENDING, marker owed by default.
+    const { caller } = callerFor(sessionFor(ALICE), db);
+
+    await expect(
+      caller.user.emails.sendAcceptanceNotification({ requestId: REQUEST_ID }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(db.ses).not.toHaveBeenCalled();
+    expect(db.request?.acceptanceNotificationPendingSince).not.toBeNull();
   });
 });
 

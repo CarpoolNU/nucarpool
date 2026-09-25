@@ -29,14 +29,14 @@ import { assertNotBlocked } from "../../db/blocks";
  * and nothing else. Bodies are rendered by SES templates through Handlebars
  * `{{ }}`, which HTML-escapes, so no additional escaping is applied here.
  *
- * **Request and message emails are one-shot** (SCRUM-559). The write that
- * creates the thing being announced also marks an email as owed:
- * `Request.notificationPendingSince` or `Message.notificationPending`. The
- * procedure clears that marker in one conditional `UPDATE` before it sends.
- * Only one caller's update can match, so calling the procedure again, or twice
- * at once, sends nothing more. Each email costs one real write by the caller.
- * These were time windows before, and inside one the procedure sent on every
- * call.
+ * **All three emails are one-shot** (SCRUM-559, and acceptance in SCRUM-564).
+ * The write that creates the thing being announced also marks an email as
+ * owed: `Request.notificationPendingSince`, `Message.notificationPending`, or
+ * `Request.acceptanceNotificationPendingSince`. The procedure clears that
+ * marker in one conditional `UPDATE` before it sends. Only one caller's
+ * update can match, so calling the procedure again, or twice at once, sends
+ * nothing more. Each email costs one real write by the caller. These were
+ * time windows before, and inside one the procedure sent on every call.
  */
 
 /** Per-sender, per-conversation cooldown for message notifications. */
@@ -142,6 +142,7 @@ const resolveRequestParties = async (
       toUserId: true,
       conversationId: true,
       notificationPendingSince: true,
+      acceptanceNotificationPendingSince: true,
       status: true,
     },
   });
@@ -212,6 +213,15 @@ const claimMessageNotification = async (
   (await prisma.$executeRaw`
     UPDATE \`message\` SET \`notificationPending\` = false
     WHERE \`id\` = ${messageId} AND \`notificationPending\` = true
+  `) === 1;
+
+const claimAcceptanceNotification = async (
+  prisma: PrismaClient,
+  requestId: string,
+) =>
+  (await prisma.$executeRaw`
+    UPDATE \`request\` SET \`acceptanceNotificationPendingSince\` = NULL
+    WHERE \`id\` = ${requestId} AND \`acceptanceNotificationPendingSince\` IS NOT NULL
   `) === 1;
 
 /**
@@ -486,17 +496,19 @@ export const emailsRouter = router({
    * accepted" call for different things from the caller, and collapsing them
    * would leave both unclear.
    *
-   * **Not yet one-shot.** The request and message emails above each clear a
-   * marker set by the write they announce (SCRUM-559). Acceptance was left out
-   * of that ticket: it is written by `markRequestAccepted` in `groups.ts`,
-   * which would have to set the marker, and nothing records that an acceptance
-   * was announced.
+   * **One-shot, like the request and message emails above** (SCRUM-559,
+   * SCRUM-564). `markRequestAccepted` in `groups.ts` sets
+   * `Request.acceptanceNotificationPendingSince` in the same statement that
+   * flips `status` to `ACCEPTED`, and this procedure clears it in one
+   * conditional `UPDATE` before sending. Only one caller's update can match,
+   * so calling this in a loop sends at most one email per acceptance.
    *
-   * Replay is therefore still possible, but the checks above bound it to
-   * requests genuinely accepted with the caller as their recipient, which is a
-   * real relationship rather than an unbounded set. That is a large reduction
-   * and not a cap. Both the missing marker and the missing per-user cap
-   * across `user.emails.*` are SCRUM-564.
+   * A per-user cap across all of `user.emails.*` — a further defence against
+   * a caller earning many separate accepted requests and notifying each once
+   * — does not exist yet. It needs shared state this deployment does not
+   * have, so it is larger than a marker, and is not implemented here. It is
+   * tracked in SCRUM-564, not "separately": this doc comment is where that
+   * ticket found it undocumented.
    */
   sendAcceptanceNotification: protectedRouter
     .input(z.object({ requestId: z.string() }).strict())
@@ -526,7 +538,20 @@ export const emailsRouter = router({
         return { sent: false as const, reason: "missing_email_address" };
       }
 
+      // Null once announced, and on every request accepted before the column
+      // existed.
+      const pendingSince = request.acceptanceNotificationPendingSince;
+      if (!pendingSince) {
+        return { sent: false as const, reason: "already_notified" };
+      }
+
       assertDeliverable(recipient.email);
+
+      // Of any number of concurrent calls, exactly one gets past this. See
+      // `claimAcceptanceNotification`.
+      if (!(await claimAcceptanceNotification(ctx.prisma, request.id))) {
+        return { sent: false as const, reason: "already_notified" };
+      }
 
       // The *recipient's* role, same as the request flow above. This used to
       // pass the caller's role, preserved from what the client sent. Both
@@ -547,7 +572,12 @@ export const emailsRouter = router({
         true,
       );
 
-      await ctx.sesClient.send(new SendTemplatedEmailCommand(emailParams));
+      await sendOrRelease(ctx.sesClient, emailParams, () =>
+        ctx.prisma.request.updateMany({
+          where: { id: request.id, acceptanceNotificationPendingSince: null },
+          data: { acceptanceNotificationPendingSince: pendingSince },
+        }),
+      );
       return { sent: true as const };
     }),
 });
