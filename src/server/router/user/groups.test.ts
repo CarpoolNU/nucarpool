@@ -268,17 +268,19 @@ const buildGroupsDb = (opts?: {
   // carpoolId = ${...} WHERE userId = ${...} AND role = ${...} AND
   // carpoolId IS NULL`. Both call sites compile to the same shape, so one
   // implementation covers them.
-  const executeRaw = jest.fn(async (_strings: unknown, ...values: unknown[]) => {
-    const [groupIdToSet, riderId, roleToMatch] = values;
-    const row = searches.find((r) =>
-      matches(r, { userId: riderId, role: roleToMatch, carpoolId: null }),
-    );
-    if (!row) {
-      return 0;
-    }
-    row.carpoolId = groupIdToSet as string;
-    return 1;
-  });
+  const executeRaw = jest.fn(
+    async (_strings: unknown, ...values: unknown[]) => {
+      const [groupIdToSet, riderId, roleToMatch] = values;
+      const row = searches.find((r) =>
+        matches(r, { userId: riderId, role: roleToMatch, carpoolId: null }),
+      );
+      if (!row) {
+        return 0;
+      }
+      row.carpoolId = groupIdToSet as string;
+      return 1;
+    },
+  );
 
   // The groups mutations wrap their writes in `prisma.$transaction`,
   // so the mock rolls back on a throw. Restoring in place matters:
