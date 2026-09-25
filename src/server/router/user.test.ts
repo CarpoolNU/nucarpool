@@ -711,6 +711,21 @@ const buildEditDb = (
         );
         return row;
       }),
+      // The role-change branch's compare-and-swap (SCRUM-563): `where` can
+      // carry `carpoolId` alongside `id`, and a real `updateMany` matches
+      // only rows where every clause holds, so a stale `carpoolId` has to
+      // make this find nothing rather than writing anyway.
+      updateMany: jest.fn(async ({ where, data }: any) => {
+        const matching = searches.filter(
+          (s) =>
+            (where.id === undefined || s.id === where.id) &&
+            (!("carpoolId" in where) || s.carpoolId === where.carpoolId),
+        );
+        for (const row of matching) {
+          Object.assign(row, data);
+        }
+        return { count: matching.length };
+      }),
       create: jest.fn(async ({ data }: any) => {
         const row = { id: `search-created-${++created}`, ...data };
         searches.push(row);
@@ -1174,8 +1189,13 @@ describe("user.edit — a schedule time can be cleared", () => {
    * `update` path. With no seeded search it would `create` instead, and
    * `create` has no "omit this field" semantics to test - the whole point here
    * is what `update` receives.
+   *
+   * `role` has to match what each test then submits: SCRUM-563 routes a role
+   * *change* through a separate compare-and-swap `updateMany`, which would
+   * make `dataFor` below read from the wrong mock and every assertion here
+   * about nothing at all.
    */
-  const withExistingSearch = () =>
+  const withExistingSearch = (role: Role) =>
     buildEditDb(
       [
         {
@@ -1203,6 +1223,7 @@ describe("user.edit — a schedule time can be cleared", () => {
           userId: SESSION_USER,
           homeLocationId: "loc-mine-home",
           companyLocationId: "loc-mine-company",
+          role,
           startTime: new Date("1970-01-01T13:00:00.000Z"),
           endTime: new Date("1970-01-01T22:00:00.000Z"),
         },
@@ -1213,7 +1234,7 @@ describe("user.edit — a schedule time can be cleared", () => {
     db.prisma.carpoolSearch.update.mock.calls[0][0].data;
 
   it("writes null when a VIEWER clears both times", async () => {
-    const db = withExistingSearch();
+    const db = withExistingSearch(Role.VIEWER);
     const caller = editCallerFor(SESSION_USER, db);
 
     await caller.user.edit(
@@ -1230,7 +1251,7 @@ describe("user.edit — a schedule time can be cleared", () => {
     // optional, and every caller not editing the schedule sends nothing.
     // `toHaveProperty` is the assertion that distinguishes absent from null -
     // `data.startTime === undefined` would pass for either.
-    const db = withExistingSearch();
+    const db = withExistingSearch(Role.VIEWER);
     const caller = editCallerFor(SESSION_USER, db);
 
     await caller.user.edit(editInput({ role: Role.VIEWER }));
@@ -1241,7 +1262,9 @@ describe("user.edit — a schedule time can be cleared", () => {
   });
 
   it("stores the parsed instant when a time is supplied", async () => {
-    const db = withExistingSearch();
+    // `editInput()`'s default role is DRIVER, matching the seed, so this is
+    // still exercising the plain `update` path rather than a role change.
+    const db = withExistingSearch(Role.DRIVER);
     const caller = editCallerFor(SESSION_USER, db);
 
     await caller.user.edit(
@@ -1291,7 +1314,7 @@ describe("user.edit — a schedule time can be cleared", () => {
       // VIEWER who means "clear" sends `null`.
       for (const role of [Role.RIDER, Role.VIEWER]) {
         for (const field of ["startTime", "endTime"] as const) {
-          const db = withExistingSearch();
+          const db = withExistingSearch(role);
 
           expect(
             await editIssues(
@@ -1816,6 +1839,11 @@ describe("user.edit is atomic", () => {
           userId: SESSION_USER,
           homeLocationId: "loc-home",
           companyLocationId: "loc-company",
+          // Matches `editInput()`'s default role, so this exercises the
+          // plain `update` path this test is actually about (SCRUM-563 would
+          // otherwise route it through the role-change compare-and-swap
+          // instead, and the forced failure below would never fire).
+          role: Role.DRIVER,
         },
       ],
     );
@@ -2136,6 +2164,104 @@ describe("user.edit — a grouped user's seat count is left alone", () => {
     );
 
     expect(db.searchFor(SESSION_USER)?.seatsAvail).toBe(4);
+  });
+});
+
+/**
+ * A role change is a compare-and-swap on `carpoolId`, not a plain `update`.
+ *
+ * SCRUM-563: `groups.create` and `groups.edit` check this same row's `role`
+ * before linking a rider into a group, but only against a read taken inside
+ * their *own* transaction — a snapshot under MySQL REPEATABLE READ, so it can
+ * still say RIDER after this save already committed DRIVER. The mock cannot
+ * model the isolation level itself (see `user.db.test.ts` for the real one),
+ * but it can model the write losing the race by having `updateMany` find
+ * nothing, exactly as the real compare-and-swap does when the group side has
+ * already moved `carpoolId`.
+ */
+describe("user.edit — a role change re-checks carpoolId at write time (SCRUM-563)", () => {
+  const ridingLocations = (): LocationRow[] => [
+    {
+      id: "loc-home",
+      street: "Huntington Ave",
+      city: "Boston",
+      state: "Massachusetts",
+      streetAddress: "Huntington Ave, Boston, Massachusetts",
+      coordLng: -71.1,
+      coordLat: 42.31,
+    },
+    {
+      id: "loc-company",
+      street: "Congress St",
+      city: "Boston",
+      state: "Massachusetts",
+      streetAddress: "Congress St, Boston, Massachusetts",
+      coordLng: -71.05,
+      coordLat: 42.36,
+    },
+  ];
+
+  const riderWithNoGroup = () =>
+    buildEditDb(ridingLocations(), [
+      {
+        id: "search-mine",
+        userId: SESSION_USER,
+        homeLocationId: "loc-home",
+        companyLocationId: "loc-company",
+        role: Role.RIDER,
+        carpoolId: null,
+      },
+    ]);
+
+  it("throws CONFLICT and writes nothing when carpoolId changed since the read", async () => {
+    // Stands in for `groups.create` linking this same rider into a group
+    // between this transaction's read of `existingSearch` and its write.
+    const db = riderWithNoGroup();
+    db.prisma.carpoolSearch.updateMany.mockImplementationOnce(async () => ({
+      count: 0,
+    }));
+
+    await expect(
+      editCallerFor(SESSION_USER, db).user.edit(
+        editInput({ role: Role.DRIVER }),
+      ),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+
+    // Rolled back: the role change, and the profile fields that travelled
+    // with it, never landed.
+    expect(db.searchFor(SESSION_USER)).toMatchObject({
+      role: Role.RIDER,
+      carpoolId: null,
+    });
+  });
+
+  it("still saves the role change when nothing raced it", async () => {
+    const db = riderWithNoGroup();
+
+    await editCallerFor(SESSION_USER, db).user.edit(
+      editInput({ role: Role.DRIVER }),
+    );
+
+    expect(db.searchFor(SESSION_USER)).toMatchObject({
+      role: Role.DRIVER,
+      carpoolId: null,
+    });
+  });
+
+  it("does not take the compare-and-swap path when the role is unchanged", async () => {
+    // Only a role change needs the extra check. Every other column on this
+    // row is exclusively this user's to write, so routing an ordinary save
+    // through `updateMany` as well would just be a chance for it to be
+    // refused by a concurrent write to some other field.
+    const db = riderWithNoGroup();
+
+    await editCallerFor(SESSION_USER, db).user.edit(
+      editInput({ role: Role.RIDER, seatAvail: 0 }),
+    );
+
+    expect(db.prisma.carpoolSearch.updateMany).not.toHaveBeenCalled();
+    expect(db.prisma.carpoolSearch.update).toHaveBeenCalled();
+    expect(db.searchFor(SESSION_USER)).toMatchObject({ role: Role.RIDER });
   });
 });
 

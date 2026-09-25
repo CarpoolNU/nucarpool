@@ -2753,6 +2753,94 @@ describe("the rider slot holds a rider", () => {
 });
 
 /**
+ * The rider-slot check above reads `riderSearch` inside this transaction, but
+ * that read is a snapshot under MySQL REPEATABLE READ — a concurrent
+ * `user.edit` moving this same rider to DRIVER can still commit in between,
+ * which the mock cannot model (see `groupRoleRace.db.test.ts` for the real
+ * one). What it can model is the linking write losing that race: SCRUM-563
+ * re-checks `role` and `carpoolId` in the `updateMany`'s WHERE rather than
+ * trusting the earlier read, so forcing that call to match nothing is
+ * exactly what the real compare-and-swap does when `user.edit` won.
+ */
+describe("the rider slot is re-checked at write time, not just at read time (SCRUM-563)", () => {
+  /** Fails the nth `updateMany` call with a lost compare-and-swap, not an error. */
+  const loseTheRaceOnCall = (mock: jest.Mock, callNumber: number) => {
+    const real = mock.getMockImplementation()!;
+    let calls = 0;
+    mock.mockImplementation(async (args: any) => {
+      calls += 1;
+      if (calls === callNumber) return { count: 0 };
+      return real(args);
+    });
+  };
+
+  it("create throws CONFLICT and rolls back the seat and group", async () => {
+    const db = buildGroupsDb({
+      searches: [
+        {
+          id: "s-driver",
+          userId: DRIVER,
+          role: Role.DRIVER,
+          carpoolId: null,
+          seatsAvail: 3,
+        },
+        {
+          id: "s-rider-1",
+          userId: RIDER_1,
+          role: Role.RIDER,
+          carpoolId: null,
+          seatsAvail: 0,
+        },
+      ],
+      groups: [],
+      requests: [[RIDER_1, DRIVER]],
+    });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    // #1 reserves the seat, #2 links the driver, #3 links the rider - the
+    // call a concurrent `user.edit` would have raced.
+    loseTheRaceOnCall(db.carpoolSearch.updateMany, 3);
+
+    await expect(
+      caller.user.groups.create({ driverId: DRIVER, riderId: RIDER_1 }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+
+    expect(db.groupIds()).toEqual([]);
+    expect(db.seatsOf(DRIVER)).toBe(3);
+    expect(db.carpoolIdOf(DRIVER)).toBeNull();
+    expect(db.carpoolIdOf(RIDER_1)).toBeNull();
+  });
+
+  it("edit-add throws CONFLICT and returns the seat", async () => {
+    const db = buildGroupsDb({
+      requests: [
+        [DRIVER, RIDER_1],
+        [OUTSIDER, DRIVER],
+      ],
+    });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+    const seatsBefore = db.seatsOf(DRIVER)!;
+
+    // #1 reserves the seat, #2 links the rider.
+    loseTheRaceOnCall(db.carpoolSearch.updateMany, 2);
+
+    await expect(
+      caller.user.groups.edit({
+        driverId: DRIVER,
+        riderId: OUTSIDER,
+        groupId: GROUP,
+        add: true,
+      }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+
+    expect(db.seatsOf(DRIVER)).toBe(seatsBefore);
+    expect(db.carpoolIdOf(OUTSIDER)).toBeNull();
+    // The request stays usable - the accept never happened.
+    expect(db.requestStatusOf(OUTSIDER, DRIVER)).toBe(RequestStatus.PENDING);
+  });
+});
+
+/**
  * the two halves of one inconsistency, asserted together.
  *
  * A driver at `seats_avail = -1` was a live, ACTIVE row in production-derived

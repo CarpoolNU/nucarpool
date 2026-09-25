@@ -546,11 +546,24 @@ export const groupsRouter = router({
           data: { carpoolId: group.id },
         });
 
-        // update rider's CarpoolSearch
-        await tx.carpoolSearch.updateMany({
-          where: { userId: input.riderId },
+        // Re-checks role and membership against the current row rather than
+        // trusting `riderSearch` above, which is this transaction's snapshot
+        // and can be stale by now: a concurrent `user.edit` can flip this
+        // same rider to DRIVER between that read and this write (SCRUM-563).
+        // `updateMany`'s WHERE is a current read in InnoDB, not a snapshot
+        // read, so this is the compare-and-swap that closes it - the same
+        // technique `reserveSeat` above already uses for seats.
+        const riderLinked = await tx.carpoolSearch.updateMany({
+          where: { userId: input.riderId, role: Role.RIDER, carpoolId: null },
           data: { carpoolId: group.id },
         });
+
+        if (riderLinked.count === 0) {
+          throw membershipConflict(
+            "That rider's role or group membership changed while this " +
+              "request was being accepted. Ask them to send a new request.",
+          );
+        }
 
         await markRequestAccepted(tx, input.driverId, input.riderId);
 
@@ -819,11 +832,27 @@ export const groupsRouter = router({
           // that could do neither reliably.
           await reserveSeat(tx, input.driverId);
 
-          // when adding rider, set carpoolId for the rider
-          await tx.carpoolSearch.updateMany({
-            where: { userId: input.riderId },
+          // Re-checks role and membership against the current row rather
+          // than trusting `riderSearch` above, for the same reason as
+          // `create`: this transaction's snapshot of it can be stale by now,
+          // because a concurrent `user.edit` can flip this rider to DRIVER
+          // in between (SCRUM-563). `updateMany`'s WHERE is a current read
+          // in InnoDB, not a snapshot read.
+          const riderLinked = await tx.carpoolSearch.updateMany({
+            where: {
+              userId: input.riderId,
+              role: Role.RIDER,
+              carpoolId: null,
+            },
             data: { carpoolId: input.groupId },
           });
+
+          if (riderLinked.count === 0) {
+            throw membershipConflict(
+              "That rider's role or group membership changed while this " +
+                "request was being accepted. Ask them to send a new request.",
+            );
+          }
 
           await markRequestAccepted(tx, input.driverId, input.riderId);
         } else {

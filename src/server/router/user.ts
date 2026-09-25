@@ -471,10 +471,50 @@ export const userRouter = router({
         };
 
         if (existingSearch) {
-          await tx.carpoolSearch.update({
-            where: { id: existingSearch.id },
-            data: carpoolSearchData,
-          });
+          // A role change is the half of this write `groups.create` and
+          // `groups.edit` depend on: both re-check the rider's `role` before
+          // linking them into a group, but only against a read taken earlier
+          // in *their own* transaction. Under MySQL REPEATABLE READ that read
+          // is a snapshot, so it can still say RIDER after this save has
+          // already committed DRIVER. SCRUM-557 keeps a stray DRIVER-in-group
+          // out of the ordinary path; this closes the concurrent one.
+          //
+          // `updateMany`'s WHERE performs a current read in InnoDB rather
+          // than reading the snapshot, so this is a compare-and-swap on
+          // `carpoolId`: it only writes the role change if the row's
+          // `carpoolId` still matches what this transaction saw when it read
+          // `existingSearch` above. If a concurrent accept moved it in
+          // between, `count` comes back 0 and the throw below rolls back the
+          // whole transaction, including the `user.update` — leaving the
+          // caller to reload and decide again with current data, rather than
+          // silently landing a DRIVER inside the group the accept just built.
+          //
+          // Scoped to role changes only: every other field on this row is
+          // exclusively this user's to write, so there is nothing for a
+          // plain `update` to race there.
+          if (input.role !== existingSearch.role) {
+            const roleChangeApplied = await tx.carpoolSearch.updateMany({
+              where: {
+                id: existingSearch.id,
+                carpoolId: existingSearch.carpoolId,
+              },
+              data: carpoolSearchData,
+            });
+
+            if (roleChangeApplied.count === 0) {
+              throw new TRPCError({
+                code: "CONFLICT",
+                message:
+                  "Your carpool group membership changed while this save " +
+                  "was in progress. Reload your profile and try again.",
+              });
+            }
+          } else {
+            await tx.carpoolSearch.update({
+              where: { id: existingSearch.id },
+              data: carpoolSearchData,
+            });
+          }
         } else {
           await tx.carpoolSearch.create({
             data: {
