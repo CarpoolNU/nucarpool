@@ -538,6 +538,13 @@ export const groupsRouter = router({
         // refusals and before the seat, so nothing has been written when it
         // throws. `user.blocks.block` enforces the other half: it refuses to
         // block someone the caller already shares a group with.
+        //
+        // This read and that one are both plain, non-locking reads in their
+        // own transaction, so a block landing at the same moment as this
+        // accept can have each side pass its own check against the other's
+        // pre-race state - a known, accepted race, not fixed here. See the
+        // long comment on `applyBlock` in `blocks.ts` for why, and the ticket
+        // filed alongside SCRUM-562 for the real fix.
         await assertNotBlocked(tx, input.driverId, input.riderId);
 
         await reserveSeat(tx, input.driverId);
@@ -828,6 +835,10 @@ export const groupsRouter = router({
           // blocked another rider, or was blocked by one, would otherwise
           // share a group with them through the driver, which is the state
           // `user.blocks.block` refuses to create from the other side.
+          //
+          // Same accepted race as `create`'s equivalent check above: a block
+          // landing at the same instant is not closed by this read. See the
+          // comment on `applyBlock` in `blocks.ts`.
           const members = await tx.carpoolSearch.findMany({
             where: { carpoolId: input.groupId },
             select: { userId: true },

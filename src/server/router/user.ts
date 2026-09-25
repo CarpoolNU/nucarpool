@@ -26,6 +26,7 @@ import {
 } from "../../utils/profileImage";
 import { adminDataRouter } from "./user/admin";
 import { resolveOwnedLocations } from "../db/locationOwnership";
+import { isBlockedPair } from "../db/blocks";
 import {
   latitudeSchema,
   longitudeSchema,
@@ -642,7 +643,8 @@ export const userRouter = router({
   getPresignedDownloadUrl: protectedRouter
     .input(getPresignedDownloadUrlInput)
     .query(async ({ ctx, input }): Promise<{ url: string | null }> => {
-      const userId: string | undefined = input.userId ?? ctx.session.user?.id;
+      const callerId = ctx.session.user?.id;
+      const userId: string | undefined = input.userId ?? callerId;
       if (!userId) {
         throw new TRPCError({
           code: "UNAUTHORIZED",
@@ -650,6 +652,21 @@ export const userRouter = router({
         });
       }
       try {
+        // A blocked pair may not fetch each other's photo (SCRUM-562), the
+        // one carve-out from the access rule documented above. `{ url: null
+        // }` rather than a thrown FORBIDDEN: it is the same cacheable shape
+        // "no picture" already uses, so a blocked viewer's avatar renders the
+        // ordinary fallback instead of an error, and reveals nothing about
+        // *why* there is no picture. Skipped when `userId` names the caller,
+        // since nobody can block themselves.
+        if (
+          callerId &&
+          callerId !== userId &&
+          (await isBlockedPair(ctx.prisma, callerId, userId))
+        ) {
+          return { url: null };
+        }
+
         // A primary-key lookup on an already-open connection is the whole cost
         // of an avatar: signing is a local HMAC, so no S3 request is made for
         // anyone. The column is the only record that a picture exists, and a

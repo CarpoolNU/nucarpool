@@ -79,6 +79,8 @@ const sessionFor = (id: string): Session => ({
  */
 const mockUserFindUnique = jest.fn();
 const mockUserUpdate = jest.fn();
+/** `isBlockedPair`'s only read (SCRUM-562). Defaults to "no block anywhere". */
+const mockBlockFindFirst = jest.fn();
 
 const callerFor = (session: Session | null) =>
   appRouter.createCaller({
@@ -90,6 +92,9 @@ const callerFor = (session: Session | null) =>
         findUnique: (...args: unknown[]) => mockUserFindUnique(...args),
         update: (...args: unknown[]) => mockUserUpdate(...args),
       },
+      block: {
+        findFirst: (...args: unknown[]) => mockBlockFindFirst(...args),
+      },
     },
     sesClient: { send: jest.fn() },
   } as unknown as Context);
@@ -98,6 +103,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockUserFindUnique.mockResolvedValue({ profilePictureUpdatedAt: null });
   mockUserUpdate.mockResolvedValue({});
+  mockBlockFindFirst.mockResolvedValue(null);
 });
 
 const withRecordedPicture = () =>
@@ -383,6 +389,62 @@ describe("user.getPresignedDownloadUrl — recorded picture state", () => {
 
     expect(result).not.toBeUndefined();
     expect(result).toEqual({ url: null });
+  });
+});
+
+/**
+ * `getPresignedDownloadUrl` across a block (SCRUM-562).
+ *
+ * The one carve-out from "any signed-in user may read any user's profile
+ * picture", documented at the top of this file. `{ url: null }` rather than a
+ * thrown error, matching the "no picture" shape exactly: cacheable, and it
+ * does not tell a blocked viewer why the avatar disappeared.
+ */
+describe("user.getPresignedDownloadUrl — across a block", () => {
+  it("returns { url: null } without signing when the caller blocked the owner", async () => {
+    withRecordedPicture();
+    mockBlockFindFirst.mockResolvedValue({ id: "block-1" });
+    const caller = callerFor(sessionFor(SESSION_USER));
+
+    await expect(
+      caller.user.getPresignedDownloadUrl({ userId: OTHER_USER }),
+    ).resolves.toEqual({ url: null });
+
+    expect(mockSignProfileImageUrl).not.toHaveBeenCalled();
+    // Refused before the picture lookup, not merely before signing.
+    expect(mockUserFindUnique).not.toHaveBeenCalled();
+  });
+
+  it("returns { url: null } when the owner blocked the caller", async () => {
+    withRecordedPicture();
+    mockBlockFindFirst.mockResolvedValue({ id: "block-2" });
+    const caller = callerFor(sessionFor(SESSION_USER));
+
+    await expect(
+      caller.user.getPresignedDownloadUrl({ userId: OTHER_USER }),
+    ).resolves.toEqual({ url: null });
+  });
+
+  it("still signs once there is no block between the pair", async () => {
+    withRecordedPicture();
+    mockSignProfileImageUrl.mockResolvedValueOnce(SIGNED);
+    const caller = callerFor(sessionFor(SESSION_USER));
+
+    await expect(
+      caller.user.getPresignedDownloadUrl({ userId: OTHER_USER }),
+    ).resolves.toEqual({ url: SIGNED });
+  });
+
+  it("never checks a block for the caller's own picture", async () => {
+    withRecordedPicture();
+    mockSignProfileImageUrl.mockResolvedValueOnce(SIGNED);
+    const caller = callerFor(sessionFor(SESSION_USER));
+
+    await expect(caller.user.getPresignedDownloadUrl({})).resolves.toEqual({
+      url: SIGNED,
+    });
+
+    expect(mockBlockFindFirst).not.toHaveBeenCalled();
   });
 });
 

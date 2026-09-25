@@ -19,10 +19,11 @@ jest.mock("../../utils/trpc", () => {
       user: {
         admin: {
           getReports: {
-            useQuery: (input: undefined, options: object) =>
-              reactQuery.useQuery({
+            useInfiniteQuery: (input: unknown, options: object) =>
+              reactQuery.useInfiniteQuery({
                 queryKey: ["getReports", input],
-                queryFn: () => reportsQueryFn(),
+                queryFn: () => reportsQueryFn(input),
+                initialPageParam: undefined,
                 ...options,
               }),
           },
@@ -66,6 +67,12 @@ const report = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+/** One `getReports` page, the shape `useInfiniteQuery`'s `queryFn` resolves. */
+const page = (
+  reports: ReturnType<typeof report>[],
+  nextCursor: string | null = null,
+) => ({ reports, nextCursor });
+
 beforeEach(() => {
   reportsQueryFn.mockReset();
   usersQueryFn.mockReset();
@@ -73,7 +80,7 @@ beforeEach(() => {
 
 describe("AdminReports", () => {
   it("names both users by email and the reason by its label", async () => {
-    reportsQueryFn.mockResolvedValue([report()]);
+    reportsQueryFn.mockResolvedValue(page([report()]));
     usersQueryFn.mockResolvedValue(USERS);
 
     render(withClient(<AdminReports />));
@@ -85,23 +92,25 @@ describe("AdminReports", () => {
   });
 
   it("keeps the snapshot folded until opened, labelling who said what", async () => {
-    reportsQueryFn.mockResolvedValue([
-      report({
-        requestId: "req-1",
-        conversationSnapshot: [
-          {
-            senderId: "reporter-1",
-            content: "Please stop.",
-            sentAt: new Date(2026, 8, 1, 9, 0),
-          },
-          {
-            senderId: "reported-1",
-            content: "No.",
-            sentAt: new Date(2026, 8, 1, 9, 1),
-          },
-        ],
-      }),
-    ]);
+    reportsQueryFn.mockResolvedValue(
+      page([
+        report({
+          requestId: "req-1",
+          conversationSnapshot: [
+            {
+              senderId: "reporter-1",
+              content: "Please stop.",
+              sentAt: new Date(2026, 8, 1, 9, 0),
+            },
+            {
+              senderId: "reported-1",
+              content: "No.",
+              sentAt: new Date(2026, 8, 1, 9, 1),
+            },
+          ],
+        }),
+      ]),
+    );
     usersQueryFn.mockResolvedValue(USERS);
     const user = userEvent.setup();
 
@@ -121,18 +130,20 @@ describe("AdminReports", () => {
 
   it("renders markup in stored text as characters, never as elements", async () => {
     const payload = '<img src="x" onerror="alert(1)">';
-    reportsQueryFn.mockResolvedValue([
-      report({
-        message: payload,
-        conversationSnapshot: [
-          {
-            senderId: "reported-1",
-            content: payload,
-            sentAt: new Date(2026, 8, 1, 9, 0),
-          },
-        ],
-      }),
-    ]);
+    reportsQueryFn.mockResolvedValue(
+      page([
+        report({
+          message: payload,
+          conversationSnapshot: [
+            {
+              senderId: "reported-1",
+              content: payload,
+              sentAt: new Date(2026, 8, 1, 9, 0),
+            },
+          ],
+        }),
+      ]),
+    );
     usersQueryFn.mockResolvedValue(USERS);
 
     const { container } = render(withClient(<AdminReports />));
@@ -142,7 +153,9 @@ describe("AdminReports", () => {
   });
 
   it("shows no conversation for a report made from a card", async () => {
-    reportsQueryFn.mockResolvedValue([report({ message: "Rude at pickup." })]);
+    reportsQueryFn.mockResolvedValue(
+      page([report({ message: "Rude at pickup." })]),
+    );
     usersQueryFn.mockResolvedValue(USERS);
 
     render(withClient(<AdminReports />));
@@ -152,7 +165,7 @@ describe("AdminReports", () => {
   });
 
   it("shows an empty-state message rather than a blank table", async () => {
-    reportsQueryFn.mockResolvedValue([]);
+    reportsQueryFn.mockResolvedValue(page([]));
     usersQueryFn.mockResolvedValue([]);
 
     render(withClient(<AdminReports />));
@@ -168,6 +181,46 @@ describe("AdminReports", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("alert")).toBeVisible();
+    });
+  });
+
+  it("loads another page on demand, rather than all at once (SCRUM-562)", async () => {
+    reportsQueryFn.mockResolvedValueOnce(
+      page([report({ id: "report-1" })], "report-1"),
+    );
+    usersQueryFn.mockResolvedValue(USERS);
+    const user = userEvent.setup();
+
+    render(withClient(<AdminReports />));
+
+    expect(await screen.findByText("Load more")).toBeVisible();
+    expect(reportsQueryFn).toHaveBeenCalledTimes(1);
+
+    reportsQueryFn.mockResolvedValueOnce(page([report({ id: "report-2" })]));
+    await user.click(screen.getByText("Load more"));
+
+    await waitFor(() => {
+      expect(screen.queryByText("Load more")).not.toBeInTheDocument();
+    });
+    expect(reportsQueryFn).toHaveBeenCalledTimes(2);
+  });
+
+  it("re-queries when the status filter changes, defaulting to Open", async () => {
+    reportsQueryFn.mockResolvedValue(page([report()]));
+    usersQueryFn.mockResolvedValue(USERS);
+    const user = userEvent.setup();
+
+    render(withClient(<AdminReports />));
+    await screen.findByText("reporter@northeastern.edu");
+
+    expect(reportsQueryFn).toHaveBeenLastCalledWith({ status: "OPEN" });
+
+    await user.click(screen.getByText("Dismissed"));
+
+    await waitFor(() => {
+      expect(reportsQueryFn).toHaveBeenLastCalledWith({
+        status: "DISMISSED",
+      });
     });
   });
 });

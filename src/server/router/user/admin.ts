@@ -1,6 +1,6 @@
 import { adminRouter, router } from "../createRouter";
 import { z } from "zod";
-import { Permission, Prisma, Role, Status } from "@prisma/client";
+import { Permission, Prisma, ReportStatus, Role, Status } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
 import { addWeeks, startOfWeek } from "date-fns";
 import {
@@ -21,12 +21,34 @@ import { parseConversationSnapshot } from "../../reportSnapshot";
 const AUDIT_LOG_PAGE_SIZE = 500;
 
 /**
- * How many reports the queue reads back. The same static ceiling as the audit
- * log. The worst case is 500 reports each carrying a full 50-message
- * snapshot, a few megabytes. Reports are rare enough that this is far off, and
- * a lower cap would hide the oldest unresolved reports, which is worse.
+ * The default and maximum number of reports one `getReports` page carries.
+ * The worst case is 500 reports each carrying a full 50-message snapshot, a
+ * few megabytes.
+ *
+ * Used to be the whole of the queue - unpaginated, so a script filing OPEN
+ * reports against every user it could see (SCRUM-562) pushed genuinely
+ * unresolved reports past the newest 500 and out of what an admin could ever
+ * see. `getReports` now pages with a cursor, so a flood makes the queue
+ * longer rather than making the rest of it invisible; the per-reporter rate
+ * limit in `reports.ts` is what keeps the flood itself from being free.
  */
 const REPORT_QUEUE_PAGE_SIZE = 500;
+
+/**
+ * The input `getReports` accepts. All optional, so the existing bare call
+ * (`getReports()`) keeps working: `status` defaults to OPEN, matching the
+ * queue an admin actually needs to act on, and `null` is the explicit way to
+ * ask for every status instead. `cursor`/`limit` follow `messages.conversation`
+ * and `getReports`'s own `dateCreated, id` ordering below.
+ */
+const getReportsInput = z
+  .object({
+    status: z.nativeEnum(ReportStatus).nullable().optional(),
+    cursor: z.string().optional(),
+    limit: z.number().int().min(1).max(REPORT_QUEUE_PAGE_SIZE).optional(),
+  })
+  .strict()
+  .optional();
 
 /**
  * Admin dashboard queries. `adminRouter` already restricts these to ADMIN and
@@ -399,8 +421,8 @@ export const adminDataRouter = router({
   }),
 
   /**
-   * The report queue (SCRUM-555). Read-only, most recent first, and bounded
-   * like `getAuditLog`. Resolving a report is SCRUM-552.
+   * The report queue (SCRUM-555). Read-only, most recent first, cursor-paged
+   * (SCRUM-562). Resolving a report is SCRUM-552.
    *
    * **This is the one admin read that returns message text**, and it is the
    * exception the header's rule allows for. A snapshot is a copy of a thread
@@ -410,27 +432,58 @@ export const adminDataRouter = router({
    * Like `getAuditLog`, it returns raw user ids, and the client resolves them
    * through `getAllUsers`. The snapshot is parsed here, so the client gets
    * typed messages rather than a JSON string.
+   *
+   * **Defaults to OPEN.** An admin working the queue wants what still needs
+   * review; a reviewed or dismissed report competing for the same page pushes
+   * that further away for no reason. Pass `status: null` for every status,
+   * or a specific one to look at what was already resolved.
+   *
+   * Ordered by `(dateCreated, id)`, not `dateCreated` alone, for the same
+   * reason as `messages.conversation`: two reports filed in the same request
+   * can share a timestamp, and a cursor over a non-total order can skip or
+   * repeat a row across pages.
    */
-  getReports: adminRouter.query(async ({ ctx }) => {
-    const rows = await ctx.prisma.report.findMany({
-      orderBy: { dateCreated: "desc" },
-      take: REPORT_QUEUE_PAGE_SIZE,
-      select: {
-        id: true,
-        reporterId: true,
-        reportedUserId: true,
-        reason: true,
-        message: true,
-        requestId: true,
-        conversationSnapshot: true,
-        status: true,
-        dateCreated: true,
-      },
-    });
+  getReports: adminRouter
+    .input(getReportsInput)
+    .query(async ({ ctx, input }) => {
+      // `??` would coalesce `null` (explicitly "every status") into OPEN along
+      // with `undefined` (the field omitted) - the two have to read as
+      // different requests, so only `undefined` falls through to the default.
+      const status =
+        input?.status === undefined ? ReportStatus.OPEN : input.status;
+      const limit = input?.limit ?? REPORT_QUEUE_PAGE_SIZE;
 
-    return rows.map(({ conversationSnapshot, ...row }) => ({
-      ...row,
-      conversationSnapshot: parseConversationSnapshot(conversationSnapshot),
-    }));
-  }),
+      // One extra row, to learn whether another page exists without a second
+      // round trip or a `count` over the whole queue.
+      const rows = await ctx.prisma.report.findMany({
+        where: status === null ? undefined : { status },
+        orderBy: [{ dateCreated: "desc" }, { id: "desc" }],
+        take: limit + 1,
+        ...(input?.cursor
+          ? { cursor: { id: input.cursor }, skip: 1 }
+          : undefined),
+        select: {
+          id: true,
+          reporterId: true,
+          reportedUserId: true,
+          reason: true,
+          message: true,
+          requestId: true,
+          conversationSnapshot: true,
+          status: true,
+          dateCreated: true,
+        },
+      });
+
+      const hasMore = rows.length > limit;
+      const page = hasMore ? rows.slice(0, limit) : rows;
+
+      return {
+        reports: page.map(({ conversationSnapshot, ...row }) => ({
+          ...row,
+          conversationSnapshot: parseConversationSnapshot(conversationSnapshot),
+        })),
+        nextCursor: hasMore ? page[page.length - 1].id : null,
+      };
+    }),
 });
