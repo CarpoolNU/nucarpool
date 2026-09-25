@@ -223,10 +223,28 @@ export const calculateScore = (
 
     if (
       (currentUser.role === "RIDER" &&
-        (user.role === "RIDER" || !hasSeatAvailable(user.seatAvail))) ||
-      (currentUser.role === "DRIVER" && user.role === "DRIVER") ||
-      user.role === "VIEWER" ||
-      (currentUser.carpoolId && currentUser.carpoolId === user.carpoolId)
+        (user.role === "RIDER" ||
+          !hasSeatAvailable(user.seatAvail) ||
+          // Every accept path requires the rider's own row to hold
+          // `carpoolId: null` before it links them (SCRUM-560), so a rider
+          // already in a group - theirs or anyone else's - can never join
+          // another. The old test compared groups (`currentUser.carpoolId ===
+          // user.carpoolId`), which excluded only a driver in the rider's own
+          // group and still offered drivers from every other one, all of
+          // which would refuse the resulting request with CONFLICT.
+          !!currentUser.carpoolId)) ||
+      (currentUser.role === "DRIVER" &&
+        (user.role === "DRIVER" ||
+          // A driver with no seats left cannot accept anyone either -
+          // `connectAction` refuses every rider with "no seats" today.
+          !hasSeatAvailable(currentUser.seatAvail) ||
+          // A rider who already has a `carpoolId` can never be accepted,
+          // whichever group holds them. A grouped *driver* recruiting an
+          // ungrouped rider is still valid, which is why this tests the
+          // candidate's group state rather than comparing it to the current
+          // user's own.
+          (user.role === "RIDER" && !!user.carpoolId))) ||
+      user.role === "VIEWER"
     ) {
       return undefined;
     }
