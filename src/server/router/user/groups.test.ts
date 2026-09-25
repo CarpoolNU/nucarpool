@@ -258,18 +258,36 @@ const buildGroupsDb = (opts?: {
   // Read-only here: groups never writes a block, so it needs no snapshot.
   const block = fakeBlockDelegate(opts?.blocks ?? []);
 
-  // The rider-linking compare-and-swap in `create` and `edit`'s add path
-  // (SCRUM-563). A raw `UPDATE`, not `tx.carpoolSearch.updateMany` -
-  // `updateMany`'s WHERE was verified against a real MySQL to match this
-  // transaction's own snapshot rather than the current row on this Prisma
-  // version, so it did not actually close the race. `$executeRaw` is a
-  // template-tag call: `values` holds, in order, the `carpoolId` being set
-  // and the `userId`/`role` from the WHERE, from `UPDATE carpool_search SET
-  // carpoolId = ${...} WHERE userId = ${...} AND role = ${...} AND
-  // carpoolId IS NULL`. Both call sites compile to the same shape, so one
-  // implementation covers them.
+  // Two raw `UPDATE`s now route through `$executeRaw`, distinguished below by
+  // how many interpolated values each carries - neither compiles to the
+  // other's shape, so this is unambiguous:
+  //
+  // - `reserveSeat`'s seat claim (SCRUM-565), one value: `UPDATE
+  //   carpool_search SET seatsAvail = seatsAvail - 1 WHERE userId = ${...}
+  //   AND seatsAvail > 0`.
+  // - The rider-linking compare-and-swap in `create` and `edit`'s add path
+  //   (SCRUM-563), three values - the `carpoolId` being set and the
+  //   `userId`/`role` from the WHERE: `UPDATE carpool_search SET carpoolId =
+  //   ${...} WHERE userId = ${...} AND role = ${...} AND carpoolId IS NULL`.
+  //
+  // Both are `updateMany`-shaped compare-and-swaps that moved to raw SQL for
+  // the same reason: `updateMany`'s WHERE was verified against a real MySQL
+  // to match this transaction's own snapshot rather than the current row on
+  // this Prisma version, so it did not actually close either race.
   const executeRaw = jest.fn(
     async (_strings: unknown, ...values: unknown[]) => {
+      if (values.length === 1) {
+        const [driverUserId] = values;
+        const row = searches.find((r) =>
+          matches(r, { userId: driverUserId, seatsAvail: { gt: 0 } }),
+        );
+        if (!row) {
+          return 0;
+        }
+        row.seatsAvail -= 1;
+        return 1;
+      }
+
       const [groupIdToSet, riderId, roleToMatch] = values;
       const row = searches.find((r) =>
         matches(r, { userId: riderId, role: roleToMatch, carpoolId: null }),
@@ -2800,8 +2818,13 @@ describe("the rider slot is re-checked at write time, not just at read time (SCR
     const { caller } = callerFor(sessionFor(DRIVER), db);
 
     // The rider link - the call a concurrent `user.edit` would have raced -
-    // loses the compare-and-swap.
-    db.executeRaw.mockImplementationOnce(async () => 0);
+    // loses the compare-and-swap. Targeted by argument count rather than call
+    // order: `reserveSeat` (SCRUM-565) now also routes through `$executeRaw`,
+    // and runs first.
+    const defaultExecuteRaw = db.executeRaw.getMockImplementation()!;
+    db.executeRaw.mockImplementation(async (strings: unknown, ...values) =>
+      values.length === 3 ? 0 : defaultExecuteRaw(strings, ...values),
+    );
 
     await expect(
       caller.user.groups.create({ driverId: DRIVER, riderId: RIDER_1 }),
@@ -2823,9 +2846,13 @@ describe("the rider slot is re-checked at write time, not just at read time (SCR
     const { caller } = callerFor(sessionFor(DRIVER), db);
     const seatsBefore = db.seatsOf(DRIVER)!;
 
-    // The seat reservation goes through; the rider link's compare-and-swap
-    // then loses the race.
-    db.executeRaw.mockImplementationOnce(async () => 0);
+    // The seat reservation (SCRUM-565's raw claim) goes through; the rider
+    // link's compare-and-swap then loses the race. Targeted by argument count
+    // rather than call order - see the `create` test above for why.
+    const defaultExecuteRaw = db.executeRaw.getMockImplementation()!;
+    db.executeRaw.mockImplementation(async (strings: unknown, ...values) =>
+      values.length === 3 ? 0 : defaultExecuteRaw(strings, ...values),
+    );
 
     await expect(
       caller.user.groups.edit({
