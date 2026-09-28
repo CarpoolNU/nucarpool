@@ -1,5 +1,5 @@
 /**
- * SCRUM-561 item 2: closing "Your request has been sent!" by any route must
+ * Closing "Your request has been sent!" by any route must
  * refresh the request lists, not only by its Close button.
  *
  * `onClose` invalidated `requests.me` and `recommendations.me` only for the

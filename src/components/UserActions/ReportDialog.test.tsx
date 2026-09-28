@@ -11,7 +11,7 @@ import {
 import { REPORT_MESSAGE_MAX_LENGTH } from "../../utils/textLimits";
 
 /**
- * The report form (SCRUM-555).
+ * The report form.
  *
  * The server decides what a report may contain and whether its block goes
  * through. What this file pins is the client's half: nothing is sent without

@@ -2,8 +2,9 @@
  * That the connect modal's panel caps its own height, and that the cap is
  * paired with an alignment which leaves the overflow reachable.
  *
- * SCRUM-482 (phase 1 of SCRUM-477). The panel carried `overflow-y-auto` and no
- * `max-height`, which is a scroller that can never engage: with no ceiling the
+ * This was phase 1 of a broader modal-height audit. The panel carried
+ * `overflow-y-auto` and no `max-height`, which is a scroller that can never
+ * engage: with no ceiling the
  * box simply grows to its content, so the content never exceeds it. Centred
  * inside a `fixed inset-0` wrapper, it then overflowed off both edges with no
  * page scroll to recover it.

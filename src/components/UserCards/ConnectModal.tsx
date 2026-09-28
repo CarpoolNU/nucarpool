@@ -43,7 +43,7 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
    * `closeAfterSend`; Esc and a backdrop click arrive through `Dialog`'s
    * `onClose` as `close`, so they skipped the invalidation and left the
    * Requests tab without the sent card, the explore card still offering
-   * Connect, and a second Send heading for the server's CONFLICT (SCRUM-561).
+   * Connect, and a second Send heading for the server's CONFLICT.
    *
    * The action forwarded to the parent is corrected too, not only the
    * invalidation. `ConnectCard` collapses the mobile detail sheet on

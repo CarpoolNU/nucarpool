@@ -129,7 +129,7 @@ describe.each(CARDS)("%s controls", (_name, Card) => {
       // The exact set, not a presence check. A View Route or Connect button
       // reappearing here is the regression this file exists to catch, and
       // either would slip past `getByRole(…, { name: OPEN_CONVERSATION })`.
-      // Bar the actions menu every `UserCard` carries (SCRUM-554), which is
+      // Bar the actions menu every `UserCard` carries, which is
       // pinned by element so the set stays exact.
       const menu = screen.getByRole("button", {
         name: "More actions for Riley",

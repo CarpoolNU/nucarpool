@@ -1,5 +1,5 @@
 /**
- * SCRUM-510 finding 1: a sent message has to reach the thread it was sent to
+ * A sent message has to reach the thread it was sent to
  * even when the Pusher echo never arrives.
  *
  * `sendMessage`'s `onSuccess` invalidated `user.requests.me` and nothing else,

@@ -299,7 +299,7 @@ export const GroupPage = (props: GroupPageProps) => {
        * screen's `z-50` - so the nav won both the paint and the hit test over
        * whatever the overlay put down there. That was the sticky action bar
        * holding "Preview Group Route", the group screen's primary action:
-       * SCRUM-464 measured 44 of its 56px behind the nav on a 375x667 phone,
+       * 44 of its 56px was measured behind the nav on a 375x667 phone,
        * leaving a 12px strip to tap. The last member card's Leave/Remove
        * button is the same exposure whenever it is the bottom-most thing in
        * the scroll port, which is the `hasDriver` false case, where no action
@@ -312,7 +312,7 @@ export const GroupPage = (props: GroupPageProps) => {
        * inherits that, and so does anything else ever pinned to the bottom of
        * this screen - which is why this is one class here rather than padding
        * on each of them. `MapConnectPortal` solved the same overlap the same
-       * way, and `bottom-mobile-nav` is the token SCRUM-412 created for it -
+       * way, and `bottom-mobile-nav` is the token created for it -
        * it carries `env(safe-area-inset-bottom)`, which a hand-written offset
        * would not.
        *
@@ -365,7 +365,7 @@ export const GroupPage = (props: GroupPageProps) => {
       {/* Backdrop and panel are siblings. While the backdrop wrapped the
        * panel, its `aria-hidden` covered the whole subtree - the group-details
        * form, "Preview Group Route", "Leave Group", "Remove", "Delete Group" -
-       * and no descendant can opt back in. SCRUM-475. The `relative z-50` on
+       * and no descendant can opt back in. The `relative z-50` on
        * `Dialog` above is the stacking context both of these sit in, so DOM
        * order alone puts the panel over the blur. */}
       <div className="fixed inset-0 backdrop-blur-xs" aria-hidden="true" />

@@ -88,7 +88,7 @@ restoreViewportAfterEach();
 const BACK = "Back to conversations";
 /** The desktop header's own control. It is a bare `×` carrying an aria-label. */
 const CLOSE = "Close";
-/** The actions menu (SCRUM-554): beside the name on mobile, before Close on desktop. */
+/** The actions menu: beside the name on mobile, before Close on desktop. */
 const MENU = "More actions for Riley";
 
 const PENDING = { id: "req-1", status: RequestStatus.PENDING } as const;

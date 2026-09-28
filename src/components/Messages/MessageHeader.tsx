@@ -80,14 +80,14 @@ const MOBILE_CONTROL_CLASSES: ControlClasses = {
  *
  * Both states delete the `Request` row and take the conversation with it -
  * they are one button on one `onReject`, and the label is the only difference
- * - so both are confirmed. SCRUM-468 asked for the Reject half, where the
- * hazard is proximity to Accept; Withdraw Request gets it too because gating
- * one state of one button out of a confirmation is a conditional with nothing
- * behind it, and a full-width single-press control that destroys a thread is
- * the same defect with a different label.
+ * - so both are confirmed. The fix originally asked for the Reject half,
+ * where the hazard is proximity to Accept; Withdraw Request gets it too
+ * because gating one state of one button out of a confirmation is a
+ * conditional with nothing behind it, and a full-width single-press control
+ * that destroys a thread is the same defect with a different label.
  *
  * Accept is deliberately not confirmed: it already refuses a second press
- * through `isMutating`, and SCRUM-468 requires it left alone.
+ * through `isMutating`, and the fix requires it left alone.
  */
 const CONFIRM_PROMPTS: Record<"respond" | "withdraw", string> = {
   respond: "Reject this request? This also deletes the conversation.",
@@ -170,8 +170,8 @@ const RequestControls = ({
           right-aligned in a shrink-wrapped slot under a right-aligned trigger
           - so ordering its row this way would move Confirm *onto* the slot the
           finger just pressed instead of off it. Same rule, opposite
-          arrangement; SCRUM-476 has the measurements. Read that comment before
-          changing either one to match the other.
+          arrangement; that component's own comment has the measurements. Read
+          that comment before changing either one to match the other.
 
           It also takes the *filled* slot, and Confirm the outlined one, which
           is the reverse of what a confirmation usually does. The reason is
@@ -409,8 +409,8 @@ const MessageHeader = ({
             are both `flex-1`, so they were two half-width thumb targets 12px
             apart where the desktop pair carry `mr-10`; a destructive and a
             constructive action that close, at that size, is a mis-tap away
-            from deleting a request and its conversation. 24px is what
-            SCRUM-468 asks for, and it still leaves each button ~160px wide at
+            from deleting a request and its conversation. 24px is the figure
+            that fix settled on, and it still leaves each button ~160px wide at
             375px.
 
             The row gap moves with it, which is the intended effect where the
@@ -448,7 +448,7 @@ const MessageHeader = ({
       with nothing: `message-content` measured 32px tall, all of it its own
       padding, with `contentHeight` 0 and a `scrollHeight` of 220 behind it.
       Not cramped - a user who opened a thread in landscape saw no messages at
-      all, including the one they had just sent (SCRUM-489).
+      all, including the one they had just sent.
 
       **The compact values are the base and the full-size ones the override**,
       which is the inversion `DESKTOP_MEDIA_QUERY`'s docblock argues for: a

@@ -214,7 +214,7 @@ describe("Discovery card activation on mobile", () => {
     // that exact mutation survived an earlier version of this file.
     renderCard();
 
-    // Bar the actions menu every `UserCard` carries (SCRUM-554), pinned by
+    // Bar the actions menu every `UserCard` carries, pinned by
     // element so any other button still fails this.
     expect(screen.queryAllByRole("button")).toEqual([
       screen.getByRole("button", { name: "More actions for Riley" }),
@@ -287,7 +287,7 @@ describe("Discovery card activation on desktop", () => {
     // match.
     renderCard({ handleMobileExpand: () => undefined });
 
-    // The actions menu (SCRUM-554) is icon-only too, so it is excluded by
+    // The actions menu is icon-only too, so it is excluded by
     // element, not by its empty text, or the overlay would be excluded with it.
     const menu = screen.getByRole("button", { name: "More actions for Riley" });
     const labels = screen

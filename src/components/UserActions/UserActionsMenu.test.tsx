@@ -5,7 +5,7 @@ import UserActionsMenu from "./UserActionsMenu";
 import { BLOCK_GROUP_MEMBER_MESSAGE } from "../../server/router/user/blocks";
 
 /**
- * The overflow menu and the block confirmation (SCRUM-554).
+ * The overflow menu and the block confirmation.
  *
  * The server enforces what a block does. What this file pins is the client's
  * half: nothing is blocked without the confirm step, confirming sends exactly
@@ -188,7 +188,7 @@ describe("UserActionsMenu", () => {
   });
 });
 
-describe("UserActionsMenu Report (SCRUM-555)", () => {
+describe("UserActionsMenu Report", () => {
   const openReport = async (requestId?: string) => {
     render(
       <UserActionsMenu

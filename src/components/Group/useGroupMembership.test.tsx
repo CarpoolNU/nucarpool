@@ -1,5 +1,5 @@
 /**
- * The post-match feedback prompt on every membership change. SCRUM-545.
+ * The post-match feedback prompt on every membership change.
  *
  * Every success path in `useGroupMembership` ends a pairing the caller was in,
  * so each one must carry the link to the feedback form - and no error path

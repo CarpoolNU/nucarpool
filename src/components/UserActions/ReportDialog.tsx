@@ -25,7 +25,7 @@ type ReportDialogProps = {
 };
 
 /**
- * Reports another user to the admins (SCRUM-555).
+ * Reports another user to the admins.
  *
  * `UserActionsMenu` mounts this only while it is open, so the form starts
  * empty each time and nothing typed in one report carries into the next.
