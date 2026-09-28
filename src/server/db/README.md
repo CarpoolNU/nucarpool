@@ -8,7 +8,7 @@ This directory holds the shared Prisma client. The schema, migrations and seed s
 ## Data model
 
 - **A user's carpool details are not on `User`.** `User` holds identity and profile only. Role, company, schedule, seats, status and group membership live on `CarpoolSearch`, which links to two `Location` rows (home and company). `user.me` merges the first `CarpoolSearch` onto the returned user, so **a flat-looking result does not mean flat storage**.
-- **A user has at most one `CarpoolSearch`.** `@@unique([userId])` is a real MySQL index — unlike the relations, `relationMode = "prisma"` does not emulate it — so every read that takes "the" search by `userId` with no `orderBy` is well defined. `user.edit` creates the row on a first save, and retries a save the index refuses because a concurrent one won. Why one and not many: [the multi-search design](../../../docs/design/multi-carpool-search.md) (SCRUM-543, SCRUM-544).
+- **A user has at most one `CarpoolSearch`.** `@@unique([userId])` is a real MySQL index — unlike the relations, `relationMode = "prisma"` does not emulate it — so every read that takes "the" search by `userId` with no `orderBy` is well defined. `user.edit` creates the row on a first save, and retries a save the index refuses because a concurrent one won. Why one and not many: [the multi-search design](../../../docs/design/multi-carpool-search.md).
 - **A `Location` belongs to one slot of one `CarpoolSearch`** — never shared between users, nor between a single user's two slots. Anything writing locations must go through [`locationOwnership.ts`](./locationOwnership.ts). See [Location ownership](#location-ownership).
 - **`relationMode = "prisma"`** — foreign keys are emulated by Prisma, not enforced by MySQL. Relation scalar fields need explicit `@@index` entries, and `onDelete` is carried out by Prisma.
 - `Account`, `Session`, `User` and `VerificationToken` back NextAuth through the Prisma adapter. Changing them can break sign-in.
@@ -31,11 +31,11 @@ Both directions go through [`scheduleTime.ts`](../../utils/scheduleTime.ts), whi
 
 Reading the wall clock rather than the instant is what makes writes date-independent — a student onboarding from California stores the schedule they typed, not one shifted three hours.
 
-**That describes what is written now, not the whole column.** Four successive pickers each stored a Boston 9:00 AM differently, and the table holds the residue of all four — SCRUM-376 has the archaeology and the production counts. Two legacy classes matter, and they need opposite treatment:
+**That describes what is written now, not the whole column.** Four successive pickers each stored a Boston 9:00 AM differently, and the table holds the residue of all four. Two legacy classes matter, and they need opposite treatment:
 
 > **Wall clock, five hours out.** Two of the four implementations wrote the typed digits straight through, so a 9-to-5 is stored `09:00`–`17:00` and renders as 4:00 AM to 12:00 PM. About 42% of the table. These _are_ identifiable — read as UTC they describe a shift starting before dawn and ending at noon, which no competing reading makes sensible. [`scheduleTimeIntegrity.ts`](./scheduleTimeIntegrity.ts) owns the classifier and [`repair-wallclock-schedule-times.ts`](../../../scripts/repair-wallclock-schedule-times.ts) the repair, scoped to co-ops that are running.
 
-> **Converted under daylight saving, one hour early — and _not_ identifiable from the row.** `13:00` is a correct winter 8:00 AM and an incorrect summer 9:00 AM, and nothing records which. **Do not apply a blanket `+1 hour`** — it would corrupt every correctly stored winter row. Bucketing by `date_modified` is about 82% accurate for rows whose co-op is running and worse elsewhere, which SCRUM-376 records as too weak for an irreversible write. The remedy is asking affected users to re-save, as with coordinates below.
+> **Converted under daylight saving, one hour early — and _not_ identifiable from the row.** `13:00` is a correct winter 8:00 AM and an incorrect summer 9:00 AM, and nothing records which. **Do not apply a blanket `+1 hour`** — it would corrupt every correctly stored winter row. Bucketing by `date_modified` is about 82% accurate for rows whose co-op is running and worse elsewhere — too weak for an irreversible write. The remedy is asking affected users to re-save, as with coordinates below.
 
 Note that a save **preserves** whatever was stored unless the user retypes the time: `toPickerScheduleTime` → `toStoredScheduleTime` is a deliberate no-op round trip. Legacy values therefore survive profile edits and whole co-op cycles, and `date_modified` records the last save rather than the last time the schedule was authored.
 
@@ -49,11 +49,11 @@ A calendar day taken from the **UTC** date of whatever `Date` Prisma is handed. 
 
 **Never write a picker value straight to the form.** Both controls go through a handler that calls `lastDayOfMonthUTC`. Writing `date.toDate()` directly gives local midnight on the _first_ of the month, which breaks two rules at once: the UTC one, and the convention that these columns hold the **last** day of the chosen month. The consequence is silent — `dateOverlapFilter` compares a first-of-month value against a last-of-month one and drops exact matches.
 
-**The range must run forwards.** A reversed range used to be stored as submitted and then fail silently at match time, because the full-overlap branch asks for `startDate <= theirs AND endDate >= theirs`, which nothing can satisfy once crossed. `user.edit` and [`onboardSchema`](../../utils/profile/zodSchema.ts) both refuse it via [`reversedCoopRangeFields`](../../utils/dateUtils.ts) — **except for a VIEWER**, whose date pickers are disabled while every save re-sends the stored dates, so refusing theirs would block every save they make (SCRUM-551). The check returns when they switch role and the pickers enable.
+**The range must run forwards.** A reversed range used to be stored as submitted and then fail silently at match time, because the full-overlap branch asks for `startDate <= theirs AND endDate >= theirs`, which nothing can satisfy once crossed. `user.edit` and [`onboardSchema`](../../utils/profile/zodSchema.ts) both refuse it via [`reversedCoopRangeFields`](../../utils/dateUtils.ts) — **except for a VIEWER**, whose date pickers are disabled while every save re-sends the stored dates, so refusing theirs would block every save they make. The check returns when they switch role and the pickers enable.
 
 **Equality is allowed**, and has to be: both pickers are month-granularity and store the last day, so a one-month co-op is the same date twice.
 
-**The year must be plausible.** Production holds 22 searches dated like 1901→1908 or 2069→2073 — they run forwards, so the ordering rule never saw them (SCRUM-550). [`coopYearBounds`](../../utils/dateUtils.ts) allows 2022, the year this repository began, through ten years past the current one. The floor is fixed so a real co-op never ages into a rejection; the ceiling moves so it never expires. `user.edit` and `onboardSchema` both refuse a year outside it, **except for a VIEWER**, whose pickers are disabled while every save re-sends the stored dates — refusing theirs would reject every save they make. The stored rows are not rewritten: adding a century still lands before the platform existed, so the profile page asks the user instead, through [`planCoopRangeNotice`](../../utils/profile/coopRangeNotice.ts).
+**The year must be plausible.** Production holds 22 searches dated like 1901→1908 or 2069→2073 — they run forwards, so the ordering rule never saw them. [`coopYearBounds`](../../utils/dateUtils.ts) allows 2022, the year this repository began, through ten years past the current one. The floor is fixed so a real co-op never ages into a rejection; the ceiling moves so it never expires. `user.edit` and `onboardSchema` both refuse a year outside it, **except for a VIEWER**, whose pickers are disabled while every save re-sends the stored dates — refusing theirs would reject every save they make. The stored rows are not rewritten: adding a century still lands before the platform existed, so the profile page asks the user instead, through [`planCoopRangeNotice`](../../utils/profile/coopRangeNotice.ts).
 
 ## Coordinates
 
@@ -105,15 +105,15 @@ The values live in [`textLimits.ts`](../../utils/textLimits.ts) so the form, the
 
 ### The two group-message columns are gone
 
-Group ride preferences used to be one JSON blob written to `group.message` and mirrored into `carpool_search.group_message`. They are three real columns on the driver's own `CarpoolSearch`, and both legacy columns were dropped in SCRUM-287 — `20260916120000_drop_legacy_group_message_columns`.
+Group ride preferences used to be one JSON blob written to `group.message` and mirrored into `carpool_search.group_message`. They are three real columns on the driver's own `CarpoolSearch`, and both legacy columns were dropped in migration `20260916120000_drop_legacy_group_message_columns`.
 
 The sequence is worth keeping, because it is the pattern any column retirement here follows:
 
 1. **Expand.** Add the new columns, write them, and leave the old one readable. [`resolveGroupDetails`](../../components/Group/groupDetails.ts) treated all three new columns being null as "never saved" and fell back to parsing the old blob, so a row that had not been backfilled still rendered correctly.
-2. **Backfill.** [`backfill-group-preferences.ts`](../../../scripts/README.md#retiring-a-script) moved the history across — 3 rows on staging, 11 on production — and a dry run confirmed nothing was left.
+2. **Backfill.** [`backfill-group-preferences.ts`](../../../scripts/README.md#retiring-a-script) moved the history across, and a dry run confirmed nothing was left.
 3. **Contract.** Only then drop the columns and the fallback, because dropping one a row still depends on loses that row's data with no route back but a restore.
 
-Doing 3 before 2 was the risk the whole ticket existed to avoid: every legacy value turned out to be plain text rather than the `GROUP_DETAILS_V1:` encoding, so `parseGroupDetails` mapped all fourteen to real notes a driver could see.
+Doing 3 before 2 was the risk this sequence exists to avoid: every legacy value turned out to be plain text rather than the `GROUP_DETAILS_V1:` encoding, so `parseGroupDetails` mapped every one of them to a real note a driver could see.
 
 One asymmetry left behind by step 3: `resolveGroupDetails` no longer needs to tell null from `""`, since there is nothing to fall back to. `groups.updatePreferences` still writes all three fields together anyway, which is what keeps a cleared field cleared.
 
@@ -306,7 +306,7 @@ Reversing the decision needs a new decision, not an `--apply` run on the strengt
 
 ## Blocks
 
-A `Block` row is one user's choice, but its effect is symmetric: every check in [`blocks.ts`](./blocks.ts) matches a row in either direction (SCRUM-554).
+A `Block` row is one user's choice, but its effect is symmetric: every check in [`blocks.ts`](./blocks.ts) matches a row in either direction.
 
 - **Hidden, never deleted.** Requests, favourites and conversations between a blocked pair are filtered where they are read. Unblocking restores them exactly, and nothing a report might later need is lost.
 - **Where it is enforced.** Discovery (`candidateExclusions`, shared by recommendations and the map), `favorites.me` and adding a favourite, `requests.me` and `requests.create`, both group join paths, `messages.conversation`, `sendMessage` and the unread count, all three notification emails, and Pusher conversation-channel auth.
@@ -315,7 +315,7 @@ A `Block` row is one user's choice, but its effect is symmetric: every check in 
 
 ## Reports
 
-A report is filed through `user.reports.create` and read by admins through `user.admin.getReports` (SCRUM-555). Nothing about it is shown to the reported user.
+A report is filed through `user.reports.create` and read by admins through `user.admin.getReports`. Nothing about it is shown to the reported user.
 
 - **A report made from a conversation keeps its own copy.** The server writes the last 50 messages into `conversation_snapshot`, because either party can delete the request, and `requests.delete` takes the conversation and every message with it. `request_id` is a plain id for the same reason. The copy is built on the server, never accepted from the client.
 - **One OPEN report per reporter and person.** It is a read before the insert, not a constraint, because it depends on `status`. Two simultaneous submissions can both pass.
@@ -324,7 +324,7 @@ A report is filed through `user.reports.create` and read by admins through `user
 
 ## Notification markers
 
-The request, message and acceptance emails each send at most once (SCRUM-559, and acceptance in SCRUM-564). Each is backed by a column that means "an email is still owed":
+The request, message and acceptance emails each send at most once. Each is backed by a column that means "an email is still owed":
 
 | Column                                       | Set by                                                      | Cleared by                   |
 | -------------------------------------------- | ----------------------------------------------------------- | ---------------------------- |
@@ -338,7 +338,7 @@ The request, message and acceptance emails each send at most once (SCRUM-559, an
 - **`notificationPendingSince` is also how the request email finds its body.** `requests.create` writes the same instant to it and to the opening message's `dateCreated`, and the email quotes the requester's message with exactly that timestamp. `request.message` is not the body. It is always `""`, and `MessageContent` renders it as an extra first message whenever it is non-empty.
 - **A reopen keeps `dateCreated`.** It is the date of first contact, and the admin request series and every sort by it read it that way. A reopened request is therefore absent from that series.
 - **`acceptanceNotificationPendingSince` is set by `markRequestAccepted`, not by a client-facing procedure.** It is written in the same transaction and the same statement as the `ACCEPTED` status flip, in `groups.create` and `groups.edit`, so a request's status and its acceptance marker cannot disagree.
-- **A per-user cap across `user.emails.*`** — beyond the one-shot marker on each email — does not exist yet. It needs shared state this deployment does not have. Tracked in SCRUM-564.
+- **A per-user cap across `user.emails.*`** — beyond the one-shot marker on each email — does not exist yet. It needs shared state this deployment does not have.
 
 ## Account deletion
 
@@ -372,7 +372,7 @@ Honouring a one-off erasure request is a **different question** from declining t
 
 The client PUTs straight to S3, so nothing in that flow reaches the server; `user.recordProfilePictureUpload` exists for that reason and is called **after** the PUT returns `ok`. Writing the column when the URL is _issued_ would be simpler and wrong — signing is not evidence of an upload, and S3 rejects a body disagreeing with the signature, so the column would claim pictures that do not exist. The converse now matters as much: a PUT that succeeds without being recorded leaves an object the app never shows. The profile save reports that as a failed picture upload and keeps the file for a retry, which records it.
 
-Null reads as "no picture" only because the gap was closed first. SCRUM-276 added the column **expand-only**: every row predating it was null whether or not an object existed, so for a while a null row still fell back to `HeadObject`. A one-off backfill then recorded each existing picture's S3 `LastModified` — not `now()`, so the column keeps meaning "when the picture last changed" — and SCRUM-366 removed the fallback once a dry run reported nothing left to record on both staging and production. The figures are in the [scripts run-state record](../../../scripts/README.md#run-state-record).
+Null reads as "no picture" only because the gap was closed first. The column was added **expand-only**: every row predating it was null whether or not an object existed, so for a while a null row still fell back to `HeadObject`. A one-off backfill then recorded each existing picture's S3 `LastModified` — not `now()`, so the column keeps meaning "when the picture last changed" — and the fallback was removed once a dry run reported nothing left to record on both staging and production. See [scripts/README.md](../../../scripts/README.md#has-a-script-been-applied-to-staging-or-production).
 
 - **There is no delete-picture path in the app** — only replacement, which writes a fresh timestamp. If removal is ever added it must clear the column, or the download path will sign URLs for a deleted object.
 - **The column is not exposed to clients.** It is read server-side inside `getPresignedDownloadUrl` and nowhere else.

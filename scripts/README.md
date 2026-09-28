@@ -1,8 +1,8 @@
 # `scripts/`
 
-Operational scripts, and the record of what has been run where.
+Operational scripts, run by hand against a real database.
 
-Everything here is run **by hand against a real database**. Nothing in CI invokes the `.ts` scripts and nothing schedules them.
+Nothing in CI invokes the `.ts` scripts and nothing schedules them.
 
 > **Before running anything, confirm what `DATABASE_URL` points at.** None of these scripts print the connection string, so none of them will tell you that you are pointed at production. Eight of them write.
 
@@ -13,7 +13,7 @@ npx ts-node scripts/<name>.ts --apply    # the ones that write
 
 Node 22, per [`.nvmrc`](../.nvmrc). `ts-node` comes from `node_modules`, so run `yarn install` first.
 
-**Why these are not `yarn` scripts.** They are one-shot tools meant to be [retired](#retiring-a-script) once applied everywhere. A `package.json` entry each would recreate a mess this repository has had once — seven entries pointing at long-deleted files — and the explicit `npx ts-node` keeps `--apply` visible at the call site rather than hidden behind an alias.
+**Why these are not `yarn` scripts.** They are one-shot tools meant to be [retired](#retiring-a-script) once applied everywhere. A `package.json` entry each would recreate a mess this repository has had once — several entries pointing at long-deleted files — and the explicit `npx ts-node` keeps `--apply` visible at the call site rather than hidden behind an alias.
 
 ## Scripts that write
 
@@ -27,16 +27,16 @@ All are **dry-run by default** and update or delete one row at a time by primary
 | [`cleanup-self-requests.ts`](./cleanup-self-requests.ts)                     | Deletes `Request` rows whose two ends are the same user, and their thread                                        |
 | [`repair-seat-residue.ts`](./repair-seat-residue.ts)                         | Clamps out-of-range `seats_avail` into `[0, 6]`, deletes member-less `group` rows, and dissolves driverless ones |
 | [`repair-wallclock-schedule-times.ts`](./repair-wallclock-schedule-times.ts) | Re-stores `start_time` / `end_time` held as a Boston wall clock, for co-ops that are running                     |
-| [`scrub-security-test-residue.ts`](./scrub-security-test-residue.ts)         | Clears five user-authored text columns on **one hard-coded account** (SCRUM-531)                                 |
+| [`scrub-security-test-residue.ts`](./scrub-security-test-residue.ts)         | Clears five user-authored text columns on **one hard-coded account**                                             |
 
-Six things to know before using any of them:
+Things to know before using any of them:
 
 - **Two of these destroy message content, and they are not the same decision.** `cleanup-orphan-conversations` deletes words two people typed to each other that nothing can read any more — irreversible, and the privacy-respecting answer rather than a tidy-up. `cleanup-self-requests` deletes a user's own opening message to themselves. **Both print the message count per candidate before deleting; read those numbers before `--apply`.**
 - **`cleanup-orphan-conversations` also takes `--limit N` and `--older-than YYYY-MM-DD`**, so a population larger than the ceiling can be retired in tranches instead of by raising `--max`. It is the only script that logs every row it deletes before deleting it.
-- **`repair-seat-residue` needs the read-path fix deployed first.** With `hasSeatAvailable` live, a negative row is already out of matching, which makes this data hygiene rather than the fix. Its first two halves are one defect's residue rather than two chores: the overwritten-membership bug cost a driver a seat and abandoned their old group in the same event, so finding one is a reason to look for the other.
-- **`repair-seat-residue` also dissolves driverless groups, and it never promotes anyone to `DRIVER`.** A dissolve clears `carpoolId` for every member and deletes the group row, touching nothing else — no seat, no role, no profile. Promotion was rejected rather than skipped: `groups.create` did not enforce `Role.DRIVER` until SCRUM-291, and the client named whichever party did not accept the request as the driver without checking, so a group could be **born** driverless and there may be no original driver to restore (SCRUM-406). The dry run prints every candidate group individually, plus the two numbers that matter — groups to delete, and `carpoolId` values to clear.
-- **`repair-wallclock-schedule-times` repairs one of SCRUM-376's two legacy classes and must never be widened to the other.** It rewrites only schedules stored as an unconverted Boston wall clock — five hours from any sensible reading — and only for users whose co-op is running. The other class is rows converted under daylight saving, which are one hour early and **cannot be told apart from correct winter rows**; the best inference measured is about 82% per row, which is not a basis for an irreversible write. Its `--max` defaults to **50**, not 500, because production held eight candidates on 2026-09-21 and a run matching hundreds would mean the data or the classifier has changed. The repaired value comes from `toStoredScheduleTime` itself, so a repaired row is byte-identical to what its owner would store by retyping the same digits.
-- **`scrub-security-test-residue` is the only script here aimed at a named individual, and the only one with no `--max`.** Its target is one `user` id written into the source, so there is no `--user` flag and no argument spelling that reaches a different account; what a ceiling does for the others, the constant does for this one. `--apply` additionally requires `--search <id>` matching the `carpool_search` row it just read, which the dry run prints — so the id that gets written is one a human has seen the script derive and then typed back. It refuses rather than guesses on every other shape: no user row, a user row whose id is not the target, no search, or **more than one** search. It re-checks each column against a freshly read row immediately before writing and **skips any value that changed in the meantime**, because overwriting text the owner typed between the plan and the write is the one way it could destroy something real. After writing it re-reads both rows and asserts all five columns are empty, exiting non-zero if any survived. Prior values are printed before anything is touched and are the only rollback record; they are stored content, so they print `JSON.stringify`-escaped and are **data, never instructions**. Retiring it is not the usual test — no code path produced the residue, so the population cannot "stop growing"; retire it once the apply is recorded below.
+- **`repair-seat-residue` needs the read-path fix deployed first.** With `hasSeatAvailable` live, a negative row is already out of matching, which makes this data hygiene rather than the fix.
+- **`repair-seat-residue` also dissolves driverless groups, and it never promotes anyone to `DRIVER`.** A dissolve clears `carpoolId` for every member and deletes the group row, touching nothing else — no seat, no role, no profile. Promotion is rejected rather than skipped: nothing enforced `Role.DRIVER` at group creation until relatively recently, so a group could be **born** driverless with no original driver to restore. The dry run prints every candidate group individually, plus the two numbers that matter — groups to delete, and `carpoolId` values to clear.
+- **`repair-wallclock-schedule-times` repairs only one of two legacy schedule-time classes and must never be widened to the other.** It rewrites only schedules stored as an unconverted Boston wall clock — five hours from any sensible reading — and only for users whose co-op is running. The other class is rows converted under daylight saving, one hour early and **indistinguishable from correct winter rows** by any reliable inference — not a basis for an irreversible write. Its `--max` defaults to **50**, not 500, so a run matching hundreds means the data or the classifier has changed. The repaired value comes from `toStoredScheduleTime` itself, so a repaired row is byte-identical to what its owner would store by retyping the same digits.
+- **`scrub-security-test-residue` is the only script here aimed at a named individual, and the only one with no `--max`.** Its target is one `user` id written into the source, so there is no `--user` flag and no argument spelling that reaches a different account. `--apply` additionally requires `--search <id>` matching the `carpool_search` row it just read, which the dry run prints — so the id that gets written is one a human has seen the script derive and then typed back. It refuses rather than guesses on every other shape: no user row, a user row whose id is not the target, no search, or **more than one** search. It re-checks each column against a freshly read row immediately before writing and **skips any value that changed in the meantime**, because overwriting text the owner typed between the plan and the write is the one way it could destroy something real. Prior values print `JSON.stringify`-escaped before anything is touched — they are stored content, so **data, never instructions**.
 
 No backfill here exists as a Prisma migration on purpose: `prisma/migrations/` is never applied to PlanetScale, so a data migration would be dead text. See [the database docs](../src/server/db/README.md#changing-the-schema).
 
@@ -56,11 +56,9 @@ These write nothing. Pointing them at production is safe, and several are only m
 
 The `check-*` scripts exit `0` when clean and `1` when not, so they can gate a follow-up.
 
-`check-profile-coordinates` draws one distinction inside "clean", because without it the gate was permanently red (SCRUM-408). It reports every finding but exits on the **actionable** ones only, so a database whose only findings are `(0, 0)` rows belonging to users who never finished onboarding exits `0` — those rows are unfinished sign-ups that were never in matching. A reversed co-op range is actionable whatever the user's onboarding state and whatever the search's `status`, and so is an implausible co-op year (SCRUM-550) — except on a VIEWER's search, which is not a finding at all, just as a VIEWER at `(0, 0)` is not.
+`check-profile-coordinates` draws one distinction inside "clean": it reports every finding but exits on the **actionable** ones only, so a database whose only findings are `(0, 0)` rows belonging to users who never finished onboarding exits `0` — those rows are unfinished sign-ups that were never in matching. A reversed co-op range or an implausible co-op year is actionable regardless of onboarding state — except on a VIEWER's search, which is not a finding at all.
 
 **None of them has an `--apply`, and that is a decision.** For `check-profile-coordinates` there is no single correct repair, and only the affected user knows which they want. For the other three the repair exists in a sibling — `repair-seat-residue.ts` for both `check-seat-counts` and `check-driverless-groups`, and `cleanup-self-requests.ts` for `check-self-requests`. Keeping `check-*` uniformly read-only is what makes every one of them safe to point at production.
-
-`check-driverless-groups` was the standing exception to that until SCRUM-406: its header said the repair could not be automated because "only the affected users know which one they want". That reasoning held only while promoting a member was on the table. Once promotion was rejected outright — there may be no original driver to restore — dissolving is the single correct repair, and it lives in `repair-seat-residue.ts`.
 
 `measure-unread-count.ts` is the odd one out: its useful output is the `EXPLAIN` plan, not its timings. Access types describe the shape of the work rather than its current size, so the plan is worth reading against a local database while the timings are not. For production numbers, PlanetScale Insights is the authority and needs no script.
 
@@ -73,7 +71,7 @@ The `check-*` scripts exit `0` when clean and `1` when not, so they can gate a f
 | [`measure-layout.ts`](./measure-layout.ts)         | Serves a layout fixture for measuring in a real browser. **No database.**                          |
 | [`emailtemplate.py`](./emailtemplate.py)           | **Mutates AWS.** Creates and updates the SES templates the app sends                               |
 
-`measure-layout.ts` is the exception to this directory's opening sentence: it touches no database, connects to no environment, and has no `--apply` because it writes nothing anywhere. It compiles `src/styles/globals.css` and serves it with a fixture over HTTP on an OS-assigned loopback port, so a browser can measure boxes that jsdom reports as zero. [`docs/testing.md`](../docs/testing.md#measuring-layout-in-a-real-browser) covers what it proves, what it does not, and the four sharp edges it encodes. It is not in CI and nothing schedules it.
+`measure-layout.ts` is the exception to this directory's opening sentence: it touches no database, connects to no environment, and has no `--apply` because it writes nothing anywhere. It compiles `src/styles/globals.css` and serves it with a fixture over HTTP on an OS-assigned loopback port, so a browser can measure boxes that jsdom reports as zero. [`docs/testing.md`](../docs/testing.md#measuring-layout-in-a-real-browser) covers what it proves and does not. It is not in CI and nothing schedules it.
 
 ```bash
 npx ts-node scripts/measure-layout.ts                            # list fixtures
@@ -103,217 +101,41 @@ These three touch git and the filesystem, never a database, and none of them is 
 
 `wt-recycle.sh` is the one that deletes a branch, so its ordering is the thing to preserve on any edit: it validates, fetches, re-validates against the fresh refs, and then **switches to the new branch before deleting the old one**. If the switch fails nothing has changed; if the delete fails the slot is recycled and the old branch is still there. Neither outcome can make a reachable commit unreachable. The human gate is `git worktree lock` — a locked slot is refused, so recycling takes a deliberate `git worktree unlock` first.
 
-`wt-state.sh` exists because `node_modules` and `node_modules/.prisma/client` are generated from sources that change under them and neither records what it was built from. It stamps each with a `git hash-object --no-filters` fingerprint of its source, inside the ignored directory itself, so freshness is a fact about the artefact rather than a guess from the primary checkout. `wt-bootstrap.sh` used to compare against the primary's `schema.prisma`, which could report a client as current when it was generated from something else entirely (SCRUM-448).
+`wt-state.sh` exists because `node_modules` and `node_modules/.prisma/client` are generated from sources that change under them and neither records what it was built from. It stamps each with a `git hash-object --no-filters` fingerprint of its source, inside the ignored directory itself, so freshness is a fact about the artefact rather than a guess from the primary checkout.
 
 `wt-recycle.test.ts` and `wt-state.test.ts` run in `yarn test` and drive the real scripts against disposable git repositories under `os.tmpdir()`, with `yarn` shadowed by a fake that records its arguments. **No test here runs against this repository or any remote.**
 
-`wt-pipelines.test.ts` runs nothing at all. It reads every `wt-*.sh` and asserts one property of the source: **no pipeline consumer leaves before its input is exhausted** — no `| head`, no `grep -q`/`-m`, no `awk` program containing `exit`. A consumer that leaves early makes its producer take SIGPIPE, and under the `set -euo pipefail` these scripts run with, that is the pipeline's exit status: 141, aborting the script at that line with a number that says nothing about worktrees. It is static because the defect is a race — it needs the producer still writing at the instant the consumer goes, so it passed every local run and failed on CI (SCRUM-449, then SCRUM-454 for the same shape in `wt-bootstrap.sh` and `wt-cleanup.sh`). Being a builtin does not exempt `printf`, and the file list is globbed, so a fifth worktree script is covered the day it lands.
+`wt-pipelines.test.ts` runs nothing at all. It reads every `wt-*.sh` and asserts one property of the source: **no pipeline consumer leaves before its input is exhausted** — no `| head`, no `grep -q`/`-m`, no `awk` program containing `exit`. A consumer that leaves early makes its producer take SIGPIPE, and under the `set -euo pipefail` these scripts run with, that is the pipeline's exit status: 141, aborting the script at that line with a number that says nothing about worktrees. It is static because the defect is a race that needs the producer still writing at the instant the consumer goes — it can pass every local run and still fail on CI. Being a builtin does not exempt `printf`, and the file list is globbed, so a fifth worktree script is covered the day it lands.
 
-## Run-state record
+## Has a script been applied to staging or production?
 
-Two different questions, and only one of them is answerable from a database:
+There are two different questions, and only one is answerable from a database:
 
-- **"Has it been run?"** — unknowable retrospectively. Nothing recorded it before this file existed.
-- **"Does it still have work to do?"** — checkable, and the question that actually matters before dropping a column or closing a ticket.
+- **"Has it been run?"** — not reliably knowable in retrospect unless someone recorded it.
+- **"Does it still have work to do?"** — checkable right now, and the question that actually matters before dropping a column or closing a ticket.
 
-> A zero outstanding count means **"nothing left to do"**, not **"it was run"**. A script that never had candidates and a script applied successfully look identical.
+**A zero outstanding count means "nothing left to do," not "it was run."** A script that never had candidates and a script applied successfully look identical from the outside. Don't infer "already applied" from a clean result — check with the script itself.
 
-| Script                            | staging            | production         | Verified   |
-| --------------------------------- | ------------------ | ------------------ | ---------- |
-| `backfill-request-status`         | 0 outstanding      | 0 outstanding      | 2026-09-09 |
-| `cleanup-orphan-locations`        | 0 outstanding      | **90 outstanding** | 2026-09-09 |
-| `cleanup-orphan-conversations`    | **11 outstanding** | **620 retained**   | 2026-09-09 |
-| `cleanup-self-requests`           | 0 outstanding      | **2 outstanding**  | 2026-09-09 |
-| `repair-seat-residue`             | 0 outstanding      | 0 outstanding      | 2026-09-16 |
-| `repair-wallclock-schedule-times` | 0 outstanding      | **8 outstanding**  | 2026-09-21 |
-| `scrub-security-test-residue`     | not measured       | not measured       | —          |
-| `check-self-requests`             | 0 findings         | **2 findings**     | 2026-09-09 |
-| `check-driverless-groups`         | 0 findings         | 0 findings         | 2026-09-16 |
-| `check-profile-coordinates`       | **521 findings**   | **626 findings**   | 2026-09-09 |
-| `check-seat-counts`               | 0 findings         | 0 findings         | 2026-09-16 |
+To check the current state of any script in the table above:
 
-Three scripts have been applied in a shared environment:
+1. Run it (with `--force`/read-only, no `--apply`) against the target environment. That gives you the live count, not a stale figure.
+2. For the four `check-*` scripts, the sibling repair script's dry run reports the same population from the other side — cross-checking is free.
+3. A few scripts have counts that are **retained by decision, not pending**: `cleanup-orphan-conversations`'s orphan backlog on production is intentionally kept (see [Conversation ownership](../src/server/db/README.md#conversation-ownership)) — a rising count there means the fix that stops new orphans regressed, not that a backlog needs clearing.
+4. `repair-wallclock-schedule-times`'s candidate count depends on the day it runs, because its scope is "co-op running now" — a stale count from last month tells you nothing about today's population.
 
-- **`backfill-group-preferences`**, 2026-09-16 — staging (3 rows) and production (11). Its row is gone from the table because the script was retired in the same change: SCRUM-287 dropped the columns it read.
-- **`backfill-profile-picture-timestamps`** — staging and production, run by Jonathan Cho with `s3:ListBucket` and recorded 2026-09-25. Its row is gone from the table because SCRUM-366 retired the script together with the `HeadObject` fallback it existed to empty. The final dry run in each environment reported **nothing to record**:
-
-  | Final dry run                    | staging | production |
-  | -------------------------------- | ------- | ---------- |
-  | objects under the picture prefix | 24      | 222        |
-  | …already recorded                | 5       | 221        |
-  | …naming no existing user         | 19      | 1          |
-  | unparseable keys                 | 0       | 0          |
-  | rows to record                   | **0**   | **0**      |
-
-  Verified read-only afterwards, aggregates only: staging holds 5 recorded timestamps of 1,298 users and production 221 of 4,489, matching the script's own figures. On production 218 of the 221 are whole seconds — S3 `LastModified`, which is what the backfill writes — and 3 carry milliseconds, which only `user.recordProfilePictureUpload` produces; all 5 on staging are whole seconds. The 20 objects naming no existing user are left in the bucket: the script never deletes, and nothing reads them.
-
-- **`repair-seat-residue`** — staging and production, immediately after [#369](https://github.com/CarpoolNU/nucarpool/pull/369) merged (SCRUM-406). **Production: dissolved 15 driverless groups, clearing 33 `carpoolId` associations, and deleted 3 empty group rows** — 18 group rows in total, taking `group` from 67 to 49. **Staging: deleted 1 empty group row and clamped 1 out-of-range seat count**, taking `group` from 11 to 10; it had no driverless group to dissolve. Both environments then reported clean: `check-driverless-groups` exits `0`, and a second `repair-seat-residue` says "nothing to repair".
-
-  Verified read-only afterwards against production, aggregates only: `carpool_search` rows carrying a `carpoolId` fell from 159 to 126 — exactly the 33 cleared — with **0** rows pointing at a `group` row that no longer exists, **0** seat counts out of range, and **0** solo groups. `carpool_search` and `user` row counts were not reduced, so no search, profile or account was deleted: the dissolve wrote `carpoolId` and nothing else, and promoted nobody.
-
-Nothing else has been applied anywhere. Every production figure was read as an aggregate count, never row data.
-
-`repair-wallclock-schedule-times` **has not been run in any environment**, including as a dry run — its figures above were measured with the equivalent SQL predicate, read-only, and cross-checked by running the classifier itself over the production distribution reconstructed from aggregated `(start_time, end_time, start_date, end_date, count)` tuples. Both agree on eight rows. Staging's zero is not a clean bill of health: no staging co-op is running today, so the predicate selects nothing there whatever the times hold.
-
-Its candidate count depends on the day it runs, because the scope is "co-op running now". Over the production data as it stands: 4 in January 2026, 8 today, 1 by December. A 2025-03-15 run would have matched 109 — which is exactly the case the `--max 50` ceiling exists to stop.
-
-`scrub-security-test-residue` **has not been run in any environment, and neither cell above has been measured** — not even as a dry run. Its row says `not measured` rather than `0 outstanding` on purpose: those two are the same output, and only one of them means the residue is gone. The target was confirmed by the operator who requested the script (SCRUM-531); the agent that wrote it performed no production read and has not seen the five values. **Staging is expected to hold nothing**, since SCRUM-357's sweep found not one user-authored field there containing even a bare `<` or `>` across 1,298 production-derived users — so a staging dry run reporting "nothing to scrub" is the predicted result and is not evidence about production. The account id is also production's, and staging is a restore rather than a mirror, so the row may not exist there at all, which the script reports as a refusal.
-
-What the non-zero figures actually mean:
-
-- **`cleanup-orphan-conversations` — production's 620 are retained by decision**, not pending. A figure _above_ 620 would mean the fix that stopped new ones regressed. See [Conversation ownership](../src/server/db/README.md#conversation-ownership).
-- **`check-profile-coordinates` — only 47 of production's 626 are actionable.** Those are reversed co-op ranges. The other 579 are `(0, 0)` rows belonging to users who never finished onboarding and were never in matching; staging's 521 are all of that kind. The script reports both and exits `1` on the actionable set only, so production exits `1` on the 47 and staging exits `0` (SCRUM-408). **Both cells above are the total each run reports**, which is the figure to compare a later run against; the actionable count is the second number the run prints.
-- **`check-seat-counts` and `repair-seat-residue` see the same data from different sides**, so they reach zero together, as they did on 2026-09-16.
-- **`emailtemplate.py` — a republish is outstanding.** The SES templates in AWS are older than the repository's copy.
-
-### What the driverless repair cleared, 2026-09-16
-
-Kept because a zero cell records that there is nothing left to do, not what was there — and because the shape of this population is the reason the repair dissolves rather than promotes.
-
-Production held **15 driverless groups containing 33 members**: 14 groups of two and one of five; 25 `RIDER` and 8 `VIEWER`, 32 `ACTIVE` and 1 `INACTIVE`. All 33 seat values were in `[0, 2]` and none negative, so the dissolve needed no seat arithmetic. On activity, 30 of the 33 had a co-op end date already past, 2 had none, and exactly one group held a member whose co-op was still running — dissolved with the rest by decision, since both its members were `RIDER`s and no car was being broken up.
-
-Staging held **none of them**, only a single empty group, which is why every figure taken from staging understated this for as long as it was the only environment being measured.
-
-The groups were created between **2024-10-21 and 2026-01-11** — all before `groups.create` began enforcing `Role.DRIVER` in SCRUM-291 (2026-08-27), and before `Role.DRIVER` appeared in that router at all (SCRUM-220, 2026-08-21). `initiateGroup` named whichever party did not accept the request as the group's driver without checking their role, and the server took that id on trust, so **a group could be born driverless with no original driver to restore.** That is why nobody was promoted: promotion would have invented a driver who never existed. Per-group attribution was not achievable either — role history is not stored, and the profile form zeroes `seatsAvail` for any non-`DRIVER` on save, so an ex-driver and a never-driver are indistinguishable.
-
-**Production is readable.** The PlanetScale MCP server's token returns `403` against the `main` branch, but the `pscale` CLI reader role does not — that is the route every production figure above came from, and it is read-only.
-
-<details>
-<summary>Re-checking the table without running the scripts</summary>
-
-Ten of the table's eleven rows are one read-only query below, using the same conditions the scripts use, so they are safe to run against production through any SQL console.
-
-```sql
--- backfill-request-status: PENDING requests between pairs already carpooling
-SELECT COUNT(*) FROM request r
-JOIN carpool_search f ON f.userId = r.fromUserId
-JOIN carpool_search t ON t.userId = r.toUserId
-WHERE r.status = 'PENDING'
-  AND f.carpoolId IS NOT NULL AND f.carpoolId <> ''
-  AND f.carpoolId = t.carpoolId;
-
--- cleanup-orphan-locations: Location rows nothing points at
-SELECT COUNT(*) FROM location l
-WHERE NOT EXISTS (
-  SELECT 1 FROM carpool_search cs
-  WHERE cs.homeLocationId = l.id OR cs.companyLocationId = l.id
-);
-
--- check-self-requests and cleanup-self-requests: the same predicate
-SELECT COUNT(*) FROM request WHERE fromUserId = toUserId;
-
--- check-driverless-groups
-SELECT COUNT(*) FROM `group` g WHERE NOT EXISTS (
-  SELECT 1 FROM carpool_search cs WHERE cs.carpoolId = g.id AND cs.role = 'DRIVER'
-);
-
--- check-profile-coordinates: findings vs. the actionable subset the script's
--- exit code is keyed to (SCRUM-408). COALESCE(u.is_onboarded, 1) matches the
--- script's rule that a dangling emulated foreign key counts as onboarded, so
--- a search with no user row lands in `actionable` rather than being excused.
-SELECT
-  COUNT(*) AS findings,
-  SUM(missing_location OR out_of_range OR reversed_range OR (unresolved AND onboarded)) AS actionable,
-  SUM(NOT (missing_location OR out_of_range OR reversed_range OR (unresolved AND onboarded))) AS not_actionable,
-  SUM(reversed_range) AS reversed_range,
-  SUM(out_of_range) AS out_of_range,
-  SUM(missing_location) AS missing_location
-FROM (
-  SELECT
-    (h.id IS NULL OR c.id IS NULL) AS missing_location,
-    (
-      (h.id IS NOT NULL AND (h.coord_lat NOT BETWEEN -90 AND 90 OR h.coord_lng NOT BETWEEN -180 AND 180))
-      OR (c.id IS NOT NULL AND (c.coord_lat NOT BETWEEN -90 AND 90 OR c.coord_lng NOT BETWEEN -180 AND 180))
-    ) AS out_of_range,
-    (cs.start_date IS NOT NULL AND cs.end_date IS NOT NULL AND cs.end_date < cs.start_date) AS reversed_range,
-    (
-      cs.role <> 'VIEWER' AND (
-        (h.id IS NOT NULL AND h.coord_lat = 0 AND h.coord_lng = 0)
-        OR (c.id IS NOT NULL AND c.coord_lat = 0 AND c.coord_lng = 0)
-      )
-    ) AS unresolved,
-    (COALESCE(u.is_onboarded, 1) = 1) AS onboarded
-  FROM carpool_search cs
-  LEFT JOIN location h ON h.id = cs.homeLocationId
-  LEFT JOIN location c ON c.id = cs.companyLocationId
-  LEFT JOIN user u ON u.id = cs.userId
-) s
-WHERE missing_location OR out_of_range OR reversed_range OR unresolved;
-
--- cleanup-orphan-conversations: the provably unreachable population, which
--- must fail BOTH links. A conversation a live request still reaches through
--- Request.conversationId is NOT an orphan -- requests.me still reads it.
-SELECT COUNT(*) FROM conversation c
-WHERE NOT EXISTS (SELECT 1 FROM request r1 WHERE r1.id = c.requestId)
-  AND NOT EXISTS (SELECT 1 FROM request r2 WHERE r2.conversationId = c.id);
-
--- check-seat-counts and repair-seat-residue. The 6 is MAX_SEATS_AVAILABLE in
--- carpoolSeats.ts written out, because SQL cannot import it: if that constant
--- changes, these queries are what to update -- the scripts are already right.
-SELECT COUNT(*) FROM carpool_search WHERE seats_avail < 0 OR seats_avail > 6;
-SELECT COUNT(*) FROM `group` g WHERE NOT EXISTS (
-  SELECT 1 FROM carpool_search cs WHERE cs.carpoolId = g.id
-);
--- repair-seat-residue's third candidate set: driverless groups, and the
--- memberships a dissolve would clear. These are the two numbers its dry run
--- prints, and they are deliberately separate -- one is rows deleted, the other
--- is people returned to matching.
-SELECT COUNT(*) AS driverless_groups, COALESCE(SUM(member_count), 0) AS memberships
-FROM (
-  SELECT g.id, COUNT(*) AS member_count
-  FROM `group` g
-  JOIN carpool_search cs ON cs.carpoolId = g.id
-  GROUP BY g.id
-  HAVING SUM(cs.role = 'DRIVER') = 0
-) t;
-
--- scrub-security-test-residue: how many of the five columns still hold
--- content, for the one account the script is pinned to. Counts only -- do not
--- SELECT the values into a shared transcript; the script prints them escaped
--- when someone is actually about to act on them. A result of 5 rows with
--- `pending` summing to 0 means nothing is left to scrub; 0 rows means the
--- account does not exist in this environment, which the script refuses on.
-SELECT 'user.bio' AS col, (u.bio <> '') AS pending FROM user u
-  WHERE u.id = 'cmcnr3q5s0000k112x4io32gp'
-UNION ALL
-SELECT 'user.pronouns', (u.pronouns <> '') FROM user u
-  WHERE u.id = 'cmcnr3q5s0000k112x4io32gp'
-UNION ALL
-SELECT 'user.preferredName', (u.preferredName <> '') FROM user u
-  WHERE u.id = 'cmcnr3q5s0000k112x4io32gp'
-UNION ALL
-SELECT 'carpool_search.company_name', (cs.company_name <> '') FROM carpool_search cs
-  WHERE cs.userId = 'cmcnr3q5s0000k112x4io32gp'
-UNION ALL
-SELECT 'carpool_search.group_notes', (COALESCE(cs.group_notes, '') <> '') FROM carpool_search cs
-  WHERE cs.userId = 'cmcnr3q5s0000k112x4io32gp';
-
--- The same script's other precondition: it refuses unless this returns
--- exactly 1. The code assumes one search per user; the schema permits many.
-SELECT COUNT(*) FROM carpool_search WHERE userId = 'cmcnr3q5s0000k112x4io32gp';
-```
-
-The dry run is still better where it is practical: the scripts report _which_ rows, and some of them draw a distinction the SQL cannot. `backfill-group-preferences` did exactly that — it separated rows carrying preferences worth writing from rows whose stored value parsed to nothing, and on production the two figures were 11 and 12. The one row it skipped stayed in the SQL count for good, so the table cell never reached zero even once the work was finished. Trust the script's own report over the cell.
-
-</details>
-
-## Updating this record
-
-When you run one of these against a shared environment, **edit the table in the same pull request as the work, or immediately after.** A rough row beats a blank cell: record the environment, the date, what happened (`applied, N rows`, `dry run, 0 candidates`) and who ran it. A dry run that reported zero is still worth recording — it is the evidence the next person needs.
+**When you apply one of these against a shared environment, record it** — a line in the PR description or a Jira comment naming the environment, the date, what happened (`applied, N rows` / `dry run, 0 candidates`), and who ran it. That is enough to answer "has this run" later without a maintained table here that goes stale the moment nobody updates it.
 
 ## Retiring a script
 
 A one-shot script should not live here forever. Retire it when **all** of these hold:
 
-1. Its dry run reports zero candidates in **every** shared environment, recorded above.
+1. Its dry run reports zero candidates in every shared environment.
 2. The code path that made the bad data possible is fixed and deployed, so the population cannot grow again.
 3. Any fallback existing only to tolerate un-migrated rows is removed, or is being removed in the same change.
 
-Then delete the script, its test and its row, and say in the commit message which environments were verified and when.
+Then delete the script, its test, and any table row referencing it, and say in the commit message which environments were verified and when.
 
-`backfill-group-preferences.ts` is the worked example, now finished: SCRUM-287 removed the script, both legacy columns and `resolveGroupDetails`'s fallback in one change, which is point 3 — a fallback that exists only to tolerate un-migrated rows goes with the thing it was tolerating.
-
-Point 1 is what held it up for six weeks, and the reason is worth keeping. The script's dry run reported candidates in **both** environments the whole time, and the values were not the `GROUP_DETAILS_V1:` blobs anyone expected — every one was plain text, which `parseGroupDetails` mapped to a real note. Dropping the column on the first attempt would have destroyed fourteen drivers' notes. Read point 1 as "the dry run says zero", never as "the backfill has surely run by now".
+**Verify point 1 for real before deleting** — a script whose dry run has reported candidates in every environment the whole time is not ready, however long it has been sitting there. `backfill-group-preferences.ts` held up its own retirement for weeks this way: its stored values turned out to be plain text rather than the encoded format anyone expected, so an early attempt to drop the column would have destroyed real user notes. Trust what the dry run says today, never how long it's been since the backfill presumably ran.
 
 Read-only `check-*` and `measure-*` scripts are cheaper to keep than to re-derive. Retire those only when the thing they measure is gone.
 

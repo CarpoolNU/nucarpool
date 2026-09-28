@@ -7,10 +7,10 @@ import { FEEDBACK_FORM_URL } from "../../utils/feedbackForm";
  * Every mutation `useGroupMembership` performs ends at least one pairing the
  * caller was part of - they left, they removed somebody, or the group was
  * dissolved - so every one of its success toasts carries the prompt. This is
- * the post-match feedback of SCRUM-545, routed to the existing Jira form
- * instead of a table of our own: the app keeps no record of a pairing once it
- * ends (`docs/design/post-match-feedback.md`), and nothing here reads a
- * submission back, so the rated user is never shown one.
+ * the post-match feedback routed to the existing Jira form instead of a table
+ * of our own: the app keeps no record of a pairing once it ends
+ * (`docs/design/post-match-feedback.md`), and nothing here reads a submission
+ * back, so the rated user is never shown one.
  *
  * It reaches only the member who acted. A rider the driver removed, and the
  * member left behind when a group dissolves under them, are not in the app at
