@@ -1,4 +1,4 @@
-import { Permission } from "@prisma/client";
+import { Permission, ReportStatus } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
 import type { Session } from "next-auth";
 import { appRouter } from "./index";
@@ -54,15 +54,38 @@ const buildPrismaMock = () => {
     adminAuditLog: {
       create: jest.fn().mockResolvedValue({}),
     },
-    report: { findMany: jest.fn().mockResolvedValue([]) },
+    report: {
+      findMany: jest.fn().mockResolvedValue([]),
+      findUnique: jest.fn().mockResolvedValue(null),
+    },
   };
 
-  // Non-enumerable so `allPrismaCalls`'s `Object.values(prisma)` still walks
-  // only real delegate objects, matching the same fix in `admin.test.ts`.
-  return Object.defineProperty({ ...client }, "$transaction", {
-    value: jest.fn((fn: (tx: typeof client) => unknown) => fn(client)),
+  // Both non-enumerable so `allPrismaCalls`'s `Object.values(prisma)` still
+  // walks only real delegate objects, matching the same fix in
+  // `admin.test.ts`. `$executeRaw` is set on `client` itself first so
+  // `tx.$executeRaw` inside `$transaction`'s callback is the same jest.fn().
+  const executeRaw = jest.fn().mockResolvedValue(1);
+  Object.defineProperty(client, "$executeRaw", {
+    value: executeRaw,
     enumerable: false,
   });
+
+  // `Object.defineProperties` types its return as the input's own type, so a
+  // cast is what actually exposes `$transaction`/`$executeRaw` to callers —
+  // both exist at runtime regardless.
+  return Object.defineProperties(
+    { ...client },
+    {
+      $transaction: {
+        value: jest.fn((fn: (tx: typeof client) => unknown) => fn(client)),
+        enumerable: false,
+      },
+      $executeRaw: { value: executeRaw, enumerable: false },
+    },
+  ) as typeof client & {
+    $transaction: jest.Mock;
+    $executeRaw: jest.Mock;
+  };
 };
 
 type PrismaMock = ReturnType<typeof buildPrismaMock>;
@@ -163,6 +186,14 @@ const adminProcedures: Array<{
   // The report queue carries message text from reported conversations, so
   // a USER reaching it would read other people's threads (SCRUM-555).
   { path: "getReports", invoke: (c) => c.user.admin.getReports() },
+  {
+    path: "resolveReport",
+    invoke: (c) =>
+      c.user.admin.resolveReport({
+        reportId: "report-1",
+        status: ReportStatus.REVIEWED,
+      }),
+  },
 ];
 
 describe("protectedRouter", () => {
@@ -374,4 +405,31 @@ describe("admin.updateUserPermission manager gate", () => {
     );
     expect(prisma.user.update).not.toHaveBeenCalled();
   });
+});
+
+describe("admin.resolveReport", () => {
+  // Unlike `updateUserPermission`, the acceptance criteria (SCRUM-574) name
+  // both ADMIN and MANAGER, so this checks `adminRouter`'s ordinary gate does
+  // the whole job here — there is no extra MANAGER-only check to test.
+  it.each([Permission.ADMIN, Permission.MANAGER])(
+    "lets a %s resolve an OPEN report",
+    async (permission) => {
+      const { caller, prisma } = callerFor(sessionFor(permission));
+
+      await caller.user.admin.resolveReport({
+        reportId: "report-1",
+        status: ReportStatus.DISMISSED,
+      });
+
+      expect(prisma.$executeRaw).toHaveBeenCalled();
+      expect(prisma.adminAuditLog.create).toHaveBeenCalledWith({
+        data: {
+          actorId: "user-1",
+          action: "user.admin.resolveReport",
+          targetId: "report-1",
+          metadata: JSON.stringify({ status: ReportStatus.DISMISSED }),
+        },
+      });
+    },
+  );
 });

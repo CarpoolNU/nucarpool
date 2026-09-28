@@ -157,8 +157,9 @@ export const reportsRouter = router({
       }
 
       // One OPEN report per reporter and person. A report that has been
-      // reviewed or dismissed (SCRUM-552) does not stop a new one, because
-      // something new may have happened. There is no constraint behind this,
+      // reviewed or dismissed by `admin.resolveReport` (SCRUM-574) does not
+      // stop a new one, because something new may have happened. There is no
+      // constraint behind this,
       // since the rule depends on `status`, so two simultaneous submissions can
       // both pass. The dialog disables Submit while one is in flight.
       const existing = await ctx.prisma.report.findFirst({

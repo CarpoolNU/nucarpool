@@ -11,11 +11,16 @@ import AdminReports from "./AdminReports";
 
 const reportsQueryFn = jest.fn();
 const usersQueryFn = jest.fn();
+const resolveReportMutationFn = jest.fn();
+const invalidateReports = jest.fn();
 
 jest.mock("../../utils/trpc", () => {
   const reactQuery = jest.requireActual("@tanstack/react-query");
   return {
     trpc: {
+      useUtils: () => ({
+        user: { admin: { getReports: { invalidate: invalidateReports } } },
+      }),
       user: {
         admin: {
           getReports: {
@@ -32,6 +37,13 @@ jest.mock("../../utils/trpc", () => {
               reactQuery.useQuery({
                 queryKey: ["getAllUsers", input],
                 queryFn: () => usersQueryFn(),
+                ...options,
+              }),
+          },
+          resolveReport: {
+            useMutation: (options: object) =>
+              reactQuery.useMutation({
+                mutationFn: (input: unknown) => resolveReportMutationFn(input),
                 ...options,
               }),
           },
@@ -76,6 +88,8 @@ const page = (
 beforeEach(() => {
   reportsQueryFn.mockReset();
   usersQueryFn.mockReset();
+  resolveReportMutationFn.mockReset();
+  invalidateReports.mockReset();
 });
 
 describe("AdminReports", () => {
@@ -222,5 +236,63 @@ describe("AdminReports", () => {
         status: "DISMISSED",
       });
     });
+  });
+
+  it("resolves an OPEN report as Reviewed and refreshes the queue (SCRUM-574)", async () => {
+    reportsQueryFn.mockResolvedValue(page([report()]));
+    usersQueryFn.mockResolvedValue(USERS);
+    resolveReportMutationFn.mockResolvedValue({
+      id: "report-1",
+      status: "REVIEWED",
+    });
+    const user = userEvent.setup();
+
+    render(withClient(<AdminReports />));
+    await screen.findByText("reporter@northeastern.edu");
+
+    await user.click(screen.getByText("Mark reviewed"));
+
+    await waitFor(() => {
+      expect(resolveReportMutationFn).toHaveBeenCalledWith({
+        reportId: "report-1",
+        status: "REVIEWED",
+      });
+    });
+    await waitFor(() => {
+      expect(invalidateReports).toHaveBeenCalled();
+    });
+  });
+
+  it("dismisses an OPEN report", async () => {
+    reportsQueryFn.mockResolvedValue(page([report()]));
+    usersQueryFn.mockResolvedValue(USERS);
+    resolveReportMutationFn.mockResolvedValue({
+      id: "report-1",
+      status: "DISMISSED",
+    });
+    const user = userEvent.setup();
+
+    render(withClient(<AdminReports />));
+    await screen.findByText("reporter@northeastern.edu");
+
+    await user.click(screen.getByText("Dismiss"));
+
+    await waitFor(() => {
+      expect(resolveReportMutationFn).toHaveBeenCalledWith({
+        reportId: "report-1",
+        status: "DISMISSED",
+      });
+    });
+  });
+
+  it("shows no resolve actions for a report that is already resolved", async () => {
+    reportsQueryFn.mockResolvedValue(page([report({ status: "REVIEWED" })]));
+    usersQueryFn.mockResolvedValue(USERS);
+
+    render(withClient(<AdminReports />));
+
+    await screen.findByText("reporter@northeastern.edu");
+    expect(screen.queryByText("Mark reviewed")).not.toBeInTheDocument();
+    expect(screen.queryByText("Dismiss")).not.toBeInTheDocument();
   });
 });

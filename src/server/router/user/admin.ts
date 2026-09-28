@@ -117,6 +117,24 @@ export const DASHBOARD_WINDOW_ORDER_MESSAGE =
 /** Reported when a dashboard window is too wide to chart. Names the ceiling. */
 export const DASHBOARD_WINDOW_SPAN_MESSAGE = `Date range cannot span more than ${MAX_DASHBOARD_WEEKS} weeks`;
 
+/** What `resolveReport` is refused with when `reportId` names no report. */
+export const REPORT_NOT_FOUND_MESSAGE = "Report not found.";
+
+/**
+ * What `resolveReport` is refused with when the report is no longer `OPEN` —
+ * already resolved, whether by this admin or by another one racing it.
+ */
+export const REPORT_ALREADY_RESOLVED_MESSAGE =
+  "This report has already been resolved.";
+
+/** The only two statuses `resolveReport` may transition a report to. */
+const resolveReportInput = z
+  .object({
+    reportId: z.string().min(1),
+    status: z.enum([ReportStatus.REVIEWED, ReportStatus.DISMISSED]),
+  })
+  .strict();
+
 /**
  * The window `getDashboardSeries` accepts.
  *
@@ -437,8 +455,8 @@ export const adminDataRouter = router({
   }),
 
   /**
-   * The report queue (SCRUM-555). Read-only, most recent first, cursor-paged
-   * (SCRUM-562). Resolving a report is SCRUM-552.
+   * The report queue (SCRUM-555). Most recent first, cursor-paged
+   * (SCRUM-562). Resolving a report is `resolveReport` below (SCRUM-574).
    *
    * **This is the one admin read that returns message text**, and it is the
    * exception the header's rule allows for. A snapshot is a copy of a thread
@@ -501,5 +519,67 @@ export const adminDataRouter = router({
         })),
         nextCursor: hasMore ? page[page.length - 1].id : null,
       };
+    }),
+
+  /**
+   * Transitions a `Report` out of `OPEN` (SCRUM-574). Until this existed,
+   * nothing ever moved a report to `REVIEWED` or `DISMISSED`, so the
+   * duplicate-report guard in `reports.ts` — keyed on `OPEN` — made a user's
+   * first report against someone also their last.
+   *
+   * The `WHERE … AND status = 'OPEN'` check and the write are one
+   * `$executeRaw` statement rather than a `findFirst` followed by `update`,
+   * for the reason `claimRequestNotification` in `email.ts` documents:
+   * `relationMode = "prisma"` makes a filtered `updateMany` read matching ids
+   * and then update by id, so two admins racing to resolve the same report
+   * would both see a match and the second write would silently overwrite the
+   * first with no error. A single `UPDATE` is atomic in InnoDB, so only one
+   * of two concurrent calls can ever affect a row.
+   *
+   * The write and its audit entry are one transaction, matching
+   * `updateUserPermission`: a report can never end up resolved with no
+   * corresponding `AdminAuditLog` row.
+   */
+  resolveReport: adminRouter
+    .input(resolveReportInput)
+    .mutation(async ({ ctx, input }) => {
+      const actorId = ctx.session.user?.id;
+      if (!actorId) {
+        throw new TRPCError({ code: "UNAUTHORIZED" });
+      }
+
+      return ctx.prisma.$transaction(async (tx) => {
+        const changed = await tx.$executeRaw`
+          UPDATE \`report\` SET \`status\` = ${input.status}
+          WHERE \`id\` = ${input.reportId} AND \`status\` = ${ReportStatus.OPEN}
+        `;
+
+        if (changed !== 1) {
+          // Either the id names no report, or it is no longer OPEN. A second
+          // read tells the caller which, rather than one message covering
+          // both.
+          const existing = await tx.report.findUnique({
+            where: { id: input.reportId },
+            select: { id: true },
+          });
+          throw new TRPCError({
+            code: existing ? "CONFLICT" : "NOT_FOUND",
+            message: existing
+              ? REPORT_ALREADY_RESOLVED_MESSAGE
+              : REPORT_NOT_FOUND_MESSAGE,
+          });
+        }
+
+        await tx.adminAuditLog.create({
+          data: buildAuditLogEntry({
+            actorId,
+            action: AdminAuditAction.RESOLVE_REPORT,
+            targetId: input.reportId,
+            metadata: { status: input.status },
+          }),
+        });
+
+        return { id: input.reportId, status: input.status };
+      });
     }),
 });

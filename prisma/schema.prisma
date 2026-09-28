@@ -61,10 +61,11 @@ enum ReportReason {
   OTHER
 }
 
-// Where a report stands in the admin queue. Every report is created `OPEN`,
-// and nothing moves it yet: the queue is read-only until the suspension work
-// (SCRUM-552) gives an admin something to resolve it with. `REVIEWED` and
-// `DISMISSED` ship now so that ticket needs no second Deploy Request.
+// Where a report stands in the admin queue. Every report is created `OPEN`;
+// `user.admin.resolveReport` (SCRUM-574) is what moves it to `REVIEWED` or
+// `DISMISSED`, and `user.reports.create`'s duplicate-report guard is keyed on
+// `OPEN` so a resolved report no longer blocks a new one against the same
+// person.
 enum ReportStatus {
   OPEN
   REVIEWED

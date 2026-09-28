@@ -1,4 +1,4 @@
-import { Permission, Role, Status } from "@prisma/client";
+import { Permission, ReportStatus, Role, Status } from "@prisma/client";
 import { addWeeks, startOfWeek } from "date-fns";
 import type { Session } from "next-auth";
 import { appRouter } from "../index";
@@ -48,24 +48,50 @@ const buildPrismaMock = () => {
       create: jest.fn().mockResolvedValue({}),
       findMany: jest.fn().mockResolvedValue([]),
     },
-    report: { findMany: jest.fn().mockResolvedValue([]) },
+    report: {
+      findMany: jest.fn().mockResolvedValue([]),
+      findUnique: jest.fn().mockResolvedValue(null),
+    },
   };
 
-  // `updateUserPermission` writes its update and its audit entry inside
+  // `updateUserPermission` and `resolveReport` each write inside
   // `ctx.prisma.$transaction(async (tx) => ...)`. A pass-through is enough
   // here: this file asserts query *shape*, and `tx.user.update` /
-  // `tx.adminAuditLog.create` are the same jest.fn()s as `client.user.update`
-  // / `client.adminAuditLog.create`, so existing assertions on those still
-  // see the calls. Atomicity itself is proven for real in `admin.db.test.ts`.
+  // `tx.adminAuditLog.create` / `tx.$executeRaw` are the same jest.fn()s as
+  // `mock.user.update` / `mock.adminAuditLog.create` / `mock.$executeRaw`, so
+  // assertions on those see the calls made inside a transaction too.
+  // Atomicity itself is proven for real in `admin.db.test.ts`.
   //
-  // Defined non-enumerable so `everyCallArgument`'s `Object.values(prisma)`
+  // Both defined non-enumerable so `everyCallArgument`'s `Object.values(prisma)`
   // still walks only real delegate objects — a plain spread would hand it a
   // bare jest.fn() as one of those "delegates" and it would fail reading
   // `.mock.calls` off jest's own internal mock-state object.
-  return Object.defineProperty({ ...client }, "$transaction", {
-    value: jest.fn((fn: (tx: typeof client) => unknown) => fn(client)),
+  //
+  // `$executeRaw` is set on `client` itself first, so `tx.$executeRaw` inside
+  // `$transaction`'s callback (`tx` is `client`) is the same jest.fn() as the
+  // one below, and a test can assert on either.
+  const executeRaw = jest.fn().mockResolvedValue(1); // 1 row changed: success.
+  Object.defineProperty(client, "$executeRaw", {
+    value: executeRaw,
     enumerable: false,
   });
+
+  // `Object.defineProperties` types its return as the input's own type, so a
+  // cast is what actually exposes `$transaction`/`$executeRaw` to callers —
+  // both exist at runtime regardless.
+  return Object.defineProperties(
+    { ...client },
+    {
+      $transaction: {
+        value: jest.fn((fn: (tx: typeof client) => unknown) => fn(client)),
+        enumerable: false,
+      },
+      $executeRaw: { value: executeRaw, enumerable: false },
+    },
+  ) as typeof client & {
+    $transaction: jest.Mock;
+    $executeRaw: jest.Mock;
+  };
 };
 
 type PrismaMock = ReturnType<typeof buildPrismaMock>;
@@ -743,5 +769,67 @@ describe("getReports", () => {
       },
     ]);
     expect(reports[1].conversationSnapshot).toBeNull();
+  });
+});
+
+describe("resolveReport", () => {
+  it("issues one atomic UPDATE guarded on OPEN, then writes an audit entry", async () => {
+    const { caller, prisma } = callerFor(adminSession(Permission.ADMIN));
+
+    const result = await caller.user.admin.resolveReport({
+      reportId: "report-1",
+      status: ReportStatus.REVIEWED,
+    });
+
+    expect(result).toEqual({ id: "report-1", status: ReportStatus.REVIEWED });
+    expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
+    expect(prisma.adminAuditLog.create).toHaveBeenCalledWith({
+      data: {
+        actorId: "admin-1",
+        action: "user.admin.resolveReport",
+        targetId: "report-1",
+        metadata: JSON.stringify({ status: ReportStatus.REVIEWED }),
+      },
+    });
+  });
+
+  it("rejects a status other than REVIEWED or DISMISSED", async () => {
+    const { caller, prisma } = callerFor(adminSession(Permission.ADMIN));
+
+    await expect(
+      caller.user.admin.resolveReport({
+        reportId: "report-1",
+        status: ReportStatus.OPEN as never,
+      }),
+    ).rejects.toThrow();
+    expect(prisma.$executeRaw).not.toHaveBeenCalled();
+  });
+
+  it("answers NOT_FOUND when the id names no report, writing no audit entry", async () => {
+    const { caller, prisma } = callerFor(adminSession(Permission.ADMIN));
+    prisma.$executeRaw.mockResolvedValueOnce(0);
+    prisma.report.findUnique.mockResolvedValueOnce(null);
+
+    await expect(
+      caller.user.admin.resolveReport({
+        reportId: "missing",
+        status: ReportStatus.DISMISSED,
+      }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(prisma.adminAuditLog.create).not.toHaveBeenCalled();
+  });
+
+  it("answers CONFLICT when the report exists but is no longer OPEN", async () => {
+    const { caller, prisma } = callerFor(adminSession(Permission.ADMIN));
+    prisma.$executeRaw.mockResolvedValueOnce(0);
+    prisma.report.findUnique.mockResolvedValueOnce({ id: "report-1" });
+
+    await expect(
+      caller.user.admin.resolveReport({
+        reportId: "report-1",
+        status: ReportStatus.DISMISSED,
+      }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(prisma.adminAuditLog.create).not.toHaveBeenCalled();
   });
 });
