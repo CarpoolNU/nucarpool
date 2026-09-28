@@ -125,12 +125,12 @@ const formatDateToMonth = (date: Date | null): string | undefined => {
  * and the controls kept displaying the ones they had started with: a user who
  * had just saved was told their change had not taken, which is the opposite
  * of what the database held. `UnsavedModal`'s discard is the same
- * `reset(...)` and had the same outcome (SCRUM-472).
+ * `reset(...)` and had the same outcome.
  *
  * `StepThree`'s identical pickers had the opposite problem for the same
  * reason: no `value` at all, so a Previous/Next remount - which unmounts and
  * remounts the step rather than hiding it - restarted antd's internal state at
- * `null` while the form went on holding the dates (SCRUM-512).
+ * `null` while the form went on holding the dates.
  *
  * **`null` rather than `undefined`, and the empty case never reaches
  * `dayjs`.** `formatDateToMonth(null)` is `undefined`, and `dayjs(undefined,
@@ -187,7 +187,7 @@ const isReversedCoopRange = (
  *
  * Production carries 22 searches with years in 1901–1926 and 2069–2074 — the
  * shape of a two-digit year read against the wrong century pivot, though which
- * input produced them is not recorded (SCRUM-550). Nothing refused them:
+ * input produced them is not recorded. Nothing refused them:
  * `isReversedCoopRange` catches inversion only, and a 1901→1908 range runs
  * forwards perfectly well.
  *
@@ -295,7 +295,7 @@ const implausibleCoopYearFields = ({
  * Which co-op date field a reversed range is reported against, for the two
  * schemas and the profile page's notice: the end date, or nothing.
  *
- * **A VIEWER is exempt (SCRUM-551)**, for the reason
+ * **A VIEWER is exempt**, for the reason
  * `implausibleCoopYearFields` gives. The same trap caught more than the one
  * VIEWER among production's 47 reversed rows: `isViewer` reads the live form
  * role, so a RIDER or DRIVER holding a reversed range who picked Viewer had

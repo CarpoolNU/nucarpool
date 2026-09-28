@@ -51,7 +51,7 @@ const DropDownMenu = ({ checkChanges }: DropDownMenuProps) => {
   return (
     // `relative`: Menu.Items below is `absolute right-0`, and neither this
     // wrapper nor any ancestor up to the viewport used to be positioned, so
-    // it resolved against the window instead of this trigger (SCRUM-517).
+    // it resolved against the window instead of this trigger.
     <div className="relative z-30">
       {isLoading && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-white">
@@ -60,7 +60,7 @@ const DropDownMenu = ({ checkChanges }: DropDownMenuProps) => {
       )}
       <Menu>
         {/* `h-header-control w-header-control`, not the `h-14 w-14` this
-            declared, and that pair is SCRUM-491's fix. The trigger is a child
+            declared, and that pair is the fix. The trigger is a child
             of a bar whose height is 8.5% of the viewport, so a fixed 56px was
             unrelated to the space it had: at 667x375 the bar is 31.875px and
             this box was 56px, centred, hanging 12.06px above the screen and

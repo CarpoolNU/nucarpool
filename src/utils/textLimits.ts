@@ -59,7 +59,7 @@ export const GROUP_OPTION_MAX_LENGTH = 40;
 /**
  * `report.message` — `VARCHAR(500)`.
  *
- * The reporter's own description of what happened (SCRUM-532). Wider than a
+ * The reporter's own description of what happened. Wider than a
  * chat message because a report is often the only account an admin gets of an
  * incident, and cutting it off at a tweet's length would lose detail.
  */

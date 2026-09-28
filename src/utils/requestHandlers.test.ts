@@ -122,10 +122,10 @@ jest.mock("react-toastify/unstyled", () => ({
 }));
 
 /**
- * A spy per cache rather than one shared between them, which is what SCRUM-510
- * needed: `groups.me` was the cache nobody invalidated, and a single counter
- * asserting "two calls" could not say *which* two, so adding the missing one
- * and dropping an existing one would read the same.
+ * A spy per cache rather than one shared between them: `groups.me` was the
+ * cache nobody invalidated, and a single counter asserting "two calls" could
+ * not say *which* two, so adding the missing one and dropping an existing
+ * one would read the same.
  */
 const mockInvalidateUserMe = jest.fn();
 const mockInvalidateRequestsMe = jest.fn();
@@ -469,12 +469,12 @@ describe("handleAcceptRequest — the writes a real acceptance makes", () => {
     expect(mockInvalidateRequestsMe).toHaveBeenCalledTimes(1);
     expect(mockInvalidateUserMe).toHaveBeenCalledTimes(1);
     // `groups.me` is the member list itself, and it was the one nobody
-    // invalidated here (SCRUM-510).
+    // invalidated here.
     expect(mockInvalidateGroupsMe).toHaveBeenCalledTimes(1);
   });
 
   /**
-   * SCRUM-510 finding 2, and the case the defect was actually reached through.
+   * The case the defect was actually reached through.
    *
    * A driver already in a group accepts a second rider. That is `groups.edit`,
    * not `groups.create`, and `carpoolId` does not change - so nothing remounts

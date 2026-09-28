@@ -28,7 +28,7 @@ export const NO_SEATS_MESSAGE =
  *
  * `valueAsNumber` parses an empty box as `NaN` rather than "no value yet",
  * which reached Zod's own `expected number, received NaN` on every ordinary
- * clear-and-retype (SCRUM-512). An empty string reads as `undefined` instead,
+ * clear-and-retype. An empty string reads as `undefined` instead,
  * which the schema's own `optional()` and its "Cannot be empty" refinement
  * already handle in project copy. Anything else is still handed to `Number`
  * rather than parsed as an integer, so a fractional entry like `1.5` reaches

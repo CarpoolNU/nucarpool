@@ -227,10 +227,10 @@ describe("Header navigation at a mobile viewport", () => {
     }
   });
 
-  it("sizes each nav item to the bar rather than to its children (SCRUM-502)", () => {
+  it("sizes each nav item to the bar rather than to its children", () => {
     // Not a re-assertion of the border-bottom test above - that one passed
-    // while this was broken, which is the whole reason SCRUM-502 needed a
-    // real browser rather than jsdom to find the defect. Before the fix,
+    // while this was broken, which is the whole reason finding the defect
+    // needed a real browser rather than jsdom. Before the fix,
     // `MobileNavItem` declared no height at all, so its box was an emergent
     // sum of its children (8px padding + 24px icon + 24px label + 8px padding
     // + 4px border = 68px) against a 59px bar, and the border-bottom - the
@@ -509,17 +509,17 @@ describe("Header styling across the breakpoint", () => {
     const logo = desktopBrand()!;
 
     /*
-     * The design sizes, which SCRUM-484 capped rather than replaced: each is
-     * still the first argument to its own `min()`, so a viewport with room for
-     * it still gets exactly it.
+     * The design sizes, capped rather than replaced: each is still the first
+     * argument to its own `min()`, so a viewport with room for it still gets
+     * exactly it.
      */
     expect(baseOf(logo)).toContain("font-size: min(32px");
     expect(desktopOf(logo)).toContain("font-size: min(48px");
   });
 
   /**
-   * SCRUM-484's regression guard, and the one assertion in this file whose
-   * subject is an *absence*.
+   * A regression guard, and the one assertion in this file whose subject is
+   * an *absence*.
    *
    * The defect was a fixed pixel height inside a percentage-height bar:
    * `HeaderDiv` is 8.5% of the viewport and `Logo` declared `111px`, so the
@@ -531,14 +531,15 @@ describe("Header styling across the breakpoint", () => {
    * **A positive control comes first.** `desktopOf` returning the empty string
    * would satisfy every `not.toContain` below it and read as a pass - the same
    * vacuous-negative shape `guards the header's styling` guards against above,
-   * and the one SCRUM-475 was written about. So the block is proved non-empty
-   * by the declaration it *does* carry before anything is asserted missing.
+   * and the one the aria-hidden dialog regression was written about. So the
+   * block is proved non-empty by the declaration it *does* carry before
+   * anything is asserted missing.
    *
    * This says nothing about the resulting geometry. jsdom computes no layout
    * and resolves no `dvh`, so whether 100% of the bar is 31.88px is a browser
    * question - measured through `scripts/measure-layout.ts`, recorded on the
-   * `header-logo-bar` fixture, and regression-testable only in SCRUM-264's
-   * Playwright suite.
+   * `header-logo-bar` fixture, and regression-testable only in the
+   * layout-fixture Playwright suite.
    */
   it("gives the logo a height it can occupy rather than a fixed one", () => {
     renderHeader();
@@ -595,7 +596,7 @@ describe("Header styling across the breakpoint", () => {
 });
 
 /**
- * `MobileNav`'s horizontal safe-area padding (SCRUM-530).
+ * `MobileNav`'s horizontal safe-area padding.
  *
  * The bar read `env(safe-area-inset-bottom)` and nothing else, so on a
  * notched or Dynamic Island iPhone rotated to landscape the outermost tab sat
@@ -666,7 +667,7 @@ describe("Header — MobileNav horizontal safe-area padding", () => {
 });
 
 /**
- * The bar's *other* children, which SCRUM-484 did not reach.
+ * The bar's *other* children, which the fix above did not reach.
  *
  * `Logo` above is a percentage-height bar's child that declared a fixed pixel
  * height, and the tests above are the record of that fix. The four desktop
@@ -684,7 +685,7 @@ describe("Header — MobileNav horizontal safe-area padding", () => {
  * through the `header-control-row` fixture, whose `recorded` lines carry the
  * before and after; `scripts/measure-layout.test.ts` fails if either class
  * string here stops matching the one that fixture copied. The geometry itself
- * belongs to SCRUM-264's Playwright suite.
+ * belongs to the layout-fixture Playwright suite.
  */
 describe("Header controls inside the bar they have to fit", () => {
   beforeEach(() => {
@@ -778,7 +779,7 @@ describe("Header controls inside the bar they have to fit", () => {
 
   /**
    * Why `/sign-in` is outside this fix's blast radius, pinned rather than
-   * assumed - SCRUM-477's Closeout on `SigninLogo` is the reason to check.
+   * assumed - a closeout note on `SigninLogo` is the reason to check.
    *
    * Both caps are derived from `100dvh * 0.085`, which reconstructs the bar's
    * basis rather than reading it, so they describe the bar only on the pages

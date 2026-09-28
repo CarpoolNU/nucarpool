@@ -46,12 +46,12 @@ import {
 /**
  * The header bar.
  *
- * **`height` and `min-height` are a pair, and SCRUM-496 added the second one.**
- * The bar is a percentage of the viewport, which on a landscape phone - 667x375,
- * which `useIsMobile` treats as desktop because the breakpoint is width-only -
- * came to 31.875px. Every control in this bar is a child of it, so that was a
- * ceiling on all of them: SCRUM-491 could cap the tabs and the profile trigger
- * to *fit* the bar, which is what stopped them taking clicks meant for the
+ * **`height` and `min-height` are a pair, and the second one was added
+ * later.** The bar is a percentage of the viewport, which on a landscape phone
+ * - 667x375, which `useIsMobile` treats as desktop because the breakpoint is
+ * width-only - came to 31.875px. Every control in this bar is a child of it,
+ * so that was a ceiling on all of them: capping the tabs and the profile
+ * trigger to *fit* the bar is what stopped them taking clicks meant for the
  * content row, but nothing inside a 31.875px box can be the 44px Apple's HIG
  * and WCAG 2.5.5 ask of a touch control. Raising the ceiling is this
  * declaration.
@@ -108,12 +108,12 @@ const HeaderDiv = styled.div`
  * alone would grow the bar past what callers subtract.
  *
  * **That content box is 59px, not 60** - this block's `border-top` is the
- * difference, and SCRUM-502 is the ticket that had to measure it to find out.
+ * difference, and it had to be measured to find out.
  * `MobileNavItem` no longer assumes a figure for it at all; see that
  * component's comment.
  *
- * **`padding-left`/`padding-right` are SCRUM-530's fix, the horizontal
- * counterpart to the pair above.** In portrait the horizontal insets are 0, so
+ * **`padding-left`/`padding-right` are the horizontal counterpart to the pair
+ * above.** In portrait the horizontal insets are 0, so
  * this bar was very nearly correct with none at all - the gap only shows in
  * landscape, where a notched or Dynamic Island iPhone reports a nonzero inset
  * on whichever side the sensor housing has rotated to. Before this, `padding:
@@ -160,8 +160,8 @@ const MobileNav = styled.div`
 // warning: React caches it per attribute name at module scope, so it appears
 // **once per page load** and never again - not once per element and not once
 // per render, which is why `Header.console.test.tsx` has to be its own file.
-// `height: 100%` plus `justify-content: center` is SCRUM-502's fix, and the
-// point is that it is structural rather than arithmetic. Before this, the
+// `height: 100%` plus `justify-content: center` is the fix, and the point is
+// that it is structural rather than arithmetic. Before this, the
 // item had no declared height at all, so its box was whatever its children
 // summed to: 8px padding + 24px icon span + 24px label span (the label's
 // wrapper sets no font-size, so it inherits `globals.css`'s 24px line-height
@@ -209,7 +209,7 @@ const MobileNavItem = styled.button<{ $active: boolean }>`
  * The in-page logo, which is the bar's only child on the pages that give the
  * bar a definite height.
  *
- * **`height: 100%`, not a pixel figure, and that is SCRUM-484's fix.**
+ * **`height: 100%`, not a pixel figure, is the fix.**
  * `HeaderDiv` above is a percentage of the viewport; this declared `70px` and
  * `111px`, so the child's height had no relationship to the parent's and lost
  * whenever the parent was smaller. Measured at 667x375 the bar is 31.88px and
@@ -295,7 +295,7 @@ export const SigninLogo = styled.h1`
 /**
  * One desktop navigation tab's classes.
  *
- * **`py-header-nav-y` is SCRUM-491's fix and is the only part of this string
+ * **`py-header-nav-y` is the fix and is the only part of this string
  * that changed**; `px-4` is the horizontal half of the `p-4` that was here
  * before, at the same 16px. The token caps the vertical padding against the
  * bar's own height, so a tab is 60px wherever 60px fits and exactly the bar
@@ -545,7 +545,7 @@ const Header = (props: HeaderProps) => {
    * sidebar and leave the URL alone, so with the param set - which the mobile
    * nav's `/?tab=requests` leaves behind for a tablet rotated or a window
    * resized across `md` - clicking Explore re-rendered, the effect put
-   * Requests back, and the click did nothing (SCRUM-561).
+   * Requests back, and the click did nothing.
    *
    * Keyed on the tab string and the setter instead. `data.setSidebar` is a
    * `useState` setter and stable; `tab` is a string, so a re-render that

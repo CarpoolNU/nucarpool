@@ -14,7 +14,7 @@
  * `onDestroyStarted` guard and fall straight through to the real teardown,
  * which still invokes `onDestroyed` - which was wired to `handleComplete`. So
  * every re-render tore the live tour down, marked the tutorial complete in the
- * database, and started a new tour from step 1. SCRUM-527.
+ * database, and started a new tour from step 1.
  *
  * ---
  *
@@ -338,14 +338,14 @@ describe("WelcomeTutorial under StrictMode", () => {
 /**
  * The mobile tour's two steps that target something the sheet can cover or
  * hide, and the detent each is supposed to force before it is measured or
- * shown. SCRUM-528.
+ * shown.
  *
  * `reactStrictMode: false` for the same reason the construction-count block
  * above uses it: these tests read `setSheetDetent`'s call history, and
  * StrictMode's extra mount-teardown-remount would add calls from a tour that
  * never really ran, muddying what a test is checking.
  */
-describe("WelcomeTutorial mobile sheet detent (SCRUM-528)", () => {
+describe("WelcomeTutorial mobile sheet detent", () => {
   beforeEach(() => {
     configure({ reactStrictMode: false });
     mockedUseIsMobile.mockReturnValue(true);

@@ -1,7 +1,7 @@
 /**
  * The gate condition, and the separation the whole ticket turns on: a terms
  * version is a *record*, and re-consent is a *policy*. Bumping the first must
- * not silently do the second. SCRUM-280.
+ * not silently do the second.
  *
  * The case that matters most is the legacy cohort - `licenseSigned` true with
  * a null version, which is every one of the ~3,341 production rows that

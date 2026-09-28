@@ -115,7 +115,7 @@ export const trackRequestResponse = (
 };
 
 /**
- * How many candidates a search returned — the supply signal (SCRUM-570).
+ * How many candidates a search returned — the supply signal.
  *
  * **One event carrying a count, rather than a separate "empty" event.** Zero
  * results and two results are the same question asked of Mixpanel, and the
@@ -127,8 +127,7 @@ export const trackRequestResponse = (
  * question this exists to answer is which corridor to recruit drivers in, and
  * a city answers it. The home coordinate would answer it slightly better and
  * is a home address; `companyAddress` is a street address too. Both are more
- * than a third party needs, so neither is sent — see the acceptance criteria
- * on SCRUM-570.
+ * than a third party needs, so neither is sent.
  *
  * An object rather than this file's usual positional arguments: `companyCity`
  * and `companyState` are adjacent strings, and a call site that transposed

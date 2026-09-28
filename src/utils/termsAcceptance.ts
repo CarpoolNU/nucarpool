@@ -6,7 +6,7 @@
  * third is not derivable from the first two. `user.license_signed` answered
  * "have they ever agreed"; it could not say *when* or *to what*, so there was
  * no audit trail for a disclaimer written on behalf of Northeastern and no way
- * to tell who had seen the current wording. SCRUM-280.
+ * to tell who had seen the current wording.
  *
  * The canonical location for all three. Nothing else should hard-code a terms
  * version or re-derive the gate condition.

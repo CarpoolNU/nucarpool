@@ -4,7 +4,7 @@
  * `ProfilePicture` hands this to react-easy-crop as an explicit `cropSize` and
  * uses it to compute the cropper's opening zoom, so the two have to agree: a
  * box sized from one number and a zoom computed from another is exactly the
- * mismatch SCRUM-479 was filed for. One constant, imported by both.
+ * mismatch a prior defect was filed for. One constant, imported by both.
  */
 export const CROP_BOX_PX = 300;
 

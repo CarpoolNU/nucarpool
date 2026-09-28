@@ -7,7 +7,7 @@
  * an editor improving a sentence in `CompliancePortal.tsx` would leave every
  * subsequent acceptance stamped with a version naming text that no longer
  * exists, which is worse than the bare boolean it replaced: it is a wrong
- * answer rather than no answer. SCRUM-280.
+ * answer rather than no answer.
  *
  * **What is fingerprinted is the prose, not the file.** The body of every
  * `<p>` outside the error alert, with tags, JSX expressions and all whitespace

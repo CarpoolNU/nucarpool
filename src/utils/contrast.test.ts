@@ -1,8 +1,8 @@
 import { contrastRatio } from "./contrast";
 
 /**
- * SCRUM-515: the two colour pairs the audit found below WCAG AA, after the
- * fix. Each pair's threshold depends on where it renders, not on the hex
+ * The two colour pairs the audit found below WCAG AA, after the fix. Each
+ * pair's threshold depends on where it renders, not on the hex
  * values themselves - 4.5:1 for body text, 3:1 for the ~19px/700 popover
  * title, per https://www.w3.org/TR/WCAG21/#contrast-minimum.
  *

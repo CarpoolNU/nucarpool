@@ -57,8 +57,8 @@ const DESKTOP_MEDIA_QUERY = `(min-width: ${MOBILE_BREAKPOINT_PX}px)`;
  * The name of the screen that means "wide enough for the desktop layout *and*
  * tall enough to lay it out", used by the onboarding wizard.
  *
- * `desktop:` is a `min-width` and nothing else, which is the defect SCRUM-474
- * records: a phone held in landscape is 667px wide, so it is above the
+ * `desktop:` is a `min-width` and nothing else, which is the defect this
+ * exists to fix: a phone held in landscape is 667px wide, so it is above the
  * breakpoint and takes every desktop branch - into a viewport 375px tall.
  *
  * Deliberately a *second* screen rather than a height term added to
@@ -127,7 +127,7 @@ const WIZARD_NAV_STRIP_SPACE_PX = 132 + 40;
  * rechecked if the strip's contents change, and that is what the composition
  * above is for: the pieces are named, so the recheck is arithmetic rather than
  * archaeology. The geometry itself is not assertable in jsdom and belongs in
- * SCRUM-264's Playwright suite.
+ * the layout-fixture Playwright suite.
  */
 const WIZARD_DESKTOP_MIN_HEIGHT_PX =
   WIZARD_CARD_HEIGHT_PX + 2 * WIZARD_NAV_STRIP_SPACE_PX;
@@ -161,7 +161,7 @@ const isMobileWidth = (width) => width < MOBILE_BREAKPOINT_PX;
  * The share of the viewport the header bar takes, as the percentage
  * `HeaderDiv` declares and as the fraction the arithmetic below needs.
  *
- * Hoisted out of `Header.tsx` for SCRUM-484, which needs the same figure three
+ * Hoisted out of `Header.tsx` because it needs the same figure three
  * times: the bar declares it, the logo's font cap is derived from it, and the
  * admin console's height gate is derived from its complement. It was one
  * number in one template before that, and nothing else could read it.
@@ -175,7 +175,7 @@ const isMobileWidth = (width) => width < MOBILE_BREAKPOINT_PX;
  * block, which is only the viewport on the pages that give it one.** On `/`,
  * `/profile` and `/admin` the bar's parent is `100dvh`, so 8.5% is 8.5% of the
  * viewport and the content row beside it is the remainder - a remainder that
- * since SCRUM-496 is `CONTENT_ROW_HEIGHT` rather than a second percentage,
+ * is now `CONTENT_ROW_HEIGHT` rather than a second percentage,
  * because the bar has a pixel floor under it below 517.65px of height. On
  * `/sign-in` the bar sits inside a `w-fit` card in an auto-height flex column
  * (`sign-in.tsx:68`), so the percentage has no definite height to resolve
@@ -192,17 +192,16 @@ const HEADER_BAR_VIEWPORT_FRACTION = HEADER_BAR_VIEWPORT_PERCENT / 100;
 const HEADER_BAR_HEIGHT = `${HEADER_BAR_VIEWPORT_PERCENT}%`;
 
 /**
- * The shortest the header bar is allowed to be, in pixels - SCRUM-496's floor,
- * and the reason every other constant in this section grew a `max()`.
+ * The shortest the header bar is allowed to be, in pixels - the floor that is
+ * the reason every other constant in this section grew a `max()`.
  *
  * 44px is what Apple's HIG and WCAG 2.5.5 ask of a touch control, and it is the
- * figure SCRUM-421, SCRUM-432 and SCRUM-480 brought the rest of the mobile UI
- * up to. **The bar needs it because its children cannot have it otherwise.**
- * Every control in the bar is a child of it, so the bar's height is a ceiling
- * on all of them: at 667x375 - a landscape phone, which `useIsMobile` treats as
- * desktop because the breakpoint is width-only - 8.5% is 31.875px, and SCRUM-491
- * could cap the tabs and the trigger to *fit* that but could not make any of
- * them exceed it.
+ * figure the rest of the mobile UI was brought up to elsewhere. **The bar
+ * needs it because its children cannot have it otherwise.** Every control in
+ * the bar is a child of it, so the bar's height is a ceiling on all of them:
+ * at 667x375 - a landscape phone, which `useIsMobile` treats as desktop
+ * because the breakpoint is width-only - 8.5% is 31.875px, and capping the
+ * tabs and the trigger to *fit* that could not make any of them exceed it.
  *
  * **The band this binds in is the whole reason it is safe.** The floor wins
  * only while `8.5% × H < 44`, which is below `44 / 0.085` = **517.65px** of
@@ -264,12 +263,12 @@ const HEADER_BAR_RESOLVED_HEIGHT = `max(${HEADER_BAR_VIEWPORT_PERCENT}%, ${HEADE
  * The share of the viewport left for a page's content row.
  *
  * **This is no longer the row's height and is kept because it is still the
- * row's *share above the floor's band*.** Until SCRUM-496 the bar and the row
- * were two fractions summing to 1, and 91.5% was what the three desktop rows
- * declared. Now the bar has a pixel floor, so the row is the bar's complement
- * as a length (`CONTENT_ROW_HEIGHT`) and this fraction describes it only where
- * the percentage wins - at or above `HEADER_BAR_MIN_HEIGHT_PX / 0.085`, which
- * is 517.65px of viewport height.
+ * row's *share above the floor's band*.** Until the floor was added the bar
+ * and the row were two fractions summing to 1, and 91.5% was what the three
+ * desktop rows declared. Now the bar has a pixel floor, so the row is the
+ * bar's complement as a length (`CONTENT_ROW_HEIGHT`) and this fraction
+ * describes it only where the percentage wins - at or above
+ * `HEADER_BAR_MIN_HEIGHT_PX / 0.085`, which is 517.65px of viewport height.
  *
  * That is not a technicality for the two thresholds derived from it below:
  * `shortestViewportForContentRow` exists because one of them sits inside the
@@ -284,9 +283,10 @@ const CONTENT_ROW_VIEWPORT_FRACTION = 1 - HEADER_BAR_VIEWPORT_FRACTION;
  *
  * Reaches the four call sites as the `h-content-row` token registered in
  * `tailwind.config.js` - `index.tsx`, `admin.tsx`, `profile/index.tsx` and
- * `AdminMobileNotice.tsx`, which each spelled `91.5%` before SCRUM-496. A token
- * rather than an arbitrary value for the reason the `spacing` block in that file
- * gives at length: the value is composed here in JavaScript, and Tailwind emits
+ * `AdminMobileNotice.tsx`, which each spelled `91.5%` before this was
+ * introduced. A token rather than an arbitrary value for the reason the
+ * `spacing` block in that file gives at length: the value is composed here in
+ * JavaScript, and Tailwind emits
  * a bracketed utility only if the finished class name appears literally in the
  * source, so four call sites would mean four hand-copied nested expressions
  * with nothing checking them against this one.
@@ -318,7 +318,7 @@ const CONTENT_ROW_HEIGHT = `calc(100% - ${HEADER_BAR_RESOLVED_HEIGHT})`;
  * **Both callers below need this and they land in different cases**, which is
  * the whole reason it is a function. `MESSAGE_PANEL_MIN_HEIGHT_PX` is 491 and
  * inside the band; `ADMIN_CONSOLE_MIN_HEIGHT_PX` is 582 and above it, so the
- * floor does not reach it and its figure is unchanged by SCRUM-496. A single
+ * floor does not reach it and its figure is unchanged by that addition. A single
  * `ceil(needed / 0.915)` for both - which is what this replaced - would have
  * left the message panel gating its compact chrome two pixels before the space
  * it is measuring actually runs out.
@@ -356,7 +356,7 @@ const LOGO_FONT_BOX_RATIO = 1.15;
  * The largest font size the header logo can take and still have its line fit
  * inside the bar.
  *
- * **This is the fix SCRUM-484 exists for, and the shape of the defect is worth
+ * **This is a fix, and the shape of the defect it addresses is worth
  * stating.** The bar's height is a *percentage* and the logo's was a fixed
  * `111px`, so the two were unrelated: the logo fit only above
  * `111 * 1.15 / 0.085` of viewport height, which is past 1500px and therefore
@@ -381,7 +381,7 @@ const LOGO_FONT_BOX_RATIO = 1.15;
  * which is why desktop is untouched; 48px stops fitting below about 649px of
  * viewport height, and from there down the logo tracks the bar.
  *
- * **Deliberately left on the bare percentage by SCRUM-496, while
+ * **Deliberately left on the bare percentage, while
  * `HEADER_BAR_CONTROL_HEIGHT_EXPRESSION` below took the 44px floor.** The two
  * look like they should move together and should not. This one caps a *font* so
  * its line box fits the bar, and a floor makes the bar taller - so the cap is
@@ -406,8 +406,8 @@ const HEADER_LOGO_MAX_FONT_SIZE = `calc(100dvh * ${HEADER_BAR_VIEWPORT_FRACTION}
  * and a bare expression composes into both. Wrapping it here would nest a
  * `calc()` inside a `calc()`, which is valid CSS and reads like an accident.
  *
- * Since SCRUM-496 this is a `max()` rather than a bare product, which changes
- * nothing about that rule and does remove one `calc()` at the call site below:
+ * This is now a `max()` rather than a bare product, which changes nothing
+ * about that rule and does remove one `calc()` at the call site below:
  * a complete math function needs no `calc()` wrapper to sit inside a `min()`,
  * only to have arithmetic done *to* it. The nav padding still wraps it,
  * because it subtracts and divides; the avatar no longer does.
@@ -421,8 +421,8 @@ const HEADER_LOGO_MAX_FONT_SIZE = `calc(100dvh * ${HEADER_BAR_VIEWPORT_FRACTION}
  * That page renders neither of the controls below, which is what keeps the
  * distinction academic here; `Header.test.tsx` pins that.
  *
- * **The floor has to be repeated here, and that is SCRUM-496's least obvious
- * line.** SCRUM-496 filed the bar's height as fixable on its own on the
+ * **The floor has to be repeated here, and that is the least obvious line in
+ * that fix.** The bar's height was filed as fixable on its own on the
  * grounds that the bar's children are "capped against the bar rather than
  * against a constant, so they would follow it up automatically". That is true
  * of `Logo`, which declares `height: 100%` and is therefore the bar. It is
@@ -430,7 +430,7 @@ const HEADER_LOGO_MAX_FONT_SIZE = `calc(100dvh * ${HEADER_BAR_VIEWPORT_FRACTION}
  * gives: the reconstruction is what a child gets instead of reading its parent,
  * so raising the bar alone would have left the trigger at `min(56px, 31.875px)`
  * and each tab at its 1.94px of padding inside a bar that had grown to 44px -
- * reinstating the mismatch SCRUM-491 closed, with the slack now *inside* the
+ * reinstating the mismatch a prior fix closed, with the slack now *inside* the
  * bar instead of hanging out of it. The floor appears twice because the
  * relationship is a reconstruction and not a reference; `breakpoints.test.ts`
  * asserts the two stay equal.
@@ -446,7 +446,7 @@ const HEADER_AVATAR_DESIGN_SIZE_PX = 56;
 /**
  * The largest square the profile trigger can be and still sit inside the bar.
  *
- * **This is SCRUM-491's fix for the avatar, and it is SCRUM-484's shape with
+ * **This is the fix for the avatar, and it takes the logo cap's shape with
  * one difference worth stating.** The logo needed a *font* capped; this needs a
  * box, because the trigger is a circle wrapping a raster and both of its axes
  * have to move together or it stops being round. So the cap is applied to
@@ -496,7 +496,7 @@ const HEADER_NAV_BUTTON_PADDING_PX = 16;
  * The vertical padding a desktop navigation tab can actually afford inside the
  * bar.
  *
- * **This is SCRUM-491's fix for the tabs, and the defect it closes is worse
+ * **This is the fix for the tabs, and the defect it closes is worse
  * than the avatar's.** `rounded-xl p-4 text-xl` is 16 + 28 + 16 = 60px, so at
  * 667x375 each tab was 60px in a 31.875px bar, centred, with 14.06px above the
  * screen and 14.06px below the bar. Unlike the trigger, the tab group's
@@ -534,7 +534,7 @@ const HEADER_NAV_BUTTON_VERTICAL_PADDING = `max(0px, min(${HEADER_NAV_BUTTON_PAD
  * The shortest chart the admin console draws, in pixels - the `h-[500px]` on
  * `BarChartDaysFrequency`. The other two chart blocks are `min-h-[600px]`.
  *
- * **This said "declares" until SCRUM-488, and the distinction was a real one
+ * **This said "declares" until a later fix, and the distinction was a real one
  * rather than a pedantic one.** This is the only one of the three written as a
  * fixed `h-` rather than a `min-h-` floor, and all three are flex items of
  * `AdminData`'s `flex-col` - which always overflows, because its children sum
@@ -544,10 +544,10 @@ const HEADER_NAV_BUTTON_VERTICAL_PADDING = `max(0px, min(${HEADER_NAV_BUTTON_PAD
  * string that said 500. The `min-h-[600px]` pair resisted, because a minimum
  * is a floor a shrink cannot cross.
  *
- * SCRUM-484 derived the gate from the 500 anyway, on the grounds that a gate
+ * The gate was derived from the 500 anyway, on the grounds that a gate
  * is a judgement about the layout as designed and one derived from a defect
- * would have to move when the defect was fixed. SCRUM-488 then added
- * `shrink-0` to that chart, so the figure below is now measured at both
+ * would have to move when the defect was fixed. `shrink-0` was then added
+ * to that chart, so the figure below is now measured at both
  * viewports rather than merely intended - the derivation did not move, the
  * page came to meet it.
  */
@@ -558,7 +558,7 @@ const ADMIN_SHORTEST_CHART_HEIGHT_PX = 500;
  * at each end.
  *
  * Named for the space rather than for the utility. It was
- * `ADMIN_DATA_VERTICAL_MARGIN_PX` until SCRUM-488 changed which box the 16px
+ * `ADMIN_DATA_VERTICAL_MARGIN_PX` until a later fix changed which box the 16px
  * is charged to, and a constant that has to be renamed whenever that changes
  * is naming the wrong thing.
  *
@@ -566,8 +566,8 @@ const ADMIN_SHORTEST_CHART_HEIGHT_PX = 500;
  * Everything else inside the scroll port - the Download button, the quick
  * stats, the gaps - can be scrolled off, so none of it belongs in a floor.
  *
- * **It was `my-4` when SCRUM-484 wrote this, and the name is the whole of
- * SCRUM-488's second half.** A margin on a `h-full` box inside an
+ * **It was `my-4` when this constant was first written, and the name is the
+ * whole story of what changed since.** A margin on a `h-full` box inside an
  * `overflow-hidden` parent does not take space out of the row at all - it
  * pushes a full-height port past the row's bottom edge, putting the port's
  * last 16px outside the clip at any scroll position. As padding the 32px is
@@ -606,14 +606,15 @@ const ADMIN_DATA_VERTICAL_SPACE_PX = 32;
  * derived and also wrong is still wrong.
  *
  * Opt-in at one call site, which is `admin.tsx`. `MOBILE_BREAKPOINT_PX` is
- * untouched: SCRUM-477 records why giving that constant a height term would
- * move all twelve of its survey sites across the line at once, and SCRUM-474
- * is the pattern this follows instead.
+ * untouched: giving that constant a height term would move all twelve of its
+ * survey sites across the line at once, and this follows the same opt-in
+ * pattern used elsewhere instead.
  *
- * **Re-derived through `shortestViewportForContentRow` by SCRUM-496, and the
- * figure did not move.** That ticket's acceptance criteria asked for this
- * constant to be re-derived rather than "left reading a fraction that no longer
- * describes the row", which was the right instruction aimed at the wrong
+ * **Re-derived through `shortestViewportForContentRow` once the floor was
+ * added, and the figure did not move.** The acceptance criteria for that
+ * change asked for this constant to be re-derived rather than "left reading a
+ * fraction that no longer describes the row", which was the right
+ * instruction aimed at the wrong
  * threshold. 582 is *above* the 517.65px band the bar's floor binds in, so at
  * that height the bar is still 8.5% and the row is still 0.915 - the division
  * this used to do by hand is what the helper returns anyway. Going through the
@@ -631,8 +632,8 @@ const ADMIN_CONSOLE_MIN_HEIGHT_PX = shortestViewportForContentRow(
  * *and* tall enough to lay its full-size chrome out".
  *
  * A third screen rather than a height term on `MOBILE_BREAKPOINT_PX`, for the
- * reason `DESKTOP_TALL_SCREEN_NAME` gives and SCRUM-477 records: that constant
- * is read by `useIsMobile`, by the `desktop:` screen and by
+ * reason `DESKTOP_TALL_SCREEN_NAME` gives: that constant is read by
+ * `useIsMobile`, by the `desktop:` screen and by
  * `DESKTOP_MEDIA_QUERY`, so giving it a height would move every page at once.
  * And not `desktop-tall` either - 844px is the onboarding card's figure and
  * means nothing here, so reusing it would hand the compact chrome to a 1366x768
@@ -669,8 +670,8 @@ const MESSAGE_PANEL_TAB_STRIP_PX = 53;
  * margins leave it 78px, the hint takes three lines and the bar measures 131.5.
  *
  * That band is the only place the figure is still width-dependent. Below the
- * threshold the compact chrome drops both the margins and 12px of the padding
- * (SCRUM-494), which leaves the composer 174px at the same 267px panel - one
+ * threshold the compact chrome drops both the margins and 12px of the padding,
+ * which leaves the composer 174px at the same 267px panel - one
  * line of hint, and a 73px bar.
  *
  * So this figure describes the panel the full-size chrome was designed for,
@@ -721,9 +722,10 @@ const MESSAGE_PANEL_DATED_MESSAGE_PX = 120;
  *   ROW(H) - HEADER - TABS - SEND_BAR >= PADDING + DATED_MESSAGE
  *
  * **`ROW(H)` and no longer `0.915 * H`, which is what moved this figure from
- * 489 to 491 in SCRUM-496.** This is the threshold that ticket's acceptance
- * criteria missed - they named `ADMIN_CONSOLE_MIN_HEIGHT_PX`, which sits above
- * the band the bar's new floor binds in and therefore did not move at all.
+ * 489 to 491 when the floor was added.** This is the threshold that fix's
+ * acceptance criteria missed - they named `ADMIN_CONSOLE_MIN_HEIGHT_PX`, which
+ * sits above the band the bar's new floor binds in and therefore did not move
+ * at all.
  * This one sits *inside* it: a 491px viewport gets a 44px bar rather than a
  * 41.7px one, so the row is `H - 44` and not `0.915 × H`, and it needs two more
  * pixels of viewport to leave the same 447 in the row. Derived through
@@ -736,9 +738,9 @@ const MESSAGE_PANEL_DATED_MESSAGE_PX = 120;
  * fires late is a gate that does not fire in the band it was written for.
  *
  * Below it the newest message cannot be seen whole at any scroll position;
- * below about 395 - SCRUM-485's figure - the conversation has no content height
- * at all and the send bar leaves the screen, which is the defect SCRUM-489 was
- * filed for.
+ * below about 395 - the figure a prior defect was measured at - the
+ * conversation has no content height at all and the send bar leaves the
+ * screen, which was the defect filed against.
  *
  * Verified at the threshold and at the width it was derived for: at 1440x489
  * the conversation measured exactly 120px of content height against a dated
@@ -765,13 +767,13 @@ const MESSAGE_PANEL_DATED_MESSAGE_PX = 120;
  *
  *  - every phone in landscape is below it - 375, 390 and 430 for the three
  *    iPhones `breakpoints.test.ts` names - so all of them get the compact
- *    chrome, which is the band SCRUM-485 measured the defect in;
+ *    chrome, which is the band the defect was measured in;
  *  - every desktop viewport worth serving is above it, including the ~650px a
  *    1366x768 laptop leaves and the ~695px an iPad in landscape leaves. So the
  *    full-size chrome is what desktop keeps rendering.
  *
  * Opt-in at its own call sites, which are `MessageHeader`, `SendBar` and
- * `MessageContent`; SCRUM-474 is the pattern this follows.
+ * `MessageContent`; this follows the same opt-in pattern used elsewhere.
  */
 const MESSAGE_PANEL_MIN_HEIGHT_PX = shortestViewportForContentRow(
   MESSAGE_PANEL_HEADER_PX +
@@ -802,7 +804,7 @@ const MESSAGE_PANEL_TALL_MEDIA_QUERY =
  * `message-panel-tall` inside the same width band.
  *
  * **The first `max-`-shaped screen in this repository, and a deliberate
- * precedent rather than a convenience (SCRUM-494).** Every other screen here is
+ * precedent rather than a convenience.** Every other screen here is
  * mobile-first: a compact base, restored inside a `min-` query. That direction
  * works whenever the compact value can also be the base, which is what
  * `MESSAGE_PANEL_TALL_MEDIA_QUERY` describes above - and it is exactly what
@@ -838,7 +840,7 @@ const MESSAGE_PANEL_SHORT_SCREEN_NAME = "message-panel-short";
  * Safari 16.4+, Chrome 111+ and Firefox 128+ all support `not` in a media
  * condition. **Measured rather than assumed**, because a media query a browser
  * fails to parse is dropped silently and would present as the padding simply
- * not changing: SCRUM-494 confirmed in Chromium that the query survives
+ * not changing: it was confirmed in Chromium that the query survives
  * `matchMedia` verbatim rather than collapsing to `not all`, that it matches at
  * 667x375 while the tall screen does not, and that the layout it gates really
  * does change at 488 and not at 489.
@@ -897,7 +899,7 @@ const MOBILE_NAV_SPACE = `calc(${MOBILE_NAV_HEIGHT_PX}px + env(safe-area-inset-b
  * It lived in `tailwind.config.js` and moved here because the drag gesture now
  * needs it as a *number*: `useSheetDrag` derives the sheet's expanded height
  * from the sheet's own bottom edge minus this strip, so that the range is known
- * in every detent rather than only after an expanded render (SCRUM-459).
+ * in every detent rather than only after an expanded render.
  *
  * The rem figure is the definition and the CSS string below is derived from it,
  * rather than the other way round, because parsing `"5.5rem"` back into a
@@ -924,8 +926,8 @@ const MOBILE_SHEET_MAP_STRIP = `${MOBILE_SHEET_MAP_STRIP_REM}rem`;
  * figure as a number. That hook writes the handle's `bottom` on every pointer
  * move, and without this term the pill sat exactly on the sheet's edge for the
  * whole gesture and corrected by this distance the instant the finger lifted -
- * dropping 8px at `half` and `expanded`, and jumping up 8px at `collapsed`
- * (SCRUM-529). See `handleBottomPx` in `sheetDetents.ts` for why the drag
+ * dropping 8px at `half` and `expanded`, and jumping up 8px at `collapsed`.
+ * See `handleBottomPx` in `sheetDetents.ts` for why the drag
  * floors at `collapsed`'s clearance rather than applying this uniformly.
  */
 const MOBILE_SHEET_HANDLE_LIFT_REM = 0.5;
