@@ -568,10 +568,28 @@ export const groupsRouter = router({
         const group = await tx.carpoolGroup.create({ data: {} });
 
         // update driver's CarpoolSearch
-        await tx.carpoolSearch.updateMany({
-          where: { userId: input.driverId },
-          data: { carpoolId: group.id },
-        });
+        //
+        // A raw `UPDATE`, not `tx.carpoolSearch.updateMany` - the identical
+        // defect the rider link below was already guarded against
+        // (SCRUM-563, SCRUM-565): verified against a real MySQL, `updateMany`'s
+        // WHERE matched this transaction's own REPEATABLE READ snapshot rather
+        // than the row's current committed state, so two concurrent accepts
+        // against a driver with 2+ seats could both pass the membership check
+        // above, both reserve a seat, and both overwrite `carpoolId` here -
+        // whichever committed last "won", leaving the other transaction's
+        // group linked to a real rider but no driver (SCRUM-573).
+        const driverLinked = await tx.$executeRaw`
+          UPDATE carpool_search
+          SET carpoolId = ${group.id}
+          WHERE userId = ${input.driverId} AND carpoolId IS NULL
+        `;
+
+        if (driverLinked === 0) {
+          throw membershipConflict(
+            "You are already in a carpool group. Leave it before starting " +
+              "another.",
+          );
+        }
 
         // Re-checks role and membership against the current row rather than
         // trusting `riderSearch` above, which is this transaction's snapshot
