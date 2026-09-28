@@ -4,7 +4,7 @@ import SelectDays from "./SelectDays";
 import { OnboardingFormInputs } from "../../utils/types";
 
 /**
- * SCRUM-513. The seven day boxes put their letter inside the MUI `Checkbox`'s
+ * The seven day boxes put their letter inside the MUI `Checkbox`'s
  * `icon`/`checkedIcon`, which is not a name source for an `<input>` - so all
  * seven announced as identical, unnamed checkboxes. `slotProps={{ input: {
  * "aria-label": day } }}` is the fix.

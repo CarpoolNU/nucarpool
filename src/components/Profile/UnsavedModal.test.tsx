@@ -83,7 +83,6 @@ describe("UnsavedModal", () => {
 
     // The × glyph is not itself an accessible name - `aria-label="Close"` is
     // what makes this findable by role and name rather than by position.
-    // SCRUM-514.
     const dismiss = screen.getByRole("button", { name: "Close" });
     await userEvent.click(dismiss);
 
@@ -93,8 +92,8 @@ describe("UnsavedModal", () => {
   });
 
   /**
-   * SCRUM-514: the modal used to be a plain `div` with no `role`, so a
-   * screen-reader user got no indication one had opened at all.
+   * The modal used to be a plain `div` with no `role`, so a screen-reader
+   * user got no indication one had opened at all.
    */
   it("exposes itself as a modal dialog", () => {
     renderModal();

@@ -230,20 +230,21 @@ describe("AccountSection co-op date pickers", () => {
  * The widths this section asks for, either side of the mobile breakpoint.
  *
  * **Class-request assertions, and that is the ceiling in this file.**
- * SCRUM-490 is a geometry defect - a declared 700px box hanging 315px off a
- * 667px screen, inside a column that hides the overflow rather than scrolling
- * it - and jsdom resolves no CSS and reports every rect as zero, so none of
- * that is observable here. See `src/testing/viewport.ts`. What *is* observable
- * is which utilities the component asks for, and the defect was precisely the
- * absence of a cap beside the declared width. So these fail if the cap is
- * dropped again, and they would still pass if a cap were present and
- * ineffective - which is the honest limit of the assertion. The pixels are in
- * `src/testing/layoutFixtures.ts`'s `profile-content-column-width`, measured in
- * Chromium; the geometry itself belongs in SCRUM-264's Playwright suite.
+ * The underlying defect is geometric - a declared 700px box hanging 315px off
+ * a 667px screen, inside a column that hides the overflow rather than
+ * scrolling it - and jsdom resolves no CSS and reports every rect as zero, so
+ * none of that is observable here. See `src/testing/viewport.ts`. What *is*
+ * observable is which utilities the component asks for, and the defect was
+ * precisely the absence of a cap beside the declared width. So these fail if
+ * the cap is dropped again, and they would still pass if a cap were present
+ * and ineffective - which is the honest limit of the assertion. The pixels are
+ * in `src/testing/layoutFixtures.ts`'s `profile-content-column-width`,
+ * measured in Chromium; the geometry itself belongs in a Playwright suite that
+ * can measure real layout.
  */
 /**
- * SCRUM-513. `EntryLabel` had no `htmlFor`, so these two pickers announced as
- * unlabelled despite the visible "Start Date"/"End Date" text beside them.
+ * `EntryLabel` had no `htmlFor`, so these two pickers announced as unlabelled
+ * despite the visible "Start Date"/"End Date" text beside them.
  */
 describe("AccountSection accessible names", () => {
   it("names the co-op date pickers after their visible labels", () => {

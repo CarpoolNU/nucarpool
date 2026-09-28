@@ -2,8 +2,9 @@
  * That the preview the user sees and the file that will be uploaded cannot
  * disagree.
  *
- * SCRUM-511's second symptom. The cropped `File` lived in the parent - the
- * profile page, or `setup.tsx` - while the preview URL lived in
+ * A second symptom of the same pending-preview defect: the cropped `File`
+ * lived in the parent - the profile page, or `setup.tsx` - while the preview
+ * URL lived in
  * `ProfilePicture`'s own state, and the component's unmount cleanup revoked it.
  * So switching profile tabs, or stepping back through onboarding, destroyed the
  * preview and left the parent holding a picture the user could no longer see,

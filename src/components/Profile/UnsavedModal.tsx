@@ -12,7 +12,7 @@ function UnsavedModal({ onClose, onSave, onContinue }: UnsavedModalProps) {
       <div className="font-montserrat fixed inset-0 z-50 flex items-center justify-center bg-black/50">
         {/*
          * `min-w-[min(22rem,100%)]` is a width *floor*, and both halves of it
-         * are load-bearing. SCRUM-492.
+         * are load-bearing.
          *
          * `w-1/3` alone was the defect. A third of a viewport is 480px on a
          * desktop and 222.33px on a phone held in landscape, and this panel's
@@ -30,7 +30,7 @@ function UnsavedModal({ onClose, onSave, onContinue }: UnsavedModalProps) {
          * `measure-layout.test.ts` fails if the class string below drifts from
          * it.
          *
-         * One figure in SCRUM-492's own description is wrong and is the obvious
+         * One figure in the original bug report is wrong and is the obvious
          * thing to re-derive this from: it cites the row's `scrollWidth` of 196
          * plus the padding, giving 244. That `scrollWidth` is the overflow of
          * the *already-wrapped* row, not the width needed to avoid wrapping, and

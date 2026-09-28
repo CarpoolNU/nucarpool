@@ -142,8 +142,8 @@ const CarpoolSection = ({
           column without moving the viewport.
 
           Both rules are kept, because they say different things.
-          `max-desktop:` is the deliberate mobile treatment SCRUM-430 chose,
-          and it is why 639px keeps its 32px boxes even though 360px of
+          `max-desktop:` is the deliberate mobile treatment chosen for this
+          section, and it is why 639px keeps its 32px boxes even though 360px of
           wrapper would hold the 40px ones. The container query is a floor
           under every width: it cannot fire at `md` or `lg`, where the wrapper
           caps at exactly the 448px and 504px those rows occupy and the column

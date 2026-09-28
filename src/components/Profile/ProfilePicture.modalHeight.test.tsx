@@ -2,9 +2,9 @@
  * That the cropper modal caps its own height and keeps its button row outside
  * the scrolling region.
  *
- * SCRUM-482 (phase 1 of SCRUM-477): the panel had no `max-h`, no `dvh` and no
- * overflow, and it is centred inside a `fixed inset-0` wrapper - so at its
- * natural 476px it overflowed a 375px landscape-phone viewport by 51px at
+ * The panel had no `max-h`, no `dvh` and no overflow, and it is centred inside
+ * a `fixed inset-0` wrapper - so at its natural 476px it overflowed a 375px
+ * landscape-phone viewport by 51px at
  * *each* end, slicing both `Cancel` and `Crop Image` in half. `#__next` is
  * `height: 100dvh`, so there was no page scroll to reach them with.
  *
@@ -117,8 +117,8 @@ describe("the cropper modal's height", () => {
     // `cropSize` is a flat `CROP_BOX_PX` (300px), so a stage shorter than that
     // would draw the round crop box overflowing its own container. Holding it
     // at 384px also leaves `mediaSize` - which react-easy-crop derives from
-    // this container under `objectFit="contain"` - the value SCRUM-479's
-    // fill-zoom arithmetic was measured against.
+    // this container under `objectFit="contain"` - the value the fill-zoom
+    // arithmetic elsewhere was measured against.
     expect(stage?.className).toContain("h-96");
   });
 

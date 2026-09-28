@@ -1,5 +1,5 @@
 /**
- * SCRUM-509: that a failed `user.me` on `/profile/setup` says so.
+ * That a failed `user.me` on `/profile/setup` says so.
  *
  * The wizard's guard was `if (isLoading || !user)`, returning a
  * `fixed inset-0 z-50` white overlay with a spinner in it. `isError` went

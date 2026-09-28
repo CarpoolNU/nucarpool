@@ -151,8 +151,8 @@ describe("onboardSchema", () => {
    * `seatAvail` used to be the one field in this schema with no custom
    * messages, so Zod's own wording reached the screen verbatim -
    * "Invalid input: expected number, received NaN", "Too big: expected
-   * number to be <=6", "Invalid input: expected int, received number"
-   * (SCRUM-512). Asserting the exact project string, rather than merely that
+   * number to be <=6", "Invalid input: expected int, received number".
+   * Asserting the exact project string, rather than merely that
    * `seatAvail` has an issue, is what stops a Zod upgrade that changes its
    * default wording from silently restoring the defect: this schema names
    * its own message for every check, so an upgrade cannot make one reappear
@@ -302,7 +302,7 @@ describe("onboardSchema — co-op date ordering", () => {
     },
   );
 
-  it("exempts a VIEWER, whose pickers are disabled (SCRUM-551)", () => {
+  it("exempts a VIEWER, whose pickers are disabled", () => {
     // It used to check a VIEWER too. But both pickers are `disabled` for a
     // VIEWER and every save re-sends the stored dates, so a VIEWER holding a
     // reversed range could save nothing at all - name, bio, role - and was
@@ -346,7 +346,7 @@ describe("onboardSchema — co-op date ordering", () => {
 
 /**
  * Production holds 1901→1908 and 2069→2073 ranges, which run forwards and so
- * passed the ordering check above (SCRUM-550).
+ * passed the ordering check above.
  *
  * The schema reads the real clock, so the ceiling edge is computed from it
  * rather than written down; `dateUtils.test.ts` pins the bound itself against

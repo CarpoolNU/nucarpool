@@ -1,5 +1,5 @@
 /**
- * The crop dialog's accessibility contract. SCRUM-514.
+ * The crop dialog's accessibility contract.
  *
  * This was a `createPortal` into `document.body` with no `role`, no focus
  * trap and no Escape handling - the sole route to setting a profile picture,

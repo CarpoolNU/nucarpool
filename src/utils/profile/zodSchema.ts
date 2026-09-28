@@ -18,7 +18,7 @@ export const onboardSchema = z
     // Every check below needs its own message: with none, zod's own wording
     // ("Invalid input: expected number, received NaN", "Too big: expected
     // number to be <=6") reaches the screen verbatim, which is developer
-    // output rather than project copy (SCRUM-512). The bound itself still
+    // output rather than project copy. The bound itself still
     // comes from `MAX_SEATS_AVAILABLE` alone, so a change to it cannot drift
     // between the message and the check it describes.
     seatAvail: z

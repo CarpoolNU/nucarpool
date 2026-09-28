@@ -6,7 +6,7 @@ import { trpc } from "../../utils/trpc";
 import { invalidateBlockCaches } from "../../utils/blocks/invalidateBlockCaches";
 
 /**
- * The people the reader has blocked, each with Unblock (SCRUM-554).
+ * The people the reader has blocked, each with Unblock.
  *
  * It sits in the profile's Account section and outside its react-hook-form.
  * Unblock is a mutation of its own that takes effect at once, and none of it

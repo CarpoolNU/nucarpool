@@ -1,6 +1,6 @@
 /**
- * The explicit confirmation SCRUM-508 requires before onboarding can finish
- * on Viewer: `handleNextStep`'s step-1 VIEWER branch used to call
+ * The explicit confirmation required before onboarding can finish on Viewer:
+ * `handleNextStep`'s step-1 VIEWER branch used to call
  * `handleSubmit(onSubmit)` directly on the first tap, which reached
  * `isOnboarded: true` with no chance to back out. This sits between that tap
  * and the actual submit, mirroring `UnsavedModal`'s two-button layout.

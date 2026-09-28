@@ -5,8 +5,8 @@ import { OnboardingFormInputs } from "../../utils/types";
 import { useAddressSelection } from "../../utils/useAddressSelection";
 
 /**
- * SCRUM-513. `EntryLabel` had no `htmlFor`, and `ControlledAddressCombobox`
- * had no `id` on its underlying input at all, so "Start Address" and
+ * `EntryLabel` had no `htmlFor`, and `ControlledAddressCombobox` had no `id`
+ * on its underlying input at all, so "Start Address" and
  * "Workplace Address" announced as unlabelled despite the visible text above
  * each combobox.
  */

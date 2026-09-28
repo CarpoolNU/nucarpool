@@ -1,13 +1,13 @@
 /**
- * SCRUM-508: the Viewer radio used to be wrapped in `!isMobile`, so on a
- * phone step 1 rendered only Rider and Driver - both drawing unselected
- * whenever `watch("role")` was VIEWER, with nothing on screen indicating
- * what the primary button was about to commit the user to. This pins that
- * all three roles render on mobile, and that the selected one always has a
- * visible, checked control there - never all three unselected.
+ * The Viewer radio used to be wrapped in `!isMobile`, so on a phone step 1
+ * rendered only Rider and Driver - both drawing unselected whenever
+ * `watch("role")` was VIEWER, with nothing on screen indicating what the
+ * primary button was about to commit the user to. This pins that all three
+ * roles render on mobile, and that the selected one always has a visible,
+ * checked control there - never all three unselected.
  *
- * SCRUM-521: those same radios reported the wrong accessible role.
- * `FormRadioButton` spread its caller's props onto the native
+ * A second, separate defect: those same radios reported the wrong
+ * accessible role. `FormRadioButton` spread its caller's props onto the native
  * `<input type="radio">`, and `InitialStep` passed `role={Role.X}` alongside
  * the `value` that actually drives selection - `role` is a real ARIA
  * attribute, not a naming collision with Prisma's `Role` enum, so it
@@ -50,7 +50,7 @@ const Harness = ({ role }: { role: Role }) => {
 const radioFor = (container: HTMLElement, id: "viewer" | "rider" | "driver") =>
   container.querySelector<HTMLInputElement>(`#${id}`);
 
-describe("InitialStep on a mobile viewport (SCRUM-508)", () => {
+describe("InitialStep on a mobile viewport", () => {
   beforeEach(() => setViewportWidth(MOBILE_WIDTH));
 
   it("renders the Viewer radio, not only Rider and Driver", () => {
@@ -74,7 +74,7 @@ describe("InitialStep on a mobile viewport (SCRUM-508)", () => {
   );
 });
 
-describe("the onboarding role radios (SCRUM-521)", () => {
+describe("the onboarding role radios", () => {
   it("are reachable as radios, not as their Role enum value", () => {
     render(<Harness role={Role.RIDER} />);
 

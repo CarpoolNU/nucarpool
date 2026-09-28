@@ -70,8 +70,8 @@ const UserSection = ({
   // Nobody in a carpool group can change role until they leave it.
   // `user.edit` refuses it server-side, in both directions: a driver leaving
   // the role strands the group, and a rider taking it gains control of the
-  // group from its real driver (SCRUM-557). The form says so up front so the
-  // answer is not a failed save.
+  // group from its real driver. The form says so up front so the answer is
+  // not a failed save.
   //
   // Every radio but the stored role is disabled, as the driver-only lock
   // this replaces did. The current one is inert anyway, and `Radio` dims a

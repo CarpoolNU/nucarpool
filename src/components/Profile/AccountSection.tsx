@@ -47,7 +47,8 @@ const AccountSection = ({
        a desktop into a wide enough column that nothing clipped, and on a
        landscape phone off the side of the screen, where the column's
        `overflow-x-hidden` meant no gesture reached the End Date picker or
-       most of Save Changes. See SCRUM-490 for the measurements. */
+       most of Save Changes. Measured in Chromium against the compiled
+       stylesheet. */
     <div
       className={`flex h-fit ${isMobile ? "w-full" : "w-[700px]"} max-w-full flex-col justify-start`}
     >
@@ -132,7 +133,8 @@ const AccountSection = ({
             fraction was only ever applied between 640px and 1440px, and the
             full width is what the layout already resolved to above that, so
             this makes the wide-desktop arrangement the single arrangement
-            rather than inventing one. Measured for SCRUM-490. */}
+            rather than inventing one. Measured in Chromium against the
+            compiled stylesheet. */}
         <div className={`flex ${isMobile ? "flex-col gap-4" : "w-full gap-8"}`}>
           <div className="flex flex-1 flex-col">
             <EntryLabel
