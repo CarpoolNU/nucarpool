@@ -96,8 +96,8 @@ const headerIsIn = (html: string) => html.includes("DESKTOP HEADER");
  *
  * `height` is optional, and every caller that omits it gets jsdom's default
  * 768 - which is above `ADMIN_CONSOLE_MIN_HEIGHT_PX`, so the cases written
- * before SCRUM-484 added a height term still describe the viewport they
- * always did. That is deliberate rather than convenient: those tests are the
+ * before a height term was added to the gate still describe the viewport
+ * they always did. That is deliberate rather than convenient: those tests are the
  * control for the gate below, and rewriting them to state a height would make
  * it possible to change the threshold without any of them noticing.
  */
@@ -204,7 +204,7 @@ describe("/admin's layout below the mobile breakpoint", () => {
 });
 
 /**
- * SCRUM-484: the same choice, decided on height rather than width.
+ * The same choice, decided on height rather than width.
  *
  * The gate above was width-only, so a phone held in landscape is 667px wide,
  * lands above the breakpoint, and was served the full console into a content
@@ -218,7 +218,7 @@ describe("/admin's layout below the mobile breakpoint", () => {
  * overflowed anything; it observes which subtree the page chose. The geometry
  * was measured in Chromium through `scripts/measure-layout.ts` and is recorded
  * on the `admin-console-chart-fold` fixture, and it is regression-testable
- * only in SCRUM-264's Playwright suite.
+ * only in the project's Playwright suite.
  */
 describe("/admin's layout on a viewport that is wide enough but too short", () => {
   it("shows the notice to a phone held in landscape", async () => {

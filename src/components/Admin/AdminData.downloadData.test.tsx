@@ -1,5 +1,5 @@
 /**
- * SCRUM-540: the "Download Data" button after `buildLineChartCSV` /
+ * The "Download Data" button, after `buildLineChartCSV` /
  * `buildUserCountsCSV` / `buildDaysFrequencyCSV` / `buildQuickStatsCSV` moved
  * out of `AdminData` into `../../utils/adminDashboardCsv`, so they are
  * unit-testable on their own (see `adminDashboardCsv.test.ts`).

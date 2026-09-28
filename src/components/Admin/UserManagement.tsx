@@ -43,7 +43,7 @@ const UserManagement = ({ permission }: UserManagementProps) => {
    * React Query reads a disabled query as `ready` rather than as loading, so
    * `HELD_QUERY_STATE` supplies the spinner for the deferred pass. That used
    * to be a `useState(true)` cleared only by `users` arriving - which is
-   * precisely why a *failed* query never cleared it either (SCRUM-509).
+   * precisely why a *failed* query never cleared it either.
    */
   const isHydrated = useIsHydrated();
 

@@ -16,15 +16,15 @@ import { MOBILE_NAV_SPACE } from "../../utils/breakpoints";
  * `admin.updateUserPermission`; a cramped column around a mutation that grants
  * and revokes access is worth not shipping at all, rather than shipping small.
  *
- * Adapting the layout properly is the option SCRUM-434 describes and did not
- * take: a horizontal tab strip in place of the sidebar, plus per-component
+ * Adapting the layout properly was considered and not taken: a horizontal
+ * tab strip in place of the sidebar, plus per-component
  * work across the four charts, which are legible at 340px only with fewer
  * ticks and rotated labels. That was left undone deliberately rather than
  * deferred to a ticket, because it should only be built if someone turns out
  * to need the dashboard on a phone. This panel is not the obstacle to it.
  *
- * **It is no longer only the narrow case.** SCRUM-484 added a height term to
- * the gate in `admin.tsx`, so this also stands in for the console on a
+ * **It is no longer only the narrow case.** The gate in `admin.tsx` also
+ * carries a height term now, so this also stands in for the console on a
  * viewport that is wide enough and too short - a phone in landscape, which is
  * 667x375 and therefore above the width breakpoint. Two things below follow
  * from that and neither is cosmetic: the copy no longer says "wider", because
@@ -77,8 +77,8 @@ const AdminMobileNotice = ({ reservesMobileNav }: AdminMobileNoticeProps) => {
      * console's own row takes at `admin.tsx:120`, so the notice occupies
      * exactly the space the layout it replaces would have.
      *
-     * The remainder is a token rather than a second percentage because
-     * SCRUM-496 gave the bar a 44px floor, so below 517.65px of viewport
+     * The remainder is a token rather than a second percentage because the
+     * bar has a 44px floor, so below 517.65px of viewport
      * height the bar is that floor and the row is what is left of `100%`
      * after it. `breakpoints.js` composes it; this site only has to name the
      * same one the row does.

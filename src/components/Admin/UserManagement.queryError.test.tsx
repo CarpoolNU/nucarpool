@@ -1,5 +1,5 @@
 /**
- * SCRUM-509: that a failed `getAllUsers` says so, and offers a way out.
+ * Covers that a failed `getAllUsers` says so, and offers a way out.
  *
  * The Permissions tab is `/admin`'s default, and it used to hold its loading
  * state in a `useState<boolean>(true)` cleared only by an effect watching

@@ -7,7 +7,7 @@ import {
 import { AdminDashboardStats } from "./types";
 
 /**
- * CSV formatting for the SCRUM-540 admin dashboard export.
+ * CSV formatting for the admin dashboard export.
  *
  * These assert on the exact strings `AdminData`'s "Download Data" button
  * zips up, since that is what an admin actually opens in a spreadsheet —

@@ -1,5 +1,5 @@
 /**
- * SCRUM-509: that the admin dashboard distinguishes "one of these three
+ * Covers that the admin dashboard distinguishes "one of these three
  * failed" from "one of these three has not arrived".
  *
  * `AdminData` fans out to `getDateRange`, `getDashboardStats` and
