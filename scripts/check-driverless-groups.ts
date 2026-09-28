@@ -19,8 +19,9 @@
  * `cleanup-orphan-locations.ts`. This header used to say the repair could not
  * be automated because only the people in the group know whether they want a
  * member promoted back to DRIVER or the group dissolved. That reasoning held
- * only while promotion was a candidate, and SCRUM-406 established it is not:
- * `groups.create` did not enforce `Role.DRIVER` until SCRUM-291, and the client
+ * only while promotion was a candidate, and an audit of driverless groups
+ * established it is not: `groups.create` did not enforce `Role.DRIVER` until a
+ * later fix, and the client
  * named whichever party did not accept the request as the driver without
  * checking, so a group could be *born* driverless with no original driver to
  * restore. Dissolving is the single correct repair, and it lives in

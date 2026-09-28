@@ -126,7 +126,7 @@ const Setup: NextPage = () => {
         // A brand-new user has no `CarpoolSearch` row, so `user.role` is only
         // the `?? Role.VIEWER` fallback in `user.me` - not a stored choice.
         // Restoring it here is what put every new user on Viewer with one tap
-        // to end onboarding. SCRUM-508.
+        // to end onboarding.
         role: user.hasCarpoolSearch ? user.role : profileDefaultValues.role,
         seatAvail: user.seatAvail,
         status: user.status,
@@ -242,7 +242,7 @@ const Setup: NextPage = () => {
       if (role === Role.VIEWER) {
         // Confirm before this ends onboarding: `onSubmit` is what sets
         // `isOnboarded: true`, and step 1 is otherwise a single tap away from
-        // it with no way back into the wizard. SCRUM-508.
+        // it with no way back into the wizard.
         setShowViewerConfirm(true);
         return;
       }
@@ -287,7 +287,7 @@ const Setup: NextPage = () => {
    * The same permanent overlay `/profile` carried, for the same reason, and
    * worse placed: this is the first screen a new account sees, so a lapsed
    * session or a 500 here is a white page with a spinner before the user has
-   * ever reached the app. See the note on the sibling route (SCRUM-509).
+   * ever reached the app. See the note on the sibling route.
    */
   if (userQuery.isError) {
     return (
@@ -334,7 +334,7 @@ const Setup: NextPage = () => {
     flow again and *can* meet the card on a short window. It is a no-op on
     mobile, where the two no longer occupy the same space at all.
 
-    **The placement is `desktop-tall:`, not `desktop:`, and that is SCRUM-474.**
+    **The placement is `desktop-tall:`, not `desktop:`, because of a height constraint.**
     Taking the strip out of flow is only safe while the window is tall enough
     for a centred 500px card to clear it, which is `WIZARD_DESKTOP_MIN_HEIGHT_PX`
     - see the derivation there. Below it the strip stays in flow and the column
@@ -352,7 +352,7 @@ const Setup: NextPage = () => {
     there being vertical room.
 
     Styling-only differences go through `desktop:` overrides on mobile-first
-    base classes rather than an `isMobile` ternary, per SCRUM-415. That also
+    base classes rather than an `isMobile` ternary, following the established convention. That also
     removes a first-render wrinkle this element used to have: `useIsMobile`
     returns the desktop snapshot during hydration, so the ternary positioned the
     strip twice on a phone, and - because the two branches lived at different
@@ -436,13 +436,13 @@ const Setup: NextPage = () => {
         figure `SetupContainer` uses, so the bar and the card share an edge.
 
         Both differences here are overrides on mobile-first base classes rather
-        than an `isMobile` ternary - the direction SCRUM-415 settled on. That
+        than an `isMobile` ternary - the established direction. That
         also removes a first-render wrinkle: `useIsMobile` returns the desktop
         snapshot during hydration, so the ternary placed the bar at its desktop
         offset once on a phone before correcting.
 
-        The two differences take *different* breakpoints, which is the point of
-        SCRUM-474. The width is a width concern and stays on `desktop:`, sharing
+        The two differences take *different* breakpoints, which is deliberate.
+        The width is a width concern and stays on `desktop:`, sharing
         its 600px with the card. The offset is not: `calc(50% - 250px - 60px)`
         is only meaningful while the card is a 500px block centred in the
         viewport - it reads as "half the screen, back up over the card's top
@@ -480,7 +480,7 @@ const Setup: NextPage = () => {
         500px card refuses to shrink however short the window is, so it was
         clipped rather than fitted; in a column it shrinks to what is left.
 
-        **The condition gained a height term for SCRUM-474.** It was
+        **The condition gained a height term to fix exactly this.** It was
         `desktop:flex-row`, a `min-width` and nothing else, so a phone in
         landscape - 667px wide, 375px tall, above the breakpoint - was handed
         the arrangement that cannot shrink. Switching on

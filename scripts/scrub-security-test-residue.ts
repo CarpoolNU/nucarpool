@@ -2,14 +2,15 @@
  * Clear the confirmed security-test residue from one named account's five
  * user-authored text columns.
  *
- * SCRUM-357 investigated an apparent stored-XSS probe — the canonical harmless
- * test string — and deliberately stopped short of touching anything: *"No
- * remediation of any record is authorised by this ticket — if a suspicious
- * value is confirmed, what to do about it is a separate decision requiring a
- * separate ticket and a human call."* SCRUM-531 is that ticket and that call.
- * This script is the tool, and nothing else in `scripts/` fits: every other
- * write script operates on a population defined by a predicate, and this one
- * has a population of exactly one account, named in the source.
+ * An earlier investigation looked into an apparent stored-XSS probe — the
+ * canonical harmless test string — and deliberately stopped short of touching
+ * anything: *"No remediation of any record is authorised by this ticket — if
+ * a suspicious value is confirmed, what to do about it is a separate decision
+ * requiring a separate ticket and a human call."* A later ticket was that
+ * separate ticket and human call, and this script is the tool it produced,
+ * and nothing else in `scripts/` fits: every other write script operates on a
+ * population defined by a predicate, and this one has a population of
+ * exactly one account, named in the source.
  *
  * **What it changes**, and nothing else:
  *
@@ -78,7 +79,7 @@
 import { PrismaClient } from "@prisma/client";
 
 /**
- * The one account this script may touch, from SCRUM-531. A constant rather
+ * The one account this script may touch, fixed by that same later ticket. A constant rather
  * than an argument: an id that cannot be passed in cannot be mistyped into
  * somebody else's profile.
  */

@@ -7,10 +7,10 @@
  *   npx ts-node scripts/measure-layout.ts group-member-card-trigger --width 320
  *   npx ts-node scripts/measure-layout.ts header-logo-bar --width 667 --height 375
  *
- * This is the harness SCRUM-481 committed. Eight tickets needed a real pixel,
- * hand-rolled the same four steps in their own session, and threw them away
- * (SCRUM-421, 432, 456, 458, 467, 474, 476, 480). The recipe was identical
- * every time and is now here instead of in ticket prose.
+ * This is the harness that got built once eight separate earlier fixes each
+ * needed a real pixel, hand-rolled the same four steps in their own session,
+ * and threw them away. The recipe was identical every time and is now here
+ * instead of in ticket prose.
  *
  * **It touches no database.** Every other `.ts` script in this directory does;
  * this one reads two files and opens a local socket. There is no `--apply`, it
@@ -36,11 +36,11 @@
  *     browser chrome, and no `dvh` behaviour as that chrome moves.
  *  3. **Nothing runs it.** It is not in `yarn test`, not in CI, and not
  *     scheduled. A criterion measured through this is measured once, by a
- *     human who chose to. The regression protection those tickets left behind
- *     is still their class-name assertions, which are proxies and say so.
- *     Making this durable means a browser in CI, which means a new dev
- *     dependency - deliberately not done here (SCRUM-481 settles that in a
- *     comment) and not smuggled in later.
+ *     human who chose to. The regression protection those earlier fixes left
+ *     behind is still their class-name assertions, which are proxies and say
+ *     so. Making this durable means a browser in CI, which means a new dev
+ *     dependency - a decision deliberately left settled here, in this
+ *     comment, rather than smuggled in later.
  *
  * ---
  *
@@ -106,7 +106,7 @@ type DimensionFlag = (typeof DIMENSION_FLAGS)[number];
 /**
  * `--width` and `--height` override the fixture's recorded viewport, which is
  * how a criterion stated across a breakpoint band gets checked at both ends
- * (SCRUM-456/458 did that by hand for width). A dimension the fixture did not
+ * (done by hand for width in earlier fixes). A dimension the fixture did not
  * record is reported as such in the banner, so a figure taken at one viewport
  * is not read as the recorded one.
  *
@@ -114,7 +114,7 @@ type DimensionFlag = (typeof DIMENSION_FLAGS)[number];
  * because its first seven criteria were, and a fixture whose defect is
  * vertical cannot state the viewport its figures came from at all - so the one
  * number the whole measurement turns on would live in prose beside it.
- * SCRUM-484 is the first pair of those: a logo overflowing a percentage-height
+ * The first pair of those was a logo overflowing a percentage-height
  * bar, and a fixed-height chart in a percentage-height row. Both are the same
  * defect shape and neither has a horizontal component.
  */
@@ -217,7 +217,7 @@ const CONTENT_TYPES: Record<string, string> = {
  * every request, so there is no copy of either to go stale and no temp
  * directory to clean up. `.playwright-mcp/` - where the driver writes
  * screenshots - is the only thing a measurement leaves behind, and it is
- * gitignored (SCRUM-461, then SCRUM-473 for the same debris a second time).
+ * gitignored, after landing in the repo root twice.
  */
 export const createFixtureServer = (
   fixture: LayoutFixture,

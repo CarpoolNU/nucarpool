@@ -49,7 +49,7 @@ enum RequestStatus {
   ACCEPTED
 }
 
-// Why a user reported another user (SCRUM-532). The reporter picks one; the
+// Why a user reported another user. The reporter picks one; the
 // free-text `Report.message` carries the detail. `OTHER` exists so a report
 // never has to be forced into a category that does not fit.
 enum ReportReason {
@@ -62,7 +62,7 @@ enum ReportReason {
 }
 
 // Where a report stands in the admin queue. Every report is created `OPEN`;
-// `user.admin.resolveReport` (SCRUM-574) is what moves it to `REVIEWED` or
+// `user.admin.resolveReport` is what moves it to `REVIEWED` or
 // `DISMISSED`, and `user.reports.create`'s duplicate-report guard is keyed on
 // `OPEN` so a resolved report no longer blocks a new one against the same
 // person.
@@ -127,7 +127,7 @@ model Request {
   // Non-null while this request's acceptance email is owed: set by
   // `markRequestAccepted` when it flips status to ACCEPTED, cleared when the
   // email goes out. Null on every row older than the column and on every
-  // request never accepted. See `sendAcceptanceNotification`. SCRUM-564.
+  // request never accepted. See `sendAcceptanceNotification`.
   acceptanceNotificationPendingSince DateTime?
 
   @@index([fromUserId])
@@ -216,8 +216,8 @@ model User {
   //
   // It is the only record that a picture exists: null means "no picture", and
   // the download path signs nothing for it. Rows predating the column were
-  // filled from S3 `LastModified` by a one-off backfill before that became true
-  // (SCRUM-366).
+  // filled from S3 `LastModified` by a one-off backfill before that became
+  // true.
   profilePictureUpdatedAt DateTime?       @map("profile_picture_updated_at")
   favoritedBy             User[]          @relation("Favorites")
   favorites               User[]          @relation("Favorites")
@@ -276,7 +276,7 @@ model CarpoolSearch {
   // owner: the driver's own search. `groups.me` reads them through the group's
   // driver, so a driver sees the same values before and after having a group.
   //
-  // Both legacy columns were dropped in SCRUM-287, once
+  // Both legacy columns were dropped, once
   // `scripts/backfill-group-preferences.ts` had run in every environment. A
   // save writes all three together; null and "" both read as empty now that
   // there is no fallback for all-three-null to select.
@@ -298,7 +298,7 @@ model CarpoolSearch {
   // a second row would make those reads disagree with each other. Unlike the
   // relations, a unique index is real under `relationMode = "prisma"`: MySQL
   // enforces it. See docs/design/multi-carpool-search.md for why this is one
-  // search and not many (SCRUM-543, SCRUM-544).
+  // search and not many.
   //
   // `@@index([userId])` is now redundant with it and is kept for the moment:
   // dropping it is a separate decision with its own Deploy Request.
@@ -317,7 +317,7 @@ model CarpoolSearch {
 // Records who performed an admin/manager mutation, on whom, and when.
 // `actorId` and `targetId` are plain ids rather than relations: the point of
 // an audit trail is to outlive the rows it describes, so it must not cascade
-// when a `User` is deleted, and future admin mutations (SCRUM-541) may not
+// when a `User` is deleted, and future admin mutations may not
 // target a `User` at all. Readers resolve ids to emails through
 // `user.admin.getAllUsers`, the same list `UserManagement` already fetches.
 model AdminAuditLog {
@@ -337,7 +337,7 @@ model AdminAuditLog {
   @@map("admin_audit_log")
 }
 
-// One user blocking another (SCRUM-532). A row is one direction, but the
+// One user blocking another. A row is one direction, but the
 // effect is symmetric: the server treats a pair as blocked if a row exists
 // either way round, so neither user sees or reaches the other. Only the
 // blocker can remove the row.
@@ -360,7 +360,7 @@ model Block {
   @@map("block")
 }
 
-// A user's report about another user, read by admins (SCRUM-532).
+// A user's report about another user, read by admins.
 //
 // **A report must outlive what it describes.** Either party can delete the
 // request a report was made from, and `requests.delete` takes the conversation

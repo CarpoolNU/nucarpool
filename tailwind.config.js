@@ -6,9 +6,9 @@
  * Both were local constants here, hoisted out of the `h-mobile-sheet` and
  * `sheet-handle` tokens once the sheet gained a second open height. Each moved
  * into `breakpoints.js` once the drag gesture needed the same figure as a
- * number in JavaScript - the map strip for SCRUM-459, so the sheet's expanded
+ * number in JavaScript - the map strip's figure, so the sheet's expanded
  * height is known in every detent rather than only after an expanded render;
- * the lift for SCRUM-529, so the handle's `bottom` holds the same clearance
+ * the handle's own lift figure, so the handle's `bottom` holds the same clearance
  * while dragging that these classes hold at rest, instead of riding the sheet's
  * bare edge and correcting by the lift the instant the gesture ends. Defining
  * either twice would let the gesture and the CSS drift apart silently, which is
@@ -49,7 +49,7 @@ const MOBILE_SHEET_HEIGHT = `calc(100% - ${MOBILE_SHEET_MAP_STRIP} - ${MOBILE_NA
  *   `marginTop: -8%` in `listStyle`  -2.08rem   -33.28px
  *
  * **The negative term is the one worth reading twice**, and leaving it out is
- * the arithmetic error SCRUM-483 corrects. A percentage margin resolves against
+ * an arithmetic error that was later corrected. A percentage margin resolves against
  * the containing block's *inline* size - the panel's `w-[26rem]` - and never
  * against the viewport height, so it contributes a constant 8% of 26rem at
  * every window height rather than scaling with one. It also collapses with the
@@ -124,7 +124,7 @@ module.exports = {
         "sheet-handle": `calc(100% - ${MOBILE_SHEET_MAP_STRIP} - ${MOBILE_SHEET_HANDLE_LIFT})`,
         "half-sheet-handle": `calc(${MOBILE_NAV_SPACE} + (${MOBILE_SHEET_HEIGHT}) / 2 - ${MOBILE_SHEET_HANDLE_LIFT})`,
         /**
-         * The two caps SCRUM-491 puts on the header bar's own controls, both
+         * The two caps placed on the header bar's own controls, both
          * derived in `breakpoints.js` from the same 8.5% the bar declares.
          *
          * **Tokens rather than arbitrary values at the call site, and here the
@@ -157,7 +157,7 @@ module.exports = {
          *
          * Four call sites - `index.tsx`, `admin.tsx`, `profile/index.tsx` and
          * `AdminMobileNotice.tsx` - each of which declared the bar's percentage
-         * complement directly until SCRUM-496 gave the bar a 44px floor. Once
+         * complement directly until the bar gained a 44px floor. Once
          * the bar's height is a `max()` the complement stops being a second
          * percentage, so it could not stay a figure typed out four times.
          *
@@ -177,8 +177,8 @@ module.exports = {
         "content-row": CONTENT_ROW_HEIGHT,
         /**
          * The explore page's main row on mobile: the viewport, less the
-         * navigation. SCRUM-503 removed the "use desktop instead" banner this
-         * row used to be pushed down by, along with the `1.5rem` allowance
+         * navigation. A later change removed the "use desktop instead" banner
+         * this row used to be pushed down by, along with the `1.5rem` allowance
          * that used to sit here and the matching top margin in `index.tsx`.
          */
         "mobile-row": `calc(100% - ${MOBILE_NAV_SPACE})`,
@@ -275,7 +275,7 @@ module.exports = {
       // arrangement needs vertical room rather than only horizontal. A `raw`
       // query because a screen is otherwise min-width only, which is precisely
       // the gap: a landscape phone is 667px wide and 375px tall, so `desktop:`
-      // alone hands it a layout that cannot fit (SCRUM-474).
+      // alone hands it a layout that cannot fit.
       //
       // Declared immediately after `desktop` and before `md`, which keeps the
       // ascending order this list requires: its width term is the same 640px,
@@ -293,7 +293,7 @@ module.exports = {
       // The same shape as `desktop-tall` and a second height, because the
       // height a layout needs is the layout's own: 844px is the onboarding
       // card's figure and means nothing to the conversation panel, whose
-      // full-size chrome stops fitting at 489 (SCRUM-489). Reusing
+      // full-size chrome stops fitting at 489. Reusing
       // `desktop-tall` here would compact the panel on a 1366x768 laptop,
       // which is the mistake `ADMIN_CONSOLE_MIN_HEIGHT_PX` warns about by
       // name.

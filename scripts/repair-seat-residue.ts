@@ -7,7 +7,7 @@
  * an atomic compare-and-swap now, so no new negative can be written,
  * `groups.edit` verifies membership, so no new group can be leaked, and
  * `groups.create` requires the named driver to actually hold `Role.DRIVER`
- * (SCRUM-291), so no new group can be born driverless — but the rows already
+ * now, so no new group can be born driverless — but the rows already
  * written stayed, one of them an ACTIVE driver at `-1`.
  *
  * `repair-` rather than `backfill-` or `cleanup-`: it writes a column *and*
@@ -44,8 +44,8 @@
  *
  * The driverless repair **dissolves** — it clears `carpoolId` for every member
  * and deletes the group row. It does not promote anyone to `DRIVER`, and that
- * is a decision rather than an omission (SCRUM-406). The server did not enforce
- * `Role.DRIVER` on `groups.create` until SCRUM-291, and the client named
+ * is a decision rather than an omission. The server did not enforce
+ * `Role.DRIVER` on `groups.create` until a later fix, and the client named
  * whichever party did not accept the request as the group's driver without
  * checking their role — so a group could be *born* driverless. There is
  * therefore no "original driver" to restore: promoting a member would invent a

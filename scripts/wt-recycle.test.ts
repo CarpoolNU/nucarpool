@@ -941,7 +941,7 @@ describe("what it never does", () => {
 
   // "pipes into no consumer that exits before reading its input" used to live
   // here, asserted over this script alone. `wt-bootstrap.sh` and
-  // `wt-cleanup.sh` turned out to carry the same shape, so SCRUM-454 moved it
+  // `wt-cleanup.sh` turned out to carry the same shape, so it moved
   // to `wt-pipelines.test.ts`, which asserts it over every `wt-*.sh` - this one
   // included - and picks up a new script automatically.
 

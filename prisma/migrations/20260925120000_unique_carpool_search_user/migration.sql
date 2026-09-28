@@ -1,7 +1,8 @@
 /*
   Makes `carpool_search.userId` unique: one CarpoolSearch per user, enforced by
-  MySQL rather than assumed by the application. SCRUM-544, phase 1 of the
-  SCRUM-543 design spike (docs/design/multi-carpool-search.md).
+  MySQL rather than assumed by the application. This is the schema phase of
+  the design spike into supporting more than one search per user
+  (docs/design/multi-carpool-search.md).
 
   `user.edit`'s find-or-create could race two first-time saves into two rows,
   and every reader picks "the" search with no `orderBy`. The index closes the

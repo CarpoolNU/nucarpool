@@ -113,8 +113,7 @@ const Admin: NextPage<AdminProps> = ({ userPermission }) => {
   const isMobile = useIsMobile();
 
   /*
-   * The height half of the same question, and the reason SCRUM-484 touched
-   * this line.
+   * The height half of the same question, and the reason this line changed.
    *
    * `isMobile` is width alone, so a phone held in landscape is 667px wide,
    * lands *above* the breakpoint, and was served the full console into a
@@ -125,9 +124,8 @@ const Admin: NextPage<AdminProps> = ({ userPermission }) => {
    * The threshold is the console's own, derived in `breakpoints.js` from the
    * shortest chart it contains and the row's share of the viewport, and read
    * at this one call site. `MOBILE_BREAKPOINT_PX` is untouched on purpose:
-   * SCRUM-477 records why a height term on that constant would move all twelve
-   * of its survey sites at once, and SCRUM-474's opt-in threshold is the
-   * pattern instead.
+   * A height term on that constant would move all twelve of its survey sites
+   * at once, which is why an opt-in threshold is the pattern instead.
    */
   const isTooShort = useIsViewportShorterThan(ADMIN_CONSOLE_MIN_HEIGHT_PX);
 

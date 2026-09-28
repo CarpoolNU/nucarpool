@@ -1,7 +1,7 @@
 /**
  * `scripts/wt-state.sh` - the generated-state fingerprints.
  *
- * The defect these replace (SCRUM-448) is worth restating, because it is the
+ * The defect these replace is worth restating, because it is the
  * thing these tests exist to make impossible: `wt-bootstrap.sh` used to decide
  * whether `node_modules/.prisma/client` was current by comparing the
  * worktree's `prisma/schema.prisma` against the **primary checkout's** copy.
@@ -185,7 +185,7 @@ describe("the Prisma client fingerprint", () => {
   });
 });
 
-describe("the primary checkout is not consulted (SCRUM-448)", () => {
+describe("the primary checkout is not consulted", () => {
   it("regenerates a mismatched client even when the primary's schema is identical", () => {
     const box = sandbox();
     const dir = slot(box);
