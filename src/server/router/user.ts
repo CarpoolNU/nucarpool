@@ -484,16 +484,15 @@ export const userRouter = router({
           // This has to be a raw `UPDATE`, not `tx.carpoolSearch.updateMany`.
           // The obvious Prisma-idiomatic compare-and-swap is `updateMany`'s
           // WHERE re-checking `carpoolId` - the same shape `reserveSeat` in
-          // `groups.ts` uses for seats - but verified against a real MySQL
-          // (a throwaway container, forcing the exact interleaving): on this
-          // Prisma version, `updateMany`'s WHERE matched against this
-          // transaction's own REPEATABLE READ snapshot instead of the
-          // current committed row, so it happily "won" a race it should have
-          // lost. A raw `UPDATE ... WHERE ...` does not have that problem -
-          // InnoDB gives it a current read - which the same throwaway
-          // database confirmed. `reserveSeat`'s use of `updateMany` is
-          // believed to have the identical defect; fixing that is tracked
-          // separately and was out of scope for this change.
+          // `groups.ts` used for seats before it was fixed - but verified
+          // against a real MySQL (a throwaway container, forcing the exact
+          // interleaving): on this Prisma version, `updateMany`'s WHERE
+          // matched against this transaction's own REPEATABLE READ snapshot
+          // instead of the current committed row, so it happily "won" a race
+          // it should have lost. A raw `UPDATE ... WHERE ...` does not have
+          // that problem - InnoDB gives it a current read - which the same
+          // throwaway database confirmed. `reserveSeat` had the identical
+          // defect and now uses the same raw-`UPDATE` primitive.
           //
           // Reachable only with `existingSearch.carpoolId === null`: the
           // FORBIDDEN guard above already threw if it was truthy and the
