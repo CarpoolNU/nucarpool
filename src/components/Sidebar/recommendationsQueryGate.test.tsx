@@ -6,7 +6,7 @@
  * of its error, loading and empty branches, so for a VIEWER every one of those
  * candidates was built, sent and thrown away — on first mount and again on
  * every client-side navigation back to `/`, because the call site sets
- * `refetchOnMount: true`. About a third of accounts hold that role (SCRUM-460).
+ * `refetchOnMount: true`. About a third of accounts hold that role.
  *
  * **Why this mocks `trpc` onto a real React Query rather than onto a spy.**
  * Same reasoning as `utils/useProfileImage.test.tsx` and

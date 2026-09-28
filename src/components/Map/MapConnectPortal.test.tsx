@@ -250,8 +250,8 @@ describe("a map pin tap at a mobile viewport", () => {
 
   it("keeps its own height cap rather than the desktop one", () => {
     /*
-     * The two branches stay separate expressions, and SCRUM-483 considered
-     * merging them and decided against: this sheet is bottom-anchored against
+     * The two branches stay separate expressions; merging them was considered
+     * and rejected, because this sheet is bottom-anchored against
      * the navigation and the desktop column is top-anchored under desktop
      * chrome, so the two budgets share no term. The desktop token reserves
      * four margins that do not exist here, and applying it to the sheet would
@@ -297,8 +297,8 @@ describe("a map pin click at a desktop viewport", () => {
     // than buttons, so it is absent from this list either way.
     renderPortal();
 
-    // The actions menu (SCRUM-554) is icon-only too, so it is excluded by
-    // element, not by its empty text, or an overlay would be excluded with it.
+    // The actions menu is icon-only too, so it is excluded by element, not by
+    // its empty text, or an overlay would be excluded with it.
     const menu = screen.getByRole("button", { name: "More actions for Riley" });
     const labels = screen
       .getAllByRole("button")
@@ -311,12 +311,13 @@ describe("a map pin click at a desktop viewport", () => {
   it("caps the card list with the token that reserves the chrome above it", () => {
     /*
      * A class-request assertion and deliberately nothing more. The defect
-     * SCRUM-483 fixed was arithmetic - the budget reserved 128px for chrome
+     * fixed here was arithmetic - the budget reserved 128px for chrome
      * that measures 106.73px, so the list was capped 21px shorter than its own
      * container at every window height - and **none of that is assertable
      * here**. jsdom does no layout and evaluates no `calc()` against a
      * viewport, so the numbers were measured in Chromium against the compiled
-     * stylesheet and the geometry belongs in SCRUM-264's Playwright suite.
+     * stylesheet and the geometry belongs in the Playwright suite that covers
+     * this component's layout directly.
      *
      * What this catches is the regression that has no other symptom: the cap
      * reverting to a literal. The token's *value* is verified by the four

@@ -1,6 +1,6 @@
 /**
- * SCRUM-561 item 3: a filter the user set on the explore page has to survive a
- * `user.me` refetch.
+ * A filter the user set on the explore page has to survive a `user.me`
+ * refetch.
  *
  * The seeding effect in `pages/index.tsx` was keyed on `[user]`, and every
  * refetch returns a new object - superjson rebuilds the dates, too - so

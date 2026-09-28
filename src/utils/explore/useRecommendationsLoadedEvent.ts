@@ -25,8 +25,7 @@ export type RecommendationsLoadProfile = Pick<
 >;
 
 /**
- * Records how many candidates a rider's or driver's search returned
- * (SCRUM-570).
+ * Records how many candidates a rider's or driver's search returned.
  *
  * The driver shortage — 266 live riders to 22 live drivers, 54 seats between
  * them — is invisible in every dashboard the team has. It can be established
@@ -74,8 +73,8 @@ export type RecommendationsLoadProfile = Pick<
  * Not a VIEWER. Their empty recommendations list is a role explanation, not an
  * unserved rider, and folding the two together would overstate unmet demand by
  * the ~13 live viewers. The gate is `roleFetchesRecommendations`, the same
- * predicate that decides whether the query runs at all (SCRUM-460) — so the
- * event cannot drift from the request behind it. It is belt and braces today,
+ * predicate that decides whether the query runs at all — so the event cannot
+ * drift from the request behind it. It is belt and braces today,
  * since a gated query never reaches `isSuccess`; it is what keeps this correct
  * if that gate is ever relaxed.
  */

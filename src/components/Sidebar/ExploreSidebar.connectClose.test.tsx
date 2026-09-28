@@ -13,8 +13,8 @@ import {
 } from "../../testing/viewport";
 
 /**
- * SCRUM-520: a successfully-sent connect request did not return mobile
- * Explore to the Recommendations tab. `curOption` lived only in
+ * A successfully-sent connect request did not return mobile Explore to the
+ * Recommendations tab. `curOption` lived only in
  * `ExploreSidebar`, and `SidebarContent.renderUserCard` never passed an
  * `onClose` into the `ConnectCard`s it builds for the Recommendations and
  * Favorites tabs - so nothing downstream of `ConnectModal` could reach it.

@@ -34,7 +34,7 @@ interface RecentreButtonProps {
  * top of the map is clear", which was true of the map and not of this button -
  * it was a *sibling* of the map container with nothing positioned between it
  * and `#__next`, so `top-2` measured from the viewport and landed 16px under
- * `MobileBanner`. SCRUM-464 moved the call site inside `#map`; keep it there.
+ * `MobileBanner`. The call site was moved inside `#map` to fix that; keep it there.
  * The offsets below are relative to the map, not to the page.
  *
  * 44px on mobile against the desktop 32px, matching the touch target

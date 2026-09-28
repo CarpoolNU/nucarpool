@@ -7,9 +7,10 @@ import { hasSeatAvailable } from "./carpoolSeats";
  *
  * Discovery evaluates these rules twice over: `buildCandidateWhere` narrows in
  * SQL and `calculateScore` decides in JavaScript, and the SQL half must stay a
- * superset of the JS half or the map silently loses matches. SCRUM-560 added
- * three "unreachable candidate" rules to both halves and tied them together
- * only by matching comments, which is the arrangement `hasSeatAvailable` and
+ * superset of the JS half or the map silently loses matches. Three
+ * "unreachable candidate" rules were once added to both halves and tied
+ * together only by matching comments, which is the arrangement
+ * `hasSeatAvailable` and
  * `SEAT_AVAILABLE_FILTER` exist to avoid: one definition, plus a test that
  * fails if either caller is changed alone.
  *

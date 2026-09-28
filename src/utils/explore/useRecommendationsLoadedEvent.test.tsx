@@ -1,6 +1,6 @@
 /**
- * SCRUM-570: that a rider's recommendations count reaches Mixpanel, once per
- * resolved load, and that a VIEWER's silence is not mistaken for unmet demand.
+ * That a rider's recommendations count reaches Mixpanel, once per resolved
+ * load, and that a VIEWER's silence is not mistaken for unmet demand.
  *
  * **Real React Query, a spy `queryFn`, and the real `utils/mixpanel`.** The
  * subject is *when* an event fires relative to a query's lifecycle, so a
@@ -330,8 +330,9 @@ describe("the Recommendations Loaded event", () => {
 
   it("stays silent for a VIEWER even when the query does resolve", async () => {
     // The control for the case above, which on its own only re-establishes
-    // SCRUM-460's gate. Ungated, a VIEWER's query resolves with an empty list
-    // — 13 of the 301 live searches — and that zero is a role, not a shortage.
+    // the VIEWER query gate. Ungated, a VIEWER's query resolves with an empty
+    // list — 13 of the 301 live searches — and that zero is a role, not a
+    // shortage.
     profile = { role: "VIEWER", companyCity: "", companyState: "" };
     candidateCount = 0;
 

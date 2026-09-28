@@ -100,8 +100,8 @@ export const toggleSheetDetent = (detent: SheetDetent): SheetDetent =>
  * sibling of the map area. So on a phone the expanded sheet covered the panel
  * outright and **no z-index available to the panel could lift it**: the
  * comparison that decides paint order is sheet `z-20` against `#map` `z-0`, and
- * the panel is never a party to it. That is SCRUM-455, and it is why the fix is
- * a detent rather than a restyle.
+ * the panel is never a party to it. That gap is why the fix is a detent
+ * rather than a restyle.
  *
  * **Collapsed rather than not rendering the sheet at all**, which was the other
  * candidate and looked cheaper. It is not: a VIEWER's Favorites tab renders real
@@ -130,9 +130,9 @@ export const defaultSheetDetent = (role?: Role): SheetDetent =>
  *
  * **This is what lets a drag start from any detent.** The height used to be
  * read off the sheet itself during an expanded render and cached, so the range
- * did not exist until the sheet had been expanded once — and after SCRUM-455 a
- * VIEWER's sheet opens `collapsed`, which made that role's first gesture on the
- * handle fall through to the tap path (SCRUM-459).
+ * did not exist until the sheet had been expanded once — and once a VIEWER's
+ * sheet started opening `collapsed` by default, that made that role's first
+ * gesture on the handle fall through to the tap path.
  *
  * The derivation is exact rather than approximate, and the reason is where the
  * sheet's offsets resolve against. `h-mobile-sheet` is
@@ -155,7 +155,7 @@ export const defaultSheetDetent = (role?: Role): SheetDetent =>
  *
  * **Not the containing row**, which was the first suggestion. The row is not
  * the sheet's containing block — `overflow` does not establish one, as
- * `index.tsx` records for SCRUM-464 — so its height is not a substitute for
+ * `index.tsx` records — so its height is not a substitute for
  * the sheet's own measured bottom edge, regardless of what the row's height
  * resolves to.
  *
@@ -230,7 +230,7 @@ export const dragHeightPx = ({
  * Before this existed the drag wrote `sheetBottomInsetPx + heightPx` with no
  * lift term at all, so the pill sat exactly on the sheet's edge for the whole
  * gesture and corrected by the lift the instant the finger lifted - dropping
- * 8px at `half` and `expanded`, and jumping up 8px at `collapsed` (SCRUM-529).
+ * 8px at `half` and `expanded`, and jumping up 8px at `collapsed`.
  */
 export const handleBottomPx = ({
   sheetBottomInsetPx,

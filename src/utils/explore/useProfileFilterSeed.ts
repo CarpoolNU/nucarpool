@@ -10,7 +10,7 @@ import { FiltersState, User } from "../types";
  * group preferences all invalidate `user.me`, so each of them silently wrote
  * the profile's days and dates back over whatever the user had set in the
  * filter panel - and, because `filters` then changed, refetched
- * recommendations as well (SCRUM-561).
+ * recommendations as well.
  *
  * The dates are compared by timestamp because superjson rebuilds a `Date` on
  * every fetch: the same stored day arrives as a different object each time.

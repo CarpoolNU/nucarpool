@@ -22,8 +22,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 export const MAP_RESIZE_DEBOUNCE_MS = 100;
 
 /**
- * The zoom-out floor applied when a caller does not supply its own
- * (SCRUM-534).
+ * The zoom-out floor applied when a caller does not supply its own.
  *
  * **Derived from Mapbox's tile pyramid, not chosen by feel.** At zoom `z` the
  * world is rendered into a `512 * 2^z` px square: that width is the Mercator
@@ -156,8 +155,8 @@ export function useMapInstance({
  * and dozens of times in a few seconds on iOS Safari, which fires `resize` on
  * every URL-bar collapse and expand during an ordinary scroll.
  *
- * **A `ResizeObserver` on the container itself (SCRUM-518), not a `window`
- * `resize` listener plus a `layoutKey` the caller had to remember to pass.**
+ * **A `ResizeObserver` on the container itself, not a `window` `resize`
+ * listener plus a `layoutKey` the caller had to remember to pass.**
  * `mapbox-gl` 3.30 has no internal `ResizeObserver` - it never watches its own
  * container - so this hook was inferring the container's box from the
  * `window`'s instead, which is only a proxy for it. A `layoutKey` (the page

@@ -54,8 +54,8 @@ describe("expandedSheetHeightPx", () => {
   });
 
   it("gives a collapsed sheet a full range, which is the whole bug", () => {
-    // SCRUM-459. A VIEWER's sheet opens `collapsed` and measures no height at
-    // all, and before this their first gesture had no range to drag within.
+    // A VIEWER's sheet opens `collapsed` and measures no height at all, and
+    // before this fix their first gesture had no range to drag within.
     // The sheet's own height is not an input here - only the bottom edge its
     // classes pin it to, which is the same in every detent - so "collapsed"
     // is not a state this arithmetic can distinguish, let alone refuse.
@@ -148,8 +148,8 @@ describe("toggleSheetDetent", () => {
 
 describe("defaultSheetDetent", () => {
   /**
-   * SCRUM-455. The defect itself is unobservable from here — whether one box
-   * paints over another is layout, and jsdom does none (`src/testing/
+   * The defect itself is unobservable from here — whether one box paints
+   * over another is layout, and jsdom does none (`src/testing/
    * viewport.ts`). This is the one part of the fix that is a rule rather than a
    * position, so it is the one part a test can hold: *which* detent the sheet
    * opens in, per role. The manual mobile pass is still the acceptance
@@ -259,7 +259,7 @@ describe("dragHeightPx", () => {
 
 describe("handleBottomPx", () => {
   /**
-   * SCRUM-529's regression. The table mirrors the resting classes in
+   * A regression this table pins down. It mirrors the resting classes in
    * `HANDLE_POSITION_CLASSES` (`src/pages/index.tsx`) at the same NAV,
    * expanded height and lift used elsewhere in this file - a NAV of 60, an
    * expanded height of 400 and, at a 16px root, an 8px lift. Before the fix
