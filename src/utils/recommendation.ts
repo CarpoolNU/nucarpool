@@ -1,6 +1,10 @@
 import { CarpoolSearch, Location } from "@prisma/client";
 import _ from "lodash";
 import { hasSeatAvailable } from "./carpoolSeats";
+import {
+  candidateIsUngrouped,
+  searcherCanMatchNobody,
+} from "./candidateReachability";
 import { dayMatchApplies } from "./filters/dayMatch";
 
 /** Type for storing recommendation scores associated with a particular user */
@@ -218,32 +222,29 @@ export const calculateScore = (
     .split(",")
     .map((str) => str === "1");
 
+  // A grouped rider and a seatless driver can be matched with nobody at all,
+  // so the verdict depends only on `currentUserSearch` and is answered once
+  // here rather than per candidate. `candidateSearch.ts` asks the same
+  // predicate to decide whether to empty the SQL result - see
+  // `candidateReachability.ts`, and the equivalence test that keeps the two
+  // callers from drifting.
+  const matchesNobody = searcherCanMatchNobody(currentUserSearch);
+
   return (userSearch: CarpoolSearchWithLocations) => {
     const user = carpoolSearchToCommonUser(userSearch);
 
     if (
+      matchesNobody ||
       (currentUser.role === "RIDER" &&
-        (user.role === "RIDER" ||
-          !hasSeatAvailable(user.seatAvail) ||
-          // Every accept path requires the rider's own row to hold
-          // `carpoolId: null` before it links them (SCRUM-560), so a rider
-          // already in a group - theirs or anyone else's - can never join
-          // another. The old test compared groups (`currentUser.carpoolId ===
-          // user.carpoolId`), which excluded only a driver in the rider's own
-          // group and still offered drivers from every other one, all of
-          // which would refuse the resulting request with CONFLICT.
-          !!currentUser.carpoolId)) ||
+        (user.role === "RIDER" || !hasSeatAvailable(user.seatAvail))) ||
       (currentUser.role === "DRIVER" &&
         (user.role === "DRIVER" ||
-          // A driver with no seats left cannot accept anyone either -
-          // `connectAction` refuses every rider with "no seats" today.
-          !hasSeatAvailable(currentUser.seatAvail) ||
           // A rider who already has a `carpoolId` can never be accepted,
           // whichever group holds them. A grouped *driver* recruiting an
           // ungrouped rider is still valid, which is why this tests the
           // candidate's group state rather than comparing it to the current
-          // user's own.
-          (user.role === "RIDER" && !!user.carpoolId))) ||
+          // user's own. Mirrored in SQL by `UNGROUPED_CANDIDATE_FILTER`.
+          (user.role === "RIDER" && !candidateIsUngrouped(user)))) ||
       user.role === "VIEWER"
     ) {
       return undefined;
