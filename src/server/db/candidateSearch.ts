@@ -395,8 +395,8 @@ export const rankCandidates = <T extends Parameters<typeof calculateScore>[0]>(
  *
  * `user.recommendations.me` and `mapbox.geoJsonUserList` used to build this
  * list inline, as two copies of the same few lines. It moved here when blocks
- * joined it (SCRUM-554), because a third concern added to two copies is how
- * one of them ends up missing it.
+ * joined it, because a third concern added to two copies is how one of them
+ * ends up missing it.
  *
  *   - **The reader.** Always.
  *   - **Anyone with a block against the reader, in either direction.** Always,

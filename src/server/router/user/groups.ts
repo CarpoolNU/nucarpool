@@ -47,7 +47,7 @@ import { assertNotBlocked, assertNotBlockedForUpdate } from "../../db/blocks";
  * cost of keeping it is that a resolved row is indistinguishable from a live
  * invitation unless `status` is read, which is exactly what was fixed.
  *
- * Neither join path admits a pair with a block between them (SCRUM-554), and
+ * Neither join path admits a pair with a block between them, and
  * `edit` checks the joining rider against every member rather than the driver
  * alone. The remove path and `delete` deliberately ignore blocks, because
  * leaving must always work.
@@ -104,7 +104,7 @@ const membershipOf = async (
  * `user.edit` - the only procedure that writes `role` - refuses every role
  * change while the caller is in a group. That second guard used to cover only
  * a driver leaving the role, so a grouped rider could promote themselves and
- * pass this check (SCRUM-557). A new path that writes `role` has to keep the
+ * pass this check. A new path that writes `role` has to keep the
  * same rule, or this check stops meaning anything.
  */
 const requireGroupDriver = async (
@@ -235,7 +235,7 @@ const requireAcceptableRequest = async (
  * idempotent and does not depend on a read taken before the transaction opened.
  *
  * Also marks the acceptance email as owed, in the same statement that flips
- * `status`: `acceptanceNotificationPendingSince` (SCRUM-564).
+ * `status`: `acceptanceNotificationPendingSince`.
  * `requireAcceptableRequest` above only reaches here for a request that is
  * still `PENDING`, so this write is always a genuine new acceptance, never a
  * repeat of one already recorded. `sendAcceptanceNotification` clears the
@@ -264,15 +264,15 @@ const markRequestAccepted = async (
 /**
  * Takes one seat from the driver, atomically.
  *
- * A raw `UPDATE`, not `carpoolSearch.updateMany` - the same defect SCRUM-563
- * found and fixed for the rider-linking compare-and-swaps below, and this one
- * uses the identical primitive. Verified against a real MySQL there:
- * `updateMany`'s `WHERE` matched a concurrent transaction's own REPEATABLE
- * READ snapshot rather than the row's current committed state, so two riders
- * accepted at the same instant could both see a seat free and both decrement
- * (SCRUM-565) - the exact failure this function's old doc comment claimed it
- * prevented. The old JS read-compare-decrement shape this replaced had the
- * same hole for the same reason, just without a name for it yet.
+ * A raw `UPDATE`, not `carpoolSearch.updateMany` - the same defect found and
+ * fixed for the rider-linking compare-and-swaps below, and this one uses the
+ * identical primitive. Verified against a real MySQL there: `updateMany`'s
+ * `WHERE` matched a concurrent transaction's own REPEATABLE READ snapshot
+ * rather than the row's current committed state, so two riders accepted at
+ * the same instant could both see a seat free and both decrement - the exact
+ * failure this function's old doc comment claimed it prevented. The old JS
+ * read-compare-decrement shape this replaced had the same hole for the same
+ * reason, just without a name for it yet.
  *
  * `> 0` has to keep meaning what `SEAT_AVAILABLE_FILTER` (`{ gt: 0 }`, in
  * `carpoolSeats.ts`) means, the same way that filter already has to agree
@@ -545,7 +545,7 @@ export const groupsRouter = router({
           );
         }
 
-        // A blocked pair cannot share a group (SCRUM-554). Last among the
+        // A blocked pair cannot share a group. Last among the
         // refusals and before the seat, so nothing has been written when it
         // throws. `user.blocks.block` enforces the other half: it refuses to
         // block someone the caller already shares a group with.
@@ -556,28 +556,28 @@ export const groupsRouter = router({
         // point but before the claim below commits would be invisible to it
         // - closed by the locking recheck after `riderLinked`, not here. See
         // the long comment on `applyBlock` in `blocks.ts` for the full
-        // picture (SCRUM-566).
+        // picture.
         await assertNotBlocked(tx, input.driverId, input.riderId);
 
         await reserveSeat(tx, input.driverId);
 
         // `group.message` used to be seeded from the driver's `groupMessage`,
         // making the group a second home for the same preferences. They are
-        // read through the driver's own search now, and SCRUM-287 dropped the
-        // column, so there is no placeholder left to write.
+        // read through the driver's own search now, and the `groupMessage`
+        // column was dropped, so there is no placeholder left to write.
         const group = await tx.carpoolGroup.create({ data: {} });
 
         // update driver's CarpoolSearch
         //
         // A raw `UPDATE`, not `tx.carpoolSearch.updateMany` - the identical
-        // defect the rider link below was already guarded against
-        // (SCRUM-563, SCRUM-565): verified against a real MySQL, `updateMany`'s
+        // defect the rider link below was already guarded against:
+        // verified against a real MySQL, `updateMany`'s
         // WHERE matched this transaction's own REPEATABLE READ snapshot rather
         // than the row's current committed state, so two concurrent accepts
         // against a driver with 2+ seats could both pass the membership check
         // above, both reserve a seat, and both overwrite `carpoolId` here -
         // whichever committed last "won", leaving the other transaction's
-        // group linked to a real rider but no driver (SCRUM-573).
+        // group linked to a real rider but no driver.
         const driverLinked = await tx.$executeRaw`
           UPDATE carpool_search
           SET carpoolId = ${group.id}
@@ -594,7 +594,7 @@ export const groupsRouter = router({
         // Re-checks role and membership against the current row rather than
         // trusting `riderSearch` above, which is this transaction's snapshot
         // and can be stale by now: a concurrent `user.edit` can flip this
-        // same rider to DRIVER between that read and this write (SCRUM-563).
+        // same rider to DRIVER between that read and this write.
         //
         // A raw `UPDATE`, not `tx.carpoolSearch.updateMany` - see the long
         // comment on the equivalent guard in `user.ts`'s `saveProfile` for
@@ -614,7 +614,7 @@ export const groupsRouter = router({
           );
         }
 
-        // A second, locking check against the pair just linked (SCRUM-566):
+        // A second, locking check against the pair just linked:
         // `assertNotBlocked` above answered from this transaction's snapshot,
         // taken before this point, so a block a concurrent transaction
         // committed afterward would be invisible to it. This one forces a
@@ -879,7 +879,7 @@ export const groupsRouter = router({
           // Same plain read as `create`'s equivalent check above, and the
           // same reason it stays one: cheap, and closed for the racing case
           // by the locking recheck after `riderLinked` below rather than
-          // here. See the comment on `applyBlock` in `blocks.ts` (SCRUM-566).
+          // here. See the comment on `applyBlock` in `blocks.ts`.
           const members = await tx.carpoolSearch.findMany({
             where: { carpoolId: input.groupId },
             select: { userId: true },
@@ -900,7 +900,7 @@ export const groupsRouter = router({
           // than trusting `riderSearch` above, for the same reason as
           // `create`: this transaction's snapshot of it can be stale by now,
           // because a concurrent `user.edit` can flip this rider to DRIVER
-          // in between (SCRUM-563). A raw `UPDATE`, not
+          // in between. A raw `UPDATE`, not
           // `tx.carpoolSearch.updateMany` - see the comment on `create`'s
           // equivalent guard above.
           const riderLinked = await tx.$executeRaw`
@@ -919,7 +919,7 @@ export const groupsRouter = router({
           // Same recheck as `create`, against every current member rather
           // than only the driver - see the comment on `assertNotBlocked`
           // above and on `assertNotBlockedForUpdate` in `../../db/blocks.ts`
-          // for why a locking read is what actually closes SCRUM-566 rather
+          // for why a locking read is what actually closes the race rather
           // than merely narrowing it.
           await assertNotBlockedForUpdate(
             tx,

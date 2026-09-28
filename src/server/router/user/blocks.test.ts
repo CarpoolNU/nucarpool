@@ -5,7 +5,7 @@ import type { Context } from "../context";
 import { BLOCK_GROUP_MEMBER_MESSAGE } from "./blocks";
 
 /**
- * `user.blocks` - creating, listing and removing a block (SCRUM-554).
+ * `user.blocks` - creating, listing and removing a block.
  *
  * What a block *does* is tested at each enforcement site. This file pins the
  * row's own rules: the actor is the session, never the input; self and group
@@ -41,9 +41,9 @@ const buildBlocksDb = (opts?: {
         users[where.id] ? { id: where.id } : null,
       ),
     },
-    // `applyBlock`'s group-membership check is a locking `$queryRaw`
-    // (SCRUM-566), not `carpoolSearch.findMany` - always exactly two
-    // interpolated values, `blockerId` then `blockedId`.
+    // `applyBlock`'s group-membership check is a locking `$queryRaw`, not
+    // `carpoolSearch.findMany` - always exactly two interpolated values,
+    // `blockerId` then `blockedId`.
     $queryRaw: jest.fn(async (_strings: unknown, ...values: unknown[]) => {
       const [blockerId, blockedId] = values as [string, string];
       return [blockerId, blockedId]
@@ -86,8 +86,8 @@ const buildBlocksDb = (opts?: {
     },
   };
 
-  // `user.blocks.block` now runs `applyBlock` inside an explicit transaction
-  // (SCRUM-566), so the fake has to support one. Nothing here needs
+  // `user.blocks.block` now runs `applyBlock` inside an explicit transaction,
+  // so the fake has to support one. Nothing here needs
   // rollback: every refusal in `applyBlock` throws before its one write, the
   // upsert above. `enumerable: false`, the same as `reports.test.ts`'s
   // equivalent fake, so a `{ ...prisma }` spread would not carry it along.

@@ -4,7 +4,7 @@ import {
 } from "./reportSnapshot";
 
 /**
- * The stored shape of a report's conversation copy (SCRUM-555), both ways.
+ * The stored shape of a report's conversation copy, both ways.
  * `getReports` depends on the parse never throwing, since one bad row would
  * otherwise take the whole admin queue down.
  */

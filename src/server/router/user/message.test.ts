@@ -398,7 +398,7 @@ describe("sendMessage — only participants may write", () => {
   });
 });
 
-describe("sendMessage — a blocked pair cannot write to each other (SCRUM-554)", () => {
+describe("sendMessage — a blocked pair cannot write to each other", () => {
   // Every combination of who blocked whom and who is writing. A block is one
   // row but a symmetric effect, so all four must be refused alike.
   const cases: [string, BlockRow, string][] = [
@@ -762,7 +762,7 @@ const buildUnreadDb = (
       if (where?.isRead !== undefined && message.isRead !== where.isRead) {
         return false;
       }
-      // `notIn` is the caller plus every blocked counterpart (SCRUM-554).
+      // `notIn` is the caller plus every blocked counterpart.
       // `not` is still understood, so a regression back to it is caught by
       // the counts below rather than by a crash in this double.
       if (where?.userId?.not && message.userId === where.userId.not) {
@@ -995,7 +995,7 @@ describe("getUnreadMessageCount - the badge and the Requests tab agree", () => {
   });
 });
 
-describe("getUnreadMessageCount - a blocked counterpart's messages are not counted (SCRUM-554)", () => {
+describe("getUnreadMessageCount - a blocked counterpart's messages are not counted", () => {
   // Two threads for SENDER: one with RECIPIENT, who is blocked in the cases
   // below, and one with OUTSIDER, the control counterpart who never is.
   const users: UnreadUser[] = [
@@ -1205,8 +1205,8 @@ describe("markMessagesAsRead — the id list is bounded", () => {
     // input that feeds it and must leave the `where` clause alone. Note it does
     // not depend on the array: an id the caller does not own matches nothing.
     //
-    // `userId: { not: ... }` was added by SCRUM-559: only the recipient may
-    // mark a message read, so the caller's own messages are never matched.
+    // `userId: { not: ... }` was added so that only the recipient may mark a
+    // message read, so the caller's own messages are never matched.
     // `message.db.test.ts` shows it against a real database.
     const { caller, db } = markReadCallerFor(SENDER);
 

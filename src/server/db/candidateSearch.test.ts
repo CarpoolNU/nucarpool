@@ -370,7 +370,7 @@ describe("buildCandidateWhere — group, favorites, bounds", () => {
       favoriteUserIds,
     });
 
-  // SCRUM-560: every accept path requires the rider's own row to hold
+  // Every accept path requires the rider's own row to hold
   // `carpoolId: null`, whichever group they would be joining, so a grouped
   // rider has no reachable candidate at all - not merely the driver in their
   // own group, which is what this used to test for.
@@ -439,13 +439,13 @@ describe("buildCandidateWhere — group, favorites, bounds", () => {
 });
 
 /**
- * SCRUM-560: every accept path (`groups.ts`'s `create` and `add`) requires the
- * rider's own row to hold `carpoolId: null` before it links them. These pin
- * the two candidate sets that leaves unreachable, and the one case that stays
+ * Every accept path (`groups.ts`'s `create` and `add`) requires the rider's
+ * own row to hold `carpoolId: null` before it links them. These pin the two
+ * candidate sets that leaves unreachable, and the one case that stays
  * reachable on purpose - a grouped driver with a seat is still valid for an
  * ungrouped rider.
  */
-describe("buildCandidateWhere — unreachable candidates (SCRUM-560)", () => {
+describe("buildCandidateWhere — unreachable candidates", () => {
   const build = (currentSearch: CurrentSearch) =>
     buildCandidateWhere({
       currentSearch,
@@ -825,15 +825,15 @@ describe("seat filter agrees with calculateScore", () => {
 });
 
 /**
- * The group rules, in both directions at once (SCRUM-572).
+ * The group rules, in both directions at once.
  *
  * The seat and date blocks above each pin one predicate. This pins the whole
  * role/seat/group decision as a single property: over every combination of the
  * three columns `candidateReachability.ts` reads, evaluating the SQL `where` in
  * JavaScript gives the same verdict as asking `calculateScore` directly.
  *
- * SCRUM-560 encoded these rules twice — a Prisma `where` in
- * `buildCandidateWhere` and a guard clause in `calculateScore` — and tied them
+ * These rules used to be encoded twice — a Prisma `where` in
+ * `buildCandidateWhere` and a guard clause in `calculateScore` — tied
  * together only by matching comments. The three suites that covered them each
  * exercised one side, so editing either alone left all of them green and
  * shipped a discovery regression that only production would show. This is the
@@ -879,7 +879,7 @@ describe("group exclusion agrees with calculateScore", () => {
    * Listed rather than ignored by default on purpose. A new candidate-state
    * predicate in the `where` reaches the `default` below and fails this suite
    * loudly, which is the prompt to decide whether `calculateScore` mirrors it
-   * — the step SCRUM-560 skipped.
+   * — the step the earlier duplication skipped.
    */
   const CONSTANT_KEYS = new Set(["status", "user"]);
 

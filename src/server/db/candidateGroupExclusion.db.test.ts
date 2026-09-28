@@ -4,7 +4,7 @@ import { anyFilters } from "../../utils/recommendation.fixtures";
 import { candidateExclusions, fetchRankedCandidates } from "./candidateSearch";
 
 /**
- * SCRUM-560: every accept path requires the rider's own row to hold
+ * Every accept path requires the rider's own row to hold
  * `carpoolId: null` before it links them (`groups.ts`'s `create` and `add`),
  * so a rider already in a group can never join another - theirs or anyone
  * else's - and a grouped rider has no reachable driver at all. The mocked
@@ -99,7 +99,7 @@ const candidateIdsFor = async (userId: string) => {
   return ranked.map((search) => search.userId).sort();
 };
 
-describe("candidate exclusion across groups (SCRUM-560)", () => {
+describe("candidate exclusion across groups", () => {
   it("keeps a driver's results down to ungrouped riders, whichever group each rider is in", async () => {
     const group = await prisma.carpoolGroup.create({ data: {} });
 

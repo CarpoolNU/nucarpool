@@ -4,7 +4,7 @@ import { protectedRouter, router } from "../createRouter";
 import type { PrismaOrTransaction } from "../../db/client";
 
 /**
- * Blocking another user (SCRUM-554).
+ * Blocking another user.
  *
  * What a block *does* is enforced where two users meet, through
  * `src/server/db/blocks.ts`. This router only creates, lists and removes the
@@ -37,22 +37,22 @@ const requireCallerId = (userId: string | undefined): string => {
 /**
  * Records `blockerId`'s block of `blockedId`, or throws the refusal.
  *
- * Shared by `user.blocks.block` and by `user.reports.create`'s "Also block"
- * (SCRUM-555), so a report cannot place a block the Block button would have
+ * Shared by `user.blocks.block` and by `user.reports.create`'s "Also block",
+ * so a report cannot place a block the Block button would have
  * refused. Takes the client as a parameter because the report path runs it
  * inside the transaction that writes the report, and `user.blocks.block`
  * below now opens one of its own for the same reason. Every refusal is
  * thrown before the upsert, so a caller inside a transaction can catch one
  * and carry on.
  *
- * **The race SCRUM-562's audit left open, closed (SCRUM-566).** The
+ * **A race an earlier audit surfaced but left open is now closed.** The
  * group-membership read a few lines down used to be a plain, non-locking
  * `findMany`, and `groups.create`/`groups.edit`'s own `assertNotBlocked`
  * call was the only check on their side - both plain reads inside their own
  * transaction. A block landing at the same moment as a request being
  * accepted could have each side check against the other's pre-race state and
- * both commit, leaving a blocked pair sharing a group. Closed the way
- * SCRUM-563/565 closed the sibling `carpool_search` races: a plain `SELECT`
+ * both commit, leaving a blocked pair sharing a group. Closed the same way
+ * the sibling `carpool_search` races were closed: a plain `SELECT`
  * under REPEATABLE READ answers from this transaction's starting snapshot,
  * not the current row, so the read below is now a raw `SELECT ... FOR
  * UPDATE` over both users' `carpool_search` rows - the same rows
@@ -89,8 +89,8 @@ export const applyBlock = async (
     throw new TRPCError({ code: "NOT_FOUND", message: "User not found." });
   }
 
-  // A locking current read, not `carpoolSearch.findMany` (SCRUM-566): see the
-  // long comment above. `groups.create`/`groups.edit` claim a rider's row
+  // A locking current read, not `carpoolSearch.findMany`: see the long
+  // comment above. `groups.create`/`groups.edit` claim a rider's row
   // here with a raw `UPDATE`, so locking it first makes a concurrent accept
   // wait behind this transaction rather than pass its own check against this
   // pair's pre-block state. Raw SQL bypasses Prisma's field mapping, but
@@ -164,8 +164,8 @@ export const blocksRouter = router({
    * Nothing between the pair is deleted. See `blocks.ts` for why hiding is
    * the rule.
    *
-   * Runs inside an explicit transaction (SCRUM-566), unlike before: `applyBlock`
-   * now takes a `FOR UPDATE` lock on `carpool_search` rows, which only
+   * Runs inside an explicit transaction, unlike before: `applyBlock` now
+   * takes a `FOR UPDATE` lock on `carpool_search` rows, which only
    * serializes against a concurrent group-join if it is held until the block
    * itself commits, rather than released at the end of one autocommitted
    * statement.

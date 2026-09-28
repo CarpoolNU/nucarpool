@@ -208,7 +208,7 @@ describe("only participants may read a conversation", () => {
   });
 });
 
-describe("a blocked pair's thread is hidden, not deleted (SCRUM-554)", () => {
+describe("a blocked pair's thread is hidden, not deleted", () => {
   // Either direction of block, read by either party.
   const cases: [string, BlockRow, string][] = [
     [

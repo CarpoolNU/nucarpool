@@ -489,8 +489,7 @@ describe("user.emails.sendRequestNotification — participants only, addresses f
   /**
    * The body used to be `input.messagePreview`, sent to SES unchecked. With the
    * replay below, that let a requester mail the recipient any text they liked,
-   * repeatedly, and none of it was stored where a report could capture it
-   * (SCRUM-559).
+   * repeatedly, and none of it was stored where a report could capture it.
    */
   it("no longer accepts a preview from the client", async () => {
     const db = buildEmailDb({ messages: [openingMessage("stored text")] });
@@ -583,7 +582,7 @@ describe("user.emails.sendRequestNotification — participants only, addresses f
   });
 
   /**
-   * The replay these cases pin (SCRUM-559). The only control used to be "the
+   * The replay these cases pin. The only control used to be "the
    * request is under five minutes old", so inside that window every call sent
    * another email. The count of SES calls is the assertion that matters.
    */
@@ -827,7 +826,7 @@ describe("user.emails.sendMessageNotification — participants only, stored body
   });
 
   /**
-   * The replay (SCRUM-559). The cooldown counts the caller's *other* recent
+   * The replay. The cooldown counts the caller's *other* recent
    * messages, so after one message every call saw none and sent. The marker
    * is what stops that; the cooldown only limits bursts of new messages.
    */
@@ -1064,7 +1063,7 @@ describe("user.emails.sendAcceptanceNotification — only the party who accepted
   });
 
   /**
-   * The replay this ticket exists to close (SCRUM-564). Before, the procedure
+   * The replay this test exists to close. Before, the procedure
    * checked only direction and status, both of which stay true forever once a
    * request is accepted, so every call after the first sent another copy of
    * "<name> accepted your carpool request". The marker is what stops that.
@@ -1176,7 +1175,7 @@ describe("user.emails.sendAcceptanceNotification — only the party who accepted
 });
 
 /**
- * No mail between a blocked pair (SCRUM-554).
+ * No mail between a blocked pair.
  *
  * All three procedures resolve their parties through one shared helper, which
  * is where the check sits, so each is pinned here separately: a fourth path

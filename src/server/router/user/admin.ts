@@ -26,7 +26,7 @@ const AUDIT_LOG_PAGE_SIZE = 500;
  * few megabytes.
  *
  * Used to be the whole of the queue - unpaginated, so a script filing OPEN
- * reports against every user it could see (SCRUM-562) pushed genuinely
+ * reports against every user it could see pushed genuinely
  * unresolved reports past the newest 500 and out of what an admin could ever
  * see. `getReports` now pages with a cursor, so a flood makes the queue
  * longer rather than making the rest of it invisible; the per-reporter rate
@@ -413,8 +413,8 @@ export const adminDataRouter = router({
       }
 
       // One transaction so the permission change and its audit entry either
-      // both land or neither does — SCRUM-541 exists precisely so a
-      // permission change can never happen without a corresponding record.
+      // both land or neither does — a permission change must never happen
+      // without a corresponding record.
       return ctx.prisma.$transaction(async (tx) => {
         const updated = await tx.user.update({
           where: {
@@ -440,8 +440,8 @@ export const adminDataRouter = router({
 
   /**
    * The audit log's list view. Most recent first, and bounded rather than
-   * paginated — SCRUM-541 asks for "a simple list view", and admin mutations
-   * are rare enough that a static ceiling is sufficient for now.
+   * paginated — a simple list view is all that's needed here, and admin
+   * mutations are rare enough that a static ceiling is sufficient for now.
    *
    * Returns raw `actorId`/`targetId`; the client resolves those to emails
    * through `getAllUsers`, which it already fetches for `UserManagement`,
@@ -455,8 +455,8 @@ export const adminDataRouter = router({
   }),
 
   /**
-   * The report queue (SCRUM-555). Most recent first, cursor-paged
-   * (SCRUM-562). Resolving a report is `resolveReport` below (SCRUM-574).
+   * The report queue. Most recent first, cursor-paged. Resolving a report is
+   * `resolveReport` below.
    *
    * **This is the one admin read that returns message text**, and it is the
    * exception the header's rule allows for. A snapshot is a copy of a thread
@@ -522,7 +522,7 @@ export const adminDataRouter = router({
     }),
 
   /**
-   * Transitions a `Report` out of `OPEN` (SCRUM-574). Until this existed,
+   * Transitions a `Report` out of `OPEN`. Before this procedure existed,
    * nothing ever moved a report to `REVIEWED` or `DISMISSED`, so the
    * duplicate-report guard in `reports.ts` — keyed on `OPEN` — made a user's
    * first report against someone also their last.

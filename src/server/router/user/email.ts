@@ -29,7 +29,7 @@ import { assertNotBlocked } from "../../db/blocks";
  * and nothing else. Bodies are rendered by SES templates through Handlebars
  * `{{ }}`, which HTML-escapes, so no additional escaping is applied here.
  *
- * **All three emails are one-shot** (SCRUM-559, and acceptance in SCRUM-564).
+ * **All three emails are one-shot.**
  * The write that creates the thing being announced also marks an email as
  * owed: `Request.notificationPendingSince`, `Message.notificationPending`, or
  * `Request.acceptanceNotificationPendingSince`. The procedure clears that
@@ -164,8 +164,8 @@ const resolveRequestParties = async (
   const otherUserId =
     request.fromUserId === callerId ? request.toUserId : request.fromUserId;
 
-  // No mail between a blocked pair, in either direction (SCRUM-554). Here
-  // rather than in each procedure because all three resolve their parties
+  // No mail between a blocked pair, in either direction. Here rather than in
+  // each procedure because all three resolve their parties
   // through this, so a fourth added later cannot forget it. Thrown rather
   // than returned as `sent: false`: the request, message or acceptance it
   // would announce has already been refused, so reaching this is a direct
@@ -496,8 +496,8 @@ export const emailsRouter = router({
    * accepted" call for different things from the caller, and collapsing them
    * would leave both unclear.
    *
-   * **One-shot, like the request and message emails above** (SCRUM-559,
-   * SCRUM-564). `markRequestAccepted` in `groups.ts` sets
+   * **One-shot, like the request and message emails above.**
+   * `markRequestAccepted` in `groups.ts` sets
    * `Request.acceptanceNotificationPendingSince` in the same statement that
    * flips `status` to `ACCEPTED`, and this procedure clears it in one
    * conditional `UPDATE` before sending. Only one caller's update can match,
@@ -507,8 +507,9 @@ export const emailsRouter = router({
    * a caller earning many separate accepted requests and notifying each once
    * — does not exist yet. It needs shared state this deployment does not
    * have, so it is larger than a marker, and is not implemented here. It is
-   * tracked in SCRUM-564, not "separately": this doc comment is where that
-   * ticket found it undocumented.
+   * tracked as part of the acceptance-notification work already covering this
+   * file, not as a separate gap: this doc comment is where that work found it
+   * undocumented.
    */
   sendAcceptanceNotification: protectedRouter
     .input(z.object({ requestId: z.string() }).strict())

@@ -98,7 +98,7 @@ describe("canSubscribe — conversation channels", () => {
   });
 });
 
-describe("canSubscribe — a blocked pair's conversation channel (SCRUM-554)", () => {
+describe("canSubscribe — a blocked pair's conversation channel", () => {
   // `messages.conversation` refuses a blocked pair's thread, so its realtime
   // channel must close too, or new messages would still arrive live. Every
   // combination of who blocked whom and who is subscribing.

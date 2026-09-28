@@ -8,7 +8,7 @@ import { buildConversationSnapshot } from "../../reportSnapshot";
 import { applyBlock } from "./blocks";
 
 /**
- * Reporting another user (SCRUM-555, phase 3 of SCRUM-532).
+ * Reporting another user.
  *
  * The reporter always comes from the session. `reportedUserId` names who the
  * report is about, never who is making it.
@@ -22,8 +22,8 @@ export const DUPLICATE_REPORT_MESSAGE =
   "You already have an open report about this user. An admin will review it.";
 
 /**
- * How many reports one reporter may file inside `REPORT_RATE_LIMIT_WINDOW_MS`
- * (SCRUM-562). Every user id is visible in every map and recommendation
+ * How many reports one reporter may file inside `REPORT_RATE_LIMIT_WINDOW_MS`.
+ * Every user id is visible in every map and recommendation
  * payload, so nothing before this stopped a script from filing an OPEN
  * report - each carrying up to the full reason text - against every user it
  * can see, with no prior interaction. `getReports` reads back only the
@@ -157,8 +157,8 @@ export const reportsRouter = router({
       }
 
       // One OPEN report per reporter and person. A report that has been
-      // reviewed or dismissed by `admin.resolveReport` (SCRUM-574) does not
-      // stop a new one, because something new may have happened. There is no
+      // reviewed or dismissed by `admin.resolveReport` does not stop a new
+      // one, because something new may have happened. There is no
       // constraint behind this,
       // since the rule depends on `status`, so two simultaneous submissions can
       // both pass. The dialog disables Submit while one is in flight.

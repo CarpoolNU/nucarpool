@@ -79,7 +79,7 @@ const sessionFor = (id: string): Session => ({
  */
 const mockUserFindUnique = jest.fn();
 const mockUserUpdate = jest.fn();
-/** `isBlockedPair`'s only read (SCRUM-562). Defaults to "no block anywhere". */
+/** `isBlockedPair`'s only read. Defaults to "no block anywhere". */
 const mockBlockFindFirst = jest.fn();
 
 const callerFor = (session: Session | null) =>
@@ -255,8 +255,8 @@ describe("user.getPresignedDownloadUrl", () => {
  *
  * It used to be one of two: a null column fell back to an S3 `HeadObject`,
  * because every row predating the column was null whether or not an object
- * existed (SCRUM-276). The backfill recorded all of those, so a null column now
- * means "no picture" and resolves `{ url: null }` without signing (SCRUM-366).
+ * existed. The backfill recorded all of those, so a null column now means
+ * "no picture" and resolves `{ url: null }` without signing.
  * Signing is a local HMAC, so no path here makes an S3 request - pinned
  * against the real module in `uploadToS3.test.ts`.
  *
@@ -265,7 +265,7 @@ describe("user.getPresignedDownloadUrl", () => {
  * nobody uploaded shows a broken image instead of the fallback icon.
  */
 /**
- * SCRUM-508: `role: carpoolSearch?.role ?? Role.VIEWER` collapses two
+ * `role: carpoolSearch?.role ?? Role.VIEWER` collapses two
  * different situations into the same value - a user who has never had a
  * `CarpoolSearch` row, and a returning user whose row genuinely stores
  * VIEWER. `hasCarpoolSearch` is what lets a caller (the onboarding wizard)
@@ -393,7 +393,7 @@ describe("user.getPresignedDownloadUrl — recorded picture state", () => {
 });
 
 /**
- * `getPresignedDownloadUrl` across a block (SCRUM-562).
+ * `getPresignedDownloadUrl` across a block.
  *
  * The one carve-out from "any signed-in user may read any user's profile
  * picture", documented at the top of this file. `{ url: null }` rather than a
@@ -779,7 +779,7 @@ const buildEditDb = (
         return row;
       }),
     },
-    // The role-change branch's compare-and-swap (SCRUM-563). This is a raw
+    // The role-change branch's compare-and-swap. This is a raw
     // `UPDATE`, not `tx.carpoolSearch.updateMany` - `updateMany`'s WHERE was
     // verified against a real MySQL to match this transaction's own
     // snapshot rather than the current row on this Prisma version, so it did
@@ -916,7 +916,7 @@ const editIssues = async (
  * It now records *when* and *to what* as well, and all three columns move
  * together. A row with the boolean set and the other two null is not a partial
  * write from here - it is a row that predates the columns, and the only thing
- * that distinguishes the untrusted legacy cohort. SCRUM-280.
+ * that distinguishes the untrusted legacy cohort.
  */
 describe("user.acceptTerms", () => {
   const acceptCallerFor = (session: Session | null, prisma: unknown) =>
@@ -1124,7 +1124,7 @@ describe("user.edit — Location ownership", () => {
 
 /**
  * A first-time save that loses the race to create the user's only
- * CarpoolSearch (SCRUM-544).
+ * CarpoolSearch.
  *
  * The race itself, and the unique index that decides it, only exist against a
  * real MySQL - `user.db.test.ts` has those. What this covers is the router's
@@ -1256,8 +1256,8 @@ describe("user.edit — a schedule time can be cleared", () => {
    * `create` has no "omit this field" semantics to test - the whole point here
    * is what `update` receives.
    *
-   * `role` has to match what each test then submits: SCRUM-563 routes a role
-   * *change* through a separate raw-SQL compare-and-swap claim, which would
+   * `role` has to match what each test then submits: a role *change* routes
+   * through a separate raw-SQL compare-and-swap claim, which would
    * make `dataFor` below read from the wrong mock and every assertion here
    * about nothing at all.
    */
@@ -1374,9 +1374,9 @@ describe("user.edit — a schedule time can be cleared", () => {
   ])(
     "refuses %s as a time rather than clearing the schedule",
     async (_label, value) => {
-      // `fromScheduleTimeInput` maps both to `null`, so before SCRUM-557 they
-      // cleared a RIDER's schedule by another route than the explicit null
-      // refused above. Refused for a VIEWER too: neither is a time, and a
+      // `fromScheduleTimeInput` maps both to `null`, so they used to clear a
+      // RIDER's schedule by another route than the explicit null refused
+      // above. Refused for a VIEWER too: neither is a time, and a
       // VIEWER who means "clear" sends `null`.
       for (const role of [Role.RIDER, Role.VIEWER]) {
         for (const field of ["startTime", "endTime"] as const) {
@@ -1679,8 +1679,8 @@ describe("user.edit - co-op dates must run forwards", () => {
   });
 
   it("exempts a VIEWER, whose save re-sends a range they cannot edit", async () => {
-    // SCRUM-551: both pickers are disabled for a VIEWER, so refusing their
-    // stored range would reject every save they make, whatever they changed.
+    // Both pickers are disabled for a VIEWER, so refusing their stored range
+    // would reject every save they make, whatever they changed.
     const db = buildEditDb();
 
     await expect(
@@ -1772,9 +1772,10 @@ describe("user.edit - co-op dates must run forwards", () => {
 });
 
 /**
- * A range like 1901→1908 runs forwards, so the ordering check above passed it,
- * and production holds 22 (SCRUM-550). The procedure reads the real clock, so
- * the ceiling edge is computed from `coopYearBounds` rather than written down.
+ * A range like 1901→1908 runs forwards, so the ordering check above passed
+ * it, and production holds 22 such rows. The procedure reads the real clock,
+ * so the ceiling edge is computed from `coopYearBounds` rather than written
+ * down.
  */
 describe("user.edit - co-op years must be plausible", () => {
   const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
@@ -1906,8 +1907,8 @@ describe("user.edit is atomic", () => {
           homeLocationId: "loc-home",
           companyLocationId: "loc-company",
           // Matches `editInput()`'s default role, so this exercises the
-          // plain `update` path this test is actually about (SCRUM-563 would
-          // otherwise route it through the role-change compare-and-swap
+          // plain `update` path this test is actually about (a role change
+          // would otherwise route it through the role-change compare-and-swap
           // instead, and the forced failure below would never fire).
           role: Role.DRIVER,
         },
@@ -1978,7 +1979,7 @@ describe("user.edit is atomic", () => {
  * take the guard with it: the invariant is asserted against the procedure, not
  * against the form.
  *
- * The rider direction is the other half (SCRUM-557). The guard used to fire
+ * The rider direction is the other half. The guard used to fire
  * only for a driver leaving the role, so a grouped rider could make themselves
  * DRIVER, pass `requireGroupDriver`, and dissolve the group or evict its real
  * driver. Any role change while grouped is refused now.
@@ -2102,7 +2103,7 @@ describe("user.edit — nobody in a group can change role", () => {
   it.each([Role.DRIVER, Role.VIEWER])(
     "refuses a rider in a group switching to %s, and writes nothing",
     async (role) => {
-      // DRIVER is the escalation SCRUM-557 closes: the promoted rider would
+      // DRIVER is the escalation this guard closes: the promoted rider would
       // pass `requireGroupDriver`. VIEWER is refused on purpose - a viewer in
       // a group is not a coherent member, and Leave Group is always open to a
       // rider.
@@ -2164,7 +2165,7 @@ describe("user.edit — nobody in a group can change role", () => {
  * `reserveSeat` and `releaseSeats`. The profile form sends back whatever it
  * loaded, so a rider joining after the driver opened the page was undone by the
  * driver's next save of anything - and the car could then take more riders
- * than it seats. SCRUM-557.
+ * than it seats.
  */
 describe("user.edit — a grouped user's seat count is left alone", () => {
   const withSearch = (role: Role, carpoolId: string | null, seats: number) =>
@@ -2236,7 +2237,7 @@ describe("user.edit — a grouped user's seat count is left alone", () => {
 /**
  * A role change is a compare-and-swap on `carpoolId`, not a plain `update`.
  *
- * SCRUM-563: `groups.create` and `groups.edit` check this same row's `role`
+ * `groups.create` and `groups.edit` check this same row's `role`
  * before linking a rider into a group, but only against a read taken inside
  * their *own* transaction — a snapshot under MySQL REPEATABLE READ, so it can
  * still say RIDER after this save already committed DRIVER. The mock cannot
@@ -2249,7 +2250,7 @@ describe("user.edit — a grouped user's seat count is left alone", () => {
  * snapshot on this Prisma version instead of the current row — see the
  * comment on the guard itself in `user.ts`.
  */
-describe("user.edit — a role change re-checks carpoolId at write time (SCRUM-563)", () => {
+describe("user.edit — a role change re-checks carpoolId at write time", () => {
   const ridingLocations = (): LocationRow[] => [
     {
       id: "loc-home",

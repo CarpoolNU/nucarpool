@@ -2,7 +2,7 @@ import { TRPCError } from "@trpc/server";
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 /**
- * Block checks, shared by every server path where two users meet (SCRUM-554).
+ * Block checks, shared by every server path where two users meet.
  *
  * **A block is one row but a symmetric effect.** `Block` records who blocked
  * whom, and only the blocker can remove it. What it *does* holds in both
@@ -136,7 +136,7 @@ export const assertNotBlocked = async (
 
 /**
  * Same refusal as `assertNotBlocked`, but a locking current read rather than
- * a plain one (SCRUM-566).
+ * a plain one.
  *
  * A plain `SELECT` inside an interactive transaction answers from that
  * transaction's REPEATABLE READ snapshot - taken at its first consistent
@@ -144,9 +144,9 @@ export const assertNotBlocked = async (
  * it for the rest of the transaction, however much later this runs. `FOR
  * UPDATE` makes MySQL read the latest committed row regardless of the
  * snapshot, and holds a lock a concurrent `block.upsert` on the same pair has
- * to wait behind - the same "raw query forces a current read" fix
- * SCRUM-563/565 used for the sibling `carpool_search` races, applied here to
- * the `block` table so a group-join can catch a block that lands mid-race.
+ * to wait behind - the same "raw query forces a current read" fix used for
+ * the sibling `carpool_search` races, applied here to the `block` table so a
+ * group-join can catch a block that lands mid-race.
  * `applyBlock` in `../router/user/blocks.ts` is the other half: its own new
  * locking read, over `carpool_search` instead, is what makes a concurrent
  * block wait behind a group-join in progress rather than the reverse.

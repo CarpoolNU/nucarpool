@@ -512,7 +512,7 @@ describe("user.favorites.edit — a newly-visible favourite can be removed", () 
 });
 
 /**
- * Blocks (SCRUM-554). A favourite with a block either way is hidden from
+ * Blocks. A favourite with a block either way is hidden from
  * `me` and cannot be added, but the `_Favorites` row is kept and removing one
  * stays open.
  */

@@ -4,8 +4,7 @@ import { anyFilters } from "../../utils/recommendation.fixtures";
 import { candidateExclusions, fetchRankedCandidates } from "./candidateSearch";
 
 /**
- * A block keeps a pair out of each other's candidates, against a real MySQL
- * (SCRUM-554).
+ * A block keeps a pair out of each other's candidates, against a real MySQL.
  *
  * The mocked suites prove the exclusion list is *built*. Only a real database
  * proves it is *applied*: that the `OR` over both directions in `blocks.ts` is

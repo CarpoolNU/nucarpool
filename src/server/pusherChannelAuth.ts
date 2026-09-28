@@ -42,7 +42,7 @@ export const canSubscribe = async (
       }
 
       // A blocked pair's thread is hidden from `messages.conversation`, so
-      // the realtime door to it closes too (SCRUM-554), for either party.
+      // the realtime door to it closes too, for either party.
       return !(await isBlockedPair(
         prisma,
         request.fromUserId,

@@ -50,7 +50,7 @@ export const favoritesRouter = router({
 
     // get CarpoolSearches for all favorited users
     //
-    // Minus anyone with a block either way (SCRUM-554). The `_Favorites` row
+    // Minus anyone with a block either way. The `_Favorites` row
     // is kept, not removed, so unblocking brings the favourite back.
     const blockedIds = new Set(await blockedCounterpartIds(ctx.prisma, userId));
     const favoritedUserIds = user.favorites

@@ -49,8 +49,8 @@ const buildPrismaMock = () => {
       findMany: jest.fn().mockResolvedValue([]),
       aggregate: jest.fn().mockResolvedValue(NO_DATES),
     },
-    // `updateUserPermission` writes its audit entry alongside the update
-    // (SCRUM-541), both inside `ctx.prisma.$transaction`.
+    // `updateUserPermission` writes its audit entry alongside the update,
+    // both inside `ctx.prisma.$transaction`.
     adminAuditLog: {
       create: jest.fn().mockResolvedValue({}),
     },
@@ -184,7 +184,7 @@ const adminProcedures: Array<{
       }),
   },
   // The report queue carries message text from reported conversations, so
-  // a USER reaching it would read other people's threads (SCRUM-555).
+  // a USER reaching it would read other people's threads.
   { path: "getReports", invoke: (c) => c.user.admin.getReports() },
   {
     path: "resolveReport",
@@ -408,7 +408,7 @@ describe("admin.updateUserPermission manager gate", () => {
 });
 
 describe("admin.resolveReport", () => {
-  // Unlike `updateUserPermission`, the acceptance criteria (SCRUM-574) name
+  // Unlike `updateUserPermission`, this procedure's acceptance criteria name
   // both ADMIN and MANAGER, so this checks `adminRouter`'s ordinary gate does
   // the whole job here — there is no extra MANAGER-only check to test.
   it.each([Permission.ADMIN, Permission.MANAGER])(
