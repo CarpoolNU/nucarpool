@@ -3,7 +3,7 @@ import { LINE_CHART_LABELS } from "./adminDashboardLabels";
 import { AdminDashboardSeries, AdminDashboardStats } from "./types";
 
 /**
- * CSV formatting for the admin dashboard export (SCRUM-540).
+ * CSV formatting for the admin dashboard export.
  *
  * Privacy decision, recorded per the ticket's acceptance criteria: every
  * column below comes straight from `user.admin.getDashboardStats` /

@@ -6,7 +6,7 @@ type AdminSidebarProps = {
 const AdminSidebar = ({ option, setOption }: AdminSidebarProps) => {
   /*
     Both buttons compose these with a template literal and a ternary, matching
-    what `ProfileSidebar` settled on under SCRUM-438 rather than inventing a
+    what `ProfileSidebar` already settled on rather than inventing a
     second convention for the same job.
 
     They used to build each button as
@@ -16,7 +16,8 @@ const AdminSidebar = ({ option, setOption }: AdminSidebarProps) => {
 
       class="px-4 py-2 text-northeastern-red font-montserrat text-xl false"
 
-    Nothing looked wrong, and that is the only real difference from SCRUM-438.
+    Nothing looked wrong, and that is the only real difference from
+    `ProfileSidebar`'s defect.
     There the same construct had no separating whitespace, so `lg:text-2xl` was
     glued to its neighbour and stopped applying. Here `baseButton` ended in a
     space and `selectedButton` began with one, so every real utility stayed

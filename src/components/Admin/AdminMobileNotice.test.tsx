@@ -80,7 +80,7 @@ describe("AdminMobileNotice", () => {
   });
 
   /**
-   * SCRUM-484 made this panel serve two viewports rather than one: mobile
+   * This panel serves two viewports rather than one: mobile
    * width, where `Header` renders a fixed bottom navigation, and adequate
    * width with inadequate height, where it renders the in-flow desktop bar.
    *
@@ -89,7 +89,7 @@ describe("AdminMobileNotice", () => {
    * the viewport's bottom edge is a layout question, and jsdom computes no layout
    * - `getBoundingClientRect` is zeros throughout. The geometry was measured
    * in Chromium through `scripts/measure-layout.ts` and belongs, durably, in
-   * SCRUM-264's Playwright suite. What is assertable is that the component
+   * the project's Playwright suite. What is assertable is that the component
    * *requests* the right box for the header it was told about, which is the
    * step that was wrong.
    */
@@ -124,7 +124,7 @@ describe("AdminMobileNotice", () => {
          the viewport by the height of the bar.
 
          `h-content-row` and not the bar's percentage complement, which is what
-         this asserted until SCRUM-496 put a 44px floor under the bar: once the
+         this asserted until a 44px floor was put under the bar: once the
          bar's height is a `max()` the remainder stops being a second
          percentage, so it is composed in `breakpoints.js` and registered as a
          token. **jsdom resolves no percentage and does no layout**, so this

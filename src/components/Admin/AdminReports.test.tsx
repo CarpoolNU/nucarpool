@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import AdminReports from "./AdminReports";
 
 /**
- * The report queue (SCRUM-555): `getReports` rows resolved against
+ * The report queue: `getReports` rows resolved against
  * `getAllUsers`, as `AdminAuditLog` does. Mocked onto a real React Query for
  * the reason `AdminAuditLog.test.tsx` gives.
  */
@@ -198,7 +198,7 @@ describe("AdminReports", () => {
     });
   });
 
-  it("loads another page on demand, rather than all at once (SCRUM-562)", async () => {
+  it("loads another page on demand, rather than all at once", async () => {
     reportsQueryFn.mockResolvedValueOnce(
       page([report({ id: "report-1" })], "report-1"),
     );
@@ -238,7 +238,7 @@ describe("AdminReports", () => {
     });
   });
 
-  it("resolves an OPEN report as Reviewed and refreshes the queue (SCRUM-574)", async () => {
+  it("resolves an OPEN report as Reviewed and refreshes the queue", async () => {
     reportsQueryFn.mockResolvedValue(page([report()]));
     usersQueryFn.mockResolvedValue(USERS);
     resolveReportMutationFn.mockResolvedValue({

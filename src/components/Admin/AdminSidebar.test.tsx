@@ -5,7 +5,7 @@ import AdminSidebar from "./AdminSidebar";
  * The classes the admin sidebar puts on its two buttons.
  *
  * This is the sibling of `ProfileSidebar.test.tsx`, and the defect it covers
- * (SCRUM-450) is the same *shape* as the one that file describes at length: a
+ * is the same *shape* as the one that file describes at length: a
  * `&&` expression concatenated into a `className`, whose false branch
  * stringifies to `"false"` and ships as a class token.
  *
@@ -19,7 +19,7 @@ import AdminSidebar from "./AdminSidebar";
  *
  * So these tests are not defending an appearance; they are defending the
  * *construct*. The fix replaces the concatenation with a template literal
- * carrying explicit separators, which is what SCRUM-438 settled on, and which
+ * carrying explicit separators, which is what `ProfileSidebar` settled on, and which
  * removes the invisible load-bearing spaces that made the sibling defect
  * possible in the first place.
  *
@@ -28,7 +28,7 @@ import AdminSidebar from "./AdminSidebar";
  * into the `class` attribute, and that is exactly where this defect lives.
  * `AdminSidebar` takes two props and has no router, tRPC client or portal, so
  * it renders standalone; the desktop sidebar is its only appearance, since
- * `/admin` below 640px renders `AdminMobileNotice` instead (SCRUM-434).
+ * `/admin` below 640px renders `AdminMobileNotice` instead.
  *
  * Asserted as **discrete tokens**, never as substrings of the whole class
  * string, for the reason the sibling file gives: `includes("text-xl")` is true
@@ -130,10 +130,10 @@ it("keeps the unselected button unmarked", () => {
 });
 
 /**
- * SCRUM-513. Selection here was underline and weight alone - no
+ * Selection here was underline and weight alone - no
  * `aria-pressed` - so both buttons announced identically.
  */
-it("offers the Reports tab, and selecting it asks for the reports option (SCRUM-555)", () => {
+it("offers the Reports tab, and selecting it asks for the reports option", () => {
   const setOption = jest.fn();
   render(<AdminSidebar option="reports" setOption={setOption} />);
 

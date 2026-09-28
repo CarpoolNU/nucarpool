@@ -1,7 +1,7 @@
 import { AdminAuditAction, buildAuditLogEntry } from "./adminAuditLog";
 
 /**
- * `buildAuditLogEntry`'s construction, isolated from Prisma (SCRUM-541's
+ * `buildAuditLogEntry`'s construction, isolated from Prisma (the
  * "unit: log-entry construction" testing requirement). The real-database
  * round trip through `updateUserPermission` lives in `admin.db.test.ts`.
  */

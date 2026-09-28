@@ -369,7 +369,7 @@ describe("summariseUsers", () => {
   });
 
   it("counts only RIDERs towards totalRiders, leaving viewers out", () => {
-    // SCRUM-548: this used to be "every active user who is not a driver", so
+    // This used to be "every active user who is not a driver", so
     // VIEWERs - a third of production - roughly halved "Riders In a Group".
     const { membership } = summariseUsers([
       user({ role: Role.DRIVER }),

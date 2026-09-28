@@ -1,8 +1,8 @@
 /**
  * Series labels for the admin growth chart, shared by `LineChartCount` and the
- * SCRUM-540 CSV export so the two cannot drift apart. They used to be written
+ * CSV export so the two cannot drift apart. They used to be written
  * out separately in each, which is how an export could go on calling a series
- * something the chart no longer claimed it was (SCRUM-548).
+ * something the chart no longer claimed it was.
  *
  * The request splits say "current" because a `Request` row does not record
  * its sender's role: they classify each request by the role its sender holds

@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import AdminAuditLog from "./AdminAuditLog";
 
 /**
- * SCRUM-541's list view: `getAuditLog` rows resolved against `getAllUsers`,
+ * The audit log's list view: `getAuditLog` rows resolved against `getAllUsers`,
  * the same query `UserManagement` already fetches — no denormalized email on
  * `AdminAuditLog` itself. Mocked onto a real React Query, following
  * `UserManagement.test.tsx`'s reasoning: a render-time spy cannot distinguish

@@ -5,7 +5,7 @@ import { Prisma } from "@prisma/client";
  * procedure path that performs it. A string rather than a Prisma enum: a new
  * admin mutation (the account-suspension action this ticket's Jira issue
  * mentions) can start writing here without a schema change, which is the
- * whole point of SCRUM-541 covering "any future admin mutation".
+ * whole point of this file covering "any future admin mutation".
  */
 export const AdminAuditAction = {
   UPDATE_USER_PERMISSION: "user.admin.updateUserPermission",

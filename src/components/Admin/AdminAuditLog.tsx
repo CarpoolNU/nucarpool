@@ -10,7 +10,7 @@ import {
 import useIsHydrated from "../../utils/useIsHydrated";
 
 /**
- * The audit log's list view (SCRUM-541) — every `AdminAuditLog` row, most
+ * The audit log's list view — every `AdminAuditLog` row, most
  * recent first.
  *
  * `getAuditLog` returns raw `actorId`/`targetId` rather than denormalized

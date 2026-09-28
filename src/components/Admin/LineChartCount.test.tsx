@@ -5,7 +5,7 @@ import { buildLineChartCSV } from "../../utils/adminDashboardCsv";
 import { IMPORTED_SIGNUP_DATE_NOTE } from "../../utils/adminDashboardLabels";
 
 /**
- * SCRUM-548: the growth chart and its CSV export used to name their series
+ * The growth chart and its CSV export used to name their series
  * separately, so the export could go on calling a column "InactiveUserCount"
  * after the chart stopped claiming to know that. This pins the CSV headers to
  * the labels the chart actually hands Chart.js, not to a shared constant, so a

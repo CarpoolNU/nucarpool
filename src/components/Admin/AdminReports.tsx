@@ -22,8 +22,8 @@ const STATUS_FILTERS = [
 ] as const;
 
 /**
- * The report queue (SCRUM-555): most recent first, defaulting to OPEN and
- * paginated (SCRUM-562) so a flood of reports makes the queue longer rather
+ * The report queue: most recent first, defaulting to OPEN and
+ * paginated so a flood of reports makes the queue longer rather
  * than pushing genuinely unresolved ones out of what `getReports`'s bounded
  * page carries.
  *
@@ -35,7 +35,7 @@ const STATUS_FILTERS = [
  * message and every line of the snapshot alike. It is rendered as React text
  * children only, never as HTML, so markup in a report shows as characters.
  *
- * An OPEN report can be resolved (SCRUM-574) as Reviewed or Dismissed, which
+ * An OPEN report can be resolved as Reviewed or Dismissed, which
  * is what lets the same reporter file a new report against the same person —
  * `reports.ts`'s duplicate guard is keyed on `OPEN`.
  */

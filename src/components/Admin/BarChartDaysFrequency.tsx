@@ -105,8 +105,8 @@ function BarChartDaysFrequency({
      *
      * This is a flex item of `AdminData`'s column, and that column's children
      * sum to more than the content row at every viewport. `flex-shrink`
-     * defaults to 1 and `min-height: auto` does not stop it, so before
-     * SCRUM-488 the box was shrunk to whatever was left - measured in Chromium
+     * defaults to 1 and `min-height: auto` does not stop it, so previously
+     * the box was shrunk to whatever was left - measured in Chromium
      * at 151.5px at 1440x900 and 24px at 667x582, against a class string that
      * says 500. It is silent, which is what made it survive: nothing about the
      * markup reads as wrong. The other two chart blocks escape it by declaring

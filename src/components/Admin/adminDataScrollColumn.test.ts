@@ -1,5 +1,5 @@
 /**
- * The two class requests SCRUM-488 turns on, asserted from the source rather
+ * The two class requests these tests check, asserted from the source rather
  * than from a render.
  *
  * **Neither figure this ticket is about is observable in jsdom**, which
@@ -107,7 +107,7 @@ describe("BarChartDaysFrequency's root", () => {
   it("refuses to be shrunk out of it", () => {
     /*
      * `ADMIN_SHORTEST_CHART_HEIGHT_PX` derives the gate from this 500, and
-     * before SCRUM-488 the box never rendered at it: as a flex item of a
+     * previously the box never rendered at it: as a flex item of a
      * column whose children always sum to more than the row, with
      * `flex-shrink` defaulting to 1 and `min-height: auto` not stopping it, it
      * was measured at 151.5px at 1440x900 and 24px at 667x582. The height and

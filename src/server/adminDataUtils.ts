@@ -142,7 +142,7 @@ export function generateWeekLabels(allDates: Date[]): Date[] {
 /**
  * The growth chart's series.
  *
- * Users are one series, not an active/inactive pair (SCRUM-548). Nothing records
+ * Users are one series, not an active/inactive pair. Nothing records
  * when a user's status changed, so splitting past signups by the status they
  * hold today drew a user who lapsed last week as inactive in every earlier
  * week. Only the point-in-time bar chart can make that split honestly.
@@ -272,7 +272,7 @@ export function summariseUsers(rows: AdminUserRow[]) {
       totalDrivers: drivers.length,
       // Active RIDERs only, defined the same way as `totalDrivers`. This used to
       // be every active non-driver, so VIEWERs - about a third of production -
-      // roughly halved "Riders In a Group" (SCRUM-548).
+      // roughly halved "Riders In a Group".
       totalRiders: riders.length,
     },
   };

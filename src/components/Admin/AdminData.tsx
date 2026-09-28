@@ -96,7 +96,7 @@ function AdminData() {
    * "One of these three failed" and "one of these three has not arrived" used
    * to be the same spinner, so any failure here was a dashboard that never
    * appeared - and for an ADMIN or MANAGER whose session had lapsed, that was
-   * the whole page (SCRUM-509).
+   * the whole page.
    *
    * `combineQueryStates` gives failure priority over loading across all three
    * and retries all three, because from the reader's side this is one
@@ -228,9 +228,8 @@ function AdminData() {
      * port exactly as tall as the content row, and a top margin then pushes it
      * down, so the port's last 16px lands outside the row's clip and is
      * unreachable at *any* scroll position rather than merely below the fold.
-     * Measured in Chromium at 16px at 1440x900 and at 667x582 alike, which is
-     * the half of SCRUM-484's finding that turned out not to be about small
-     * screens at all (SCRUM-488).
+     * Measured in Chromium at 16px at 1440x900 and at 667x582 alike,
+     * confirming this part of the defect was not limited to small screens.
      *
      * Padding keeps the same 16px of visual gap - nothing here paints a
      * background, so the two are indistinguishable on screen - and
