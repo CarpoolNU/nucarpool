@@ -163,6 +163,33 @@ describe("an open conversation, in each of its three states", () => {
     expect(emptyCopy()).not.toBeInTheDocument();
   });
 
+  /**
+   * SCRUM-575: `messages.conversation` throws `FORBIDDEN` for a blocked pair,
+   * and that refusal never clears by retrying. Shaped like a real
+   * `TRPCClientError` — `data.code` is what `isBlocked` and
+   * `NON_RETRYABLE_CODES` both read — rather than a plain `Error`, which is
+   * exactly what the "other failure modes" case above already covers.
+   */
+  it("shows a plain unavailable message, with no Retry, for a blocked FORBIDDEN", async () => {
+    behaviour = async () => {
+      throw Object.assign(new Error("This user isn't available."), {
+        data: { code: "FORBIDDEN" },
+      });
+    };
+
+    renderThread();
+
+    const status = await screen.findByRole("status");
+    expect(status).toHaveTextContent("This user isn't available.");
+    expect(status).not.toHaveTextContent("problem on our side");
+    expect(
+      screen.queryByRole("button", { name: "Try again" }),
+    ).not.toBeInTheDocument();
+    expect(failure()).not.toBeInTheDocument();
+    expect(spinner()).not.toBeInTheDocument();
+    expect(emptyCopy()).not.toBeInTheDocument();
+  });
+
   it("recovers the conversation when retry is pressed", async () => {
     behaviour = async () => {
       throw new Error("boom");

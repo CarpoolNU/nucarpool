@@ -264,11 +264,38 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
    */
   const threadState = toQueryState(threadQuery);
 
+  /**
+   * `messages.conversation` throws `FORBIDDEN` both for a blocked pair
+   * (SCRUM-554) and for a caller who was never a participant, and neither
+   * refusal will ever clear by retrying — it is a permanent state, not a
+   * transient outage. `QueryError`'s "problem on our side" framing and Retry
+   * button are wrong for it, so it is carved out before falling into the
+   * generic failure treatment below (SCRUM-575). `NON_RETRYABLE_CODES` in
+   * `utils/trpc.ts` reads `error?.data?.code` the same way, and
+   * `errorMasking.ts` never rewrites a `FORBIDDEN` message, so the server's
+   * own wording is safe to show verbatim.
+   */
+  const isForbidden =
+    (threadQuery.error as { data?: { code?: string } } | null)?.data?.code ===
+    "FORBIDDEN";
+
   if (threadState.status !== "ready" || allMessages.length === 0) {
     return (
       <div className="flex h-full flex-1 flex-col items-center justify-center overflow-x-hidden overflow-y-auto bg-white p-4">
         {threadState.status === "error" ? (
-          <QueryError subject="this conversation" onRetry={threadState.retry} />
+          isForbidden ? (
+            <p
+              role="status"
+              className="text-center text-lg font-light text-gray-700"
+            >
+              {threadQuery.error?.message}
+            </p>
+          ) : (
+            <QueryError
+              subject="this conversation"
+              onRetry={threadState.retry}
+            />
+          )
         ) : threadState.status === "loading" ? (
           <Spinner />
         ) : (
