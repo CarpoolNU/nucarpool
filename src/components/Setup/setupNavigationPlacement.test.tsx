@@ -3,10 +3,10 @@
  * card*, inside the same full-screen flex container, rather than an overlay
  * floating above it.
  *
- * This is the durable half of SCRUM-467. The defect was geometric - the fixed
- * strip covered the bottom 70px of every step's scroll area at 375x667 - and
- * **jsdom cannot see that**: no layout, no `getBoundingClientRect`, no `dvh`,
- * no paint order, and `env()` is actively mangled. See `src/testing/viewport.ts`
+ * This is the durable half of a two-part fix. The defect was geometric - the
+ * fixed strip covered the bottom 70px of every step's scroll area at 375x667
+ * - and **jsdom cannot see that**: no layout, no `getBoundingClientRect`, no
+ * `dvh`, no paint order, and `env()` is actively mangled. See `src/testing/viewport.ts`
  * for the measurements behind each of those claims. So nothing here asserts
  * that the overlap is gone.
  *
@@ -14,12 +14,12 @@
  * strip and the card share a flex parent, so the browser sizes the two against
  * each other. A future edit that lifts the strip back out to the page root -
  * which is exactly what it used to be - restores the defect silently, and this
- * is the assertion that catches it. The geometry belongs in SCRUM-264's
- * Playwright suite.
+ * is the assertion that catches it. The geometry belongs in a Playwright
+ * suite that can measure real layout.
  *
- * SCRUM-474 added the second half of the same idea: *which* breakpoint each of
- * those classes hangs off. That fix moved the arrangement - the flex direction,
- * the strip's placement, the progress bar's offset - from `desktop:` to
+ * The other half of the same two-part fix addressed *which* breakpoint each
+ * of those classes hangs off. That fix moved the arrangement - the flex
+ * direction, the strip's placement, the progress bar's offset - from `desktop:` to
  * `desktop-tall:`, because `desktop:` is a `min-width` and a phone in landscape
  * is 667px wide and 375px tall. Those assertions are class-request assertions
  * for the same reason as the rest of this file: jsdom resolves no media query
@@ -209,10 +209,10 @@ describe("the onboarding wizard's navigation strip", () => {
      * desktop card from shrinking: a flex item only shrinks along the main
      * axis, and height is the cross axis in a row.
      *
-     * On `desktop-tall:` rather than `desktop:`, and that is SCRUM-474. The row
-     * is the arrangement that cannot shrink, so it is only safe where there is
-     * room for it - and `desktop:` is a `min-width`, which a phone in landscape
-     * satisfies at 667px wide and 375px tall.
+     * This restoration is gated on `desktop-tall:` rather than `desktop:`,
+     * because the row is the arrangement that cannot shrink, so it is only
+     * safe where there is room for it - and `desktop:` is a `min-width`,
+     * which a phone in landscape satisfies at 667px wide and 375px tall.
      */
     expect(wrapper.className).toContain("desktop-tall:flex-row");
     expect(wrapper.className).not.toContain("desktop:flex-row");
@@ -221,9 +221,9 @@ describe("the onboarding wizard's navigation strip", () => {
   /**
    * The strip leaves the flow only where the card it would float over has room
    * to clear it. Same reasoning as the direction above, and the two have to
-   * agree: an out-of-flow strip in a column arrangement is the SCRUM-467 defect
-   * again, and an in-flow strip in a row arrangement would sit beside the card
-   * rather than below it.
+   * agree: an out-of-flow strip in a column arrangement is the fixed-strip
+   * defect again, and an in-flow strip in a row arrangement would sit beside
+   * the card rather than below it.
    */
   it("takes the strip out of flow only on a window tall enough to hold it", async () => {
     const { container } = await renderAtStepOne();

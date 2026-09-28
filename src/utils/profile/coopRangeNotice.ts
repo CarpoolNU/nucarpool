@@ -21,7 +21,7 @@
  *
  * So this fires on load, and only for the defect it names.
  *
- * **A second defect, the same remedy (SCRUM-550).** Production also holds
+ * **A second defect, the same remedy.** Production also holds
  * searches whose years are absurd — 1901→1908, 2069→2073 — and whose ordering
  * is fine, so the check above never saw them. Rewriting them would be a guess,
  * since adding a century still lands before this platform existed; only the
@@ -85,7 +85,7 @@ export const REVERSED_COOP_RANGE_NOTICE =
   "in anyone's matches. Pick the right months below and save to fix it.";
 
 /**
- * The same, for a year outside `coopYearBounds` (SCRUM-550). Production holds
+ * The same, for a year outside `coopYearBounds`. Production holds
  * searches dated like 1901→1908, and those users drop out of any search
  * filtered on term-date overlap. That filter defaults to "Any", so unlike the
  * reversed case they are not invisible by default — the toast says only what

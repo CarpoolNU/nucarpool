@@ -6,10 +6,9 @@ import { OnboardingFormInputs } from "../../utils/types";
 import { useAddressSelection } from "../../utils/useAddressSelection";
 
 /**
- * SCRUM-513. `EntryLabel` had no `htmlFor`, and `ControlledAddressCombobox`
- * had no `id` on its underlying input at all, so "Home Address" and
- * "Workplace Address" announced as unlabelled despite the visible text above
- * each combobox.
+ * `EntryLabel` had no `htmlFor`, and `ControlledAddressCombobox` had no `id`
+ * on its underlying input at all, so "Home Address" and "Workplace Address"
+ * announced as unlabelled despite the visible text above each combobox.
  */
 const addressHook = (): ReturnType<typeof useAddressSelection> => ({
   selectedAddress: { place_name: "", center: [0, 0] },

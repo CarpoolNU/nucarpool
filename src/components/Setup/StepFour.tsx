@@ -22,7 +22,7 @@ interface StepFourProps {
    * The cropped picture waiting to be saved, so `ProfilePicture` can derive its
    * preview from it. Needed here for the same reason as on the profile page:
    * this step unmounts when the user steps back to step 3, which used to revoke
-   * the preview while `setup.tsx` went on holding the file (SCRUM-511).
+   * the preview while `setup.tsx` went on holding the file.
    */
   selectedFile: File | null;
 }

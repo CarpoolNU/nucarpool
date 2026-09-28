@@ -1,6 +1,6 @@
 /**
- * SCRUM-561 item 1: the unsaved-changes modal's Save and Continue must not
- * leave the page when the save is refused.
+ * The unsaved-changes modal's Save and Continue must not leave the page
+ * when the save is refused.
  *
  * `onSubmit` caught the mutation's rejection, showed a toast, and then fell
  * through to `return true` - and `onSubmitWithContinue` reads `true` as "go

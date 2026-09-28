@@ -42,8 +42,8 @@ import {
  * Buttons are found by their **exact** accessible name. They were once found
  * by a regular expression over the label instead, because each icon inside them
  * contributed its `alt` text to that name - "user User Profile", "car Carpool
- * Details". That was a second defect, fixed under SCRUM-446, and the matchers
- * tightened along with it: the regex form is precisely what could not see it,
+ * Details". That was a second defect, and the matchers tightened along with
+ * the fix: the regex form is precisely what could not see it,
  * since /User Profile/ matches "user User Profile" as happily as it matches the
  * right answer.
  */
@@ -121,7 +121,7 @@ describe("the desktop sidebar", () => {
   });
 
   /*
-   * SCRUM-446. Each button held an icon rendered with descriptive alt text -
+   * Each button held an icon rendered with descriptive alt text -
    * `alt="user"`, `alt="car"`, `alt="checkbox"` - and an image's alt text
    * contributes to the accessible name of the control containing it, so the
    * buttons announced themselves as "user User Profile", "car Carpool Details"
@@ -180,8 +180,8 @@ describe("the desktop sidebar", () => {
   });
 
   /**
-   * SCRUM-513. Selection here was a colour and weight swap alone - no
-   * `aria-pressed` - so every button announced identically.
+   * Selection here was a colour and weight swap alone - no `aria-pressed` -
+   * so every button announced identically.
    */
   it("marks exactly the selected section as pressed", () => {
     renderSidebar("carpool");

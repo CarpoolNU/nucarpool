@@ -69,7 +69,7 @@ describe("planCoopRangeNotice", () => {
     ).toBe(REVERSED_COOP_RANGE_NOTICE);
   });
 
-  it("stays quiet for a VIEWER, whose pickers are disabled (SCRUM-551)", () => {
+  it("stays quiet for a VIEWER, whose pickers are disabled", () => {
     // The notice routes to the Account tab, where a VIEWER's pickers are
     // greyed out: an instruction they could not follow, on every load.
     expect(
@@ -154,8 +154,9 @@ describe("planCoopRangeNotice", () => {
 });
 
 /**
- * The year half (SCRUM-550). The same bar applies: this interrupts the profile
- * page, so a false positive is worse than the defect it reports, and most of
+ * The year half of the same remedy. The same bar applies: this interrupts
+ * the profile page, so a false positive is worse than the defect it reports,
+ * and most of
  * these cases are about staying quiet.
  */
 describe("planCoopRangeNotice — implausible years", () => {

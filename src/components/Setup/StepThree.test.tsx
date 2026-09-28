@@ -13,8 +13,8 @@ import { OnboardingFormInputs } from "../../utils/types";
  * lives one level up and survives the toggle. Both pickers had an `onChange`
  * and no `value`, so antd's own state - which is what a mounted `<input>`
  * actually displays - restarted at `null` on every remount while the form
- * went on holding the dates untouched (SCRUM-512). `AccountSection.test.tsx`
- * covers the sibling picker's own version of this same property.
+ * went on holding the dates untouched. `AccountSection.test.tsx` covers the
+ * sibling picker's own version of this same property.
  */
 const Harness = ({
   mounted,
@@ -135,9 +135,9 @@ describe("StepThree co-op date pickers", () => {
 });
 
 /**
- * SCRUM-513. `EntryLabel` had no `htmlFor`, so every field in this step
- * announced as unlabelled to a screen reader despite the visible text beside
- * it - see the ticket for the full inventory. The positive `getByRole` query
+ * `EntryLabel` had no `htmlFor`, so every field in this step announced as
+ * unlabelled to a screen reader despite the visible text beside it. The
+ * positive `getByRole` query
  * is the one that actually exercises the label/input association: a
  * `queryByRole(..., { hidden: true })` or similar negative form would pass
  * whether or not the name was ever wired up.

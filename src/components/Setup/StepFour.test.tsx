@@ -4,8 +4,8 @@ import StepFour from "./StepFour";
 import { OnboardingFormInputs } from "../../utils/types";
 
 /**
- * SCRUM-513. `EntryLabel` had no `htmlFor`, and the "About Me" `<textarea>`
- * had no `id` at all, so none of this step's three fields announced a name a
+ * `EntryLabel` had no `htmlFor`, and the "About Me" `<textarea>` had no `id`
+ * at all, so none of this step's three fields announced a name a
  * screen reader could use - despite the visible label text beside each one.
  */
 

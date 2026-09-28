@@ -300,7 +300,7 @@ describe("profileChanges", () => {
      * profile edit that never reaches the form, so `pristine` really is
      * pristine as far as the fourteen comparisons go, and the page navigated
      * away without a modal. The upload only ever runs inside the save handler,
-     * so the file was simply dropped (SCRUM-511).
+     * so the file was simply dropped.
      *
      * A `File` rather than a stub because `profileChanges` only tests presence
      * and a stub would pass an assertion that a plain `{}` also passes - which

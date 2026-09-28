@@ -4,7 +4,7 @@ import { act } from "react";
 import BlockedUsersSection from "./BlockedUsersSection";
 
 /**
- * The profile's blocked-users list (SCRUM-554).
+ * The profile's blocked-users list.
  *
  * Pinned here: every state of the query reads as itself (loading, failed,
  * empty, a list), Unblock sends only that person's id, a success refreshes

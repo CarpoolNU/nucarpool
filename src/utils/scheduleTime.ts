@@ -181,7 +181,7 @@ export const SCHEDULE_TIME_INVALID_MESSAGE = "Not a valid time";
  * is "clear the schedule" - so before this check a hand-built request could
  * clear a RIDER's or DRIVER's schedule by sending `""`, walking straight past
  * the explicit-null refusal that exists to stop exactly that. A search with no
- * times then passes every time filter. SCRUM-557.
+ * times then passes every time filter.
  *
  * The app's own client never sends either: `toScheduleTimeInput` produces an
  * ISO string or `null`.

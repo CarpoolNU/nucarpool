@@ -1,5 +1,5 @@
 /**
- * SCRUM-508: `handleNextStep`'s step-1 VIEWER branch used to call
+ * `handleNextStep`'s step-1 VIEWER branch used to call
  * `handleSubmit(onSubmit)` directly on the first tap of the primary button -
  * which is what `updateUser` writes `isOnboarded: true` from - with no
  * confirmation and no way back into the wizard. This pins the fix: selecting
@@ -106,7 +106,7 @@ const renderAtStepOneAsViewer = async () => {
   return view;
 };
 
-describe("onboarding wizard step 1 — Viewer requires confirmation (SCRUM-508)", () => {
+describe("onboarding wizard step 1 — Viewer requires confirmation", () => {
   it("does not submit on the first tap; it opens a confirmation instead", async () => {
     await renderAtStepOneAsViewer();
 

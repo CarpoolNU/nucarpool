@@ -1,5 +1,5 @@
 /**
- * SCRUM-508: a brand-new user has no `CarpoolSearch` row, so `user.me` can
+ * A brand-new user has no `CarpoolSearch` row, so `user.me` can
  * only report `role: VIEWER` as the `?? Role.VIEWER` fallback in
  * `src/server/router/user.ts`, not as a stored choice. The wizard's
  * `initialLoad` effect used to `reset({ role: user.role, ... })`
@@ -121,7 +121,7 @@ const renderAtStepOne = async () => {
 const radioFor = (container: HTMLElement, id: "viewer" | "rider" | "driver") =>
   container.querySelector<HTMLInputElement>(`#${id}`)!;
 
-describe("onboarding wizard step 1 — role default (SCRUM-508)", () => {
+describe("onboarding wizard step 1 — role default", () => {
   it("selects Rider, not Viewer, for a brand-new user with no CarpoolSearch row", async () => {
     mockUseMeQuery.mockReturnValue({
       data: { ...baseUser, role: "VIEWER", hasCarpoolSearch: false },

@@ -19,7 +19,7 @@ import { CSSProperties } from "styled-components";
  * utilities it overrides, so which of the two applies is guaranteed by the
  * cascade rather than left to the compiler's sort - and the value has one owner,
  * so there is no override left to lose. Styling-only differences go through
- * `desktop:` rather than an `isMobile` ternary, per SCRUM-415.
+ * `desktop:` rather than an `isMobile` ternary on the same principle.
  *
  * `h-[500px]` is deliberately *not* paired with a `desktop:` prefix, and it is
  * a request rather than a guarantee. On mobile the caller overrides it with an
@@ -30,8 +30,8 @@ import { CSSProperties } from "styled-components";
  * would otherwise floor this at the full 500px, so in the wizard's column
  * arrangement the card shrinks to the space the navigation strip leaves.
  *
- * That it shrinks is now load-bearing above the mobile breakpoint too. Until
- * SCRUM-474 the desktop arrangement was a flex *row*, where height is the cross
+ * That it shrinks is now load-bearing above the mobile breakpoint too. The
+ * desktop arrangement used to be a flex *row*, where height is the cross
  * axis and this 500px could not shrink at all - so a window shorter than the
  * card simply clipped it, 62px off the top and 63px off the bottom of a phone
  * held in landscape. The row is now conditional on the window being tall enough

@@ -8,7 +8,7 @@ import { resetIdentity } from "../mixpanel";
  * that call may never run. It is also deliberately here rather than beside
  * either button - `DropDownMenu` and `UserSection` both reach sign-out through
  * this module, and the set of exits from the profile page is precisely the
- * thing that was discovered one at a time across SCRUM-384 and SCRUM-468.
+ * thing that was discovered one exit at a time, each in its own fix.
  *
  * Only reached once the guard below has let the sign-out through, so cancelling
  * `UnsavedModal` leaves the identity intact along with the unsaved edits.
@@ -26,15 +26,15 @@ const signOutAndForget = async (): Promise<void> => {
  * `src/pages/profile/index.tsx`, which compares the live form against the
  * stored user through `hasProfileChanges` and either runs `proceed`
  * immediately or holds it behind `UnsavedModal`. Taking the caller's exit as a
- * callback rather than a destination is SCRUM-384's shape, and the reason is
- * written down there: it keeps each consumer's own way of leaving - a router
- * push, a full page load, a sign-out - in the consumer.
+ * callback rather than a destination is deliberate: it keeps each consumer's
+ * own way of leaving - a router push, a full page load, a sign-out - in the
+ * consumer.
  *
  * Named here rather than written inline in `HeaderProps` so the set of things
  * that accept the guard is one identifier away from a grep. That the set was
  * not writable down anywhere is how three separate exits from the page came to
  * be discovered one at a time: the desktop Map button, then the mobile bottom
- * navigation (SCRUM-384), then Sign Out (SCRUM-468).
+ * navigation, then Sign Out.
  */
 export type UnsavedChangesGuard = (
   proceed: () => void | Promise<void>,

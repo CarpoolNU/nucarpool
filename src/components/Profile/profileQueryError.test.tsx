@@ -1,5 +1,5 @@
 /**
- * SCRUM-509: that a failed `user.me` on `/profile` says so.
+ * That a failed `user.me` on `/profile` says so.
  *
  * The guard was `if (isLoading || !user)`, returning a `fixed inset-0 z-50`
  * white overlay with a spinner in it, and it returns *before* `Header` - so on

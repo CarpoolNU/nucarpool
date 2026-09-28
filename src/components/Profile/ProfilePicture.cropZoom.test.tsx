@@ -2,8 +2,8 @@
  * That the cropper opens at a zoom which covers the crop box, and never tells
  * react-easy-crop to let the crop rectangle leave the photo.
  *
- * SCRUM-479: a landscape camera-roll photo accepted at the default framing
- * produced an avatar with opaque black bands top and bottom. `onMediaLoaded`
+ * A landscape camera-roll photo accepted at the default framing produced an
+ * avatar with opaque black bands top and bottom. `onMediaLoaded`
  * pinned `minZoom` to `1` for any image over 300px - every photograph - so the
  * 300x300 crop box was taller than the displayed image, and
  * `restrictPosition={false}` allowed the overshoot instead of clamping it. The
@@ -71,7 +71,7 @@ jest.mock("../../utils/useProfileImage", () => ({
  * The cropper's box on an iPhone-width viewport, and the media size
  * react-easy-crop lays a 4032x3024 photo out at inside it: `h-96` is 384px
  * tall and a 375px viewport inside the modal's `border-8` leaves 359px, so a
- * 4:3 photo contains to 359x269.25. These are the numbers SCRUM-479 was
+ * 4:3 photo contains to 359x269.25. These are the numbers the fix above was
  * measured against, and `mediaSize` is the library's own type - it carries the
  * displayed pair *and* the natural pair, which is how the pre-fix code came to
  * use the wrong one.

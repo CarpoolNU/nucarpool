@@ -21,7 +21,7 @@ import {
  * no prompt and no undo. The profile page has owned an unsaved-changes guard
  * the whole time and handed it to exactly one consumer, `Header`; sign-out was
  * the third exit off the page found to be going around it, after the desktop
- * Map button and the mobile bottom navigation (SCRUM-384).
+ * Map button and the mobile bottom navigation.
  *
  * On a phone it is also the *only* route to signing out: `Header` returns the
  * bottom navigation before it reaches `DropDownMenu`, so the desktop
@@ -182,7 +182,7 @@ describe("Sign Out and the unsaved-changes guard", () => {
   });
 });
 
-describe("the role radios (SCRUM-521)", () => {
+describe("the role radios", () => {
   // `Radio` already destructured `role` out of its props before spreading
   // the rest onto the native input, so this call site was never affected by
   // the sibling bug in `FormRadioButton` - the dead `role={Role.X}` prop
@@ -207,9 +207,9 @@ describe("the role radios (SCRUM-521)", () => {
 });
 
 /**
- * SCRUM-557. The role lock used to cover a grouped *driver* only, so the Driver
- * radio stayed live for a grouped rider - one click from taking the group away
- * from its real driver. `user.edit` refuses any role change while grouped now,
+ * The role lock used to cover a grouped *driver* only, so the Driver radio
+ * stayed live for a grouped rider - one click from taking the group away from
+ * its real driver. `user.edit` refuses any role change while grouped now,
  * and the form has to say so before the save rather than after it.
  */
 describe("the role lock for a user in a carpool group", () => {
@@ -323,8 +323,8 @@ describe("the role lock for a user in a carpool group", () => {
 });
 
 /**
- * SCRUM-513. `EntryLabel` rendered its `<label>` as a sibling with no
- * `htmlFor`, so every text field here announced as unlabelled despite the
+ * `EntryLabel` rendered its `<label>` as a sibling with no `htmlFor`, so
+ * every text field here announced as unlabelled despite the
  * visible text beside it. The positive `getByRole` query is what actually
  * exercises the association - a negative query would pass whether or not the
  * name was ever wired up.

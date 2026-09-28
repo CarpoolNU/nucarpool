@@ -15,8 +15,8 @@ interface ProfilePictureProps {
    * parent while the preview URL lived only here, so unmounting this component
    * - switching profile tabs, or stepping back and forward through onboarding -
    * revoked the preview and left the parent holding a file the user could no
-   * longer see, which a later Save would upload anyway (SCRUM-511). Deriving
-   * makes the two agree by construction: there is one source of truth, and
+   * longer see, which a later Save would upload anyway. Deriving makes the
+   * two agree by construction: there is one source of truth, and
    * remounting rebuilds the preview from it.
    */
   selectedFile: File | null;
@@ -233,7 +233,7 @@ const ProfilePicture = ({
                   the round crop box overflowing its own container. Holding the
                   stage at 384px also leaves `mediaSize` - which react-easy-crop
                   derives from this container under `objectFit="contain"` - the
-                  same value SCRUM-479's fill-zoom arithmetic was measured
+                  same value the fill-zoom arithmetic below was measured
                   against.
 
                   `min-h-0` is load-bearing: a flex item's default `min-height`
@@ -261,7 +261,7 @@ const ProfilePicture = ({
                       // library's default of `true`: it clamps the crop rectangle
                       // inside the photo, so `croppedAreaPixels` can never come
                       // back with a negative origin. Passing `false` disabled that
-                      // clamp and was half of SCRUM-479's black bands. The
+                      // clamp and was half of the black-bands defect above. The
                       // clamping is the library's to do - it is the only party
                       // that knows the laid-out media size - so this stores the
                       // position it asks for rather than bounding it a second
