@@ -9,6 +9,7 @@ import { Prisma } from "@prisma/client";
  */
 export const AdminAuditAction = {
   UPDATE_USER_PERMISSION: "user.admin.updateUserPermission",
+  RESOLVE_REPORT: "user.admin.resolveReport",
 } as const;
 
 export type AdminAuditAction =

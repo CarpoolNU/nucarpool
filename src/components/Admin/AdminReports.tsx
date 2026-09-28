@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { format } from "date-fns";
 import { ReportStatus } from "@prisma/client";
+import { toast } from "react-toastify/unstyled";
 import { trpc } from "../../utils/trpc";
 import Spinner from "../Spinner";
 import { QueryError } from "../QueryError";
@@ -24,7 +25,7 @@ const STATUS_FILTERS = [
  * The report queue (SCRUM-555): most recent first, defaulting to OPEN and
  * paginated (SCRUM-562) so a flood of reports makes the queue longer rather
  * than pushing genuinely unresolved ones out of what `getReports`'s bounded
- * page carries. Read-only. Resolving a report is SCRUM-552.
+ * page carries.
  *
  * Modelled on `AdminAuditLog`. `getReports` returns raw user ids, and this
  * resolves them through `getAllUsers`, the query `UserManagement` already
@@ -33,6 +34,10 @@ const STATUS_FILTERS = [
  * **Everything a report carries was written by a user**, the reporter's
  * message and every line of the snapshot alike. It is rendered as React text
  * children only, never as HTML, so markup in a report shows as characters.
+ *
+ * An OPEN report can be resolved (SCRUM-574) as Reviewed or Dismissed, which
+ * is what lets the same reporter file a new report against the same person —
+ * `reports.ts`'s duplicate guard is keyed on `OPEN`.
  */
 const AdminReports = () => {
   // Held for the reason `AdminAuditLog` gives: `/admin` is server-rendered,
@@ -41,6 +46,7 @@ const AdminReports = () => {
 
   const [status, setStatus] = useState<ReportStatus | null>(ReportStatus.OPEN);
 
+  const utils = trpc.useUtils();
   const reportsQuery = trpc.user.admin.getReports.useInfiniteQuery(
     { status },
     {
@@ -50,6 +56,14 @@ const AdminReports = () => {
   );
   const usersQuery = trpc.user.admin.getAllUsers.useQuery(undefined, {
     enabled: isHydrated,
+  });
+  const resolveReport = trpc.user.admin.resolveReport.useMutation({
+    onSuccess: () => {
+      utils.user.admin.getReports.invalidate();
+    },
+    onError: (error) => {
+      toast.error(`Failed to resolve report: ${error.message}`);
+    },
   });
 
   const state = isHydrated
@@ -108,6 +122,7 @@ const AdminReports = () => {
                   <th className="py-2 pr-4">Reason</th>
                   <th className="py-2 pr-4">Status</th>
                   <th className="py-2 pr-4">Details</th>
+                  <th className="py-2 pr-4">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -118,6 +133,10 @@ const AdminReports = () => {
                       : senderId === report.reportedUserId
                         ? "Reported"
                         : nameFor(senderId);
+
+                  const isResolvingThis =
+                    resolveReport.isPending &&
+                    resolveReport.variables?.reportId === report.id;
 
                   return (
                     <tr
@@ -167,6 +186,38 @@ const AdminReports = () => {
                               )}
                             </ol>
                           </details>
+                        )}
+                      </td>
+                      <td className="py-2 pr-4 whitespace-nowrap">
+                        {report.status === ReportStatus.OPEN && (
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                resolveReport.mutate({
+                                  reportId: report.id,
+                                  status: ReportStatus.REVIEWED,
+                                })
+                              }
+                              disabled={isResolvingThis}
+                              className="hover:text-northeastern-red text-stone-600 underline disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Mark reviewed
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                resolveReport.mutate({
+                                  reportId: report.id,
+                                  status: ReportStatus.DISMISSED,
+                                })
+                              }
+                              disabled={isResolvingThis}
+                              className="hover:text-northeastern-red text-stone-600 underline disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Dismiss
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>

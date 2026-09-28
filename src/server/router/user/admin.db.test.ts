@@ -1,4 +1,10 @@
-import { Permission, Role, Status } from "@prisma/client";
+import {
+  Permission,
+  ReportReason,
+  ReportStatus,
+  Role,
+  Status,
+} from "@prisma/client";
 import type { Session } from "next-auth";
 import { addWeeks, format, startOfWeek } from "date-fns";
 import { integrationPrisma } from "../../../testing/integrationDatabase";
@@ -320,5 +326,143 @@ describe("updateUserPermission's audit trail against a real database", () => {
       action: "user.admin.updateUserPermission",
       targetId: target.id,
     });
+  });
+});
+
+/**
+ * SCRUM-574: `resolveReport` against a real database.
+ *
+ * The property worth a real database is the one the ticket exists for: a
+ * resolved report must actually stop blocking a new one. `reports.ts`'s
+ * duplicate guard is a `findFirst` keyed on `status: OPEN`, which a mocked
+ * Prisma cannot prove either side of — it only ever returns what the test
+ * told it to, regardless of what `resolveReport` actually wrote.
+ */
+describe("resolveReport against a real database", () => {
+  const reporterSession = (id: string): Session => ({
+    expires: new Date(Date.now() + 60_000).toISOString(),
+    user: {
+      id,
+      isOnboarded: true,
+      tutorialCompleted: true,
+      permission: Permission.USER,
+    },
+  });
+
+  it("unblocks a new report from the same reporter against the same person", async () => {
+    const reporter = await prisma.user.create({
+      data: { name: "Reporter", email: "reporter@northeastern.edu" },
+    });
+    const reported = await prisma.user.create({
+      data: { name: "Reported", email: "reported@northeastern.edu" },
+    });
+
+    const { reportId } = await callerFor(
+      reporterSession(reporter.id),
+    ).user.reports.create({
+      reportedUserId: reported.id,
+      reason: ReportReason.HARASSMENT,
+      alsoBlock: false,
+    });
+
+    // Still OPEN: the existing duplicate guard keeps refusing, unchanged.
+    await expect(
+      callerFor(reporterSession(reporter.id)).user.reports.create({
+        reportedUserId: reported.id,
+        reason: ReportReason.OTHER,
+        alsoBlock: false,
+      }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+
+    await callerFor(managerSession()).user.admin.resolveReport({
+      reportId,
+      status: ReportStatus.DISMISSED,
+    });
+
+    expect(
+      await prisma.report.findUniqueOrThrow({ where: { id: reportId } }),
+    ).toMatchObject({ status: ReportStatus.DISMISSED });
+
+    // Now unblocked: the same reporter can file a new report against the
+    // same person, which is the whole point of resolving the first one.
+    const second = await callerFor(
+      reporterSession(reporter.id),
+    ).user.reports.create({
+      reportedUserId: reported.id,
+      reason: ReportReason.SAFETY_CONCERN,
+      alsoBlock: false,
+    });
+
+    expect(await prisma.report.count()).toBe(2);
+    expect(
+      await prisma.report.findUnique({ where: { id: second.reportId } }),
+    ).toMatchObject({ status: ReportStatus.OPEN });
+  });
+
+  it("writes exactly one audit log row alongside the status change", async () => {
+    const reporter = await prisma.user.create({
+      data: { name: "Reporter Two", email: "reporter2@northeastern.edu" },
+    });
+    const reported = await prisma.user.create({
+      data: { name: "Reported Two", email: "reported2@northeastern.edu" },
+    });
+    const { reportId } = await callerFor(
+      reporterSession(reporter.id),
+    ).user.reports.create({
+      reportedUserId: reported.id,
+      reason: ReportReason.FAKE_PROFILE,
+      alsoBlock: false,
+    });
+
+    await callerFor(managerSession()).user.admin.resolveReport({
+      reportId,
+      status: ReportStatus.REVIEWED,
+    });
+
+    const logs = await prisma.adminAuditLog.findMany({
+      where: { targetId: reportId },
+    });
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatchObject({
+      actorId: "manager-1",
+      action: "user.admin.resolveReport",
+      targetId: reportId,
+      metadata: JSON.stringify({ status: ReportStatus.REVIEWED }),
+    });
+  });
+
+  it("refuses to resolve a report a second time, leaving its status and audit log alone", async () => {
+    const reporter = await prisma.user.create({
+      data: { name: "Reporter Three", email: "reporter3@northeastern.edu" },
+    });
+    const reported = await prisma.user.create({
+      data: { name: "Reported Three", email: "reported3@northeastern.edu" },
+    });
+    const { reportId } = await callerFor(
+      reporterSession(reporter.id),
+    ).user.reports.create({
+      reportedUserId: reported.id,
+      reason: ReportReason.NO_SHOW,
+      alsoBlock: false,
+    });
+
+    await callerFor(managerSession()).user.admin.resolveReport({
+      reportId,
+      status: ReportStatus.DISMISSED,
+    });
+
+    await expect(
+      callerFor(managerSession()).user.admin.resolveReport({
+        reportId,
+        status: ReportStatus.REVIEWED,
+      }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+
+    expect(
+      await prisma.report.findUniqueOrThrow({ where: { id: reportId } }),
+    ).toMatchObject({ status: ReportStatus.DISMISSED });
+    expect(
+      await prisma.adminAuditLog.findMany({ where: { targetId: reportId } }),
+    ).toHaveLength(1);
   });
 });
