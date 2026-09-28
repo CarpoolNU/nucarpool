@@ -111,8 +111,8 @@ describe("parseArgs", () => {
 
   it("refuses an unknown option rather than ignoring it", () => {
     /* `--viewport` rather than `--height`, which this asserted against until
-       SCRUM-484 added that flag. A flag name that later becomes real is how a
-       negative assertion quietly stops testing anything. */
+       a later fixture added that flag. A flag name that later becomes real is
+       how a negative assertion quietly stops testing anything. */
     expect(() => parseArgs(["a", "--viewport", "667x375"])).toThrow(
       /Unknown option "--viewport"/,
     );
@@ -536,7 +536,7 @@ describe("what the harness prints", () => {
   });
 
   it("names the gitignored directory a measurement leaves behind", () => {
-    /* .playwright-mcp/ landed in the repo root twice, SCRUM-461 and SCRUM-473. */
+    /* .playwright-mcp/ landed in the repo root twice before being gitignored. */
     expect(banner(fixture, "http://x/", 375, 375, 1)).toContain(
       ".playwright-mcp/",
     );

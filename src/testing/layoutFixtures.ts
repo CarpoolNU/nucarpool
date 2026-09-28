@@ -135,8 +135,9 @@ export const describeContainerWidth = (
 };
 
 /*
- * The destructive trigger on a group member card, which is SCRUM-480's
- * criterion and the smallest of the seven the harness was rebuilt for.
+ * The destructive trigger on a group member card, this fixture's own
+ * criterion (see `issue` below) and the smallest of the seven the harness was
+ * rebuilt for.
  *
  * The chain is the mobile group view: `MobileGroupView`'s `px-4` page gutter,
  * the members panel's 1px border on each side, the `divide-y` list (no
@@ -246,7 +247,7 @@ const groupMemberCardTrigger: LayoutFixture = {
 };
 
 /*
- * SCRUM-484's two items, and the one thing they have in common: a
+ * The two fixtures below, and the one thing they have in common: a
  * percentage-height container holding a fixed-pixel child.
  *
  * `#__next` is `height: 100dvh` (`globals.css`), `HeaderDiv` is a percentage
@@ -270,8 +271,8 @@ const groupMemberCardTrigger: LayoutFixture = {
 /**
  * `HeaderDiv`, `Header.tsx:45`. The bar every page's content row sits under.
  *
- * The height is composed from the constant rather than restated, because after
- * SCRUM-484 it *is* the constant - `Header.tsx` reads the same export. The
+ * The height is composed from the constant rather than restated, because it
+ * *is* the constant - `Header.tsx` reads the same export. The
  * `min-width: 640px` in the queries below is the opposite case and is written
  * literally on purpose: that boundary is an independent decision the fixture
  * should state rather than inherit, so that a fixture measured at 667 is
@@ -328,8 +329,8 @@ const HEADER_LOGO_DESKTOP_CSS = `
  * own bottom edge on every one of them. The row's own contents differ and are
  * not what is being measured.
  *
- * **The token is what makes that sentence true after SCRUM-496.** The bar now
- * has a 44px floor, so its height is a `max()` and the row's share is no longer
+ * **The token is what makes that sentence true now that the bar has a 44px
+ * floor.** Its height is a `max()` and the row's share is no longer
  * a fixed percentage - four hand-copied complements would have had to be
  * corrected in four places to keep this fixture honest, which is the drift the
  * token removes.
@@ -505,7 +506,7 @@ const adminConsoleChartFold: LayoutFixture = {
   viewportWidth: 667,
   /*
    * The gate, not the defect - and the difference matters for what this
-   * fixture is for. After SCRUM-484 a 375px-tall viewport is served
+   * fixture is for. Now a 375px-tall viewport is served
    * `AdminMobileNotice` and renders no chart at all, so 375 measures a layout
    * the app no longer produces; the figures it gave are kept in `recorded` as
    * the before-state. `ADMIN_CONSOLE_MIN_HEIGHT_PX` is the shortest viewport
@@ -528,8 +529,8 @@ const adminConsoleChartFold: LayoutFixture = {
     { name: "sidebar border-r-4", x: 4 },
     { name: "AdminData px-8", x: 64 },
     /*
-     * Not a CSS length, and the only inset here that is not. Before SCRUM-488
-     * the scroll port never scrolled - the column's one shrinkable child
+     * Not a CSS length, and the only inset here that is not. Before this
+     * chart-scroll fix the scroll port never scrolled - the column's one shrinkable child
      * absorbed the whole overflow, so `scrollHeight` equalled `clientHeight`
      * and no scrollbar was laid out. Stopping that shrink is what gives the
      * port real scroll range, and a classic scrollbar takes width from the
@@ -589,14 +590,14 @@ const adminConsoleChartFold: LayoutFixture = {
   },
   recorded: [
     "At 667x582 — the gate, the shortest viewport still served the console — content-row rect top 49.469 and height 532.523, which is 0.915 of 582 to three decimals.",
-    "scroll-port rect top 49.469 and height 532.523 — the row's box exactly, top and bottom, and `portRect.bottom - rowRect.bottom` is 0. SCRUM-488 moved the 16px inside as `py-4`, so the port is no longer a `h-full` box wearing a margin inside an `overflow-hidden` parent. BEFORE it was top 65.469 for the same height, hanging 16px past the row's clip.",
+    "scroll-port rect top 49.469 and height 532.523 — the row's box exactly, top and bottom, and `portRect.bottom - rowRect.bottom` is 0. The chart-scroll fix moved the 16px inside as `py-4`, so the port is no longer a `h-full` box wearing a margin inside an `overflow-hidden` parent. BEFORE it was top 65.469 for the same height, hanging 16px past the row's clip.",
     "The port's usable content height at the gate is 501 — `clientHeight` 533 less the 32px of `py-4` — against the 500px chart the gate is derived from. `ADMIN_CONSOLE_MIN_HEIGHT_PX` solves `0.915 * H - 32 >= 500` to 581.4 and rounds to 582, and that arithmetic is now what the box does rather than what it was hoped to do: scrolled to the maximum the short chart sits at rect top 81.969 and bottom 581.969, whole, inside a row that ends at 581.992.",
     "chart (`min-h-[600px]`) rect height 600 at every viewport measured. A minimum is a floor a flex shrink cannot cross, which is what makes this the console's real tallest block.",
-    "short-chart (`h-[500px] shrink-0`) rect height 500 here and 500 at 1440x900, matching what its class string says. BEFORE, without the `shrink-0` SCRUM-488 added, it was 24 here and 151.5 at 1440x900: a shrinkable flex item in a column that always overflows renders at whatever is left, and `min-height: auto` does not stop it.",
-    "The scroll range is the other half of that change, and it is the tell that the shrink was doing real work. BEFORE, `scrollHeight` equalled `clientHeight` at 824 at 1440x900 — the port did not scroll at all, because crushing one chart was enough to make the column fit. AFTER it is 1188 against 824, so the console scrolls, and an 11px Chromium scrollbar appears that was never laid out before. That is the `insets` entry above, and it is why this fixture's measured contentWidth is 413 at 667 where SCRUM-484 recorded 424.",
+    "short-chart (`h-[500px] shrink-0`) rect height 500 here and 500 at 1440x900, matching what its class string says. BEFORE, without the `shrink-0` this fix added, it was 24 here and 151.5 at 1440x900: a shrinkable flex item in a column that always overflows renders at whatever is left, and `min-height: auto` does not stop it.",
+    "The scroll range is the other half of that change, and it is the tell that the shrink was doing real work. BEFORE, `scrollHeight` equalled `clientHeight` at 824 at 1440x900 — the port did not scroll at all, because crushing one chart was enough to make the column fit. AFTER it is 1188 against 824, so the console scrolls, and an 11px Chromium scrollbar appears that was never laid out before. That is the `insets` entry above, and it is why this fixture's measured contentWidth is 413 at 667 where its own original filing recorded 424.",
     "chart contentWidth 413, matching the predicted chain once the scrollbar is in it — 424 of CSS less Chromium's 11. Read the sidebar note on `insets` before reusing this at another width, and the scrollbar note before reading the 11 as a constant.",
     "BEFORE, at 667x375 — the viewport that now gets `AdminMobileNotice` instead: row 343.125, port 311.13 of usable window, chart 600, and the axis at rect top 679.875, some 305px below the fold.",
-    "BEFORE, and the more serious half: scrolled fully to the bottom the axis's rect bottom was 390.875 against a viewport of 375, so it was *permanently* unreachable — `my-4` plus `h-full` made the port 16px taller than the row that clips it, so its last 16px was outside the clip at any scroll position. Measured at 1440x900 too, where it was also 16. Viewport-independent; fixed in SCRUM-488, and the overhang is 0 at both viewports above.",
+    "BEFORE, and the more serious half: scrolled fully to the bottom the axis's rect bottom was 390.875 against a viewport of 375, so it was *permanently* unreachable — `my-4` plus `h-full` made the port 16px taller than the row that clips it, so its last 16px was outside the clip at any scroll position. Measured at 1440x900 too, where it was also 16. Viewport-independent; fixed by the same chart-scroll change, and the overhang is 0 at both viewports above.",
   ],
   reproduces: [
     {
@@ -628,7 +629,7 @@ const adminConsoleChartFold: LayoutFixture = {
   ],
 };
 
-/* ===================== SCRUM-485 measurement fixtures ===================== */
+/* ===================== mobile layout audit measurement fixtures ===================== */
 
 /**
  * An inline box for a stand-in element, in CSS rather than utilities.
@@ -699,15 +700,16 @@ const ACCOUNT_DATE_ROW_TERNARY =
 /**
  * `EntryLabel`'s own declarations, as an inline style.
  *
- * The labels either side of the date pickers are the criterion SCRUM-490 asks
- * about - whether narrowing the row truncates one - so a bare `<span>` would
+ * The labels either side of the date pickers are this fixture's own criterion
+ * (see `issue` below) - whether narrowing the row truncates one - so a bare
+ * `<span>` would
  * measure the wrong thing: `EntryLabel` is a styled-component at 20px bold
  * Montserrat with `display: flex`, none of which Tailwind emits.
  *
  * **Inline rather than a `<style>` block, and the class beside it is real.**
  * A fixture's markup is scanned like any other file, so inventing a utility
  * here would ship a rule to the production bundle that applies to nothing -
- * the eight-rule mistake SCRUM-485 caught in its first draft. Inline styles
+ * the eight-rule mistake an early draft of this same fixture caught. Inline styles
  * are invisible to the scanner. `!text-lg` is left as a class on purpose: it
  * is what the component actually passes, it is already in the bundle from
  * `AccountSection` itself, and its `!important` is what beats these inline
@@ -739,11 +741,11 @@ const profileContentColumnWidth: LayoutFixture = {
   summary:
     "The profile page's two 700px desktop rows, now capped, inside the content column an overflow-x-hidden grid gives them",
   source: "src/components/Profile/AccountSection.tsx:89",
-  /* SCRUM-485 built this fixture and recorded the defect; SCRUM-490 fixed it
-     and re-measured against the same chain. The live criterion is 490's, so
-     that is what the banner should name - 485's figures are kept below as the
-     before, labelled, because a fixture that only carries the after cannot
-     show that anything moved. */
+  /* This fixture was originally built to record the defect; a later fix
+     corrected it and re-measured against the same chain. The live criterion
+     is that fix's, so that is what the banner should name - the original
+     figures are kept below as the before, labelled, because a fixture that
+     only carries the after cannot show that anything moved. */
   issue: "SCRUM-490",
   viewportWidth: 667,
   viewportHeight: 375,
@@ -815,7 +817,7 @@ const profileContentColumnWidth: LayoutFixture = {
     against: ["[data-probe='scroll-column']"],
   },
   recorded: [
-    "AFTER SCRUM-490, at 667x375. Everything below is the fixed layout; the BEFORE lines at the end are SCRUM-485's, kept so the movement is readable.",
+    "AFTER the fix, at 667x375. Everything below is the fixed layout; the BEFORE lines at the end are the original defect's, kept so the movement is readable.",
     "scroll-inner rect width 402, contentWidth 338 — 15px under the predicted 353, and the prediction is the one to trust. Capping the section makes its content taller than the 343px column, so `overflow-y-auto` draws a scrollbar, and a classic scrollbar in desktop Chromium is 15px. Before the fix the content was wide rather than tall, no scrollbar appeared, and 485 measured the full 417/353. The chain did not change. The insets deliberately do not encode that 15px: a touch device uses overlay scrollbars, which take no width, so on the landscape phone this criterion is about, the column really is 353 and the fixed section is 353 with its right edge at 635. 338 is the harness's answer rather than the device's, and it is the more pessimistic of the two — which is the right way round for a check that the section fits.",
     "account-section rect left 282 width 338 — right edge 620 against a viewport of 667. Fully on screen. Was 700 wide with its right edge at 982.",
     "save-button rect width 338, entirely on screen. `overlaps scroll-column` 1, and the footprint hit test probed all 9 of its points with 0 skipped and 9 on target. Was 0.55 with 3 of 9 skipped.",
@@ -824,9 +826,9 @@ const profileContentColumnWidth: LayoutFixture = {
     "No hidden overflow left: scroll-column scrollWidth 402 = clientWidth 402, where before it was 732 against 417. Nothing depends on a gesture the column does not offer.",
     "**The labels are measured in a font this page does not load.** The harness serves no webfont, so `EntryLabel`'s Montserrat falls back to the system sans — which is narrower, and measured both labels as fitting on one line at 96.66px when the real font wraps them. The figures above were taken after injecting the Google Fonts link `_document.tsx` carries. Anything read off this fixture about text width, rather than about boxes, has to do the same.",
     "DESKTOP, at 1440x900, and this one is a change rather than a fix: account-section and date-row both narrow from 700 to 608, which is exactly the content box `max-w-2xl` leaves. The declared 700px never fitted at any viewport — it overflowed the reading column on desktop too, just into a column wide enough that nothing clipped. 608 is what role-row has always measured, so the two sections now agree.",
-    "BEFORE (SCRUM-485, the defect): scroll-inner contentWidth 353 / clientWidth 417; account-section 700 wide at left 282, 315px off-screen; save-button 700 wide with 385 on screen; end-date right edge 748.66; scroll-column scrollWidth 732 against clientWidth 417, with the document pinned at scrollLeft 0 so no gesture reached any of it.",
+    "BEFORE (the original defect): scroll-inner contentWidth 353 / clientWidth 417; account-section 700 wide at left 282, 315px off-screen; save-button 700 wide with 385 on screen; end-date right edge 748.66; scroll-column scrollWidth 732 against clientWidth 417, with the document pinned at scrollLeft 0 so no gesture reached any of it.",
     'BEFORE, and not a defect: the save-button label survived, centred in the 700px box at x 632, inside 667. Reading that as "the label is cut off" was the easy mistake.',
-    'role-row — `UserSection.tsx:93`, the item SCRUM-477 ranked High — is the counter-example and is untouched by this ticket: `max-w-full` already capped its declared 700px, and it measures 338 here for the same reason account-section now does. SCRUM-477\'s "64px overflow" was a misreading: `ProfilePicture` is not in this div, it is at `UserSection.tsx:175`.',
+    'role-row — `UserSection.tsx:93`, the item an earlier survey ranked High — is the counter-example and is untouched by this ticket: `max-w-full` already capped its declared 700px, and it measures 338 here for the same reason account-section now does. That survey\'s "64px overflow" was a misreading: `ProfilePicture` is not in this div, it is at `UserSection.tsx:175`.',
   ],
   reproduces: [
     { file: "src/pages/profile/index.tsx", className: PROFILE_GRID_CLASS },
@@ -943,35 +945,35 @@ const headerControlRow: LayoutFixture = {
     against: ["[data-probe='content-row']"],
   },
   recorded: [
-    "AFTER SCRUM-496, at 667x375, with a 44px floor under the bar. **Every control in this bar now measures 44px**, which is what the 8.5% ceiling made impossible: bar rect height 44, and logo, nav-button, nav-button-active and avatar-trigger all 44 at top 0. The trigger is 44 x 44, still square. contentWidth 587 as predicted, so the container chain is the one being described.",
-    "SCRUM-496, the tabs in detail: rect 44 at top 0 with padding 8 top and bottom against a 28px line box - 8 + 28 + 8 is exactly the bar, so the cap still binds and now binds at the floor. The active tab measures identically, which is the point of it having its own probe.",
-    "SCRUM-496, the row: content-row rect height 331 at top 44, so the bar and the row sum to exactly 375. The row paid the 12.125px the bar gained, which is the trade that ticket's decision comment weighs.",
-    "SCRUM-496, the clicks: `overlaps content-row` is still 0, and the footprint hit test probed all 9 points with 0 skipped, 9 on target, reachable and unobstructed. Sweeping elementFromPoint down each control's centre line at 0.25px, all four answer to the bar's bottom edge - the last sample inside the box is 43.5 for the logo and both tabs and 43.75 for the trigger - and from 44 down every column returns the content row's own background div. **So the visible band and the clickable band are still the same, and they are now 44px rather than 31.875px.** SCRUM-491's property is preserved rather than re-earned.",
-    "SCRUM-496, the logo: it followed the bar with no change of its own, because `Logo` declares `height: 100%` and therefore *is* the bar. Its font stays capped against the unfloored percentage, so the type is unchanged at this viewport and its box is 44px. That asymmetry is the correction SCRUM-496 had to make to its own Proposed Fix - the trigger and the tabs reconstruct the bar's height from `100dvh` and had to be given the floor explicitly.",
-    "SCRUM-496, DESKTOP CONTROL at 1440x900, and it is unchanged rather than merely acceptable: bar 76.5, nav-button and nav-button-active 60 at top 8.25 with 16px of padding, avatar-trigger 56 at top 10.25, logo 76.5 at font-size 48px, content-row 823.5 at top 76.5 - summing to exactly 900. Identical to the figures below from before the floor, because the floor only wins below 517.65px of viewport height.",
-    "SCRUM-496, RE-MEASURED after merging `origin/main` at 5eac02b, which brought in SCRUM-287 and SCRUM-494: identical at 667x375 - bar, logo, both tab probes and the trigger all 44 at top 0, row 331, sum exactly 375, bar contentWidth 587. Neither of those tickets touches this bar, and the figures confirm it rather than assuming it.",
-    "SCRUM-496, MID-RANGE at 1366x660: bar 56.09375, nav-button 56.09375, avatar-trigger 56, row 603.8984375 - identical to SCRUM-491's figures at this viewport. Also measured here with inline styles, which the Tailwind scanner cannot see: a box at the old `91.5%` and a box at the row's new `calc(100% - max(8.5%, 44px))` both come back 603.8984375, byte for byte. **So the 0.0078125px by which the bar and the row fail to sum to 660 is Chromium quantising 8.5% to a 1/64px LayoutUnit, and it predates this change rather than being caused by it.** At 375 and at 900 the sum is exact.",
-    "SCRUM-496, THE BAND BOUNDARY, which is where the floor hands back over to the percentage. At 800x517 the bar is 44 (the floor), the row 473, the sum exactly 517, and all controls 44. At 800x518 the bar is 44.0234375 - the percentage, matching a bare `8.5%` box measured beside it - the row 473.96875, and that row figure is identical to the old `91.5%` spelling. So the crossover is at the derived 517.647px and above it this change is a no-op.",
-    "SCRUM-496, `/sign-in`, reproducing that page's real chain - a full-height centring flex, a `w-fit` auto-height flex column card, `HeaderDiv`, `SigninLogo` at its desktop `height: 111px`. The bar is 111px with the logo's box ending exactly on its bottom edge, an overflow of 0, and it is 111px **unchanged under the shipped `min-height` and also under the `height: max(8.5%, 44px)` spelling that was rejected**. The rejection's stated reason was wrong and is recorded as such: an empty child of an auto-height parent measures 0px for `8.5%`, for `max(8.5%, 44px)` and for `calc(100% - 10px)`, but 44px for a plain `44px` - so Chromium treats a math function whose percentage cannot resolve as `auto` for the whole function rather than substituting zero. Neither spelling touches that page.",
-    "BELOW, from SCRUM-491 and SCRUM-485, kept so the movement is readable. Everything from here to the BEFORE block was measured against the 8.5% bar with no floor.",
-    "bar rect height 31.875, logo 31.875 at top 0 — SCRUM-484's fix still holding, and untouched by this ticket.",
+    "AFTER the fix, at 667x375, with a 44px floor under the bar. **Every control in this bar now measures 44px**, which is what the 8.5% ceiling made impossible: bar rect height 44, and logo, nav-button, nav-button-active and avatar-trigger all 44 at top 0. The trigger is 44 x 44, still square. contentWidth 587 as predicted, so the container chain is the one being described.",
+    "AFTER, the tabs in detail: rect 44 at top 0 with padding 8 top and bottom against a 28px line box - 8 + 28 + 8 is exactly the bar, so the cap still binds and now binds at the floor. The active tab measures identically, which is the point of it having its own probe.",
+    "AFTER, the row: content-row rect height 331 at top 44, so the bar and the row sum to exactly 375. The row paid the 12.125px the bar gained, which is the trade this fix's decision comment weighs.",
+    "AFTER, the clicks: `overlaps content-row` is still 0, and the footprint hit test probed all 9 points with 0 skipped, 9 on target, reachable and unobstructed. Sweeping elementFromPoint down each control's centre line at 0.25px, all four answer to the bar's bottom edge - the last sample inside the box is 43.5 for the logo and both tabs and 43.75 for the trigger - and from 44 down every column returns the content row's own background div. **So the visible band and the clickable band are still the same, and they are now 44px rather than 31.875px.** The touch-target property established by the earlier measurement below is preserved rather than re-earned.",
+    "AFTER, the logo: it followed the bar with no change of its own, because `Logo` declares `height: 100%` and therefore *is* the bar. Its font stays capped against the unfloored percentage, so the type is unchanged at this viewport and its box is 44px. That asymmetry is the correction this fix had to make to its own Proposed Fix - the trigger and the tabs reconstruct the bar's height from `100dvh` and had to be given the floor explicitly.",
+    "AFTER, DESKTOP CONTROL at 1440x900, and it is unchanged rather than merely acceptable: bar 76.5, nav-button and nav-button-active 60 at top 8.25 with 16px of padding, avatar-trigger 56 at top 10.25, logo 76.5 at font-size 48px, content-row 823.5 at top 76.5 - summing to exactly 900. Identical to the figures below from before the floor, because the floor only wins below 517.65px of viewport height.",
+    "AFTER, RE-MEASURED after merging `origin/main` at 5eac02b, which brought in an unrelated schema change and the send-bar fix: identical at 667x375 - bar, logo, both tab probes and the trigger all 44 at top 0, row 331, sum exactly 375, bar contentWidth 587. Neither of those changes touches this bar, and the figures confirm it rather than assuming it.",
+    "AFTER, MID-RANGE at 1366x660: bar 56.09375, nav-button 56.09375, avatar-trigger 56, row 603.8984375 - identical to the earlier touch-target measurement's figures at this viewport. Also measured here with inline styles, which the Tailwind scanner cannot see: a box at the old `91.5%` and a box at the row's new `calc(100% - max(8.5%, 44px))` both come back 603.8984375, byte for byte. **So the 0.0078125px by which the bar and the row fail to sum to 660 is Chromium quantising 8.5% to a 1/64px LayoutUnit, and it predates this change rather than being caused by it.** At 375 and at 900 the sum is exact.",
+    "AFTER, THE BAND BOUNDARY, which is where the floor hands back over to the percentage. At 800x517 the bar is 44 (the floor), the row 473, the sum exactly 517, and all controls 44. At 800x518 the bar is 44.0234375 - the percentage, matching a bare `8.5%` box measured beside it - the row 473.96875, and that row figure is identical to the old `91.5%` spelling. So the crossover is at the derived 517.647px and above it this change is a no-op.",
+    "AFTER, `/sign-in`, reproducing that page's real chain - a full-height centring flex, a `w-fit` auto-height flex column card, `HeaderDiv`, `SigninLogo` at its desktop `height: 111px`. The bar is 111px with the logo's box ending exactly on its bottom edge, an overflow of 0, and it is 111px **unchanged under the shipped `min-height` and also under the `height: max(8.5%, 44px)` spelling that was rejected**. The rejection's stated reason was wrong and is recorded as such: an empty child of an auto-height parent measures 0px for `8.5%`, for `max(8.5%, 44px)` and for `calc(100% - 10px)`, but 44px for a plain `44px` - so Chromium treats a math function whose percentage cannot resolve as `auto` for the whole function rather than substituting zero. Neither spelling touches that page.",
+    "BELOW, from the earlier touch-target measurement and the original mobile audit, kept so the movement is readable. Everything from here to the BEFORE block was measured against the 8.5% bar with no floor.",
+    "bar rect height 31.875, logo 31.875 at top 0 — an earlier fix's logo change still holding, and untouched by this ticket.",
     "nav-button rect height 31.875 at top 0, padding 1.9375 top and bottom. Was 60 at top -14.0625. The cap is on the padding, so 2 * 1.9375 + 28 is exactly the bar.",
     "nav-button-active — the underlined state one of the four tabs is always in, added as its own probe because `Header.tsx` composes it as a second class string that could lose the cap on its own — measures identically: 31.875 at top 0, padding 1.9375.",
     "avatar-trigger rect 31.875 x 31.875 at top 0, still square. Was 56 x 56 at top -12.0625, hanging 12.06px above the screen and 12.06px into the row.",
     "`overlaps content-row` is 0, where it was 0.215. The footprint hit test probed all 9 of its points with 0 skipped as outside the viewport, 9 on target, reachable and unobstructed — before the fix it skipped 3 of 9 and found 6.",
     "**The clicks are back where the paint is, and that is the criterion this ticket turns on.** Sweeping elementFromPoint down each control's centre line at 0.25px: the tab answers from y 0 to y 31.25 and the content row's background from y 31.5 on; the avatar the same. At y 38 — below the bar, inside the row — both now return the row's own background div, where the avatar used to return its own span. Nothing in the bar hit-tests below the bar.",
     "Before the fix the tab painted a 45.94px visible band of which 31.875px responded, and the avatar's full 43.94px band responded, 12.06px of it inside the content row. After, every control's visible band and its clickable band are the same 31.875px.",
-    "**31.875px is below the 44px Apple's HIG and WCAG 2.5.5 ask of a touch control, and no child of this bar could do better.** The bar was 8.5% of a 375px viewport; a 44px target needed the bar's own height changed, which moves the content row on `/`, `/profile` and `/admin`. That was out of SCRUM-491 and was filed as SCRUM-496, **which is done and is the AFTER block at the top of this list** - the floor is in and every control measures 44. What SCRUM-491 fixed was the mismatch: the target no longer claimed to be 45.94px, and it no longer took clicks meant for the page.",
+    "**31.875px is below the 44px Apple's HIG and WCAG 2.5.5 ask of a touch control, and no child of this bar could do better.** The bar was 8.5% of a 375px viewport; a 44px target needed the bar's own height changed, which moves the content row on `/`, `/profile` and `/admin`. That was out of scope for this earlier measurement and was filed separately, **which is done and is the AFTER block at the top of this list** - the floor is in and every control measures 44. What this earlier measurement fixed was the mismatch: the target no longer claimed to be 45.94px, and it no longer took clicks meant for the page.",
     "**The label does not move at all.** Its content box top is 1.9375 both before and after — a 60px box centred in a 31.875px bar puts its 28px line exactly where a 31.875px box with 1.9375px of padding does. The tabs carry no background or border, so `rounded-xl` paints nothing either; at this viewport the whole change is in what responds to a tap. The avatar is the visible half: a 31.875px circle where a 56px one used to overhang.",
     "The probe reports nav-button contentHeight 28.125, which is derived from the rounded clientHeight of 32 rather than from the rect. The line box is 28: 31.875 less 2 * 1.9375.",
     "One thing the fix does not close, measured rather than assumed: `underline-offset-8` puts the active tab's rule 8px under a baseline at 23.4375, so about 0.56px of that 1px decoration paints below the bar's bottom edge. It is unchanged by this ticket — the line box did not move — it is decoration and does not hit-test, and closing it would mean capping `line-height`, which moves the label at every viewport. **That baseline is the one figure here that depends on the missing webfont** (ascent 19, descent 4, measured through canvas TextMetrics on the system fallback this harness serves). The box figures do not: `text-xl`'s line-height is an absolute 1.75rem, so the 28px holds whatever font arrives.",
-    "DESKTOP CONTROL at 1440x900, and it is unchanged rather than merely acceptable: bar 76.5, nav-button 60 at top 8.25 with 16px of padding, nav-button-active 60, avatar-trigger 56 at top 10.25, overflow 0, clickable bands the full 60 and 56. Identical to the figures SCRUM-485 took here before the fix, which is what `min()` against the design size is for.",
-    "MID-RANGE at 1366x660, the viewport SCRUM-485 used to argue this was mild: the bar is 56.094 and the tab now takes exactly that, padding 14.05, overhang 0 — it used to overhang 1.953px each way. The trigger's 56px still fits inside by 0.047px, so its cap has not engaged yet. The two thresholds are 706px of viewport height for the tab and 659px for the trigger, and above them nothing changes.",
+    "DESKTOP CONTROL at 1440x900, and it is unchanged rather than merely acceptable: bar 76.5, nav-button 60 at top 8.25 with 16px of padding, nav-button-active 60, avatar-trigger 56 at top 10.25, overflow 0, clickable bands the full 60 and 56. Identical to the figures the original mobile audit took here before the fix, which is what `min()` against the design size is for.",
+    "MID-RANGE at 1366x660, the viewport the original mobile audit used to argue this was mild: the bar is 56.094 and the tab now takes exactly that, padding 14.05, overhang 0 — it used to overhang 1.953px each way. The trigger's 56px still fits inside by 0.047px, so its cap has not engaged yet. The two thresholds are 706px of viewport height for the tab and 659px for the trigger, and above them nothing changes.",
     "bar contentWidth 587, matching the predicted chain; the 80px against clientWidth 667 is the bar's own desktop padding. Unchanged — this ticket touches no horizontal figure, and `px-4` is the horizontal half of the old `p-4` at the same 16px.",
     "A note for the next selector-set diff on this fixture: `h-14`, `w-14` and `p-4` are all still in the compiled stylesheet afterwards, because the comments explaining their removal name them and Tailwind v4 scans prose. Their absence from the output was never available as a check — see `tailwind.config.js`.",
-    "BEFORE (SCRUM-485, the defect): bar 31.875 with logo 31.875 at top 0; avatar-trigger 56 at top -12.0625 with `overlaps content-row` 0.215 and 3 of 9 footprint points skipped; nav-button 60 at top -14.0625, being `rounded-xl p-4 text-xl` = 16 + 28 + 16.",
+    "BEFORE (the original defect): bar 31.875 with logo 31.875 at top 0; avatar-trigger 56 at top -12.0625 with `overlaps content-row` 0.215 and 3 of 9 footprint points skipped; nav-button 60 at top -14.0625, being `rounded-xl p-4 text-xl` = 16 + 28 + 16.",
     "BEFORE, and this is the mechanism the fix had to respect: the two differed in whether the overlap was clickable, for a flex-item reason rather than a z-index one. At y 38 elementFromPoint returned the avatar's own span but the row's background div for the tab. `DropDownMenu`'s wrapper carries a z-index and is a flex item, and a flex item's z-index creates a stacking context even at `position: static`; the tab group's wrapper has none, so the positioned row painted and hit-tested above it.",
-    "BEFORE, at 1440x900: bar 76.5, both fit with room to spare, overflow 0 — so this degraded continuously as the window shortened and was only worth acting on at the bottom of the range. SCRUM-477's Closeout recorded the same shape for the logo, which overflowed by 17.25px each way even at 1440x900; this was the milder version of that.",
+    "BEFORE, at 1440x900: bar 76.5, both fit with room to spare, overflow 0 — so this degraded continuously as the window shortened and was only worth acting on at the bottom of the range. An earlier survey's Closeout recorded the same shape for the logo, which overflowed by 17.25px each way even at 1440x900; this was the milder version of that.",
   ],
   reproduces: [
     {
@@ -1000,7 +1002,8 @@ const headerControlRow: LayoutFixture = {
 
 /**
  * The compact values are the base and `message-panel-tall:` restores the
- * full-size ones, so this one string carries both sides of SCRUM-489's fix and
+ * full-size ones, so this one string carries both sides of this fixture's own
+ * fix and
  * the fixture measures whichever the viewport selects. Serve it at 667x375 for
  * the compact chrome and at 1440x900 for the full-size one.
  */
@@ -1087,7 +1090,7 @@ const messagePanelChrome: LayoutFixture = {
   viewportHeight: 375,
   /*
     `px-2` and not `p-8`: the chain is stated for the viewport the fixture
-    records, and at 375px tall the header takes the compact padding SCRUM-489
+    records, and at 375px tall the header takes the compact padding this fix
     added. Serving this fixture at 1440x900 therefore prints a prediction that
     is 48px short of what it measures, which is the harness working as
     intended - the banner says the height is not the recorded one.
@@ -1179,25 +1182,25 @@ const messagePanelChrome: LayoutFixture = {
     against: ["[data-probe='content-row']"],
   },
   recorded: [
-    "AFTER SCRUM-496, which put a 44px floor under the header bar and so took 12.125px off this row at a landscape phone. Re-measured at 667x375 on top of SCRUM-494: row 331 where it was 343.125, content-area 213 where it was 225.13, and the conversation port's content height **108 where SCRUM-494 left 120**. **Every criterion those two tickets set still holds** - `content-area` overflow is 0, the send bar's bottom is exactly 375.00, and scrolling the port to the bottom leaves the newest 64px bubble wholly inside it. SCRUM-494 more than paid for this: the same figure was 83 before it and would have been 71 had this ticket landed first.",
-    "SCRUM-496, THE RE-DERIVED GATE, and this is the figure that moved. `MESSAGE_PANEL_MIN_HEIGHT_PX` went 489 to 491, because this threshold sits inside the floor's band and its row is now `H - 44` rather than `0.915 x H`. SCRUM-494 does not move it again - the five numerator terms still sum to 447, since 97 is the send bar's full-size figure and that ticket changed the compact one. Measured at 800x491: the full-size chrome applies, the row is **exactly 447** and the port's content height **exactly 120**, which is `MESSAGE_PANEL_DATED_MESSAGE_PX` - so the inequality is as tight at the new gate as SCRUM-489 found it at the old one. At 800x490 the compact chrome takes over, header 65 and row 446. The boundary is a boundary.",
-    "AFTER SCRUM-494, which finished the send bar off; the header and bubble figures are still SCRUM-489's and were re-measured unchanged. The `BEFORE` lines are kept because this fixture's whole purpose is the comparison, and because two of them are the reason the threshold is where it is. Where a line carries two of them, `BEFORE 489` is the original defect and `BEFORE 494` is what SCRUM-489 left behind. **Every row figure from here down predates SCRUM-496's floor** and describes a 343.125px row at 667x375; read them as those tickets', not as current.",
+    "AFTER the header-floor fix, which put a 44px floor under the header bar and so took 12.125px off this row at a landscape phone. Re-measured at 667x375 on top of the send-bar fix: row 331 where it was 343.125, content-area 213 where it was 225.13, and the conversation port's content height **108 where the send-bar fix left 120**. **Every criterion those two fixes set still holds** - `content-area` overflow is 0, the send bar's bottom is exactly 375.00, and scrolling the port to the bottom leaves the newest 64px bubble wholly inside it. The send-bar fix more than paid for this: the same figure was 83 before it and would have been 71 had this fix landed first.",
+    "AFTER, THE RE-DERIVED GATE, and this is the figure that moved. `MESSAGE_PANEL_MIN_HEIGHT_PX` went 489 to 491, because this threshold sits inside the floor's band and its row is now `H - 44` rather than `0.915 x H`. The send-bar fix does not move it again - the five numerator terms still sum to 447, since 97 is the send bar's full-size figure and that fix changed the compact one. Measured at 800x491: the full-size chrome applies, the row is **exactly 447** and the port's content height **exactly 120**, which is `MESSAGE_PANEL_DATED_MESSAGE_PX` - so the inequality is as tight at the new gate as the original fix found it at the old one. At 800x490 the compact chrome takes over, header 65 and row 446. The boundary is a boundary.",
+    "AFTER the send-bar fix, which finished the send bar off; the header and bubble figures are still the original fix's and were re-measured unchanged. The `BEFORE` lines are kept because this fixture's whole purpose is the comparison, and because two of them are the reason the threshold is where it is. Where a line carries two of them, `BEFORE ORIGINAL` is the original defect and `BEFORE SEND-BAR` is what the original fix left behind. **Every row figure from here down predates the header-floor fix** and describes a 343.125px row at 667x375; read them as those earlier states', not as current.",
     "message-header rect height 65 — `px-2 py-1` around an `h-14` avatar, plus the `border-b`. BEFORE: 145, from `p-8` around `h-20`. The height is set by the close control rather than the avatar below 56px, which is why the avatar stops at `h-14` and the padding does the rest.",
     "The chrome was the finding, not the header alone: header 65 + tab-strip 53 = 118 of a 343.125px row, leaving content-area 225.13. BEFORE: 198 of chrome and 145.13 of content-area.",
-    "message-content rect height 152.13, clientHeight 152, `padding: 16px` — **contentHeight 120**. BEFORE 494: rect 115.13 and contentHeight 83. BEFORE 489: rect 32, clientHeight 32, **contentHeight 0** with a scrollHeight of 220 behind it. That is the defect it started as: the conversation was not cramped at 667x375, it was invisible.",
-    "The newest message is readable, which is the criterion and not a proxy for it. Scroll the port to the bottom the way `MessageContent` does and the bubble is 64px tall with **all 64 inside the port**, and **32.13px of slack** under it. BEFORE 494: the same bubble was whole with 3px to spare, which met the criterion and left nothing over — 83 of content height against a 64px bubble plus the block's 16px `mb-4`. The 37px the bar gave back is what turned meeting the criterion into clearing it.",
-    "send-bar rect height **73**, `padding: 12px 16px`, bottom at **375.00** against a viewport of 375 — nothing past the edge. BEFORE 494: 110, with `padding: 24px` on all four sides. BEFORE 489: 131.5 with its bottom at 393.38, so the last 18.38px sat under the screen with `#__next` at `100dvh` and no page scroll to reach it. Of the 37px between 110 and 73, 24 is the vertical padding the short screen cuts and 13 is the composer row no longer holding a wrapped hint.",
+    "message-content rect height 152.13, clientHeight 152, `padding: 16px` — **contentHeight 120**. BEFORE SEND-BAR: rect 115.13 and contentHeight 83. BEFORE ORIGINAL: rect 32, clientHeight 32, **contentHeight 0** with a scrollHeight of 220 behind it. That is the defect it started as: the conversation was not cramped at 667x375, it was invisible.",
+    "The newest message is readable, which is the criterion and not a proxy for it. Scroll the port to the bottom the way `MessageContent` does and the bubble is 64px tall with **all 64 inside the port**, and **32.13px of slack** under it. BEFORE SEND-BAR: the same bubble was whole with 3px to spare, which met the criterion and left nothing over — 83 of content height against a 64px bubble plus the block's 16px `mb-4`. The 37px the bar gave back is what turned meeting the criterion into clearing it.",
+    "send-bar rect height **73**, `padding: 12px 16px`, bottom at **375.00** against a viewport of 375 — nothing past the edge. BEFORE SEND-BAR: 110, with `padding: 24px` on all four sides. BEFORE ORIGINAL: 131.5 with its bottom at 393.38, so the last 18.38px sat under the screen with `#__next` at `100dvh` and no page scroll to reach it. Of the 37px between 110 and 73, 24 is the vertical padding the short screen cuts and 13 is the composer row no longer holding a wrapped hint.",
     "content-area scrollHeight equals its clientHeight — **overflow 0**. BEFORE: 179 against 145, the same 34px of overflow seen from the other side. The mechanism was that content-area is `flex h-0 flex-1 flex-col`, and a flex item will not shrink below its min-content height, so the 131.5px send bar took the space and message-content was left with its own padding.",
     "The bubble is 153x64. BEFORE: 90x112 — the half-column width cap, then applied on width alone, held it to 110px of a 220px column, so a 26-character message wrapped to four lines. The cap is a readability rule at a wide panel and a height multiplier at a narrow one, which is why it moved to the same screen as the rest of the chrome. (Both caps are named here as widths rather than as their utilities: this file is scanned, and a selector-set diff caught the `BEFORE` half of this very line keeping the retired rule alive in the shipped bundle.)",
-    "The composer is **174x37.5 — one line** of `globals.css`'s `.placeholder:empty:before` hint. BEFORE 494: 158x59 and two lines. BEFORE 489: 78x80.5 and three. **The figure that settled it: the hint is 144.77px of text in this font and wants a 160.77px composer, so at 158 it was 2.77px short of one line.** SCRUM-489 estimated 200px and concluded no inset could find it in a 267px panel, which is why it left the wrap in place; measuring the string is what showed the container's own 8px a side was already enough. Anything read off this line is font-dependent and this harness serves no webfont — the trap `profile-content-column-width` records — but here the fallback is faithful rather than optimistic: the composer inherits no `font-family`, from Tailwind's preflight or from anything in `globals.css`, so the app renders that hint in the same system sans this page does. Checked on the element rather than reasoned about.",
+    "The composer is **174x37.5 — one line** of `globals.css`'s `.placeholder:empty:before` hint. BEFORE SEND-BAR: 158x59 and two lines. BEFORE ORIGINAL: 78x80.5 and three. **The figure that settled it: the hint is 144.77px of text in this font and wants a 160.77px composer, so at 158 it was 2.77px short of one line.** The original fix estimated 200px and concluded no inset could find it in a 267px panel, which is why it left the wrap in place; measuring the string is what showed the container's own 8px a side was already enough. Anything read off this line is font-dependent and this harness serves no webfont — the trap `profile-content-column-width` records — but here the fallback is faithful rather than optimistic: the composer inherits no `font-family`, from Tailwind's preflight or from anything in `globals.css`, so the app renders that hint in the same system sans this page does. Checked on the element rather than reasoned about.",
     "send-button rect 58x46, fully inside the composer row and reachable — unchanged, and it was never the problem. An earlier draft of this fixture reported it clipped; that was the stand-in composer's fault, see SEND_BAR_COMPOSER_CLASS.",
     "message-header contentWidth 251, matching the predicted chain — 667 less the 400px sidebar less its own `px-2`. Note the chain is stated for *this* viewport, so serving the fixture at a tall one prints a prediction 48px short of what it measures.",
-    "DESKTOP CONTROL at 1440x900, re-measured on SCRUM-494 and unchanged in every term: header 145 with `padding: 32px`, avatar 80, tab-strip 53, content-area 625.5, message-content contentHeight **497**, send-bar **97** with `padding: 24px` on all four sides and nothing past the viewport, composer 851x37.5 on one line, composer row margin `0px 40px`, bubble max-width `50%` at 44px tall. This is what `message-panel-tall:` is protecting, and the send bar is the term to watch: 97 is the figure `MESSAGE_PANEL_MIN_HEIGHT_PX` is derived from, so a vertical inset that leaked out of the short screen would move the threshold that selects it.",
+    "DESKTOP CONTROL at 1440x900, re-measured after the send-bar fix and unchanged in every term: header 145 with `padding: 32px`, avatar 80, tab-strip 53, content-area 625.5, message-content contentHeight **497**, send-bar **97** with `padding: 24px` on all four sides and nothing past the viewport, composer 851x37.5 on one line, composer row margin `0px 40px`, bubble max-width `50%` at 44px tall. This is what `message-panel-tall:` is protecting, and the send bar is the term to watch: 97 is the figure `MESSAGE_PANEL_MIN_HEIGHT_PX` is derived from, so a vertical inset that leaked out of the short screen would move the threshold that selects it.",
     "THE BOUNDARY, both sides of it, at 667 wide: 489 gives the full-size chrome — header 145, send-bar 131.5 with `padding: 24px`, margin `0px 40px`, cap `50%`, contentHeight 86 — and 488 gives the compact one — header 65, send-bar 73 with `padding: 12px 16px`, margin `0px`, cap `85%`, contentHeight 224. Neither overflows. The two screens are exact complements, so this pair is also the whole of the evidence that no viewport falls between them: 489 matches the tall screen and not the short one, 488 the reverse.",
-    "PORTRAIT CONTROL at 375x667, which is the viewport SCRUM-494 had to leave alone. **The surrounding layout here is not representative — this fixture hard-codes the 400px desktop sidebar, so the panel is crushed and every conversation figure at this width is an artefact.** What is measurable, and is the entire claim, is which queries the bar's own insets resolve through: neither screen matches, because both carry a 640px minimum width, and the bar keeps the base `padding: 24px 16px` it had before this ticket. A phone in portrait is unchanged by construction rather than by inspection.",
+    "PORTRAIT CONTROL at 375x667, which is the viewport the send-bar fix had to leave alone. **The surrounding layout here is not representative — this fixture hard-codes the 400px desktop sidebar, so the panel is crushed and every conversation figure at this width is an artefact.** What is measurable, and is the entire claim, is which queries the bar's own insets resolve through: neither screen matches, because both carry a 640px minimum width, and the bar keeps the base `padding: 24px 16px` it had before this fix. A phone in portrait is unchanged by construction rather than by inspection.",
     "THE DERIVATION, checked where it was derived: at 1440x489 the conversation measures exactly 120px of content height against a dated message of exactly 120. `MESSAGE_PANEL_MIN_HEIGHT_PX` is tight at the threshold rather than approximately right, and the 86 above is the same threshold seen at a panel too narrow for a one-line composer.",
     "WEBFONT CONTROL, which this fixture needs because two of its figures are about wrapped text. `buildFixturePage` serves no font link, and the app gets Lato and Montserrat from `_document.tsx` - so a text measurement here can resolve in the narrower system fallback and report that something fits when it does not. It does not happen to bite here, and that was checked rather than assumed: the bubble and the composer carry no font utility and nothing sets one on `body`, so both resolve to Tailwind's preflight sans in the app exactly as they do here. Injecting both links and awaiting `document.fonts.ready` - with `document.fonts.check` confirming each arrived - re-measured every figure above identically, bubble 153x64 and composer 59 included. The header's name span is the one Montserrat element, and the header's height is set by the 56px close control, so the name would have to wrap to three lines to reach it.",
-    "BEFORE, retained from SCRUM-485: contentHeight reached 0 at about 395px of viewport height, with 5px measured at 667x400. Below ~395 the send bar also left the screen. That band is landscape phones and nothing else, which is what kept this item's blast radius honest.",
+    "BEFORE, retained from the original mobile audit: contentHeight reached 0 at about 395px of viewport height, with 5px measured at 667x400. Below ~395 the send bar also left the screen. That band is landscape phones and nothing else, which is what kept this item's blast radius honest.",
   ],
   reproduces: [
     {
@@ -1323,7 +1326,7 @@ const mapOverlayAnchors: LayoutFixture = {
   },
   recorded: [
     "The map is 267x343.13 at 667x375 — the `w-[25rem]` sidebar takes 400 of the 667px width, so the map is 40% of the screen. Both items below are about overlays on that box.",
-    'legend rect 195.69x168, top 143.13 within the map: 48.96% of its height and 73% of its width, so roughly a third of the map\'s area. SCRUM-477 said "roughly 45%" of the height and was close.',
+    'legend rect 195.69x168, top 143.13 within the map: 48.96% of its height and 73% of its width, so roughly a third of the map\'s area. An earlier survey said "roughly 45%" of the height and was close.',
     "recentre rect 32x32, top 161.13 within the map — its centre is 51.62% of the way down, which is the item as described: `bottom-[150px]` lands it mid-map.",
     "Both are nonetheless cosmetic, and the hit test is why. recentre is reachable and unobstructed, and `overlaps` against both the legend and Mapbox's own control is 0 — the 150px offset still clears the `bottom-right` NavigationControl by 53px at this height, because the offset and the control it avoids are measured from the same edge.",
     "So nothing here is unreachable, nothing is covered and nothing is off-screen. The map items are the clearest case in phase 4 for leaving the layout alone: the cost is an ugly anchor, and the risk of re-anchoring is a desktop regression on the platform where these controls work today.",
@@ -1359,7 +1362,7 @@ const UNSAVED_MODAL_PANEL_CLASS =
 const centredDialogPanels: LayoutFixture = {
   name: "centred-dialog-panels",
   summary:
-    "The three centred panels SCRUM-485 inherited, and whether a percentage-height panel can overflow the box centring it",
+    "The three centred panels the original mobile audit inherited, and whether a percentage-height panel can overflow the box centring it",
   source: "src/components/CompliancePortal.tsx:55",
   issue: "SCRUM-485",
   viewportWidth: 667,
@@ -1409,15 +1412,15 @@ const centredDialogPanels: LayoutFixture = {
   },
   recorded: [
     "compliance-panel and group-panel both measure 423.33x228.66 at top 73.16, bottom 301.83 — **fully inside the viewport**, and that is this fixture's main result.",
-    "It falsifies a specific claim: SCRUM-485's opening comment listed all three of these as centred boxes needing `justify-center-safe` alongside a cap. Two of them cannot overflow at all. `h-4/6` is a percentage of the centring container, so the panel is always two thirds of the space available and there is no overflow for safe alignment to rescue. The pairing SCRUM-482 measured is real; it does not apply here.",
+    "It falsifies a specific claim: the original mobile audit's opening comment listed all three of these as centred boxes needing `justify-center-safe` alongside a cap. Two of them cannot overflow at all. `h-4/6` is a percentage of the centring container, so the panel is always two thirds of the space available and there is no overflow for safe alignment to rescue. The pairing an earlier fix measured is real; it does not apply here.",
     "compliance-scroll clientHeight 53 against scrollHeight 192, and compliance-agree fully inside the viewport. So the terms are readable 53px at a time and the only control is reachable: cramped exactly as the ticket describes, with nothing lost.",
-    "**The three unsaved-* figures below are SCRUM-492's, taken after it fixed this panel.** SCRUM-485 measured it overflowing — rect height 376 at top -0.5, bottom 375.5 against a viewport of 375, half a pixel each way and growing on any shorter viewport. It now measures 352x276 at top 49.5, bottom 325.5: fully inside, with 49.5px of clearance top and bottom.",
-    "unsaved-buttons is 40px tall with contentWidth 304, so neither label wraps. SCRUM-485 had it at 88px in a 174px box.",
+    "**The three unsaved-* figures below are from the fix that corrected this panel, taken after it landed.** The original mobile audit measured it overflowing — rect height 376 at top -0.5, bottom 375.5 against a viewport of 375, half a pixel each way and growing on any shorter viewport. It now measures 352x276 at top 49.5, bottom 325.5: fully inside, with 49.5px of clearance top and bottom.",
+    "unsaved-buttons is 40px tall with contentWidth 304, so neither label wraps. The original mobile audit had it at 88px in a 174px box.",
     "unsaved-save is 176.02x40, fully inside the viewport. It was 101.32x88 — the same button, squeezed to 101px and wrapping its label over three lines.",
-    "The mechanism was never the one SCRUM-477 recorded. The survey blamed `py-16` and put the clipping threshold at ~280px; the padding is 128px and the panel was 376px, so something else supplied the other 248. It was the width: `w-1/3` is 222.33px at this viewport, and the panel now carries a floor of `min-w-[min(22rem,100%)]` — 352px, which is the button row's natural single-line width plus the panel's own `px-6`.",
-    "**And the floor is not the arithmetic SCRUM-492's description gives**, which is the one figure here most likely to be re-derived wrongly. That ticket took the wrapped row's scrollWidth of 196, added the 48px of `px-6`, and proposed 244. scrollWidth is the overflow of a row that has *already* wrapped, not the width it needs in order not to; the row's natural single-line width is 293.34 (Continue 101.32 + gap 16 + Save and Continue 176.02), so a 244px panel still wraps both labels. 293.34 + 48 is where 352 comes from.",
+    "The mechanism was never the one an earlier survey recorded. That survey blamed `py-16` and put the clipping threshold at ~280px; the padding is 128px and the panel was 376px, so something else supplied the other 248. It was the width: `w-1/3` is 222.33px at this viewport, and the panel now carries a floor of `min-w-[min(22rem,100%)]` — 352px, which is the button row's natural single-line width plus the panel's own `px-6`.",
+    "**And the floor is not the arithmetic the panel fix's description gives**, which is the one figure here most likely to be re-derived wrongly. That fix took the wrapped row's scrollWidth of 196, added the 48px of `px-6`, and proposed 244. scrollWidth is the overflow of a row that has *already* wrapped, not the width it needs in order not to; the row's natural single-line width is 293.34 (Continue 101.32 + gap 16 + Save and Continue 176.02), so a 244px panel still wraps both labels. 293.34 + 48 is where 352 comes from.",
     "The `min()` in that floor is load-bearing and was also measured. An unconditional 22rem floor puts the panel 16px past each edge of a 320px-wide viewport, symmetrically and so unreachably, and a minimum width beats a maximum one in CSS — a cap alongside it is inert. Capped inside the floor, the panel measures exactly 320 wide at that viewport and 352 from 375 upwards.",
-    "This panel was the one centred box in this fixture that genuinely overflowed, and the fix means it no longer does at any viewport at or above 276px tall — so the `justify-center-safe` pairing SCRUM-477's Closeout describes is, in the end, not needed here either. Three for three: nothing in this fixture needs it.",
+    "This panel was the one centred box in this fixture that genuinely overflowed, and the fix means it no longer does at any viewport at or above 276px tall — so the `justify-center-safe` pairing that earlier survey's Closeout describes is, in the end, not needed here either. Three for three: nothing in this fixture needs it.",
     "compliance-centring contentWidth 635, matching the predicted chain: 667 less its own `p-4`.",
   ],
   reproduces: [
@@ -1441,16 +1444,16 @@ const centredDialogPanels: LayoutFixture = {
 };
 
 /**
- * The explore page's mobile content row, after SCRUM-503 removed the
+ * The explore page's mobile content row, after this fix removed the
  * "use desktop instead" banner it used to be pushed down by.
  *
  * `h-mobile-row` used to be `calc(100% - 1.5rem - MOBILE_NAV_SPACE)`, and the
  * row carried a matching `mt-6`. Both are gone: the token is now
  * `calc(100% - MOBILE_NAV_SPACE)` and the row has no top margin. This fixture
- * is what SCRUM-503's acceptance criterion asks for directly - the row starts
+ * is what this fix's acceptance criterion asks for directly - the row starts
  * at y=0 and its height is the viewport less `MOBILE_NAV_SPACE` - measured
- * rather than read off the class names, per that ticket's own note that a
- * class no longer appearing in the output is not a valid check (SCRUM-419).
+ * rather than read off the class names, per an earlier lesson that a
+ * class no longer appearing in the output is not a valid check.
  *
  * The wrapper (`m-0 h-full w-full`) is included because the row's `100%` in
  * `h-mobile-row` resolves against *its* height, not `#__next`'s directly - so
@@ -1479,7 +1482,7 @@ const mobileContentRowHeight: LayoutFixture = {
   },
   recorded: [
     "Measured in Chromium at 375x667: content-row rect top 0, height 607, contentWidth 375 (matching the predicted chain, since insets is empty). 607 is the viewport's 667 less MOBILE_NAV_SPACE's 60px, with no banner allowance and no top margin left to account for. env(safe-area-inset-bottom) resolves to its 0px fallback in this headless browser, so MOBILE_NAV_SPACE is exactly 60px here.",
-    "SCRUM-503's own ticket evidence measured the pre-removal chain at this same viewport: banner occupying y 0→24 and the row starting at y 24. This fixture's top 0 is the criterion that comparison was checking for.",
+    "This fix's own ticket evidence measured the pre-removal chain at this same viewport: banner occupying y 0→24 and the row starting at y 24. This fixture's top 0 is the criterion that comparison was checking for.",
   ],
   reproduces: [
     { file: "src/pages/index.tsx", className: "m-0 h-full w-full" },
@@ -1492,7 +1495,7 @@ const mobileContentRowHeight: LayoutFixture = {
 };
 
 /**
- * SCRUM-528's fixture: how much of the explore map the mobile explore sheet
+ * This fixture: how much of the explore map the mobile explore sheet
  * covers, expanded versus collapsed - the two detents the mobile tour's
  * second and third steps meet.
  *
@@ -1573,9 +1576,9 @@ const mobileTourMapStepSheetOverlap: LayoutFixture = {
 };
 
 /*
- * SCRUM-502's fixture: `MobileNav` and `MobileNavItem`, `Header.tsx:115` and
- * `:168`. Both are styled-components, so - as SCRUM-484's comment above
- * explains for the desktop header - the markup carries its own `<style>` and
+ * This fixture: `MobileNav` and `MobileNavItem`, `Header.tsx:115` and
+ * `:168`. Both are styled-components, so - as the desktop header's comment
+ * above explains - the markup carries its own `<style>` and
  * the drift guard reads `Header.tsx` for the declaration text rather than a
  * compiled class string.
  *
@@ -1688,7 +1691,7 @@ const mobileNavActiveUnderline: LayoutFixture = {
     "0px inset (Chromium's real default, no CDP override) at 375x667: nav rect top 607 / bottom 667 / height 60. item-active rect top 608 / bottom 667 / height 59 - one pixel inside the bar's own top edge (its 1px border-top), and exactly at the bar's bottom edge. The 4px border-bottom therefore paints from 663 to 667, fully inside a 667-tall viewport. Before the fix this same fixture measured item top 603.5 / bottom 671.5 / height 68, 3.5px above the bar and 4.5px below the viewport's bottom edge - the underline entirely off-screen.",
     "0px inset at 320x568 (the other required viewport): nav top 508 / bottom 568 / height 60. item-active top 509 / bottom 568 / height 59 - identical shape to 375x667, confirming the fix is width-independent, as the defect was.",
     "34px inset at 375x667, `Emulation.setSafeAreaInsetsOverride({ bottom: 34, bottomMax: 34 })` applied first so `env(safe-area-inset-bottom, 0px)` resolves to the override rather than its fallback: nav rect top 573 / bottom 667 / height 94 (60 + 34, matching `MOBILE_NAV_SPACE`). item-active top 574 / bottom 633 / height 59 - unchanged from the 0px case except for the bar's own position, because the item's `height: 100%` is what pins it to the content box regardless of how much of the bar's own height the inset consumes. Border-bottom paints 629 to 633, 34px clear of the viewport's bottom edge and inside the band `padding-bottom` reserves for the home indicator - the inversion of the pre-fix figure, which had the underline sitting in that band rather than the tap target's whole box respecting it.",
-    "item-active `clientHeight` 55 and `contentHeight` 39 at every inset and width measured: the tap target (border-box, 59px) still clears the 44px floor SCRUM-421/432/480 established, and the 9px the icon-plus-label still exceed the 39px content box by is absorbed into the item's own 8px top/bottom padding rather than pushing past the button's edges - confirmed by the rect matching the bar's content box exactly rather than overflowing it.",
+    "item-active `clientHeight` 55 and `contentHeight` 39 at every inset and width measured: the tap target (border-box, 59px) still clears the 44px floor earlier fixes established, and the 9px the icon-plus-label still exceed the 39px content box by is absorbed into the item's own 8px top/bottom padding rather than pushing past the button's edges - confirmed by the rect matching the bar's content box exactly rather than overflowing it.",
   ],
   reproduces: [
     {
@@ -1732,7 +1735,7 @@ const mobileNavActiveUnderline: LayoutFixture = {
 };
 
 /**
- * SCRUM-530's fixture: the same `MobileNav`/`MobileNavItem` pair above, all
+ * This fixture: the same `MobileNav`/`MobileNavItem` pair above, all
  * four real tabs, at a landscape phone (667x375) with a horizontal
  * safe-area-inset applied.
  *
@@ -1810,7 +1813,7 @@ const mobileNavHorizontalSafeArea: LayoutFixture = {
   },
   recorded: [
     "0px inset (no CDP override) at 667x375: nav rect left 0 / right 667, height 60. item-0 left 0 / right 166.75. item-3 left 500.25 / right 667. Identical whether measured before or after this fix - the zero-inset control the criteria require.",
-    "AFTER, 44px left / 34px bottom (housing rotated to the left edge, home indicator band at the reduced landscape height SCRUM-502 already accounts for vertically): nav rect left 0 / right 667 - the bar's own box, and therefore its background, still spans the full viewport and covers the housing band. item-0 left 44 / right 199.75, width 155.75 - entirely inside the safe content box `[44, 667]` and well clear of the 44px WCAG/HIG floor. item-3 left 511.25 / right 667, also entirely inside.",
+    "AFTER, 44px left / 34px bottom (housing rotated to the left edge, home indicator band at the reduced landscape height the earlier fixture already accounts for vertically): nav rect left 0 / right 667 - the bar's own box, and therefore its background, still spans the full viewport and covers the housing band. item-0 left 44 / right 199.75, width 155.75 - entirely inside the safe content box `[44, 667]` and well clear of the 44px WCAG/HIG floor. item-3 left 511.25 / right 667, also entirely inside.",
     "AFTER, 44px right / 34px bottom (housing rotated to the right edge): item-0 left 0 / right 155.75 - unaffected side, unchanged shape. item-3 left 467.25 / right 623, entirely inside the safe content box `[0, 623]`.",
     "BEFORE (the defect, reproduced by removing this fixture's `padding-right`/`padding-left` and restoring the single `padding: 0px 0;` MobileNav used to declare): 44px left / 34px bottom at 667x375 - item-0 left 0 / right 166.75, **unmoved by the inset**, because nothing in the unfixed CSS read it. 44px of that tab's 166.75px width sits under the housing band. 44px right / 34px bottom: item-3 left 500.25 / right 667, the same 44px of its width under the housing on the opposite edge. The bar's own rect was already full-width before the fix, so the background-coverage half of the criteria held even before this ticket - only the items were wrong.",
   ],
@@ -1839,7 +1842,7 @@ const mobileNavHorizontalSafeArea: LayoutFixture = {
 };
 
 /**
- * The profile dropdown, open, at the desktop widths SCRUM-517's Impact section
+ * The profile dropdown, open, at the desktop widths this fix's Impact section
  * names - 1280x800 and 1440x900.
  *
  * `[data-probe='dropdown-wrapper']` is `relative z-30` - the fix - and is the
@@ -1853,7 +1856,7 @@ const mobileNavHorizontalSafeArea: LayoutFixture = {
  *
  * `[data-probe="bar"]` and its inset are carried over from `header-control-row`
  * unchanged, so the same measurement that proves the panel's own alignment
- * also confirms this ticket touched no figure SCRUM-491 or SCRUM-484
+ * also confirms this ticket touched no figure earlier fixes
  * established for that bar.
  */
 const profileDropdownPanel: LayoutFixture = {
@@ -1905,8 +1908,8 @@ const profileDropdownPanel: LayoutFixture = {
     ],
   },
   recorded: [
-    "AFTER SCRUM-517, at 1280x800: bar rect 1280 x 68, contentWidth 1200 matching the predicted chain. avatar-trigger rect left 1184, width 56 - right edge 1240. panel rect left 1016, width 224 - right edge 1240. **The two right edges agree exactly.** Panel stays fully on screen, left 1016 to right 1240, inside 0-1280.",
-    "AFTER SCRUM-517, at 1440x900: bar rect 1440 x 76.5 (clientHeight rounds to 77), contentWidth 1360 matching the predicted chain. avatar-trigger rect left 1344, width 56 - right edge 1400. panel rect left 1176, width 224 - right edge 1400. **The two right edges agree exactly**, and the bar's own height (76.5) and padding (40 each side) are unchanged from `header-control-row`'s desktop control for this same figure - this ticket touched no property of the bar itself.",
+    "AFTER the fix, at 1280x800: bar rect 1280 x 68, contentWidth 1200 matching the predicted chain. avatar-trigger rect left 1184, width 56 - right edge 1240. panel rect left 1016, width 224 - right edge 1240. **The two right edges agree exactly.** Panel stays fully on screen, left 1016 to right 1240, inside 0-1280.",
+    "AFTER the fix, at 1440x900: bar rect 1440 x 76.5 (clientHeight rounds to 77), contentWidth 1360 matching the predicted chain. avatar-trigger rect left 1344, width 56 - right edge 1400. panel rect left 1176, width 224 - right edge 1400. **The two right edges agree exactly**, and the bar's own height (76.5) and padding (40 each side) are unchanged from `header-control-row`'s desktop control for this same figure - this ticket touched no property of the bar itself.",
     "BEFORE (the defect, reproduced by removing `relative` from `[data-probe='dropdown-wrapper']` and otherwise measuring identically): at 1280x800, avatar-trigger right edge 1240, unchanged from AFTER since the trigger itself was never repositioned. panel rect left 1056, width 224 - right edge 1280, exactly the viewport width rather than the trigger's edge. **The two right edges disagree by 40px - the bar's own desktop padding, which is the Proposed Fix section's hypothesis and is now the measured mechanism, not an estimate.**",
     "BEFORE, at 1440x900: avatar-trigger right edge 1400, unchanged. panel rect left 1216, width 224 - right edge 1440, again exactly the viewport width. Same 40px disagreement at both widths, confirming the mechanism (no positioned ancestor, so `right-0` resolves against the initial containing block) rather than a fixed pixel offset that happened to match one viewport.",
     "The open transition's origin corner: `origin-top-right` is unchanged by this fix - only the box it pivots now has the right edge the class name assumes.",

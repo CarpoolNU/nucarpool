@@ -5,13 +5,13 @@
  * Two of the four historical `ControlledTimePicker` implementations wrote the
  * digits the user typed straight into the column with no conversion, so a
  * 9-to-5 is stored as `09:00`-`17:00` and every surface renders it as 4:00 AM
- * to 12:00 PM. SCRUM-373 fixed the write path — `toStoredScheduleTime` pins
+ * to 12:00 PM. A later fix corrected the write path — `toStoredScheduleTime` pins
  * both sides to a fixed EST anchor now, so no new row can be written this way
  * — and the fix was not retroactive. `src/server/db/scheduleTimeIntegrity.ts`
  * owns which rows those are and what each should have held; this script is the
  * reads and the writes.
  *
- * **Scope, and why it is this narrow.** SCRUM-376 measured production on
+ * **Scope, and why it is this narrow.** A measurement of production on
  * 2026-09-21: 4,173 `carpool_search` rows, 283 with a co-op running, and eight
  * of those holding a wall clock. The repair is deliberately confined to that
  * intersection.

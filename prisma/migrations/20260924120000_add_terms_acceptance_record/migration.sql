@@ -1,7 +1,8 @@
 /*
   Records when the terms were accepted and which wording was accepted, so
   `user.license_signed` stops being the only evidence of a disclaimer written
-  on behalf of Northeastern University. SCRUM-280.
+  on behalf of Northeastern University, and a later change to that wording
+  does not silently apply to everyone who accepted an earlier version.
 
   Both columns are nullable and neither is backfilled. There is no timestamp
   to recover for rows that predate them and no version to infer -- the wording

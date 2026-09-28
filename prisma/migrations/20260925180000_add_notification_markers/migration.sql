@@ -1,6 +1,6 @@
 /*
-  One-shot markers for the request and message notification emails.
-  SCRUM-559, phase 3 of the SCRUM-556 audit.
+  One-shot markers for the request and message notification emails, added
+  during the notification-duplication audit's schema phase.
 
   Nothing recorded that a notification had gone out, so both procedures could
   be called in a loop and would mail the recipient each time. Each column marks

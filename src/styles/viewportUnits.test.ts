@@ -15,7 +15,7 @@ import postcss from "postcss";
  *
  * This is a guard rather than a discovery. The sites were converted one at a
  * time, and the last applied `vh` in the tree - the map connect portal's
- * desktop height budget - went with SCRUM-483. What this prevents is the next
+ * desktop height budget - went last. What this prevents is the next
  * one arriving, which nothing else would notice: a `vh` length is valid CSS and
  * valid Tailwind, it type-checks, it lints, and **jsdom resolves no viewport
  * units at all**, so no component test can see one either.
@@ -46,9 +46,9 @@ import postcss from "postcss";
  *
  * **The height utilities named after the viewport are the closed one.** They
  * compile to a `100vh` length while the source never says `vh`, so the literal
- * walk above cannot see them: SCRUM-483 left exactly one, on a div in
- * `src/pages/index.tsx`, as a known exemption for SCRUM-477's phase 4.
- * SCRUM-485 measured it inert - the div is a child of a `100dvh` `#__next`, and
+ * walk above cannot see them: exactly one was left, on a div in
+ * `src/pages/index.tsx`, as a known exemption during an earlier audit phase.
+ * A later fix found it inert - the div is a child of a `100dvh` `#__next`, and
  * the dynamic viewport is never larger than the large one - removed it, and
  * added `VIEWPORT_HEIGHT_ALIAS` below so the next one is rejected at source.
  *
@@ -225,8 +225,8 @@ const viewportHeightAliases = (): string[] =>
  *
  * Not a stylistic choice. **Tailwind v4 scans the whole repository**, so a real
  * class name written here - fixture or not, test file or not - is emitted into
- * the bundle as live CSS, and a fixture spelling the budget SCRUM-483 removed
- * would have quietly put it back. Composing it leaves no candidate for the
+ * the bundle as live CSS, and a fixture spelling the budget an earlier fix
+ * removed would have quietly put it back. Composing it leaves no candidate for the
  * scanner to find, and keeps this file out of its own results: no literal in it
  * holds a digit and a unit next to each other.
  *
@@ -395,8 +395,8 @@ describe("applied viewport units in src/", () => {
 
   it("names no viewport-height alias anywhere", () => {
     /* The gap the docblock used to record as open. One of these was live on a
-       div in `src/pages/index.tsx` until SCRUM-485 measured it inert and
-       removed it - it compiled to the only `100vh` left in the bundle, while
+       div in `src/pages/index.tsx` until a later measurement found it inert
+       and removed it - it compiled to the only `100vh` left in the bundle, while
        the assertion above saw nothing, because the source named the viewport
        and not the unit. Use a `dvh` token from `tailwind.config.js` instead of
        reaching for one of these. */

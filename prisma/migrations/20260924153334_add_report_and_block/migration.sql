@@ -1,6 +1,7 @@
 /*
   Adds the `block` and `report` tables, so a user can block another user and
-  report them to an admin. SCRUM-553, phase 1 of SCRUM-532.
+  report them to an admin. This is the schema phase of the moderation feature;
+  phases 2 and 3 add the reads and writes.
 
   Schema only. Nothing reads or writes either table yet; phases 2 and 3 do.
   Those phases read `block` on every recommendations and map request, so this

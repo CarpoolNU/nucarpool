@@ -86,7 +86,7 @@ export const setViewportWidth = (width: number) => {
  * The same for `innerHeight`, which jsdom reports as 768 and likewise never
  * changes.
  *
- * Added for SCRUM-484, the first criterion in this repository that branches on
+ * Added for the first criterion in this repository that branches on
  * viewport *height* - `useIsViewportShorterThan`, which `/admin` reads to
  * decide between the console and the notice.
  *

@@ -121,7 +121,7 @@ export async function getServerSideProps(context: GetServerSidePropsContext) {
  * So `bottom-mobile-nav` measures from the viewport's bottom edge and
  * `h-mobile-sheet`'s `100%` resolves against the viewport's height.
  *
- * That is deliberate as of SCRUM-464, and it is why the recentre button was
+ * That is deliberate, and it is why the recentre button was
  * moved *into* `#map` rather than the row being given `relative`: making the
  * row a containing block would have repositioned this sheet and the drag
  * handle as a side effect of placing a button. Anything that needs to be
@@ -164,7 +164,7 @@ const MOBILE_SIDEBAR_CLASSES: Record<
  * flight none of these classes apply: `useSheetDrag` writes the handle's
  * `bottom` directly, holding it to the same clearance these classes encode
  * rather than to the sheet's bare edge - see `handleBottomPx` in
- * `sheetDetents.ts` (SCRUM-529).
+ * `sheetDetents.ts`.
  */
 const HANDLE_POSITION_CLASSES: Record<SheetDetent, string> = {
   collapsed: "bottom-above-mobile-nav",
@@ -275,7 +275,7 @@ const Home: NextPage<any> = () => {
    *
    * `defaultSheetDetent` carries why that differs by role - in short, a VIEWER's
    * only interface is the route-search panel and an expanded sheet paints over
-   * it from a stacking context the panel cannot reach out of (SCRUM-455).
+   * it from a stacking context the panel cannot reach out of.
    */
   const sheetDetent = sheetDetentOverride ?? defaultSheetDetent(user?.role);
 
@@ -306,7 +306,7 @@ const Home: NextPage<any> = () => {
    */
   const isSheetCollapsed = sheetDetent === "collapsed";
 
-  // `enabled` is the whole of SCRUM-460. A VIEWER's recommendations tab renders
+  // `enabled` is the entire fix here. A VIEWER's recommendations tab renders
   // a sentence, not cards — `SidebarContent` short-circuits on
   // `viewerModeHidesCards` ahead of its error, loading and empty branches — so
   // every one of the 50 ranked candidates the server built was discarded on
@@ -333,7 +333,7 @@ const Home: NextPage<any> = () => {
   );
   const { data: recommendations = NO_USERS } = recommendationsQuery;
 
-  // How many candidates that search returned, to Mixpanel (SCRUM-570). Read
+  // How many candidates that search returned, sent to Mixpanel. Read
   // from the query rather than from the sidebar that draws it, because
   // `SidebarContent` is unmounted and remounted by the filter panel and by the
   // Recommendations/Favorites toggle — see the hook for why that would turn a
@@ -453,7 +453,7 @@ const Home: NextPage<any> = () => {
     },
   });
 
-  // Watches `mapContainerRef` directly (SCRUM-518) rather than inferring its
+  // Watches `mapContainerRef` directly rather than inferring its
   // box from `window` - a mobile/desktop flip resizes this container without
   // any `resize` event, and so does the dynamic-viewport reflow this file's
   // `useMapInstance.ts` documents.
@@ -520,7 +520,7 @@ const Home: NextPage<any> = () => {
    *
    * This also called `setSelectedUserId` with the id it was given, which only
    * ever re-selected the conversation already open - until `MessagePanel` was
-   * keyed per conversation (SCRUM-558). React Query runs a mutation's own
+   * keyed per conversation. React Query runs a mutation's own
    * `onSuccess` after its component unmounts, so a send to A that landed after
    * the user had clicked B came back from A's unmounted panel and switched the
    * page back to A. Closing the conversation mid-send reopened it the same way.
@@ -881,7 +881,7 @@ const Home: NextPage<any> = () => {
    * It is that role's entire interface and had never been given a mobile
    * treatment. Two defects, both styling-only, so both are fixed as `desktop:`
    * overrides on top of mobile-first base classes rather than with an
-   * `isMobile` ternary - the direction SCRUM-415 settled on.
+   * `isMobile` ternary - the established direction.
    *
    * **Width.** The floor was an unconditional `min-w-[25rem]`. 400px, plus
    * `m-2` either side, is a 416px minimum on a viewport that is commonly 375px
@@ -906,7 +906,8 @@ const Home: NextPage<any> = () => {
    * the two share a z-index and the legend is the later sibling.
    *
    * **Still inside a stacking context this panel cannot escape, and that is
-   * now handled elsewhere: SCRUM-455.** On mobile the explore sheet covers
+   * now handled by the sheet's own behaviour instead of this panel's.** On
+   * mobile the explore sheet covers
    * everything below the top 5.5rem of the map row. It is `z-20` and a sibling
    * of the map area, while this panel sits inside `#map`, which is `relative
    * z-0` - so no z-index written here can lift the panel above it, and the
@@ -995,8 +996,8 @@ const Home: NextPage<any> = () => {
             element is a direct child of `#__next`, which `globals.css` gives a
             `100dvh` height - and the dynamic viewport is by definition never
             larger than the large one, so that ceiling cannot clip this height
-            at any viewport. SCRUM-483 measured it in Chromium, found it inert,
-            and deferred the removal to SCRUM-485.
+            at any viewport. A later measurement in Chromium found it inert,
+            and the removal itself waited for a further change.
 
             It was the last `vh` length in the shipped bundle, and the only one
             `viewportUnits.test.ts` could not see: that guard reads source
@@ -1023,7 +1024,7 @@ const Home: NextPage<any> = () => {
           )}
           {/* `h-mobile-row` is the viewport less the navigation - see
               `tailwind.config.js`. It no longer reserves a banner allowance:
-              SCRUM-503 removed the "use desktop instead" bar this row used to
+              A later change removed the "use desktop instead" bar this row used to
               be pushed down by.
 
               The desktop arm is `h-content-row`, which is its own token and not
@@ -1035,8 +1036,8 @@ const Home: NextPage<any> = () => {
               either side of it, which is why the two arms are separate tokens
               rather than one with a term switched.
 
-              Both arms were bracketed percentages once. SCRUM-496 moved the
-              desktop one into `tailwind.config.js` when the bar gained a 44px
+              Both arms were bracketed percentages once. The desktop one moved
+              into `tailwind.config.js` when the bar gained a 44px
               floor and its complement stopped being expressible as a second
               percentage. */}
           <div
@@ -1054,7 +1055,7 @@ const Home: NextPage<any> = () => {
                 `isSheetDetentView`, which `useSheetDrag` checks before starting
                 a gesture. Sharing the predicate is the point: the handle
                 rendering somewhere the drag refuses to run is precisely what
-                SCRUM-459 was. */}
+                the defect this guards against. */}
             {isSheetDetentView(sidebarView) &&
               (sidebarType === "explore" || sidebarType === "requests") && (
                 <button

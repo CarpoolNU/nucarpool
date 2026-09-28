@@ -5,8 +5,8 @@
  * The locked-slot refusal in `wt-recycle.sh` exited 141 rather than 1 on CI,
  * because `git worktree list --porcelain | awk '...; exit'` left git killed by
  * SIGPIPE and `set -o pipefail` reports a signalled producer as the pipeline's
- * status (SCRUM-449). `wt-bootstrap.sh` and `wt-cleanup.sh` each carried the
- * same shape and were fixed under SCRUM-454; this file is the generalisation
+ * status. `wt-bootstrap.sh` and `wt-cleanup.sh` each carried the
+ * same shape and were fixed separately; this file is the generalisation
  * that stops a fourth instance appearing in any of them.
  *
  * Reading from a shell variable is not the fix and this is not a style rule:
@@ -16,8 +16,9 @@
  *
  * It is asserted statically because the defect is a race. It needs the
  * producer still writing at the instant the consumer goes away, so a short
- * worktree table on a fast machine wins it by luck: the SCRUM-449 instance
- * passed every local run and failed on CI. The property holds of the source or
+ * worktree table on a fast machine wins it by luck: the original instance of
+ * this defect passed every local run and failed on CI. The property holds of
+ * the source or
  * it does not hold at all, which is the only thing a test can pin down here.
  */
 

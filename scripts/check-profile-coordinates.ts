@@ -17,7 +17,7 @@
  * - **Reversed co-op ranges.** `dateOverlapFilter`'s full-overlap branch wants
  *   `startDate <= theirs AND endDate >= theirs`, which no candidate satisfies
  *   once the two are crossed. The partial-overlap negation is arbitrary.
- * - **Implausible co-op years** (SCRUM-550). A range like 1901→1908 runs
+ * - **Implausible co-op years.** A range like 1901→1908 runs
  *   forwards, so the check above passes it, and it then fails every
  *   term-date-overlap search. Bounded by `coopYearBounds`; a VIEWER is not a
  *   finding, for the reason `implausibleCoopYearFields` gives.
@@ -37,7 +37,7 @@
  * for a row with no `Location`; `user.edit` deliberately still permits it.
  * Counting them would bury the real findings.
  *
- * ## Two populations, one of them not a defect (SCRUM-408)
+ * ## Two populations, one of them not a defect
  *
  * A user who picks `RIDER` during onboarding and abandons it before resolving
  * an address leaves exactly the shape the coordinate check looks for: role

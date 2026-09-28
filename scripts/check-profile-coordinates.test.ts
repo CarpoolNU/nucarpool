@@ -293,7 +293,7 @@ describe("findProfileDataProblems", () => {
 });
 
 /**
- * SCRUM-550: 22 production searches store years like 1901 and 2069, and every
+ * 22 production searches store years like 1901 and 2069, and every
  * one runs forwards, so the reversed-range line above never named them. `now`
  * is pinned because the ceiling moves with the clock.
  */
@@ -381,7 +381,7 @@ describe("exitCodeFor", () => {
 
   it("exits 0 when every finding is a non-onboarded (0, 0) row", () => {
     // The staging shape, and 579 of production's 626. A gate that is
-    // permanently red gates nothing, which is what SCRUM-408 fixes.
+    // permanently red gates nothing, which is what the exemption below fixes.
     const findings = findProfileDataProblems([
       search({
         id: "noise-1",

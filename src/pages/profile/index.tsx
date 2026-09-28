@@ -169,7 +169,7 @@ const Index: NextPage = () => {
       // matching, and the form is `mode: "onChange"` — so nothing would say so
       // until they changed a field or pressed Save. Neither is likely when the
       // only symptom is an empty explore map. A stored year like 1901 is the
-      // same problem at lower cost (SCRUM-550). `planCoopRangeNotice` decides;
+      // same problem at lower cost. `planCoopRangeNotice` decides;
       // the latch is here because the effect above re-runs on every refetch.
       const notice = planCoopRangeNotice({
         role: user.role,
@@ -231,7 +231,7 @@ const Index: NextPage = () => {
    * unsaved change that is not a form field. Without it a freshly cropped
    * picture took the else branch below and the navigation happened at once,
    * with no modal - the single profile edit the guard could not see, on a page
-   * whose other fourteen it protects (SCRUM-511).
+   * whose other fourteen it protects.
    */
   const checkForChanges = async (proceed?: () => void | Promise<void>) => {
     proceedRef.current = proceed ?? null;
@@ -393,7 +393,7 @@ const Index: NextPage = () => {
       // `false`, because the save did not happen. This used to fall through to
       // the `return true` below, so the unsaved-changes modal's Save and
       // Continue navigated away - or signed out - on a refused save and threw
-      // away the very edits it had offered to keep (SCRUM-561).
+      // away the very edits it had offered to keep.
       return false;
     } finally {
       setIsLoading(false);
@@ -447,7 +447,7 @@ const Index: NextPage = () => {
    * below forever - and because this guard returns before `Header` renders,
    * that overlay was the whole page, with no navigation to leave by and no
    * way out but a manual reload. `/` fixed exactly this for the map page and
-   * the fix was never carried across (SCRUM-509).
+   * the fix was never carried across.
    *
    * Checked ahead of the spinner for the reason `toQueryState` documents: a
    * query that has failed is also not loading, and a spinner that is really a

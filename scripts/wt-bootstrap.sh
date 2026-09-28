@@ -58,8 +58,8 @@ cd "$worktree_root"
 # Taken by parameter expansion rather than by piping into a consumer that
 # leaves after the first line. Under `pipefail` such a consumer makes git a
 # producer killed by SIGPIPE and the pipeline's status 141, which aborts this
-# script before it does anything and never reaches the `die` below (SCRUM-454,
-# the same defect SCRUM-449 fixed in wt-recycle.sh). No subprocess here, so
+# script before it does anything and never reaches the `die` below - the same
+# defect fixed in wt-recycle.sh. No subprocess here, so
 # there is no pipeline status to reason about at all.
 #
 # A first line that is somehow not a worktree line leaves the prefix unstripped
@@ -123,7 +123,7 @@ wt_reconcile_dependencies
 #
 # This used to compare this worktree's `prisma/schema.prisma` against the
 # *primary checkout's* copy, which is a statement about two working trees and
-# not about the generated client (SCRUM-448). The primary may be on another
+# not about the generated client. The primary may be on another
 # branch, dirty, or itself never generated, so the comparison could report a
 # match while the client was built from something else entirely.
 step "prisma client"

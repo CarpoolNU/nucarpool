@@ -16,7 +16,7 @@
 #
 # ---------------------------------------------------------------- shell options
 #
-# This file sets none, deliberately (SCRUM-454). `set` in a sourced file is not
+# This file deliberately sets none. `set` in a sourced file is not
 # scoped to the file: it mutates the caller's shell for the rest of its run. A
 # `set -o pipefail` here would silently change how wt-bootstrap.sh and
 # wt-recycle.sh behave everywhere *after* the `.` line, which is a side effect
@@ -44,8 +44,8 @@ command -v note >/dev/null 2>&1 || note() { printf '    %s\n' "$1"; }
 # wt-bootstrap.sh used to compare the worktree's `prisma/schema.prisma` with the
 # *primary checkout's* copy. That is a statement about two working trees, not
 # about the generated client: the primary may be on another branch, dirty, or
-# itself never generated. It reads as a freshness check and is not one
-# (SCRUM-448). Under reusable slots it is actively wrong, because a slot's
+# itself never generated. It reads as a freshness check and is not one.
+# Under reusable slots it is actively wrong, because a slot's
 # `node_modules` outlives the branch that generated it.
 #
 # The fix is to record the fingerprint of the source *inside* the generated

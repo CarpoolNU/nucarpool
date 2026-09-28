@@ -8,9 +8,9 @@
    media queries and the layout logic cannot drift apart. */
 @config "../../tailwind.config.js";
 
-/* SCRUM-518: `#__next` below is not `document.scrollingElement` - `html` and
+/* `#__next` below is not `document.scrollingElement` - `html` and
    `body` are, and neither carried a rule of its own until now. That gap is
-   what let SCRUM-501's `overflow: hidden` on `#__next` leave a residual risk:
+   what let the `overflow: hidden` rule on `#__next` below leave a residual risk:
    clipping a descendant's overflow does not stop the actual document from
    becoming a scrollable/bounceable surface, which is what iOS Safari's native
    rubber-band responds to. `height: 100%` against `100dvh`'s own dynamic
@@ -53,7 +53,7 @@ body {
      already documents as firing mid-gesture on iOS Safari - let the whole
      document scroll instead of being contained at the one place sized to the
      viewport, which is what surfaced as blank space under the map on a
-     pinch-zoom or a stray upward swipe (SCRUM-501). No page relies on
+     pinch-zoom or a stray upward swipe. No page relies on
      document-level scroll; every one of them scrolls its own content in an
      `overflow-y-auto` container instead. */
   overflow: hidden;
@@ -92,7 +92,7 @@ input[type="month"]::-webkit-calendar-picker-indicator {
   pointer-events: none;
 }
 
-/* SCRUM-515: #d5706a was a one-off literal, not one of the five named brand
+/* #d5706a was a one-off literal, not one of the five named brand
    colours in tailwind.config.js, and white text against it read at 3.30:1 -
    below the 4.5:1 body-text minimum. northeastern-red (#C8102E) is both a
    named brand colour and reaches 5.89:1 against white, so it replaces the

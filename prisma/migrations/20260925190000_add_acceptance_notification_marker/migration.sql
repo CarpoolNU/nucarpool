@@ -1,6 +1,7 @@
 /*
-  One-shot marker for the acceptance notification email. SCRUM-564, found
-  while implementing SCRUM-559 (request and message markers).
+  One-shot marker for the acceptance notification email, found while
+  implementing the `notificationPendingSince`/`notificationPending` request
+  and message markers.
 
   `sendAcceptanceNotification` had no marker at all, so the person who
   accepted a request could call it in a loop and mail the requester

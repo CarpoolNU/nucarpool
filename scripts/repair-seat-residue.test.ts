@@ -67,7 +67,7 @@ describe("repair-seat-residue argument parsing", () => {
 
 describe("summariseDissolution", () => {
   it("counts groups and memberships as two separate numbers", () => {
-    // 14 pairs and one group of five is the production shape (SCRUM-406):
+    // 14 pairs and one group of five is the production shape:
     // approving "15 groups" is not the same as approving "33 people moved".
     expect(
       summariseDissolution([

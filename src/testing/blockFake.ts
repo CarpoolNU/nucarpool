@@ -2,7 +2,7 @@
  * An in-memory `block` delegate for the router tests' hand-rolled Prisma fakes.
  *
  * Every server path where two users meet now reads `block` through
- * `src/server/db/blocks.ts` (SCRUM-554), so every fake client that reaches one
+ * `src/server/db/blocks.ts`, so every fake client that reaches one
  * needs this delegate. The default, no rows, is the state every pre-existing
  * test was written against: nobody has blocked anybody.
  *

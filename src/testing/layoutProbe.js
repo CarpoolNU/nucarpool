@@ -2,8 +2,8 @@
  * The in-page half of the layout measurement harness.
  *
  * jsdom does no layout, so the layout half of every mobile finding has to be
- * measured in a real browser. Eight tickets did that and threw the harness
- * away each time (SCRUM-481 lists them). This is that harness, committed.
+ * measured in a real browser. Eight earlier fixes did that and threw the
+ * harness away each time. This is that harness, committed.
  * `scripts/measure-layout.ts` is the entry point; start there.
  *
  * ---
@@ -85,8 +85,9 @@ function rectArea(rect) {
  * inside the rect and off its edges, where a 1px rounding difference decides
  * which element `elementFromPoint` returns.
  *
- * **This is the mistake SCRUM-476 made, and it is the reason there is no
- * `centre` option here.** That ticket measured the centre of a control, found
+ * **This is the mistake an earlier measurement made, and it is the reason
+ * there is no `centre` option here.** That earlier pass measured the centre
+ * of a control, found
  * nothing overlapping it, and recorded the control as safe. The hazard was in
  * its left third. A single probe answers a question nobody asked: a finger is
  * about 9mm across and lands where it lands. Sampling the thirds is the
@@ -182,10 +183,10 @@ function intersectionArea(a, b) {
 /**
  * How much of `target` the `other` rect covers, as a fraction of `target`.
  *
- * Asymmetric deliberately: the question these tickets ask is "what share of
+ * Asymmetric deliberately: the question is "what share of
  * the footprint my finger just pressed does the new control now occupy", which
  * is relative to the footprint, not to the union or to the other control. The
- * figures SCRUM-476 and SCRUM-480 recorded as percentages are this number.
+ * figures earlier fixes recorded as percentages are this number.
  *
  * A zero-area target returns 0 rather than dividing by zero - an element with
  * no box cannot have a share of itself covered.
@@ -265,8 +266,8 @@ function describeElement(element) {
  *    padding, and are integers. **A tap-target criterion wants
  *    `clientHeight`.** A container with `divide-y` gives every child *but the
  *    last* a 1px bottom border in Tailwind v4, so such a row measures 73 by
- *    rect and 72 by `clientHeight` - SCRUM-480 had to explain that pixel to
- *    itself, and `layoutFixtures.ts` reproduces both a bordered and an
+ *    rect and 72 by `clientHeight` - an earlier fix had to explain that pixel
+ *    to itself, and `layoutFixtures.ts` reproduces both a bordered and an
  *    unbordered row so the difference is observable rather than asserted.
  *  - **`contentWidth`/`contentHeight`** subtract the element's own padding, via
  *    `getComputedStyle`. This is the one a container chain predicts: a chain of
@@ -389,7 +390,7 @@ function probeFootprint(selector, options, env) {
  *
  * `spec.boxes` names elements to measure, `spec.footprint` the one to
  * hit-test, and `spec.against` the elements whose share of that footprint to
- * compute - the SCRUM-476 question. One call rather than three because the
+ * compute - the same question an earlier measurement asked. One call rather than three because the
  * page is re-rendered between calls by nothing at all, but a human driving
  * this by hand pastes three times as much.
  */

@@ -85,7 +85,7 @@ table=$(worktree_table)
 #
 # First line, first field, by parameter expansion. A consumer that leaves after
 # one line makes its producer take SIGPIPE, and under `pipefail` that is the
-# pipeline's status - 141, aborting the script with no message (SCRUM-454).
+# pipeline's status - 141, aborting the script with no message.
 # Being a builtin does not exempt `printf`; bash takes the signal like anything
 # else. What kept this one latent was only that `$table` fits the pipe buffer.
 primary_row=${table%%$'\n'*}

@@ -235,7 +235,7 @@ describe("gridPoints", () => {
     }
   });
 
-  it("puts a 1x1 grid at the centre, which is the reading SCRUM-476 got wrong", () => {
+  it("puts a 1x1 grid at the centre, which is the reading a single centre probe got wrong", () => {
     expect(probe.gridPoints(rect(0, 0, 100, 40), 1, 1)).toEqual([
       { x: 50, y: 20, col: 0, row: 0 },
     ]);
@@ -331,7 +331,7 @@ describe("overlapFraction", () => {
     ["no contact", rect(0, 0, 44, 44), rect(100, 100, 44, 44), 0],
     ["fully covered", rect(0, 0, 44, 44), rect(-10, -10, 100, 100), 1],
     [
-      "the left third, the SCRUM-476 shape",
+      "the left third, the shape a single centre probe misses",
       rect(0, 0, 90, 30),
       rect(0, 0, 30, 30),
       1 / 3,
@@ -427,8 +427,8 @@ describe("probeFootprint", () => {
     const trigger = stubElement({ probe: "trigger", box: rect(0, 0, 90, 30) });
     const env = stubEnv({
       elements: { "#trigger": trigger },
-      /* Covers the left third only - the hazard SCRUM-476's single centre
-         probe missed. */
+      /* Covers the left third only - the hazard a single centre
+         probe misses. */
       at: (x: number) => (x < 30 ? sheet : trigger),
     });
 
