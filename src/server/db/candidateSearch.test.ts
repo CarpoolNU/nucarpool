@@ -19,6 +19,7 @@ import {
   SEAT_AVAILABLE_FILTER,
   hasSeatAvailable,
 } from "../../utils/carpoolSeats";
+import { searcherCanMatchNobody } from "../../utils/candidateReachability";
 import {
   anyFilters,
   BOSTON,
@@ -820,5 +821,164 @@ describe("seat filter agrees with calculateScore", () => {
     }).seatsAvail as Record<string, unknown>;
 
     expect(filterKeeps(clause, -1)).toBe(false);
+  });
+});
+
+/**
+ * The group rules, in both directions at once (SCRUM-572).
+ *
+ * The seat and date blocks above each pin one predicate. This pins the whole
+ * role/seat/group decision as a single property: over every combination of the
+ * three columns `candidateReachability.ts` reads, evaluating the SQL `where` in
+ * JavaScript gives the same verdict as asking `calculateScore` directly.
+ *
+ * SCRUM-560 encoded these rules twice — a Prisma `where` in
+ * `buildCandidateWhere` and a guard clause in `calculateScore` — and tied them
+ * together only by matching comments. The three suites that covered them each
+ * exercised one side, so editing either alone left all of them green and
+ * shipped a discovery regression that only production would show. This is the
+ * test that fails instead, and it drives the two callers rather than the shared
+ * predicate, so it catches drift whether or not the next change goes through
+ * `candidateReachability.ts`.
+ *
+ * Agreement is asserted as *equality*, not as the superset property the date
+ * filter settles for. For dates, SQL keeping a row the scorer rejects is a
+ * wasted read; here the two sides read the same three columns under the same
+ * predicate, so a difference in either direction is a defect.
+ */
+describe("group exclusion agrees with calculateScore", () => {
+  type GroupState = {
+    role: Role;
+    carpoolId: string | null;
+    seatsAvail: number;
+  };
+
+  /**
+   * Every combination of the three columns the rules read. `-1` is here
+   * because a negative count is the value the pre-`hasSeatAvailable` pair
+   * disagreed on, and production held one.
+   */
+  const STATES: GroupState[] = [Role.RIDER, Role.DRIVER, Role.VIEWER].flatMap(
+    (role) =>
+      [null, "group-1"].flatMap((carpoolId) =>
+        [-1, 0, 4].map((seatsAvail) => ({ role, carpoolId, seatsAvail })),
+      ),
+  );
+
+  const describeState = (state: GroupState) =>
+    `${state.role} carpoolId=${state.carpoolId ?? "null"} seats=${
+      state.seatsAvail
+    }`;
+
+  /**
+   * Keys `buildCandidateWhere` emits that cannot decide any row in this table:
+   * every candidate here is an ACTIVE search owned by an onboarded user, and
+   * `anyFilters()` switches the distance and date predicates off entirely, so
+   * they are not emitted at all.
+   *
+   * Listed rather than ignored by default on purpose. A new candidate-state
+   * predicate in the `where` reaches the `default` below and fails this suite
+   * loudly, which is the prompt to decide whether `calculateScore` mirrors it
+   * — the step SCRUM-560 skipped.
+   */
+  const CONSTANT_KEYS = new Set(["status", "user"]);
+
+  /** Evaluates the `where` against one candidate, in JavaScript. */
+  const whereKeeps = (
+    where: Record<string, unknown>,
+    candidate: GroupState & { userId: string },
+  ): boolean =>
+    Object.entries(where).every(([key, clause]) => {
+      if (CONSTANT_KEYS.has(key)) {
+        return true;
+      }
+
+      switch (key) {
+        case "id": {
+          // The only `id` clause this builder emits is the empty `in`, which
+          // is how "no candidate is reachable" is expressed.
+          const ids = (clause as { in: string[] }).in;
+          expect(ids).toEqual([]);
+          return false;
+        }
+        case "userId": {
+          const { notIn, in: only } = clause as {
+            notIn: string[];
+            in?: string[];
+          };
+          return (
+            !notIn.includes(candidate.userId) &&
+            (only === undefined || only.includes(candidate.userId))
+          );
+        }
+        case "role":
+          return (clause as { in: Role[] }).in.includes(candidate.role);
+        case "seatsAvail":
+          return candidate.seatsAvail > (clause as { gt: number }).gt;
+        case "carpoolId":
+          expect(clause).toBeNull();
+          return candidate.carpoolId === null;
+        default:
+          throw new Error(
+            `unhandled candidate predicate \`${key}\` — does calculateScore mirror it?`,
+          );
+      }
+    });
+
+  it.each(STATES.map((state) => [describeState(state), state] as const))(
+    "keeps the same candidates as the scorer for a viewer who is %s",
+    (_label, viewerState) => {
+      const viewer = buildSearch({ id: "current", ...viewerState });
+
+      const where = buildCandidateWhere({
+        currentSearch: viewer as unknown as CurrentSearch,
+        filters: { ...anyFilters(), favorites: false },
+        excludedUserIds: ["current"],
+        favoriteUserIds: [],
+      }) as Record<string, unknown>;
+
+      const score = calculateScore(viewer, anyFilters(), "any");
+
+      for (const candidateState of STATES) {
+        const candidate = buildSearch({ id: "candidate", ...candidateState });
+
+        const keptBySql = whereKeeps(where, {
+          ...candidateState,
+          userId: candidate.userId,
+        });
+        const keptByScorer = score(candidate) !== undefined;
+
+        expect({
+          candidate: describeState(candidateState),
+          keptBySql,
+        }).toEqual({
+          candidate: describeState(candidateState),
+          keptBySql: keptByScorer,
+        });
+      }
+    },
+  );
+
+  it("agrees that a viewer who can match nobody gets an empty result", () => {
+    for (const state of STATES) {
+      const viewer = buildSearch({ id: "current", ...state });
+
+      const where = buildCandidateWhere({
+        currentSearch: viewer as unknown as CurrentSearch,
+        filters: { ...anyFilters(), favorites: false },
+        excludedUserIds: ["current"],
+        favoriteUserIds: [],
+      });
+
+      // The SQL side's own expression of the shared predicate: the empty `id`
+      // filter appears exactly when `searcherCanMatchNobody` is true.
+      expect({
+        viewer: describeState(state),
+        empty: where.id !== undefined,
+      }).toEqual({
+        viewer: describeState(state),
+        empty: searcherCanMatchNobody(state),
+      });
+    }
   });
 });
