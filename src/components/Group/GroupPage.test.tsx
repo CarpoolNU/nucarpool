@@ -56,7 +56,8 @@ jest.mock("../../utils/trpc", () => ({
  * only use literals. `groupDetails.ts` is the source of truth for the shape.
  *
  * They were `musicPreference`, `snackPreference`, `conversationStyle` and
- * `groupNotes` until SCRUM-475, and the last three of those are not fields.
+ * `groupNotes` until a later fix corrected them, and the last three of those
+ * are not fields.
  * Nothing noticed, because the only body these tests rendered was a RIDER's,
  * which is prose - `GroupDetailsForm` reads `details.notes` and appears on the
  * DRIVER branch alone, which nothing here reached until the desktop
@@ -175,7 +176,7 @@ describe("My Group on mobile", () => {
    * class that encodes the clearance and nothing more, so it catches the
    * regression of someone putting `inset-0` back and catches nothing else.
    *
-   * The real assertion belongs in SCRUM-264's Playwright suite:
+   * The real assertion belongs in the project's Playwright suite:
    * `boundingBox().y + height <= viewportHeight - navHeight` for this overlay.
    *
    * `inset-0` is asserted absent as well as `bottom-mobile-nav` present,
@@ -234,7 +235,7 @@ describe("My Group on desktop", () => {
  * and no descendant can opt back in, so every control the modal offers - the
  * group-details form and its Submit, "Preview Group Route", "Leave Group",
  * "Remove", "Delete Group" - was absent from the accessibility tree while
- * rendering, staying visible, and staying clickable with a mouse. SCRUM-475.
+ * rendering, staying visible, and staying clickable with a mouse.
  *
  * `getByRole` resolves against that tree and `getByText` does not, which is the
  * only reason these assertions can tell the difference. It is also why the

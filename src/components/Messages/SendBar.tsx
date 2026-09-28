@@ -86,10 +86,10 @@ const SendBar = ({ onSendMessage }: SendBarProps) => {
       64px a side at every viewport. On a 375px phone that left the row 247px
       and the text itself about 170px, under half the screen, to compose a
       message that may run to 255 characters. The desktop inset is
-      deliberate and is unchanged; mobile was simply paying for it (SCRUM-442).
+      deliberate and is unchanged; mobile was simply paying for it.
 
       **`message-panel-tall:` and not `desktop:` on the horizontal inset,
-      which is half of SCRUM-494.** `desktop:` is a width alone, and a
+      which is half of the same fix.** `desktop:` is a width alone, and a
       landscape phone is 667px wide - so it was handed the 24px desktop inset,
       out of a panel that is the viewport less a 400px sidebar. The 8px a side
       that buys back is not a cosmetic gain: it widens the composer from 158px
@@ -98,7 +98,8 @@ const SendBar = ({ onSendMessage }: SendBarProps) => {
       158 it wrapped to two. Removing the wrap takes 13px off the bar, because
       the composer row is the send button's 46px plus 2px of border wherever
       the composer fits inside it. The row's own margins moved to this screen
-      for the same reason in SCRUM-489, and the two now agree.
+      for the same reason, in the height-gated message cap fix, and the two
+      now agree.
 
       The `sm` prefix remains the trap it always was: this repository overrides
       Tailwind's screens, so `sm` is 576px, and using it would leave every
@@ -147,17 +148,17 @@ const SendBar = ({ onSendMessage }: SendBarProps) => {
         phone was 131.5 of the 145px the conversation and the bar had to share.
         A flex item will not shrink below its min-content height, so the
         conversation lost and the bar's last 18.38px went off the bottom of the
-        screen (SCRUM-489).
+        screen.
 
         Dropping it below the threshold returned the composer to 158px and the
-        bar to 110, which was still two lines of hint. **SCRUM-489 read that as
-        a cost it could only relieve, on an estimate that the hint needed about
-        200px and that no inset could find it in a 267px panel. The estimate
-        was wrong, and measuring it is what finished this off.** The hint is
-        144.77px of text and wants a 160.77px composer; at 158 it was 2.77px
-        short of one line. So the container's own inset above - 8px a side
-        once it stopped taking the desktop figure - is enough to clear it, and
-        the wrap is gone rather than merely reduced (SCRUM-494).
+        bar to 110, which was still two lines of hint. **That earlier fix read
+        that as a cost it could only relieve, on an estimate that the hint
+        needed about 200px and that no inset could find it in a 267px panel.
+        The estimate was wrong, and measuring it is what finished this off.**
+        The hint is 144.77px of text and wants a 160.77px composer; at 158 it
+        was 2.77px short of one line. So the container's own inset above - 8px
+        a side once it stopped taking the desktop figure - is enough to clear
+        it, and the wrap is gone rather than merely reduced.
 
         Nothing changes on either side of the band it was written for: a phone
         in portrait is below the width term and keeps `mx-0`, and a desktop
@@ -227,7 +228,7 @@ const SendBar = ({ onSendMessage }: SendBarProps) => {
           // screen the row above did - left on `desktop:` it would hang 40px
           // inboard of the box it belongs to on a landscape phone.
           className={`message-panel-tall:mx-10 mx-0 mt-1 text-end text-sm ${
-            // SCRUM-515: text-stone-400 read at 2.52:1 against this panel's
+            // text-stone-400 read at 2.52:1 against this panel's
             // white background, below the 4.5:1 body-text minimum. stone-600
             // clears it with margin; text-northeastern-red already did.
             isTooLong ? "text-northeastern-red" : "text-stone-600"

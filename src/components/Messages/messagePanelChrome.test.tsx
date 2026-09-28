@@ -20,11 +20,11 @@ import {
  * The conversation panel asks for its full-size chrome only where there is
  * height for it.
  *
- * **This file is the ticket (SCRUM-489).** A landscape phone is 667px wide, so
- * it is above the width breakpoint and takes every desktop branch - into a
- * viewport 375px tall. The panel fills the content row beside the header bar,
- * which at the time was 343px of that - SCRUM-496 has since put a 44px floor
- * under the bar and left the row 331 - and the
+ * **This file is the regression test for that bug.** A landscape phone is
+ * 667px wide, so it is above the width breakpoint and takes every desktop
+ * branch - into a viewport 375px tall. The panel fills the content row beside
+ * the header bar, which at the time was 343px of that - a later fix has
+ * since put a 44px floor under the bar and left the row 331 - and the
  * full-size chrome took 198px of the 343 available: 145 of header, from `p-8`
  * around an 80px avatar, and a 53px tab strip. `SendBar` then would not shrink
  * below its min-content height, so the conversation was left with nothing but
@@ -49,7 +49,7 @@ import {
  * gets. `setViewportWidth` moves `useIsMobile`, which is a hook and therefore
  * observable; it does nothing whatsoever to a `min-height` media query, so
  * there is no "at a short viewport" case to write. The rendered geometry
- * belongs in SCRUM-264's Playwright suite at 667x375.
+ * belongs in the project's Playwright suite at 667x375.
  *
  * **The variant prefixes below are composed from the screen constants rather
  * than written out.** Two reasons, and the first is the one that bites: these
@@ -365,7 +365,7 @@ describe("the send bar's composer inset", () => {
 });
 
 /**
- * The bar's own two insets, which SCRUM-494 moved onto two different screens.
+ * The bar's own two insets, moved onto two different screens by a later fix.
  *
  * Unlike everything above, the utilities named here - the 24px horizontal inset
  * and the 12px vertical one - are both already used bare elsewhere in the app,

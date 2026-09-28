@@ -40,7 +40,7 @@ export const GroupMembers = ({ users, onLeftGroup }: GroupMembersProps) => {
    * member, and nothing about that will change on its own - so the spinner was
    * permanent, and the member list, the explanation and the one exit the server
    * still accepts were all unreachable behind it. 15 groups holding 33 members
-   * were in that state on production. See SCRUM-457.
+   * were in that state on production before this was fixed.
    */
   if (!curUser) {
     return <Spinner />;
@@ -307,11 +307,12 @@ export const GroupMemberCard = ({
 
                 `gap-6` - 24px - is then about the remaining hazard, which is
                 a press aimed at Cancel drifting down onto Confirm rather than
-                a repeat press. 24px is the figure SCRUM-468 settled on for a
+                a repeat press. 24px is the figure settled on for a
                 destructive control next to a non-destructive one, reused so
                 there is one number in the codebase for this rather than two.
 
-                The colours are deliberately *not* SCRUM-468's. That ticket
+                The colours are deliberately *not* the same as the
+                conversation header's equivalent confirmation. That one
                 gave Cancel the filled treatment because `primary` in the
                 conversation header is `northeastern-red`, the brand colour
                 Accept wears, so a filled red Confirm impersonated the
@@ -360,9 +361,9 @@ export const GroupMemberCard = ({
               assumed; the 73px an inspector shows on a non-last row is
               `divide-y`'s 1px border on the container, not this card.
 
-              SCRUM-476's property survives too: Confirm sits 46px below this
-              button's bottom edge before the change and 42px after it, still
-              0% of the footprint. See SCRUM-480.
+              The same overlap-free property survives too: Confirm sits 46px
+              below this button's bottom edge before the change and 42px
+              after it, still 0% of the footprint.
             */
             <button
               type="button"

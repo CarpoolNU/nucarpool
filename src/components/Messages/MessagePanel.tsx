@@ -24,7 +24,7 @@ interface ConversationPanelProps extends MessagePanelProps {
 }
 
 /**
- * One conversation's state lives and dies with that conversation (SCRUM-558).
+ * One conversation's state lives and dies with that conversation.
  *
  * On desktop the Requests sidebar stays beside the open panel, so clicking a
  * second card swaps `selectedUser` under a panel that stays mounted. Nothing

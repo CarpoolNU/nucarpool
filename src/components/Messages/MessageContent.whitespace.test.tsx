@@ -6,10 +6,11 @@ import { EnhancedPublicUser, Message, User } from "../../utils/types";
 /**
  * The message bubble honours the newlines the composer already stores.
  *
- * **This file is the ticket (SCRUM-471).** A newline survives everywhere
- * except where it is read: `SendBar` sets `white-space: pre-wrap` on the
- * contentEditable, so Shift+Enter on desktop — and, after SCRUM-463, a plain
- * Enter on mobile — puts a literal `\n` into `messageContent`; `handleSend`
+ * **This file is the regression test for that bug.** A newline survives
+ * everywhere except where it is read: `SendBar` sets `white-space: pre-wrap`
+ * on the contentEditable, so Shift+Enter on desktop — and, after mobile
+ * gained the same handling, a plain Enter on mobile — puts a literal `\n`
+ * into `messageContent`; `handleSend`
  * trims it and sends it; the mutation stores it in a `VARCHAR(255)`. The
  * bubble then set no `white-space` at all, so the initial `normal` collapsed
  * that newline into a space. Two lines in, one line out, with nothing
@@ -20,8 +21,8 @@ import { EnhancedPublicUser, Message, User } from "../../utils/types";
  * line" is not observable here — see `testing/viewport.ts` for the measured
  * list. The assertions below are therefore about the class that selects the
  * behaviour, as an explicit proxy for it. The rendered line count belongs in
- * SCRUM-264's Playwright suite; a jsdom test that claimed to check it would be
- * asserting nothing while looking like it asserted everything.
+ * the project's Playwright suite; a jsdom test that claimed to check it would
+ * be asserting nothing while looking like it asserted everything.
  *
  * The negative assertion earns its place. `pre-wrap` would also honour the
  * newline and so would pass any presence-only check, but it additionally
@@ -213,7 +214,7 @@ describe("message bubble whitespace", () => {
     // this ticket's business, so all three are pinned against it.
     //
     // The 50% cap moved from the width-only `desktop:` screen to the message
-    // panel's own height-gated one in SCRUM-489: at a 267px panel the cap does
+    // panel's own height-gated one: at a 267px panel the cap does
     // not narrow the bubble, it wraps it to four lines, inside a conversation
     // box that had nothing to show them in. This assertion is why that change
     // had to be deliberate, which is the job it was written for.

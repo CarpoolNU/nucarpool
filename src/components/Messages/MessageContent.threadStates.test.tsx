@@ -1,5 +1,5 @@
 /**
- * SCRUM-509: that a conversation gives three different answers, where it used
+ * That a conversation gives three different answers, where it used
  * to give one.
  *
  * The message list rendered unconditionally, so "nobody has written anything",
@@ -164,7 +164,7 @@ describe("an open conversation, in each of its three states", () => {
   });
 
   /**
-   * SCRUM-575: `messages.conversation` throws `FORBIDDEN` for a blocked pair,
+   * `messages.conversation` throws `FORBIDDEN` for a blocked pair,
    * and that refusal never clears by retrying. Shaped like a real
    * `TRPCClientError` — `data.code` is what `isBlocked` and
    * `NON_RETRYABLE_CODES` both read — rather than a plain `Error`, which is

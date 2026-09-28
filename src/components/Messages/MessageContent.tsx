@@ -250,7 +250,7 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
    * The message list rendered unconditionally, so "nobody has written
    * anything", "still loading" and "the request failed" were one
    * pixel-identical empty white panel - with a live send box above it offering
-   * to add to a conversation that might not have loaded (SCRUM-509).
+   * to add to a conversation that might not have loaded.
    *
    * The empty case is not an edge case, it is the normal first paint.
    * `requests.create` stores the opening text as a `Message` rather than in
@@ -266,11 +266,11 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
 
   /**
    * `messages.conversation` throws `FORBIDDEN` both for a blocked pair
-   * (SCRUM-554) and for a caller who was never a participant, and neither
+   * and for a caller who was never a participant, and neither
    * refusal will ever clear by retrying — it is a permanent state, not a
    * transient outage. `QueryError`'s "problem on our side" framing and Retry
    * button are wrong for it, so it is carved out before falling into the
-   * generic failure treatment below (SCRUM-575). `NON_RETRYABLE_CODES` in
+   * generic failure treatment below. `NON_RETRYABLE_CODES` in
    * `utils/trpc.ts` reads `error?.data?.code` the same way, and
    * `errorMasking.ts` never rewrites a `FORBIDDEN` message, so the server's
    * own wording is safe to show verbatim.
@@ -372,7 +372,7 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
                   44px tall against a 1040px panel and 112px against the 267px
                   one a landscape phone gets - four lines inside a conversation
                   box that had 83px to show it in, so the message the cap was
-                  meant to keep readable could not be read at all (SCRUM-489).
+                  meant to keep readable could not be read at all.
 
                   So the cap follows the rest of the panel's chrome onto
                   `message-panel-tall:`, and below that it falls back to the

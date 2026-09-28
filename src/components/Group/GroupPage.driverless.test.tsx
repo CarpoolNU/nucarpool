@@ -15,7 +15,7 @@
  * The exit itself was never missing. `groups.edit` skips the seat credit rather
  * than failing it for exactly this case, commented "leaving one at a time is
  * the only way its riders can get out", and `groups.test.ts` pins it. The
- * button that reaches it was what did not exist. SCRUM-457.
+ * button that reaches it was what did not exist, until this fix added it.
  *
  * ---
  *
@@ -179,9 +179,9 @@ beforeEach(() => {
  * file's ticket added - was absent from the accessibility tree that `getByRole`
  * resolves against. `hidden: true` made a role query ignore that exclusion, so
  * these addressed the button that existed rather than the one the modal
- * announced. The wrapper was the defect, filed as SCRUM-475 and deliberately
- * not fixed here; SCRUM-475 has since split the backdrop out into a sibling,
- * and the flag came off with it.
+ * announced. The wrapper was the defect, filed separately and deliberately
+ * not fixed here; that later fix has since split the backdrop out into a
+ * sibling, and the flag came off with it.
  *
  * It mattered just as much on the **negative** assertions, which is the part
  * worth not losing. While everything in that panel was hidden,

@@ -5,11 +5,11 @@ import { UserContext } from "../../utils/userContext";
 import { EnhancedPublicUser, User } from "../../utils/types";
 
 /**
- * SCRUM-513. The Message/Map tab strip signalled the active tab by colour
+ * The Message/Map tab strip signalled the active tab by colour
  * alone - no `role="tab"`, no `aria-selected` - so both tabs announced
- * identically. This is the one of the ticket's five segmented controls close
- * enough to a real tablist to get full tab semantics rather than
- * `aria-pressed`.
+ * identically. Of the five segmented controls the accessibility sweep
+ * covered, this is the one close enough to a real tablist to get full tab
+ * semantics rather than `aria-pressed`.
  *
  * The header, message list and composer are stubbed out: the subject here is
  * the tab strip `MessagePanel` owns directly, and each child already has its

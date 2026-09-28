@@ -7,7 +7,7 @@
  *
  * These are real columns on the driver's `CarpoolSearch`. They were once a
  * `GROUP_DETAILS_V1:` JSON blob in `carpool_search.group_message`, read through
- * a fallback here while rows were migrated; SCRUM-287 dropped the column after
+ * a fallback here while rows were migrated; the column was dropped after
  * `scripts/backfill-group-preferences.ts` had run in every environment, and the
  * fallback went with it. Reads are now just the three columns.
  */

@@ -29,9 +29,9 @@ import { toastCarpoolEnded } from "./CarpoolEndedToast";
  * library for the same three events; that one has since been removed, so
  * `react-toastify` is now the only one.
  *
- * This took the whole driver row as an argument until SCRUM-457, purely to read
- * two fields off it, which made the hook uncallable for a group that has no
- * DRIVER member - the one group whose members most need the removal path, since
+ * This took the whole driver row as an argument until that was fixed, purely
+ * to read two fields off it, which made the hook uncallable for a group that
+ * has no DRIVER member - the one group whose members most need the removal path, since
  * leaving is all the server will let them do. It now takes the group id and an
  * optional driver id instead.
  */
@@ -44,7 +44,7 @@ type UseGroupMembershipArgs = {
    * Both name the same group whenever there is a driver, and a group with no
    * DRIVER member has no driver row to read it off at all - which was enough to
    * make this hook uncallable in exactly the state whose only permitted action
-   * is the one it exists to perform. See SCRUM-457.
+   * is the one it exists to perform.
    */
   groupId: string | null;
   /**

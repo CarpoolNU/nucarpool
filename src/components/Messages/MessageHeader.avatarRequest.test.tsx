@@ -91,7 +91,7 @@ const SELECTED_USER = {
   isFavorited: false,
 } as unknown as EnhancedPublicUser;
 
-/** Every svg except the actions menu's icon (SCRUM-554), which is no avatar. */
+/** Every svg except the actions menu's icon, which is no avatar. */
 const avatarSlotSvgs = (container: HTMLElement) => {
   const menu = screen.getByRole("button", { name: "More actions for Riley" });
   return Array.from(container.querySelectorAll("svg")).filter(

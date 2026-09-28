@@ -45,8 +45,9 @@ describe("resolveGroupDetails — the single read path", () => {
 
   it("reads an unselected column as empty", () => {
     // `undefined` rather than `null`, from a caller that did not select them.
-    // Before SCRUM-287 this was the case that chose the legacy fallback, so it
-    // had to be told apart from a blank row; now both are simply empty.
+    // Before the legacy JSON-blob fallback was dropped, this was the case
+    // that chose it, so it had to be told apart from a blank row; now both
+    // are simply empty.
     expect(resolveGroupDetails({})).toEqual(DEFAULT_GROUP_DETAILS);
   });
 

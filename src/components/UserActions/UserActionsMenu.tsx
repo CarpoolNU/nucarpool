@@ -24,8 +24,8 @@ type UserActionsMenuProps = {
 };
 
 /**
- * The overflow menu on another user's card and conversation header
- * (SCRUM-554). It holds Report (SCRUM-555) and Block.
+ * The overflow menu on another user's card and conversation header.
+ * It holds Report and Block.
  *
  * The dialogs are rendered beside the `Menu`, not inside an item. A menu
  * closes when an item is chosen, and a dialog inside it would unmount with it.

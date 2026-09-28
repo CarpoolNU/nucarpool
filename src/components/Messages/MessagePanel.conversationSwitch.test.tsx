@@ -1,5 +1,5 @@
 /**
- * SCRUM-558: switching conversations on desktop must not carry one
+ * Switching conversations on desktop must not carry one
  * conversation's state into the next.
  *
  * The Requests sidebar stays beside the open panel on desktop, so a click on a

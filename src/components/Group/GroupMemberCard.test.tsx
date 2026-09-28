@@ -11,7 +11,7 @@
  * *which* actions each group state offers. This file owns what happens once
  * one of them is pressed.
  *
- * **What these assertions are and are not.** SCRUM-476 is a geometry defect:
+ * **What these assertions are and are not.** This pins a geometry defect:
  * Confirm and Cancel were 36px tall, 8px apart, and Confirm sat in territory
  * the trigger had just occupied. jsdom does no layout and resolves no
  * Tailwind - `getBoundingClientRect()` is all zeros here, see
@@ -21,9 +21,9 @@
  * compiled stylesheet, and the numbers are recorded in the component's own
  * comment.
  *
- * SCRUM-480 is the same defect on the *trigger* those two sit behind, which
- * SCRUM-476 left at 36px because its acceptance criteria named only the pair -
- * there were three 36px controls in this flow, not two. It is measured the same
+ * The same defect recurs on the *trigger* those two sit behind, which the
+ * earlier fix left at 36px because its acceptance criteria named only the
+ * pair - there were three 36px controls in this flow, not two. It is measured the same
  * way and asserted the same way, one `it.each` per label, and it is the same
  * proxy with the same limits rather than a second kind of test. The Chromium
  * figures: 36px to 44px at all three labels, with the row's own content box
@@ -94,7 +94,7 @@ describe("the destructive confirmation on a group member row", () => {
   });
 
   /*
-   * The ordering half of SCRUM-476. The trigger is right-aligned in a
+   * The ordering half of the fix. The trigger is right-aligned in a
    * shrink-wrapped slot and the pair is stacked under `items-end`, so the
    * control in the *first* slot is the one a repeat press in the same place
    * lands on. Cancel has to be that control.
@@ -118,7 +118,7 @@ describe("the destructive confirmation on a group member row", () => {
 
   /*
    * The defect, stated without geometry: press the trigger, then press
-   * whatever now sits in the slot the trigger occupied. Before SCRUM-476 that
+   * whatever now sits in the slot the trigger occupied. Before the fix, that
    * second press could be Confirm and the group was gone.
    */
   it("cancels rather than acts when the second press lands on the first control", async () => {
@@ -213,8 +213,8 @@ describe("the destructive confirmation on a group member row", () => {
   });
 
   /*
-   * The same proxy for the trigger, which SCRUM-480 raised from 36px to the
-   * same 44px. `py-2` is the 36px and `p-3` the 44px, so the negative half
+   * The same proxy for the trigger, raised from 36px to the same 44px.
+   * `py-2` is the 36px and `p-3` the 44px, so the negative half
    * matters as much as the positive one: `p-3` alongside a leftover `py-2`
    * would still measure 36, since both set `padding-block` and the later
    * declaration in the stylesheet wins rather than the one written last in

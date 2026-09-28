@@ -13,7 +13,7 @@ type BlockConfirmDialogProps = {
 };
 
 /**
- * Asks before blocking, and says what a block does (SCRUM-554).
+ * Asks before blocking, and says what a block does.
  *
  * The copy promises only what the server does. Both directions are hidden,
  * nothing is deleted, and unblocking from the profile brings it all back. A
