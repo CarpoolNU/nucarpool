@@ -45,37 +45,15 @@ jest.mock("react-toastify/unstyled", () => ({
 let editBehaviour: () => Promise<unknown> = async () => ({});
 const editFn = jest.fn(() => editBehaviour());
 
-jest.mock("../../utils/trpc", () => {
-  const reactQuery = jest.requireActual("@tanstack/react-query");
-  return {
-    trpc: {
-      useUtils: () => ({
-        user: {
-          me: { refetch: jest.fn(async () => undefined) },
-          recommendations: { me: { invalidate: jest.fn(async () => {}) } },
-        },
-        mapbox: { geoJsonUserList: { invalidate: jest.fn(async () => {}) } },
-      }),
-      user: {
-        me: {
-          useQuery: (input: unknown, options: object) =>
-            reactQuery.useQuery({
-              queryKey: ["user.me", input],
-              queryFn: async () => VIEWER_USER,
-              ...options,
-            }),
-        },
-        edit: {
-          useMutation: (options: object) =>
-            reactQuery.useMutation({
-              mutationFn: () => editFn(),
-              ...options,
-            }),
-        },
-      },
-    },
-  };
-});
+jest.mock("../../utils/trpc", () =>
+  require("../../testing/trpcHarness").buildTrpcMock({
+    "user.me": { query: async () => VIEWER_USER },
+    "user.edit": { mutation: () => editFn() },
+    // Utils-only: the save path invalidates both and neither is the subject.
+    "user.recommendations.me": {},
+    "mapbox.geoJsonUserList": {},
+  }),
+);
 
 jest.mock("../../utils/mixpanel", () => ({
   trackProfileCompletion: jest.fn(),

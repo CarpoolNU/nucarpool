@@ -31,38 +31,20 @@ import {
   restoreViewportAfterEach,
   setViewportWidth,
 } from "../../testing/viewport";
+import { trpcSpies, resetTrpcSpies } from "../../testing/trpcHarness";
 
 /** Set per test: what the one fetch does. */
 let behaviour: () => Promise<unknown[]> = async () => [];
-const queryFn = jest.fn(() => behaviour());
 
-const refetchSpy = jest.fn();
+jest.mock("../../utils/trpc", () =>
+  require("../../testing/trpcHarness").buildTrpcMock({
+    "user.admin.getAllUsers": { query: () => behaviour() },
+    "user.admin.updateUserPermission": { inertMutation: true },
+  }),
+);
 
-jest.mock("../../utils/trpc", () => {
-  const reactQuery = jest.requireActual("@tanstack/react-query");
-  return {
-    trpc: {
-      user: {
-        admin: {
-          getAllUsers: {
-            useQuery: (input: undefined, options: object) =>
-              reactQuery.useQuery({
-                queryKey: ["getAllUsers", input],
-                queryFn: () => queryFn(),
-                ...options,
-              }),
-          },
-          updateUserPermission: {
-            useMutation: () => ({ mutate: jest.fn() }),
-          },
-        },
-      },
-      useUtils: () => ({
-        user: { admin: { getAllUsers: { refetch: refetchSpy } } },
-      }),
-    },
-  };
-});
+/** The `getAllUsers` fetch, counted from inside the client. */
+const queryFn = () => trpcSpies("user.admin.getAllUsers").queryFn;
 
 restoreViewportAfterEach();
 
@@ -88,8 +70,7 @@ const spinner = () => screen.queryByText("Loading...");
 
 beforeEach(() => {
   setViewportWidth(DESKTOP_WIDTH);
-  queryFn.mockClear();
-  refetchSpy.mockClear();
+  resetTrpcSpies();
   behaviour = async () => [];
 });
 
@@ -127,7 +108,7 @@ describe("UserManagement when getAllUsers fails", () => {
       expect(screen.getByText("Permissions Management")).toBeInTheDocument(),
     );
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(queryFn).toHaveBeenCalledTimes(2);
+    expect(queryFn()).toHaveBeenCalledTimes(2);
   });
 
   /**

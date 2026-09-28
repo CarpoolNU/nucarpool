@@ -40,26 +40,14 @@ jest.mock("next-auth/react", () => ({
 let behaviour: () => Promise<unknown> = async () => ({});
 const queryFn = jest.fn(() => behaviour());
 
-jest.mock("../../utils/trpc", () => {
-  const reactQuery = jest.requireActual("@tanstack/react-query");
-  return {
-    trpc: {
-      mapbox: {
-        search: { useQuery: () => ({ data: undefined, error: null }) },
-      },
-      user: {
-        me: {
-          useQuery: (input: unknown, options: object) =>
-            reactQuery.useQuery({
-              queryKey: ["user.me", input],
-              queryFn: () => queryFn(),
-              ...options,
-            }),
-        },
-      },
-    },
-  };
-});
+jest.mock("../../utils/trpc", () =>
+  require("../../testing/trpcHarness").buildTrpcMock({
+    "user.me": { query: () => queryFn() },
+    // The address box's own lookup, held at a literal empty result: it is not
+    // the subject and a real fetch here would be a second thing to control.
+    "mapbox.search": { inertQuery: true },
+  }),
+);
 
 jest.mock("../../utils/mixpanel", () => ({
   trackFTUEStep: jest.fn(),

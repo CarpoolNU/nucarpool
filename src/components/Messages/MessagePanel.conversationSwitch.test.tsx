@@ -48,66 +48,37 @@ const sendMessageFn = jest.fn(
 const pusherHandlers: Record<string, (data: { newMessage: Message }) => void> =
   {};
 
-jest.mock("../../utils/trpc", () => {
-  const reactQuery = jest.requireActual("@tanstack/react-query");
-
-  const inertMutation = () => ({
-    mutate: jest.fn(),
-    mutateAsync: jest.fn(),
-    isPending: false,
-  });
-
-  return {
-    realTimeQueryOptions: {},
-    trpc: {
-      useUtils: () => ({
-        user: {
-          me: { invalidate: jest.fn() },
-          requests: { me: { invalidate: jest.fn() } },
-          recommendations: { me: { invalidate: jest.fn() } },
-          groups: { me: { invalidate: jest.fn() } },
-          messages: {
-            getUnreadMessageCount: { invalidate: jest.fn() },
-            conversation: { invalidate: jest.fn() },
-          },
-        },
-      }),
-      user: {
-        messages: {
-          conversation: {
-            useInfiniteQuery: (input: { requestId: string }, options: object) =>
-              reactQuery.useInfiniteQuery({
-                queryKey: ["conversation", input],
-                queryFn: async () => ({
-                  messages: [...(storedThreads[input.requestId] ?? [])],
-                  nextCursor: undefined,
-                }),
-                initialPageParam: undefined,
-                ...options,
-              }),
-          },
-          sendMessage: {
-            useMutation: (options: object) =>
-              reactQuery.useMutation({
-                mutationFn: sendMessageFn,
-                ...options,
-              }),
-          },
-          markMessagesAsRead: { useMutation: inertMutation },
-        },
-        emails: {
-          sendMessageNotification: { useMutation: inertMutation },
-          sendAcceptanceNotification: { useMutation: inertMutation },
-        },
-        requests: { delete: { useMutation: inertMutation } },
-        groups: {
-          edit: { useMutation: inertMutation },
-          create: { useMutation: inertMutation },
-        },
+jest.mock("../../utils/trpc", () =>
+  require("../../testing/trpcHarness").buildTrpcMock(
+    {
+      "user.messages.conversation": {
+        infiniteQuery: async (input: { requestId: string }) => ({
+          messages: [...(storedThreads[input.requestId] ?? [])],
+          nextCursor: undefined,
+        }),
       },
+      "user.messages.sendMessage": {
+        mutation: (variables: { requestId: string; content: string }) =>
+          sendMessageFn(variables),
+      },
+      // Wired up during render, never the subject.
+      "user.messages.markMessagesAsRead": { inertMutation: true },
+      "user.emails.sendMessageNotification": { inertMutation: true },
+      "user.emails.sendAcceptanceNotification": { inertMutation: true },
+      "user.requests.delete": { inertMutation: true },
+      "user.groups.edit": { inertMutation: true },
+      "user.groups.create": { inertMutation: true },
+      // Utils-only. The harness's default invalidate records and resolves
+      // without reaching the cache, which is what this file relied on.
+      "user.me": {},
+      "user.requests.me": {},
+      "user.recommendations.me": {},
+      "user.groups.me": {},
+      "user.messages.getUnreadMessageCount": {},
     },
-  };
-});
+    { realTimeQueryOptions: {} },
+  ),
+);
 
 jest.mock("../../utils/pusherClient", () => ({
   acquirePusherClient: () => ({

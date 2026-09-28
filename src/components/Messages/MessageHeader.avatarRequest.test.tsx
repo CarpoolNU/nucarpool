@@ -52,29 +52,12 @@ const queryFn = jest.fn(async () => ({ url: AVATAR_URL }));
  * a fix that built the flag but failed to pass it shows up here as a fetch
  * that still happens.
  */
-jest.mock("../../utils/trpc", () => {
-  const reactQuery = jest.requireActual("@tanstack/react-query");
-  return {
-    trpc: {
-      useUtils: () => ({}),
-      user: {
-        blocks: {
-          block: {
-            useMutation: () => ({ mutate: jest.fn(), isPending: false }),
-          },
-        },
-        getPresignedDownloadUrl: {
-          useQuery: (input: { userId?: string }, options: object) =>
-            reactQuery.useQuery({
-              queryKey: ["getPresignedDownloadUrl", input],
-              queryFn: () => queryFn(),
-              ...options,
-            }),
-        },
-      },
-    },
-  };
-});
+jest.mock("../../utils/trpc", () =>
+  require("../../testing/trpcHarness").buildTrpcMock({
+    "user.getPresignedDownloadUrl": { query: () => queryFn() },
+    "user.blocks.block": { inertMutation: true },
+  }),
+);
 
 restoreViewportAfterEach();
 

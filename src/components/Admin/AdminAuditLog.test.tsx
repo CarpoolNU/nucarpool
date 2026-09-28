@@ -13,33 +13,12 @@ import AdminAuditLog from "./AdminAuditLog";
 const auditLogQueryFn = jest.fn();
 const usersQueryFn = jest.fn();
 
-jest.mock("../../utils/trpc", () => {
-  const reactQuery = jest.requireActual("@tanstack/react-query");
-  return {
-    trpc: {
-      user: {
-        admin: {
-          getAuditLog: {
-            useQuery: (input: undefined, options: object) =>
-              reactQuery.useQuery({
-                queryKey: ["getAuditLog", input],
-                queryFn: () => auditLogQueryFn(),
-                ...options,
-              }),
-          },
-          getAllUsers: {
-            useQuery: (input: undefined, options: object) =>
-              reactQuery.useQuery({
-                queryKey: ["getAllUsers", input],
-                queryFn: () => usersQueryFn(),
-                ...options,
-              }),
-          },
-        },
-      },
-    },
-  };
-});
+jest.mock("../../utils/trpc", () =>
+  require("../../testing/trpcHarness").buildTrpcMock({
+    "user.admin.getAuditLog": { query: () => auditLogQueryFn() },
+    "user.admin.getAllUsers": { query: () => usersQueryFn() },
+  }),
+);
 
 const withClient = (node: React.ReactNode) => (
   <QueryClientProvider

@@ -46,43 +46,26 @@ import {
   restoreViewportAfterEach,
   setViewportWidth,
 } from "../../testing/viewport";
-
-const queryFn = jest.fn(async () => [] as unknown[]);
+import { trpcSpies, resetTrpcSpies } from "../../testing/trpcHarness";
 
 /**
- * `trpc.user.admin.getAllUsers.useQuery`, as the React Query call it compiles
- * down to. The `options` spread is what carries `enabled` through, so a fix
- * that computed the gate but failed to pass it would show up here as a fetch
- * that still happens.
+ * `trpc` on a real React Query, through the shared harness. The harness
+ * spreads each caller's `options` into the client, which is what carries
+ * `enabled` through - so a fix that computed the gate but failed to pass it
+ * shows up here as a fetch that still happens.
  *
- * `updateUserPermission` and `useUtils` are stubs: the component calls both
- * during render and neither is the subject.
+ * `updateUserPermission` is inert and `useUtils` comes from the harness: the
+ * component calls both during render and neither is the subject.
  */
-jest.mock("../../utils/trpc", () => {
-  const reactQuery = jest.requireActual("@tanstack/react-query");
-  return {
-    trpc: {
-      user: {
-        admin: {
-          getAllUsers: {
-            useQuery: (input: undefined, options: object) =>
-              reactQuery.useQuery({
-                queryKey: ["getAllUsers", input],
-                queryFn: () => queryFn(),
-                ...options,
-              }),
-          },
-          updateUserPermission: {
-            useMutation: () => ({ mutate: jest.fn() }),
-          },
-        },
-      },
-      useUtils: () => ({
-        user: { admin: { getAllUsers: { refetch: jest.fn() } } },
-      }),
-    },
-  };
-});
+jest.mock("../../utils/trpc", () =>
+  require("../../testing/trpcHarness").buildTrpcMock({
+    "user.admin.getAllUsers": { query: async () => [] as unknown[] },
+    "user.admin.updateUserPermission": { inertMutation: true },
+  }),
+);
+
+/** The `getAllUsers` fetch, counted from inside the client. */
+const queryFn = () => trpcSpies("user.admin.getAllUsers").queryFn;
 
 restoreViewportAfterEach();
 
@@ -129,7 +112,7 @@ const withClient = (node: React.ReactNode) => (
  */
 const hydrateAt = async (width: number) => {
   setViewportWidth(width);
-  queryFn.mockClear();
+  resetTrpcSpies();
 
   const tree = withClient(<AdminDashboardBranch />);
   const serverHtml = renderToString(tree);
@@ -173,7 +156,7 @@ describe("UserManagement on a hydration pass that is discarded", () => {
 
     // The whole ticket: that discarded mount used to cost one privileged
     // request for the entire user table, on every mobile load of `/admin`.
-    expect(queryFn).not.toHaveBeenCalled();
+    expect(queryFn()).not.toHaveBeenCalled();
   });
 
   it("still fetches when the dashboard survives hydration", async () => {
@@ -182,14 +165,14 @@ describe("UserManagement on a hydration pass that is discarded", () => {
     // The other side, so a component that simply never fetched would fail
     // here. The gate is one render pass of deferral, not a cancellation - and
     // because it carries no viewport term, desktop pays that pass too.
-    expect(queryFn).toHaveBeenCalledTimes(1);
+    expect(queryFn()).toHaveBeenCalledTimes(1);
   });
 });
 
 describe("UserManagement on a fresh client mount", () => {
   it("starts its request on the first render, undeferred", async () => {
     setViewportWidth(DESKTOP_WIDTH);
-    queryFn.mockClear();
+    resetTrpcSpies();
 
     await act(async () => {
       render(withClient(<UserManagement permission={Permission.MANAGER} />));
@@ -201,6 +184,6 @@ describe("UserManagement on a fresh client mount", () => {
      * anywhere else. A `useState(false)` plus mount effect would defer this
      * one too and fail here.
      */
-    expect(queryFn).toHaveBeenCalledTimes(1);
+    expect(queryFn()).toHaveBeenCalledTimes(1);
   });
 });
