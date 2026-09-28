@@ -312,8 +312,8 @@ describe("Filters — control labels", () => {
 });
 
 /**
- * SCRUM-513. Each of the four range sliders had a bare `<label>` followed by
- * a `<div>`-wrapped input, with no `htmlFor`/`id` pairing between them - so
+ * Each of the four range sliders had a bare `<label>` followed by a
+ * `<div>`-wrapped input, with no `htmlFor`/`id` pairing between them - so
  * every one announced as unlabelled despite the visible text above it.
  */
 describe("Filters — slider accessible names", () => {
@@ -345,8 +345,8 @@ describe("Filters — slider accessible names", () => {
 });
 
 /**
- * SCRUM-513. The Any/Exact/Flex buttons signalled the active mode by colour
- * alone - no `aria-pressed`, so every option announced identically.
+ * The Any/Exact/Flex buttons signalled the active mode by colour alone - no
+ * `aria-pressed`, so every option announced identically.
  */
 describe("Filters — Carpool Days Match segmented control", () => {
   it("marks exactly the selected mode as pressed", () => {

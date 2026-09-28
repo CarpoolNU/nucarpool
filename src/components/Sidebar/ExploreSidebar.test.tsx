@@ -129,8 +129,8 @@ describe.each([
   });
 
   /**
-   * SCRUM-513. The two list-switch buttons signalled the active list by
-   * colour alone - no `aria-pressed` - so both announced identically.
+   * The two list-switch buttons signalled the active list by colour alone -
+   * no `aria-pressed` - so both announced identically.
    */
   it("marks exactly the active list as pressed", async () => {
     renderSidebar();

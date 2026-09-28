@@ -209,9 +209,9 @@ describe("useMapInstance", () => {
   });
 
   /**
-   * The white-box-below-the-map bug (SCRUM-534): with no floor, a user could
-   * zoom out past the point where Mapbox's rendered world still fills the
-   * container, exposing blank canvas past the latitude clamp.
+   * The white-box-below-the-map bug: with no floor, a user could zoom out
+   * past the point where Mapbox's rendered world still fills the container,
+   * exposing blank canvas past the latitude clamp.
    */
   it("caps how far the map can be zoomed out, by default", () => {
     renderHook(() =>

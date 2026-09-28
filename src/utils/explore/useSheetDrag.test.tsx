@@ -29,7 +29,7 @@ import type { SheetDetent } from "./sheetDetents";
  *    `half` would be collapsed a moment later by the tap handler;
  *  - a release lands on a detent, and a cancel lands on none;
  *  - a drag begins from a *collapsed* sheet with no expanded render behind it,
- *    which is the regression SCRUM-459 fixed and the one this environment can
+ *    which is the regression this hook fixed and the one this environment can
  *    genuinely speak to, since the range is now arithmetic over a measured
  *    edge rather than a cached measurement;
  *  - a sheet with no geometry, or a view that is not a detent, degrades to
@@ -63,8 +63,8 @@ const MAP_STRIP_PX = MOBILE_SHEET_MAP_STRIP_REM * ROOT_FONT_SIZE_PX;
 
 /**
  * 0.5rem of clearance the handle holds above the edge it is riding: 8px.
- * SCRUM-529 - before the fix the drag held none of this, so the handle
- * landed exactly on the edge and corrected by this figure on release.
+ * Before the fix the drag held none of this, so the handle landed exactly
+ * on the edge and corrected by this figure on release.
  */
 const LIFT_PX = MOBILE_SHEET_HANDLE_LIFT_REM * ROOT_FONT_SIZE_PX;
 
@@ -269,8 +269,8 @@ describe("a drag", () => {
   });
 
   it("expands from a collapsed sheet on the very first gesture", () => {
-    // **SCRUM-459.** A VIEWER's sheet opens `collapsed`, so this is that role's
-    // first touch of the handle in a session - no expanded render has ever
+    // A VIEWER's sheet opens `collapsed`, so this is that role's first touch
+    // of the handle in a session - no expanded render has ever
     // happened. The sheet itself measures zero here, and that no longer
     // matters: the range comes from the bottom edge the sheet is pinned to,
     // which is the same in every detent.
@@ -355,8 +355,7 @@ describe("a drag", () => {
     expect(sheet.style.height).toBe("300px");
     // 60px of viewport below the sheet's bottom edge - the navigation - plus
     // the 300px the sheet now stands at, less the 8px clearance the pill
-    // holds above that edge (SCRUM-529): the pill rides the top edge, not
-    // sits on it.
+    // holds above that edge: the pill rides the top edge, not sits on it.
     expect(handle.style.bottom).toBe(`${NAV_SPACE + 300 - LIFT_PX}px`);
     expect(handle).toHaveTextContent("dragging");
   });

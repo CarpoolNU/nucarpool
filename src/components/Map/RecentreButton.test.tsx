@@ -26,13 +26,14 @@ import {
  * *Also not covered, and not coverable here:* **that the caller renders this
  * inside a positioned ancestor.** Every offset below is `absolute`, so where
  * the button lands is decided by whichever ancestor establishes its containing
- * block - and that is `index.tsx`'s business, not this component's. It was the
- * whole of SCRUM-464 item 2: the classes asserted below were already correct
- * while the button sat under `MobileBanner`, because it was rendered as a
- * sibling of `#map` rather than inside it and `top-2` was measuring from the
- * viewport. `index.tsx` has no test, so nothing in this suite fails if that
- * regresses. The assertion that would catch it is SCRUM-264's:
- * `elementFromPoint` at the button's top edge returns the button.
+ * block - and that is `index.tsx`'s business, not this component's. That gap
+ * let the classes asserted below stay correct while the button sat under
+ * `MobileBanner`, because it was rendered as a sibling of `#map` rather than
+ * inside it and `top-2` was measuring from the viewport. `index.tsx` has no
+ * test, so nothing in this suite fails if that regresses. The assertion that
+ * would catch it lives in the Playwright suite that covers this component's
+ * layout directly: `elementFromPoint` at the button's top edge returns the
+ * button.
  */
 
 restoreViewportAfterEach();

@@ -115,8 +115,8 @@ describe("the predicates together", () => {
 });
 
 describe("roleFetchesRecommendations", () => {
-  // SCRUM-460. `user.recommendations.me` is a ranked scoring pass returning up
-  // to 50 candidates, and a VIEWER's copy of it was discarded unrendered on
+  // `user.recommendations.me` is a ranked scoring pass returning up to 50
+  // candidates, and a VIEWER's copy of it was discarded unrendered on
   // every mount. "A query did not fire" is not something the mocked suite can
   // observe, which is why the rule is a predicate and why these are its tests.
 

@@ -269,10 +269,10 @@ describe("isSheetDetentView", () => {
   });
 
   it("agrees with the views a detent can actually produce", () => {
-    // SCRUM-459 was the gap between the handle's render condition and the
-    // drag's precondition. They are one predicate now, and this is the link
-    // back to `planExploreSidebar`: every view a detent resolves to is one the
-    // drag accepts.
+    // The gap between the handle's render condition and the drag's
+    // precondition is closed: they are one predicate now, and this is the
+    // link back to `planExploreSidebar`: every view a detent resolves to is
+    // one the drag accepts.
     for (const detent of ["collapsed", "half", "expanded"] as SheetDetent[]) {
       const produced = view({
         isMobile: true,

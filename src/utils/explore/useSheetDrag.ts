@@ -54,7 +54,7 @@ import {
  * held to the same clearance its resting classes hold rather than to the
  * sheet's bare edge - see `handleBottomPx` in `sheetDetents.ts` for that
  * arithmetic and why `collapsed` floors it instead of matching the others
- * exactly (SCRUM-529).
+ * exactly.
  *
  * ---
  *
@@ -62,9 +62,9 @@ import {
  * The expanded height was measured off the sheet during an expanded render and
  * kept in a ref, on the reasoning that `h-mobile-sheet` is a `calc()` no
  * JavaScript should try to reproduce. That held only while every role opened
- * the sheet expanded. SCRUM-455 gave a VIEWER a `collapsed` opening detent, so
+ * the sheet expanded. Once a VIEWER got a `collapsed` opening detent instead,
  * for a third of the user base the ref was still zero when the first finger
- * arrived and the gesture fell through to the tap path (SCRUM-459).
+ * arrived and the gesture fell through to the tap path.
  *
  * `expandedSheetHeightPx` derives the range instead, from the sheet's own
  * bottom edge at the moment the gesture starts — see there for why that is
@@ -259,9 +259,9 @@ export const useSheetDrag = ({
       // The pill rides the sheet's top edge, held at the same clearance its
       // resting classes hold and floored at `collapsed`'s clearance above the
       // navigation - `handleBottomPx` in `sheetDetents.ts` has the arithmetic
-      // and why the floor is needed rather than a uniform offset. Before
-      // SCRUM-529 this wrote the edge itself with no clearance, which was a
-      // second relationship the docblocks here used to claim was the same one.
+      // and why the floor is needed rather than a uniform offset. This used to
+      // write the edge itself with no clearance, which was a second
+      // relationship the docblocks here used to claim was the same one.
       gesture.handle.style.bottom = `${handleBottomPx({
         sheetBottomInsetPx: gesture.sheetBottomInsetPx,
         heightPx,

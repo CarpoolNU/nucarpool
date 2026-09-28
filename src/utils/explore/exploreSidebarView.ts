@@ -143,10 +143,10 @@ const DETENT_VIEWS: Record<SheetDetent, true> = {
  * **One rule rather than two.** The page used to spell the render condition out
  * as a three-way `||`, and `useSheetDrag` enforced its own separate
  * precondition — that an expanded render had already been measured. Those were
- * never the same statement, and the gap between them is SCRUM-459: the handle
- * rendered in `collapsed` while the drag refused to start there.
+ * never the same statement, and the gap between them was a real defect: the
+ * handle rendered in `collapsed` while the drag refused to start there.
  *
- * The other two views are excluded for reasons that outlive that ticket.
+ * The other two views are excluded for reasons that outlive that defect.
  * `hidden` is `display: none`, so there is no sheet to drag and no geometry to
  * read. `detail` is a *different* sheet — a fixed 320px capped at `60dvh` —
  * pinned to the same bottom edge, so the expanded range derived from that edge
