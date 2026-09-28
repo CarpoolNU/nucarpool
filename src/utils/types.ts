@@ -18,7 +18,7 @@ export type AdminUser = {
   permission: Permission;
 };
 
-/** One row of `AdminAuditLog`, as `getAuditLog` returns it (SCRUM-541). */
+/** One row of `AdminAuditLog`, as `getAuditLog` returns it. */
 export type AdminAuditLogEntry =
   RouterOutput["user"]["admin"]["getAuditLog"][number];
 
@@ -245,7 +245,7 @@ export type User = {
   // Fields merged from CarpoolSearch
   /**
    * Whether the user has a `CarpoolSearch` row at all, as opposed to `role`
-   * falling back to `VIEWER` because there is none yet. See SCRUM-508.
+   * falling back to `VIEWER` because there is none yet.
    */
   hasCarpoolSearch: boolean;
   role: Role;

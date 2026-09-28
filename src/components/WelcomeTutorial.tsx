@@ -19,7 +19,7 @@ import type { SheetDetent } from "../utils/explore/sheetDetents";
  * opacity-0 pointer-events-none`, so without this the tour anchors a popover
  * to an element that is there but invisible. The map step (`#map`) needs the
  * opposite: a RIDER or DRIVER's own opening detent is `expanded`, which pins
- * the sheet over roughly 85% of the map, so this collapses it first. SCRUM-528.
+ * the sheet over roughly 85% of the map, so this collapses it first.
  */
 export const MOBILE_STEP_DETENTS: Partial<Record<number, SheetDetent>> = {
   1: "expanded",
@@ -49,7 +49,7 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({
   // effect and something the effect's own teardown set - which made a single
   // completion re-run the effect and build another tour. A ref is also the
   // stricter guard, since `setState` would not have been visible to a second
-  // call in the same tick. SCRUM-527.
+  // call in the same tick.
   const isCompletingRef = useRef(false);
   // Use the exact same mobile detection as the main page
   const isMobile = useIsMobile();
@@ -91,7 +91,7 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({
    * rebuilt on every render (`return { ...result, mutate, mutateAsync }`). So
    * `handleComplete` is never referentially stable, and depending on it re-ran
    * the effect - tearing down the live tour and starting a new one from step 1
-   * - on every single render of this component. SCRUM-527.
+   * - on every single render of this component.
    */
   const handleCompleteRef = useRef(handleComplete);
   useEffect(() => {
@@ -136,7 +136,7 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({
      * is precisely what skips the `onDestroyStarted` guard and drops straight
      * into the teardown that invokes `onDestroyed`. So the hook has to make
      * that distinction itself, or every teardown reports a completed tutorial
-     * to the server. SCRUM-527.
+     * to the server.
      */
     let isCleaningUp = false;
 
@@ -144,8 +144,8 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({
      * The detent the sheet was resting at before this tour touched it - a
      * snapshot taken once, since this effect does not depend on `sheetDetent`
      * (that would re-run the whole effect on every step the mobile tour
-     * drives, rebuilding the tour exactly the way SCRUM-527 fixed). `undefined`
-     * on desktop, where the prop is never passed. SCRUM-528.
+     * drives, rebuilding the tour exactly the way the fix above avoids).
+     * `undefined` on desktop, where the prop is never passed.
      */
     const openingDetent = sheetDetentRef.current;
 
@@ -216,7 +216,7 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({
         // Forces the sheet open before this step is measured or shown - see
         // `MOBILE_STEP_DETENTS`. Without it a VIEWER's opening `collapsed`
         // detent leaves this element `h-0 opacity-0`, so the popover anchors
-        // to nothing. SCRUM-528.
+        // to nothing.
         onHighlightStarted: () =>
           setSheetDetentRef.current?.(MOBILE_STEP_DETENTS[1]!),
         popover: {
@@ -232,7 +232,6 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({
         // Collapses the sheet before this step is measured or shown - a
         // RIDER or DRIVER's opening `expanded` detent otherwise pins the
         // sheet over roughly 85% of the map this step claims to show.
-        // SCRUM-528.
         onHighlightStarted: () =>
           setSheetDetentRef.current?.(MOBILE_STEP_DETENTS[2]!),
         popover: {
@@ -283,7 +282,6 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({
         // and the `destroy()` call below that React's own cleanup makes - so
         // this is the one place that reaches all of them, synchronously,
         // rather than waiting on `handleComplete`'s round trip to the server.
-        // SCRUM-528.
         if (isMobile && openingDetent !== undefined) {
           setSheetDetentRef.current?.(openingDetent);
         }

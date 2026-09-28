@@ -320,8 +320,8 @@ describe("the shared mobile navigation height", () => {
  * The third quantity to move into this file, and for a new reason: the drag
  * gesture needs it as a *number*. `useSheetDrag` derives the sheet's expanded
  * height as its measured bottom edge less this strip, which is what lets a
- * drag start from a collapsed sheet instead of only after an expanded render
- * (SCRUM-459). A figure defined twice - once as CSS here and once as
+ * drag start from a collapsed sheet instead of only after an expanded render.
+ * A figure defined twice - once as CSS here and once as
  * arithmetic there - would let the gesture and the layout drift apart with
  * nothing failing, which is the same defect the navigation height had.
  */
@@ -370,7 +370,7 @@ describe("the shared explore-sheet map strip", () => {
 /**
  * The height the onboarding wizard's desktop arrangement needs.
  *
- * The defect (SCRUM-474) was that it needed one at all and nothing said so:
+ * The defect was that it needed one at all and nothing said so:
  * `desktop:` is a `min-width`, so a phone in landscape - 667px wide, 375px tall
  * - took the desktop branch and got a 500px card centred in a 375px viewport,
  * clipped at both ends with the navigation strip across what was left.
@@ -451,8 +451,7 @@ describe("the onboarding wizard's minimum desktop height", () => {
 });
 
 /**
- * The header bar's share of the viewport, and the two things SCRUM-484 derived
- * from it.
+ * The header bar's share of the viewport, and the two things derived from it.
  *
  * The bar declares a percentage and its logo declared a fixed `111px`, so the
  * two were unrelated numbers and the child overflowed the parent at every
@@ -478,7 +477,7 @@ describe("the header bar's share of the viewport", () => {
     /* Stated as the complement so the bar and the row cannot add up to
        anything but the viewport.
 
-       **Kept rather than deleted when SCRUM-496 put a 44px floor under the
+       **Kept rather than deleted when a 44px floor was put under the
        bar, and narrowed to what it still proves.** The two fractions are
        complements of each other and always were; what changed is that the
        bar's *rendered* height is no longer the fraction at every viewport, so
@@ -492,7 +491,7 @@ describe("the header bar's share of the viewport", () => {
   });
 
   /**
-   * SCRUM-496's floor, and the invariant that replaced the bare complement
+   * The bar's floor, and the invariant that replaced the bare complement
    * above.
    *
    * The floor reaches the bar as a separate `min-height` rather than folded
@@ -536,12 +535,12 @@ describe("the header bar's share of the viewport", () => {
     });
 
     /**
-     * The criterion SCRUM-496 asks for by name: the bar and the content row
+     * The criterion the fix asks for by name: the bar and the content row
      * sum to exactly the viewport at 375, 660 and 900px tall.
      *
      * 375 is inside the floor's band, 900 is above it, and 660 is the
-     * mid-range viewport SCRUM-491 measured at - so the three cover both cases
-     * and the case boundary is covered by its own test below.
+     * mid-range viewport an earlier fix measured at - so the three cover
+     * both cases and the case boundary is covered by its own test below.
      */
     it.each([375, 660, 900])(
       "has the bar and the row partition a %ipx viewport exactly",
@@ -588,13 +587,14 @@ describe("the header bar's share of the viewport", () => {
     });
 
     /**
-     * The floor repeated into the children, which is the correction SCRUM-496
-     * had to make to its own Proposed Fix.
+     * The floor repeated into the children, which is a correction the fix
+     * had to make to its own initial proposal.
      *
-     * That ticket expected the bar's controls to follow the bar up on their
-     * own, on the grounds that SCRUM-491 capped them "against the bar". Only
-     * `Logo` does, because it declares `height: 100%` and therefore *is* the
-     * bar. Everything built on `HEADER_BAR_CONTROL_HEIGHT_EXPRESSION` is a
+     * That proposal expected the bar's controls to follow the bar up on their
+     * own, on the grounds that an earlier fix had capped them "against the
+     * bar". Only `Logo` does, because it declares `height: 100%` and
+     * therefore *is* the bar. Everything built on
+     * `HEADER_BAR_CONTROL_HEIGHT_EXPRESSION` is a
      * reconstruction from `100dvh` - a CSS length cannot ask its parent how
      * tall it turned out - so the floor has to appear there too or the
      * controls stay at 31.875px inside a 44px bar.
@@ -789,7 +789,7 @@ describe("the header bar's share of the viewport", () => {
 });
 
 /**
- * The two caps SCRUM-491 puts on the bar's *other* children.
+ * The two caps put on the bar's *other* children.
  *
  * Same defect shape as the logo above and the same treatment - a fixed pixel
  * size inside a percentage-height bar, capped rather than replaced so that an
@@ -804,8 +804,8 @@ describe("the header bar's share of the viewport", () => {
  */
 describe("the caps on the header bar's controls", () => {
   it("caps the profile trigger as a square, composed from the shared fraction", () => {
-    /* The inner `calc()` this had until SCRUM-496 is gone with it: the shared
-       expression is now a complete `max()`, and a math function needs no
+    /* The inner `calc()` this had until the floor was added is gone with it:
+       the shared expression is now a complete `max()`, and a math function needs no
        `calc()` wrapper to sit inside a `min()` - only to have arithmetic done
        to it, which is what the tab's padding below still does. */
     expect(HEADER_AVATAR_TRIGGER_SIZE).toBe(
@@ -868,7 +868,7 @@ describe("the caps on the header bar's controls", () => {
 
   it("leaves both design sizes alone on an ordinary desktop window", () => {
     /* Measured at 1440x900: bar 76.5, tab 60 at top 8.25, trigger 56 at top
-       10.25 - the same figures SCRUM-485 recorded before the fix. */
+       10.25 - the same figures recorded before the fix. */
     expect(barAt(900)).toBe(76.5);
     expect(tabHeightAt(900)).toBe(60);
     expect(triggerAt(900)).toBe(56);
@@ -942,11 +942,11 @@ describe("the caps on the header bar's controls", () => {
 /**
  * The admin console's height gate.
  *
- * SCRUM-484's other half: `showMobileNotice` was width-only, so a landscape
- * phone was served the console into a 343px row. The threshold is the
- * console's own, read at that one call site, and `MOBILE_BREAKPOINT_PX` is
- * untouched - SCRUM-477 records why a height term on that constant would move
- * all twelve of its survey sites at once.
+ * The other half of the same defect as the header bar's controls above:
+ * `showMobileNotice` was width-only, so a landscape phone was served the
+ * console into a 343px row. The threshold is the console's own, read at that
+ * one call site, and `MOBILE_BREAKPOINT_PX` is untouched - a height term on
+ * that constant would move all twelve of its survey sites at once.
  */
 describe("the admin console's minimum height", () => {
   it("is composed from the console's own numbers, not chosen", () => {
@@ -958,10 +958,10 @@ describe("the admin console's minimum height", () => {
   });
 
   /**
-   * **This gate is above the band the bar's floor binds in, so SCRUM-496 did
-   * not move it - and that is asserted rather than assumed.**
+   * **This gate is above the band the bar's floor binds in, so adding that
+   * floor did not move it - and that is asserted rather than assumed.**
    *
-   * SCRUM-496's acceptance criteria named this constant as the one needing
+   * That fix's acceptance criteria named this constant as the one needing
    * re-derivation. It went through the helper, and the helper returned the
    * same 582: at that height the bar is still 8.5%, because 582 is above
    * `44 / 0.085`. Pinning the equality to the old division is what would catch
@@ -991,8 +991,8 @@ describe("the admin console's minimum height", () => {
      * below, it is not. That one-pixel check is what makes this a boundary
      * rather than a plausible number.
      *
-     * The row is the viewport less the bar's *rendered* height since
-     * SCRUM-496, which is the floored `max()` and not the bare fraction. At
+     * The row is the viewport less the bar's *rendered* height, which is now
+     * the floored `max()` and not the bare fraction. At
      * this gate's own height the two coincide; written this way the boundary
      * stays a boundary if the gate ever moves into the floor's band.
      */
@@ -1041,9 +1041,8 @@ describe("the admin console's minimum height", () => {
   });
 
   /**
-   * Not the wizard's, and this is the assertion that would have caught the
-   * mistake SCRUM-484's ticket warns about by name: copying 844px to a place
-   * it means nothing.
+   * Not the wizard's, and this is the assertion that would have caught
+   * exactly the mistake to avoid: copying 844px to a place it means nothing.
    */
   it("is its own figure, not the onboarding wizard's", () => {
     expect(ADMIN_CONSOLE_MIN_HEIGHT_PX).not.toBe(WIZARD_DESKTOP_MIN_HEIGHT_PX);
@@ -1059,7 +1058,7 @@ describe("the admin console's minimum height", () => {
  * layout is that the chrome does not shrink - 145px of header and a 53px tab
  * strip came off the top, and `SendBar`'s min-content height took the rest, so
  * the conversation was left with its own padding and nothing else:
- * `contentHeight` 0, with a `scrollHeight` of 220 behind it (SCRUM-489).
+ * `contentHeight` 0, with a `scrollHeight` of 220 behind it.
  *
  * These guard the derivation rather than the number, for the reason the
  * wizard's docblock gives: a test restating 489 would still pass on the day one
@@ -1080,7 +1079,7 @@ describe("the message panel's minimum height", () => {
   });
 
   /**
-   * **This is the gate the bar's floor actually moved, and SCRUM-496's
+   * **This is the gate the bar's floor actually moved, and that fix's
    * acceptance criteria did not mention it.**
    *
    * They asked for `ADMIN_CONSOLE_MIN_HEIGHT_PX` to be re-derived, which sits
@@ -1270,7 +1269,7 @@ describe("the message panel's screen", () => {
 
 /**
  * The complement screen, which is the first in this repository that stops
- * applying as a viewport grows (SCRUM-494).
+ * applying as a viewport grows.
  *
  * Everything else here is mobile-first, and these tests exist because this one
  * cannot be: `SendBar`'s vertical padding is declared unconditionally on a tree

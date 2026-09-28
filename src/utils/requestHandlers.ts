@@ -6,7 +6,7 @@ import { Request, Role } from "@prisma/client";
  * rather than as the whole Prisma row, because callers hold what
  * `user.requests.me` returns, typed by `utils/types.ts`, not a database row.
  * The two stopped matching when the row gained a column that type does not
- * declare (SCRUM-559).
+ * declare.
  */
 type RequestRef = Pick<Request, "id" | "fromUserId">;
 import { trpc } from "./trpc";
@@ -61,8 +61,8 @@ export const createRequestHandlers = (
    * write took.
    *
    * One function rather than the same body written out beside each mutation,
-   * because that is how SCRUM-510 happened: the two copies drifted, and both
-   * were missing `groups.me` while `useGroupMembership.ts` - calling the
+   * because writing it twice before is exactly how the two copies drifted:
+   * both were missing `groups.me` while `useGroupMembership.ts` - calling the
    * *same* `groups.edit` procedure - invalidated it. Nothing came along
    * afterwards to paper over the gap either, since `utils/trpc.ts` sets
    * `refetchOnMount` and `refetchOnWindowFocus` to false globally.

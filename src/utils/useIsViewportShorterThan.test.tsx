@@ -1,10 +1,10 @@
 /**
- * The height half of the breakpoint, added by SCRUM-484.
+ * The height half of the breakpoint.
  *
  * `useIsMobile` branches on width alone, which is what handed a landscape
  * phone - 667x375, above the width breakpoint - the full admin console into a
- * content row 343px tall. This hook is the opt-in alternative SCRUM-474
- * established: a caller passes its own derived threshold, and no existing
+ * content row 343px tall. This hook is the opt-in alternative to that
+ * constant: a caller passes its own derived threshold, and no existing
  * layout moves.
  *
  * The structure below deliberately mirrors `useIsMobile.test.tsx`, including
@@ -92,7 +92,7 @@ describe("useIsViewportShorterThan", () => {
 
   it("answers for the threshold it was given, not a shared one", () => {
     /*
-     * The parameter is the point of the hook: SCRUM-477's decision was that
+     * The parameter is the point of the hook: the decision was that
      * each layout opts in at its *own* derived height, rather than the app
      * gaining a second global breakpoint. Two hooks over one viewport
      * disagreeing is the correct behaviour, and a hook that had quietly
@@ -237,20 +237,20 @@ describe("useIsViewportShorterThan under hydration", () => {
  *
  * A thin assertion on its own, and it is here for a specific reason: the
  * ticket's acceptance criteria require that any new threshold be derived at
- * its own call site rather than copied, and SCRUM-474's 844px sitting in
+ * its own call site rather than copied, and a copied 844px sitting in
  * `admin.tsx` would satisfy every other test in this file.
  */
 describe("the threshold /admin reads", () => {
   it("is composed from the console's own numbers", () => {
     /* 500px shortest chart plus the 32px of `py-4` around the scroll port,
        over the content row's share of the viewport. That share is the
-       complement of the header bar, which since SCRUM-496 has a 44px floor -
+       complement of the header bar, which now has a 44px floor -
        but this threshold is above the height where the floor binds, so the
        figure is unmoved. `breakpoints.test.ts` holds the
        composition; this records the value a reviewer can check the
        measurements against. Both terms were a description of intent rather
-       than of the page until SCRUM-488: the chart was shrunk below its 500 and
-       the 32px was a margin that took nothing out of the row. */
+       than of the page until a later fix: the chart was shrunk below its 500
+       and the 32px was a margin that took nothing out of the row. */
     expect(ADMIN_CONSOLE_MIN_HEIGHT_PX).toBe(582);
   });
 

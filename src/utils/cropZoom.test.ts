@@ -16,14 +16,14 @@ import { CROP_BOX_PX, minZoomToFill } from "./cropZoom";
  *
  * The numbers below are not invented. They are the layout react-easy-crop
  * 6.2.3 actually produces, reproduced from its own `computeSizes` (the
- * `objectFit: "contain"` branch), and they match the measurements recorded on
- * SCRUM-479 against a real 4032x3024 photo in Chromium.
+ * `objectFit: "contain"` branch), and they match the measurements recorded
+ * against a real 4032x3024 photo in Chromium.
  */
 
 /**
  * The cropper's box on an iPhone-width viewport: `h-96` is 384px tall, and a
  * 375px viewport inside the modal's `border-8` leaves 359px of width. This is
- * the container SCRUM-479 was measured against.
+ * the container the fix was measured against.
  */
 const MOBILE_CONTAINER = { width: 359, height: 384 };
 
@@ -122,7 +122,7 @@ describe("containMediaSize", () => {
 describe("minZoomToFill", () => {
   describe("covers the crop box for every photo shape", () => {
     // The invariant, stated against the displayed sizes the library computes.
-    // Every one of these shapes failed it before SCRUM-479, because the zoom
+    // Every one of these shapes failed it before the fix, because the zoom
     // was pinned to 1 regardless.
     const shapes: ReadonlyArray<{
       name: string;
@@ -213,7 +213,7 @@ describe("minZoomToFill", () => {
 
   describe("rejects the fit-inside reading of the same numbers", () => {
     /**
-     * The pre-SCRUM-479 algorithm, kept here as a control.
+     * The pre-fix algorithm, kept here as a control.
      *
      * Two faults, either one sufficient: it measured the *natural* pixels
      * where zoom scales the displayed ones, and it took `Math.min` - the zoom

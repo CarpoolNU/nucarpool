@@ -1,6 +1,6 @@
 /**
- * SCRUM-561 item 4: on desktop, a `?tab=` in the URL must not override the
- * Explore and Requests buttons.
+ * On desktop, a `?tab=` in the URL must not override the Explore and
+ * Requests buttons.
  *
  * The effect applying `router.query.tab` listed `props.data` among its
  * dependencies, and `pages/index.tsx` passes `data` as an object literal - a

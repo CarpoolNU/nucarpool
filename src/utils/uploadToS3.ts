@@ -93,7 +93,7 @@ function profileImageKey(fileName: string): string {
  * calls this only once `User.profilePictureUpdatedAt` says a picture exists,
  * so rendering an avatar makes no S3 request at all. It used to be preceded by
  * a `HeadObject` asking S3 the same question, which was the entire AWS cost of
- * an avatar (SCRUM-276, removed in SCRUM-366).
+ * an avatar until that call was removed.
  *
  * Returns null only if signing itself fails, which means misconfigured
  * credentials rather than a missing picture. The caller cannot tell those apart

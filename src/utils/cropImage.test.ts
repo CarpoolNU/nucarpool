@@ -29,7 +29,7 @@ import { croppedCanvasSize, MAX_CROPPED_IMAGE_PX } from "./cropImage";
  * 3024px height and `0.75 * 4032` of the width. With `aspect={1}` the library
  * squares it itself, so both sides are 3024 - not merely close to equal.
  *
- * **This was 3369x3369 before SCRUM-479**, when the cropper opened at a flat
+ * **This was 3369x3369 before the fix**, when the cropper opened at a flat
  * `zoom: 1` and the crop box was 111% of the displayed image's height: the
  * rectangle overhung the photo by 173px top and bottom, and those bands
  * reached the encoded JPEG as opaque black. The framing changed, so this
@@ -65,7 +65,7 @@ describe("croppedCanvasSize", () => {
     // Not a round number worth asserting precisely, but the order of magnitude
     // is the point: this is why the uploaded object gets materially smaller.
     //
-    // It was ~43x when the crop rectangle was 3369x3369. SCRUM-479 made the
+    // It was ~43x when the crop rectangle was 3369x3369. The fix made the
     // cropper open at a zoom that covers its crop box, so the rectangle is now
     // 3024x3024 - a smaller source for the same 512x512 output, hence a
     // smaller ratio. The saving this asserts is unaffected; there is simply

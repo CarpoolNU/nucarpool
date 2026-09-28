@@ -75,7 +75,7 @@ export const combineQueryStates = (...states: QueryState[]): QueryState => ({
  * data really is still coming, so `ready` would draw an empty frame for a pass
  * and then fill it. Before this existed `UserManagement` expressed that with a
  * `useState(true)` cleared only by data arriving - which is also why a failure
- * never cleared it, the defect in SCRUM-509.
+ * never cleared it.
  *
  * `retry` is a no-op because there is nothing to retry: the query has not run.
  */

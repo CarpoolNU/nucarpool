@@ -37,18 +37,18 @@ const getServerSnapshot = () => false;
  * Whether the viewport is shorter than `minHeightPx`.
  *
  * **The height half of the breakpoint, kept out of `useIsMobile` on purpose.**
- * SCRUM-477 records why `MOBILE_BREAKPOINT_PX` does not gain a height term:
- * it is read by `useIsMobile`, by `tailwind.config.js`, by the `desktop:`
- * screen and by `DESKTOP_MEDIA_QUERY`, so a height there would move every page
- * across the line at once. This is the opt-in alternative SCRUM-474
- * established, in the shape a page needs when the branch cannot be CSS - a
- * caller passes its *own* derived threshold and nothing else is affected.
+ * `MOBILE_BREAKPOINT_PX` deliberately does not gain a height term: it is read
+ * by `useIsMobile`, by `tailwind.config.js`, by the `desktop:` screen and by
+ * `DESKTOP_MEDIA_QUERY`, so a height there would move every page across the
+ * line at once. This is the opt-in alternative to that constant, in the shape
+ * a page needs when the branch cannot be CSS - a caller passes its *own*
+ * derived threshold and nothing else is affected.
  *
  * **Why a hook and not a `desktop-tall:`-style screen.** The admin console's
  * branch decides which subtree *mounts*, not which classes apply. Rendering
  * both and hiding one in CSS would mount the console on a landscape phone and
- * fire its `getAllUsers` query there, which is the request SCRUM-452 went to
- * some trouble to stop firing on a render that gets discarded.
+ * fire its `getAllUsers` query there, which took some trouble to stop firing
+ * on a render that gets discarded.
  *
  * **Why `useSyncExternalStore` and not `useState` plus an effect**, and what
  * it does not buy: exactly as written at length in `useIsMobile`. Read that
@@ -63,9 +63,9 @@ const getServerSnapshot = () => false;
  * The threshold is a parameter rather than a constant because there is no one
  * right height: it is a property of the layout asking, the way
  * `WIZARD_DESKTOP_MIN_HEIGHT_PX` and `ADMIN_CONSOLE_MIN_HEIGHT_PX` are each
- * derived from their own arrangement. Passing a literal here would be the
- * mistake SCRUM-484's ticket calls out - copying the wizard's 844px to a place
- * it means nothing.
+ * derived from their own arrangement. Passing a literal here would be exactly
+ * the mistake to avoid - copying the wizard's 844px to a place it means
+ * nothing.
  *
  * `getSnapshot` is rebuilt per render, which `useSyncExternalStore` allows: it
  * compares snapshots with `Object.is`, and a boolean is equal to itself by

@@ -47,7 +47,7 @@ export const ComplianceModal = () => {
        * subtree and cannot be undone by a descendant - so every control in
        * this dialog was absent from the accessibility tree, including the "I
        * Agree" that is the only way past this gate. Only the decorative blur
-       * layer is hidden now. SCRUM-475. */}
+       * layer is hidden now. */}
       <div className="fixed inset-0 z-50 backdrop-blur-xs" aria-hidden="true" />
       {/* Carries `z-50` in its own right now that it is no longer inside the
        * element that had it, and sits after the backdrop so it paints above

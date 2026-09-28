@@ -5,7 +5,7 @@
  * single `div` carrying `aria-hidden="true"`. `aria-hidden` applies to the
  * whole subtree and no descendant can opt back in, so every control in the
  * dialog was removed from the accessibility tree - while still rendering,
- * still being visible, and still being clickable with a mouse. SCRUM-475.
+ * still being visible, and still being clickable with a mouse.
  *
  * That mattered more here than anywhere else in the app. This dialog is
  * rendered over everything for any user who has not accepted the terms, its

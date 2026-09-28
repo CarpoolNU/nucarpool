@@ -99,8 +99,8 @@ describe("seatAvailValueAs", () => {
   it("reads an emptied box as unset rather than NaN", () => {
     // `valueAsNumber` parsed an empty string to `NaN`, which reached Zod's own
     // "expected number, received NaN" on the ordinary gesture of clearing the
-    // box to retype (SCRUM-512). `undefined` is what the rest of the schema
-    // already treats as "no value yet".
+    // box to retype. `undefined` is what the rest of the schema already
+    // treats as "no value yet".
     expect(seatAvailValueAs("")).toBeUndefined();
   });
 

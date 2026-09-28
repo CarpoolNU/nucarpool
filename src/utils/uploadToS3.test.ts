@@ -2,7 +2,7 @@
  * Tests for `signProfileImageUrl`, the whole server-side cost of rendering an
  * avatar.
  *
- * The acceptance criterion SCRUM-366 turns on is "zero S3 API calls", and this
+ * The acceptance criterion this turns on is "zero S3 API calls", and this
  * is where it is assertable: the S3 client's `send` is the only way this module
  * could reach AWS, so an avatar signed without calling it made no request.
  * Signing a URL is a local HMAC. It used to be preceded by a `HeadObject`

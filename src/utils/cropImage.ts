@@ -105,7 +105,7 @@ export default function getCroppedImg(
       // cover its own crop box, so a landscape photo cropped square arrived
       // here with a negative `y`: `drawImage` left that band of the
       // destination transparent, and JPEG has no alpha channel to store it in,
-      // so it composited onto black. SCRUM-479 fixed both halves at the
+      // so it composited onto black. Both halves were fixed at the
       // source - see `cropZoom.ts`. Nothing here depends on that having
       // happened, because `drawImage` clips the source and the destination in
       // the same proportion either way, which is what keeps the framing

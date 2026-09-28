@@ -1,7 +1,7 @@
 import { ReportReason } from "@prisma/client";
 
 /**
- * What each `ReportReason` is called on screen (SCRUM-555). One map for the
+ * What each `ReportReason` is called on screen. One map for the
  * reporter's select and the admin queue, so the two cannot describe the same
  * report differently.
  *

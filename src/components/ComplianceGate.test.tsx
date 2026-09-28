@@ -7,7 +7,7 @@
  * ignores the policy flag would re-prompt every user who accepted before the
  * version column existed - ~3,341 production rows - on their next page load.
  * These tests pin the shipped behaviour as *identical* to the old boolean
- * check. SCRUM-280.
+ * check.
  *
  * `ComplianceModal` is stubbed rather than rendered. What is under test is the
  * decision, not the dialog, and the real modal is a `next/dynamic` import that

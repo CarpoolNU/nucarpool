@@ -166,7 +166,7 @@ describe("calculateScore", () => {
       ).toBeUndefined();
     });
 
-    // SCRUM-560: every accept path requires the rider's own row to hold
+    // Every accept path requires the rider's own row to hold
     // `carpoolId: null` before it links them, so a grouped rider can never
     // join *any* group - not only the one they are not already in. This used
     // to score 0 (a perfect match) and rank at the top of a driver's results,

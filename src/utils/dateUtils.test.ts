@@ -394,7 +394,7 @@ describe("reversedCoopRangeFields", () => {
     ).toEqual([]);
   });
 
-  it("exempts a VIEWER, whose pickers are disabled (SCRUM-551)", () => {
+  it("exempts a VIEWER, whose pickers are disabled", () => {
     // Every profile save re-sends the stored dates, so refusing a VIEWER's
     // would reject every save they make with nothing on the page to change.
     expect(

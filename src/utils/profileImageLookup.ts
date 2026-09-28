@@ -6,7 +6,7 @@
  * column means "no picture". That became true once a one-off backfill had
  * recorded every picture uploaded before the column existed — until then a
  * null row still asked S3 with a `HeadObject`, and this module held the
- * predicate that told the two apart (SCRUM-276, contracted in SCRUM-366).
+ * predicate that told the two apart.
  */
 
 /**
