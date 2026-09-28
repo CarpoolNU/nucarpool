@@ -9,7 +9,7 @@ import {
 import { fakeBlockReader } from "../../testing/blockFake";
 
 /**
- * The block helpers every enforcement site goes through (SCRUM-554).
+ * The block helpers every enforcement site goes through.
  *
  * The property under test is symmetry. A `Block` row names one direction, but
  * every helper must answer the same whichever of the pair placed it. A helper

@@ -89,7 +89,7 @@ const SENSITIVE_FIELDS = [
   "emailVerified",
   "licenseSigned",
   // When and to what they consented. Nobody else's business, and a timestamp
-  // is a behavioural fingerprint the map has no use for. SCRUM-280.
+  // is a behavioural fingerprint the map has no use for.
   "licenseSignedAt",
   "licenseVersion",
   "isOnboarded",

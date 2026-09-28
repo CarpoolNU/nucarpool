@@ -175,12 +175,12 @@ describe('referential actions under relationMode = "prisma"', () => {
     expect(orphan?.userId).toBe(user.id);
   });
 
-  it("leaves Location rows behind, which is the gap SCRUM-232 tracks", async () => {
+  it("leaves Location rows behind, since nothing owns them independently of the search", async () => {
     // Documenting current behaviour, not endorsing it. `CarpoolSearch` points
     // at two `Location` rows and declares no referential action on them, so
     // deleting the user cascades the search away and strands both locations.
-    // When SCRUM-232 gives Locations an owner, this expectation is the one to
-    // invert.
+    // If Locations ever gain an independent owner, this expectation is the
+    // one to invert.
     const { user, home, company } = await seedDriver();
 
     await prisma.user.delete({ where: { id: user.id } });
@@ -252,12 +252,12 @@ describe("one CarpoolSearch per user", () => {
   });
 
   it("resolves two concurrent first-time saves to one search", async () => {
-    // The race SCRUM-544 closes. Two saves for a user with no search both read
-    // "none" and both create one. Left to timing the race rarely fires, so the
-    // test forces it: each save's first attempt takes its snapshot and then
-    // waits at a barrier until the other has taken one too. From there the
-    // interleaving is MySQL's - one save wins, the other's insert is refused
-    // by the unique index, and `user.edit` retries it.
+    // The race `user.edit`'s retry closes. Two saves for a user with no search
+    // both read "none" and both create one. Left to timing the race rarely
+    // fires, so the test forces it: each save's first attempt takes its
+    // snapshot and then waits at a barrier until the other has taken one too.
+    // From there the interleaving is MySQL's - one save wins, the other's
+    // insert is refused by the unique index, and `user.edit` retries it.
     const user = await prisma.user.create({
       data: { name: "Ada Lovelace", email: "ada@northeastern.edu" },
     });
@@ -325,7 +325,7 @@ describe("one CarpoolSearch per user", () => {
 });
 
 /**
- * A rider cannot take a group away from its driver (SCRUM-557).
+ * A rider cannot take a group away from its driver.
  *
  * `requireGroupDriver` reads only the caller's own role, because `CarpoolGroup`
  * stores no owner. That is sound only while a group holds one DRIVER, and

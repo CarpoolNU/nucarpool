@@ -258,8 +258,8 @@ describe("getDashboardSeries", () => {
   });
 
   it("counts every signup as one series, whatever its status today", async () => {
-    // SCRUM-548: a user's status history is not recorded, so splitting past
-    // signups by today's status drew every lapsed user as inactive all along.
+    // A user's status history is not recorded, so splitting past signups by
+    // today's status drew every lapsed user as inactive all along.
     const { caller, prisma } = callerFor();
     prisma.user.findMany.mockResolvedValue([
       { dateCreated: start },
@@ -553,7 +553,7 @@ describe("updateUserPermission", () => {
     expect(prisma.user.update).not.toHaveBeenCalled();
   });
 
-  it("writes exactly one audit log entry naming the actor, action and target (SCRUM-541)", async () => {
+  it("writes exactly one audit log entry naming the actor, action and target", async () => {
     const { caller, prisma } = callerFor(adminSession(Permission.MANAGER));
 
     await caller.user.admin.updateUserPermission({

@@ -122,7 +122,7 @@ export const messageRouter = router({
     // there rather than restated here.
     //
     // Messages written by anyone with a block against the caller, in either
-    // direction, are not counted (SCRUM-554), because `requests.me` hides the
+    // direction, are not counted, because `requests.me` hides the
     // thread they sit in. A conversation has exactly two parties, so leaving
     // out the counterpart's messages leaves out the conversation. `notIn` is
     // a negation like the `not` it replaces, so the plan described above holds.
@@ -238,8 +238,8 @@ export const messageRouter = router({
         });
       }
 
-      // A thread between a blocked pair is hidden, not deleted (SCRUM-554),
-      // so it is refused here for either party with the same generic answer
+      // A thread between a blocked pair is hidden, not deleted, so it is
+      // refused here for either party with the same generic answer
       // and comes back intact on unblock.
       await assertNotBlocked(ctx.prisma, request.fromUserId, request.toUserId);
 
@@ -311,7 +311,7 @@ export const messageRouter = router({
       }
 
       // Before the write and so before either Pusher event: a refused
-      // message is neither stored nor delivered (SCRUM-554).
+      // message is neither stored nor delivered.
       await assertNotBlocked(ctx.prisma, request.fromUserId, request.toUserId);
 
       // Find or create the conversation. This used to be two exclusive
@@ -345,7 +345,7 @@ export const messageRouter = router({
             content: input.content,
             userId: userId,
             // `sendMessageNotification` sends at most one email per message
-            // it finds marked here (SCRUM-559). The opening message
+            // it finds marked here. The opening message
             // `requests.create` writes is left unmarked: the request email
             // announces that one.
             notificationPending: true,
@@ -408,7 +408,7 @@ export const messageRouter = router({
    * "Unread" means unread by the recipient, so the caller's own messages are
    * excluded here. Only `MessageContent` used to filter them out, so a direct
    * call could mark a sender's own messages read before the other person
-   * had seen them (SCRUM-559).
+   * had seen them.
    */
   markMessagesAsRead: protectedRouter
     .input(

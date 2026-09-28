@@ -5,12 +5,13 @@
  * `CarpoolSearch.startTime` / `endTime` are `@db.Time(0)` and are documented as
  * UTC (see "Schedule times" in this directory's README). Four successive
  * `ControlledTimePicker` implementations disagreed about that, and the table
- * holds the residue of all four — SCRUM-376 has the full archaeology. Two of
- * the four wrote the wall clock straight through with no conversion at all, so
- * a 9-to-5 is stored as `09:00`-`17:00` and renders as 4:00 AM to 12:00 PM.
+ * holds the residue of all four — the README section above has the full
+ * archaeology. Two of the four wrote the wall clock straight through with no
+ * conversion at all, so a 9-to-5 is stored as `09:00`-`17:00` and renders as
+ * 4:00 AM to 12:00 PM.
  *
  * **This module finds only that class, and deliberately only that class.**
- * The other open defect on SCRUM-376 is a *one-hour* split between rows
+ * The other open defect described there is a *one-hour* split between rows
  * converted under EDT and rows converted under EST, and the two are not
  * distinguishable from the stored values: `13:00`-`21:00` is equally "9-5
  * written in summer" and "8-4 written in winter". Nothing here tries. A
@@ -18,11 +19,11 @@
  * — `09:00`-`17:00` as UTC is a shift starting at 4:00 AM and ending at noon —
  * which is what makes this class safe to repair and that one not.
  *
- * Scoped to co-ops that are running, because that is the decision recorded on
- * SCRUM-376: a student between placements re-enters their schedule when they
- * come back, so their row does not justify an irreversible write. Production
- * measurement behind that: of 4,173 rows, 283 were on co-op on 2026-09-21 and
- * eight of those were wall clock.
+ * Scoped to co-ops that are running, because a student between placements
+ * re-enters their schedule when they come back, so their row does not
+ * justify an irreversible write. Production measurement behind that: of
+ * 4,173 rows, 283 were on co-op on 2026-09-21 and eight of those were wall
+ * clock.
  *
  * Pure, and kept out of the script for the same reason as `seatIntegrity.ts`:
  * the selection and the repaired value are the parts worth testing, and they

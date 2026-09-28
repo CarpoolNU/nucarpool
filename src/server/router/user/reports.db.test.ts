@@ -6,7 +6,7 @@ import { appRouter } from "../index";
 import { parseConversationSnapshot } from "../../reportSnapshot";
 
 /**
- * `user.reports.create` against a real MySQL (SCRUM-555).
+ * `user.reports.create` against a real MySQL.
  *
  * The property worth a real database is the one the snapshot exists for:
  * either party can delete the request, and `requests.delete` takes the

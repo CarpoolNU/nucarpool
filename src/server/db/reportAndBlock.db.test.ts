@@ -2,7 +2,7 @@ import { Prisma, ReportReason, ReportStatus } from "@prisma/client";
 import { integrationPrisma } from "../../testing/integrationDatabase";
 
 /**
- * The `block` and `report` tables (SCRUM-553), against a real MySQL.
+ * The `block` and `report` tables, against a real MySQL.
  *
  * All three properties below live in the schema and nowhere else, and the
  * mocked suite cannot see any of them. The unique pair is a real MySQL index,

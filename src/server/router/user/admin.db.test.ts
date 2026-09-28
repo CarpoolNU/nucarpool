@@ -18,7 +18,7 @@ import {
 } from "../../../utils/adminDashboardCsv";
 
 /**
- * SCRUM-540: the CSV export against a real database.
+ * The CSV export against a real database.
  *
  * `admin.test.ts` proves the query *shape* against a mocked Prisma; it cannot
  * prove that a real aggregate value survives the trip through the CSV
@@ -246,7 +246,7 @@ describe("the admin dashboard CSV export against a real database", () => {
     expect(midWeekIndex).toBeGreaterThanOrEqual(0);
     expect(series.signupCount[midWeekIndex]).toBe(2);
 
-    // Privacy decision (SCRUM-540): the export is aggregate-only. No message
+    // Privacy decision: the export is aggregate-only. No message
     // body or other individual-level field can appear in any of the four
     // CSVs, because none of the builders is ever given one.
     for (const csv of [
@@ -263,7 +263,7 @@ describe("the admin dashboard CSV export against a real database", () => {
 });
 
 /**
- * SCRUM-541: `updateUserPermission`'s audit trail against a real database.
+ * `updateUserPermission`'s audit trail against a real database.
  *
  * `admin.test.ts` proves the shape against a mocked Prisma with a pass-through
  * `$transaction`; it cannot prove the two writes actually land as one
@@ -330,7 +330,7 @@ describe("updateUserPermission's audit trail against a real database", () => {
 });
 
 /**
- * SCRUM-574: `resolveReport` against a real database.
+ * `resolveReport` against a real database.
  *
  * The property worth a real database is the one the ticket exists for: a
  * resolved report must actually stop blocking a new one. `reports.ts`'s

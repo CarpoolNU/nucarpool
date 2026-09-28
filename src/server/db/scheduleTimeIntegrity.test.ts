@@ -83,9 +83,9 @@ describe("isWallClockSchedule", () => {
 
   it("rejects a converted row, which is the population it must not touch", () => {
     // 9-5 written under EST, and the same written under EDT. Telling these two
-    // apart is the open question on SCRUM-376; neither is this repair's
-    // business, and misreading either as wall clock would write a five-hour
-    // error into a row that is at worst one hour out.
+    // apart is an open question outside this repair's scope, and misreading
+    // either as wall clock would write a five-hour error into a row that is
+    // at worst one hour out.
     expect(isWallClockSchedule(stored("14:00"), stored("22:00"))).toBe(false);
     expect(isWallClockSchedule(stored("13:00"), stored("21:00"))).toBe(false);
   });
@@ -149,8 +149,8 @@ describe("findWallClockScheduleRows", () => {
   });
 
   it("ignores wall-clock rows whose co-op is not running", () => {
-    // The scope decision on SCRUM-376: a student between co-ops re-enters
-    // their schedule when they come back, so their row is not worth an
+    // Scoped this way because a student between co-ops re-enters their
+    // schedule when they come back, so their row is not worth an
     // irreversible write.
     const past = row({
       id: "search-past",

@@ -17,7 +17,7 @@ jest.mock("../../pusher", () => ({
 import { appRouter } from "../index";
 
 /**
- * The notification emails are one-shot, against a real MySQL (SCRUM-559).
+ * The notification emails are one-shot, against a real MySQL.
  *
  * The mocked suite in `email.test.ts` shows the procedures stop after one
  * send. What it cannot show is the part that crosses modules and the database:
@@ -311,7 +311,7 @@ describe("message notifications are one-shot", () => {
   });
 });
 
-describe("acceptance notifications are one-shot (SCRUM-564)", () => {
+describe("acceptance notifications are one-shot", () => {
   const seedLocation = async (streetAddress: string) =>
     prisma.location.create({
       data: {

@@ -5,8 +5,8 @@ import type { Context } from "../context";
 import { appRouter } from "../index";
 
 /**
- * SCRUM-566: a block landing at the same instant as a group-join accept must
- * never leave the blocked pair sharing a `carpoolId`.
+ * A block landing at the same instant as a group-join accept must never leave
+ * the blocked pair sharing a `carpoolId`.
  *
  * `applyBlock` refuses a block between two people who already share a group,
  * and `groups.create`/`groups.edit` refuse to link a pair with a block
@@ -161,7 +161,7 @@ const blockExistsBetween = async (userA: string, userB: string) =>
     },
   })) !== null;
 
-describe("a block racing a group-join accept (SCRUM-566)", () => {
+describe("a block racing a group-join accept", () => {
   it.each([
     // Both directions: the blocker is the driver, and the blocker is the
     // rider. `applyBlock`'s new locking read touches both users' rows

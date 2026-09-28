@@ -5,13 +5,13 @@ import type { Context } from "../context";
 import { appRouter } from "../index";
 
 /**
- * SCRUM-563: a profile save racing a request acceptance must never leave a
- * DRIVER inside the rider slot of a group.
+ * A profile save racing a request acceptance must never leave a DRIVER inside
+ * the rider slot of a group.
  *
  * `user.edit` refuses a role change for a driver already in a group, and
  * `groups.create` / `groups.edit` refuse to link anyone but a RIDER into the
- * rider slot. Together those close the *ordinary* path to a two-driver group
- * (SCRUM-557). But each side reads the *other* side's column - `carpoolId`
+ * rider slot. Together those close the *ordinary* path to a two-driver group.
+ * But each side reads the *other* side's column - `carpoolId`
  * and `role` respectively - with a plain read inside its own interactive
  * transaction, and under MySQL REPEATABLE READ that read is a snapshot: it
  * can go on reporting the pre-race value even after the other side has
@@ -185,7 +185,7 @@ const buildRacingClient = (client: typeof prisma, callers: number) => {
   }) as typeof client;
 };
 
-describe("a role change racing a request acceptance (SCRUM-563)", () => {
+describe("a role change racing a request acceptance", () => {
   it("never leaves the rider as DRIVER inside the group", async () => {
     const driver = await seedDriver();
     const { user: rider, search: riderSearch } = await seedRider();

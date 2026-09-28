@@ -6,7 +6,7 @@ import { appRouter } from "../index";
 import { BLOCKED_PAIR_MESSAGE } from "../../db/blocks";
 
 /**
- * `user.requests.delete` against a real MySQL (SCRUM-562).
+ * `user.requests.delete` against a real MySQL.
  *
  * The property worth a real database: once a block exists between the two
  * parties, `delete` must refuse rather than take the conversation and every

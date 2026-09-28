@@ -2458,7 +2458,7 @@ describe("user.requests.me - the status is read per request, not per response", 
 });
 
 /**
- * Blocks (SCRUM-554). `create` refuses across a block in either direction,
+ * Blocks. `create` refuses across a block in either direction,
  * before it reads or writes anything else in its transaction. `me` hides a
  * request with a blocked counterpart without deleting it.
  *
@@ -2467,7 +2467,7 @@ describe("user.requests.me - the status is read per request, not per response", 
  * parties the moment a block exists, so nothing is actually stranded by
  * refusing the delete too. What refusing protects is the report that has not
  * been filed yet: the blocked party could otherwise erase the thread before
- * the blocker gets to `reports.create` (SCRUM-562).
+ * the blocker gets to `reports.create`.
  */
 const USER_D = "user-d";
 

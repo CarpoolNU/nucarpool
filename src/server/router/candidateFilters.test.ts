@@ -227,7 +227,7 @@ describe.each([
 });
 
 /**
- * Blocks (SCRUM-554). Both endpoints get their exclusion list from
+ * Blocks. Both endpoints get their exclusion list from
  * `candidateExclusions`, so these run against each of them: a copy that
  * dropped the block lookup would otherwise pass through the other's tests.
  */

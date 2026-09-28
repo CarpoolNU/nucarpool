@@ -267,7 +267,7 @@ export const requestsRouter = router({
     // `PublicUser` to build a card from, and no hidden row behind it.
     //
     // A request with someone the caller has a block with, in either direction,
-    // is hidden as well (SCRUM-554). Hidden, not deleted: the row, its
+    // is hidden as well. Hidden, not deleted: the row, its
     // conversation and its messages all survive, so unblocking brings the
     // card back as it was.
     const blockedIds = new Set(await blockedCounterpartIds(ctx.prisma, userId));
@@ -422,7 +422,7 @@ export const requestsRouter = router({
         // `sendRequestNotification` finds the text to quote. It looks up the
         // requester's message with exactly this timestamp, so it quotes what
         // was stored and never what the client sends. A reopen with no text
-        // writes no message, so its email quotes nothing (SCRUM-559).
+        // writes no message, so its email quotes nothing.
         const requestedAt = new Date();
 
         // An accepted request the pair have since left behind. Reopening it,
@@ -600,9 +600,9 @@ export const requestsRouter = router({
         });
       }
 
-      // A blocked pair may not delete their thread either (SCRUM-562).
-      // `requests.me` already hides this row for both parties the moment a
-      // block exists (SCRUM-554), so refusing the delete strands nobody's
+      // A blocked pair may not delete their thread either. `requests.me`
+      // already hides this row for both parties the moment a block exists,
+      // so refusing the delete strands nobody's
       // exit - the "exits stay open" case `blocks.ts` documents is a pair who
       // can still see their conversation, and this one already cannot. What
       // it does protect is the report that hasn't been filed yet: without

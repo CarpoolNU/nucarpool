@@ -12,7 +12,7 @@ import { REPORT_MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
 import { REPORT_SNAPSHOT_MESSAGE_LIMIT } from "../../../utils/reports";
 
 /**
- * `user.reports.create` (SCRUM-555).
+ * `user.reports.create`.
  *
  * The fake keeps reports, blocks and messages in memory, and its
  * `$transaction` restores both lists when the callback throws, so a test can
@@ -113,9 +113,9 @@ const buildReportsDb = (opts?: {
         return { id: row.id };
       }),
     },
-    // `applyBlock`'s group-membership check is a locking `$queryRaw`
-    // (SCRUM-566), not `carpoolSearch.findMany` - always exactly two
-    // interpolated values, `blockerId` then `blockedId`.
+    // `applyBlock`'s group-membership check is a locking `$queryRaw`, not
+    // `carpoolSearch.findMany` - always exactly two interpolated values,
+    // `blockerId` then `blockedId`.
     $queryRaw: jest.fn(async (_strings: unknown, ...values: unknown[]) => {
       const [blockerId, blockedId] = values as [string, string];
       return [blockerId, blockedId]
@@ -448,7 +448,7 @@ describe("duplicate reports", () => {
   });
 });
 
-describe("per-reporter rate limit (SCRUM-562)", () => {
+describe("per-reporter rate limit", () => {
   const reportsFor = (
     reporterId: string,
     count: number,

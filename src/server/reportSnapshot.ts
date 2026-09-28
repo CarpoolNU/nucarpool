@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * The copy of a conversation a report keeps (SCRUM-555).
+ * The copy of a conversation a report keeps.
  *
  * A report keeps its own copy because either party can delete the request
  * behind a conversation, and `requests.delete` takes the conversation and

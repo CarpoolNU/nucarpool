@@ -258,8 +258,8 @@ const buildGroupsDb = (opts?: {
   // Read-only here: groups never writes a block, so it needs no snapshot.
   const block = fakeBlockDelegate(opts?.blocks ?? []);
 
-  // `assertNotBlockedForUpdate`'s locking recheck (SCRUM-566) routes through
-  // `$queryRaw` rather than `block.findFirst`, one call per counterpart id,
+  // `assertNotBlockedForUpdate`'s locking recheck routes through `$queryRaw`
+  // rather than `block.findFirst`, one call per counterpart id,
   // always exactly two interpolated values (`userId`, `counterpartId`) - it
   // reads `block.rows` directly rather than duplicating `fakeBlockDelegate`'s
   // matching logic, so the two checks cannot silently disagree.
@@ -277,11 +277,11 @@ const buildGroupsDb = (opts?: {
   // how many interpolated values each carries - neither compiles to the
   // other's shape, so this is unambiguous:
   //
-  // - `reserveSeat`'s seat claim (SCRUM-565), one value: `UPDATE
+  // - `reserveSeat`'s seat claim, one value: `UPDATE
   //   carpool_search SET seatsAvail = seatsAvail - 1 WHERE userId = ${...}
   //   AND seatsAvail > 0`.
-  // - The rider-linking compare-and-swap in `create` and `edit`'s add path
-  //   (SCRUM-563), three values - the `carpoolId` being set and the
+  // - The rider-linking compare-and-swap in `create` and `edit`'s add path,
+  //   three values - the `carpoolId` being set and the
   //   `userId`/`role` from the WHERE: `UPDATE carpool_search SET carpoolId =
   //   ${...} WHERE userId = ${...} AND role = ${...} AND carpoolId IS NULL`.
   //
@@ -1683,7 +1683,7 @@ describe("group mutations are atomic", () => {
     // By the time the rider link runs, the seat is already spent, the group
     // already exists and the driver is already linked. That is the state
     // that used to survive a failure here. The rider link is the raw
-    // `$executeRaw` claim (SCRUM-563), not a `carpoolSearch.updateMany`.
+    // `$executeRaw` claim, not a `carpoolSearch.updateMany`.
     db.executeRaw.mockImplementationOnce(async () => {
       throw new Error("connection lost");
     });
@@ -1740,8 +1740,8 @@ describe("group mutations are atomic", () => {
     const seatsBefore = db.seatsOf(DRIVER)!;
 
     // The seat reservation (`updateMany`) already went through by the time
-    // the rider link - the raw `$executeRaw` claim, SCRUM-563 - runs, so
-    // this fails with the seat already taken.
+    // the rider link - the raw `$executeRaw` claim - runs, so this fails with
+    // the seat already taken.
     db.executeRaw.mockImplementationOnce(async () => {
       throw new Error("connection lost");
     });
@@ -2809,13 +2809,12 @@ describe("the rider slot holds a rider", () => {
  * that read is a snapshot under MySQL REPEATABLE READ — a concurrent
  * `user.edit` moving this same rider to DRIVER can still commit in between,
  * which the mock cannot model (see `groupRoleRace.db.test.ts` for the real
- * one). What it can model is the linking write losing that race: SCRUM-563
- * re-checks `role` and `carpoolId` in the raw `$executeRaw` claim's WHERE
- * rather than trusting the earlier read, so forcing that call to match
- * nothing is exactly what the real compare-and-swap does when `user.edit`
- * won.
+ * one). What it can model is the linking write losing that race: the raw
+ * `$executeRaw` claim re-checks `role` and `carpoolId` in its WHERE rather
+ * than trusting the earlier read, so forcing that call to match nothing is
+ * exactly what the real compare-and-swap does when `user.edit` won.
  */
-describe("the rider slot is re-checked at write time, not just at read time (SCRUM-563)", () => {
+describe("the rider slot is re-checked at write time, not just at read time", () => {
   it("create throws CONFLICT and rolls back the seat and group", async () => {
     const db = buildGroupsDb({
       searches: [
@@ -2841,8 +2840,8 @@ describe("the rider slot is re-checked at write time, not just at read time (SCR
 
     // The rider link - the call a concurrent `user.edit` would have raced -
     // loses the compare-and-swap. Targeted by argument count rather than call
-    // order: `reserveSeat` (SCRUM-565) now also routes through `$executeRaw`,
-    // and runs first.
+    // order: `reserveSeat` now also routes through `$executeRaw`, and runs
+    // first.
     const defaultExecuteRaw = db.executeRaw.getMockImplementation()!;
     db.executeRaw.mockImplementation(async (strings: unknown, ...values) =>
       values.length === 3 ? 0 : defaultExecuteRaw(strings, ...values),
@@ -2868,7 +2867,7 @@ describe("the rider slot is re-checked at write time, not just at read time (SCR
     const { caller } = callerFor(sessionFor(DRIVER), db);
     const seatsBefore = db.seatsOf(DRIVER)!;
 
-    // The seat reservation (SCRUM-565's raw claim) goes through; the rider
+    // The seat reservation (the raw claim) goes through; the rider
     // link's compare-and-swap then loses the race. Targeted by argument count
     // rather than call order - see the `create` test above for why.
     const defaultExecuteRaw = db.executeRaw.getMockImplementation()!;
@@ -3187,7 +3186,7 @@ describe("a paused search cannot be built into a group", () => {
 });
 
 /**
- * A blocked pair cannot share a group (SCRUM-554).
+ * A blocked pair cannot share a group.
  *
  * A block is one row but a symmetric effect, so every refusal here is checked
  * with the row pointing each way. `edit` checks the joining rider against every

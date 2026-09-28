@@ -139,7 +139,7 @@ export const userRouter = router({
       ...user,
       // Distinguishes "no CarpoolSearch row yet" from "the stored role really
       // is VIEWER" - the two collapse to the same `role` below, and a
-      // brand-new user is the former, not a Viewer. SCRUM-508.
+      // brand-new user is the former, not a Viewer.
       hasCarpoolSearch: carpoolSearch !== undefined,
       // CarpoolSearch data
       role: carpoolSearch?.role ?? Role.VIEWER,
@@ -385,8 +385,8 @@ export const userRouter = router({
         // group, and the riders' shared preferences - read through the
         // driver's own search - vanish.
         //
-        // *Towards* DRIVER is the mirror image, and was open until SCRUM-557:
-        // the guard used to fire only for a driver leaving the role. A rider
+        // *Towards* DRIVER is the mirror image, and used to be unguarded: the
+        // guard fired only for a driver leaving the role. A rider
         // who made themselves DRIVER then passed `requireGroupDriver`, and
         // could dissolve the group, evict the real driver, or add riders
         // against their own seat count. The profile form offered it as one
@@ -452,7 +452,7 @@ export const userRouter = router({
           // The profile form sends back whatever it loaded, so a rider joining
           // after the driver opened the page was undone by the driver's next
           // save of anything at all - the bio, say - and the car could then
-          // take more riders than it seats. SCRUM-557.
+          // take more riders than it seats.
           //
           // Ignored rather than refused: a stale value is exactly what the
           // form sends in that case, and it is indistinguishable from an
@@ -477,8 +477,9 @@ export const userRouter = router({
           // linking them into a group, but only against a read taken earlier
           // in *their own* transaction. Under MySQL REPEATABLE READ that read
           // is a snapshot, so it can still say RIDER after this save has
-          // already committed DRIVER. SCRUM-557 keeps a stray DRIVER-in-group
-          // out of the ordinary path; this closes the concurrent one.
+          // already committed DRIVER. The role-change guard above keeps a
+          // stray DRIVER-in-group out of the ordinary path; this closes the
+          // concurrent one.
           //
           // This has to be a raw `UPDATE`, not `tx.carpoolSearch.updateMany`.
           // The obvious Prisma-idiomatic compare-and-swap is `updateMany`'s
@@ -491,8 +492,8 @@ export const userRouter = router({
           // lost. A raw `UPDATE ... WHERE ...` does not have that problem -
           // InnoDB gives it a current read - which the same throwaway
           // database confirmed. `reserveSeat`'s use of `updateMany` is
-          // believed to have the identical defect; see SCRUM-563's ticket
-          // discussion for why fixing that is out of this ticket's scope.
+          // believed to have the identical defect; fixing that is tracked
+          // separately and was out of scope for this change.
           //
           // Reachable only with `existingSearch.carpoolId === null`: the
           // FORBIDDEN guard above already threw if it was truthy and the
@@ -556,7 +557,7 @@ export const userRouter = router({
       // create one. The unique index on `carpool_search.userId` refuses the
       // second insert, and that save is retried from the top so that it
       // becomes an update of the row that won - a lost race is a successful
-      // save, not a 500. SCRUM-544.
+      // save, not a 500.
       //
       // The whole transaction, not just the insert. Under MySQL's REPEATABLE
       // READ the losing transaction keeps the snapshot it took before the
@@ -652,8 +653,8 @@ export const userRouter = router({
         });
       }
       try {
-        // A blocked pair may not fetch each other's photo (SCRUM-562), the
-        // one carve-out from the access rule documented above. `{ url: null
+        // A blocked pair may not fetch each other's photo, the one carve-out
+        // from the access rule documented above. `{ url: null
         // }` rather than a thrown FORBIDDEN: it is the same cacheable shape
         // "no picture" already uses, so a blocked viewer's avatar renders the
         // ordinary fallback instead of an error, and reveals nothing about
@@ -674,7 +675,7 @@ export const userRouter = router({
         //
         // That reading became safe only once the backfill had recorded every
         // picture uploaded before the column existed; until then a null row
-        // asked S3 with a `HeadObject` instead (SCRUM-276, SCRUM-366).
+        // asked S3 with a `HeadObject` instead.
         const owner = await ctx.prisma.user.findUnique({
           where: { id: userId },
           select: { profilePictureUpdatedAt: true },

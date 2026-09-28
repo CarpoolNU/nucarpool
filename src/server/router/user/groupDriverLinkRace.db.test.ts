@@ -5,13 +5,13 @@ import type { Context } from "../context";
 import { appRouter } from "../index";
 
 /**
- * SCRUM-573: two of a driver's pending requests accepted at nearly the same
- * instant must never both link the driver into a group.
+ * Two of a driver's pending requests accepted at nearly the same instant must
+ * never both link the driver into a group.
  *
- * `reserveSeat` is correctly CAS'd (SCRUM-565), so a driver with 2+ open
- * seats lets both concurrent `groups.create` calls past it - each reserves
- * its own seat, creates its own `CarpoolGroup`, and links "its" rider via the
- * guarded raw `UPDATE` (SCRUM-563). Only the driver's own link
+ * `reserveSeat` is correctly CAS'd, so a driver with 2+ open seats lets both
+ * concurrent `groups.create` calls past it - each reserves its own seat,
+ * creates its own `CarpoolGroup`, and links "its" rider via the guarded raw
+ * `UPDATE`. Only the driver's own link
  * (`groups.ts`, just above the rider link) used a plain `carpoolSearch.updateMany`
  * with no `carpoolId IS NULL` guard and no check on the write count, so
  * whichever transaction committed last simply overwrote the other's work,
@@ -19,7 +19,7 @@ import { appRouter } from "../index";
  * suite (`groups.test.ts`) cannot reproduce that at all - a mocked Prisma has
  * no isolation level - so this needs a real MySQL.
  *
- * Like SCRUM-565's `groupSeatRace.db.test.ts`, no forced-interleaving barrier
+ * Like `groupSeatRace.db.test.ts`, no forced-interleaving barrier
  * is needed: `groups.create` opens its own interactive transaction per call,
  * and the several round trips between the membership checks and the commit
  * are ample window for a plain `Promise.all` to start both transactions
@@ -109,7 +109,7 @@ const seedRiderWithRequest = async (n: number, driverId: string) => {
   return user;
 };
 
-describe("the driver's own link closes the race between two concurrent accepts (SCRUM-573)", () => {
+describe("the driver's own link closes the race between two concurrent accepts", () => {
   it("lets exactly one of two concurrent accepts against the same driver link the driver", async () => {
     const driver = await seedDriver();
     const [riderA, riderB] = await Promise.all([
