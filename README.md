@@ -38,25 +38,7 @@ Ask a maintainer for development credentials. `yarn startup` runs `yarn db:start
 
 ### Working in a worktree
 
-Concurrent sessions each get their own checkout under `.claude/worktrees/`, so one session's branch switch cannot move another's HEAD.
-
-**One ticket, one isolated worktree slot, one fresh session, one PR, then stop.**
-
-```
-one ticket
-  -> one isolated worktree SLOT
-  -> one FRESH Claude session
-  -> one PR
-  -> STOP SESSION
-```
-
-And the distinction that makes reusable directories safe:
-
-```
-one ticket != one permanent worktree directory
-```
-
-A **slot** is a directory. It holds one ticket at a time and many tickets in sequence, so it can be reused. A **session** is a conversation, and it holds exactly one ticket ever. Recycling a directory for the next ticket is routine; continuing a conversation into the next ticket is not, because every turn re-sends the whole conversation — a second ticket in the same session pays to re-send the first one's history on every turn, and the context window fills until it has to be compacted, which costs money and loses detail from work already done.
+Concurrent Claude Code sessions each get their own checkout under `.claude/worktrees/`, so one session's branch switch cannot move another's HEAD. **One ticket, one worktree slot, one fresh session, one PR, then stop the session** — see [the development workflow doc](docs/AI_DEVELOPMENT_WORKFLOW.md#one-ticket-one-slot-one-session) for why a slot (a reusable directory) and a session (a conversation, never reused across tickets) are different things.
 
 There are two kinds of workspace, and the difference is only how long the directory lives.
 
@@ -120,27 +102,19 @@ git fetch origin
 
 #### The lock is the ownership gate
 
-There is no reliable way to detect that a session is using a directory. `lsof -a -d cwd` catches a shell sitting in one, but a Claude session holds no such handle, so **a miss is not proof a slot is free**. `git worktree lock` is the explicit claim instead: `wt-recycle.sh` refuses a locked slot outright and prints the lock reason, so recycling takes two deliberate human commands — `git worktree unlock`, then the recycle.
+There is no reliable way to detect that a session is using a directory — a Claude session holds no shell handle to check with `lsof`. `git worktree lock` is the explicit claim instead: `wt-recycle.sh` refuses a locked slot outright and prints the lock reason, so recycling takes two deliberate human commands — `git worktree unlock`, then the recycle.
 
-Claude Code already uses the same marker: a worktree it creates with `claude --worktree` is locked on its behalf, with a reason naming the session and its pid — `claude session scrum-446 (pid 56690 start ...)`. So a live session's workspace is already refused without anyone doing anything, and the lock is the mechanism the harness itself reaches for rather than a convention invented here.
+A worktree created with `claude --worktree` is locked automatically, on the session's behalf. A slot created by hand with `git worktree add` is **not**, which is why handing one to a session is an explicit `git worktree lock` (commands above). Enter a slot by `cd`-ing into it and starting a session there; `claude --worktree scrum` is for creating a _new_ task worktree, not for adopting an existing slot.
 
-A slot created by hand with `git worktree add` is **not** locked automatically, which is why handing one to a session is an explicit `git worktree lock`. Enter a slot by `cd`-ing into it and starting a session there; `claude --worktree scrum` is for creating a _new_ task worktree, not for adopting an existing slot.
-
-That is the whole human gate, and it is deliberately the only one. There is no `--yes`, no `--force` and no environment variable that skips a check, so there is nothing to set once in a wrapper and have be permanent and invisible afterwards — the reason `seedGuard.ts` lost its `SEED_ALLOW_REMOTE`. Nothing recycles on a schedule or a hook.
-
-**A session never recycles its own slot**, deletes its own branch, or removes its own worktree. Those are the human's, between tickets.
+There is no `--yes`, no `--force` and no environment variable that skips the lock check, and nothing recycles on a schedule or a hook. **A session never recycles its own slot**, deletes its own branch, or removes its own worktree — those are the human's, between tickets.
 
 #### The scripts
 
-[`wt-bootstrap.sh`](scripts/wt-bootstrap.sh) is idempotent and refuses to run on `main`, on `staging`, or in the primary checkout. It establishes idempotence by fingerprint rather than by comparing against the primary checkout: [`wt-state.sh`](scripts/wt-state.sh) records what the installed tree and the generated Prisma client were built from, inside the ignored directories themselves, and re-running compares against those stamps. The primary checkout is one branch's state among many and has no authority over what a worktree needs — comparing against it could report a client as current when it was generated from something else entirely.
+- [`wt-bootstrap.sh`](scripts/wt-bootstrap.sh) — idempotent; refuses on `main`, `staging`, or the primary checkout. Fingerprints what the installed tree and Prisma client were built from (via [`wt-state.sh`](scripts/wt-state.sh)) rather than comparing against the primary checkout, which could report a client as current when it was generated from something else entirely.
+- [`wt-recycle.sh`](scripts/wt-recycle.sh) — points a slot at a new branch. Refuses unless the slot is on the allowlist, unlocked, clean, and its current branch is fully merged into `origin/main`; refuses the new name if it's a protected ref or already exists. Validates, fetches, re-validates, then **switches to the new branch before deleting the old one** — so a failure at either step leaves no reachable commit lost. Clears `.next` and `coverage` by name rather than `git clean -xdf`, which would take `node_modules` and `.env` with it.
+- [`wt-cleanup.sh`](scripts/wt-cleanup.sh) — the teardown half for task-specific worktrees, same refusal grounds. Never fetches, so a stale `origin/main` only makes it refuse more, never less.
 
-[`wt-recycle.sh`](scripts/wt-recycle.sh) points a slot at a new branch. It refuses rather than guesses: the slot must be on the allowlist, be a registered linked worktree one level under `.claude/worktrees/`, not be the primary checkout or the worktree you are running from, be neither locked nor prunable, have no operation in progress, hold a branch other than `main` or `staging` that is checked out nowhere else and has every commit reachable from `origin/main`, have no modified or untracked files, have an `.env` and no `.env.production`, and have no stash entry taken from that branch. The new name must be a valid ref, unprotected, not the branch already there, and absent both locally and on the remote.
-
-Its ordering is the part that matters: it validates, fetches, re-validates against the fresh refs, then **switches to the new branch before deleting the old one**. If the switch fails nothing has changed; if the delete fails the slot is already recycled and the old branch is still there. Either way no reachable commit is lost. It clears `.next` and `coverage` by name, because a branch switch leaves ignored files alone — never a `git clean -xdf`, which would take `node_modules` and `.env` with it.
-
-[`wt-cleanup.sh`](scripts/wt-cleanup.sh) is the teardown half for task-specific worktrees, and it refuses on the same grounds. It never fetches, which is why the fetch above matters — a stale `origin/main` only ever makes it refuse more.
-
-All three use the plain non-force commands, so git's own refusals are the last line of defence — none of them runs `git worktree remove --force`, `git branch -D`, `reset --hard`, `clean` or `rm -rf` over a worktree. A squash or rebase merge leaves the branch's commits off `origin/main`, so they will refuse a branch whose pull request really did merge; the refusal prints the PR state and the commits at stake and leaves the decision to you. The remote is never touched, and neither is the shared stash — `refs/stash` lives in the common git dir, so one stack is shared by every worktree, and popping would hand another worktree's work to this one.
+All three use plain non-force git commands only — no `--force`, no `reset --hard`, no `rm -rf` over a worktree — so git's own refusals are the last line of defence. A squash or rebase merge leaves a branch's commits off `origin/main`; the scripts refuse rather than guess and print the PR state for you to decide. The remote and the shared stash (`refs/stash`, common across every worktree) are never touched automatically.
 
 #### What stays shared
 

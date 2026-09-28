@@ -1,6 +1,7 @@
 # Design spike: lifting the one-`CarpoolSearch`-per-user assumption
 
-**Status:** design only. SCRUM-543. No production code changes.
+**Status:** design only, Phase 1 shipped (see [Follow-up](#follow-up)). No other
+production code changes.
 **Evidence base:** `origin/main` at 47c720e, plus a read-only count against production.
 
 `schema.prisma` lets a `User` have many `CarpoolSearch` rows. The application
@@ -42,20 +43,20 @@ repair. Any design below starts from a clean base.
 
 **The case that is real is _zero_ searches, not two.** 299 users — 6.7% — have
 no `CarpoolSearch` at all. That is the case the `?? VIEWER` / `?? 0` / `?? ""`
-fallbacks in `user.me` exist for, and the case `hasCarpoolSearch` (SCRUM-508)
-was added to distinguish. Work on this ticket must not regress it: every option
-below has to keep "no search" distinguishable from "a search whose values happen
-to be the defaults".
+fallbacks in `user.me` exist for, and the case `hasCarpoolSearch` was added to
+distinguish. Any multi-search work must not regress it: every option below has
+to keep "no search" distinguishable from "a search whose values happen to be
+the defaults".
 
 ## The assumption is not one pattern, it is four
 
-The ticket names `findFirst` and `carpoolSearches[0]`. Those are the visible
-class. There are three more, and two of them are considerably more dangerous,
-because they fail by writing rather than by reading.
+`findFirst` and `carpoolSearches[0]` are the visible class. There are three
+more, and two of them are considerably more dangerous, because they fail by
+writing rather than by reading.
 
 **Class A — Selection.** "Get the user's search." `findFirst({ where: { userId } })`,
 `carpoolSearches[0]`, `take: 1`. Under multi-search these return an arbitrary
-row. Loud and easy to find; this is the class the ticket describes.
+row. Loud and easy to find.
 
 **Class B — Fan-out join.** `findMany({ where: { userId: { in: [...] } } })`
 followed by `.find((s) => s.userId === x)`. These assume the result set is a
@@ -169,8 +170,8 @@ Listed because it is the part of the sequencing argument that is easy to miss.
 
 ## The real obstacle is identity, not the flatten site
 
-The ticket frames the work around `user.me`'s flattened shape and `types.ts`.
-Those are real, but they are the tractable part. The obstacle is one line:
+`user.me`'s flattened shape and `types.ts` are real obstacles, but they are
+the tractable part. The deeper obstacle is one line:
 
 ```ts
 // src/server/publicUser.ts:53, inside buildPublicUser
@@ -258,7 +259,7 @@ ever live.
 Buys: switching contexts between co-op terms; history retained rather than
 overwritten by `user.edit`.
 
-Does **not** buy: the ticket's own motivating example — rider outbound and
+Does **not** buy: the original motivating example — rider outbound and
 driver on the return — because that needs two searches live _at once_.
 MySQL cannot express "one active row per user" as a partial unique index, so the
 invariant stays application-enforced, which is the same class of problem this
@@ -293,8 +294,8 @@ not build Option 2.**
 
 The reasoning:
 
-1. **Nothing currently needs multi-search.** The ticket says so, and the data
-   agrees — 0 users have a second search. Option 2 is the only one that could be
+1. **Nothing currently needs multi-search.** The data agrees — 0 users have
+   a second search. Option 2 is the only one that could be
    built speculatively, and it is the one that does not satisfy the motivating
    use case. Building it would add a pointer, a migration and an
    application-enforced invariant in exchange for a capability nobody has asked
@@ -371,10 +372,9 @@ spike.
 
 ## Follow-up
 
-SCRUM-544 implements Phase 1: `@@unique([userId])` in `schema.prisma`, migration
+Phase 1 shipped: `@@unique([userId])` in `schema.prisma`, migration
 `20260925120000_unique_carpool_search_user`, and a retry in `user.edit`. The
 race described above is reproduced deterministically in
 `src/server/router/user.db.test.ts`. The redundant `@@index([userId])` was kept
-and remains a separate decision. Option 3 gets its own
-ticket if and when a feature requires it; this document is the input to that
-design.
+and remains a separate decision. Option 3 gets its own ticket if and when a
+feature requires it; this document is the input to that design.
