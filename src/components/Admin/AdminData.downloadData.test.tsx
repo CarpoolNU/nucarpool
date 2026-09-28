@@ -39,29 +39,13 @@ jest.mock("file-saver", () => ({
   saveAs: (...args: unknown[]) => mockSaveAs(...args),
 }));
 
-jest.mock("../../utils/trpc", () => {
-  const reactQuery = jest.requireActual("@tanstack/react-query");
-  const asQuery =
-    (name: "dateRange" | "stats" | "series") =>
-    (input: unknown, options: object) =>
-      reactQuery.useQuery({
-        queryKey: [name, input],
-        queryFn: () => behaviour[name](),
-        ...options,
-      });
-
-  return {
-    trpc: {
-      user: {
-        admin: {
-          getDateRange: { useQuery: asQuery("dateRange") },
-          getDashboardStats: { useQuery: asQuery("stats") },
-          getDashboardSeries: { useQuery: asQuery("series") },
-        },
-      },
-    },
-  };
-});
+jest.mock("../../utils/trpc", () =>
+  require("../../testing/trpcHarness").buildTrpcMock({
+    "user.admin.getDateRange": { query: () => behaviour.dateRange() },
+    "user.admin.getDashboardStats": { query: () => behaviour.stats() },
+    "user.admin.getDashboardSeries": { query: () => behaviour.series() },
+  }),
+);
 
 jest.mock("./BarChartUserCounts", () => ({
   __esModule: true,

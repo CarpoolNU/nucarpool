@@ -82,76 +82,48 @@ const sendMessageFn = jest.fn(
  * notification emails - which never run in these tests but must exist for the
  * component to mount.
  */
-jest.mock("../../utils/trpc", () => {
-  const reactQuery = jest.requireActual("@tanstack/react-query");
-
-  const inertMutation = () => ({
-    mutate: jest.fn(),
-    mutateAsync: jest.fn(),
-    isPending: false,
-  });
-
-  return {
-    realTimeQueryOptions: {},
-    trpc: {
-      useUtils: () => {
-        const queryClient = reactQuery.useQueryClient();
-        return {
-          user: {
-            me: { invalidate: jest.fn() },
-            requests: { me: { invalidate: jest.fn() } },
-            recommendations: { me: { invalidate: jest.fn() } },
-            groups: { me: { invalidate: jest.fn() } },
-            messages: {
-              getUnreadMessageCount: { invalidate: jest.fn() },
-              conversation: {
-                invalidate: () =>
-                  invalidationReachesCache
-                    ? queryClient.invalidateQueries({
-                        queryKey: ["conversation"],
-                      })
-                    : Promise.resolve(),
-              },
-            },
-          },
-        };
+jest.mock("../../utils/trpc", () =>
+  require("../../testing/trpcHarness").buildTrpcMock(
+    {
+      "user.messages.conversation": {
+        infiniteQuery: () => conversationQueryFn(),
+        /*
+         * The one util in this file that reaches the cache for real - that is
+         * the whole subject - so it is declared rather than left as the
+         * harness's recording no-op, and is handed the live client.
+         *
+         * The key is the harness's own `[path, input]`, so a prefix of the
+         * dotted path matches every page of the thread.
+         */
+        invalidate: (queryClient: QueryClient) =>
+          invalidationReachesCache
+            ? queryClient.invalidateQueries({
+                queryKey: ["user.messages.conversation"],
+              })
+            : Promise.resolve(),
       },
-      user: {
-        messages: {
-          conversation: {
-            useInfiniteQuery: (input: unknown, options: object) =>
-              reactQuery.useInfiniteQuery({
-                queryKey: ["conversation", input],
-                queryFn: () => conversationQueryFn(),
-                initialPageParam: undefined,
-                ...options,
-              }),
-          },
-          sendMessage: {
-            useMutation: (options: object) =>
-              reactQuery.useMutation({
-                mutationFn: (variables: {
-                  requestId: string;
-                  content: string;
-                }) => sendMessageFn(variables),
-                ...options,
-              }),
-          },
-          markMessagesAsRead: { useMutation: inertMutation },
-        },
-        emails: {
-          sendMessageNotification: { useMutation: inertMutation },
-          sendAcceptanceNotification: { useMutation: inertMutation },
-        },
-        requests: { delete: { useMutation: inertMutation } },
-        groups: {
-          edit: { useMutation: inertMutation },
-          create: { useMutation: inertMutation },
-        },
+      "user.messages.sendMessage": {
+        mutation: (variables: { requestId: string; content: string }) =>
+          sendMessageFn(variables),
       },
+      // Wired up during render, never the subject.
+      "user.messages.markMessagesAsRead": { inertMutation: true },
+      "user.emails.sendMessageNotification": { inertMutation: true },
+      "user.emails.sendAcceptanceNotification": { inertMutation: true },
+      "user.requests.delete": { inertMutation: true },
+      "user.groups.edit": { inertMutation: true },
+      "user.groups.create": { inertMutation: true },
+      // Utils-only, and deliberately inert: an invalidation that reached the
+      // cache here would refetch mid-assertion.
+      "user.me": {},
+      "user.requests.me": {},
+      "user.recommendations.me": {},
+      "user.groups.me": {},
+      "user.messages.getUnreadMessageCount": {},
     },
-  };
-});
+    { realTimeQueryOptions: {} },
+  ),
+);
 
 /** The echo that never arrives. `bind` is registered and never invoked. */
 jest.mock("../../utils/pusherClient", () => ({

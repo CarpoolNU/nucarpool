@@ -22,6 +22,7 @@
 
 import { render, screen, waitFor, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { trpcSpies, resetTrpcSpies } from "../../testing/trpcHarness";
 
 jest.mock("../../pages/api/auth/[...nextauth]", () => ({ authOptions: {} }));
 jest.mock("next-auth", () => ({ getServerSession: jest.fn() }));
@@ -38,25 +39,12 @@ jest.mock("next-auth/react", () => ({
 
 /** Set per test: what the one `user.me` fetch does. */
 let behaviour: () => Promise<unknown> = async () => ({});
-const queryFn = jest.fn(() => behaviour());
 
-jest.mock("../../utils/trpc", () => {
-  const reactQuery = jest.requireActual("@tanstack/react-query");
-  return {
-    trpc: {
-      user: {
-        me: {
-          useQuery: (input: unknown, options: object) =>
-            reactQuery.useQuery({
-              queryKey: ["user.me", input],
-              queryFn: () => queryFn(),
-              ...options,
-            }),
-        },
-      },
-    },
-  };
-});
+jest.mock("../../utils/trpc", () =>
+  require("../../testing/trpcHarness").buildTrpcMock({
+    "user.me": { query: () => behaviour() },
+  }),
+);
 
 jest.mock("../../utils/mixpanel", () => ({
   trackProfileCompletion: jest.fn(),
@@ -135,7 +123,7 @@ const renderProfile = () =>
 const spinner = () => screen.queryByText("Loading...");
 
 beforeEach(() => {
-  queryFn.mockClear();
+  resetTrpcSpies();
   behaviour = async () => BASE_USER;
 });
 
@@ -172,7 +160,7 @@ describe("/profile when user.me fails", () => {
       expect(screen.getByText("PROFILE HEADER")).toBeInTheDocument(),
     );
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(queryFn).toHaveBeenCalledTimes(2);
+    expect(trpcSpies("user.me").queryFn).toHaveBeenCalledTimes(2);
   });
 
   /**

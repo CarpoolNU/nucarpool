@@ -14,44 +14,18 @@ const usersQueryFn = jest.fn();
 const resolveReportMutationFn = jest.fn();
 const invalidateReports = jest.fn();
 
-jest.mock("../../utils/trpc", () => {
-  const reactQuery = jest.requireActual("@tanstack/react-query");
-  return {
-    trpc: {
-      useUtils: () => ({
-        user: { admin: { getReports: { invalidate: invalidateReports } } },
-      }),
-      user: {
-        admin: {
-          getReports: {
-            useInfiniteQuery: (input: unknown, options: object) =>
-              reactQuery.useInfiniteQuery({
-                queryKey: ["getReports", input],
-                queryFn: () => reportsQueryFn(input),
-                initialPageParam: undefined,
-                ...options,
-              }),
-          },
-          getAllUsers: {
-            useQuery: (input: undefined, options: object) =>
-              reactQuery.useQuery({
-                queryKey: ["getAllUsers", input],
-                queryFn: () => usersQueryFn(),
-                ...options,
-              }),
-          },
-          resolveReport: {
-            useMutation: (options: object) =>
-              reactQuery.useMutation({
-                mutationFn: (input: unknown) => resolveReportMutationFn(input),
-                ...options,
-              }),
-          },
-        },
-      },
+jest.mock("../../utils/trpc", () =>
+  require("../../testing/trpcHarness").buildTrpcMock({
+    "user.admin.getReports": {
+      infiniteQuery: (input: unknown) => reportsQueryFn(input),
+      invalidate: () => invalidateReports(),
     },
-  };
-});
+    "user.admin.getAllUsers": { query: () => usersQueryFn() },
+    "user.admin.resolveReport": {
+      mutation: (input: unknown) => resolveReportMutationFn(input),
+    },
+  }),
+);
 
 const withClient = (node: React.ReactNode) => (
   <QueryClientProvider

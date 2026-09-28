@@ -56,32 +56,12 @@ let rolesSeen: (string | undefined)[] = [];
  * carries `enabled` through, so a fix that computed the gate but failed to pass
  * it would show up here as a fetch that still happens.
  */
-jest.mock("../../utils/trpc", () => {
-  const reactQuery = jest.requireActual("@tanstack/react-query");
-  return {
-    trpc: {
-      user: {
-        me: {
-          useQuery: () =>
-            reactQuery.useQuery({
-              queryKey: ["user.me"],
-              queryFn: () => userMeQueryFn(),
-            }),
-        },
-        recommendations: {
-          me: {
-            useQuery: (input: unknown, options: object) =>
-              reactQuery.useQuery({
-                queryKey: ["recommendations.me", input],
-                queryFn: () => recommendationsQueryFn(),
-                ...options,
-              }),
-          },
-        },
-      },
-    },
-  };
-});
+jest.mock("../../utils/trpc", () =>
+  require("../../testing/trpcHarness").buildTrpcMock({
+    "user.me": { query: () => userMeQueryFn() },
+    "user.recommendations.me": { query: () => recommendationsQueryFn() },
+  }),
+);
 
 /**
  * The input `index.tsx` passes, at its defaults. Spelled out in full rather

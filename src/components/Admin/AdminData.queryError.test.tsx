@@ -28,44 +28,34 @@
 import { render, screen, waitFor, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import AdminData from "./AdminData";
+import { trpcSpies, resetTrpcSpies } from "../../testing/trpcHarness";
 
 /** Set per test, one entry per procedure. */
 let behaviour: Record<string, () => Promise<unknown>>;
 
-const calls = { dateRange: 0, stats: 0, series: 0 };
+/**
+ * The three procedure paths, named once so a count assertion and the mock spec
+ * cannot drift apart.
+ */
+const DATE_RANGE_PATH = "user.admin.getDateRange";
+const STATS_PATH = "user.admin.getDashboardStats";
+const SERIES_PATH = "user.admin.getDashboardSeries";
 
-jest.mock("../../utils/trpc", () => {
-  const reactQuery = jest.requireActual("@tanstack/react-query");
-  /**
-   * The three `useQuery` calls as the React Query calls they compile down to.
-   * The `options` spread carries each `enabled` gate through, which is what
-   * makes the series query's hold on `queryRange` real here rather than
-   * assumed.
-   */
-  const asQuery =
-    (name: "dateRange" | "stats" | "series") =>
-    (input: unknown, options: object) =>
-      reactQuery.useQuery({
-        queryKey: [name, input],
-        queryFn: () => {
-          calls[name] += 1;
-          return behaviour[name]();
-        },
-        ...options,
-      });
+/** Fetches the client actually ran, counted from inside it. */
+const callCount = (path: string) => trpcSpies(path).queryFn.mock.calls.length;
 
-  return {
-    trpc: {
-      user: {
-        admin: {
-          getDateRange: { useQuery: asQuery("dateRange") },
-          getDashboardStats: { useQuery: asQuery("stats") },
-          getDashboardSeries: { useQuery: asQuery("series") },
-        },
-      },
-    },
-  };
-});
+/**
+ * The harness spreads each caller's `options` into the real client, which is
+ * what carries the `enabled` gate through - so the series query's hold on
+ * `queryRange`, asserted below, is measured rather than assumed.
+ */
+jest.mock("../../utils/trpc", () =>
+  require("../../testing/trpcHarness").buildTrpcMock({
+    "user.admin.getDateRange": { query: () => behaviour.dateRange() },
+    "user.admin.getDashboardStats": { query: () => behaviour.stats() },
+    "user.admin.getDashboardSeries": { query: () => behaviour.series() },
+  }),
+);
 
 // Inline factories rather than a shared helper: `jest.mock` is hoisted above
 // every `const` in the file, so a helper referenced here is not yet defined.
@@ -154,9 +144,7 @@ const spinner = () => screen.queryByText("Loading...");
 
 beforeEach(() => {
   behaviour = resolving();
-  calls.dateRange = 0;
-  calls.stats = 0;
-  calls.series = 0;
+  resetTrpcSpies();
 });
 
 describe("AdminData when a dashboard query fails", () => {
@@ -188,7 +176,10 @@ describe("AdminData when a dashboard query fails", () => {
     renderDashboard();
     await screen.findByRole("alert");
 
-    const before = { ...calls };
+    const before = {
+      dateRange: callCount(DATE_RANGE_PATH),
+      stats: callCount(STATS_PATH),
+    };
     behaviour = resolving();
 
     await act(async () => {
@@ -201,8 +192,8 @@ describe("AdminData when a dashboard query fails", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 
     // All three, not just the one that failed - `combineQueryStates.retry`.
-    expect(calls.dateRange).toBeGreaterThan(before.dateRange);
-    expect(calls.stats).toBeGreaterThan(before.stats);
+    expect(callCount(DATE_RANGE_PATH)).toBeGreaterThan(before.dateRange);
+    expect(callCount(STATS_PATH)).toBeGreaterThan(before.stats);
   });
 
   /**
@@ -246,6 +237,6 @@ describe("AdminData when a dashboard query fails", () => {
     );
     expect(spinner()).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(calls.series).toBe(0);
+    expect(callCount(SERIES_PATH)).toBe(0);
   });
 });

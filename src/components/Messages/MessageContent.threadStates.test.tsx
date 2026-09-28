@@ -40,34 +40,19 @@ let behaviour: () => Promise<unknown> = async () => ({
 
 const queryFn = jest.fn(() => behaviour());
 
-jest.mock("../../utils/trpc", () => {
-  const reactQuery = jest.requireActual("@tanstack/react-query");
-  return {
-    realTimeQueryOptions: {},
-    trpc: {
-      useUtils: () => ({
-        user: {
-          messages: { getUnreadMessageCount: { invalidate: jest.fn() } },
-          requests: { me: { invalidate: jest.fn() } },
-        },
-      }),
-      user: {
-        messages: {
-          conversation: {
-            useInfiniteQuery: (input: unknown, options: object) =>
-              reactQuery.useInfiniteQuery({
-                queryKey: ["conversation", input],
-                queryFn: () => queryFn(),
-                initialPageParam: undefined,
-                ...options,
-              }),
-          },
-          markMessagesAsRead: { useMutation: () => ({ mutate: jest.fn() }) },
-        },
-      },
+jest.mock("../../utils/trpc", () =>
+  require("../../testing/trpcHarness").buildTrpcMock(
+    {
+      "user.messages.conversation": { infiniteQuery: () => queryFn() },
+      "user.messages.markMessagesAsRead": { inertMutation: true },
+      // Utils-only: the component invalidates both, and neither is the
+      // subject. The harness's default invalidate records and resolves.
+      "user.messages.getUnreadMessageCount": {},
+      "user.requests.me": {},
     },
-  };
-});
+    { realTimeQueryOptions: {} },
+  ),
+);
 
 jest.mock("../../utils/pusherClient", () => ({
   acquirePusherClient: () => ({

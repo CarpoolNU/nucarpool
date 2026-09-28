@@ -34,53 +34,29 @@ const invalidateRequests = jest.fn();
 const invalidateRecommendations = jest.fn();
 const requestsQueryFn = jest.fn(async () => []);
 
-jest.mock("../../utils/trpc", () => {
-  const reactQuery = jest.requireActual("@tanstack/react-query");
-  return {
-    trpc: {
-      useUtils: () => {
-        const queryClient = reactQuery.useQueryClient();
-        return {
-          user: {
-            recommendations: {
-              me: {
-                invalidate: async () => {
-                  invalidateRecommendations();
-                },
-              },
-            },
-            requests: {
-              me: {
-                invalidate: () => {
-                  invalidateRequests();
-                  return queryClient.invalidateQueries({
-                    queryKey: ["requests.me"],
-                  });
-                },
-              },
-            },
-          },
-        };
-      },
-      user: {
-        requests: {
-          create: {
-            useMutation: (options: object) =>
-              reactQuery.useMutation({
-                mutationFn: async () => ({ id: "request-1" }),
-                ...options,
-              }),
-          },
-        },
-        emails: {
-          sendRequestNotification: {
-            useMutation: () => ({ mutate: jest.fn() }),
-          },
-        },
+jest.mock("../../utils/trpc", () =>
+  require("../../testing/trpcHarness").buildTrpcMock({
+    "user.requests.create": { mutation: async () => ({ id: "request-1" }) },
+    "user.emails.sendRequestNotification": { inertMutation: true },
+    "user.recommendations.me": {
+      invalidate: async () => {
+        invalidateRecommendations();
       },
     },
-  };
-});
+    "user.requests.me": {
+      /*
+       * Reaches the cache for real, because the point is that the Requests
+       * tab refreshes. The key is `RequestsProbe`'s own literal one - that
+       * query is a plain `useQuery` in this file, not a harness path, so it
+       * must stay `["requests.me"]` rather than follow the harness's scheme.
+       */
+      invalidate: (queryClient: QueryClient) => {
+        invalidateRequests();
+        return queryClient.invalidateQueries({ queryKey: ["requests.me"] });
+      },
+    },
+  }),
+);
 
 jest.mock("../../utils/useProfileImage", () => ({
   __esModule: true,
