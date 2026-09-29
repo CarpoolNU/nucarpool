@@ -16,6 +16,7 @@ import {
 import useIsMobile from "../../utils/useIsMobile";
 import SelectDays from "../Schedule/SelectDays";
 import SelectTimeRange from "../Schedule/SelectTimeRange";
+import { COOP_DATE_RANGE_ERROR_ID, fieldErrorId } from "../../utils/formA11y";
 
 interface StepThreeProps {
   errors: FieldErrors<OnboardingFormInputs>;
@@ -68,7 +69,11 @@ const StepThree = ({
             />
           </div>
           {errors.daysWorking && (
-            <ErrorDisplay className="text-xs">
+            <ErrorDisplay
+              id={fieldErrorId("daysWorking")}
+              role="alert"
+              className="text-xs"
+            >
               {errors.daysWorking.message}
             </ErrorDisplay>
           )}
@@ -109,6 +114,12 @@ const StepThree = ({
               onChange={handleMonthPickerChange("coopStartDate", setValue)}
               format="YYYY-MM"
               inputReadOnly={true}
+              aria-invalid={errors.coopStartDate ? true : undefined}
+              aria-describedby={
+                errors.coopStartDate || errors.coopEndDate
+                  ? COOP_DATE_RANGE_ERROR_ID
+                  : undefined
+              }
               className={`${isMobile ? "h-10 text-base" : "h-12 text-lg"} w-full rounded-md border border-gray-200 p-2`}
             />
           </div>
@@ -128,6 +139,12 @@ const StepThree = ({
               onChange={handleMonthPickerChange("coopEndDate", setValue)}
               format="YYYY-MM"
               inputReadOnly={true}
+              aria-invalid={errors.coopEndDate ? true : undefined}
+              aria-describedby={
+                errors.coopStartDate || errors.coopEndDate
+                  ? COOP_DATE_RANGE_ERROR_ID
+                  : undefined
+              }
               className={`${isMobile ? "h-10 text-base" : "h-12 text-lg"} w-full rounded-md border border-gray-200 p-2`}
             />
           </div>
@@ -138,7 +155,11 @@ const StepThree = ({
             infer, and the year bound can land on the start date alone - so
             that field's message is the fallback. */}
         {(errors.coopEndDate?.message || errors.coopStartDate?.message) && (
-          <ErrorDisplay className="text-xs">
+          <ErrorDisplay
+            id={COOP_DATE_RANGE_ERROR_ID}
+            role="alert"
+            className="text-xs"
+          >
             {errors.coopEndDate?.message || errors.coopStartDate?.message}
           </ErrorDisplay>
         )}

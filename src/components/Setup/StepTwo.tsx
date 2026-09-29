@@ -7,6 +7,7 @@ import ControlledAddressCombobox from "../Profile/ControlledAddressCombobox";
 import { TextField } from "../TextField";
 import { useAddressSelection } from "../../utils/useAddressSelection";
 import { PROFILE_TEXT_MAX_LENGTH } from "../../utils/textLimits";
+import { fieldErrorId } from "../../utils/formA11y";
 
 interface StepTwoProps {
   register: UseFormRegister<OnboardingFormInputs>;
@@ -54,7 +55,9 @@ const StepTwo = ({
           will not be displayed to any other users.
         </Note>
         {errors.startAddress && (
-          <ErrorDisplay>{errors.startAddress.message}</ErrorDisplay>
+          <ErrorDisplay id={fieldErrorId("startAddress")} role="alert">
+            {errors.startAddress.message}
+          </ErrorDisplay>
         )}
 
         {/* Workplace Name */}
@@ -101,7 +104,9 @@ const StepTwo = ({
             addressUpdater={companyAddressHook.updateAddress}
           />
           {errors.companyAddress && (
-            <ErrorDisplay>{errors.companyAddress.message}</ErrorDisplay>
+            <ErrorDisplay id={fieldErrorId("companyAddress")} role="alert">
+              {errors.companyAddress.message}
+            </ErrorDisplay>
           )}
         </div>
       </div>

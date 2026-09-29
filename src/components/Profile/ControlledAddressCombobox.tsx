@@ -6,6 +6,7 @@ import {
   CarpoolAddress,
   OnboardingFormInputs,
 } from "../../utils/types";
+import { fieldErrorId } from "../../utils/formA11y";
 
 interface ControlledAddressComboboxProps {
   control: Control<OnboardingFormInputs>;
@@ -21,6 +22,7 @@ interface ControlledAddressComboboxProps {
 }
 
 const ControlledAddressCombobox = (props: ControlledAddressComboboxProps) => {
+  const errorId = props.error && props.id ? fieldErrorId(props.id) : undefined;
   return (
     <Controller
       name={props.name}
@@ -50,6 +52,8 @@ const ControlledAddressCombobox = (props: ControlledAddressComboboxProps) => {
           {props.isDisabled ? (
             <input
               id={props.id}
+              aria-invalid={props.error ? true : undefined}
+              aria-describedby={errorId}
               className={`h-12 w-full rounded-md bg-gray-100 px-3 py-2 text-gray-400 shadow-xs ${
                 props.error ? "border-northeastern-red" : "border-gray-200"
               }`}
@@ -60,6 +64,8 @@ const ControlledAddressCombobox = (props: ControlledAddressComboboxProps) => {
           ) : (
             <Combobox.Input
               id={props.id}
+              aria-invalid={props.error ? true : undefined}
+              aria-describedby={errorId}
               className={`h-12 w-full rounded-md px-3 py-2 shadow-xs ${
                 props.error ? "border-northeastern-red" : "border-black"
               }`}

@@ -17,6 +17,7 @@ import { PROFILE_TEXT_MAX_LENGTH } from "../../utils/textLimits";
 import { useAddressSelection } from "../../utils/useAddressSelection";
 import SelectDays from "../Schedule/SelectDays";
 import SelectTimeRange from "../Schedule/SelectTimeRange";
+import { fieldErrorId } from "../../utils/formA11y";
 interface CarpoolSectionProps {
   register: UseFormRegister<OnboardingFormInputs>;
   errors: FieldErrors<OnboardingFormInputs>;
@@ -162,7 +163,9 @@ const CarpoolSection = ({
         />
       </div>
       {errors.daysWorking && (
-        <ErrorDisplay>{errors.daysWorking.message}</ErrorDisplay>
+        <ErrorDisplay id={fieldErrorId("daysWorking")} role="alert">
+          {errors.daysWorking.message}
+        </ErrorDisplay>
       )}
       <SelectTimeRange
         control={control}
@@ -206,7 +209,9 @@ const CarpoolSection = ({
         </Note>
       </div>
       {errors.startAddress && (
-        <ErrorDisplay>{errors.startAddress.message}</ErrorDisplay>
+        <ErrorDisplay id={fieldErrorId("startAddress")} role="alert">
+          {errors.startAddress.message}
+        </ErrorDisplay>
       )}
       <EntryLabel
         htmlFor="companyName"
@@ -248,7 +253,9 @@ const CarpoolSection = ({
         addressUpdater={companyAddressHook.updateAddress}
       />
       {errors.companyAddress && (
-        <ErrorDisplay>{errors.companyAddress.message}</ErrorDisplay>
+        <ErrorDisplay id={fieldErrorId("companyAddress")} role="alert">
+          {errors.companyAddress.message}
+        </ErrorDisplay>
       )}
       <div className="font-montserrat py-8">
         <button

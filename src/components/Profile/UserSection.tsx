@@ -20,6 +20,7 @@ import {
   signOutWithGuard,
   UnsavedChangesGuard,
 } from "../../utils/profile/signOutWithGuard";
+import { fieldErrorId } from "../../utils/formA11y";
 
 interface UserSectionProps {
   register: UseFormRegister<OnboardingFormInputs>;
@@ -172,6 +173,10 @@ const UserSection = ({
                 type="number"
                 min="0"
                 isDisabled={seatsLocked}
+                aria-invalid={errors.seatAvail ? true : undefined}
+                aria-describedby={
+                  errors.seatAvail ? fieldErrorId("seatAvail") : undefined
+                }
                 {...register("seatAvail", { setValueAs: seatAvailValueAs })}
               />
             </div>
@@ -195,7 +200,9 @@ const UserSection = ({
           )}
         </Note>
         {errors.seatAvail && watch("role") === Role.DRIVER && (
-          <ErrorDisplay>{errors.seatAvail.message}</ErrorDisplay>
+          <ErrorDisplay id={fieldErrorId("seatAvail")} role="alert">
+            {errors.seatAvail.message}
+          </ErrorDisplay>
         )}
       </div>
 
