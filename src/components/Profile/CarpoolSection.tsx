@@ -18,6 +18,7 @@ import { useAddressSelection } from "../../utils/useAddressSelection";
 import SelectDays from "../Schedule/SelectDays";
 import SelectTimeRange from "../Schedule/SelectTimeRange";
 import { fieldErrorId } from "../../utils/formA11y";
+import { preventEnterSubmitFromReadOnlyInput } from "../../utils/formSubmit";
 interface CarpoolSectionProps {
   register: UseFormRegister<OnboardingFormInputs>;
   errors: FieldErrors<OnboardingFormInputs>;
@@ -42,7 +43,13 @@ const CarpoolSection = ({
   const isViewer = watch("role") === Role.VIEWER;
 
   return (
-    <div className="flex flex-col space-y-4">
+    <form
+      noValidate
+      aria-label="Carpool details"
+      onSubmit={onSubmit}
+      onKeyDown={preventEnterSubmitFromReadOnlyInput}
+      className="flex flex-col space-y-4"
+    >
       {/*
         The mobile size is the base and desktop overrides it, which is the same
         24px/36px pair `UserSection` and `AccountSection` reach with an
@@ -259,14 +266,13 @@ const CarpoolSection = ({
       )}
       <div className="font-montserrat py-8">
         <button
-          type="button"
+          type="submit"
           className="bg-northeastern-red w-full rounded-lg py-3 text-lg text-white hover:bg-red-700"
-          onClick={onSubmit}
         >
           Save Changes
         </button>
       </div>
-    </div>
+    </form>
   );
 };
 export default CarpoolSection;

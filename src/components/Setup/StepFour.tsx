@@ -65,6 +65,8 @@ const StepFour = ({
             error={errors.preferredName}
             isDisabled={false}
             type="text"
+            // Enter here is Complete: this is the wizard's last step.
+            enterKeyHint="done"
             inputClassName="h-12"
             {...register("preferredName")}
           />
@@ -84,6 +86,7 @@ const StepFour = ({
             error={errors.pronouns}
             isDisabled={false}
             type="text"
+            enterKeyHint="done"
             defaultValue={watch("pronouns") ? `(${watch("pronouns")})` : ""}
             onChange={(e: any) => {
               const input = e.target;

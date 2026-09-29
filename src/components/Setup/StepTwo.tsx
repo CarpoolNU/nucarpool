@@ -74,6 +74,7 @@ const StepTwo = ({
           id="companyName"
           error={errors.companyName}
           type="text"
+          enterKeyHint="next"
           // `company_name` is `VARCHAR(191)` and this field had no cap at all,
           // so a pasted value failed the save inside Prisma.
           charLimit={PROFILE_TEXT_MAX_LENGTH}
