@@ -47,6 +47,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import AdminData from "./AdminData";
 import { trpcSpies, resetTrpcSpies } from "../../testing/trpcHarness";
 import {
+  buildDaysByWeekdayCSV,
   buildDaysFrequencyCSV,
   buildLineChartCSV,
   buildQuickStatsCSV,
@@ -113,6 +114,31 @@ jest.mock("./BarChartDaysFrequency", () => ({
   __esModule: true,
   default: () => <div>days chart</div>,
 }));
+// The weekday chart's stub says which days are stranded and how many riders are
+// unspecified, so the wiring from `stats.daysByWeekday` is measured.
+jest.mock("./BarChartDaysByWeekday", () => ({
+  __esModule: true,
+  default: ({
+    daysByWeekday,
+  }: {
+    daysByWeekday: {
+      days: { day: string; stranded: boolean }[];
+      unspecified: { drivers: number; riders: number };
+    };
+  }) => (
+    <div>
+      weekday chart with {daysByWeekday.days.length} days,{" "}
+      {daysByWeekday.days.filter((row) => row.stranded).length} stranded,{" "}
+      {daysByWeekday.unspecified.riders} unspecified riders
+    </div>
+  ),
+}));
+jest.mock("./DaysByWeekdayTable", () => ({
+  __esModule: true,
+  default: ({ daysByWeekday }: { daysByWeekday: { days: unknown[] } }) => (
+    <div>weekday table with {daysByWeekday.days.length} days</div>
+  ),
+}));
 // The supply chart's stub says how many rows it was handed, so the wiring from
 // `stats.supplyByCity` is measured and not only that a chart exists.
 jest.mock("./BarChartSupplyByCity", () => ({
@@ -136,6 +162,20 @@ const STATS = {
   daysFrequency: {
     riderDayCount: [1, 2, 0, 1, 0, 2, 0],
     driverDayCount: [0, 1, 1, 1, 1, 1, 0],
+  },
+  // Every column distinct, and one stranded day, so an export that transposed
+  // two columns or the two series would differ.
+  daysByWeekday: {
+    days: [
+      { day: "Sunday", drivers: 0, riders: 1, stranded: true },
+      { day: "Monday", drivers: 4, riders: 9, stranded: false },
+      { day: "Tuesday", drivers: 5, riders: 8, stranded: false },
+      { day: "Wednesday", drivers: 3, riders: 0, stranded: false },
+      { day: "Thursday", drivers: 2, riders: 6, stranded: false },
+      { day: "Friday", drivers: 1, riders: 7, stranded: false },
+      { day: "Saturday", drivers: 0, riders: 0, stranded: false },
+    ],
+    unspecified: { drivers: 2, riders: 5 },
   },
   // Every column distinct, and one stranded city with no ratio, so an export
   // that transposed two columns or wrote the missing ratio as text would differ.
@@ -306,6 +346,17 @@ describe("AdminData when a dashboard query fails", () => {
     expect(screen.getByText("supply table with 2 rows")).toBeInTheDocument();
   });
 
+  it("hands the weekday chart and its table what `getDashboardStats` returned", async () => {
+    renderDashboard();
+
+    expect(
+      await screen.findByText(
+        "weekday chart with 7 days, 1 stranded, 5 unspecified riders",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("weekday table with 7 days")).toBeInTheDocument();
+  });
+
   it("control: shows the spinner while a fetch is still in flight", () => {
     behaviour.stats = () => new Promise(() => undefined);
 
@@ -343,9 +394,9 @@ describe("AdminData when a dashboard query fails", () => {
  * unit-testable on their own (see `adminDashboardCsv.test.ts`).
  *
  * That move is a behaviour-preserving refactor only if the button still zips
- * the same four CSVs from the same rendered `stats`/`series` (two more,
- * `buildSupplyByCityCSV` and `buildRequestFunnelCSV`, joined them in SCRUM-599
- * and SCRUM-600). This renders
+ * the same four CSVs from the same rendered `stats`/`series` (three more,
+ * `buildSupplyByCityCSV`, `buildRequestFunnelCSV` and `buildDaysByWeekdayCSV`,
+ * joined them in SCRUM-599, SCRUM-600 and SCRUM-602). This renders
  * the real component against mocked queries (same harness as
  * `AdminData.queryError.test.tsx`), clicks the button, and checks each
  * `zip.file(...)` call against the same builder functions called directly on
@@ -353,7 +404,7 @@ describe("AdminData when a dashboard query fails", () => {
  * already covered elsewhere.
  */
 describe("AdminData's Download Data button", () => {
-  it("zips the six CSVs the extracted builders produce for the rendered stats/series", async () => {
+  it("zips the seven CSVs the extracted builders produce for the rendered stats/series", async () => {
     renderDashboard();
 
     const button = await screen.findByRole("button", {
@@ -412,7 +463,11 @@ describe("AdminData's Download Data button", () => {
       expect.stringMatching(/^supply_by_city_.*\.csv$/),
       buildSupplyByCityCSV(STATS.supplyByCity),
     );
-    expect(mockZipFile).toHaveBeenCalledTimes(6);
+    expect(mockZipFile).toHaveBeenCalledWith(
+      expect.stringMatching(/^days_by_weekday_.*\.csv$/),
+      buildDaysByWeekdayCSV(STATS.daysByWeekday),
+    );
+    expect(mockZipFile).toHaveBeenCalledTimes(7);
 
     expect(mockSaveAs).toHaveBeenCalledWith(
       "zip-blob-content",

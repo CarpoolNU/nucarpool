@@ -1,5 +1,8 @@
 import { format } from "date-fns";
-import { LINE_CHART_LABELS } from "./adminDashboardLabels";
+import {
+  LINE_CHART_LABELS,
+  UNSPECIFIED_DAYS_LABEL,
+} from "./adminDashboardLabels";
 import { buildFunnelStages } from "./adminRequestFunnel";
 import { AdminDashboardSeries, AdminDashboardStats } from "./types";
 
@@ -109,6 +112,37 @@ export function buildSupplyByCityCSV(
   });
 
   return csvRows.join("\n");
+}
+
+/**
+ * Drivers and riders per weekday, Sunday first, then the people who named no
+ * weekday. Counts only, like the chart it exports, and no time of day: schedule
+ * times are not read anywhere on this path.
+ *
+ * `No Driver` says which days have riders and no driver, and is blank on the
+ * `Unspecified` row, which is a head count of people rather than a day.
+ */
+export function buildDaysByWeekdayCSV(
+  daysByWeekday: AdminDashboardStats["daysByWeekday"],
+): string {
+  const csvRows = [["Day", "Drivers", "Riders", "No Driver"]];
+
+  daysByWeekday.days.forEach((row) => {
+    csvRows.push([
+      row.day,
+      String(row.drivers),
+      String(row.riders),
+      row.stranded ? "Yes" : "No",
+    ]);
+  });
+  csvRows.push([
+    UNSPECIFIED_DAYS_LABEL,
+    String(daysByWeekday.unspecified.drivers),
+    String(daysByWeekday.unspecified.riders),
+    "",
+  ]);
+
+  return csvRows.map((row) => row.join(",")).join("\n");
 }
 
 export function buildUserCountsCSV(

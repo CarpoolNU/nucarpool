@@ -582,6 +582,121 @@ describe("getDashboardStats", () => {
     expect(prisma.carpoolGroup.findMany).not.toHaveBeenCalled();
   });
 
+  describe("daysByWeekday", () => {
+    it("is built from the user query's `daysWorking`, with no query of its own", async () => {
+      const { caller, prisma } = callerFor();
+      prisma.user.findMany.mockResolvedValue([
+        {
+          isOnboarded: true,
+          carpoolSearches: [
+            searchRow({ role: Role.RIDER, daysWorking: "1,1,0,0,0,0,0" }),
+          ],
+        },
+        {
+          isOnboarded: true,
+          carpoolSearches: [
+            searchRow({ role: Role.DRIVER, daysWorking: "0,1,0,0,0,0,0" }),
+          ],
+        },
+      ]);
+
+      const stats = await caller.user.admin.getDashboardStats();
+
+      expect(stats.daysByWeekday.days.map((row) => row.riders)).toEqual([
+        1, 1, 0, 0, 0, 0, 0,
+      ]);
+      expect(stats.daysByWeekday.days.map((row) => row.drivers)).toEqual([
+        0, 1, 0, 0, 0, 0, 0,
+      ]);
+      // The one user query is still the only one, and it still asks only for
+      // the columns it asked for before.
+      expect(prisma.user.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.carpoolSearch.findMany).not.toHaveBeenCalled();
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    });
+
+    it("counts a search with an empty `daysWorking` as unspecified, not dropped", async () => {
+      const { caller, prisma } = callerFor();
+      prisma.user.findMany.mockResolvedValue([
+        {
+          isOnboarded: true,
+          carpoolSearches: [
+            searchRow({ role: Role.RIDER, daysWorking: "" }),
+            // Only the first search is read; see `FIRST_SEARCH`.
+          ],
+        },
+        {
+          isOnboarded: true,
+          carpoolSearches: [
+            searchRow({ role: Role.DRIVER, daysWorking: "garbage" }),
+          ],
+        },
+      ]);
+
+      const stats = await caller.user.admin.getDashboardStats();
+
+      expect(stats.daysByWeekday.unspecified).toEqual({
+        drivers: 1,
+        riders: 1,
+      });
+    });
+
+    it("leaves out viewers and the inactive, like the days-per-week chart beside it", async () => {
+      const { caller, prisma } = callerFor();
+      prisma.user.findMany.mockResolvedValue([
+        {
+          isOnboarded: true,
+          carpoolSearches: [
+            searchRow({ role: Role.VIEWER, daysWorking: "1,1,1,1,1,1,1" }),
+          ],
+        },
+        {
+          isOnboarded: true,
+          carpoolSearches: [
+            searchRow({
+              role: Role.RIDER,
+              status: Status.INACTIVE,
+              daysWorking: "1,1,1,1,1,1,1",
+            }),
+          ],
+        },
+      ]);
+
+      const stats = await caller.user.admin.getDashboardStats();
+
+      expect(
+        stats.daysByWeekday.days.every((row) => row.drivers + row.riders === 0),
+      ).toBe(true);
+      expect(stats.daysByWeekday.unspecified).toEqual({
+        drivers: 0,
+        riders: 0,
+      });
+      // The unchanged neighbour, as a regression control.
+      expect(stats.daysFrequency.riderDayCount).toEqual([0, 0, 0, 0, 0, 0, 0]);
+    });
+
+    it("asks the database for no schedule time, and returns none", async () => {
+      const { caller, prisma } = callerFor();
+
+      const stats = await caller.user.admin.getDashboardStats();
+
+      // Schedule times were written under four picker conventions, so a
+      // time-of-day figure would be wrong. The chart must not be able to
+      // draw one, which starts with never selecting the column.
+      for (const args of everyCallArgument(prisma)) {
+        expect(selectsField(args, "startTime")).toBe(false);
+        expect(selectsField(args, "endTime")).toBe(false);
+      }
+      const [strings] = prisma.$queryRaw.mock.calls[0] as [
+        TemplateStringsArray,
+      ];
+      expect(strings.join("?")).not.toMatch(/start_time|end_time/);
+      expect(JSON.stringify(stats.daysByWeekday)).not.toMatch(
+        /startTime|endTime|hour/i,
+      );
+    });
+  });
+
   describe("supplyByCity", () => {
     /** The SQL a tagged-template call carried, with each `${}` shown as `?`. */
     const supplySql = (prisma: PrismaMock) => {

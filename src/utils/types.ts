@@ -59,6 +59,35 @@ export type AdminSupplyQueryRow = {
   openSeats: number;
 };
 
+/**
+ * One weekday's row in the drivers-vs-riders-by-day chart, as
+ * `summariseDaysByWeekday` builds it. `day` is the full name, `Sunday` first,
+ * because that is the index order of `daysWorking`.
+ *
+ * `stranded` is decided once, here, so the chart, the table and the CSV cannot
+ * disagree about which days they mark: riders are available and no driver is.
+ */
+export type AdminWeekdayRow = {
+  day: string;
+  drivers: number;
+  riders: number;
+  stranded: boolean;
+};
+
+/**
+ * Active drivers and riders by the weekday they are available, plus the ones
+ * who named no weekday at all.
+ *
+ * `unspecified` is a head count of people, not a day: a person who works
+ * Monday and Tuesday is in two `days` rows and in `unspecified` never, and one
+ * who works no day is in `unspecified` only. So `days` cannot be summed to the
+ * population, and `unspecified` is what keeps the population reconcilable.
+ */
+export type AdminDaysByWeekday = {
+  days: AdminWeekdayRow[];
+  unspecified: { drivers: number; riders: number };
+};
+
 /** Active/Inactive x Onboarded/Not, split by role. */
 export type AdminUserCounts = {
   totalAO: number;
