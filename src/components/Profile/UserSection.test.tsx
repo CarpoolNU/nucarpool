@@ -36,9 +36,9 @@ import {
  * function the button calls.
  */
 
-jest.mock("next-auth/react", () => ({
-  signOut: jest.fn(),
-}));
+jest.mock("next-auth/react", () =>
+  require("../../testing/nextAuthStub").buildNextAuthMock(),
+);
 
 /**
  * `ProfilePicture`, rendered in the middle of this section, resolves the
@@ -47,14 +47,9 @@ jest.mock("next-auth/react", () => ({
  * through a tRPC provider - the same treatment `MessageHeader.test.tsx` gives
  * it.
  */
-jest.mock("../../utils/useProfileImage", () => ({
-  __esModule: true,
-  default: () => ({
-    profileImageUrl: null,
-    imageLoadError: false,
-    isLoading: false,
-  }),
-}));
+jest.mock("../../utils/useProfileImage", () =>
+  require("../../testing/profileImageStub").buildProfileImageMock(),
+);
 
 const mockSignOut = signOut as jest.MockedFunction<typeof signOut>;
 

@@ -25,6 +25,7 @@ import type { Request as PrismaRequest } from "@prisma/client";
 import { CURRENT_TERMS_VERSION } from "./termsAcceptance";
 import { createRequestHandlers } from "./requestHandlers";
 import type { EnhancedPublicUser, User } from "./types";
+import { toastSpies } from "../testing/toastStub";
 
 type MutationOptions = {
   onSuccess?: (data: unknown, variables: unknown) => void;
@@ -105,21 +106,23 @@ jest.mock("./trpc", () => ({
   },
 }));
 
-const mockToastError = jest.fn();
-const mockToastSuccess = jest.fn();
-
 /**
  * `react-toastify/unstyled`, matching what the module under test imports.
  * `jest.mock` keys on the specifier, so mocking `"react-toastify"` here would
  * intercept nothing and let the real toast run - which is how these 11 tests
  * failed when the imports moved.
  */
-jest.mock("react-toastify/unstyled", () => ({
-  toast: {
-    error: (...args: unknown[]) => mockToastError(...args),
-    success: (...args: unknown[]) => mockToastSuccess(...args),
-  },
-}));
+jest.mock("react-toastify/unstyled", () =>
+  require("../testing/toastStub").buildToastMock(),
+);
+
+/*
+ * Read after the import section, by which point the factory above has run -
+ * the module under test imports `toast`, so requiring it builds the stub.
+ * Named locally because these two spies are referenced a dozen times below.
+ */
+const mockToastError = toastSpies().error;
+const mockToastSuccess = toastSpies().success;
 
 /**
  * A spy per cache rather than one shared between them: `groups.me` was the

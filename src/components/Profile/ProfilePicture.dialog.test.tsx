@@ -24,14 +24,9 @@ jest.mock("react-easy-crop", () => ({
   default: () => <div data-testid="cropper" />,
 }));
 
-jest.mock("../../utils/useProfileImage", () => ({
-  __esModule: true,
-  default: () => ({
-    profileImageUrl: null,
-    imageLoadError: false,
-    isLoading: false,
-  }),
-}));
+jest.mock("../../utils/useProfileImage", () =>
+  require("../../testing/profileImageStub").buildProfileImageMock(),
+);
 
 beforeEach(() => {
   // `handleFileChange` calls `createObjectURL` before the cropper can mount,

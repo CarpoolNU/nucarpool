@@ -9,6 +9,7 @@ import {
   REPORT_SNAPSHOT_MESSAGE_LIMIT,
 } from "../../utils/reports";
 import { REPORT_MESSAGE_MAX_LENGTH } from "../../utils/textLimits";
+import { toastSpies } from "../../testing/toastStub";
 
 /**
  * The report form.
@@ -68,14 +69,10 @@ jest.mock("../../utils/trpc", () => {
   };
 });
 
-jest.mock("react-toastify/unstyled", () => ({
-  toast: { success: jest.fn(), error: jest.fn(), info: jest.fn() },
-}));
-const mockToast = jest.requireMock("react-toastify/unstyled").toast as {
-  success: jest.Mock;
-  error: jest.Mock;
-  info: jest.Mock;
-};
+jest.mock("react-toastify/unstyled", () =>
+  require("../../testing/toastStub").buildToastMock(),
+);
+const mockToast = toastSpies();
 
 beforeEach(() => {
   jest.clearAllMocks();

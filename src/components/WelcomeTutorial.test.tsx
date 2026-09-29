@@ -114,18 +114,18 @@ jest.mock("driver.js", () => ({
 // mock rather than a virtual one.
 jest.mock("driver.js/dist/driver.css", () => ({}));
 
-jest.mock("next-auth/react", () => ({
-  useSession: jest.fn(),
-}));
+jest.mock("next-auth/react", () =>
+  require("../testing/nextAuthStub").buildNextAuthMock(),
+);
 
 jest.mock("../utils/useIsMobile", () => ({
   __esModule: true,
   default: jest.fn(),
 }));
 
-jest.mock("react-toastify/unstyled", () => ({
-  toast: { error: jest.fn(), success: jest.fn() },
-}));
+jest.mock("react-toastify/unstyled", () =>
+  require("../testing/toastStub").buildToastMock(),
+);
 
 jest.mock("../utils/trpc", () => ({
   trpc: {

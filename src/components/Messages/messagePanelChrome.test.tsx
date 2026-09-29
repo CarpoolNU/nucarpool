@@ -112,20 +112,17 @@ const classAttributes = (container: HTMLElement) =>
     .map((element) => element.getAttribute("class") ?? "")
     .join(" ");
 
-jest.mock("../../utils/useProfileImage", () => ({
-  __esModule: true,
-  default: () => ({
-    profileImageUrl: null,
-    imageLoadError: false,
-    // `true` so the header draws its placeholder box, which is a plain `div`
-    // carrying the avatar's classes. The loaded and errored branches are an
-    // `Image` and an icon component, and both would put the classes behind a
-    // wrapper's rendering choices rather than on an element this test can read
-    // directly. All three request the same string; `layoutFixtures.ts` guards
-    // that they keep doing so.
+// `isLoading: true` so the header draws its placeholder box, which is a plain
+// `div` carrying the avatar's classes. The loaded and errored branches are an
+// `Image` and an icon component, and both would put the classes behind a
+// wrapper's rendering choices rather than on an element this test can read
+// directly. All three request the same string; `layoutFixtures.ts` guards
+// that they keep doing so.
+jest.mock("../../utils/useProfileImage", () =>
+  require("../../testing/profileImageStub").buildProfileImageMock({
     isLoading: true,
   }),
-}));
+);
 
 /**
  * `MessageContent`'s three tRPC calls and its Pusher subscription, stubbed as

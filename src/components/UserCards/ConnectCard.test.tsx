@@ -105,10 +105,9 @@ jest.mock("../../utils/trpc", () => ({
 }));
 
 /** Avatars resolve through a presigned-URL query; irrelevant here. */
-jest.mock("../../utils/useProfileImage", () => ({
-  __esModule: true,
-  default: () => ({ profileImageUrl: null, isLoading: false }),
-}));
+jest.mock("../../utils/useProfileImage", () =>
+  require("../../testing/profileImageStub").buildProfileImageMock(),
+);
 
 restoreViewportAfterEach();
 

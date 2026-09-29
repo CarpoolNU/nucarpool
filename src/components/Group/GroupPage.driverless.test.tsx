@@ -73,9 +73,9 @@ jest.mock("./useGroupDetails", () => ({
   useGroupDetails: jest.fn(),
 }));
 
-jest.mock("react-toastify/unstyled", () => ({
-  toast: { success: jest.fn(), error: jest.fn() },
-}));
+jest.mock("react-toastify/unstyled", () =>
+  require("../../testing/toastStub").buildToastMock(),
+);
 
 const mockedTrpc = trpc as unknown as {
   useUtils: jest.Mock;

@@ -21,7 +21,9 @@ import { signOut } from "next-auth/react";
 import { resetIdentity } from "../mixpanel";
 import { signOutWithGuard, UnsavedChangesGuard } from "./signOutWithGuard";
 
-jest.mock("next-auth/react", () => ({ signOut: jest.fn() }));
+jest.mock("next-auth/react", () =>
+  require("../../testing/nextAuthStub").buildNextAuthMock(),
+);
 jest.mock("../mixpanel", () => ({ resetIdentity: jest.fn() }));
 
 const mockSignOut = signOut as jest.MockedFunction<typeof signOut>;

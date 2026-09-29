@@ -27,19 +27,16 @@ import { OnboardingFormInputs } from "../../utils/types";
 jest.mock("../../pages/api/auth/[...nextauth]", () => ({ authOptions: {} }));
 jest.mock("next-auth", () => ({ getServerSession: jest.fn() }));
 
-jest.mock("next/router", () => ({
-  useRouter: () => ({
-    push: jest.fn(),
-    events: { on: jest.fn(), off: jest.fn() },
-  }),
-}));
-jest.mock("next-auth/react", () => ({
-  useSession: () => ({ data: { user: { name: "Test User" } } }),
-}));
+jest.mock("next/router", () =>
+  require("../../testing/nextRouterStub").buildRouterMock(),
+);
+jest.mock("next-auth/react", () =>
+  require("../../testing/nextAuthStub").buildNextAuthMock(),
+);
 
-jest.mock("react-toastify/unstyled", () => ({
-  toast: { error: jest.fn(), success: jest.fn(), warning: jest.fn() },
-}));
+jest.mock("react-toastify/unstyled", () =>
+  require("../../testing/toastStub").buildToastMock(),
+);
 
 /** Set per test: what the server does with the save. */
 let editBehaviour: () => Promise<unknown> = async () => ({});

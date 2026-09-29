@@ -71,10 +71,9 @@ jest.mock("../../utils/trpc", () => ({
   },
 }));
 
-jest.mock("../../utils/useProfileImage", () => ({
-  __esModule: true,
-  default: () => ({ profileImageUrl: null, isLoading: false }),
-}));
+jest.mock("../../utils/useProfileImage", () =>
+  require("../../testing/profileImageStub").buildProfileImageMock(),
+);
 
 const OTHER_USER = {
   id: "other-1",

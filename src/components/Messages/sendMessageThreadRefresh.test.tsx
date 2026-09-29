@@ -136,9 +136,9 @@ jest.mock("../../utils/pusherClient", () => ({
 
 jest.mock("./MessageHeader", () => ({ __esModule: true, default: () => null }));
 
-jest.mock("react-toastify/unstyled", () => ({
-  toast: { error: jest.fn(), success: jest.fn() },
-}));
+jest.mock("react-toastify/unstyled", () =>
+  require("../../testing/toastStub").buildToastMock(),
+);
 
 const CURRENT_USER = {
   id: CURRENT_USER_ID,

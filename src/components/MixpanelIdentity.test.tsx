@@ -14,11 +14,17 @@
 
 import { act, render, waitFor } from "@testing-library/react";
 import { MixpanelIdentity } from "./MixpanelIdentity";
+import { nextAuthSpies } from "../testing/nextAuthStub";
 
-const useSession = jest.fn();
-jest.mock("next-auth/react", () => ({
-  useSession: () => useSession(),
-}));
+jest.mock("next-auth/react", () =>
+  require("../testing/nextAuthStub").buildNextAuthMock(),
+);
+
+/*
+ * The stub's own `useSession`, which this suite drives per test. Read after
+ * the import section, by which point the factory above has run.
+ */
+const useSession = nextAuthSpies().useSession;
 
 const identifyUser = jest.fn();
 jest.mock("../utils/mixpanel", () => ({

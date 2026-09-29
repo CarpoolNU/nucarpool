@@ -56,14 +56,9 @@ import {
  * lifted out without also lifting the hoisting. The subject here is narrow
  * enough that the copies are cheap.
  */
-jest.mock("next/router", () => ({
-  useRouter: () => ({
-    push: jest.fn(),
-    replace: jest.fn(),
-    pathname: "/",
-    query: {},
-  }),
-}));
+jest.mock("next/router", () =>
+  require("../testing/nextRouterStub").buildRouterMock(),
+);
 
 jest.mock("../utils/trpc", () => ({
   trpc: {
@@ -84,10 +79,11 @@ jest.mock("../utils/messages/useUnreadNotifications", () => ({
   useUnreadNotifications: () => undefined,
 }));
 
-jest.mock("next-auth/react", () => ({
-  useSession: () => ({ data: null, status: "unauthenticated" }),
-  signOut: jest.fn(),
-}));
+jest.mock("next-auth/react", () =>
+  require("../testing/nextAuthStub").buildNextAuthMock({
+    status: "unauthenticated",
+  }),
+);
 
 restoreViewportAfterEach();
 

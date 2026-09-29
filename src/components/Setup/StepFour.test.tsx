@@ -9,14 +9,9 @@ import { OnboardingFormInputs } from "../../utils/types";
  * screen reader could use - despite the visible label text beside each one.
  */
 
-jest.mock("../../utils/useProfileImage", () => ({
-  __esModule: true,
-  default: () => ({
-    profileImageUrl: null,
-    imageLoadError: false,
-    isLoading: false,
-  }),
-}));
+jest.mock("../../utils/useProfileImage", () =>
+  require("../../testing/profileImageStub").buildProfileImageMock(),
+);
 
 const Harness = () => {
   const { register, watch, setValue, formState } =

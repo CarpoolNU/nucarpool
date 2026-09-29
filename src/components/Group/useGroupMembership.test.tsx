@@ -32,9 +32,9 @@ jest.mock("../../utils/trpc", () => ({
   },
 }));
 
-jest.mock("react-toastify/unstyled", () => ({
-  toast: { success: jest.fn(), error: jest.fn() },
-}));
+jest.mock("react-toastify/unstyled", () =>
+  require("../../testing/toastStub").buildToastMock(),
+);
 
 type MutationOptions = {
   onSuccess: (data: unknown, variables: { riderId: string }) => void;

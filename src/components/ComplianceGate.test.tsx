@@ -19,6 +19,7 @@
 import { render, screen } from "@testing-library/react";
 import { ComplianceGate } from "./ComplianceGate";
 import { CURRENT_TERMS_VERSION } from "../utils/termsAcceptance";
+import { nextAuthSpies } from "../testing/nextAuthStub";
 
 const MODAL_TEXT = "compliance modal rendered";
 
@@ -30,10 +31,15 @@ jest.mock("next/dynamic", () => () => {
   return Stub;
 });
 
-const useSession = jest.fn();
-jest.mock("next-auth/react", () => ({
-  useSession: () => useSession(),
-}));
+jest.mock("next-auth/react", () =>
+  require("../testing/nextAuthStub").buildNextAuthMock(),
+);
+
+/*
+ * The stub's own `useSession`, which this suite drives per test. Read after
+ * the import section, by which point the factory above has run.
+ */
+const useSession = nextAuthSpies().useSession;
 
 const useQuery = jest.fn();
 jest.mock("../utils/trpc", () => ({
