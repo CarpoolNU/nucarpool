@@ -26,10 +26,12 @@ import { render, screen, act } from "@testing-library/react";
 jest.mock("../../pages/api/auth/[...nextauth]", () => ({ authOptions: {} }));
 jest.mock("next-auth", () => ({ getServerSession: jest.fn() }));
 
-jest.mock("next/router", () => ({ useRouter: () => ({ push: jest.fn() }) }));
-jest.mock("next-auth/react", () => ({
-  useSession: () => ({ data: { user: { name: "Test User" } } }),
-}));
+jest.mock("next/router", () =>
+  require("../../testing/nextRouterStub").buildRouterMock(),
+);
+jest.mock("next-auth/react", () =>
+  require("../../testing/nextAuthStub").buildNextAuthMock(),
+);
 
 const mockUseMeQuery = jest.fn();
 

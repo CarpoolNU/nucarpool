@@ -19,6 +19,7 @@ import {
   setViewportWidth,
 } from "../testing/viewport";
 import { DESKTOP_MEDIA_QUERY } from "../utils/breakpoints";
+import { routerSpies } from "../testing/nextRouterStub";
 
 /**
  * Which navigation the header renders, at each viewport.
@@ -41,9 +42,6 @@ import { DESKTOP_MEDIA_QUERY } from "../utils/breakpoints";
  * `testing/viewport.ts`.
  */
 
-const mockPush = jest.fn();
-const mockReplace = jest.fn();
-
 /**
  * `pathname` is `/` so `planMobileNav` treats a tab press as a client-side
  * switch rather than a page load - `/profile` is the one path that navigates
@@ -53,14 +51,17 @@ const mockReplace = jest.fn();
  * out of it to restore the tab a full page load carried in the URL, and
  * destructuring `undefined` throws during render.
  */
-jest.mock("next/router", () => ({
-  useRouter: () => ({
-    push: mockPush,
-    replace: mockReplace,
+jest.mock("next/router", () =>
+  require("../testing/nextRouterStub").buildRouterMock({
+    // Named explicitly although the stub defaults to both: the comment above
+    // is the reason this file needs them, and a later change to those
+    // defaults must not quietly take it away.
     pathname: "/",
     query: {},
   }),
-}));
+);
+
+const mockPush = routerSpies().push;
 
 /**
  * `trpc` onto a real React Query, through `testing/trpcHarness.ts`.
@@ -123,10 +124,11 @@ jest.mock("../utils/messages/useUnreadNotifications", () => ({
  * next-auth's own state machine, and the menu's contents are not what is being
  * asserted here.
  */
-jest.mock("next-auth/react", () => ({
-  useSession: () => ({ data: null, status: "unauthenticated" }),
-  signOut: jest.fn(),
-}));
+jest.mock("next-auth/react", () =>
+  require("../testing/nextAuthStub").buildNextAuthMock({
+    status: "unauthenticated",
+  }),
+);
 
 restoreViewportAfterEach();
 
@@ -317,14 +319,19 @@ describe("Header navigation at a mobile viewport — reselecting My Group", () =
   beforeEach(() => {
     setViewportWidth(MOBILE_WIDTH);
     // `handleMobileNavClick`'s switchTab branch awaits `router.push(...)`
-    // before forwarding the tab; nothing before this suite ever clicked a nav
-    // item, so the mock's default `undefined` return - which has no
-    // `.finally` - was never exercised.
+    // before forwarding the tab. The shared stub already resolves, which the
+    // hand-rolled `jest.fn()` this replaced did not - it returned `undefined`,
+    // which has no `.finally`, so this line had to supply the promise. It is
+    // kept because the awaited value is what the branch turns on, and pinning
+    // it here says so at the point it matters.
     mockPush.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
-    mockPush.mockReset();
+    // `mockClear`, not `mockReset`: the latter would strip the shared stub's
+    // resolving default along with this suite's override, leaving a later
+    // `router.push` returning `undefined` again.
+    mockPush.mockClear();
   });
 
   it("reopens the sheet when My Group is tapped while already the active tab", async () => {

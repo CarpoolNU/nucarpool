@@ -50,14 +50,9 @@ jest.mock("react-easy-crop", () => ({
  * Stubbed as a shape rather than driven through a tRPC provider, the same
  * treatment `UserSection.test.tsx` gives it.
  */
-jest.mock("../../utils/useProfileImage", () => ({
-  __esModule: true,
-  default: () => ({
-    profileImageUrl: null,
-    imageLoadError: false,
-    isLoading: false,
-  }),
-}));
+jest.mock("../../utils/useProfileImage", () =>
+  require("../../testing/profileImageStub").buildProfileImageMock(),
+);
 
 /** The cropped JPEG `handleCrop` hands up, as `getCroppedImg` names it. */
 const croppedFile = () =>

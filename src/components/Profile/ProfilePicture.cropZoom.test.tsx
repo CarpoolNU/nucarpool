@@ -58,14 +58,9 @@ jest.mock("react-easy-crop", () => ({
   },
 }));
 
-jest.mock("../../utils/useProfileImage", () => ({
-  __esModule: true,
-  default: () => ({
-    profileImageUrl: null,
-    imageLoadError: false,
-    isLoading: false,
-  }),
-}));
+jest.mock("../../utils/useProfileImage", () =>
+  require("../../testing/profileImageStub").buildProfileImageMock(),
+);
 
 /**
  * The cropper's box on an iPhone-width viewport, and the media size

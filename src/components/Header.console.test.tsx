@@ -58,14 +58,9 @@ import {
  * is. The router, notifications and next-auth factories stay copies; the
  * subject here is narrow enough that they are cheap.
  */
-jest.mock("next/router", () => ({
-  useRouter: () => ({
-    push: jest.fn(),
-    replace: jest.fn(),
-    pathname: "/",
-    query: {},
-  }),
-}));
+jest.mock("next/router", () =>
+  require("../testing/nextRouterStub").buildRouterMock(),
+);
 
 /*
  * Both queries `Header`'s tree reaches, declared `inertQuery` - a literal
@@ -92,10 +87,11 @@ jest.mock("../utils/messages/useUnreadNotifications", () => ({
   useUnreadNotifications: () => undefined,
 }));
 
-jest.mock("next-auth/react", () => ({
-  useSession: () => ({ data: null, status: "unauthenticated" }),
-  signOut: jest.fn(),
-}));
+jest.mock("next-auth/react", () =>
+  require("../testing/nextAuthStub").buildNextAuthMock({
+    status: "unauthenticated",
+  }),
+);
 
 restoreViewportAfterEach();
 

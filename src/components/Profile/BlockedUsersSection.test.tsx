@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { act } from "react";
 import BlockedUsersSection from "./BlockedUsersSection";
+import { toastSpies } from "../../testing/toastStub";
 
 /**
  * The profile's blocked-users list.
@@ -59,12 +60,10 @@ jest.mock("../../utils/trpc", () => {
   };
 });
 
-jest.mock("react-toastify/unstyled", () => ({
-  toast: { success: jest.fn(), error: jest.fn() },
-}));
-const mockToast = jest.requireMock("react-toastify/unstyled").toast as {
-  success: jest.Mock;
-};
+jest.mock("react-toastify/unstyled", () =>
+  require("../../testing/toastStub").buildToastMock(),
+);
+const mockToast = toastSpies();
 
 const TAYLOR = { userId: "user-taylor", name: "Taylor", blockedAt: new Date() };
 const JORDAN = { userId: "user-jordan", name: "Jordan", blockedAt: new Date() };

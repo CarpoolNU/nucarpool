@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { act } from "react";
 import UserActionsMenu from "./UserActionsMenu";
 import { BLOCK_GROUP_MEMBER_MESSAGE } from "../../server/router/user/blocks";
+import { toastSpies } from "../../testing/toastStub";
 
 /**
  * The overflow menu and the block confirmation.
@@ -70,14 +71,11 @@ jest.mock("../../utils/trpc", () => ({
 }));
 
 // Built inside the factory, which `jest.mock` hoists above this module's own
-// declarations, and read back through `jest.requireMock`.
-jest.mock("react-toastify/unstyled", () => ({
-  toast: { success: jest.fn(), error: jest.fn() },
-}));
-const mockToast = jest.requireMock("react-toastify/unstyled").toast as {
-  success: jest.Mock;
-  error: jest.Mock;
-};
+// declarations, and read back through the stub's own accessor.
+jest.mock("react-toastify/unstyled", () =>
+  require("../../testing/toastStub").buildToastMock(),
+);
+const mockToast = toastSpies();
 
 // `MenuItems anchor` positions through Floating UI, which observes the
 // trigger's size once the menu opens. jsdom has no `ResizeObserver`, and does

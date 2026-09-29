@@ -27,21 +27,20 @@ import {
   restoreViewportAfterEach,
   setViewportWidth,
 } from "../testing/viewport";
+import { routerState } from "../testing/nextRouterStub";
 
-/** Set per test before render; the router object itself never changes. */
-let mockQuery: Record<string, string> = {};
-const mockRouter = {
-  push: jest.fn(),
-  replace: jest.fn(),
-  pathname: "/",
-  get query() {
-    return mockQuery;
-  },
+jest.mock("next/router", () =>
+  require("../testing/nextRouterStub").buildRouterMock(),
+);
+
+/*
+ * Set per test before render. `useRouter()` hands back one object for the
+ * whole suite, so assigning to `query` on it is visible to the next render -
+ * which is what the getter over a local `let` used to arrange.
+ */
+const setTabQuery = (query: Record<string, string>) => {
+  routerState().query = query;
 };
-
-jest.mock("next/router", () => ({
-  useRouter: () => mockRouter,
-}));
 
 /**
  * Both queries `Header`'s tree reaches at these viewports, declared
@@ -70,10 +69,11 @@ jest.mock("../utils/messages/useUnreadNotifications", () => ({
   useUnreadNotifications: () => undefined,
 }));
 
-jest.mock("next-auth/react", () => ({
-  useSession: () => ({ data: null, status: "unauthenticated" }),
-  signOut: jest.fn(),
-}));
+jest.mock("next-auth/react", () =>
+  require("../testing/nextAuthStub").buildNextAuthMock({
+    status: "unauthenticated",
+  }),
+);
 
 restoreViewportAfterEach();
 
@@ -109,12 +109,12 @@ const desktopTab = (name: string) =>
 
 beforeEach(() => {
   setViewportWidth(DESKTOP_WIDTH);
-  mockQuery = {};
+  setTabQuery({});
 });
 
 describe("Header on desktop with ?tab= in the URL", () => {
   it("keeps Explore when it is clicked", () => {
-    mockQuery = { tab: "requests" };
+    setTabQuery({ tab: "requests" });
     render(<Harness initial="explore" />);
 
     fireEvent.click(desktopTab("Explore"));
@@ -127,7 +127,7 @@ describe("Header on desktop with ?tab= in the URL", () => {
    * it would pass the case above and fail this one.
    */
   it("control: opens on the tab the URL names", () => {
-    mockQuery = { tab: "requests" };
+    setTabQuery({ tab: "requests" });
     render(<Harness initial="explore" />);
 
     expect(sidebar()).toHaveTextContent("requests");

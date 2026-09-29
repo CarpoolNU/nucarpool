@@ -58,14 +58,13 @@ jest.mock("../../utils/trpc", () =>
   }),
 );
 
-jest.mock("../../utils/useProfileImage", () => ({
-  __esModule: true,
-  default: () => ({ profileImageUrl: null, isLoading: false }),
-}));
+jest.mock("../../utils/useProfileImage", () =>
+  require("../../testing/profileImageStub").buildProfileImageMock(),
+);
 
-jest.mock("react-toastify/unstyled", () => ({
-  toast: { error: jest.fn(), success: jest.fn() },
-}));
+jest.mock("react-toastify/unstyled", () =>
+  require("../../testing/toastStub").buildToastMock(),
+);
 
 const OTHER_USER = {
   id: "other-1",

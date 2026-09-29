@@ -20,16 +20,20 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-const push = jest.fn();
-
-jest.mock("next/router", () => ({
-  useRouter: () => ({ push }),
-}));
+jest.mock("next/router", () =>
+  require("../../testing/nextRouterStub").buildRouterMock(),
+);
 
 import AdminMobileNotice from "./AdminMobileNotice";
+import { routerSpies } from "../../testing/nextRouterStub";
+
+const push = routerSpies().push;
 
 beforeEach(() => {
-  push.mockReset();
+  // `mockClear`, not `mockReset`: the latter would strip the shared stub's
+  // resolving default, and `router.push` returning a promise is what the
+  // real router does.
+  push.mockClear();
 });
 
 describe("AdminMobileNotice", () => {

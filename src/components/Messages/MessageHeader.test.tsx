@@ -47,14 +47,9 @@ import {
  * rather than driven through a tRPC provider — the precedent is
  * `ConnectCard.test.tsx`.
  */
-jest.mock("../../utils/useProfileImage", () => ({
-  __esModule: true,
-  default: () => ({
-    profileImageUrl: null,
-    imageLoadError: false,
-    isLoading: false,
-  }),
-}));
+jest.mock("../../utils/useProfileImage", () =>
+  require("../../testing/profileImageStub").buildProfileImageMock(),
+);
 
 /**
  * The header renders `UserActionsMenu`, whose closed Block dialog calls the
