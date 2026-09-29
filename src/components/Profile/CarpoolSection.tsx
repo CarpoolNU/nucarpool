@@ -218,7 +218,6 @@ const CarpoolSection = ({
       <TextField
         className={`w-full`}
         inputClassName={`h-12`}
-        label="Workplace Name"
         isDisabled={isViewer}
         id="companyName"
         error={errors.companyName}

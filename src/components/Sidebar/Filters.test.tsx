@@ -348,6 +348,55 @@ describe("Filters — slider accessible names", () => {
  * The Any/Exact/Flex buttons signalled the active mode by colour alone - no
  * `aria-pressed`, so every option announced identically.
  */
+/**
+ * SCRUM-592: three controls that fell outside SCRUM-513's `htmlFor`/`EntryLabel`
+ * sweep because each is labelled by a bare `<label>` with no `htmlFor` — the
+ * flex-days number input had no `id` at all, and the two date fields' inputs
+ * already carried one with nothing pointing at it.
+ */
+describe("Filters — accessible names for the residual controls (SCRUM-592)", () => {
+  it("names the minimum-shared-days spin button from its visible label", () => {
+    render(
+      <Harness
+        initial={{ days: 2, daysWorking: "" }}
+        activeFilters={{ days: true }}
+      />,
+    );
+
+    // Positive control first: the control must be reachable at all before a
+    // name query can mean anything.
+    const spinbutton = screen.getByRole("spinbutton");
+    expect(spinbutton).toBe(flexDaysInput());
+    expect(
+      screen.getByRole("spinbutton", {
+        name: "Minimum shared carpool days",
+      }),
+    ).toBe(spinbutton);
+  });
+
+  it("names the start and end date fields from their visible labels", () => {
+    // `getByRole` has no implicit-role mapping for `type="month"` in jsdom, so
+    // the accessible-name contract is verified the way a screen reader forms
+    // it for this control: through the label association itself.
+    render(<Harness activeFilters={{ dateOverlap: true }} />);
+
+    // Positive control first: both inputs must be reachable at all.
+    expect(document.getElementById("coopStartDate")).toBeInstanceOf(
+      HTMLInputElement,
+    );
+    expect(document.getElementById("coopEndDate")).toBeInstanceOf(
+      HTMLInputElement,
+    );
+
+    expect(screen.getByLabelText("Start Date")).toBe(
+      document.getElementById("coopStartDate"),
+    );
+    expect(screen.getByLabelText("End Date")).toBe(
+      document.getElementById("coopEndDate"),
+    );
+  });
+});
+
 describe("Filters — Carpool Days Match segmented control", () => {
   it("marks exactly the selected mode as pressed", () => {
     render(<Harness initial={{ days: 1 }} activeFilters={{ days: true }} />);

@@ -367,8 +367,11 @@ const Filters = ({
               </div>
               {filters.days === 2 && (
                 <div className="mx-4 mt-2 flex flex-col items-center justify-center">
-                  <label className="mb-2">Minimum shared carpool days</label>
+                  <label className="mb-2" htmlFor="flexDays">
+                    Minimum shared carpool days
+                  </label>
                   <input
+                    id="flexDays"
                     type="number"
                     min="1"
                     // Never below the `min`: with no days selected this was
@@ -546,7 +549,12 @@ const Filters = ({
           ) : null}
           <div className="flex w-full gap-4">
             <div className="flex min-w-0 flex-1 flex-col">
-              <label className="mb-2 block font-semibold">Start Date</label>
+              <label
+                className="mb-2 block font-semibold"
+                htmlFor="coopStartDate"
+              >
+                Start Date
+              </label>
               <TextField
                 type="month"
                 inputClassName={`${startMonthInputClassName}`}
@@ -557,7 +565,9 @@ const Filters = ({
               />
             </div>
             <div className="flex min-w-0 flex-1 flex-col">
-              <label className="mb-2 block font-semibold">End Date</label>
+              <label className="mb-2 block font-semibold" htmlFor="coopEndDate">
+                End Date
+              </label>
               <TextField
                 type="month"
                 inputClassName={`${endMonthInputClassName}`}

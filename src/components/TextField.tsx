@@ -5,7 +5,6 @@ import { classNames } from "../utils/classNames";
 import { ReactNode } from "react";
 
 type TextFieldOwnProps = {
-  label?: string;
   error?: FieldError;
   charLimit?: number;
   inputClassName?: string;
@@ -23,7 +22,6 @@ export const TextField = React.forwardRef<HTMLInputElement, TextFieldProps>(
     {
       charLimit = 524288,
       isDisabled,
-      label,
       id,
       name,
       error,

@@ -168,7 +168,6 @@ const UserSection = ({
               <TextField
                 inputClassName="h-14 text-lg"
                 className="w-full self-end"
-                label="Seat Availability"
                 id="seatAvail"
                 type="number"
                 min="0"

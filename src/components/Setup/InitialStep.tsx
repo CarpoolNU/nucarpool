@@ -117,14 +117,14 @@ const InitialStep = ({
             <div className="mt-2 flex flex-1 items-center justify-center gap-3">
               <div className="flex flex-col">
                 <div className="flex items-center justify-center">
-                  <span
+                  <label
+                    htmlFor="seatAvail"
                     className={`font-montserrat mr-2 ${isMobile ? "text-base" : "text-lg"} font-semibold`}
                   >
                     Seat Availability
-                  </span>
+                  </label>
                   <TextField
                     className="!w-1/5"
-                    label="Seat Availability"
                     id="seatAvail"
                     type="number"
                     min="1"
