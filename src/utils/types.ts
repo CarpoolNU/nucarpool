@@ -31,6 +31,34 @@ export type AdminUserRow = {
   carpoolId: string | null;
 };
 
+/**
+ * One city's row in the drivers-vs-riders chart, as `summariseSupplyByCity`
+ * builds it. `city` is the label to draw: a normalised city name, or the
+ * `Unknown`/`Other` bucket name that `kind` says it is.
+ *
+ * `ridersPerDriver` is `null` where there is no driver to divide by, never
+ * `Infinity` - it does not survive JSON, and "no driver" is what `stranded`
+ * already says. `stranded` is decided here once so the chart, the table and
+ * the CSV cannot disagree about which cities it marks.
+ */
+export type AdminSupplyRow = {
+  city: string;
+  kind: "city" | "unknown" | "other";
+  drivers: number;
+  riders: number;
+  openSeats: number;
+  ridersPerDriver: number | null;
+  stranded: boolean;
+};
+
+/** One `GROUP BY` row from the database, before city names are normalised. */
+export type AdminSupplyQueryRow = {
+  city: string;
+  drivers: number;
+  riders: number;
+  openSeats: number;
+};
+
 /** Active/Inactive x Onboarded/Not, split by role. */
 export type AdminUserCounts = {
   totalAO: number;

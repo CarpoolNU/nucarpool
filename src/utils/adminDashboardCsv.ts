@@ -57,6 +57,59 @@ export function buildLineChartCSV(
   return csvRows.join("\n");
 }
 
+/**
+ * The one free-text column any of these exports carries. The rest are numbers
+ * and fixed labels, so this is the only field that needs quoting, and it is
+ * text a user typed or a geocoder returned, so it is also the only one a
+ * spreadsheet could be made to read as a formula.
+ *
+ * A leading `=`, `+`, `-` or `@` (or a tab or carriage return, which some
+ * programs skip before looking for one) is defused with an apostrophe, the
+ * convention Excel and Sheets both honour. A field with a comma, quote or line
+ * break is quoted with `"` doubled, so it cannot open a new column or row.
+ */
+export function csvTextField(value: string): string {
+  const defused = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+  return /[",\n\r]/.test(defused)
+    ? `"${defused.replace(/"/g, '""')}"`
+    : defused;
+}
+
+/**
+ * Aggregated by city only, like the chart it exports: no user, address or
+ * coordinate reaches this file. `Riders Per Driver` is empty for a city with
+ * no driver - there is no number to give - and `No Driver` says which of those
+ * empty cells is that case.
+ */
+export function buildSupplyByCityCSV(
+  supplyByCity: AdminDashboardStats["supplyByCity"],
+): string {
+  const headers = [
+    "City",
+    "Drivers",
+    "Riders",
+    "Open Seats",
+    "Riders Per Driver",
+    "No Driver",
+  ];
+  const csvRows = [headers.join(",")];
+
+  supplyByCity.forEach((row) => {
+    csvRows.push(
+      [
+        csvTextField(row.city),
+        row.drivers,
+        row.riders,
+        row.openSeats,
+        row.ridersPerDriver ?? "",
+        row.stranded ? "Yes" : "No",
+      ].join(","),
+    );
+  });
+
+  return csvRows.join("\n");
+}
+
 export function buildUserCountsCSV(
   userCounts: AdminDashboardStats["userCounts"],
 ): string {

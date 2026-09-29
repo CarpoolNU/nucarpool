@@ -81,10 +81,16 @@ const buildPrismaMock = () => {
         enumerable: false,
       },
       $executeRaw: { value: executeRaw, enumerable: false },
+      // `getDashboardStats` groups its per-city counts with a raw query,
+      // because Prisma's `groupBy` cannot group by a related table's column.
+      // Non-enumerable for the same reason as the other two: a bare jest.fn()
+      // is not a delegate for the walkers below to read `.mock.calls` off.
+      $queryRaw: { value: jest.fn().mockResolvedValue([]), enumerable: false },
     },
   ) as typeof client & {
     $transaction: jest.Mock;
     $executeRaw: jest.Mock;
+    $queryRaw: jest.Mock;
   };
 };
 

@@ -8,10 +8,11 @@ import {
   generateWeekLabels,
   MAX_DASHBOARD_WEEKS,
   summariseConversations,
+  summariseSupplyByCity,
   summariseUsers,
   weeksSpanned,
 } from "../../adminDataUtils";
-import { AdminUserRow } from "../../../utils/types";
+import { AdminSupplyQueryRow, AdminUserRow } from "../../../utils/types";
 import { AdminAuditAction, buildAuditLogEntry } from "../../adminAuditLog";
 import { parseConversationSnapshot } from "../../reportSnapshot";
 
@@ -323,36 +324,85 @@ export const adminDataRouter = router({
    * The dashboard's date-independent aggregates: the user-counts matrix, the
    * days-working frequency, carpool membership and conversation statistics.
    *
-   * Roughly thirty numbers on the wire, from four database queries, none of which
-   * selects a message body, an email address, a name or a location.
+   * Roughly thirty numbers plus one row per city on the wire, from five database
+   * queries, none of which selects a message body, an email address, a name or
+   * a street address. The city query reads `location.city` and returns it only
+   * as a group label with counts beside it.
    */
   getDashboardStats: adminRouter.query(async ({ ctx }) => {
-    const [users, groupCount, totalConversationCount, messageCounts] =
-      await Promise.all([
-        ctx.prisma.user.findMany({
-          where: { email: { not: null } },
-          select: {
-            isOnboarded: true,
-            carpoolSearches: {
-              select: {
-                role: true,
-                status: true,
-                daysWorking: true,
-                carpoolId: true,
-              },
-              ...FIRST_SEARCH,
+    const [
+      users,
+      groupCount,
+      totalConversationCount,
+      messageCounts,
+      supplyByCity,
+    ] = await Promise.all([
+      ctx.prisma.user.findMany({
+        where: { email: { not: null } },
+        select: {
+          isOnboarded: true,
+          carpoolSearches: {
+            select: {
+              role: true,
+              status: true,
+              daysWorking: true,
+              carpoolId: true,
             },
+            ...FIRST_SEARCH,
           },
-        }),
-        ctx.prisma.carpoolGroup.count({ where: MIXED_ROLE_GROUP }),
-        ctx.prisma.conversation.count(),
-        // Aggregated in MySQL: one row per conversation that has messages, and
-        // no message row or body crosses the client boundary.
-        ctx.prisma.message.groupBy({
-          by: ["conversationId"],
-          _count: { _all: true },
-        }),
-      ]);
+        },
+      }),
+      ctx.prisma.carpoolGroup.count({ where: MIXED_ROLE_GROUP }),
+      ctx.prisma.conversation.count(),
+      // Aggregated in MySQL: one row per conversation that has messages, and
+      // no message row or body crosses the client boundary.
+      ctx.prisma.message.groupBy({
+        by: ["conversationId"],
+        _count: { _all: true },
+      }),
+      // Grouped in MySQL, one row per distinct city, because Prisma's
+      // `groupBy` cannot group by a column on a related table.
+      //
+      // The population is `summariseUsers`' `drivers` and `riders`: a user
+      // with an email whose search is ACTIVE and whose role is DRIVER or
+      // RIDER, so the rows sum to `driverAO + driverANO` and
+      // `riderAO + riderANO`. VIEWERs are about a third of production and
+      // are not demand. `LEFT JOIN location` and `COALESCE` keep a search
+      // whose home location is missing or has no city in the totals as
+      // `Unknown` rather than dropping it.
+      //
+      // `seats_avail` is what is left of the driver's seats - `reserveSeat`
+      // decrements it - so the sum is open seats already, and `> 0` only
+      // guards against a negative value pulling a city's total down. The
+      // counts are cast to SIGNED because MySQL returns COUNT as a BigInt and
+      // SUM as a Decimal, neither of which is a plain number.
+      //
+      // Raw SQL bypasses Prisma's field mapping: `seats_avail` is mapped,
+      // `userId`, `homeLocationId`, `role` and `status` are not.
+      ctx.prisma.$queryRaw<
+        {
+          city: string;
+          drivers: bigint;
+          riders: bigint;
+          openSeats: bigint;
+        }[]
+      >`
+          SELECT
+            LOWER(TRIM(COALESCE(l.city, ''))) AS city,
+            CAST(SUM(cs.role = ${Role.DRIVER}) AS SIGNED) AS drivers,
+            CAST(SUM(cs.role = ${Role.RIDER}) AS SIGNED) AS riders,
+            CAST(
+              SUM(CASE WHEN cs.role = ${Role.DRIVER} AND cs.seats_avail > 0
+                THEN cs.seats_avail ELSE 0 END) AS SIGNED
+            ) AS openSeats
+          FROM carpool_search cs
+          INNER JOIN user u ON u.id = cs.userId AND u.email IS NOT NULL
+          LEFT JOIN location l ON l.id = cs.homeLocationId
+          WHERE cs.status = ${Status.ACTIVE}
+            AND cs.role IN (${Role.DRIVER}, ${Role.RIDER})
+          GROUP BY LOWER(TRIM(COALESCE(l.city, '')))
+        `,
+    ]);
 
     const rows: AdminUserRow[] = users.map((user) => {
       const search = user.carpoolSearches[0];
@@ -367,9 +417,17 @@ export const adminDataRouter = router({
 
     const { userCounts, daysFrequency, membership } = summariseUsers(rows);
 
+    const supplyRows: AdminSupplyQueryRow[] = supplyByCity.map((row) => ({
+      city: row.city,
+      drivers: Number(row.drivers),
+      riders: Number(row.riders),
+      openSeats: Number(row.openSeats),
+    }));
+
     return {
       userCounts,
       daysFrequency,
+      supplyByCity: summariseSupplyByCity(supplyRows),
       groups: { groupCount, ...membership },
       conversations: summariseConversations(
         totalConversationCount,
