@@ -14,7 +14,16 @@ import { EnhancedPublicUser, User } from "../../utils/types";
  * The header, message list and composer are stubbed out: the subject here is
  * the tab strip `MessagePanel` owns directly, and each child already has its
  * own test file exercising its own contract (`MessageHeader.test.tsx`,
- * `MessageContent.*.test.tsx`, `SendBar.test.tsx`).
+ * `MessageContent.test.tsx`, `SendBar.test.tsx`).
+ *
+ * **That stubbing is why `MessagePanel.conversationSwitch.test.tsx` is a
+ * separate file and must stay one.** It renders the real `MessageContent` and
+ * `SendBar`, with Pusher and a real React Query behind them, because the defect
+ * it covers lives inside `MessageContent`'s merge-by-id - stubbing that child
+ * out would test nothing. A `jest.mock` is per module per file, so one file
+ * cannot have `MessageContent` both stubbed and real. Reconciling the two
+ * would mean giving up the shallow render here, which is what confines these
+ * assertions to the tab strip.
  */
 
 jest.mock("./MessageHeader", () => ({

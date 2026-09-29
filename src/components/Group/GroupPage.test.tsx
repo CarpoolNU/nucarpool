@@ -1,16 +1,386 @@
+/**
+ * `GroupPage`: a group with no driver, and how My Group is dismissed and
+ * announced.
+ *
+ * Two tickets, which were two sibling files. The split was not one of the
+ * mandatory kinds in `CLAUDE.md`; it was an idiom difference in how the same
+ * two modules were mocked. The dismissal file configured `trpc` and
+ * `useGroupDetails` with literals inside the `jest.mock` factories, which is
+ * all a fixed `{ data: undefined }` needs; this file's `jest.fn()`s configured
+ * in `beforeEach` are the wider form, because the driverless cases vary
+ * `groups.me` per test. The wider form subsumes the narrower, so the whole file
+ * now uses it and each render helper states the `groups.me` result it wants -
+ * which is also what makes that result visible at the point of use rather than
+ * buried in a factory.
+ *
+ * `useGroupDetails` now returns `DEFAULT_GROUP_DETAILS` for every block. The
+ * dismissal file returned a hand-written literal whose keys had been wrong -
+ * `musicPreference`, `snackPreference`, `conversationStyle` and `groupNotes`,
+ * of which the last three are not fields - and nothing noticed, because the
+ * only body it rendered was a RIDER's prose. The real default cannot drift from
+ * the shape that way.
+ *
+ * ---
+ *
+ * "My Group" for a carpool group that has no driver.
+ *
+ * `GroupMembers` resolved the driver before deciding whether to render at all
+ * and shared one early return with the genuine loading state:
+ *
+ *     if (!driver || !curUser) return <Spinner />;
+ *
+ * For a group whose members include no `DRIVER` that branch never ends. The
+ * query has already succeeded, there is no driver, and no amount of waiting
+ * produces one - so both the mobile screen and the desktop modal showed a
+ * spinner where the member list belongs, with no message and no way out. 15
+ * groups holding 33 members were in that state on production.
+ *
+ * The exit itself was never missing. `groups.edit` skips the seat credit rather
+ * than failing it for exactly this case, commented "leaving one at a time is
+ * the only way its riders can get out", and `groups.test.ts` pins it. The
+ * button that reaches it was what did not exist, until this fix added it.
+ *
+ * ---
+ *
+ * **Why these go through `GroupPage` rather than rendering `GroupMembers`
+ * alone.** The acceptance criterion is "on both the mobile and the desktop
+ * branch", and `GroupMembers` has no branch of its own - it renders the same
+ * tree at every width. The two branches are `MobileGroupView` and
+ * `DesktopGroupView`, which is one level up, so that is the level these render
+ * at. The last `describe` is the exception: the surviving loading state is
+ * `GroupMembers`' own, and `GroupPage` returns its own spinner before reaching
+ * it, so that one addresses the component directly.
+ *
+ * `trpc` and `useGroupDetails` are mocked as shapes rather than driven through
+ * a real client and provider, following `useGroupDetails.test.tsx` - and, as
+ * that file documents, they are configured in `beforeEach` rather than inside
+ * the `jest.mock` factories, because a factory runs while the module under test
+ * is being required, before any `const` here is initialised.
+ *
+ * jsdom does no layout, so nothing here is a claim about what the screen looks
+ * like; these assert reachability and wiring. See `src/testing/viewport.ts`.
+ */
+
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Role } from "@prisma/client";
+import { trpc } from "../../utils/trpc";
 import { GroupPage } from "./GroupPage";
+import { GroupMembers } from "./GroupMemberCard";
+import { useGroupDetails } from "./useGroupDetails";
+import { DEFAULT_GROUP_DETAILS } from "./groupDetails";
 import { UserContext } from "../../utils/userContext";
-import { User } from "../../utils/types";
+import { PublicUser, User } from "../../utils/types";
 import {
   DESKTOP_WIDTH,
   MOBILE_WIDTH,
   restoreViewportAfterEach,
   setViewportWidth,
 } from "../../testing/viewport";
-import { DEFAULT_GROUP_DETAILS } from "./groupDetails";
+
+jest.mock("../../utils/trpc", () => ({
+  trpc: {
+    useUtils: jest.fn(),
+    user: {
+      me: { useQuery: jest.fn() },
+      groups: {
+        me: { useQuery: jest.fn() },
+        edit: { useMutation: jest.fn() },
+        delete: { useMutation: jest.fn() },
+      },
+    },
+  },
+}));
+
+jest.mock("./useGroupDetails", () => ({
+  useGroupDetails: jest.fn(),
+}));
+
+jest.mock("react-toastify/unstyled", () =>
+  require("../../testing/toastStub").buildToastMock(),
+);
+
+const mockedTrpc = trpc as unknown as {
+  useUtils: jest.Mock;
+  user: {
+    me: { useQuery: jest.Mock };
+    groups: {
+      me: { useQuery: jest.Mock };
+      edit: { useMutation: jest.Mock };
+      delete: { useMutation: jest.Mock };
+    };
+  };
+};
+
+const mockedUseGroupDetails = useGroupDetails as unknown as jest.Mock;
+
+restoreViewportAfterEach();
+
+const GROUP_ID = "group-driverless";
+
+/**
+ * A member row as `groups.me` returns one. Cast rather than filled in: the
+ * member card reads `id`, `preferredName`, `email` and `role`, and `carpoolId`
+ * is what `useGroupMembership` now takes the group from.
+ */
+const member = (id: string, preferredName: string, role: Role): PublicUser =>
+  ({
+    id,
+    preferredName,
+    role,
+    email: `${id}@northeastern.edu`,
+    carpoolId: GROUP_ID,
+  }) as unknown as PublicUser;
+
+/** The caller. A `RIDER`, so nothing here may manage the group. */
+const SAM = member("sam", "Sam", Role.RIDER);
+
+/**
+ * `VIEWER`, not `RIDER`. 8 of the 33 stranded members on production are viewer
+ * rows, and the badge labelled every one of them "Rider" - so this fixture is
+ * the common case rather than an edge one.
+ */
+const ALEX = member("alex", "Alex", Role.VIEWER);
+
+/** A third member, for the group that leaving does *not* dissolve. */
+const JO = member("jo", "Jo", Role.RIDER);
+
+const CUR_USER = SAM as unknown as User;
+
+/**
+ * What the server sends for one of these groups: members, and `hasDriver`
+ * false. Not a driver among them - that is the whole state.
+ */
+const driverlessGroup = (users: PublicUser[]) => ({
+  id: GROUP_ID,
+  hasDriver: false,
+  preferences: {
+    groupNotes: null,
+    groupMusicPreference: null,
+    groupConversationStyle: null,
+  },
+  users,
+});
+
+const editGroup = jest.fn();
+const deleteGroup = jest.fn();
+
+beforeEach(() => {
+  jest.clearAllMocks();
+
+  mockedTrpc.useUtils.mockReturnValue({
+    user: {
+      me: { invalidate: jest.fn() },
+      groups: { me: { invalidate: jest.fn() } },
+    },
+  });
+  mockedTrpc.user.me.useQuery.mockReturnValue({ data: undefined });
+  mockedTrpc.user.groups.edit.useMutation.mockReturnValue({
+    mutate: editGroup,
+    isPending: false,
+  });
+  mockedTrpc.user.groups.delete.useMutation.mockReturnValue({
+    mutate: deleteGroup,
+    isPending: false,
+  });
+
+  // The real default rather than a hand-written literal: `GroupDetailsPreview`
+  // pushes this straight into `normalizeDetails`, which reads every key.
+  mockedUseGroupDetails.mockReturnValue({
+    details: DEFAULT_GROUP_DETAILS,
+    setDetails: jest.fn(),
+    save: jest.fn(),
+    isSaving: false,
+  });
+});
+
+/**
+ * These carried `hidden: true` when this file was written, and no longer do.
+ *
+ * The desktop branch used to wrap its whole `Dialog.Panel` in a `div` marked
+ * `aria-hidden="true"`, so every control inside it - including the one this
+ * file's ticket added - was absent from the accessibility tree that `getByRole`
+ * resolves against. `hidden: true` made a role query ignore that exclusion, so
+ * these addressed the button that existed rather than the one the modal
+ * announced. The wrapper was the defect, filed separately and deliberately
+ * not fixed by that ticket; the later fix - pinned by the
+ * accessibility-tree block at the end of this file - split the backdrop out
+ * into a sibling, and the flag came off with it.
+ *
+ * It mattered just as much on the **negative** assertions, which is the part
+ * worth not losing. While everything in that panel was hidden,
+ * `queryByRole("button", { name: "Remove" })` on desktop returned null whether
+ * or not a Remove button was drawn - so "Remove is not offered" held for the
+ * wrong reason and would have kept holding through a regression. Now that the
+ * panel is in the tree, the query means what it says on both branches, without
+ * the flag papering over the difference.
+ */
+const button = (name: string) => screen.getByRole("button", { name });
+
+const maybeButton = (name: string) => screen.queryByRole("button", { name });
+
+const renderDriverlessGroup = (users: PublicUser[] = [SAM, ALEX]) => {
+  mockedTrpc.user.groups.me.useQuery.mockReturnValue({
+    data: driverlessGroup(users),
+    isLoading: false,
+    isError: false,
+  });
+
+  return render(
+    <UserContext.Provider value={CUR_USER}>
+      <GroupPage onClose={() => undefined} onViewGroupRoute={() => undefined} />
+    </UserContext.Provider>,
+  );
+};
+
+/**
+ * A RIDER with no `carpoolId`, which routes to `NoGroupSection` - the lightest
+ * of the two bodies. Which body renders is irrelevant to the header under test,
+ * and this one needs no group fixture.
+ */
+const USER_WITHOUT_GROUP = {
+  id: "user-1",
+  role: Role.RIDER,
+  carpoolId: null,
+  preferredName: "Sam",
+  ...DEFAULT_GROUP_DETAILS,
+} as unknown as User;
+
+/**
+ * The no-group render the dismissal cases below use. `groups.me` is stated here
+ * rather than in the `jest.mock` factory, the same way `renderDriverlessGroup`
+ * states its own - so what each block asks the server for is readable from the
+ * block.
+ */
+const renderGroupPage = (onClose: () => void) => {
+  mockedTrpc.user.groups.me.useQuery.mockReturnValue({ data: undefined });
+
+  return render(
+    <UserContext.Provider value={USER_WITHOUT_GROUP}>
+      <GroupPage onClose={onClose} onViewGroupRoute={() => undefined} />
+    </UserContext.Provider>,
+  );
+};
+
+describe.each([
+  ["mobile", MOBILE_WIDTH],
+  ["desktop", DESKTOP_WIDTH],
+])("a group with no driver, on %s", (_variant, width) => {
+  beforeEach(() => {
+    setViewportWidth(width);
+  });
+
+  it("renders its members instead of a spinner", () => {
+    renderDriverlessGroup();
+
+    expect(screen.getByText("Sam")).toBeInTheDocument();
+    expect(screen.getByText("Alex")).toBeInTheDocument();
+    expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
+  });
+
+  it("offers the caller a way out", () => {
+    renderDriverlessGroup();
+
+    expect(button("Leave Group")).toBeInTheDocument();
+  });
+
+  /**
+   * The point of the ticket. Reaching the mutation is what "working" means
+   * here: a button that renders and then calls nothing would satisfy the
+   * assertion above and leave the 33 members exactly as stuck.
+   *
+   * `groupId` is the caller's own `carpoolId`, which is the change that let the
+   * hook run at all - it used to read the group off `driver.carpoolId`, and
+   * there is no driver row to read. `driverId` is the caller's own id because
+   * `groups.edit` requires the field and ignores it on the remove path,
+   * resolving the driver from the group's membership itself.
+   */
+  it("leaves the group when that way out is taken", async () => {
+    renderDriverlessGroup();
+
+    await userEvent.click(button("Leave Group"));
+    await userEvent.click(button("Confirm"));
+
+    expect(editGroup).toHaveBeenCalledTimes(1);
+    expect(editGroup).toHaveBeenCalledWith({
+      driverId: "sam",
+      riderId: "sam",
+      add: false,
+      groupId: GROUP_ID,
+    });
+  });
+
+  /**
+   * `requireGroupDriver` refuses every management action for every caller in
+   * this state, so offering one would be offering a rejection.
+   */
+  it("offers no action the server would refuse", () => {
+    renderDriverlessGroup();
+
+    expect(maybeButton("Delete Group")).not.toBeInTheDocument();
+    expect(maybeButton("Remove")).not.toBeInTheDocument();
+  });
+
+  it("says why there is nothing to manage", () => {
+    renderDriverlessGroup();
+
+    expect(screen.getByText("This group has no driver")).toBeInTheDocument();
+  });
+
+  /**
+   * `groups.edit` dissolves a group once one member would be left, and 14 of
+   * the 15 driverless groups on production hold exactly two members - so for
+   * almost all of them this is what leaving does, and it is said before the
+   * confirmation rather than reported in a toast afterwards.
+   */
+  it("warns that leaving a pair dissolves the group", () => {
+    renderDriverlessGroup([SAM, ALEX]);
+
+    expect(screen.getByText(/dissolve the group/i)).toBeInTheDocument();
+  });
+
+  it("does not warn of that when a third member would remain", () => {
+    renderDriverlessGroup([SAM, ALEX, JO]);
+
+    expect(screen.queryByText(/dissolve/i)).not.toBeInTheDocument();
+  });
+
+  /**
+   * A group member's role lives on `CarpoolSearch` beside `carpoolId` and
+   * nothing ties the two together, so `VIEWER` members are real. The badge was
+   * a two-way conditional on `=== DRIVER`, which put every one of them in the
+   * "Rider" half.
+   */
+  it("labels a viewer as a viewer", () => {
+    renderDriverlessGroup();
+
+    expect(screen.getByText("Viewer")).toBeInTheDocument();
+    expect(screen.getByText("Rider")).toBeInTheDocument();
+  });
+});
+
+/**
+ * The state that *should* keep the spinner, which is the risk in splitting the
+ * condition: `UserContext` is null until `user.me` resolves, and no row can be
+ * drawn without the caller - not even the caller's own.
+ *
+ * Rendered against `GroupMembers` directly because `GroupPage` returns its own
+ * spinner for a null `curUser` several levels above this one, so going through
+ * the page would assert the wrong component's loading state and pass with this
+ * branch deleted.
+ */
+describe("the member list before the current user has loaded", () => {
+  it("still shows a spinner", () => {
+    render(
+      <UserContext.Provider value={null}>
+        <GroupMembers users={[SAM, ALEX]} />
+      </UserContext.Provider>,
+    );
+
+    expect(screen.getByText("Loading...")).toBeInTheDocument();
+    expect(screen.queryByText("Sam")).not.toBeInTheDocument();
+  });
+});
 
 /**
  * Dismissing "My Group" on mobile.
@@ -35,69 +405,8 @@ import { DEFAULT_GROUP_DETAILS } from "./groupDetails";
  * `trpc` and `useGroupDetails` are mocked as shapes rather than driven through
  * a real client and provider, following `useGroupDetails.test.tsx` - the
  * subject here is the header's dismissal wiring, and a real QueryClient would
- * be testing @tanstack/react-query instead. The mocks are configured inside the
- * `jest.mock` factories only with values that need no module-scope `const`,
- * for the temporal-dead-zone reason that file documents.
+ * be testing @tanstack/react-query instead.
  */
-
-jest.mock("../../utils/trpc", () => ({
-  trpc: {
-    user: {
-      me: { useQuery: () => ({ data: undefined }) },
-      groups: { me: { useQuery: () => ({ data: undefined }) } },
-    },
-  },
-}));
-
-/**
- * The keys are `GroupDetails`', spelled out rather than spread from
- * `DEFAULT_GROUP_DETAILS` - a `jest.mock` factory runs while the module under
- * test is being required, before the imports above are initialised, so it can
- * only use literals. `groupDetails.ts` is the source of truth for the shape.
- *
- * They were `musicPreference`, `snackPreference`, `conversationStyle` and
- * `groupNotes` until a later fix corrected them, and the last three of those
- * are not fields.
- * Nothing noticed, because the only body these tests rendered was a RIDER's,
- * which is prose - `GroupDetailsForm` reads `details.notes` and appears on the
- * DRIVER branch alone, which nothing here reached until the desktop
- * accessibility cases below.
- */
-jest.mock("./useGroupDetails", () => ({
-  useGroupDetails: () => ({
-    details: {
-      notes: "",
-      musicPreference: "",
-      conversationStyle: "",
-    },
-    setDetails: jest.fn(),
-    save: jest.fn(),
-    isSaving: false,
-  }),
-}));
-
-restoreViewportAfterEach();
-
-/**
- * A RIDER with no `carpoolId`, which routes to `NoGroupSection` - the lightest
- * of the two bodies. Which body renders is irrelevant to the header under test,
- * and this one needs no group fixture.
- */
-const USER_WITHOUT_GROUP = {
-  id: "user-1",
-  role: Role.RIDER,
-  carpoolId: null,
-  preferredName: "Sam",
-  ...DEFAULT_GROUP_DETAILS,
-} as unknown as User;
-
-const renderGroupPage = (onClose: () => void) =>
-  render(
-    <UserContext.Provider value={USER_WITHOUT_GROUP}>
-      <GroupPage onClose={onClose} onViewGroupRoute={() => undefined} />
-    </UserContext.Provider>,
-  );
-
 describe("My Group on mobile", () => {
   beforeEach(() => {
     setViewportWidth(MOBILE_WIDTH);
@@ -240,7 +549,7 @@ describe("My Group on desktop", () => {
  * `getByRole` resolves against that tree and `getByText` does not, which is the
  * only reason these assertions can tell the difference. It is also why the
  * queries below deliberately carry no `{ hidden: true }` - the flag
- * `GroupPage.driverless.test.tsx` needed to work around this, and has now
+ * the driverless block above needed to work around this, and has now
  * dropped.
  *
  * Note what the `does not render the mobile close control` case above could not
@@ -260,8 +569,10 @@ describe("My Group's desktop modal in the accessibility tree", () => {
     role: Role.DRIVER,
   } as unknown as User;
 
-  const renderDesktopModal = () =>
-    render(
+  const renderDesktopModal = () => {
+    mockedTrpc.user.groups.me.useQuery.mockReturnValue({ data: undefined });
+
+    return render(
       <UserContext.Provider value={DRIVING_USER_WITHOUT_GROUP}>
         <GroupPage
           onClose={() => undefined}
@@ -269,6 +580,7 @@ describe("My Group's desktop modal in the accessibility tree", () => {
         />
       </UserContext.Provider>,
     );
+  };
 
   beforeEach(() => {
     setViewportWidth(DESKTOP_WIDTH);

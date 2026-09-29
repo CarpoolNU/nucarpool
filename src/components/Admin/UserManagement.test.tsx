@@ -1,4 +1,18 @@
 /**
+ * `UserManagement`: what a discarded hydration pass costs, and what a failed
+ * `getAllUsers` shows.
+ *
+ * Two tickets, one per `describe` block, which were two sibling files until the
+ * setup they shared outgrew the reason for the split - both mock the same two
+ * procedures through `trpcHarness`, render the same component inside the same
+ * client, and drive the same viewport helpers. Neither of the mandatory split
+ * reasons in `CLAUDE.md` applied. The one thing that had to be reconciled is
+ * `getAllUsers`, which resolved to a fixed empty list in one file and to a
+ * per-test `behaviour` in the other; `behaviour` covers both, defaulting to the
+ * empty list the hydration block expects.
+ *
+ * ---
+ *
  * That the hydration pass `/admin` cannot avoid does not cost a `getAllUsers`.
  *
  * `/admin` is the one page whose `Header` and dashboard are genuinely in the
@@ -31,9 +45,9 @@
  * Measured against the pre-fix component, the mobile case reported **1**.
  */
 
-import { render } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
-import { hydrateRoot } from "react-dom/client";
+import { hydrateRoot, type Root } from "react-dom/client";
 import { act } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Permission } from "@prisma/client";
@@ -59,7 +73,7 @@ import { trpcSpies, resetTrpcSpies } from "../../testing/trpcHarness";
  */
 jest.mock("../../utils/trpc", () =>
   require("../../testing/trpcHarness").buildTrpcMock({
-    "user.admin.getAllUsers": { query: async () => [] as unknown[] },
+    "user.admin.getAllUsers": { query: () => behaviour() },
     "user.admin.updateUserPermission": { inertMutation: true },
   }),
 );
@@ -67,7 +81,39 @@ jest.mock("../../utils/trpc", () =>
 /** The `getAllUsers` fetch, counted from inside the client. */
 const queryFn = () => trpcSpies("user.admin.getAllUsers").queryFn;
 
+/**
+ * What the one fetch does, set per test. The default is the resolving empty
+ * list the hydration block below wants; the failure block overrides it.
+ */
+let behaviour: () => Promise<unknown[]> = async () => [];
+
 restoreViewportAfterEach();
+
+const ADMIN_USER = {
+  id: "u1",
+  email: "someone@northeastern.edu",
+  permission: "USER",
+};
+
+const renderTab = () =>
+  render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <UserManagement permission={Permission.MANAGER} />
+    </QueryClientProvider>,
+  );
+
+/** The spinner is `Spinner`'s own text, which is all it renders as words. */
+const spinner = () => screen.queryByText("Loading...");
+
+beforeEach(() => {
+  setViewportWidth(DESKTOP_WIDTH);
+  resetTrpcSpies();
+  behaviour = async () => [];
+});
 
 /**
  * `admin.tsx`'s conditional, reproduced rather than imported.
@@ -110,6 +156,15 @@ const withClient = (node: React.ReactNode) => (
  * The `renderToString` output is handed back too, so a caller can pin what the
  * server actually emitted rather than only what hydration settled on.
  */
+const hydrated: { root: Root; container: HTMLElement }[] = [];
+
+afterEach(() => {
+  for (const { root, container } of hydrated.splice(0)) {
+    act(() => root.unmount());
+    container.remove();
+  }
+});
+
 const hydrateAt = async (width: number) => {
   setViewportWidth(width);
   resetTrpcSpies();
@@ -132,7 +187,7 @@ const hydrateAt = async (width: number) => {
   const consoleError = jest.spyOn(console, "error").mockImplementation();
   try {
     await act(async () => {
-      hydrateRoot(container, tree);
+      hydrated.push({ root: hydrateRoot(container, tree), container });
     });
   } finally {
     consoleError.mockRestore();
@@ -185,5 +240,97 @@ describe("UserManagement on a fresh client mount", () => {
      * one too and fail here.
      */
     expect(queryFn()).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * Covers that a failed `getAllUsers` says so, and offers a way out.
+ *
+ * The Permissions tab is `/admin`'s default, and it used to hold its loading
+ * state in a `useState<boolean>(true)` cleared only by an effect watching
+ * `users`. Nothing else could clear it, so a failure was a spinner that spun
+ * for the rest of the session - and `adminRouter` throws `UNAUTHORIZED` for
+ * `permission === "USER"`, which a MANAGER can cause by demoting someone out
+ * from under their own live session. Any 500 landed the same way.
+ *
+ * **`trpc` is mocked onto a real React Query with a rejecting `queryFn`, not
+ * onto a stub reporting `isError: true`.** A stub would assert that the
+ * component renders `QueryError` when told it failed, which is the easy half.
+ * What has to hold is that React Query *reports* a rejected fetch the way the
+ * component reads it, and - for the retry - that refetching a failed query
+ * really does recover the view. Neither is observable through a hand-written
+ * flag. Same reasoning, and the same shape, as the
+ * hydration block above.
+ *
+ * `retry: false` on the client so one rejection is one error rather than four
+ * attempts; the app's own policy in `utils/trpc.ts` already declines to retry
+ * the `UNAUTHORIZED` and `NOT_FOUND` cases this stands in for.
+ */
+describe("UserManagement when getAllUsers fails", () => {
+  it("renders the error treatment and drops the spinner", async () => {
+    behaviour = async () => {
+      throw new Error("UNAUTHORIZED");
+    };
+
+    renderTab();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("We could not load the user list.");
+
+    // The whole defect: before this the spinner was still there, forever.
+    expect(spinner()).not.toBeInTheDocument();
+  });
+
+  it("recovers when retry is pressed and the cause has cleared", async () => {
+    behaviour = async () => {
+      throw new Error("boom");
+    };
+
+    renderTab();
+    await screen.findByRole("alert");
+
+    // The underlying cause clears - a session refreshed, a 500 that passed.
+    behaviour = async () => [ADMIN_USER];
+
+    await act(async () => {
+      screen.getByRole("button", { name: "Try again" }).click();
+    });
+
+    await waitFor(() =>
+      expect(screen.getByText("Permissions Management")).toBeInTheDocument(),
+    );
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(queryFn()).toHaveBeenCalledTimes(2);
+  });
+
+  /**
+   * The control, and the mutation test for the case above. A component that
+   * rendered `QueryError` unconditionally would pass both error assertions and
+   * fail here, which is the failure mode the ticket names.
+   */
+  it("control: a resolving query renders the list and no error", async () => {
+    behaviour = async () => [ADMIN_USER];
+
+    renderTab();
+
+    await waitFor(() =>
+      expect(screen.getByText("Permissions Management")).toBeInTheDocument(),
+    );
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(spinner()).not.toBeInTheDocument();
+  });
+
+  /**
+   * The third state, which is the one the old boolean could express. Kept here
+   * so "spinner while loading" and "error once failed" are pinned against the
+   * same component rather than only the second being asserted.
+   */
+  it("control: shows the spinner while the fetch is still in flight", () => {
+    behaviour = () => new Promise(() => undefined);
+
+    renderTab();
+
+    expect(spinner()).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });

@@ -39,6 +39,17 @@ import {
  * row fits on a 375px screen alongside the tab strip, message list and send
  * bar. jsdom does no layout — see `testing/viewport.ts` for the measured list
  * of what it cannot tell you. These tests assert reachability and wiring.
+ *
+ * ---
+ *
+ * **Why `MessageHeader.avatarRequest.test.tsx` is a separate file and must
+ * stay one.** That file asks whether the mobile branch fires a presigned-URL
+ * request at all, which is only answerable with the *real* `useProfileImage`
+ * running behind a real React Query. This file stubs that hook as a shape,
+ * which is right for its own question and fatal to the other one: a stubbed
+ * hook makes no request either way, so it cannot tell a fix from a no-op. A
+ * `jest.mock` is per module per file, so no single file can have the hook both
+ * stubbed and real. The two are not a candidate for merging.
  */
 
 /**
