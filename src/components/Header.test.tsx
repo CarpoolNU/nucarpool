@@ -1,6 +1,14 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Role, Status } from "@prisma/client";
 import Header from "./Header";
+import { resetTrpcSpies, trpcSpies } from "../testing/trpcHarness";
 import { UserContext } from "../utils/userContext";
 import { User } from "../utils/types";
 import {
@@ -55,51 +63,53 @@ jest.mock("next/router", () => ({
 }));
 
 /**
- * The presigned-URL query behind `DropDownMenu`'s avatar, as a spy.
+ * `trpc` onto a real React Query, through `testing/trpcHarness.ts`.
  *
- * This is that change's regression test, and it replaces a `useProfileImage`
- * mock that used to sit lower in this file. That mock was needed by the
- * *mobile* tests, which was the tell: `useIsMobile` started at
- * `useState(false)` and corrected itself in an effect, so the first render
- * pass on a phone was the *desktop* tree - `DropDownMenu` mounted and fired
- * this query once per mobile page load before being thrown away.
+ * The presigned-URL query behind `DropDownMenu`'s avatar is this file's one
+ * side-effect assertion, and it replaces a `useProfileImage` mock that used to
+ * sit lower down. That mock was needed by the *mobile* tests, which was the
+ * tell: `useIsMobile` started at `useState(false)` and corrected itself in an
+ * effect, so the first render pass on a phone was the *desktop* tree -
+ * `DropDownMenu` mounted and fired this query once per mobile page load before
+ * being thrown away.
  *
- * Deleting the mock is what the ticket asked for, but on its own it is a weak
- * test: it failed because the mock was missing, so making the `trpc` mock
- * complete would have made it pass again with the bug still present. Spying on
- * the query instead asserts the thing that was actually wrong - that the
- * request happens at all - and it stays meaningful now that the query resolves.
+ * **Why this is fetched rather than spied at render time.** A `jest.fn()`
+ * standing in for `useQuery` is called on the discarded pass whether or not the
+ * query is disabled, so it reports the same count either way. And it is
+ * disabled here for real: `useProfileImage` gates on `useIsHydrated`, so
+ * "`DropDownMenu` rendered" and "a presigned URL was requested" are genuinely
+ * two different facts, and only the second one costs anything. The spy below is
+ * the harness's `queryFn`, called from inside the client when the request
+ * actually goes out, so the counts are measurements. Same shape and the same
+ * reasoning as `components/Admin/UserManagement.test.tsx` and
+ * `utils/useProfileImage.test.tsx`.
+ *
+ * The unread count drives the Requests badge and is declared `inertQuery` - a
+ * literal result, no fetch - whose `data` is `undefined`, so `unreadBadge`
+ * produces a hidden badge. The badge is `useUnreadNotifications` and
+ * `unreadBadge`'s subject, both of which have their own suites, and it is not
+ * what this file is about.
+ *
+ * `realTimeQueryOptions` is exported because `Header` imports it by name
+ * alongside `trpc` and spreads it into that query.
  */
-const presignedUrlQuery = jest.fn(() => ({
-  data: undefined,
-  error: null,
-  isLoading: false,
-}));
-
-/**
- * The unread count drives the Requests badge. Returned as `undefined` so
- * `unreadBadge` produces a hidden badge — the badge is `useUnreadNotifications`
- * and `unreadBadge`'s subject, both of which have their own suites, and it is
- * not what this file is about.
- */
-jest.mock("../utils/trpc", () => ({
-  trpc: {
-    user: {
-      messages: {
-        getUnreadMessageCount: { useQuery: () => ({ data: undefined }) },
-      },
-      groups: { me: { useQuery: () => ({ data: undefined }) } },
-      me: { useQuery: () => ({ data: undefined }) },
-      /*
-       * Reached through an arrow so the spy is read when the query runs rather
-       * than when this factory is invoked - `jest.mock` is hoisted above the
-       * `const` above, so naming it directly here would be a TDZ error. The
-       * `useRouter` mock above depends on the same lazy read.
-       */
-      getPresignedDownloadUrl: { useQuery: () => presignedUrlQuery() },
+jest.mock("../utils/trpc", () =>
+  require("../testing/trpcHarness").buildTrpcMock(
+    {
+      "user.messages.getUnreadMessageCount": { inertQuery: true },
+      // `{ url: null }` rather than `undefined`: React Query rejects an
+      // `undefined` resolution as an error, and null is what the hook's
+      // `data?.url ?? null` produced before, so the avatar still renders its
+      // fallback exactly as it did.
+      "user.getPresignedDownloadUrl": { query: async () => ({ url: null }) },
     },
-  },
-}));
+    { realTimeQueryOptions: {} },
+  ),
+);
+
+/** The presigned-URL fetch, counted from inside the client. */
+const presignedUrlQuery = () =>
+  trpcSpies("user.getPresignedDownloadUrl").queryFn;
 
 /** Subscribes to Pusher for live invalidation; no side effects wanted here. */
 jest.mock("../utils/messages/useUnreadNotifications", () => ({
@@ -121,11 +131,11 @@ jest.mock("next-auth/react", () => ({
 restoreViewportAfterEach();
 
 /*
- * `clearMocks` is not configured for this project, so the spy accumulates
- * across the tests in this file unless it is reset per test.
+ * `clearMocks` is not configured for this project, so the harness's spies
+ * accumulate across the tests in this file unless they are reset per test.
  */
 beforeEach(() => {
-  presignedUrlQuery.mockClear();
+  resetTrpcSpies();
 });
 
 const VIEWER = {
@@ -135,18 +145,32 @@ const VIEWER = {
   preferredName: "Sam",
 } as unknown as User;
 
+/**
+ * A fresh `QueryClient` per render, not one shared across the file.
+ *
+ * `useProfileImage` sets a long `staleTime`, so a client carried between tests
+ * would serve the previous test's cached presigned URL and issue no request -
+ * making "the avatar query mounted here" pass or fail on test order rather than
+ * on the component. A new client per render is a cold load every time.
+ */
 const renderHeader = () =>
   render(
-    <UserContext.Provider value={VIEWER}>
-      <Header
-        data={{
-          sidebarValue: "explore",
-          setSidebar: () => undefined,
-          disabled: false,
-        }}
-        onViewGroupRoute={() => undefined}
-      />
-    </UserContext.Provider>,
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <UserContext.Provider value={VIEWER}>
+        <Header
+          data={{
+            sidebarValue: "explore",
+            setSidebar: () => undefined,
+            disabled: false,
+          }}
+          onViewGroupRoute={() => undefined}
+        />
+      </UserContext.Provider>
+    </QueryClientProvider>,
   );
 
 /** The bottom bar carries this; the desktop header does not render it. */
@@ -257,17 +281,28 @@ describe("Header navigation at a mobile viewport", () => {
     expect(desktopBrand()).not.toBeInTheDocument();
   });
 
-  it("never mounts the desktop-only avatar query", () => {
+  it("never fires the desktop-only avatar query", async () => {
     // Not "the desktop header is absent from the final tree", which the test
     // above already covers and which passed while the bug was live. This
-    // asserts nothing desktop-only *ever mounted*, by watching the one side
+    // asserts nothing desktop-only ever *fetched*, by watching the one side
     // effect such a mount produces.
     //
-    // It fails against `useState(false)` plus a mount effect, where the query
-    // is called during the discarded first pass.
+    // Measured: against `useIsMobile` rewritten as `useState(false)` plus a
+    // mount effect, the fetch really does go out on the discarded first pass -
+    // React Query subscribes before React's corrective re-render - and this
+    // test fails.
     renderHeader();
 
-    expect(presignedUrlQuery).not.toHaveBeenCalled();
+    // React Query subscribes its observer in a passive effect and fetches from
+    // there, so the request would appear a tick after render rather than
+    // during it. Draining is what stops this passing merely because nothing
+    // has happened yet; the desktop control below is what stops it passing
+    // because nothing ever happens.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(presignedUrlQuery()).not.toHaveBeenCalled();
   });
 });
 
@@ -366,14 +401,15 @@ describe("Header navigation at a desktop viewport", () => {
     expect(bottomNav()).not.toBeInTheDocument();
   });
 
-  it("does mount the avatar query here", () => {
-    // The control for the assertion above. Without this, a spy that could
-    // never be called for some unrelated reason - a renamed procedure, a
-    // `DropDownMenu` that stopped requesting an avatar - would make the mobile
-    // test pass vacuously and look like a fix.
+  it("does fire the avatar query here", async () => {
+    // The control for the assertion above. Without this, a request that could
+    // never go out for some unrelated reason - a renamed procedure, a
+    // `DropDownMenu` that stopped asking for an avatar, a `useIsHydrated` gate
+    // that never opens - would make the mobile test pass vacuously and look
+    // like a fix.
     renderHeader();
 
-    expect(presignedUrlQuery).toHaveBeenCalled();
+    await waitFor(() => expect(presignedUrlQuery()).toHaveBeenCalled());
   });
 });
 
