@@ -15,6 +15,11 @@
  * `MessageContent`'s merge-by-id, so stubbing it out would test nothing.
  * `MessageHeader` is stubbed; it has its own suites.
  *
+ * **This is deliberately a separate file from `MessagePanel.test.tsx` and must
+ * stay one.** That file stubs `MessageContent` and `SendBar` out to confine
+ * itself to the tab strip; this one needs both real. A `jest.mock` is per
+ * module per file, so the two cannot share one.
+ *
  * The last block is the other half of the key's contract. The key is the
  * request, not the `selectedUser` object, because a send refetches
  * `user.requests.me` and rebuilds that object for the same conversation. Keyed

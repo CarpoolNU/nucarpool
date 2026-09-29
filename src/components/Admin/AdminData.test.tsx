@@ -1,4 +1,21 @@
 /**
+ * `AdminData`: which of the three dashboard queries failed, and what the
+ * Download Data button zips once they have all settled.
+ *
+ * Two tickets, one per `describe` block, which were two sibling files until the
+ * setup they shared outgrew the reason for the split - identical `trpcHarness`
+ * spec, identical chart stubs, identical client and identical `renderDashboard`.
+ * Neither of the mandatory split reasons in `CLAUDE.md` applied.
+ *
+ * **One fixture pair serves both blocks, and it is the download test's.** That
+ * one varies field to field, which the CSV assertions need: against an all-ones
+ * `STATS` a builder that transposed two columns would still match. The error
+ * assertions only ask which of spinner, alert and dashboard is on screen, so
+ * they are indifferent to the values - which is why the richer pair is the one
+ * that survives rather than the other way round.
+ *
+ * ---
+ *
  * Covers that the admin dashboard distinguishes "one of these three
  * failed" from "one of these three has not arrived".
  *
@@ -29,6 +46,12 @@ import { render, screen, waitFor, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import AdminData from "./AdminData";
 import { trpcSpies, resetTrpcSpies } from "../../testing/trpcHarness";
+import {
+  buildDaysFrequencyCSV,
+  buildLineChartCSV,
+  buildQuickStatsCSV,
+  buildUserCountsCSV,
+} from "../../utils/adminDashboardCsv";
 
 /** Set per test, one entry per procedure. */
 let behaviour: Record<string, () => Promise<unknown>>;
@@ -49,6 +72,22 @@ const callCount = (path: string) => trpcSpies(path).queryFn.mock.calls.length;
  * what carries the `enabled` gate through - so the series query's hold on
  * `queryRange`, asserted below, is measured rather than assumed.
  */
+const mockZipFile = jest.fn();
+const mockGenerateAsync = jest.fn().mockResolvedValue("zip-blob-content");
+jest.mock("jszip", () => ({
+  __esModule: true,
+  default: jest.fn().mockImplementation(() => ({
+    file: mockZipFile,
+    generateAsync: mockGenerateAsync,
+  })),
+}));
+
+const mockSaveAs = jest.fn();
+jest.mock("file-saver", () => ({
+  __esModule: true,
+  saveAs: (...args: unknown[]) => mockSaveAs(...args),
+}));
+
 jest.mock("../../utils/trpc", () =>
   require("../../testing/trpcHarness").buildTrpcMock({
     "user.admin.getDateRange": { query: () => behaviour.dateRange() },
@@ -78,13 +117,13 @@ const MAX_DATE = new Date("2026-02-02T00:00:00Z");
 /** Every field the settled render destructures, and nothing more. */
 const STATS = {
   daysFrequency: {
-    riderDayCount: [1, 1, 1, 1, 1, 1, 1],
-    driverDayCount: [1, 1, 1, 1, 1, 1, 1],
+    riderDayCount: [1, 2, 0, 1, 0, 2, 0],
+    driverDayCount: [0, 1, 1, 1, 1, 1, 0],
   },
   conversations: {
     totalConversationCount: 4,
     totalWithMsgCount: 2,
-    avgConvWithMsg: 1,
+    avgConvWithMsg: 1.5,
     avgMsg: 3,
   },
   groups: {
@@ -95,32 +134,32 @@ const STATS = {
     totalRiders: 9,
   },
   userCounts: {
-    totalAO: 1,
+    totalAO: 3,
     totalANO: 1,
     totalIO: 1,
     totalINO: 1,
-    driverAO: 1,
-    driverANO: 1,
+    driverAO: 2,
+    driverANO: 0,
     driverIO: 1,
-    driverINO: 1,
+    driverINO: 0,
     riderAO: 1,
     riderANO: 1,
-    riderIO: 1,
+    riderIO: 0,
     riderINO: 1,
-    viewerAO: 1,
-    viewerANO: 1,
-    viewerIO: 1,
-    viewerINO: 1,
+    viewerAO: 0,
+    viewerANO: 0,
+    viewerIO: 0,
+    viewerINO: 0,
   },
 };
 
 const SERIES = {
-  weekLabels: [MIN_DATE],
-  signupCount: [1],
-  groupCounts: [1],
-  requestCount: [1],
-  driverRequestCount: [1],
-  riderRequestCount: [0],
+  weekLabels: [MIN_DATE, MAX_DATE],
+  signupCount: [1, 3],
+  groupCounts: [1, 2],
+  requestCount: [1, 1],
+  driverRequestCount: [1, null],
+  riderRequestCount: [0, 1],
 };
 
 const resolving = () => ({
@@ -145,6 +184,9 @@ const spinner = () => screen.queryByText("Loading...");
 beforeEach(() => {
   behaviour = resolving();
   resetTrpcSpies();
+  mockZipFile.mockClear();
+  mockGenerateAsync.mockClear();
+  mockSaveAs.mockClear();
 });
 
 describe("AdminData when a dashboard query fails", () => {
@@ -238,5 +280,80 @@ describe("AdminData when a dashboard query fails", () => {
     expect(spinner()).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(callCount(SERIES_PATH)).toBe(0);
+  });
+});
+
+/**
+ * The "Download Data" button, after `buildLineChartCSV` /
+ * `buildUserCountsCSV` / `buildDaysFrequencyCSV` / `buildQuickStatsCSV` moved
+ * out of `AdminData` into `../../utils/adminDashboardCsv`, so they are
+ * unit-testable on their own (see `adminDashboardCsv.test.ts`).
+ *
+ * That move is a behaviour-preserving refactor only if the button still zips
+ * the same four CSVs from the same rendered `stats`/`series`. This renders
+ * the real component against mocked queries (same harness as
+ * `AdminData.queryError.test.tsx`), clicks the button, and checks each
+ * `zip.file(...)` call against the same builder functions called directly on
+ * the fixture — proving the wiring, not the formatting logic, which is
+ * already covered elsewhere.
+ */
+describe("AdminData's Download Data button", () => {
+  it("zips the four CSVs the extracted builders produce for the rendered stats/series", async () => {
+    renderDashboard();
+
+    const button = await screen.findByRole("button", {
+      name: "Download Data",
+    });
+
+    await act(async () => {
+      button.click();
+    });
+
+    await waitFor(() => expect(mockSaveAs).toHaveBeenCalledTimes(1));
+
+    const percent = (part: number, whole: number) =>
+      Math.round((part / whole) * 1000) / 10 + "%";
+    const expectedQuickStatsCSV = buildQuickStatsCSV({
+      totalConversationCount: STATS.conversations.totalConversationCount,
+      totalWithMsgCount: STATS.conversations.totalWithMsgCount,
+      avgConvWithMsg: STATS.conversations.avgConvWithMsg,
+      avgMsg: STATS.conversations.avgMsg,
+      groupCount: STATS.groups.groupCount,
+      percentDriversInGroup: percent(
+        STATS.groups.driversInGroup,
+        STATS.groups.totalDrivers,
+      ),
+      percentRidersInGroup: percent(
+        STATS.groups.ridersInGroup,
+        STATS.groups.totalRiders,
+      ),
+      averageRidersPerGroup:
+        Math.round(
+          (STATS.groups.ridersInGroup / STATS.groups.groupCount) * 10,
+        ) / 10,
+    });
+
+    expect(mockZipFile).toHaveBeenCalledWith(
+      expect.stringMatching(/^line_chart_.*\.csv$/),
+      buildLineChartCSV(SERIES),
+    );
+    expect(mockZipFile).toHaveBeenCalledWith(
+      expect.stringMatching(/^user_counts_.*\.csv$/),
+      buildUserCountsCSV(STATS.userCounts),
+    );
+    expect(mockZipFile).toHaveBeenCalledWith(
+      expect.stringMatching(/^days_frequency_.*\.csv$/),
+      buildDaysFrequencyCSV(STATS.daysFrequency),
+    );
+    expect(mockZipFile).toHaveBeenCalledWith(
+      expect.stringMatching(/^quick_stats_.*\.csv$/),
+      expectedQuickStatsCSV,
+    );
+    expect(mockZipFile).toHaveBeenCalledTimes(4);
+
+    expect(mockSaveAs).toHaveBeenCalledWith(
+      "zip-blob-content",
+      expect.stringMatching(/^all_data_.*\.zip$/),
+    );
   });
 });
