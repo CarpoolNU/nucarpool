@@ -19,6 +19,7 @@ import FormControlLabel from "@mui/material/FormControlLabel";
 import { Switch } from "@mui/material";
 import { DatePicker } from "antd";
 import { Dayjs } from "dayjs";
+import { COOP_DATE_RANGE_ERROR_ID } from "../../utils/formA11y";
 
 interface AccountSectionProps {
   errors: FieldErrors<OnboardingFormInputs>;
@@ -151,6 +152,12 @@ const AccountSection = ({
               value={toMonthPickerValue(watch("coopStartDate"))}
               onChange={handleMonthPickerChange("coopStartDate", setValue)}
               format="YYYY-MM"
+              aria-invalid={errors.coopStartDate ? true : undefined}
+              aria-describedby={
+                errors.coopStartDate || errors.coopEndDate
+                  ? COOP_DATE_RANGE_ERROR_ID
+                  : undefined
+              }
               // Matches `StepThree`'s two identical pickers and
               // `ControlledTimePicker`. Without it antd renders a focusable
               // text input, so a tap opens the soft keyboard as well as the
@@ -177,6 +184,12 @@ const AccountSection = ({
               value={toMonthPickerValue(watch("coopEndDate"))}
               onChange={handleMonthPickerChange("coopEndDate", setValue)}
               format="YYYY-MM"
+              aria-invalid={errors.coopEndDate ? true : undefined}
+              aria-describedby={
+                errors.coopStartDate || errors.coopEndDate
+                  ? COOP_DATE_RANGE_ERROR_ID
+                  : undefined
+              }
               // Read-only for the same reason as the start picker above.
               inputReadOnly={true}
               className="h-14 w-full rounded-md border border-gray-200 p-2 text-lg"
@@ -189,7 +202,11 @@ const AccountSection = ({
             infer, and the year bound can land on the start date alone - so
             that field's message is the fallback. */}
         {(errors.coopEndDate?.message || errors.coopStartDate?.message) && (
-          <ErrorDisplay className="pt-2">
+          <ErrorDisplay
+            id={COOP_DATE_RANGE_ERROR_ID}
+            role="alert"
+            className="pt-2"
+          >
             {errors.coopEndDate?.message || errors.coopStartDate?.message}
           </ErrorDisplay>
         )}

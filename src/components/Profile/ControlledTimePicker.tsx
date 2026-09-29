@@ -10,6 +10,7 @@ import {
   toPickerScheduleTime,
   toStoredScheduleTime,
 } from "../../utils/scheduleTime";
+import { fieldErrorId } from "../../utils/formA11y";
 import * as React from "react";
 
 /**
@@ -36,6 +37,7 @@ interface ControlledTimePickerProps {
   error?: FieldError;
 }
 const ControlledTimePicker = (props: ControlledTimePickerProps) => {
+  const errorId = props.error && props.id ? fieldErrorId(props.id) : undefined;
   const customSuffixIcon = (): ReactNode => {
     return (
       <div className="text-northeastern-red flex h-1/12 w-1/12 justify-center text-center text-xs">
@@ -84,6 +86,8 @@ const ControlledTimePicker = (props: ControlledTimePickerProps) => {
                 format="h:mm A"
                 suffixIcon={customSuffixIcon()}
                 status={fieldState.error ? "error" : undefined}
+                aria-invalid={props.error ? true : undefined}
+                aria-describedby={errorId}
                 placeholder={props.placeholder}
                 showNow={false}
                 disabled={props.isDisabled}
@@ -96,7 +100,9 @@ const ControlledTimePicker = (props: ControlledTimePickerProps) => {
                 }}
               />
               {props.error && (
-                <ErrorDisplay>{props.error.message}</ErrorDisplay>
+                <ErrorDisplay id={errorId} role="alert">
+                  {props.error.message}
+                </ErrorDisplay>
               )}
             </div>
           </ConfigProvider>

@@ -3,6 +3,7 @@ import { Controller, Control, FieldError, Merge } from "react-hook-form";
 import { OnboardingFormInputs } from "../../utils/types";
 import DayBox from "../Profile/DayBox";
 import StaticDayBox from "../Sidebar/StaticDayBox";
+import { fieldErrorId } from "../../utils/formA11y";
 
 interface SelectDaysProps {
   control: Control<OnboardingFormInputs>;
@@ -43,6 +44,10 @@ const SelectDays = ({
    */
   const DayBoxComponent = useStaticDayBox ? StaticDayBox : DayBox;
 
+  // All seven checkboxes describe the same group-level message, rendered once
+  // by the caller (`StepThree`/`CarpoolSection`) under this fixed field name.
+  const errorId = error ? fieldErrorId("daysWorking") : undefined;
+
   return (
     <>
       <div className="flex w-full items-center justify-evenly">
@@ -61,7 +66,13 @@ const SelectDays = ({
                   height: 1,
                   padding: 0,
                 }}
-                slotProps={{ input: { "aria-label": day } }}
+                slotProps={{
+                  input: {
+                    "aria-label": day,
+                    "aria-invalid": error ? true : undefined,
+                    "aria-describedby": errorId,
+                  },
+                }}
                 disabled={disabled}
                 checked={value}
                 onChange={onChange}

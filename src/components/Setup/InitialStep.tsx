@@ -12,6 +12,7 @@ import useIsMobile from "../../utils/useIsMobile";
 import FormRadioButton from "./FormRadioButton";
 import { registerRoleWithSeatDefault } from "../../utils/profile/roleSeatDefault";
 import { seatAvailValueAs } from "../../utils/carpoolSeats";
+import { fieldErrorId } from "../../utils/formA11y";
 interface InitialStepProps {
   handleNextStep: () => void;
   step: number;
@@ -129,11 +130,19 @@ const InitialStep = ({
                     type="number"
                     min="1"
                     defaultValue={1}
+                    aria-invalid={errors.seatAvail ? true : undefined}
+                    aria-describedby={
+                      errors.seatAvail ? fieldErrorId("seatAvail") : undefined
+                    }
                     {...register("seatAvail", { setValueAs: seatAvailValueAs })}
                   />
                 </div>
                 {errors.seatAvail && (
-                  <span className="text-northeastern-red mt-1 text-center text-sm">
+                  <span
+                    id={fieldErrorId("seatAvail")}
+                    role="alert"
+                    className="text-northeastern-red mt-1 text-center text-sm"
+                  >
                     {errors.seatAvail.message}
                   </span>
                 )}

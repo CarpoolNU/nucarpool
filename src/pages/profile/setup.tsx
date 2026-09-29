@@ -115,6 +115,8 @@ const Setup: NextPage = () => {
     reset,
     control,
     trigger,
+    setFocus,
+    getFieldState,
   } = useForm<OnboardingFormInputs>({
     mode: "onChange",
     defaultValues: profileDefaultValues,
@@ -174,6 +176,32 @@ const Setup: NextPage = () => {
     }
 
     return unresolved.length > 0;
+  };
+
+  /**
+   * Moves focus to the first named field that currently has an error, so a
+   * failed Continue press produces an observable result for a sighted
+   * keyboard user too, not only for whoever can see the red text appear.
+   *
+   * Reads via `getFieldState` rather than the `errors` this closure captured
+   * at its last render: that snapshot is still pre-validation the instant
+   * `trigger`'s promise resolves or `setError` returns, since either one
+   * updates react-hook-form's internal store before React re-renders this
+   * component with a fresh `errors` object.
+   *
+   * Only effective for a field `register`ed directly onto a real input -
+   * `seatAvail`, `companyName`, `preferredName`, `pronouns` and `bio` here.
+   * The `Controller`-driven fields on later steps (the address comboboxes,
+   * the day checkboxes, the time and date pickers) forward their ref to a
+   * wrapper that `.focus()` does nothing useful on, so this call is a safe
+   * no-op for them rather than a working fix - a gap called out in the PR
+   * rather than left silently unverified.
+   */
+  const focusFirstInvalidField = (names: (keyof OnboardingFormInputs)[]) => {
+    const firstInvalid = names.find((name) => getFieldState(name).error);
+    if (firstInvalid) {
+      setFocus(firstInvalid);
+    }
   };
 
   const onSubmit = async (values: OnboardingFormInputs) => {
@@ -252,32 +280,55 @@ const Setup: NextPage = () => {
           type: "manual",
           message: "Seat availability must be > 0",
         });
+        setFocus("seatAvail");
         return;
       }
       const isValid = await trigger(["seatAvail"]);
-      if (!isValid) return;
+      if (!isValid) {
+        focusFirstInvalidField(["seatAvail"]);
+        return;
+      }
     } else if (step === 2) {
-      const isValid = await trigger([
+      const addressStepFields: (keyof OnboardingFormInputs)[] = [
         "startAddress",
         "companyAddress",
         "companyName",
-      ]);
-      if (!isValid) return;
+      ];
+      const isValid = await trigger(addressStepFields);
+      if (!isValid) {
+        focusFirstInvalidField(addressStepFields);
+        return;
+      }
       // Typing an address is not the same as resolving one, and only the
       // resolved point is usable for matching.
-      if (blockOnUnresolvedAddresses(role)) return;
+      if (blockOnUnresolvedAddresses(role)) {
+        focusFirstInvalidField(["startAddress", "companyAddress"]);
+        return;
+      }
     } else if (step === 3) {
-      const valid = await trigger([
+      const scheduleStepFields: (keyof OnboardingFormInputs)[] = [
         "coopStartDate",
         "daysWorking",
         "coopEndDate",
         "startTime",
         "endTime",
-      ]);
-      if (!valid) return;
+      ];
+      const valid = await trigger(scheduleStepFields);
+      if (!valid) {
+        focusFirstInvalidField(scheduleStepFields);
+        return;
+      }
     } else if (step === 4) {
-      const valid = await trigger(["bio", "preferredName", "pronouns"]);
-      if (!valid) return;
+      const aboutStepFields: (keyof OnboardingFormInputs)[] = [
+        "bio",
+        "preferredName",
+        "pronouns",
+      ];
+      const valid = await trigger(aboutStepFields);
+      if (!valid) {
+        focusFirstInvalidField(aboutStepFields);
+        return;
+      }
       await handleSubmit(onSubmit)();
       return;
     }

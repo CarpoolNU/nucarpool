@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, act } from "@testing-library/react";
 import { useForm, UseFormReturn } from "react-hook-form";
 import { Role, Status } from "@prisma/client";
 import StepThree from "./StepThree";
@@ -155,5 +155,69 @@ describe("StepThree accessible names", () => {
     expect(
       screen.getByRole("textbox", { name: "End Date *" }),
     ).toBeInTheDocument();
+  });
+});
+
+/**
+ * SCRUM-593: neither date picker carried `aria-invalid`/`aria-describedby`,
+ * and the merged range message they share had no `id` a description could
+ * resolve to. Both pickers point at the one message (`COOP_DATE_RANGE_ERROR_ID`
+ * in `formA11y.ts`) since the range problem can land on either field - the
+ * comment above the rendered `ErrorDisplay` explains why `coopEndDate`'s
+ * message is the one shown when both are set.
+ *
+ * This also stands as the empirical check that antd's `DatePicker` actually
+ * forwards an externally-passed `aria-*` prop to its underlying `<input>`:
+ * `@rc-component/picker`'s `useInputProps` picks up any `aria-*` key via
+ * `pickAttrs` and spreads it after its own internal `aria-invalid`, so an
+ * explicit prop from here wins. Asserted here rather than trusted from
+ * reading the library's source.
+ */
+describe("StepThree co-op date range error association", () => {
+  it("gives both date pickers an accessible description matching the merged message", () => {
+    const formOut: { current: UseFormReturn<OnboardingFormInputs> | null } = {
+      current: null,
+    };
+    render(<Harness mounted={true} formOut={formOut} />);
+
+    act(() => {
+      formOut.current!.setError("coopEndDate", {
+        type: "manual",
+        message: "End date must be after start date.",
+      });
+    });
+
+    const startInput = screen.getByRole("textbox", { name: "Start Date *" });
+    const endInput = screen.getByRole("textbox", { name: "End Date *" });
+
+    expect(startInput).toHaveAccessibleDescription(
+      "End date must be after start date.",
+    );
+    expect(endInput).toHaveAccessibleDescription(
+      "End date must be after start date.",
+    );
+    expect(endInput).toHaveAttribute("aria-invalid", "true");
+    // Only the field the error actually landed on reports itself invalid,
+    // even though both share the one description. Not `not.toHaveAttribute`:
+    // antd's own `Input` always renders *some* `aria-invalid` value (it falls
+    // back to its own internal, unrelated validity state rather than omitting
+    // the attribute), so "false" is the correct no-error reading here, not
+    // absence - both of which the acceptance criterion allows.
+    expect(startInput.getAttribute("aria-invalid")).not.toBe("true");
+  });
+
+  it("carries no invalid state or description when the range has no error", () => {
+    const formOut: { current: UseFormReturn<OnboardingFormInputs> | null } = {
+      current: null,
+    };
+    render(<Harness mounted={true} formOut={formOut} />);
+
+    const startInput = screen.getByRole("textbox", { name: "Start Date *" });
+    const endInput = screen.getByRole("textbox", { name: "End Date *" });
+
+    expect(startInput.getAttribute("aria-invalid")).not.toBe("true");
+    expect(endInput.getAttribute("aria-invalid")).not.toBe("true");
+    expect(startInput).toHaveAccessibleDescription("");
+    expect(endInput).toHaveAccessibleDescription("");
   });
 });
