@@ -20,6 +20,7 @@ import { Switch } from "@mui/material";
 import { DatePicker } from "antd";
 import { Dayjs } from "dayjs";
 import { COOP_DATE_RANGE_ERROR_ID } from "../../utils/formA11y";
+import { preventEnterSubmitFromReadOnlyInput } from "../../utils/formSubmit";
 
 interface AccountSectionProps {
   errors: FieldErrors<OnboardingFormInputs>;
@@ -50,7 +51,11 @@ const AccountSection = ({
        `overflow-x-hidden` meant no gesture reached the End Date picker or
        most of Save Changes. Measured in Chromium against the compiled
        stylesheet. */
-    <div
+    <form
+      noValidate
+      aria-label="Account status"
+      onSubmit={onSubmit}
+      onKeyDown={preventEnterSubmitFromReadOnlyInput}
       className={`flex h-fit ${isMobile ? "w-full" : "w-[700px]"} max-w-full flex-col justify-start`}
     >
       <ProfileHeader className={isMobile ? "!text-2xl" : "!text-4xl"}>
@@ -218,15 +223,14 @@ const AccountSection = ({
 
         <div className="font-montserrat py-8">
           <button
-            type="button"
+            type="submit"
             className="bg-northeastern-red w-full rounded-lg py-3 text-lg text-white hover:bg-red-700"
-            onClick={onSubmit}
           >
             Save Changes
           </button>
         </div>
       </div>
-    </div>
+    </form>
   );
 };
 

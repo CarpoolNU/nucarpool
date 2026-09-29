@@ -29,6 +29,7 @@ import { Role } from "@prisma/client";
 import { trackFTUECompletion, trackFTUEStep } from "../../utils/mixpanel";
 import { useUploadFile } from "../../utils/profile/useUploadFile";
 import { useAddressSelection } from "../../utils/useAddressSelection";
+import { preventEnterSubmitFromReadOnlyInput } from "../../utils/formSubmit";
 import {
   updateUser,
   useEditUserMutation,
@@ -335,6 +336,21 @@ const Setup: NextPage = () => {
     trackFTUEStep(step);
     setStep((prevStep) => prevStep + 1);
   };
+
+  /**
+   * The wizard's one form `onSubmit`: Enter in a field and a press of Continue
+   * are the same event, so both run `handleNextStep` and its per-step gate.
+   * Nothing else calls it - Continue carries no `onClick` of its own, because a
+   * second path would run the gate twice per press, and on step 4 that is a
+   * second `user.edit`.
+   *
+   * `preventDefault` because this is a client-side flow: the browser's own
+   * submission would navigate the page.
+   */
+  const handleFormSubmit = (event: React.SubmitEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void handleNextStep();
+  };
   /*
    * The same permanent overlay `/profile` carried, for the same reason, and
    * worse placed: this is the first screen a new account sees, so a lapsed
@@ -557,7 +573,30 @@ const Setup: NextPage = () => {
         viewport. This is the one that still holds if the scroll area ever moves
         to an inner element.
       */}
-      <div className="desktop-tall:flex-row desktop-tall:gap-0 desktop-tall:p-0 fixed inset-0 flex flex-col items-center justify-center gap-4 pt-12 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]">
+      {/*
+        **This element is the form**, and it is the wrapper rather than a new
+        layer inside it on purpose: it already holds exactly the card and the
+        navigation strip, so making it a `<form>` puts Continue in the same
+        form as the fields without adding a box the layout arithmetic above
+        would have to know about. `<form>` is `display: block` by default and
+        the classes here override that, as they did for the `div`.
+
+        `noValidate` because `InitialStep`'s seat field carries `min="1"`. With
+        native validation on, the browser checks that constraint before a
+        `submit` event exists and shows its own tooltip instead - so
+        `handleNextStep`'s gate, and the error it announces, would never run for
+        a seat count of 0.
+
+        Every `<button>` in here is typed. An untyped one submits, so Previous
+        would advance the step it means to leave.
+      */}
+      <form
+        noValidate
+        aria-label="Profile setup"
+        onSubmit={handleFormSubmit}
+        onKeyDown={preventEnterSubmitFromReadOnlyInput}
+        className="desktop-tall:flex-row desktop-tall:gap-0 desktop-tall:p-0 fixed inset-0 flex flex-col items-center justify-center gap-4 pt-12 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]"
+      >
         <SetupContainer
           className={`${containerPadding()} min-h-0 overflow-y-auto`}
           style={
@@ -624,13 +663,12 @@ const Setup: NextPage = () => {
               </button>
             )}
             <button
-              type="button"
+              type="submit"
               className={`${continueBaseClass} ${
                 step === 4 || watch("role") === Role.VIEWER
                   ? continueButtonFinalStepClass
                   : continueButtonDefaultClass
               }`}
-              onClick={handleNextStep}
             >
               <div
                 className={`font-montserrat flex items-center ${isMobile ? "text-xl" : "text-2xl"} font-bold`}
@@ -649,7 +687,7 @@ const Setup: NextPage = () => {
             </button>
           </div>
         )}
-      </div>
+      </form>
       {showViewerConfirm && (
         <ViewerConfirmModal
           onCancel={() => setShowViewerConfirm(false)}

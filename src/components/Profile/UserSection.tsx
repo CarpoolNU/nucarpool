@@ -27,6 +27,12 @@ interface UserSectionProps {
   errors: FieldErrors<OnboardingFormInputs>;
   setValue: UseFormSetValue<OnboardingFormInputs>;
   watch: UseFormWatch<OnboardingFormInputs>;
+  /**
+   * The form's `onSubmit`, fired by Save Changes and by Enter in a field.
+   * Must be react-hook-form's `handleSubmit(...)` result, which is why the type
+   * is that rather than a bare event handler: it calls `preventDefault` itself,
+   * and a handler that did not would let the browser navigate the page.
+   */
   onSubmit: ReturnType<UseFormHandleSubmit<OnboardingFormInputs>>;
 
   onFileSelect: (file: File | null) => void;
@@ -95,7 +101,16 @@ const UserSection = ({
   };
 
   return (
-    <div className="relative z-10 flex h-full flex-col justify-start">
+    // The section root is the form, so Enter in a field is Save Changes. See
+    // the note on `onSubmit` above for the contract, and `noValidate` for why
+    // the browser's own checks are off: the seat field's `min` would otherwise
+    // stop the submit before react-hook-form could name the error.
+    <form
+      noValidate
+      aria-label="User profile"
+      onSubmit={onSubmit}
+      className="relative z-10 flex h-full flex-col justify-start"
+    >
       <ProfileHeader className={isMobile ? "!text-2xl" : "!text-4xl"}>
         User Profile
       </ProfileHeader>
@@ -295,13 +310,14 @@ const UserSection = ({
 
       <div className="font-montserrat flex flex-col gap-5 py-8">
         <button
-          type="button"
+          type="submit"
           className="bg-northeastern-red w-full rounded-lg py-3 text-lg text-white hover:bg-red-700"
-          onClick={onSubmit}
           aria-label="Save Changes"
         >
           Save Changes
         </button>
+        {/* `type="button"` is what keeps Sign Out from saving: in a form, an
+            untyped button submits. */}
         <button
           type="button"
           onClick={logout}
@@ -311,7 +327,7 @@ const UserSection = ({
           Sign Out
         </button>
       </div>
-    </div>
+    </form>
   );
 };
 

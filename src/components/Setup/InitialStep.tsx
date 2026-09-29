@@ -50,7 +50,11 @@ const InitialStep = ({
         CarpoolNU
       </h2>
       {step === 0 && (
+        // `type="button"` is load-bearing: this sits inside the wizard's
+        // `<form>`, where an untyped button submits. Submitting would run
+        // `handleNextStep` a second time on top of this `onClick`.
         <button
+          type="button"
           onClick={handleNextStep}
           className={`${isMobile ? "mt-12" : "mt-16"} bg-northeastern-red font-montserrat rounded-lg border border-black px-6 py-2 ${isMobile ? "text-xl" : "text-2xl"} text-white transition hover:bg-red-700`}
         >
@@ -129,6 +133,7 @@ const InitialStep = ({
                     id="seatAvail"
                     type="number"
                     min="1"
+                    enterKeyHint="next"
                     defaultValue={1}
                     aria-invalid={errors.seatAvail ? true : undefined}
                     aria-describedby={

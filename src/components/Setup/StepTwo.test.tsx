@@ -55,4 +55,15 @@ describe("StepTwo accessible names", () => {
       screen.getByRole("combobox", { name: "Workplace Address *" }),
     ).toBeInTheDocument();
   });
+
+  it("labels Enter as Next on the workplace name (SCRUM-594)", () => {
+    // Enter here is the wizard form's submit, which is Continue. The attribute
+    // is only a hint to a virtual keyboard, so the attribute is all jsdom can
+    // observe; whether a phone shows a Next key needs a device.
+    render(<Harness />);
+
+    expect(
+      screen.getByRole("textbox", { name: "Workplace Name *" }),
+    ).toHaveAttribute("enterkeyhint", "next");
+  });
 });
