@@ -1,6 +1,13 @@
 import { adminRouter, router } from "../createRouter";
 import { z } from "zod";
-import { Permission, Prisma, ReportStatus, Role, Status } from "@prisma/client";
+import {
+  Permission,
+  Prisma,
+  ReportStatus,
+  RequestStatus,
+  Role,
+  Status,
+} from "@prisma/client";
 import { TRPCError } from "@trpc/server";
 import { addWeeks, startOfWeek } from "date-fns";
 import {
@@ -322,12 +329,19 @@ export const adminDataRouter = router({
 
   /**
    * The dashboard's date-independent aggregates: the user-counts matrix, the
-   * days-working frequency, carpool membership and conversation statistics.
+   * days-working frequency, carpool membership, conversation statistics and the
+   * request funnel.
    *
-   * Roughly thirty numbers plus one row per city on the wire, from five database
+   * Roughly thirty numbers plus one row per city on the wire, from eight database
    * queries, none of which selects a message body, an email address, a name or
    * a street address. The city query reads `location.city` and returns it only
    * as a group label with counts beside it.
+   *
+   * **`requestFunnel` is a snapshot of now, not a history.** A `Request` row and
+   * its group are erased when a pair parts, so the counts describe current
+   * pairings and a weekly series of them would silently shrink. The third stage
+   * counts riders only, because one accepted request joins a rider to a group
+   * whose driver has no request of their own; see `RequestFunnel`.
    */
   getDashboardStats: adminRouter.query(async ({ ctx }) => {
     const [
@@ -335,6 +349,9 @@ export const adminDataRouter = router({
       groupCount,
       totalConversationCount,
       messageCounts,
+      requestsSent,
+      requestsAccepted,
+      ridersInGroup,
       supplyByCity,
     ] = await Promise.all([
       ctx.prisma.user.findMany({
@@ -359,6 +376,14 @@ export const adminDataRouter = router({
       ctx.prisma.message.groupBy({
         by: ["conversationId"],
         _count: { _all: true },
+      }),
+      ctx.prisma.request.count(),
+      ctx.prisma.request.count({
+        where: { status: RequestStatus.ACCEPTED },
+      }),
+      // One `CarpoolSearch` per user, so this counts distinct users.
+      ctx.prisma.carpoolSearch.count({
+        where: { role: Role.RIDER, carpoolId: { not: null } },
       }),
       // Grouped in MySQL, one row per distinct city, because Prisma's
       // `groupBy` cannot group by a column on a related table.
@@ -433,6 +458,7 @@ export const adminDataRouter = router({
         totalConversationCount,
         messageCounts.map((group) => group._count._all),
       ),
+      requestFunnel: { requestsSent, requestsAccepted, ridersInGroup },
     };
   }),
 

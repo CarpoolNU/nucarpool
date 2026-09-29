@@ -30,6 +30,7 @@ const buildPrismaMock = () => {
     carpoolSearch: {
       findFirst: jest.fn().mockResolvedValue(null),
       findMany: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
     },
     carpoolGroup: {
       findMany: jest.fn().mockResolvedValue([]),
@@ -47,6 +48,7 @@ const buildPrismaMock = () => {
     },
     request: {
       findMany: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
       aggregate: jest.fn().mockResolvedValue(NO_DATES),
     },
     // `updateUserPermission` writes its audit entry alongside the update,
@@ -321,7 +323,14 @@ describe("adminRouter", () => {
       });
       await expect(
         caller.user.admin.getDashboardStats(),
-      ).resolves.toMatchObject({ groups: { groupCount: 0 } });
+      ).resolves.toMatchObject({
+        groups: { groupCount: 0 },
+        requestFunnel: {
+          requestsSent: 0,
+          requestsAccepted: 0,
+          ridersInGroup: 0,
+        },
+      });
       await expect(
         caller.user.admin.getDashboardSeries({
           start: new Date("2024-01-01"),

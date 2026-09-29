@@ -13,6 +13,7 @@ import BarChartDaysFrequency from "./BarChartDaysFrequency";
 import BarChartSupplyByCity from "./BarChartSupplyByCity";
 import SupplyByCityTable from "./SupplyByCityTable";
 import QuickStats from "./QuickStats";
+import RequestFunnelChart from "./RequestFunnelChart";
 import { format, startOfWeek } from "date-fns";
 import { ConfigProvider, Slider } from "antd";
 import JSZip from "jszip";
@@ -22,6 +23,7 @@ import {
   buildDaysFrequencyCSV,
   buildLineChartCSV,
   buildQuickStatsCSV,
+  buildRequestFunnelCSV,
   buildSupplyByCityCSV,
   buildUserCountsCSV,
 } from "../../utils/adminDashboardCsv";
@@ -208,6 +210,10 @@ function AdminData() {
       buildDaysFrequencyCSV(stats.daysFrequency),
     );
     zip.file(
+      `request_funnel_${date}.csv`,
+      buildRequestFunnelCSV(stats.requestFunnel),
+    );
+    zip.file(
       `supply_by_city_${date}.csv`,
       buildSupplyByCityCSV(stats.supplyByCity),
     );
@@ -262,6 +268,7 @@ function AdminData() {
           averageRidersPerGroup={averageRidersPerGroup}
           percentRidersInGroup={percentRidersInGroup}
         />
+        <RequestFunnelChart funnel={stats.requestFunnel} />
         <BarChartUserCounts
           totalAO={totalAO}
           totalANO={totalANO}

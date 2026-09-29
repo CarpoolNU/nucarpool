@@ -2,6 +2,7 @@ import {
   buildDaysFrequencyCSV,
   buildLineChartCSV,
   buildQuickStatsCSV,
+  buildRequestFunnelCSV,
   buildSupplyByCityCSV,
   buildUserCountsCSV,
   csvTextField,
@@ -135,6 +136,64 @@ describe("buildQuickStatsCSV", () => {
     expect(csv.split("\n")).toEqual([
       "Total Conversations,Total Conversations With > 1 Message,Avg Messages Per Conversation with > 1 Message,Avg Messages,Total Groups,PercentDriversInGroup,PercentRidersInGroup,AverageRidersPerGroup",
       "42,30,4.5,3.2,8,75%,60%,2.1",
+    ]);
+  });
+});
+
+describe("buildRequestFunnelCSV", () => {
+  it("emits a header and one row per stage, rating each against the one before", () => {
+    expect(
+      buildRequestFunnelCSV({
+        requestsSent: 200,
+        requestsAccepted: 50,
+        ridersInGroup: 25,
+      }).split("\n"),
+    ).toEqual([
+      "Stage,Count (current state),PercentOfPreviousStage",
+      "Requests sent,200,",
+      "Requests accepted,50,25%",
+      "Riders in a group,25,50%",
+    ]);
+  });
+
+  it("names the count column as a snapshot, since a spreadsheet carries no caption", () => {
+    const [header] = buildRequestFunnelCSV({
+      requestsSent: 0,
+      requestsAccepted: 0,
+      ridersInGroup: 0,
+    }).split("\n");
+
+    expect(header).toContain("current state");
+  });
+
+  it("leaves every rate blank for an empty platform instead of writing NaN", () => {
+    const csv = buildRequestFunnelCSV({
+      requestsSent: 0,
+      requestsAccepted: 0,
+      ridersInGroup: 0,
+    });
+
+    expect(csv).not.toMatch(/NaN|Infinity/);
+    expect(csv.split("\n").slice(1)).toEqual([
+      "Requests sent,0,",
+      "Requests accepted,0,",
+      "Riders in a group,0,",
+    ]);
+  });
+
+  it("writes the real count but no rate for a stage larger than the one before it", () => {
+    // A rider in a group whose request row was erased.
+    expect(
+      buildRequestFunnelCSV({
+        requestsSent: 1,
+        requestsAccepted: 0,
+        ridersInGroup: 1,
+      }).split("\n"),
+    ).toEqual([
+      "Stage,Count (current state),PercentOfPreviousStage",
+      "Requests sent,1,",
+      "Requests accepted,0,0%",
+      "Riders in a group,1,",
     ]);
   });
 });

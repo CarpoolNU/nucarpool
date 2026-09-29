@@ -41,9 +41,13 @@ const buildPrismaMock = () => {
     },
     request: {
       findMany: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
       aggregate: jest.fn().mockResolvedValue(NO_DATES),
     },
-    carpoolSearch: { findMany: jest.fn().mockResolvedValue([]) },
+    carpoolSearch: {
+      findMany: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
+    },
     adminAuditLog: {
       create: jest.fn().mockResolvedValue({}),
       findMany: jest.fn().mockResolvedValue([]),
@@ -514,6 +518,51 @@ describe("getDashboardStats", () => {
       totalWithMsgCount: 1,
       avgConvWithMsg: 3,
       avgMsg: 1,
+    });
+  });
+
+  describe("requestFunnel", () => {
+    it("returns the three counts the database gave it", async () => {
+      const { caller, prisma } = callerFor();
+      prisma.request.count
+        .mockResolvedValueOnce(12) // every request
+        .mockResolvedValueOnce(5); // ACCEPTED only
+      prisma.carpoolSearch.count.mockResolvedValue(4);
+
+      const stats = await caller.user.admin.getDashboardStats();
+
+      expect(stats.requestFunnel).toEqual({
+        requestsSent: 12,
+        requestsAccepted: 5,
+        ridersInGroup: 4,
+      });
+    });
+
+    it("is all zeros on an empty platform, with nothing to divide", async () => {
+      const { caller } = callerFor();
+
+      const stats = await caller.user.admin.getDashboardStats();
+
+      expect(stats.requestFunnel).toEqual({
+        requestsSent: 0,
+        requestsAccepted: 0,
+        ridersInGroup: 0,
+      });
+    });
+
+    it("counts in the database, asking for accepted requests and grouped riders by filter", async () => {
+      const { caller, prisma } = callerFor();
+
+      await caller.user.admin.getDashboardStats();
+
+      expect(prisma.request.count).toHaveBeenCalledWith();
+      expect(prisma.request.count).toHaveBeenCalledWith({
+        where: { status: "ACCEPTED" },
+      });
+      expect(prisma.carpoolSearch.count).toHaveBeenCalledWith({
+        where: { role: Role.RIDER, carpoolId: { not: null } },
+      });
+      expect(prisma.request.findMany).not.toHaveBeenCalled();
     });
   });
 
