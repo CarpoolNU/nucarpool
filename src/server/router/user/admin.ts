@@ -329,7 +329,8 @@ export const adminDataRouter = router({
 
   /**
    * The dashboard's date-independent aggregates: the user-counts matrix, the
-   * days-working frequency, carpool membership, conversation statistics and the
+   * days-working frequency, the drivers and riders available on each weekday,
+   * carpool membership, conversation statistics and the
    * request funnel.
    *
    * Roughly thirty numbers plus one row per city on the wire, from eight database
@@ -440,7 +441,8 @@ export const adminDataRouter = router({
       };
     });
 
-    const { userCounts, daysFrequency, membership } = summariseUsers(rows);
+    const { userCounts, daysFrequency, daysByWeekday, membership } =
+      summariseUsers(rows);
 
     const supplyRows: AdminSupplyQueryRow[] = supplyByCity.map((row) => ({
       city: row.city,
@@ -452,6 +454,7 @@ export const adminDataRouter = router({
     return {
       userCounts,
       daysFrequency,
+      daysByWeekday,
       supplyByCity: summariseSupplyByCity(supplyRows),
       groups: { groupCount, ...membership },
       conversations: summariseConversations(

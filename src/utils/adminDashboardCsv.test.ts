@@ -1,4 +1,5 @@
 import {
+  buildDaysByWeekdayCSV,
   buildDaysFrequencyCSV,
   buildLineChartCSV,
   buildQuickStatsCSV,
@@ -117,6 +118,70 @@ describe("buildDaysFrequencyCSV", () => {
 
     expect(rows[1]).toBe("Su,1,");
     expect(rows[2]).toBe("M,,");
+  });
+});
+
+describe("buildDaysByWeekdayCSV", () => {
+  const days = [
+    ["Sunday", 0, 1],
+    ["Monday", 4, 9],
+    ["Tuesday", 5, 8],
+    ["Wednesday", 3, 0],
+    ["Thursday", 2, 6],
+    ["Friday", 1, 7],
+    ["Saturday", 0, 0],
+  ] as const;
+
+  const daysByWeekday: AdminDashboardStats["daysByWeekday"] = {
+    days: days.map(([day, drivers, riders]) => ({
+      day,
+      drivers,
+      riders,
+      stranded: riders > 0 && drivers === 0,
+    })),
+    unspecified: { drivers: 2, riders: 5 },
+  };
+
+  it("emits the header, seven days Sunday first, and then Unspecified", () => {
+    expect(buildDaysByWeekdayCSV(daysByWeekday).split("\n")).toEqual([
+      "Day,Drivers,Riders,No Driver",
+      "Sunday,0,1,Yes",
+      "Monday,4,9,No",
+      "Tuesday,5,8,No",
+      "Wednesday,3,0,No",
+      "Thursday,2,6,No",
+      "Friday,1,7,No",
+      "Saturday,0,0,No",
+      "Unspecified,2,5,",
+    ]);
+  });
+
+  it("puts drivers before riders, the order the chart and the table use", () => {
+    const rows = buildDaysByWeekdayCSV(daysByWeekday).split("\n");
+
+    expect(rows[0]).toBe("Day,Drivers,Riders,No Driver");
+    expect(rows[2]).toBe("Monday,4,9,No");
+  });
+
+  it("still lists every day and Unspecified for an empty platform", () => {
+    const rows = buildDaysByWeekdayCSV({
+      days: daysByWeekday.days.map((row) => ({
+        ...row,
+        drivers: 0,
+        riders: 0,
+        stranded: false,
+      })),
+      unspecified: { drivers: 0, riders: 0 },
+    }).split("\n");
+
+    expect(rows).toHaveLength(9);
+    expect(rows[8]).toBe("Unspecified,0,0,");
+  });
+
+  it("carries no time of day, in a header or a field", () => {
+    expect(buildDaysByWeekdayCSV(daysByWeekday)).not.toMatch(
+      /\d:\d\d|\b(am|pm)\b|hour|time/i,
+    );
   });
 });
 

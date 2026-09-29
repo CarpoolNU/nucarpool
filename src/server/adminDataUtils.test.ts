@@ -11,6 +11,7 @@ import {
   SUPPLY_TOP_CITY_LIMIT,
   UNKNOWN_CITY_LABEL,
   summariseConversations,
+  summariseDaysByWeekday,
   summariseSupplyByCity,
   summariseUsers,
   weeksSpanned,
@@ -274,6 +275,165 @@ describe("getDaysFrequency", () => {
   });
 });
 
+describe("summariseDaysByWeekday", () => {
+  const dayNamed = (
+    result: ReturnType<typeof summariseDaysByWeekday>,
+    name: string,
+  ) => result.days.find((row) => row.day === name);
+
+  it("has seven rows in a fixed order, Sunday first", () => {
+    expect(summariseDaysByWeekday([], []).days.map((row) => row.day)).toEqual([
+      "Sunday",
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+    ]);
+  });
+
+  it("counts drivers and riders per weekday, under the role that works them", () => {
+    // The ticket this chart sits beside, SCRUM-284, swapped the two series.
+    const result = summariseDaysByWeekday(
+      [
+        user({ daysWorking: "0,1,1,0,0,0,0" }),
+        user({ daysWorking: "0,1,0,0,0,0,0" }),
+      ],
+      [user({ daysWorking: "0,0,0,0,0,1,1" })],
+    );
+
+    expect(result.days.map((row) => row.riders)).toEqual([0, 2, 1, 0, 0, 0, 0]);
+    expect(result.days.map((row) => row.drivers)).toEqual([
+      0, 0, 0, 0, 0, 1, 1,
+    ]);
+  });
+
+  it("marks a day with riders and no driver, and only that day", () => {
+    const result = summariseDaysByWeekday(
+      [user({ daysWorking: "0,1,1,0,0,0,0" })],
+      [user({ daysWorking: "0,1,0,0,0,0,0" })],
+    );
+
+    expect(dayNamed(result, "Monday")?.stranded).toBe(false);
+    expect(dayNamed(result, "Tuesday")?.stranded).toBe(true);
+    // Nobody at all on a day is a gap in the data, not riders left stranded.
+    expect(dayNamed(result, "Wednesday")?.stranded).toBe(false);
+    // Drivers and no riders is not stranded either.
+    expect(
+      dayNamed(
+        summariseDaysByWeekday(
+          [],
+          [user({ role: Role.DRIVER, daysWorking: "1,0,0,0,0,0,0" })],
+        ),
+        "Sunday",
+      )?.stranded,
+    ).toBe(false);
+  });
+
+  it("reports every count as zero for an empty platform", () => {
+    const result = summariseDaysByWeekday([], []);
+
+    expect(result.days.every((row) => row.drivers + row.riders === 0)).toBe(
+      true,
+    );
+    expect(result.days.some((row) => row.stranded)).toBe(false);
+    expect(result.unspecified).toEqual({ drivers: 0, riders: 0 });
+  });
+
+  describe("a person who names no weekday", () => {
+    it.each([
+      ["an empty string", ""],
+      ["all zeros", "0,0,0,0,0,0,0"],
+      ["text that is not flags", "not,a,schedule"],
+      ["a lone separator", ","],
+      ["flags that are not 1", "true,yes,on,x,y,z,w"],
+    ])("is counted as unspecified, not dropped: %s", (_, daysWorking) => {
+      const result = summariseDaysByWeekday(
+        [user({ daysWorking })],
+        [user({ role: Role.DRIVER, daysWorking })],
+      );
+
+      expect(result.unspecified).toEqual({ drivers: 1, riders: 1 });
+      expect(result.days.every((row) => row.drivers + row.riders === 0)).toBe(
+        true,
+      );
+    });
+
+    it("counts each role under its own unspecified figure", () => {
+      const result = summariseDaysByWeekday(
+        [user({ daysWorking: "" }), user({ daysWorking: "" })],
+        [user({ role: Role.DRIVER, daysWorking: "" })],
+      );
+
+      expect(result.unspecified).toEqual({ drivers: 1, riders: 2 });
+    });
+
+    it("does not stop the rows around it from counting", () => {
+      const result = summariseDaysByWeekday(
+        [
+          user({ daysWorking: "" }),
+          user({ daysWorking: "1,0,0,0,0,0,0" }),
+          user({ daysWorking: "nonsense" }),
+        ],
+        [],
+      );
+
+      expect(dayNamed(result, "Sunday")?.riders).toBe(1);
+      expect(result.unspecified.riders).toBe(2);
+    });
+  });
+
+  it("reads a truncated string the way the days-per-week chart does", () => {
+    const rows = [user({ daysWorking: "0,1" }), user({ daysWorking: "1,0,1" })];
+
+    const result = summariseDaysByWeekday(rows, []);
+    const frequency = getDaysFrequency(rows, []);
+
+    // The two charts are on one page; a row must not be Monday's in one and
+    // nobody's in the other.
+    expect(result.days.map((row) => row.riders)).toEqual(
+      frequency.riderDayCount,
+    );
+    expect(result.unspecified.riders).toBe(0);
+  });
+
+  it("reconciles: people with a day plus unspecified is the whole population", () => {
+    const riders = [
+      user({ daysWorking: "1,1,1,1,1,1,1" }),
+      user({ daysWorking: "0,0,0,0,0,0,1" }),
+      user({ daysWorking: "" }),
+      user({ daysWorking: "0,0,0,0,0,0,0" }),
+    ];
+
+    const result = summariseDaysByWeekday(riders, []);
+    const withADay = riders.filter((rider) =>
+      rider.daysWorking.split(",").includes("1"),
+    ).length;
+
+    expect(withADay + result.unspecified.riders).toBe(riders.length);
+    // A person on several days is on each, so the days do not sum to people.
+    expect(result.days.reduce((sum, row) => sum + row.riders, 0)).toBe(8);
+  });
+
+  it("returns no schedule time, since none was ever read", () => {
+    const result = summariseDaysByWeekday(
+      [user({ daysWorking: "1,0,0,0,0,0,0" })],
+      [],
+    );
+
+    const text = JSON.stringify(result);
+    expect(text).not.toMatch(/time|hour|minute|startTime|endTime|am\b|pm\b/i);
+    expect(Object.keys(result).sort()).toEqual(["days", "unspecified"]);
+    expect(Object.keys(result.days[0]).sort()).toEqual([
+      "day",
+      "drivers",
+      "riders",
+      "stranded",
+    ]);
+  });
+});
+
 describe("countRole", () => {
   it("counts only users in the requested role", () => {
     const users = [
@@ -354,6 +514,62 @@ describe("summariseUsers", () => {
     ]);
 
     expect(daysFrequency.riderDayCount).toEqual([0, 0, 0, 0, 0, 0, 0]);
+  });
+
+  describe("daysByWeekday", () => {
+    it("counts active drivers and riders only, leaving viewers and the inactive out", () => {
+      const { daysByWeekday } = summariseUsers([
+        user({ role: Role.RIDER, daysWorking: "1,0,0,0,0,0,0" }),
+        user({ role: Role.DRIVER, daysWorking: "0,1,0,0,0,0,0" }),
+        user({ role: Role.VIEWER, daysWorking: "1,1,1,1,1,1,1" }),
+        user({
+          role: Role.RIDER,
+          status: Status.INACTIVE,
+          daysWorking: "1,1,1,1,1,1,1",
+        }),
+        user({
+          role: Role.DRIVER,
+          status: Status.INACTIVE,
+          daysWorking: "",
+        }),
+      ]);
+
+      expect(daysByWeekday.days.map((row) => row.riders)).toEqual([
+        1, 0, 0, 0, 0, 0, 0,
+      ]);
+      expect(daysByWeekday.days.map((row) => row.drivers)).toEqual([
+        0, 1, 0, 0, 0, 0, 0,
+      ]);
+      // The inactive driver with no days is not an unspecified driver.
+      expect(daysByWeekday.unspecified).toEqual({ drivers: 0, riders: 0 });
+    });
+
+    it("counts a user with no search, who arrives as an inactive viewer, nowhere", () => {
+      const { daysByWeekday } = summariseUsers([
+        user({
+          role: Role.VIEWER,
+          status: Status.INACTIVE,
+          daysWorking: "",
+        }),
+      ]);
+
+      expect(daysByWeekday.unspecified).toEqual({ drivers: 0, riders: 0 });
+    });
+
+    it("agrees with daysFrequency on every weekday", () => {
+      const { daysFrequency, daysByWeekday } = summariseUsers([
+        user({ role: Role.RIDER, daysWorking: "1,0,1,0,0,0,1" }),
+        user({ role: Role.RIDER, daysWorking: "0,1,1,0,0,0,0" }),
+        user({ role: Role.DRIVER, daysWorking: "0,0,1,1,0,0,0" }),
+      ]);
+
+      expect(daysByWeekday.days.map((row) => row.riders)).toEqual(
+        daysFrequency.riderDayCount,
+      );
+      expect(daysByWeekday.days.map((row) => row.drivers)).toEqual(
+        daysFrequency.driverDayCount,
+      );
+    });
   });
 
   it("treats an empty carpoolId as not being in a group, the same as null", () => {

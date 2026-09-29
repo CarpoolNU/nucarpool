@@ -10,6 +10,8 @@ import { trpc } from "../../utils/trpc";
 import BarChartUserCounts from "./BarChartUserCounts";
 import LineChartCount from "./LineChartCount";
 import BarChartDaysFrequency from "./BarChartDaysFrequency";
+import BarChartDaysByWeekday from "./BarChartDaysByWeekday";
+import DaysByWeekdayTable from "./DaysByWeekdayTable";
 import BarChartSupplyByCity from "./BarChartSupplyByCity";
 import SupplyByCityTable from "./SupplyByCityTable";
 import QuickStats from "./QuickStats";
@@ -20,6 +22,7 @@ import JSZip from "jszip";
 import { saveAs } from "file-saver";
 import useIsHydrated from "../../utils/useIsHydrated";
 import {
+  buildDaysByWeekdayCSV,
   buildDaysFrequencyCSV,
   buildLineChartCSV,
   buildQuickStatsCSV,
@@ -210,6 +213,10 @@ function AdminData() {
       buildDaysFrequencyCSV(stats.daysFrequency),
     );
     zip.file(
+      `days_by_weekday_${date}.csv`,
+      buildDaysByWeekdayCSV(stats.daysByWeekday),
+    );
+    zip.file(
       `request_funnel_${date}.csv`,
       buildRequestFunnelCSV(stats.requestFunnel),
     );
@@ -333,6 +340,8 @@ function AdminData() {
           riderDayCount={riderDayCount}
           driverDayCount={driverDayCount}
         />
+        <BarChartDaysByWeekday daysByWeekday={stats.daysByWeekday} />
+        <DaysByWeekdayTable daysByWeekday={stats.daysByWeekday} />
         <BarChartSupplyByCity supplyByCity={stats.supplyByCity} />
         <SupplyByCityTable supplyByCity={stats.supplyByCity} />
       </div>

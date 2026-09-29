@@ -325,6 +325,7 @@ describe("adminRouter", () => {
         caller.user.admin.getDashboardStats(),
       ).resolves.toMatchObject({
         groups: { groupCount: 0 },
+        daysByWeekday: { unspecified: { drivers: 0, riders: 0 } },
         requestFunnel: {
           requestsSent: 0,
           requestsAccepted: 0,

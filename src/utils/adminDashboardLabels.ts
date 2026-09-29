@@ -17,6 +17,25 @@ export const LINE_CHART_LABELS = {
 } as const;
 
 /**
+ * The weekdays in `daysWorking` index order, Sunday first, shared by the
+ * server aggregation, the chart, the table and the CSV so none of them can
+ * put a count under the wrong name. None of these may contain a comma, since
+ * each is also a CSV field.
+ */
+export const WEEKDAY_NAMES = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+] as const;
+
+/** What the head count of people who named no weekday is called. */
+export const UNSPECIFIED_DAYS_LABEL = "Unspecified";
+
+/**
  * 1,390 of 4,486 production users carry a `dateCreated` of 2024-10-21, and
  * some of their requests predate it: the column was rewritten when the data
  * was imported, so the chart's cliff on that date never happened. No code can

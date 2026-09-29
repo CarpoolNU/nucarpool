@@ -1,6 +1,9 @@
 import { addWeeks, differenceInWeeks, startOfWeek } from "date-fns";
 import { Role, Status } from "@prisma/client";
+import { WEEKDAY_NAMES } from "../utils/adminDashboardLabels";
+import { DAYS_IN_WEEK, parseSelectedDays } from "../utils/filters/dayMatch";
 import {
+  AdminDaysByWeekday,
   AdminSupplyQueryRow,
   AdminSupplyRow,
   AdminUserCounts,
@@ -202,6 +205,61 @@ export function getDaysFrequency(
   };
 }
 
+/**
+ * Which weekdays each active driver and rider is available, as a count per
+ * weekday and role. Reads `daysWorking` only: no schedule time is read or
+ * returned, because `startTime` and `endTime` were written under four
+ * historical picker conventions and a time-of-day figure would be wrong.
+ *
+ * The string is read with `parseSelectedDays`, the reading the Explore filter
+ * and `getDaysFrequency` already give it: a short or malformed string reads as
+ * "not that day". So this and the days-per-week chart never disagree about a
+ * row, and each weekday's counts here equal `getDaysFrequency`'s.
+ *
+ * A person who selects no day - an empty string, garbage, or all zeros - is
+ * counted under `unspecified` rather than dropped, so `unspecified` plus the
+ * people with at least one day is exactly the population passed in.
+ */
+export function summariseDaysByWeekday(
+  riders: { daysWorking: string }[],
+  drivers: { daysWorking: string }[],
+): AdminDaysByWeekday {
+  const riderDays = new Array(DAYS_IN_WEEK).fill(0);
+  const driverDays = new Array(DAYS_IN_WEEK).fill(0);
+  const unspecified = { drivers: 0, riders: 0 };
+
+  const tally = (
+    people: { daysWorking: string }[],
+    perDay: number[],
+    unnamed: "drivers" | "riders",
+  ) => {
+    for (const person of people) {
+      const selected = parseSelectedDays(person.daysWorking);
+      if (!selected.some(Boolean)) {
+        unspecified[unnamed] += 1;
+        continue;
+      }
+      selected.forEach((works, index) => {
+        if (works) {
+          perDay[index] += 1;
+        }
+      });
+    }
+  };
+  tally(riders, riderDays, "riders");
+  tally(drivers, driverDays, "drivers");
+
+  return {
+    days: WEEKDAY_NAMES.map((day, index) => ({
+      day,
+      drivers: driverDays[index],
+      riders: riderDays[index],
+      stranded: riderDays[index] > 0 && driverDays[index] === 0,
+    })),
+    unspecified,
+  };
+}
+
 export function countRole(arr: { role: Role }[], role: Role) {
   return arr.filter((u) => u.role === role).length;
 }
@@ -268,6 +326,7 @@ export function summariseUsers(rows: AdminUserRow[]) {
     // Previously `getDaysFrequency(drivers, riders)` against a `(riders, drivers)`
     // signature, which swapped the two series in the chart.
     daysFrequency: getDaysFrequency(riders, drivers),
+    daysByWeekday: summariseDaysByWeekday(riders, drivers),
     membership: {
       driversInGroup: drivers.filter(inGroup).length,
       ridersInGroup: riders.filter(inGroup).length,
