@@ -51,9 +51,10 @@
  * completes the tutorial even when React is the one calling it.
  */
 
-import { configure, render } from "@testing-library/react";
+import { act, configure, render } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
-import { trpc } from "../utils/trpc";
+import { trpcSpies } from "../testing/trpcHarness";
 import useIsMobile from "../utils/useIsMobile";
 import {
   detentHeightPx,
@@ -127,29 +128,70 @@ jest.mock("react-toastify/unstyled", () => ({
   toast: { error: jest.fn(), success: jest.fn() },
 }));
 
-jest.mock("../utils/trpc", () => ({
-  trpc: {
-    useUtils: jest.fn(),
-    user: {
-      completeTutorial: { useMutation: jest.fn() },
-    },
-  },
-}));
+/**
+ * `completeTutorial` is React Query's **real** `useMutation`, through
+ * `testing/trpcHarness.ts`.
+ *
+ * This file used to hand-write the result as `() => ({ mutateAsync, isPending:
+ * false })`, with a comment explaining that the fresh object literal per call
+ * was reproducing what v5 returns and that "a fake returning one frozen object
+ * would hide the defect". That is the whole premise of the suite, and holding it
+ * up by hand is the weakest possible way to state it - the test's subject was a
+ * property of the fake, so it could only ever be as true as the fake's author
+ * believed. Now nothing is being reproduced: the object whose identity the
+ * effect must not depend on is the one React Query itself builds.
+ *
+ * Two things follow that the old shape did not give. `onSuccess` now genuinely
+ * fires, on React Query's own timeline, so `handleComplete`'s completion path -
+ * `invalidate`, the session `update`, the ref reset - is exercised rather than
+ * skipped. And `mutationFn` counts mutations the client actually *ran*.
+ *
+ * `user.me` is declared with no hooks because the component never queries it.
+ * It is here for `useUtils`, which mirrors the spec's paths: `onSuccess` reaches
+ * `utils.user.me.invalidate`, and a path the spec omits is absent from
+ * `useUtils` too. Its `invalidate` stays a recording no-op, which is the
+ * harness's default - reaching the live cache would refetch mid-assertion.
+ */
+jest.mock("../utils/trpc", () =>
+  require("../testing/trpcHarness").buildTrpcMock({
+    "user.completeTutorial": { mutation: async () => undefined },
+    "user.me": {},
+  }),
+);
 
-const mockedTrpc = trpc as unknown as {
-  useUtils: jest.Mock;
-  user: { completeTutorial: { useMutation: jest.Mock } };
-};
 const mockedUseSession = useSession as unknown as jest.Mock;
 const mockedUseIsMobile = useIsMobile as unknown as jest.Mock;
 
 /**
- * `mutateAsync` is `result.mutate` off the `MutationObserver`, which
- * `useMutation` holds in `useState` - so the *function* is stable across
- * renders while the object wrapping it is not. Reproducing exactly that split
- * is the point: a fake returning one frozen object would hide the defect.
+ * The `completeTutorial` mutation, counted from inside the client.
+ *
+ * `mutationFn` rather than the `mutateAsync` spy: the component calls
+ * `mutateAsync` off the result object, and what matters is whether the mutation
+ * was carried out, not whether a method was entered. With the real
+ * `useMutation` the two can differ - a second call while the first is in flight
+ * still reaches `mutateAsync`.
  */
-const mutateAsync = jest.fn(async () => undefined);
+const completeTutorial = () => trpcSpies("user.completeTutorial").mutationFn;
+
+/**
+ * Lets a fired mutation reach its `mutationFn`, and its `onSuccess` run.
+ *
+ * React Query dispatches a mutation through a retryer that starts on a
+ * microtask, so nothing is recorded during the call that triggers it. The old
+ * fake's `mutateAsync` was a bare `jest.fn()` and therefore recorded
+ * synchronously, which is the only reason the assertions here used to be
+ * makeable in the same tick - a fact about the fake, not about the component.
+ *
+ * Draining is what keeps the *negative* cases honest too. "Fired no mutation"
+ * is trivially true of every one of these tests at the instant the trigger
+ * returns, so without this they would pass against a component that completes
+ * the tutorial on every teardown - which is exactly the defect this file
+ * exists for.
+ */
+const settleMutations = () =>
+  act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
 
 /** Total `drive()` calls across every instance the component constructed. */
 const totalDriveCalls = () =>
@@ -169,7 +211,36 @@ const currentDriver = () =>
  */
 const Harness: React.FC<{ tick: number }> = () => <WelcomeTutorial />;
 
-const renderHarness = () => render(<Harness tick={0} />);
+/**
+ * The provider the real `useMutation` and the harness's `useUtils` both need -
+ * `useUtils` calls `useQueryClient()` unconditionally, as tRPC's own does, so a
+ * component reaching for utils outside a provider fails here the way it would
+ * in the app.
+ *
+ * One client per *test*, created fresh so a mutation left in flight by one
+ * cannot be observed by the next, and **stable across a `rerender`**. Both
+ * halves are load-bearing. A `rerender` replaces the whole element, so the
+ * provider has to be part of what is re-rendered or the second pass finds no
+ * client; and handing it a *new* client would rebuild the `MutationObserver`,
+ * which is the one thing these tests must not do - a re-render that resets the
+ * mutation's own state is not the re-render the defect needed.
+ */
+const withClient = (client: QueryClient, tick: number) => (
+  <QueryClientProvider client={client}>
+    <Harness tick={tick} />
+  </QueryClientProvider>
+);
+
+/** `render`, plus a `rerender` that takes the tick and keeps the client. */
+const renderHarness = () => {
+  const client = new QueryClient();
+  const result = render(withClient(client, 0));
+
+  return {
+    ...result,
+    rerender: (tick: number) => result.rerender(withClient(client, tick)),
+  };
+};
 
 let confirmSpy: jest.SpyInstance<boolean, [message?: string]>;
 
@@ -182,15 +253,6 @@ beforeEach(() => {
     data: { user: { name: "Ada Lovelace" } },
     update: jest.fn(async () => null),
   });
-  mockedTrpc.useUtils.mockReturnValue({
-    user: { me: { invalidate: jest.fn() } },
-  });
-  // A new object literal per call, exactly as React Query v5 returns.
-  mockedTrpc.user.completeTutorial.useMutation.mockImplementation(() => ({
-    mutateAsync,
-    isPending: false,
-  }));
-
   confirmSpy = jest.spyOn(window, "confirm").mockReturnValue(true);
 });
 
@@ -221,81 +283,102 @@ describe.each([
     expect(totalDriveCalls()).toBe(1);
 
     for (let tick = 1; tick <= 5; tick++) {
-      rerender(<Harness tick={tick} />);
+      rerender(tick);
     }
 
     expect(mockDriverInstances).toHaveLength(1);
     expect(totalDriveCalls()).toBe(1);
   });
 
-  it("fires no completeTutorial mutation when the parent re-renders", () => {
+  it("fires no completeTutorial mutation when the parent re-renders", async () => {
     const { rerender } = renderHarness();
-    expect(mutateAsync).not.toHaveBeenCalled();
+    expect(completeTutorial()).not.toHaveBeenCalled();
 
     for (let tick = 1; tick <= 5; tick++) {
-      rerender(<Harness tick={tick} />);
+      rerender(tick);
     }
+    await settleMutations();
 
-    expect(mutateAsync).not.toHaveBeenCalled();
+    expect(completeTutorial()).not.toHaveBeenCalled();
   });
 
-  it("fires no completeTutorial mutation when unmounted mid-tour", () => {
+  it("fires no completeTutorial mutation when unmounted mid-tour", async () => {
     const { unmount } = renderHarness();
     const tour = currentDriver();
 
     unmount();
+    await settleMutations();
 
     // The tour is still torn down - it just is not reported as finished.
     expect(tour.destroy).toHaveBeenCalled();
-    expect(mutateAsync).not.toHaveBeenCalled();
+    expect(completeTutorial()).not.toHaveBeenCalled();
   });
 
-  it("fires exactly one mutation when the user finishes the last step", () => {
+  it("fires exactly one mutation when the user finishes the last step", async () => {
     renderHarness();
     const tour = currentDriver();
     tour.hasNextStep.mockReturnValue(false);
 
     tour.simulateGuardedExit();
+    await settleMutations();
 
     expect(confirmSpy).not.toHaveBeenCalled();
     expect(tour.destroyed).toBe(true);
-    expect(mutateAsync).toHaveBeenCalledTimes(1);
+    expect(completeTutorial()).toHaveBeenCalledTimes(1);
   });
 
-  it("fires exactly one mutation when the user closes the tour early and confirms", () => {
+  it("fires exactly one mutation when the user closes the tour early and confirms", async () => {
     renderHarness();
     const tour = currentDriver();
 
     tour.simulateCloseButton();
+    await settleMutations();
 
     expect(confirmSpy).toHaveBeenCalledWith(
       "Are you sure you want to skip the tour?",
     );
     expect(tour.destroyed).toBe(true);
-    expect(mutateAsync).toHaveBeenCalledTimes(1);
+    expect(completeTutorial()).toHaveBeenCalledTimes(1);
   });
 
-  it("leaves the tour running and fires nothing when the user declines the skip prompt", () => {
+  it("leaves the tour running and fires nothing when the user declines the skip prompt", async () => {
     confirmSpy.mockReturnValue(false);
     renderHarness();
     const tour = currentDriver();
 
     tour.simulateCloseButton();
+    await settleMutations();
 
     expect(confirmSpy).toHaveBeenCalledTimes(1);
     expect(tour.destroyed).toBe(false);
-    expect(mutateAsync).not.toHaveBeenCalled();
+    expect(completeTutorial()).not.toHaveBeenCalled();
   });
 
-  it("does not re-complete when the tour is torn down twice", () => {
+  it("does not re-complete when the tour is torn down twice in one tick", async () => {
     renderHarness();
     const tour = currentDriver();
     tour.hasNextStep.mockReturnValue(false);
 
+    /*
+     * Both teardowns before the drain, and the title says "in one tick"
+     * because with the real mutation that is now a distinction the test has to
+     * make. `isCompletingRef` is what blocks the second completion, and it is
+     * only held *while the first mutation is in flight* - `onSuccess` clears
+     * it. Draining between the two calls would therefore see two mutations.
+     *
+     * That is not a defect, and the reason is the component's other guard:
+     * `isCleaningUp` is set before the `destroy()` in React's cleanup, so the
+     * unmount teardown - the only second `destroy()` that actually happens in
+     * production, and the one that would land after a success - never reaches
+     * `handleComplete` at all. `completes nothing on unmount` covers that
+     * path. What is left here is two teardowns inside one tick, which is
+     * exactly the case `isCompletingRef` exists for.
+     */
     tour.simulateGuardedExit();
     tour.destroy();
+    await settleMutations();
 
-    expect(mutateAsync).toHaveBeenCalledTimes(1);
+    expect(completeTutorial()).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -305,33 +388,36 @@ describe("WelcomeTutorial under StrictMode", () => {
   // mounts, tears down and remounts the effect, so construction counts are
   // doubled by design and only the surviving state is meaningful.
 
-  it("leaves exactly one live tour and completes nothing on mount", () => {
+  it("leaves exactly one live tour and completes nothing on mount", async () => {
     renderHarness();
+    await settleMutations();
 
     expect(liveInstances()).toHaveLength(1);
-    expect(mutateAsync).not.toHaveBeenCalled();
+    expect(completeTutorial()).not.toHaveBeenCalled();
   });
 
-  it("still leaves exactly one live tour after the parent re-renders", () => {
+  it("still leaves exactly one live tour after the parent re-renders", async () => {
     const { rerender } = renderHarness();
     const constructedOnMount = mockDriverInstances.length;
 
     for (let tick = 1; tick <= 5; tick++) {
-      rerender(<Harness tick={tick} />);
+      rerender(tick);
     }
+    await settleMutations();
 
     expect(mockDriverInstances).toHaveLength(constructedOnMount);
     expect(liveInstances()).toHaveLength(1);
-    expect(mutateAsync).not.toHaveBeenCalled();
+    expect(completeTutorial()).not.toHaveBeenCalled();
   });
 
-  it("completes nothing on unmount", () => {
+  it("completes nothing on unmount", async () => {
     const { unmount } = renderHarness();
 
     unmount();
+    await settleMutations();
 
     expect(liveInstances()).toHaveLength(0);
-    expect(mutateAsync).not.toHaveBeenCalled();
+    expect(completeTutorial()).not.toHaveBeenCalled();
   });
 });
 
@@ -357,10 +443,12 @@ describe("WelcomeTutorial mobile sheet detent", () => {
 
   const renderMobile = (sheetDetent: SheetDetent, setSheetDetent: jest.Mock) =>
     render(
-      <WelcomeTutorial
-        sheetDetent={sheetDetent}
-        setSheetDetent={setSheetDetent}
-      />,
+      <QueryClientProvider client={new QueryClient()}>
+        <WelcomeTutorial
+          sheetDetent={sheetDetent}
+          setSheetDetent={setSheetDetent}
+        />
+      </QueryClientProvider>,
     );
 
   it("expands the sheet before highlighting the sidebar step - the fix for a VIEWER's collapsed opening detent leaving that element h-0 opacity-0", () => {
@@ -443,7 +531,11 @@ describe("WelcomeTutorial mobile sheet detent", () => {
 
   it("leaves the desktop tour's steps and copy unchanged", () => {
     mockedUseIsMobile.mockReturnValue(false);
-    render(<WelcomeTutorial />);
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <WelcomeTutorial />
+      </QueryClientProvider>,
+    );
     const tour = currentDriver();
 
     expect(tour.config.steps[1].popover.title).toBe("These are drivers");
@@ -460,10 +552,11 @@ describe("WelcomeTutorial without a signed-in name", () => {
     });
   });
 
-  it("builds no tour at all", () => {
+  it("builds no tour at all", async () => {
     renderHarness();
+    await settleMutations();
 
     expect(mockDriverInstances).toHaveLength(0);
-    expect(mutateAsync).not.toHaveBeenCalled();
+    expect(completeTutorial()).not.toHaveBeenCalled();
   });
 });

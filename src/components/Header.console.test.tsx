@@ -50,11 +50,13 @@ import {
 
 /*
  * The same mocks `Header.test.tsx` uses, and for the same reasons - `Header`
- * reaches a router, four tRPC queries, a Pusher subscription and next-auth.
- * Duplicated rather than shared: a helper importing them would have to be a
- * module, and `jest.mock` is hoisted per file, so the factories cannot be
- * lifted out without also lifting the hoisting. The subject here is narrow
- * enough that the copies are cheap.
+ * reaches a router, two tRPC queries, a Pusher subscription and next-auth.
+ *
+ * The tRPC factory below now delegates to `testing/trpcHarness.ts`, so its
+ * *wiring* is shared even though the `jest.mock` call itself cannot be: the
+ * call is hoisted per file, so it has to be written out here, but only the spec
+ * is. The router, notifications and next-auth factories stay copies; the
+ * subject here is narrow enough that they are cheap.
  */
 jest.mock("next/router", () => ({
   useRouter: () => ({
@@ -65,20 +67,26 @@ jest.mock("next/router", () => ({
   }),
 }));
 
-jest.mock("../utils/trpc", () => ({
-  trpc: {
-    user: {
-      messages: {
-        getUnreadMessageCount: { useQuery: () => ({ data: undefined }) },
-      },
-      groups: { me: { useQuery: () => ({ data: undefined }) } },
-      me: { useQuery: () => ({ data: undefined }) },
-      getPresignedDownloadUrl: {
-        useQuery: () => ({ data: undefined, error: null, isLoading: false }),
-      },
+/*
+ * Both queries `Header`'s tree reaches, declared `inertQuery` - a literal
+ * result, no fetch, no state machine. Deliberately the lowest fidelity the
+ * harness offers, because the assertion below is that *nothing* was logged:
+ * a query that resolved would put a state update after the one render this
+ * file is allowed to make, and React Query logs its own failures through
+ * `console.error`. Neither belongs in the subject here.
+ *
+ * `realTimeQueryOptions` is exported because `Header` imports it by name
+ * alongside `trpc` and spreads it into the unread-count query.
+ */
+jest.mock("../utils/trpc", () =>
+  require("../testing/trpcHarness").buildTrpcMock(
+    {
+      "user.messages.getUnreadMessageCount": { inertQuery: true },
+      "user.getPresignedDownloadUrl": { inertQuery: true },
     },
-  },
-}));
+    { realTimeQueryOptions: {} },
+  ),
+);
 
 jest.mock("../utils/messages/useUnreadNotifications", () => ({
   useUnreadNotifications: () => undefined,
