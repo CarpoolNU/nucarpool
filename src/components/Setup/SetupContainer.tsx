@@ -37,19 +37,38 @@ import { CSSProperties } from "styled-components";
  * held in landscape. The row is now conditional on the window being tall enough
  * to hold it; see `WIZARD_DESKTOP_MIN_HEIGHT_PX` in `src/utils/breakpoints.js`
  * for where that height comes from.
+ *
+ * **It is also where focus goes when the step changes (SCRUM-597).** The wizard
+ * mounts one step at a time, so whatever held focus - the field Enter was
+ * pressed in, or the Get Started and Previous buttons - is removed with the
+ * step it belonged to, and focus falls to `<body>`. The card is the one element
+ * that outlives every step change, so it takes `ref` and `label` from the page:
+ * a programmatic-only focus target (`tabIndex={-1}`, not in the Tab order) that
+ * is a named group, so a screen reader announces the step it landed in rather
+ * than reading an unlabelled `div`. No focus ring, as for any container that is
+ * focused by script and never operated: the controls inside it keep theirs.
  */
 export const SetupContainer = ({
   children,
   className,
   style,
+  label,
+  ref,
 }: {
   children: React.ReactNode;
   className?: string;
   style?: CSSProperties;
+  /** The group's accessible name; see the note above. */
+  label?: string;
+  ref?: React.Ref<HTMLDivElement>;
 }) => {
   return (
     <div
-      className={`desktop:w-[600px] z-50 h-[500px] w-[90%] bg-white p-4 ${className}`}
+      ref={ref}
+      role="group"
+      aria-label={label}
+      tabIndex={-1}
+      className={`desktop:w-[600px] z-50 h-[500px] w-[90%] bg-white p-4 outline-none ${className}`}
       style={style}
     >
       {children}

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { GetServerSidePropsContext, NextPage } from "next";
@@ -67,6 +67,22 @@ export async function getServerSideProps(context: GetServerSidePropsContext) {
     props: {},
   };
 }
+
+/**
+ * What the card is called to a screen reader when focus lands on it after a
+ * step change. The last three are the visible headings in `StepTwo`,
+ * `StepThree` and `StepFour`, and step 1's is its role prompt - restated here
+ * because the card is the focus target, not the heading. If a heading is
+ * reworded, reword the entry with it.
+ */
+const STEP_LABELS: Record<number, string> = {
+  0: "Welcome to CarpoolNU",
+  1: "Step 1 of 4: Choose your role",
+  2: "Step 2 of 4: Where are you carpooling?",
+  3: "Step 3 of 4: When are you carpooling?",
+  4: "Step 4 of 4: Who is carpooling?",
+};
+
 const Setup: NextPage = () => {
   const router = useRouter();
   const isMobile = useIsMobile(); // Use the hook to detect mobile
@@ -76,6 +92,8 @@ const Setup: NextPage = () => {
   const [initialLoad, setInitialLoad] = useState(true);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [showViewerConfirm, setShowViewerConfirm] = useState(false);
+  const stepCardRef = useRef<HTMLDivElement>(null);
+  const previousStep = useRef(step);
   const { uploadFile } = useUploadFile(selectedFile);
   const { data: session } = useSession();
   const userQuery = trpc.user.me.useQuery(undefined, {
@@ -152,6 +170,29 @@ const Setup: NextPage = () => {
     }
   }, [initialLoad, reset, user]);
   const role = watch("role");
+
+  /**
+   * Moves focus into the new step once the wizard has actually changed step
+   * (SCRUM-597). Each step is a conditional render, so the control that had
+   * focus - the field Enter was pressed in, Get Started, Previous - is removed
+   * with the step it belonged to and focus falls to `<body>`. A click on
+   * Continue did not show it, because that button survives every step change;
+   * Enter from a field, which SCRUM-594 made advance the wizard, does.
+   *
+   * **Compared against the previous step rather than run on every render or
+   * mount**, so the first render does not take focus and a re-render that
+   * leaves the step alone does not pull it back from a field the user has
+   * since moved to. It never runs for a failed gate either: those return before
+   * `setStep`, so `focusFirstInvalidField` is the only thing that moves focus
+   * then.
+   */
+  useEffect(() => {
+    if (previousStep.current === step) {
+      return;
+    }
+    previousStep.current = step;
+    stepCardRef.current?.focus();
+  }, [step]);
 
   /**
    * Reports the address steps whose coordinates never resolved.
@@ -598,6 +639,8 @@ const Setup: NextPage = () => {
         className="desktop-tall:flex-row desktop-tall:gap-0 desktop-tall:p-0 fixed inset-0 flex flex-col items-center justify-center gap-4 pt-12 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]"
       >
         <SetupContainer
+          ref={stepCardRef}
+          label={STEP_LABELS[step]}
           className={`${containerPadding()} min-h-0 overflow-y-auto`}
           style={
             isMobile
