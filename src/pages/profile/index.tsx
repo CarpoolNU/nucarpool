@@ -35,6 +35,7 @@ import {
 import ProfileSidebar from "../../components/Profile/ProfileSidebar";
 import UserSection from "../../components/Profile/UserSection";
 import Header from "../../components/Header";
+import PageTitle from "../../components/PageTitle";
 import CarpoolSection from "../../components/Profile/CarpoolSection";
 import AccountSection from "../../components/Profile/AccountSection";
 import BlockedUsersSection from "../../components/Profile/BlockedUsersSection";
@@ -456,25 +457,30 @@ const Index: NextPage = () => {
    */
   if (userQuery.isError) {
     return (
-      <QueryError
-        variant="page"
-        subject="your profile"
-        onRetry={() => {
-          void userQuery.refetch();
-        }}
-      />
+      <>
+        <PageTitle page="Profile" />
+        <QueryError
+          variant="page"
+          subject="your profile"
+          onRetry={() => {
+            void userQuery.refetch();
+          }}
+        />
+      </>
     );
   }
 
   if (isLoading || !user) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-white">
+        <PageTitle page="Profile" />
         <Spinner />
       </div>
     );
   }
   return (
     <div className="relative h-full select-none">
+      <PageTitle page="Profile" />
       {showModal && (
         <UnsavedModal
           onClose={onDismissModal}

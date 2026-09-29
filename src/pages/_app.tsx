@@ -24,6 +24,7 @@ import Head from "next/head";
 import { trpc } from "../utils/trpc";
 import { ComplianceGate } from "../components/ComplianceGate";
 import { MixpanelIdentity } from "../components/MixpanelIdentity";
+import PageTitle from "../components/PageTitle";
 
 export function MyApp({
   Component,
@@ -54,6 +55,10 @@ export function MyApp({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" />
       </Head>
+      {/* The backstop, so a page added without a title of its own is labelled
+          "CarpoolNU" rather than its URL. It renders before the page does, and
+          Next keeps the last `<title>` it is given, so a page's own wins. */}
+      <PageTitle />
       <SessionProvider session={session} refetchOnWindowFocus={false}>
         <Component {...pageProps} />
         {/* Renders nothing; mounted here because analytics identity belongs to

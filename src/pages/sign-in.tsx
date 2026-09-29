@@ -3,8 +3,8 @@ import { signIn } from "next-auth/react";
 import { getServerSession } from "next-auth";
 import { authOptions } from "./api/auth/[...nextauth]";
 import React from "react";
-import Head from "next/head";
 import Header from "../components/Header";
+import PageTitle from "../components/PageTitle";
 import { trackEvent } from "../utils/mixpanel";
 import { browserEnv } from "../utils/env/browser";
 
@@ -60,9 +60,7 @@ const SignIn: NextPage = () => {
 
   return (
     <>
-      <Head>
-        <title>Sign In - NU Carpool</title>
-      </Head>
+      <PageTitle page="Sign In" />
 
       <div className="flex h-full items-center justify-center bg-gray-100">
         <div className="m-4 flex w-fit flex-col items-center justify-center space-y-4 rounded-2xl bg-white p-6 drop-shadow-lg">

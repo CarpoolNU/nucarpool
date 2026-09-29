@@ -2,7 +2,10 @@ import { Html, Head, Main, NextScript } from "next/document";
 
 export default function Document() {
   return (
-    <Html>
+    // The app is English-only and has no localisation, so the language is a
+    // literal. `next.config.js` declares no `i18n` block, which is the only
+    // other thing Next derives `lang` from.
+    <Html lang="en">
       <Head>
         <link
           href="https://fonts.googleapis.com/css2?family=Lato&display=swap"
