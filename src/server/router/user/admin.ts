@@ -15,10 +15,11 @@ import {
   generateWeekLabels,
   MAX_DASHBOARD_WEEKS,
   summariseConversations,
+  summariseSupplyByCity,
   summariseUsers,
   weeksSpanned,
 } from "../../adminDataUtils";
-import { AdminUserRow } from "../../../utils/types";
+import { AdminSupplyQueryRow, AdminUserRow } from "../../../utils/types";
 import { AdminAuditAction, buildAuditLogEntry } from "../../adminAuditLog";
 import { parseConversationSnapshot } from "../../reportSnapshot";
 
@@ -331,8 +332,10 @@ export const adminDataRouter = router({
    * days-working frequency, carpool membership, conversation statistics and the
    * request funnel.
    *
-   * Roughly thirty numbers on the wire, from seven database queries, none of which
-   * selects a message body, an email address, a name or a location.
+   * Roughly thirty numbers plus one row per city on the wire, from eight database
+   * queries, none of which selects a message body, an email address, a name or
+   * a street address. The city query reads `location.city` and returns it only
+   * as a group label with counts beside it.
    *
    * **`requestFunnel` is a snapshot of now, not a history.** A `Request` row and
    * its group are erased when a pair parts, so the counts describe current
@@ -349,6 +352,7 @@ export const adminDataRouter = router({
       requestsSent,
       requestsAccepted,
       ridersInGroup,
+      supplyByCity,
     ] = await Promise.all([
       ctx.prisma.user.findMany({
         where: { email: { not: null } },
@@ -381,6 +385,48 @@ export const adminDataRouter = router({
       ctx.prisma.carpoolSearch.count({
         where: { role: Role.RIDER, carpoolId: { not: null } },
       }),
+      // Grouped in MySQL, one row per distinct city, because Prisma's
+      // `groupBy` cannot group by a column on a related table.
+      //
+      // The population is `summariseUsers`' `drivers` and `riders`: a user
+      // with an email whose search is ACTIVE and whose role is DRIVER or
+      // RIDER, so the rows sum to `driverAO + driverANO` and
+      // `riderAO + riderANO`. VIEWERs are about a third of production and
+      // are not demand. `LEFT JOIN location` and `COALESCE` keep a search
+      // whose home location is missing or has no city in the totals as
+      // `Unknown` rather than dropping it.
+      //
+      // `seats_avail` is what is left of the driver's seats - `reserveSeat`
+      // decrements it - so the sum is open seats already, and `> 0` only
+      // guards against a negative value pulling a city's total down. The
+      // counts are cast to SIGNED because MySQL returns COUNT as a BigInt and
+      // SUM as a Decimal, neither of which is a plain number.
+      //
+      // Raw SQL bypasses Prisma's field mapping: `seats_avail` is mapped,
+      // `userId`, `homeLocationId`, `role` and `status` are not.
+      ctx.prisma.$queryRaw<
+        {
+          city: string;
+          drivers: bigint;
+          riders: bigint;
+          openSeats: bigint;
+        }[]
+      >`
+          SELECT
+            LOWER(TRIM(COALESCE(l.city, ''))) AS city,
+            CAST(SUM(cs.role = ${Role.DRIVER}) AS SIGNED) AS drivers,
+            CAST(SUM(cs.role = ${Role.RIDER}) AS SIGNED) AS riders,
+            CAST(
+              SUM(CASE WHEN cs.role = ${Role.DRIVER} AND cs.seats_avail > 0
+                THEN cs.seats_avail ELSE 0 END) AS SIGNED
+            ) AS openSeats
+          FROM carpool_search cs
+          INNER JOIN user u ON u.id = cs.userId AND u.email IS NOT NULL
+          LEFT JOIN location l ON l.id = cs.homeLocationId
+          WHERE cs.status = ${Status.ACTIVE}
+            AND cs.role IN (${Role.DRIVER}, ${Role.RIDER})
+          GROUP BY LOWER(TRIM(COALESCE(l.city, '')))
+        `,
     ]);
 
     const rows: AdminUserRow[] = users.map((user) => {
@@ -396,9 +442,17 @@ export const adminDataRouter = router({
 
     const { userCounts, daysFrequency, membership } = summariseUsers(rows);
 
+    const supplyRows: AdminSupplyQueryRow[] = supplyByCity.map((row) => ({
+      city: row.city,
+      drivers: Number(row.drivers),
+      riders: Number(row.riders),
+      openSeats: Number(row.openSeats),
+    }));
+
     return {
       userCounts,
       daysFrequency,
+      supplyByCity: summariseSupplyByCity(supplyRows),
       groups: { groupCount, ...membership },
       conversations: summariseConversations(
         totalConversationCount,

@@ -51,8 +51,10 @@ import {
   buildLineChartCSV,
   buildQuickStatsCSV,
   buildRequestFunnelCSV,
+  buildSupplyByCityCSV,
   buildUserCountsCSV,
 } from "../../utils/adminDashboardCsv";
+import type { AdminSupplyRow } from "../../utils/types";
 
 /** Set per test, one entry per procedure. */
 let behaviour: Record<string, () => Promise<unknown>>;
@@ -111,6 +113,20 @@ jest.mock("./BarChartDaysFrequency", () => ({
   __esModule: true,
   default: () => <div>days chart</div>,
 }));
+// The supply chart's stub says how many rows it was handed, so the wiring from
+// `stats.supplyByCity` is measured and not only that a chart exists.
+jest.mock("./BarChartSupplyByCity", () => ({
+  __esModule: true,
+  default: ({ supplyByCity }: { supplyByCity: unknown[] }) => (
+    <div>supply chart with {supplyByCity.length} rows</div>
+  ),
+}));
+jest.mock("./SupplyByCityTable", () => ({
+  __esModule: true,
+  default: ({ supplyByCity }: { supplyByCity: unknown[] }) => (
+    <div>supply table with {supplyByCity.length} rows</div>
+  ),
+}));
 
 const MIN_DATE = new Date("2026-01-05T00:00:00Z");
 const MAX_DATE = new Date("2026-02-02T00:00:00Z");
@@ -121,6 +137,28 @@ const STATS = {
     riderDayCount: [1, 2, 0, 1, 0, 2, 0],
     driverDayCount: [0, 1, 1, 1, 1, 1, 0],
   },
+  // Every column distinct, and one stranded city with no ratio, so an export
+  // that transposed two columns or wrote the missing ratio as text would differ.
+  supplyByCity: [
+    {
+      city: "Boston",
+      kind: "city",
+      drivers: 3,
+      riders: 7,
+      openSeats: 5,
+      ridersPerDriver: 2.3,
+      stranded: false,
+    },
+    {
+      city: "Worcester",
+      kind: "city",
+      drivers: 0,
+      riders: 2,
+      openSeats: 0,
+      ridersPerDriver: null,
+      stranded: true,
+    },
+  ] satisfies AdminSupplyRow[],
   conversations: {
     totalConversationCount: 4,
     totalWithMsgCount: 2,
@@ -259,6 +297,15 @@ describe("AdminData when a dashboard query fails", () => {
     expect(spinner()).not.toBeInTheDocument();
   });
 
+  it("hands the supply chart and its table the rows `getDashboardStats` returned", async () => {
+    renderDashboard();
+
+    expect(
+      await screen.findByText("supply chart with 2 rows"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("supply table with 2 rows")).toBeInTheDocument();
+  });
+
   it("control: shows the spinner while a fetch is still in flight", () => {
     behaviour.stats = () => new Promise(() => undefined);
 
@@ -296,8 +343,9 @@ describe("AdminData when a dashboard query fails", () => {
  * unit-testable on their own (see `adminDashboardCsv.test.ts`).
  *
  * That move is a behaviour-preserving refactor only if the button still zips
- * the same four CSVs from the same rendered `stats`/`series` (a fifth,
- * `buildRequestFunnelCSV`, joined them in SCRUM-600). This renders
+ * the same four CSVs from the same rendered `stats`/`series` (two more,
+ * `buildSupplyByCityCSV` and `buildRequestFunnelCSV`, joined them in SCRUM-599
+ * and SCRUM-600). This renders
  * the real component against mocked queries (same harness as
  * `AdminData.queryError.test.tsx`), clicks the button, and checks each
  * `zip.file(...)` call against the same builder functions called directly on
@@ -305,7 +353,7 @@ describe("AdminData when a dashboard query fails", () => {
  * already covered elsewhere.
  */
 describe("AdminData's Download Data button", () => {
-  it("zips the five CSVs the extracted builders produce for the rendered stats/series", async () => {
+  it("zips the six CSVs the extracted builders produce for the rendered stats/series", async () => {
     renderDashboard();
 
     const button = await screen.findByRole("button", {
@@ -360,7 +408,11 @@ describe("AdminData's Download Data button", () => {
       expect.stringMatching(/^request_funnel_.*\.csv$/),
       buildRequestFunnelCSV(STATS.requestFunnel),
     );
-    expect(mockZipFile).toHaveBeenCalledTimes(5);
+    expect(mockZipFile).toHaveBeenCalledWith(
+      expect.stringMatching(/^supply_by_city_.*\.csv$/),
+      buildSupplyByCityCSV(STATS.supplyByCity),
+    );
+    expect(mockZipFile).toHaveBeenCalledTimes(6);
 
     expect(mockSaveAs).toHaveBeenCalledWith(
       "zip-blob-content",

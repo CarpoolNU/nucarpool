@@ -10,6 +10,8 @@ import { trpc } from "../../utils/trpc";
 import BarChartUserCounts from "./BarChartUserCounts";
 import LineChartCount from "./LineChartCount";
 import BarChartDaysFrequency from "./BarChartDaysFrequency";
+import BarChartSupplyByCity from "./BarChartSupplyByCity";
+import SupplyByCityTable from "./SupplyByCityTable";
 import QuickStats from "./QuickStats";
 import RequestFunnelChart from "./RequestFunnelChart";
 import { format, startOfWeek } from "date-fns";
@@ -22,6 +24,7 @@ import {
   buildLineChartCSV,
   buildQuickStatsCSV,
   buildRequestFunnelCSV,
+  buildSupplyByCityCSV,
   buildUserCountsCSV,
 } from "../../utils/adminDashboardCsv";
 
@@ -211,6 +214,10 @@ function AdminData() {
       buildRequestFunnelCSV(stats.requestFunnel),
     );
     zip.file(
+      `supply_by_city_${date}.csv`,
+      buildSupplyByCityCSV(stats.supplyByCity),
+    );
+    zip.file(
       `quick_stats_${date}.csv`,
       buildQuickStatsCSV({
         totalConversationCount,
@@ -326,6 +333,8 @@ function AdminData() {
           riderDayCount={riderDayCount}
           driverDayCount={driverDayCount}
         />
+        <BarChartSupplyByCity supplyByCity={stats.supplyByCity} />
+        <SupplyByCityTable supplyByCity={stats.supplyByCity} />
       </div>
     </div>
   );

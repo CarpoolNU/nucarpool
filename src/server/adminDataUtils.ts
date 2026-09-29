@@ -1,6 +1,8 @@
 import { addWeeks, differenceInWeeks, startOfWeek } from "date-fns";
 import { Role, Status } from "@prisma/client";
 import {
+  AdminSupplyQueryRow,
+  AdminSupplyRow,
   AdminUserCounts,
   AdminUserRow,
   ConversationStats,
@@ -300,4 +302,123 @@ export function summariseConversations(
       ? sum(messageCountsPerConversation) / totalConversationCount
       : 0,
   };
+}
+
+/**
+ * How many named cities the supply chart draws before folding the rest into
+ * `Other`. `Unknown` is never counted against this and never folded into
+ * `Other`, so the rows with no city stay visible as their own bar.
+ */
+export const SUPPLY_TOP_CITY_LIMIT = 8;
+
+export const UNKNOWN_CITY_LABEL = "Unknown";
+export const OTHER_CITIES_LABEL = "Other";
+
+/**
+ * `Location.city` is free text and the label is drawn on a canvas axis and
+ * written into a CSV, so a city is capped rather than trusted to be short.
+ */
+const MAX_CITY_LABEL_LENGTH = 40;
+
+/** Trimmed, inner whitespace collapsed, lower-cased: what two spellings must share to be one city. */
+const cityKey = (city: string) =>
+  city.trim().replace(/\s+/g, " ").toLowerCase();
+
+/**
+ * "boston" -> "Boston". Case is not recoverable from the key, and the
+ * database groups on the lower-cased name, so this is how a label is made.
+ * It gets "McLean" wrong ("Mclean"); the alternative is showing whichever
+ * spelling MySQL happened to return first.
+ */
+const cityLabel = (key: string) =>
+  key
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ")
+    .slice(0, MAX_CITY_LABEL_LENGTH);
+
+const supplyRow = (
+  city: string,
+  kind: AdminSupplyRow["kind"],
+  totals: { drivers: number; riders: number; openSeats: number },
+): AdminSupplyRow => ({
+  city,
+  kind,
+  ...totals,
+  // One decimal, like the dashboard's other ratios. Null with no driver: a
+  // ratio over zero has no honest number, and `Infinity` is not valid JSON.
+  ridersPerDriver:
+    totals.drivers > 0
+      ? Math.round((totals.riders / totals.drivers) * 10) / 10
+      : null,
+  stranded: totals.riders > 0 && totals.drivers === 0,
+});
+
+const addTotals = (
+  a: { drivers: number; riders: number; openSeats: number },
+  b: { drivers: number; riders: number; openSeats: number },
+) => ({
+  drivers: a.drivers + b.drivers,
+  riders: a.riders + b.riders,
+  openSeats: a.openSeats + b.openSeats,
+});
+
+/**
+ * Turns the per-city `GROUP BY` into the rows the supply chart draws.
+ *
+ * The database has already reduced the platform to one row per distinct
+ * lower-cased, trimmed city, so this runs over as many rows as there are
+ * cities, not users. It normalises again because SQL's `TRIM` does not collapse
+ * inner whitespace ("New  York"), and merges the rows that then collide.
+ *
+ * The rows are those of ACTIVE drivers and riders only - the population
+ * `summariseUsers` calls `drivers` and `riders` - so summing every returned row
+ * gives `driverAO + driverANO` and `riderAO + riderANO` exactly, and nothing is
+ * dropped by the cut: whatever is not one of the top `limit` cities is in
+ * `Other`.
+ *
+ * Ordered by riders, most first, then by name so ties do not reorder between
+ * requests. `Unknown` and `Other` come last, in that order.
+ */
+export function summariseSupplyByCity(
+  rows: AdminSupplyQueryRow[],
+  limit: number = SUPPLY_TOP_CITY_LIMIT,
+): AdminSupplyRow[] {
+  const empty = { drivers: 0, riders: 0, openSeats: 0 };
+  const byKey = new Map<string, typeof empty>();
+  for (const row of rows) {
+    const key = cityKey(row.city);
+    byKey.set(key, addTotals(byKey.get(key) ?? empty, row));
+  }
+
+  const unknown = byKey.get("");
+  byKey.delete("");
+
+  const cities = Array.from(byKey, ([key, totals]) => ({
+    label: cityLabel(key),
+    totals,
+  })).sort(
+    (a, b) =>
+      b.totals.riders - a.totals.riders || a.label.localeCompare(b.label),
+  );
+
+  const kept = cities.slice(0, limit);
+  const folded = cities.slice(limit);
+
+  const result = kept.map(({ label, totals }) =>
+    supplyRow(label, "city", totals),
+  );
+  if (unknown) {
+    result.push(supplyRow(UNKNOWN_CITY_LABEL, "unknown", unknown));
+  }
+  if (folded.length > 0) {
+    result.push(
+      supplyRow(
+        OTHER_CITIES_LABEL,
+        "other",
+        folded.reduce((sum, { totals }) => addTotals(sum, totals), empty),
+      ),
+    );
+  }
+  return result;
 }

@@ -91,10 +91,16 @@ const buildPrismaMock = () => {
         enumerable: false,
       },
       $executeRaw: { value: executeRaw, enumerable: false },
+      // `getDashboardStats` groups its per-city counts with a raw query,
+      // because Prisma's `groupBy` cannot group by a related table's column.
+      // Non-enumerable for the same reason as the other two: a bare jest.fn()
+      // is not a delegate for the walkers below to read `.mock.calls` off.
+      $queryRaw: { value: jest.fn().mockResolvedValue([]), enumerable: false },
     },
   ) as typeof client & {
     $transaction: jest.Mock;
     $executeRaw: jest.Mock;
+    $queryRaw: jest.Mock;
   };
 };
 
@@ -574,6 +580,119 @@ describe("getDashboardStats", () => {
       },
     });
     expect(prisma.carpoolGroup.findMany).not.toHaveBeenCalled();
+  });
+
+  describe("supplyByCity", () => {
+    /** The SQL a tagged-template call carried, with each `${}` shown as `?`. */
+    const supplySql = (prisma: PrismaMock) => {
+      const [strings, ...values] = prisma.$queryRaw.mock.calls[0] as [
+        TemplateStringsArray,
+        ...unknown[],
+      ];
+      return { sql: strings.join("?"), values };
+    };
+
+    it("groups by city in MySQL rather than reading location rows", async () => {
+      const { caller, prisma } = callerFor();
+
+      await caller.user.admin.getDashboardStats();
+
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+      const { sql } = supplySql(prisma);
+      expect(sql).toMatch(/GROUP BY LOWER\(TRIM\(COALESCE\(l\.city, ''\)\)\)/);
+      // Rows with no location or no city stay in the totals as "Unknown".
+      expect(sql).toMatch(/LEFT JOIN location/);
+      expect(prisma.carpoolSearch.findMany).not.toHaveBeenCalled();
+    });
+
+    it("counts the population `userCounts` calls drivers and riders", async () => {
+      const { caller, prisma } = callerFor();
+
+      await caller.user.admin.getDashboardStats();
+
+      const { sql, values } = supplySql(prisma);
+      // ACTIVE drivers and riders with an email, and nobody else: no VIEWER,
+      // no INACTIVE, and the same `email IS NOT NULL` gate `getDashboardStats`
+      // puts on its user query, so the totals reconcile.
+      expect(values).toEqual(
+        expect.arrayContaining([Role.DRIVER, Role.RIDER, Status.ACTIVE]),
+      );
+      expect(values).not.toContain(Role.VIEWER);
+      expect(values).not.toContain(Status.INACTIVE);
+      expect(sql).toMatch(/u\.email IS NOT NULL/);
+    });
+
+    it("selects the city and counts, and no street, coordinate or person", async () => {
+      const { caller, prisma } = callerFor();
+
+      await caller.user.admin.getDashboardStats();
+
+      // Raw SQL is not a delegate call, so the `selectsField` sweeps above
+      // cannot see it. Read the SELECT clause itself: everything before FROM.
+      const { sql } = supplySql(prisma);
+      const selected = sql.slice(0, sql.indexOf("FROM"));
+      for (const column of [
+        "street",
+        "coord",
+        "email",
+        "name",
+        "bio",
+        "image",
+        "content",
+        "userId",
+      ]) {
+        expect(selected).not.toContain(column);
+      }
+    });
+
+    it("turns MySQL's BigInt counts into the plain numbers a client can read", async () => {
+      const { caller, prisma } = callerFor();
+      prisma.$queryRaw.mockResolvedValue([
+        {
+          city: "boston",
+          drivers: BigInt(3),
+          riders: BigInt(9),
+          openSeats: BigInt(7),
+        },
+        {
+          city: "",
+          drivers: BigInt(0),
+          riders: BigInt(2),
+          openSeats: BigInt(0),
+        },
+      ]);
+
+      const stats = await caller.user.admin.getDashboardStats();
+
+      expect(stats.supplyByCity).toEqual([
+        {
+          city: "Boston",
+          kind: "city",
+          drivers: 3,
+          riders: 9,
+          openSeats: 7,
+          ridersPerDriver: 3,
+          stranded: false,
+        },
+        {
+          city: "Unknown",
+          kind: "unknown",
+          drivers: 0,
+          riders: 2,
+          openSeats: 0,
+          ridersPerDriver: null,
+          stranded: true,
+        },
+      ]);
+    });
+
+    it("is empty on an empty platform", async () => {
+      const { caller } = callerFor();
+
+      const stats = await caller.user.admin.getDashboardStats();
+
+      expect(stats.supplyByCity).toEqual([]);
+    });
   });
 });
 
