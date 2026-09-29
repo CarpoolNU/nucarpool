@@ -74,6 +74,37 @@ describe("InitialStep on a mobile viewport", () => {
   );
 });
 
+/**
+ * SCRUM-592: the driver-only Seat Availability field was labelled by a plain
+ * `<span>` with no association to the input, so it announced as an unnamed
+ * spin button. `TextField`'s `label` prop looked like the fix but is never
+ * rendered — SCRUM-513's own sweep threaded `htmlFor` through every
+ * `EntryLabel` and had nothing to catch here.
+ */
+describe("InitialStep — Seat Availability accessible name", () => {
+  it("names the spin button for a driver", () => {
+    render(<Harness role={Role.DRIVER} />);
+
+    // Positive control first: the control must be reachable before a name
+    // query can mean anything — the exact trap SCRUM-475 and SCRUM-513 both
+    // recorded.
+    const spinbutton = screen.getByRole("spinbutton");
+    expect(spinbutton).toBeInTheDocument();
+    expect(screen.getByRole("spinbutton", { name: /seat availability/i })).toBe(
+      spinbutton,
+    );
+  });
+
+  it("renders no seat availability control for a rider", () => {
+    const { container } = render(<Harness role={Role.RIDER} />);
+
+    // Positive assertion that the tree rendered at all, rather than a bare
+    // `queryBy...toBeNull()` that would pass just as well on a crash.
+    expect(screen.getByRole("radio", { name: "Rider" })).toBeInTheDocument();
+    expect(container.querySelector("#seatAvail")).toBeNull();
+  });
+});
+
 describe("the onboarding role radios", () => {
   it("are reachable as radios, not as their Role enum value", () => {
     render(<Harness role={Role.RIDER} />);

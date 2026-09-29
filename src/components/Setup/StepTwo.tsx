@@ -67,7 +67,6 @@ const StepTwo = ({
         <TextField
           className="w-full"
           inputClassName="h-12"
-          label="Workplace Name"
           isDisabled={false}
           id="companyName"
           error={errors.companyName}
