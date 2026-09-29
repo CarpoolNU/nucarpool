@@ -1,5 +1,6 @@
 import { format } from "date-fns";
 import { LINE_CHART_LABELS } from "./adminDashboardLabels";
+import { buildFunnelStages } from "./adminRequestFunnel";
 import { AdminDashboardSeries, AdminDashboardStats } from "./types";
 
 /**
@@ -111,6 +112,32 @@ export function buildDaysFrequencyCSV(
   });
 
   return csvRows.join("\n");
+}
+
+/**
+ * The request funnel, one row per stage.
+ *
+ * The count column is named for what it is, "current state", because a
+ * spreadsheet carries no caption and this is a snapshot that would otherwise
+ * read as a lifetime figure. A blank rate means none is defined - the stage
+ * before it is empty, or smaller than it - never zero.
+ */
+export function buildRequestFunnelCSV(
+  funnel: AdminDashboardStats["requestFunnel"],
+): string {
+  const csvRows = [
+    ["Stage", "Count (current state)", "PercentOfPreviousStage"],
+  ];
+
+  buildFunnelStages(funnel).forEach((stage) => {
+    csvRows.push([
+      stage.label,
+      String(stage.count),
+      stage.rate === null ? "" : `${stage.rate}%`,
+    ]);
+  });
+
+  return csvRows.map((row) => row.join(",")).join("\n");
 }
 
 /**

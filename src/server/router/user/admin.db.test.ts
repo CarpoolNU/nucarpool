@@ -2,6 +2,7 @@ import {
   Permission,
   ReportReason,
   ReportStatus,
+  RequestStatus,
   Role,
   Status,
 } from "@prisma/client";
@@ -259,6 +260,154 @@ describe("the admin dashboard CSV export against a real database", () => {
       expect(csv).not.toContain(driver.email);
       expect(csv).not.toContain(rider.email);
     }
+  });
+});
+
+/**
+ * The request funnel against a real database.
+ *
+ * `admin.test.ts` proves the three `count` calls are shaped right; only a real
+ * MySQL proves they count the right *rows*. That matters most for the third
+ * stage, which is a filter on role and on `carpoolId` being non-null, and for
+ * the case the ticket names: a rider in a group whose request row is gone.
+ *
+ * The fixture is chosen so each count differs from every other and from the
+ * naive alternative. Four requests, two ACCEPTED, and three riders in a group
+ * - one of whom has no request at all - with two drivers also in groups, so a
+ * count of every member would read 5 rather than 3.
+ */
+describe("the request funnel against a real database", () => {
+  const seedMember = async (
+    email: string,
+    role: Role,
+    carpoolId: string | null,
+  ) => {
+    const user = await prisma.user.create({
+      data: { name: email, email, isOnboarded: true },
+    });
+    await prisma.carpoolSearch.create({
+      data: {
+        userId: user.id,
+        role,
+        status: Status.ACTIVE,
+        daysWorking: "0,1,1,1,1,1,0",
+        homeLocationId: (await makeLocation()).id,
+        companyLocationId: (await makeLocation()).id,
+        carpoolId,
+      },
+    });
+    return user;
+  };
+
+  it("counts sent and accepted requests, and riders - not drivers - in a group", async () => {
+    const groupOne = await prisma.carpoolGroup.create({ data: {} });
+    const groupTwo = await prisma.carpoolGroup.create({ data: {} });
+
+    const driverOne = await seedMember(
+      "funnel-driver-1@northeastern.edu",
+      Role.DRIVER,
+      groupOne.id,
+    );
+    const driverTwo = await seedMember(
+      "funnel-driver-2@northeastern.edu",
+      Role.DRIVER,
+      groupTwo.id,
+    );
+    const riderOne = await seedMember(
+      "funnel-rider-1@northeastern.edu",
+      Role.RIDER,
+      groupOne.id,
+    );
+    const riderTwo = await seedMember(
+      "funnel-rider-2@northeastern.edu",
+      Role.RIDER,
+      groupOne.id,
+    );
+    // In a group, but the request that put them there no longer exists.
+    await seedMember(
+      "funnel-rider-3@northeastern.edu",
+      Role.RIDER,
+      groupTwo.id,
+    );
+    // Not in a group, so not counted in the last stage.
+    const ungroupedRider = await seedMember(
+      "funnel-rider-4@northeastern.edu",
+      Role.RIDER,
+      null,
+    );
+    // A VIEWER can send a request but is never counted as a rider.
+    const viewer = await seedMember(
+      "funnel-viewer@northeastern.edu",
+      Role.VIEWER,
+      null,
+    );
+
+    await prisma.request.createMany({
+      data: [
+        {
+          message: "accepted one",
+          fromUserId: riderOne.id,
+          toUserId: driverOne.id,
+          status: RequestStatus.ACCEPTED,
+        },
+        {
+          message: "accepted two",
+          fromUserId: riderTwo.id,
+          toUserId: driverOne.id,
+          status: RequestStatus.ACCEPTED,
+        },
+        {
+          message: "still pending",
+          fromUserId: ungroupedRider.id,
+          toUserId: driverTwo.id,
+          status: RequestStatus.PENDING,
+        },
+        {
+          message: "from a viewer",
+          fromUserId: viewer.id,
+          toUserId: driverTwo.id,
+          status: RequestStatus.PENDING,
+        },
+      ],
+    });
+
+    const stats =
+      await callerFor(managerSession()).user.admin.getDashboardStats();
+
+    expect(stats.requestFunnel).toEqual({
+      requestsSent: 4,
+      requestsAccepted: 2,
+      ridersInGroup: 3,
+    });
+  });
+
+  it("is all zeros with no requests and nobody grouped", async () => {
+    await seedMember("funnel-lonely@northeastern.edu", Role.RIDER, null);
+
+    const stats =
+      await callerFor(managerSession()).user.admin.getDashboardStats();
+
+    expect(stats.requestFunnel).toEqual({
+      requestsSent: 0,
+      requestsAccepted: 0,
+      ridersInGroup: 0,
+    });
+  });
+
+  it("is refused to a plain USER", async () => {
+    const userSession: Session = {
+      expires: new Date(Date.now() + 60_000).toISOString(),
+      user: {
+        id: "plain-user",
+        isOnboarded: true,
+        tutorialCompleted: true,
+        permission: Permission.USER,
+      },
+    };
+
+    await expect(
+      callerFor(userSession).user.admin.getDashboardStats(),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
 });
 

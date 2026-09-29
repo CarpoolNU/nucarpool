@@ -50,6 +50,7 @@ import {
   buildDaysFrequencyCSV,
   buildLineChartCSV,
   buildQuickStatsCSV,
+  buildRequestFunnelCSV,
   buildUserCountsCSV,
 } from "../../utils/adminDashboardCsv";
 
@@ -132,6 +133,11 @@ const STATS = {
     ridersInGroup: 4,
     totalDrivers: 5,
     totalRiders: 9,
+  },
+  requestFunnel: {
+    requestsSent: 10,
+    requestsAccepted: 4,
+    ridersInGroup: 3,
   },
   userCounts: {
     totalAO: 3,
@@ -290,7 +296,8 @@ describe("AdminData when a dashboard query fails", () => {
  * unit-testable on their own (see `adminDashboardCsv.test.ts`).
  *
  * That move is a behaviour-preserving refactor only if the button still zips
- * the same four CSVs from the same rendered `stats`/`series`. This renders
+ * the same four CSVs from the same rendered `stats`/`series` (a fifth,
+ * `buildRequestFunnelCSV`, joined them in SCRUM-600). This renders
  * the real component against mocked queries (same harness as
  * `AdminData.queryError.test.tsx`), clicks the button, and checks each
  * `zip.file(...)` call against the same builder functions called directly on
@@ -298,7 +305,7 @@ describe("AdminData when a dashboard query fails", () => {
  * already covered elsewhere.
  */
 describe("AdminData's Download Data button", () => {
-  it("zips the four CSVs the extracted builders produce for the rendered stats/series", async () => {
+  it("zips the five CSVs the extracted builders produce for the rendered stats/series", async () => {
     renderDashboard();
 
     const button = await screen.findByRole("button", {
@@ -349,7 +356,11 @@ describe("AdminData's Download Data button", () => {
       expect.stringMatching(/^quick_stats_.*\.csv$/),
       expectedQuickStatsCSV,
     );
-    expect(mockZipFile).toHaveBeenCalledTimes(4);
+    expect(mockZipFile).toHaveBeenCalledWith(
+      expect.stringMatching(/^request_funnel_.*\.csv$/),
+      buildRequestFunnelCSV(STATS.requestFunnel),
+    );
+    expect(mockZipFile).toHaveBeenCalledTimes(5);
 
     expect(mockSaveAs).toHaveBeenCalledWith(
       "zip-blob-content",

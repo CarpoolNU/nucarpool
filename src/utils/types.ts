@@ -58,6 +58,22 @@ export type ConversationStats = {
   avgMsg: number;
 };
 
+/**
+ * The three counts the admin request funnel is drawn from. A snapshot of the
+ * platform *now*, never a history: a `Request` row and its group are erased
+ * when a pair parts, so nothing here can be read as a lifetime rate.
+ *
+ * `ridersInGroup` counts riders and not every member. One accepted request
+ * joins a rider to a group whose driver has no request of their own to be
+ * counted, so a count of every member would exceed the accepted requests
+ * before it by construction. See `buildFunnelStages`.
+ */
+export type RequestFunnel = {
+  requestsSent: number;
+  requestsAccepted: number;
+  ridersInGroup: number;
+};
+
 /** What `user.admin.getDashboardStats`/`getDashboardSeries` resolve, for the CSV export. */
 export type AdminDashboardStats =
   RouterOutput["user"]["admin"]["getDashboardStats"];
