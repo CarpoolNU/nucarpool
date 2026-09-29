@@ -42,20 +42,28 @@ const setTabQuery = (query: Record<string, string>) => {
   routerState().query = query;
 };
 
-jest.mock("../utils/trpc", () => ({
-  trpc: {
-    user: {
-      messages: {
-        getUnreadMessageCount: { useQuery: () => ({ data: undefined }) },
-      },
-      groups: { me: { useQuery: () => ({ data: undefined }) } },
-      me: { useQuery: () => ({ data: undefined }) },
-      getPresignedDownloadUrl: {
-        useQuery: () => ({ data: undefined, error: null, isLoading: false }),
-      },
+/**
+ * Both queries `Header`'s tree reaches at these viewports, declared
+ * `inertQuery` - a literal result, no fetch, no state machine.
+ *
+ * That is the right fidelity here and not a shortcut. What this file measures
+ * is how many times an effect re-ran, so any query that resolved would be
+ * adding renders to the thing being counted. `inertQuery` is stable by
+ * construction, which leaves `data` as the only moving part - and `data` is
+ * what the defect depended on.
+ *
+ * `realTimeQueryOptions` is exported because `Header` imports it by name
+ * alongside `trpc` and spreads it into the unread-count query.
+ */
+jest.mock("../utils/trpc", () =>
+  require("../testing/trpcHarness").buildTrpcMock(
+    {
+      "user.messages.getUnreadMessageCount": { inertQuery: true },
+      "user.getPresignedDownloadUrl": { inertQuery: true },
     },
-  },
-}));
+    { realTimeQueryOptions: {} },
+  ),
+);
 
 jest.mock("../utils/messages/useUnreadNotifications", () => ({
   useUnreadNotifications: () => undefined,

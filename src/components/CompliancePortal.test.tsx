@@ -27,10 +27,8 @@
  */
 
 import { render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ComplianceModal } from "./CompliancePortal";
-
-const invalidate = jest.fn();
-const mutateAsync = jest.fn();
 
 // `utils/mixpanel` initialises the SDK at module scope from `browserEnv`, which
 // `envsafe` validates on import - so importing it for real would make this file
@@ -39,16 +37,23 @@ jest.mock("../utils/mixpanel", () => ({
   trackEvent: jest.fn(),
 }));
 
-jest.mock("../utils/trpc", () => ({
-  trpc: {
-    useUtils: () => ({ user: { me: { invalidate } } }),
-    user: {
-      acceptTerms: {
-        useMutation: () => ({ mutateAsync, isPending: false }),
-      },
-    },
-  },
-}));
+/**
+ * `acceptTerms` is declared `inertMutation`: the component wires it up on every
+ * render, but nothing in this file clicks "I Agree", so it never fires. That
+ * the dialog stays up until the write succeeds is a different claim, and not
+ * this file's subject.
+ *
+ * `user.me` is declared with no hooks at all, because the component never
+ * queries it. It is here for `useUtils`, which mirrors the spec's paths: the
+ * `onSuccess` above reaches `utils.user.me.invalidate`, and a path the spec
+ * omits is absent from `useUtils` too.
+ */
+jest.mock("../utils/trpc", () =>
+  require("../testing/trpcHarness").buildTrpcMock({
+    "user.acceptTerms": { inertMutation: true },
+    "user.me": {},
+  }),
+);
 
 /** Every ancestor of `element` up to `<body>`, nearest first. */
 const ancestorsOf = (element: HTMLElement): HTMLElement[] => {
@@ -65,16 +70,30 @@ const ancestorsOf = (element: HTMLElement): HTMLElement[] => {
   return chain;
 };
 
+/**
+ * A real `QueryClientProvider`, which the harness's `useUtils` requires: it
+ * calls `useQueryClient()` unconditionally, as tRPC's own `useUtils` does, so a
+ * component reaching for utils outside a provider fails here the way it would
+ * in the app rather than silently working. `ComplianceGate` mounts this dialog
+ * inside `_app`'s provider, so this is the real shape.
+ */
+const renderModal = () =>
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <ComplianceModal />
+    </QueryClientProvider>,
+  );
+
 describe("the compliance gate's accessibility tree", () => {
   it("offers 'I Agree' as a button to assistive technology", () => {
-    render(<ComplianceModal />);
+    renderModal();
 
     // No `{ hidden: true }`, deliberately. This is the query that failed.
     expect(screen.getByRole("button", { name: "I Agree" })).toBeInTheDocument();
   });
 
   it("announces the dialog's title", () => {
-    render(<ComplianceModal />);
+    renderModal();
 
     expect(
       screen.getByRole("heading", { name: "Carpool Terms and Conditions" }),
@@ -82,7 +101,7 @@ describe("the compliance gate's accessibility tree", () => {
   });
 
   it("puts no aria-hidden on any ancestor of the panel", () => {
-    render(<ComplianceModal />);
+    renderModal();
 
     const hiddenAncestors = ancestorsOf(
       screen.getByRole("button", { name: "I Agree" }),
@@ -97,7 +116,7 @@ describe("the compliance gate's accessibility tree", () => {
    * would satisfy every assertion above and fail this one.
    */
   it("keeps the backdrop hidden, and still blurring", () => {
-    const { baseElement } = render(<ComplianceModal />);
+    const { baseElement } = renderModal();
 
     // Selected by the class that draws the blur rather than by `aria-hidden`,
     // for two reasons. It keeps "the blur still exists" and "the blur is
