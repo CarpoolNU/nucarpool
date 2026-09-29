@@ -2,6 +2,7 @@ import { GetServerSidePropsContext, NextPage } from "next";
 import { getServerSession } from "next-auth";
 import { authOptions } from "./api/auth/[...nextauth]";
 import Header from "../components/Header";
+import PageTitle from "../components/PageTitle";
 import AdminSidebar from "../components/Admin/AdminSidebar";
 import { useState } from "react";
 import UserManagement from "../components/Admin/UserManagement";
@@ -138,6 +139,7 @@ const Admin: NextPage<AdminProps> = ({ userPermission }) => {
 
   return (
     <div className="relative h-full select-none">
+      <PageTitle page="Admin" />
       {isHydrated && <Header admin={true} />}
       {!userPermission ? (
         <Spinner />

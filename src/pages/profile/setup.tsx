@@ -15,6 +15,7 @@ import {
 } from "../../utils/profile/zodSchema";
 
 import Spinner from "../../components/Spinner";
+import PageTitle from "../../components/PageTitle";
 import { QueryError } from "../../components/QueryError";
 import InitialStep from "../../components/Setup/InitialStep";
 import { FaArrowRight } from "react-icons/fa";
@@ -291,19 +292,23 @@ const Setup: NextPage = () => {
    */
   if (userQuery.isError) {
     return (
-      <QueryError
-        variant="page"
-        subject="your profile"
-        onRetry={() => {
-          void userQuery.refetch();
-        }}
-      />
+      <>
+        <PageTitle page="Profile Setup" />
+        <QueryError
+          variant="page"
+          subject="your profile"
+          onRetry={() => {
+            void userQuery.refetch();
+          }}
+        />
+      </>
     );
   }
 
   if (isLoading || !user) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-white">
+        <PageTitle page="Profile Setup" />
         <Spinner />
       </div>
     );
@@ -425,6 +430,7 @@ const Setup: NextPage = () => {
 
   return (
     <div className="relative h-full w-full overflow-hidden">
+      <PageTitle page="Profile Setup" />
       <div className="bg-floaty absolute inset-0" />
       <h1 className={titleClass}>CarpoolNU</h1>
 

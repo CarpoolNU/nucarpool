@@ -11,10 +11,10 @@ import {
 } from "react";
 import addMapEvents from "../utils/map/addMapEvents";
 import { useMapInstance, useMapResize } from "../utils/map/useMapInstance";
-import Head from "next/head";
 import { trpc, realTimeQueryOptions } from "../utils/trpc";
 import { browserEnv } from "../utils/env/browser";
 import Header, { HeaderOptions } from "../components/Header";
+import PageTitle from "../components/PageTitle";
 import { useSession } from "next-auth/react";
 import { getServerSession } from "next-auth";
 import { authOptions } from "./api/auth/[...nextauth]";
@@ -977,9 +977,7 @@ const Home: NextPage<any> = () => {
       <UserContext.Provider value={user}>
         {/* The viewport meta this used to carry now lives in `_app.tsx`, which
             covers every page and is where `viewport-fit=cover` has to go. */}
-        <Head>
-          <title>CarpoolNU</title>
-        </Head>
+        <PageTitle />
 
         {/* Tutorial overlay for first-time users */}
         {showTutorial && (
