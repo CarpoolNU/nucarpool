@@ -2,7 +2,9 @@ import {
   buildDaysFrequencyCSV,
   buildLineChartCSV,
   buildQuickStatsCSV,
+  buildSupplyByCityCSV,
   buildUserCountsCSV,
+  csvTextField,
 } from "./adminDashboardCsv";
 import { AdminDashboardStats } from "./types";
 
@@ -134,5 +136,108 @@ describe("buildQuickStatsCSV", () => {
       "Total Conversations,Total Conversations With > 1 Message,Avg Messages Per Conversation with > 1 Message,Avg Messages,Total Groups,PercentDriversInGroup,PercentRidersInGroup,AverageRidersPerGroup",
       "42,30,4.5,3.2,8,75%,60%,2.1",
     ]);
+  });
+});
+
+describe("csvTextField", () => {
+  it("leaves an ordinary name alone", () => {
+    expect(csvTextField("Boston")).toBe("Boston");
+  });
+
+  it("quotes a comma so it cannot open a new column", () => {
+    expect(csvTextField("Boston, MA")).toBe('"Boston, MA"');
+  });
+
+  it("doubles a quote inside the quoted field", () => {
+    expect(csvTextField('The "Hub"')).toBe('"The ""Hub"""');
+  });
+
+  it("quotes a line break so it cannot open a new row", () => {
+    expect(csvTextField("Bos\nton")).toBe('"Bos\nton"');
+    expect(csvTextField("Bos\rton")).toBe('"Bos\rton"');
+  });
+
+  it.each(["=SUM(A1)", "+1", "-1", "@cmd", "\tcmd", "\rcmd"])(
+    "defuses %j, which a spreadsheet would read as a formula",
+    (value) => {
+      expect(csvTextField(value).replace(/^"/, "").startsWith("'")).toBe(true);
+    },
+  );
+
+  it("defuses and quotes a field that needs both", () => {
+    expect(csvTextField('=HYPERLINK("x","y")')).toBe(
+      '"\'=HYPERLINK(""x"",""y"")"',
+    );
+  });
+
+  it("does not touch a dash or equals sign that is not leading", () => {
+    expect(csvTextField("Winston-Salem")).toBe("Winston-Salem");
+  });
+});
+
+describe("buildSupplyByCityCSV", () => {
+  it("emits only the header for an empty platform", () => {
+    expect(buildSupplyByCityCSV([])).toBe(
+      "City,Drivers,Riders,Open Seats,Riders Per Driver,No Driver",
+    );
+  });
+
+  it("emits one row per bucket, in the order it was given", () => {
+    expect(
+      buildSupplyByCityCSV([
+        {
+          city: "Boston",
+          kind: "city",
+          drivers: 3,
+          riders: 10,
+          openSeats: 4,
+          ridersPerDriver: 3.3,
+          stranded: false,
+        },
+        {
+          city: "Worcester",
+          kind: "city",
+          drivers: 0,
+          riders: 5,
+          openSeats: 0,
+          ridersPerDriver: null,
+          stranded: true,
+        },
+        {
+          city: "Other",
+          kind: "other",
+          drivers: 1,
+          riders: 0,
+          openSeats: 2,
+          ridersPerDriver: 0,
+          stranded: false,
+        },
+      ]),
+    ).toBe(
+      [
+        "City,Drivers,Riders,Open Seats,Riders Per Driver,No Driver",
+        "Boston,3,10,4,3.3,No",
+        // No driver: the ratio cell is empty, never "Infinity" or "null".
+        "Worcester,0,5,0,,Yes",
+        // A real zero is written as 0, unlike the missing ratio above.
+        "Other,1,0,2,0,No",
+      ].join("\n"),
+    );
+  });
+
+  it("escapes the city, so a name cannot add a column", () => {
+    const [, row] = buildSupplyByCityCSV([
+      {
+        city: "Boston, MA",
+        kind: "city",
+        drivers: 1,
+        riders: 1,
+        openSeats: 0,
+        ridersPerDriver: 1,
+        stranded: false,
+      },
+    ]).split("\n");
+
+    expect(row).toBe('"Boston, MA",1,1,0,1,No');
   });
 });

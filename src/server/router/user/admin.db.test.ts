@@ -54,10 +54,10 @@ const callerFor = (session: Session) =>
     sesClient: { send: jest.fn() },
   } as unknown as Context);
 
-const makeLocation = () =>
+const makeLocation = (city = "Boston") =>
   prisma.location.create({
     data: {
-      city: "Boston",
+      city,
       state: "MA",
       street: "Main St",
       streetAddress: "1 Main St",
@@ -464,5 +464,159 @@ describe("resolveReport against a real database", () => {
     expect(
       await prisma.adminAuditLog.findMany({ where: { targetId: reportId } }),
     ).toHaveLength(1);
+  });
+});
+
+/**
+ * `getDashboardStats.supplyByCity`, whose grouping is the one part of the
+ * dashboard the mocked suite cannot check: `admin.test.ts` sees the SQL text
+ * and is handed whatever rows the test wrote, so it cannot say that MySQL
+ * groups, joins, casts or filters the way the text claims.
+ */
+describe("supplyByCity against a real database", () => {
+  let seeded = 0;
+
+  /**
+   * One user with one search, in the city named. `city: null` is a search
+   * whose home location names no row - possible because `relationMode =
+   * "prisma"` emulates the foreign key - which the `LEFT JOIN` has to keep.
+   */
+  const seedUser = async (options: {
+    role: Role;
+    status?: Status;
+    city?: string | null;
+    seatsAvail?: number;
+    email?: string | null;
+  }) => {
+    seeded += 1;
+    const company = await makeLocation();
+    const home =
+      options.city === null ? null : await makeLocation(options.city);
+    const user = await prisma.user.create({
+      data: {
+        name: `Supply User ${seeded}`,
+        email:
+          options.email === undefined
+            ? `supply${seeded}@northeastern.edu`
+            : options.email,
+      },
+    });
+    await prisma.carpoolSearch.create({
+      data: {
+        userId: user.id,
+        role: options.role,
+        status: options.status ?? Status.ACTIVE,
+        seatsAvail: options.seatsAvail ?? 0,
+        homeLocationId: home ? home.id : "no-such-location",
+        companyLocationId: company.id,
+      },
+    });
+  };
+
+  it("groups active drivers and riders by city, and only them", async () => {
+    // Boston: two drivers (one spelled differently), three riders.
+    await seedUser({ role: Role.DRIVER, city: "Boston", seatsAvail: 3 });
+    await seedUser({ role: Role.DRIVER, city: "  boston ", seatsAvail: 1 });
+    await seedUser({ role: Role.RIDER, city: "Boston" });
+    await seedUser({ role: Role.RIDER, city: "BOSTON" });
+    await seedUser({ role: Role.RIDER, city: "Boston" });
+    // Worcester: riders and no driver at all.
+    await seedUser({ role: Role.RIDER, city: "Worcester" });
+    await seedUser({ role: Role.RIDER, city: "Worcester" });
+    // No city, and no location row at all: both counted, as Unknown.
+    await seedUser({ role: Role.RIDER, city: "" });
+    await seedUser({ role: Role.RIDER, city: null });
+    // None of these is demand or supply, in any city.
+    await seedUser({ role: Role.VIEWER, city: "Worcester" });
+    await seedUser({
+      role: Role.RIDER,
+      status: Status.INACTIVE,
+      city: "Worcester",
+    });
+    await seedUser({
+      role: Role.DRIVER,
+      status: Status.INACTIVE,
+      city: "Worcester",
+      seatsAvail: 4,
+    });
+    // `getDashboardStats` counts only users with an email, so this one is out.
+    await seedUser({ role: Role.RIDER, city: "Worcester", email: null });
+
+    const stats =
+      await callerFor(managerSession()).user.admin.getDashboardStats();
+
+    expect(stats.supplyByCity).toEqual([
+      {
+        city: "Boston",
+        kind: "city",
+        drivers: 2,
+        riders: 3,
+        openSeats: 4,
+        ridersPerDriver: 1.5,
+        stranded: false,
+      },
+      {
+        city: "Worcester",
+        kind: "city",
+        drivers: 0,
+        riders: 2,
+        openSeats: 0,
+        ridersPerDriver: null,
+        stranded: true,
+      },
+      {
+        city: "Unknown",
+        kind: "unknown",
+        drivers: 0,
+        riders: 2,
+        openSeats: 0,
+        ridersPerDriver: null,
+        stranded: true,
+      },
+    ]);
+  });
+
+  it("reconciles with `userCounts`, whatever else is on the platform", async () => {
+    await seedUser({ role: Role.DRIVER, city: "Boston", seatsAvail: 2 });
+    await seedUser({ role: Role.RIDER, city: "Salem" });
+    await seedUser({ role: Role.RIDER, city: "Salem" });
+    await seedUser({ role: Role.VIEWER, city: "Salem" });
+    await seedUser({
+      role: Role.RIDER,
+      status: Status.INACTIVE,
+      city: "Salem",
+    });
+
+    const { supplyByCity, userCounts } =
+      await callerFor(managerSession()).user.admin.getDashboardStats();
+
+    const total = (field: "drivers" | "riders") =>
+      supplyByCity.reduce((sum, row) => sum + row[field], 0);
+    expect(total("drivers")).toBe(userCounts.driverAO + userCounts.driverANO);
+    expect(total("riders")).toBe(userCounts.riderAO + userCounts.riderANO);
+    // Sanity: something to reconcile, so this is not zero equals zero.
+    expect(total("drivers")).toBe(1);
+    expect(total("riders")).toBe(2);
+  });
+
+  it("returns plain numbers, which a BigInt or Decimal would not survive", async () => {
+    await seedUser({ role: Role.DRIVER, city: "Boston", seatsAvail: 2 });
+
+    const stats =
+      await callerFor(managerSession()).user.admin.getDashboardStats();
+
+    for (const row of stats.supplyByCity) {
+      expect(typeof row.drivers).toBe("number");
+      expect(typeof row.riders).toBe("number");
+      expect(typeof row.openSeats).toBe("number");
+    }
+    expect(stats.supplyByCity[0].openSeats).toBe(2);
+  });
+
+  it("is empty when nobody has signed up", async () => {
+    const stats =
+      await callerFor(managerSession()).user.admin.getDashboardStats();
+
+    expect(stats.supplyByCity).toEqual([]);
   });
 });

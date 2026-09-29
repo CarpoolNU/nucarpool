@@ -7,11 +7,15 @@ import {
   generateWeekLabels,
   getDaysFrequency,
   MAX_DASHBOARD_WEEKS,
+  OTHER_CITIES_LABEL,
+  SUPPLY_TOP_CITY_LIMIT,
+  UNKNOWN_CITY_LABEL,
   summariseConversations,
+  summariseSupplyByCity,
   summariseUsers,
   weeksSpanned,
 } from "./adminDataUtils";
-import type { AdminUserRow } from "../utils/types";
+import type { AdminSupplyQueryRow, AdminUserRow } from "../utils/types";
 
 /**
  * The admin dashboard's aggregations. These run inside the `user.admin` router
@@ -443,5 +447,296 @@ describe("summariseConversations", () => {
 
     expect(stats.avgConvWithMsg).toBe(0);
     expect(stats.avgMsg).toBe(1);
+  });
+});
+
+describe("summariseSupplyByCity", () => {
+  const city = (
+    name: string,
+    drivers: number,
+    riders: number,
+    openSeats = 0,
+  ): AdminSupplyQueryRow => ({ city: name, drivers, riders, openSeats });
+
+  const sum = (
+    rows: { drivers: number; riders: number; openSeats: number }[],
+  ) =>
+    rows.reduce(
+      (acc, row) => ({
+        drivers: acc.drivers + row.drivers,
+        riders: acc.riders + row.riders,
+        openSeats: acc.openSeats + row.openSeats,
+      }),
+      { drivers: 0, riders: 0, openSeats: 0 },
+    );
+
+  it("returns nothing for an empty platform rather than an empty bucket", () => {
+    expect(summariseSupplyByCity([])).toEqual([]);
+  });
+
+  it("carries drivers, riders and open seats, and divides riders by drivers to one decimal", () => {
+    expect(summariseSupplyByCity([city("boston", 3, 10, 4)])).toEqual([
+      {
+        city: "Boston",
+        kind: "city",
+        drivers: 3,
+        riders: 10,
+        openSeats: 4,
+        ridersPerDriver: 3.3,
+        stranded: false,
+      },
+    ]);
+  });
+
+  describe("a city with riders and no driver", () => {
+    const [row] = summariseSupplyByCity([city("worcester", 0, 5)]);
+
+    it("is marked stranded", () => {
+      expect(row.stranded).toBe(true);
+    });
+
+    it("has no ratio, not Infinity or NaN", () => {
+      // `Infinity` becomes `null` in JSON anyway; `null` says it on purpose.
+      expect(row.ridersPerDriver).toBeNull();
+    });
+  });
+
+  it("does not mark a city stranded when it has drivers, or has no riders", () => {
+    const rows = summariseSupplyByCity([
+      city("boston", 1, 5),
+      city("salem", 2, 0),
+    ]);
+
+    expect(rows.map((row) => row.stranded)).toEqual([false, false]);
+    // Zero riders over two drivers is a real 0, not a missing figure.
+    expect(rows.find((row) => row.city === "Salem")?.ridersPerDriver).toBe(0);
+  });
+
+  describe("city names", () => {
+    it("merges case variants, and whitespace variants SQL's TRIM leaves apart", () => {
+      const rows = summariseSupplyByCity([
+        city("boston", 1, 2, 3),
+        city("BOSTON", 2, 3, 1),
+        city("new  york", 1, 1),
+        city("new york", 1, 1),
+      ]);
+
+      expect(rows).toHaveLength(2);
+      expect(rows.find((row) => row.city === "Boston")).toMatchObject({
+        drivers: 3,
+        riders: 5,
+        openSeats: 4,
+      });
+      expect(rows.find((row) => row.city === "New York")).toMatchObject({
+        drivers: 2,
+        riders: 2,
+      });
+    });
+
+    it("title-cases the label", () => {
+      const [row] = summariseSupplyByCity([city("new york", 1, 1)]);
+
+      expect(row.city).toBe("New York");
+    });
+
+    it("caps a very long name rather than drawing it", () => {
+      const [row] = summariseSupplyByCity([city("x".repeat(500), 1, 1)]);
+
+      expect(row.city.length).toBeLessThanOrEqual(40);
+    });
+  });
+
+  describe("an empty city", () => {
+    it("is counted as Unknown, and not dropped", () => {
+      const rows = summariseSupplyByCity([
+        city("", 1, 2, 3),
+        city(" \t", 0, 1),
+      ]);
+
+      expect(rows).toEqual([
+        {
+          city: UNKNOWN_CITY_LABEL,
+          kind: "unknown",
+          drivers: 1,
+          riders: 3,
+          openSeats: 3,
+          ridersPerDriver: 3,
+          stranded: false,
+        },
+      ]);
+    });
+
+    it("stays its own bar, after the named cities, whatever its size", () => {
+      const rows = summariseSupplyByCity([
+        city("", 0, 100),
+        city("boston", 1, 1),
+      ]);
+
+      expect(rows.map((row) => row.city)).toEqual(["Boston", "Unknown"]);
+    });
+
+    it("is not counted against the limit, and is never folded into Other", () => {
+      const rows = summariseSupplyByCity(
+        [city("", 1, 50), city("a", 1, 3), city("b", 1, 2), city("c", 1, 1)],
+        2,
+      );
+
+      expect(rows.map((row) => [row.kind, row.city])).toEqual([
+        ["city", "A"],
+        ["city", "B"],
+        ["unknown", "Unknown"],
+        ["other", "Other"],
+      ]);
+    });
+  });
+
+  describe("the top-N cut", () => {
+    const many = Array.from({ length: SUPPLY_TOP_CITY_LIMIT + 3 }, (_, i) =>
+      // Riders 1..11, so the three smallest are the ones folded away.
+      city(`city ${String.fromCharCode(97 + i)}`, 1, i + 1, 1),
+    );
+
+    it("keeps the cities with the most riders, most first", () => {
+      const rows = summariseSupplyByCity(many);
+      const named = rows.filter((row) => row.kind === "city");
+
+      expect(named).toHaveLength(SUPPLY_TOP_CITY_LIMIT);
+      expect(named.map((row) => row.riders)).toEqual(
+        Array.from({ length: SUPPLY_TOP_CITY_LIMIT }, (_, i) => 11 - i),
+      );
+    });
+
+    it("folds the rest into one Other row, last", () => {
+      const rows = summariseSupplyByCity(many);
+
+      expect(rows[rows.length - 1]).toEqual({
+        city: OTHER_CITIES_LABEL,
+        kind: "other",
+        drivers: 3,
+        riders: 1 + 2 + 3,
+        openSeats: 3,
+        ridersPerDriver: 2,
+        stranded: false,
+      });
+    });
+
+    it("adds no Other row when everything fits", () => {
+      const rows = summariseSupplyByCity(many.slice(0, SUPPLY_TOP_CITY_LIMIT));
+
+      expect(rows.some((row) => row.kind === "other")).toBe(false);
+    });
+
+    it("can mark Other stranded, when every folded city has no driver", () => {
+      const rows = summariseSupplyByCity(
+        [city("a", 1, 5), city("b", 0, 2), city("c", 0, 1)],
+        1,
+      );
+
+      expect(rows[rows.length - 1]).toMatchObject({
+        kind: "other",
+        drivers: 0,
+        riders: 3,
+        ridersPerDriver: null,
+        stranded: true,
+      });
+    });
+
+    it("breaks a tie on riders by name, so the order does not move between requests", () => {
+      const one = summariseSupplyByCity([city("b", 1, 2), city("a", 1, 2)]);
+      const two = summariseSupplyByCity([city("a", 1, 2), city("b", 1, 2)]);
+
+      expect(one.map((row) => row.city)).toEqual(["A", "B"]);
+      expect(two).toEqual(one);
+    });
+  });
+
+  it("sums to the same totals whatever the cut, so nothing is lost to it", () => {
+    const rows = [
+      city("a", 1, 9, 2),
+      city("b", 2, 8, 3),
+      city("c", 0, 7),
+      city("", 1, 1, 1),
+      city("d", 4, 0, 4),
+    ];
+    const expected = sum(rows);
+
+    for (const limit of [0, 1, 2, 3, 100]) {
+      expect(sum(summariseSupplyByCity(rows, limit))).toEqual(expected);
+    }
+  });
+
+  it("reconciles with `summariseUsers`: active drivers and riders, and no one else", () => {
+    // Everyone `summariseUsers` counts, with the city each would be grouped
+    // under. The VIEWER and the INACTIVE rider are what it excludes from
+    // `driverAO`/`riderAO` and what the SQL excludes from its groups.
+    const users = [
+      {
+        role: Role.DRIVER,
+        status: Status.ACTIVE,
+        isOnboarded: true,
+        city: "Boston",
+      },
+      {
+        role: Role.DRIVER,
+        status: Status.ACTIVE,
+        isOnboarded: false,
+        city: "boston",
+      },
+      {
+        role: Role.RIDER,
+        status: Status.ACTIVE,
+        isOnboarded: true,
+        city: "Boston",
+      },
+      { role: Role.RIDER, status: Status.ACTIVE, isOnboarded: false, city: "" },
+      {
+        role: Role.RIDER,
+        status: Status.ACTIVE,
+        isOnboarded: true,
+        city: "Salem",
+      },
+      {
+        role: Role.RIDER,
+        status: Status.INACTIVE,
+        isOnboarded: true,
+        city: "Salem",
+      },
+      {
+        role: Role.VIEWER,
+        status: Status.ACTIVE,
+        isOnboarded: true,
+        city: "Salem",
+      },
+    ];
+    const { userCounts } = summariseUsers(
+      users.map((u) => ({
+        ...u,
+        daysWorking: "",
+        carpoolId: null,
+      })),
+    );
+
+    // What the GROUP BY would return for exactly that population.
+    const grouped = new Map<string, AdminSupplyQueryRow>();
+    for (const u of users) {
+      if (u.status !== Status.ACTIVE || u.role === Role.VIEWER) continue;
+      const key = u.city.toLowerCase();
+      const row = grouped.get(key) ?? {
+        city: key,
+        drivers: 0,
+        riders: 0,
+        openSeats: 0,
+      };
+      if (u.role === Role.DRIVER) row.drivers += 1;
+      else row.riders += 1;
+      grouped.set(key, row);
+    }
+
+    const totals = sum(summariseSupplyByCity(Array.from(grouped.values())));
+
+    expect(totals.drivers).toBe(userCounts.driverAO + userCounts.driverANO);
+    expect(totals.riders).toBe(userCounts.riderAO + userCounts.riderANO);
+    // Sanity: the fixture has something to reconcile.
+    expect(totals).toMatchObject({ drivers: 2, riders: 3 });
   });
 });
