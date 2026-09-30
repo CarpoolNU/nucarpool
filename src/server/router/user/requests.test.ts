@@ -158,11 +158,102 @@ const buildRequestsDb = (
     return { ...row };
   });
 
-  const destroy = jest.fn(async ({ where }: any) => {
-    const row = requests.get(where.id);
-    if (!row) throw new Error(`No request row matching where.id=${where.id}`);
-    requests.delete(where.id);
-    return { ...row };
+  /**
+   * `request.delete` is no longer reachable, and saying so loudly is the
+   * point.
+   *
+   * The withdrawal used to be `tx.request.delete({ where: { id } })` - the
+   * primary key and nothing else - which is what let an accept that committed
+   * after the guard's snapshot lose its request anyway. It is a conditional
+   * raw `DELETE` now. Leaving a working delegate here would let that
+   * regression back in silently and, worse, would make every
+   * `expect(destroy).not.toHaveBeenCalled()` below pass for the wrong reason.
+   */
+  const destroy = jest.fn(async () => {
+    throw new Error(
+      "requests.delete must go through the conditional raw DELETE, not " +
+        "request.delete",
+    );
+  });
+
+  const sqlOf = (strings: unknown) =>
+    (strings as unknown as string[]).join("?").replace(/\s+/g, " ").trim();
+
+  /**
+   * The conditional `DELETE`, with its WHERE reproduced rather than imported.
+   *
+   * Reproduced deliberately, the way `groups.test.ts` reproduces `clampSeats`
+   * in its seat-release branch: a mock that shared the predicate with the code
+   * under test could only ever agree with it. The values arrive in the
+   * statement's own order — id, sender, recipient, then the status the guard
+   * is keyed on and the two ids the EXISTS correlates.
+   *
+   * What it cannot reproduce is the defect itself. A mock has no isolation
+   * level, so nothing here is a stale snapshot; these tests pin the predicate,
+   * and `requestDeleteRace.db.test.ts` pins the interleaving.
+   */
+  const rawDelete = jest.fn(
+    (
+      id: string,
+      fromUserId: string,
+      toUserId: string,
+      acceptedStatus: RequestStatus,
+    ) => {
+      const row = requests.get(id);
+      if (!row || row.fromUserId !== fromUserId || row.toUserId !== toUserId) {
+        return 0;
+      }
+
+      const senderGroup = groupMembership[fromUserId] ?? null;
+      const sameGroup =
+        senderGroup !== null &&
+        senderGroup === (groupMembership[toUserId] ?? null);
+
+      if (
+        row.status === acceptedStatus &&
+        fromUserId !== toUserId &&
+        sameGroup
+      ) {
+        return 0;
+      }
+
+      requests.delete(id);
+      return 1;
+    },
+  );
+
+  const executeRaw = jest.fn(async (strings: unknown, ...values: unknown[]) => {
+    const sql = sqlOf(strings);
+
+    if (sql.startsWith("DELETE FROM `request`")) {
+      const [id, fromUserId, toUserId, acceptedStatus] = values as [
+        string,
+        string,
+        string,
+        RequestStatus,
+      ];
+      return rawDelete(id, fromUserId, toUserId, acceptedStatus);
+    }
+
+    throw new Error(`Unrecognised raw statement in the requests mock: ${sql}`);
+  });
+
+  /**
+   * The locking re-read that tells the two zero-match losers apart. In a real
+   * MySQL `FOR SHARE` is what makes it read the latest committed row rather
+   * than this transaction's snapshot; in memory there is only one version, so
+   * the lock is not modelled and only the lookup is.
+   */
+  const queryRaw = jest.fn(async (strings: unknown, ...values: unknown[]) => {
+    const sql = sqlOf(strings);
+
+    if (sql.startsWith("SELECT `id` FROM `request`")) {
+      const [id] = values as [string];
+      const row = requests.get(id);
+      return row ? [{ id: row.id }] : [];
+    }
+
+    throw new Error(`Unrecognised raw query in the requests mock: ${sql}`);
   });
 
   const conversationFindUnique = jest.fn(async ({ where }: any) => {
@@ -305,6 +396,8 @@ const buildRequestsDb = (
       },
       message: { create: messageCreate, deleteMany: messageDeleteMany },
       block,
+      $executeRaw: executeRaw,
+      $queryRaw: queryRaw,
     },
     () => ({
       requests: cloneState(requests),
@@ -332,6 +425,30 @@ const buildRequestsDb = (
     blocks: block.rows,
     create,
     destroy,
+    /** The conditional `DELETE`: called at all, and with which values. */
+    rawDelete,
+    /** The locking re-read, which only the zero-match loser should reach. */
+    queryRaw,
+    /**
+     * A concurrent writer's commit, applied straight to the backing maps.
+     *
+     * Not `update` and not `destroy`: those are the delegates under test, and
+     * the second one now throws on purpose. What these stand in for is another
+     * transaction - `groups.create`, or the other participant's own
+     * withdrawal - that finished while this one was between its reads and its
+     * write.
+     */
+    setStatus: (id: string, status: RequestStatus) => {
+      const row = requests.get(id);
+      if (!row) throw new Error(`No request row with id=${id}`);
+      row.status = status;
+    },
+    removeRequest: (id: string) => {
+      const row = requests.get(id);
+      if (!row) throw new Error(`No request row with id=${id}`);
+      requests.delete(id);
+      if (row.conversationId) conversations.delete(row.conversationId);
+    },
     update,
     conversationCreate,
     conversationDeleteMany,
@@ -349,12 +466,21 @@ const sessionFor = (id: string): Session => ({
   },
 });
 
-const callerFor = (session: Session | null, db = buildRequestsDb()) => {
+const callerFor = (
+  session: Session | null,
+  db = buildRequestsDb(),
+  /**
+   * A stand-in for `db.prisma`, for the tests that need a writer to commit
+   * between the router's reads and its transaction. It wraps the same
+   * delegates, so `db`'s spies and accessors still report on it.
+   */
+  prisma: unknown = db.prisma,
+) => {
   const ctx = {
     req: undefined,
     res: undefined,
     session,
-    prisma: db.prisma,
+    prisma,
     sesClient: { send: jest.fn() },
   } as unknown as Context;
 
@@ -1015,7 +1141,7 @@ describe("user.requests.delete — only a participant may clear a request", () =
       caller.user.requests.delete({ invitationId: "req-1" }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
 
-    expect(db.destroy).not.toHaveBeenCalled();
+    expect(db.rawDelete).not.toHaveBeenCalled();
     expect(db.rows()).toEqual([expect.objectContaining({ id: "req-1" })]);
   });
 
@@ -1027,7 +1153,7 @@ describe("user.requests.delete — only a participant may clear a request", () =
       caller.user.requests.delete({ invitationId: "no-such-request" }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
 
-    expect(db.destroy).not.toHaveBeenCalled();
+    expect(db.rawDelete).not.toHaveBeenCalled();
     expect(db.rows()).toHaveLength(1);
   });
 });
@@ -1073,7 +1199,7 @@ describe("user.requests.delete — not while still carpooling together", () => {
       caller.user.requests.delete({ invitationId: "req-1" }),
     ).rejects.toMatchObject({ code: "CONFLICT" });
 
-    expect(db.destroy).not.toHaveBeenCalled();
+    expect(db.rawDelete).not.toHaveBeenCalled();
     expect(db.conversationDeleteMany).not.toHaveBeenCalled();
     expect(db.messageDeleteMany).not.toHaveBeenCalled();
     expect(db.rows()).toEqual([expect.objectContaining({ id: "req-1" })]);
@@ -1093,7 +1219,7 @@ describe("user.requests.delete — not while still carpooling together", () => {
       caller.user.requests.delete({ invitationId: "req-1" }),
     ).rejects.toMatchObject({ code: "CONFLICT" });
 
-    expect(db.destroy).not.toHaveBeenCalled();
+    expect(db.rawDelete).not.toHaveBeenCalled();
   });
 
   it("names the Group page, so the refusal says what to do instead", async () => {
@@ -1301,6 +1427,247 @@ describe("user.requests.delete — not while still carpooling together", () => {
   });
 });
 
+/**
+ * The guard above is a snapshot read, so the `DELETE` has to be the guard too.
+ *
+ * Every read the refusal depends on is taken with `ctx.prisma`, before the
+ * transaction opens: the request row, and the two `carpoolSearch` rows. The
+ * delete then matched on the primary key and nothing else. So a request that
+ * was `PENDING` when it was read skipped the branch entirely - the group
+ * lookup lives inside it and never ran - and if `groups.create` committed in
+ * the window, the accepted request backing a live carpool was deleted anyway,
+ * taking the conversation and every message with it. The end state the guard
+ * exists to prevent, reached by timing rather than by a direct call.
+ *
+ * These drive that window directly: the interleaved write commits after the
+ * router has taken its snapshot and before the transaction opens, which is
+ * exactly where the concurrent commit lands.
+ *
+ * **What a mocked Prisma cannot show is the defect.** It has no isolation
+ * level, so the router's snapshot is never stale here - these tests pin the
+ * statement's predicate and its count check. The interleaving itself is pinned
+ * against a real MySQL in `requestDeleteRace.db.test.ts`.
+ */
+describe("user.requests.delete — the delete carries its own condition", () => {
+  /**
+   * A client whose `$transaction` lets `interleaved` commit first.
+   *
+   * Outside the transaction, deliberately. The mock snapshots state on entry
+   * so it can roll back on a throw, and a write made inside that snapshot
+   * would be undone by the very CONFLICT these tests provoke - which would
+   * quietly assert the opposite of the scenario. Committing first is also
+   * what actually happens: the other writer is already done.
+   */
+  const racedBy = (
+    db: ReturnType<typeof buildRequestsDb>,
+    interleaved: () => void,
+  ) =>
+    new Proxy(db.prisma as Record<string | symbol, unknown>, {
+      get(target, property) {
+        if (property !== "$transaction") return Reflect.get(target, property);
+        return (fn: unknown) => {
+          interleaved();
+          return (target.$transaction as (arg: unknown) => unknown)(fn);
+        };
+      },
+    });
+
+  /** A PENDING request with a conversation behind it. */
+  const pendingPair = (membership: Record<string, string | null>) =>
+    buildRequestsDb(
+      [
+        requestRow("req-1", USER_A, USER_B, {
+          conversationId: "conversation-req-1",
+        }),
+      ],
+      membership,
+    );
+
+  /** Both parties accepted into one group, as `groups.create` leaves them. */
+  const acceptInto = (
+    db: ReturnType<typeof buildRequestsDb>,
+    membership: Record<string, string | null>,
+    group: string,
+  ) => {
+    db.setStatus("req-1", RequestStatus.ACCEPTED);
+    membership[USER_A] = group;
+    membership[USER_B] = group;
+  };
+
+  it("refuses when the request is accepted into a group after the guard read it", async () => {
+    // The ticket's sequence. `requests.delete` reads PENDING and skips the
+    // branch; `groups.create` commits; the delete then used to run
+    // unconditionally and take the live carpool's thread with it.
+    const membership: Record<string, string | null> = {
+      [USER_A]: null,
+      [USER_B]: null,
+    };
+    const db = pendingPair(membership);
+    const { caller } = callerFor(
+      sessionFor(USER_A),
+      db,
+      racedBy(db, () => acceptInto(db, membership, "group-1")),
+    );
+
+    await expect(
+      caller.user.requests.delete({ invitationId: "req-1" }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+
+    // The row, the thread, and the group's backing request all survive.
+    expect(db.rows()).toEqual([
+      expect.objectContaining({ id: "req-1", status: RequestStatus.ACCEPTED }),
+    ]);
+    expect(db.conversations()).toEqual([
+      { id: "conversation-req-1", requestId: "req-1" },
+    ]);
+    expect(db.conversationDeleteMany).not.toHaveBeenCalled();
+    expect(db.messageDeleteMany).not.toHaveBeenCalled();
+  });
+
+  it("gives the loser the same message as the ordinary refusal", async () => {
+    // Two spellings of one refusal would read to the caller as two different
+    // problems, and a race is the least explicable moment to change the
+    // wording. The Group page is still the way out.
+    const membership: Record<string, string | null> = {
+      [USER_A]: null,
+      [USER_B]: null,
+    };
+    const db = pendingPair(membership);
+    const { caller } = callerFor(
+      sessionFor(USER_A),
+      db,
+      racedBy(db, () => acceptInto(db, membership, "group-1")),
+    );
+
+    await expect(
+      caller.user.requests.delete({ invitationId: "req-1" }),
+    ).rejects.toThrow(/Group page/);
+  });
+
+  it("still deletes when the accept lands but no group forms", async () => {
+    // The condition is ACCEPTED *and* grouped in SQL for the same reason it is
+    // in JavaScript: a pair who have parted must keep being able to clear the
+    // row. Refusing on the status alone would strand them, and a raced accept
+    // is not a reason to.
+    const membership: Record<string, string | null> = {
+      [USER_A]: null,
+      [USER_B]: null,
+    };
+    const db = pendingPair(membership);
+    const { caller } = callerFor(
+      sessionFor(USER_A),
+      db,
+      racedBy(db, () => db.setStatus("req-1", RequestStatus.ACCEPTED)),
+    );
+
+    await expect(
+      caller.user.requests.delete({ invitationId: "req-1" }),
+    ).resolves.not.toThrow();
+
+    expect(db.rows()).toEqual([]);
+    expect(db.conversations()).toEqual([]);
+  });
+
+  it("still deletes when the two land in different groups", async () => {
+    const membership: Record<string, string | null> = {
+      [USER_A]: null,
+      [USER_B]: null,
+    };
+    const db = pendingPair(membership);
+    const { caller } = callerFor(
+      sessionFor(USER_A),
+      db,
+      racedBy(db, () => {
+        db.setStatus("req-1", RequestStatus.ACCEPTED);
+        membership[USER_A] = "group-1";
+        membership[USER_B] = "group-2";
+      }),
+    );
+
+    await expect(
+      caller.user.requests.delete({ invitationId: "req-1" }),
+    ).resolves.not.toThrow();
+
+    expect(db.rows()).toEqual([]);
+  });
+
+  it("succeeds quietly when the other participant cleared it first", async () => {
+    // The second loser, and the reason the zero-match branch re-reads rather
+    // than assuming. Telling someone who withdrew a request the other party
+    // had just declined that they are "carpooling with this user" would be a
+    // lie, and the one thing they asked for - that this request stop existing
+    // - is already true. The unconditional delete used to throw Prisma's
+    // P2025 here, which reaches the client as a 500.
+    const db = pendingPair({ [USER_A]: null, [USER_B]: null });
+    const { caller } = callerFor(
+      sessionFor(USER_A),
+      db,
+      racedBy(db, () => db.removeRequest("req-1")),
+    );
+
+    await expect(
+      caller.user.requests.delete({ invitationId: "req-1" }),
+    ).resolves.toBeUndefined();
+
+    expect(db.rows()).toEqual([]);
+    expect(db.queryRaw).toHaveBeenCalled();
+  });
+
+  it("binds the pair as well as the id, so it cannot clear another pair's row", async () => {
+    // `fromUserId` and `toUserId` are pinned from the snapshot the participant
+    // check was made against. They are immutable in practice - nothing writes
+    // either column after `create` - so this costs nothing, and it means a row
+    // that somehow did change hands is left alone rather than deleted on the
+    // strength of an authorization decision about someone else.
+    const db = pendingPair({ [USER_A]: null, [USER_B]: null });
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await caller.user.requests.delete({ invitationId: "req-1" });
+
+    expect(db.rawDelete).toHaveBeenCalledWith(
+      "req-1",
+      USER_A,
+      USER_B,
+      RequestStatus.ACCEPTED,
+    );
+  });
+
+  it("does not re-read when the delete matched, so the ordinary path costs one statement", async () => {
+    // The locking re-read is the expensive half, and only the loser should pay
+    // for it. A plain withdrawal is the common path by a long way.
+    const db = pendingPair({ [USER_A]: null, [USER_B]: null });
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await caller.user.requests.delete({ invitationId: "req-1" });
+
+    expect(db.queryRaw).not.toHaveBeenCalled();
+  });
+
+  it("clears an accepted self-request even when the owner is in a group", async () => {
+    // The self-request exemption expressed in SQL rather than JavaScript:
+    // `fromUserId` <> `toUserId`. Without it the EXISTS compares the owner's
+    // group against their own and matches whenever they are in any group at
+    // all, so the row would become unclearable at the statement level even
+    // though the guard above deliberately lets it through.
+    const db = buildRequestsDb(
+      [
+        requestRow("req-self", USER_A, USER_A, {
+          status: RequestStatus.ACCEPTED,
+          conversationId: "conversation-req-self",
+        }),
+      ],
+      { [USER_A]: "group-1" },
+    );
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await expect(
+      caller.user.requests.delete({ invitationId: "req-self" }),
+    ).resolves.not.toThrow();
+
+    expect(db.rows()).toEqual([]);
+    expect(db.conversations()).toEqual([]);
+  });
+});
 describe("user.requests — authentication gate", () => {
   it("rejects an anonymous create without touching the database", async () => {
     const { caller, db } = callerFor(null);
@@ -1317,7 +1684,7 @@ describe("user.requests — authentication gate", () => {
     await expect(
       caller.user.requests.delete({ invitationId: "req-1" }),
     ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
-    expect(db.destroy).not.toHaveBeenCalled();
+    expect(db.rawDelete).not.toHaveBeenCalled();
   });
 
   it("rejects a session that carries no user", async () => {
@@ -1338,7 +1705,7 @@ describe("user.requests — authentication gate", () => {
     await expect(
       deleteCaller.user.requests.delete({ invitationId: "req-1" }),
     ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
-    expect(deleteDb.destroy).not.toHaveBeenCalled();
+    expect(deleteDb.rawDelete).not.toHaveBeenCalled();
   });
 });
 
