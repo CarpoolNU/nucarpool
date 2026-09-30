@@ -15,6 +15,20 @@ import { MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
 import { assertNotBlocked, blockedCounterpartIds } from "../../db/blocks";
 
 /**
+ * Why `delete` refuses a pair who are currently carpooling together.
+ *
+ * Named because the refusal is raised from two places that must not drift: the
+ * ordinary guard, which reads the request and the two `carpoolSearch` rows
+ * before the transaction, and the count check on the conditional `DELETE`
+ * inside it, which is the same question asked again atomically for the pair
+ * whose group formed in between. Two spellings of one refusal would read to a
+ * caller as two different problems.
+ */
+const CARPOOLING_PAIR_DELETE_MESSAGE =
+  "You are carpooling with this user, so this conversation cannot be " +
+  "deleted. Leave the carpool from the Group page first.";
+
+/**
  * The message columns a conversation is actually read through.
  *
  * This was `include: { User: true }`, which attached the author's whole `User`
@@ -695,10 +709,7 @@ export const requestsRouter = router({
           // failure.
           throw new TRPCError({
             code: "CONFLICT",
-            message:
-              "You are carpooling with this user, so this conversation " +
-              "cannot be deleted. Leave the carpool from the Group page " +
-              "first.",
+            message: CARPOOLING_PAIR_DELETE_MESSAGE,
           });
         }
       }
@@ -735,7 +746,108 @@ export const requestsRouter = router({
         // Request first. The other order would trip the declared
         // Conversation → Request cascade, which deletes the request as a side
         // effect and makes this `delete` throw NOT_FOUND.
-        await tx.request.delete({ where: { id: input.invitationId } });
+        //
+        // **The delete restates the guard above as its own WHERE, because the
+        // guard alone is a snapshot read.** `invitation` and the
+        // `carpoolSearch` rows behind it are both read with `ctx.prisma`,
+        // outside this transaction, and the delete used to match on the
+        // primary key and nothing else. So a request that was `PENDING` when
+        // it was read skipped the branch entirely - the group lookup lives
+        // inside it and never ran - and if `groups.create` committed in the
+        // window, this statement deleted the now-`ACCEPTED` request backing a
+        // live carpool, taking the `Conversation` and every `Message` with it.
+        // That is precisely the state the guard exists to prevent, reached by
+        // timing instead of by a direct call.
+        //
+        // Restating the predicate in the statement makes it a real
+        // compare-and-swap, the same primitive `markRequestAccepted`,
+        // `reserveSeat` and the membership claims in `groups.ts` use. Whichever
+        // transaction gets there first wins and the loser is told, rather than
+        // both proceeding on a view of the world that stopped being true.
+        //
+        // A raw `DELETE`, not `request.deleteMany`, for the reason established
+        // against a real MySQL for those siblings: `deleteMany`'s WHERE is
+        // evaluated against this transaction's own REPEATABLE READ snapshot,
+        // so a row another transaction has already accepted still reads
+        // `PENDING` to it and the condition passes anyway.
+        //
+        // `fromUserId` and `toUserId` are bound from the snapshot rather than
+        // re-read. They are safe to pin: nothing in the codebase writes either
+        // column after `create`, so a request's participants are immutable.
+        // Matching on them as well as `id` costs nothing and means a row that
+        // somehow did change hands is left alone instead of deleted for the
+        // wrong pair.
+        //
+        // `fromUserId` <> `toUserId` carries the self-request exemption the
+        // branch above documents: with one user on both sides the EXISTS
+        // compares their group against itself and matches whenever they are in
+        // any group at all.
+        //
+        // The `IS NOT NULL` is redundant - the join is `NULL = NULL`, which is
+        // never true - and is kept so the predicate reads as "both in the same
+        // real group" without the reader having to reason it out.
+        const deleted = await tx.$executeRaw`
+          DELETE FROM \`request\`
+          WHERE \`id\` = ${input.invitationId}
+            AND \`fromUserId\` = ${invitation.fromUserId}
+            AND \`toUserId\` = ${invitation.toUserId}
+            AND NOT (
+              \`status\` = ${RequestStatus.ACCEPTED}
+              AND \`fromUserId\` <> \`toUserId\`
+              AND EXISTS (
+                SELECT 1
+                FROM carpool_search AS sender
+                JOIN carpool_search AS recipient
+                  ON recipient.carpoolId = sender.carpoolId
+                WHERE sender.userId = ${invitation.fromUserId}
+                  AND recipient.userId = ${invitation.toUserId}
+                  AND sender.carpoolId IS NOT NULL
+              )
+            )
+        `;
+
+        if (deleted === 0) {
+          // Two different losers reach here, and they deserve different
+          // answers - conflating them would tell someone who simply pressed
+          // Withdraw twice that they are carpooling with a user they are not.
+          //
+          // A **locking** read, not `tx.request.findUnique`: a plain
+          // consistent read is served from this transaction's snapshot, which
+          // is the very thing that produced the defect. It would report the
+          // row still present after another transaction had deleted it, and
+          // turn an ordinary double-clear into a CONFLICT naming a carpool
+          // that does not exist. `FOR SHARE` reads the latest committed row,
+          // which is what the `DELETE` just matched against.
+          //
+          // It only runs on the zero-match path, so the common withdrawal
+          // pays for one statement and takes no extra lock. The row is the
+          // one this transaction has just tried to delete, so the lock is on
+          // a `request` the statement above already touched rather than a new
+          // one - but the ordering against `groups.create` under genuine
+          // contention has not been measured, only the interleaving in
+          // `requestDeleteRace.db.test.ts`.
+          const survivors = await tx.$queryRaw<{ id: string }[]>`
+            SELECT \`id\` FROM \`request\`
+            WHERE \`id\` = ${input.invitationId}
+            FOR SHARE
+          `;
+
+          // The row is gone: the other participant cleared the same request
+          // in the window, and took its conversation and messages with it in
+          // their own transaction. The caller wanted this request not to
+          // exist, and it does not. Nothing left to do and nothing to report.
+          if (survivors.length === 0) {
+            return;
+          }
+
+          // The row survived the condition, so it is `ACCEPTED` and the pair
+          // share a group - the guard above, arrived at a moment later. Same
+          // code and same message, because it is the same refusal.
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: CARPOOLING_PAIR_DELETE_MESSAGE,
+          });
+        }
 
         // Resolved rather than filtered in place, so the messages can be
         // deleted by id. Most requests have no conversation at all — 462 of
