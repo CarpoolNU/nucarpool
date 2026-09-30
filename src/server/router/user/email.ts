@@ -11,6 +11,7 @@ import type {
 import { RequestStatus } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import { assertNotBlocked } from "../../db/blocks";
+import { claimEmailBudget } from "../../db/emailBudget";
 
 /**
  * Notification email.
@@ -37,24 +38,25 @@ import { assertNotBlocked } from "../../db/blocks";
  * update can match, so calling the procedure again, or twice at once, sends
  * nothing more. Each email costs one real write by the caller. These were
  * time windows before, and inside one the procedure sent on every call.
+ *
+ * **All three also claim from one per-sender budget**, `claimEmailBudget`.
+ * A marker stops one thing being announced twice; it says nothing about how
+ * many things a caller can manufacture. That used to be bounded by a count of
+ * the caller's recent `Request` rows, in `sendRequestNotification` alone — and
+ * `requests.delete` hard-deletes the row the count was taken over, so
+ * create -> notify -> delete looped past it indefinitely. The budget counts
+ * sends, in a table no procedure a caller can reach writes to. See
+ * `src/server/db/emailBudget.ts` for the whole argument and for why the claim
+ * is shaped the way it is.
+ *
+ * Each procedure claims *after* its own cheap refusals and *before* it clears
+ * a marker, and refunds on every path that then declines to send. So a replay
+ * costs nothing, a staging-refused recipient costs nothing and an SES failure
+ * costs nothing: the budget tracks mail that actually went out.
  */
 
 /** Per-sender, per-conversation cooldown for message notifications. */
 const MESSAGE_NOTIFICATION_COOLDOWN_MS = 5 * 60 * 1000;
-
-/**
- * Sender budget: at most this many request notifications per hour.
- *
- * The one-shot marker already limits a request to one email. This limits how
- * fast new requests can be made to earn one, since deleting and re-creating a
- * request marks it owed again. Counted from `Request.dateCreated`, so
- * `user.requests.delete` removes rows from the count, and a reopen, which keeps
- * the original `dateCreated`, is never in it. It raises the cost of abuse and
- * is not a cap. A reopen needs the other person to have accepted first, so it
- * is not something a caller can repeat on their own.
- */
-const REQUEST_NOTIFICATION_WINDOW_MS = 60 * 60 * 1000;
-const REQUEST_NOTIFICATIONS_PER_WINDOW = 10;
 
 type Party = { id: string; name: string; email: string };
 
@@ -311,24 +313,22 @@ export const emailsRouter = router({
         return { sent: false as const, reason: "already_notified" };
       }
 
-      const recentRequests = await ctx.prisma.request.count({
-        where: {
-          fromUserId: callerId,
-          dateCreated: {
-            gte: new Date(Date.now() - REQUEST_NOTIFICATION_WINDOW_MS),
-          },
-        },
-      });
+      assertDeliverable(recipient.email);
 
-      if (recentRequests > REQUEST_NOTIFICATIONS_PER_WINDOW) {
+      // Claimed before the marker so a spent budget leaves the marker alone
+      // and the email stays owed: the recipient is told late rather than never,
+      // and the caller can retry in the next window. Claiming in the other
+      // order would spend the marker on a send that never happened.
+      const budget = await claimEmailBudget(ctx.prisma, callerId);
+      if (!budget.claimed) {
         return { sent: false as const, reason: "rate_limited" };
       }
 
-      assertDeliverable(recipient.email);
-
       // Of any number of concurrent calls, exactly one gets past this. See
-      // `claimRequestNotification`.
+      // `claimRequestNotification`. The loser refunds: it is a replay, and a
+      // replay must not cost the caller a send it never received.
       if (!(await claimRequestNotification(ctx.prisma, request.id))) {
+        await budget.refund();
         return { sent: false as const, reason: "already_notified" };
       }
 
@@ -358,12 +358,13 @@ export const emailsRouter = router({
         false,
       );
 
-      await sendOrRelease(ctx.sesClient, emailParams, () =>
-        ctx.prisma.request.updateMany({
+      await sendOrRelease(ctx.sesClient, emailParams, async () => {
+        await ctx.prisma.request.updateMany({
           where: { id: request.id, notificationPendingSince: null },
           data: { notificationPendingSince: pendingSince },
-        }),
-      );
+        });
+        await budget.refund();
+      });
       return { sent: true as const };
     }),
 
@@ -377,6 +378,10 @@ export const emailsRouter = router({
    * control, and it counts the caller's *other* recent messages. So one message
    * followed by N calls passed it N times, because each call saw no prior
    * message.
+   *
+   * The cooldown is per conversation, so it was also reset by opening a new
+   * one. The shared budget below is not, which is the half of SCRUM-606 this
+   * path needed.
    */
   sendMessageNotification: protectedRouter
     .input(z.object({ requestId: z.string() }).strict())
@@ -444,9 +449,21 @@ export const emailsRouter = router({
 
       assertDeliverable(recipient.email);
 
+      // The shared per-sender cap, on top of the per-conversation cooldown
+      // above. The cooldown alone was reset by the create -> notify -> delete
+      // loop: deleting a request takes its `Conversation` and every `Message`
+      // with it, so the next request opened a thread with no prior message to
+      // be within a cooldown of. This budget is not stored on anything the
+      // caller can delete, so that loop spends it and stops.
+      const budget = await claimEmailBudget(ctx.prisma, callerId);
+      if (!budget.claimed) {
+        return { sent: false as const, reason: "rate_limited" };
+      }
+
       // As in `sendRequestNotification`: of any number of concurrent calls,
-      // exactly one gets past this.
+      // exactly one gets past this, and the losers refund.
       if (!(await claimMessageNotification(ctx.prisma, latest.id))) {
+        await budget.refund();
         return { sent: false as const, reason: "already_notified" };
       }
 
@@ -462,12 +479,13 @@ export const emailsRouter = router({
         false,
       );
 
-      await sendOrRelease(ctx.sesClient, emailParams, () =>
-        ctx.prisma.message.updateMany({
+      await sendOrRelease(ctx.sesClient, emailParams, async () => {
+        await ctx.prisma.message.updateMany({
           where: { id: latest.id },
           data: { notificationPending: true },
-        }),
-      );
+        });
+        await budget.refund();
+      });
       return { sent: true as const };
     }),
 
@@ -503,13 +521,12 @@ export const emailsRouter = router({
    * conditional `UPDATE` before sending. Only one caller's update can match,
    * so calling this in a loop sends at most one email per acceptance.
    *
-   * A per-user cap across all of `user.emails.*` — a further defence against
-   * a caller earning many separate accepted requests and notifying each once
-   * — does not exist yet. It needs shared state this deployment does not
-   * have, so it is larger than a marker, and is not implemented here. It is
-   * tracked as part of the acceptance-notification work already covering this
-   * file, not as a separate gap: this doc comment is where that work found it
-   * undocumented.
+   * **The per-user cap this comment used to say did not exist now does.**
+   * It was described here as needing shared state the deployment does not
+   * have, which was true only of an in-process counter; the shared state is
+   * the database, and `claimEmailBudget` keeps it in one small table. So a
+   * caller earning many separate accepted requests and notifying each exactly
+   * once is bounded by the same budget as the other two emails. See SCRUM-606.
    */
   sendAcceptanceNotification: protectedRouter
     .input(z.object({ requestId: z.string() }).strict())
@@ -548,9 +565,20 @@ export const emailsRouter = router({
 
       assertDeliverable(recipient.email);
 
+      // The same shared cap the other two claim from. An acceptance is earned
+      // rather than self-served — the other party has to have requested — so
+      // this path is the hardest of the three to abuse, but it draws on one
+      // budget with the others so that the total a single account can emit is
+      // bounded whatever mixture it sends.
+      const budget = await claimEmailBudget(ctx.prisma, callerId);
+      if (!budget.claimed) {
+        return { sent: false as const, reason: "rate_limited" };
+      }
+
       // Of any number of concurrent calls, exactly one gets past this. See
-      // `claimAcceptanceNotification`.
+      // `claimAcceptanceNotification`. The losers refund.
       if (!(await claimAcceptanceNotification(ctx.prisma, request.id))) {
+        await budget.refund();
         return { sent: false as const, reason: "already_notified" };
       }
 

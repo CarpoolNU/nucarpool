@@ -338,7 +338,27 @@ The request, message and acceptance emails each send at most once. Each is backe
 - **`notificationPendingSince` is also how the request email finds its body.** `requests.create` writes the same instant to it and to the opening message's `dateCreated`, and the email quotes the requester's message with exactly that timestamp. `request.message` is not the body. It is always `""`, and `MessageContent` renders it as an extra first message whenever it is non-empty.
 - **A reopen keeps `dateCreated`.** It is the date of first contact, and the admin request series and every sort by it read it that way. A reopened request is therefore absent from that series.
 - **`acceptanceNotificationPendingSince` is set by `markRequestAccepted`, not by a client-facing procedure.** It is written in the same transaction and the same statement as the `ACCEPTED` status flip, in `groups.create` and `groups.edit`, so a request's status and its acceptance marker cannot disagree.
-- **A per-user cap across `user.emails.*`** — beyond the one-shot marker on each email — does not exist yet. It needs shared state this deployment does not have.
+
+## The per-sender email budget
+
+`email_send_budget` caps how much mail one account can emit, across all three procedures in `user.emails.*` together. `src/server/db/emailBudget.ts` owns it.
+
+**What it replaced, and why a marker was not enough.** The markers above stop one _thing_ being announced twice; they say nothing about how many things a caller can manufacture. `sendRequestNotification` used to bound that by counting the caller's `Request` rows created in the last hour — and `requests.delete` hard-deletes the row it counted. So `create` → notify → `delete`, repeated, held the count near one and never tripped: a signed-in user could send a chosen recipient unlimited branded mail from the verified SES identity, with up to 255 characters of their own text in it. The same loop reset the message cooldown too, because deleting a request takes its `Conversation` and every `Message` with it, so each new request opened a thread with no prior message to be within a cooldown of. SCRUM-606.
+
+The fix is to count **sends**, in a table no procedure a caller can reach writes to. Nothing the caller can delete is in the count.
+
+| Column         | Meaning                                                   |
+| -------------- | --------------------------------------------------------- |
+| `user_id`      | The sender. Half of the composite primary key.            |
+| `window_start` | The bucket, floored to the window length. The other half. |
+| `send_count`   | Sends already spent in that bucket.                       |
+
+- **The claim is a real compare-and-swap, and the cap lives in the `WHERE`.** Two statements: an `INSERT … ON DUPLICATE KEY UPDATE user_id = user_id` that creates the bucket and deliberately changes nothing if it exists, then `UPDATE … SET send_count = send_count + 1 WHERE … AND send_count < cap`. Only the second has to be atomic, and it is — a single `UPDATE` against one row, serialised on that row's lock, exactly as the markers above are.
+- **Writing the cap as `SET send_count = IF(send_count < cap, …)` would be wrong.** That statement always _matches_ the row and only sometimes _changes_ it, so telling a claim from a refusal would depend on the client reporting changed rather than matched rows — which is what `CLIENT_FOUND_ROWS` switches. With the cap in the `WHERE`, a spent budget matches nothing and both readings agree. `emailBudget.db.test.ts` asserts the at-cap claim reports zero against a real server.
+- **Claimed before the marker, refunded on every path that then declines to send.** A replay, a staging-refused recipient and an SES failure all cost nothing, so the budget tracks mail that actually went out. Claiming in the other order would spend a one-shot marker on a send that never happened, and the recipient would never be told at all — where a spent budget only tells them late.
+- **Windows are fixed buckets, not sliding.** A sliding window needs a row per send to count over, which cannot be claimed in one statement. The cost is that a caller who spends a full budget at the end of one bucket and another at the start of the next sends twice the cap inside one window's length — a bounded burst, where the defect it replaces was unbounded.
+- **Rows are never pruned.** One per sender per bucket, and only for senders who actually send, so growth is bounded by active senders rather than by users. Nothing reads a bucket once its window has passed.
+- **No relation to `User`.** These rows are transient and nothing joins to them, and under `relationMode = "prisma"` a relation would add an emulated cascade to every user removal to tidy rows that expire on their own.
 
 ## Account deletion
 

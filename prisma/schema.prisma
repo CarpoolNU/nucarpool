@@ -405,3 +405,41 @@ model VerificationToken {
   @@unique([identifier, token])
   @@map(name: "verification_token")
 }
+
+// One user's outbound-email allowance for one fixed window.
+//
+// The budget on `user.emails.*` used to be derived from `Request` rows:
+// `sendRequestNotification` counted the caller's requests created in the last
+// hour. `requests.delete` hard-deletes the row it counted, so the count fell
+// back and `create` -> notify -> `delete`, repeated, never tripped the limit —
+// a signed-in user could send a chosen recipient unlimited branded mail from
+// the verified SES identity (SCRUM-606). Counting sends here instead means
+// nothing the caller is able to delete is in the count.
+//
+// **The primary key is the pair, so the claim is one statement.** It is an
+// `INSERT ... ON DUPLICATE KEY UPDATE` that increments only while the count is
+// under the cap, and reports whether it changed anything. That needs the pair
+// to be the key MySQL matches on, and a composite `@@id` also spares this
+// table a surrogate id that nothing would ever reference — a raw `INSERT`
+// cannot use Prisma's client-side `@default(cuid())` anyway.
+//
+// **Deliberately no relation to `User`.** It would buy nothing: these rows are
+// transient, nothing joins to them, and `relationMode = "prisma"` emulates
+// cascades in Prisma rather than MySQL, so a relation would add an emulated
+// delete to every user removal to tidy rows that expire on their own.
+//
+// One row per sender per window, and only for senders who actually send, so
+// growth is bounded by active senders rather than by users. Rows are never
+// read again once their window passes and are left in place rather than
+// pruned: a delete path is one more thing that can go wrong, and at this
+// volume it is not worth one.
+model EmailSendBudget {
+  userId String @map("user_id")
+  // Start of the window this row counts, floored to the window length, so
+  // every sender in one window shares one bucket boundary.
+  windowStart DateTime @map("window_start")
+  sendCount   Int      @default(0) @map("send_count")
+
+  @@id([userId, windowStart])
+  @@map("email_send_budget")
+}
