@@ -443,24 +443,15 @@ export const userRouter = router({
             },
           });
 
+        // `seatsAvail` is deliberately absent, and is written separately on
+        // each branch below. It is the only field here whose write is
+        // *conditional on group membership*, and expressing that condition in
+        // JavaScript against `existingSearch` - a read taken earlier in this
+        // transaction - was the bug. See the claim in the `existingSearch`
+        // branch.
         const carpoolSearchData = {
           role: input.role,
           status: input.status,
-          // Left alone while the caller is in a group. `seatsAvail` is the
-          // *remaining* count once a group exists, and `reserveSeat` and
-          // `releaseSeats` in `groups.ts` move it as riders join and leave.
-          // The profile form sends back whatever it loaded, so a rider joining
-          // after the driver opened the page was undone by the driver's next
-          // save of anything at all - the bio, say - and the car could then
-          // take more riders than it seats.
-          //
-          // Ignored rather than refused: a stale value is exactly what the
-          // form sends in that case, and it is indistinguishable from an
-          // intended change, so refusing a mismatch would fail the bio save
-          // instead. The form locks the field for a grouped user to match.
-          // `undefined` is Prisma's "omit this field" in an `update`; the
-          // `create` path never has a group, so it always writes the input.
-          seatsAvail: existingSearch?.carpoolId ? undefined : input.seatAvail,
           companyName: input.companyName,
           daysWorking: input.daysWorking,
           startTime: startTimeDate,
@@ -524,6 +515,50 @@ export const userRouter = router({
             }
           }
 
+          // The seat count, claimed rather than written.
+          //
+          // `seatsAvail` is left alone while the caller is in a group: it is
+          // the *remaining* count once a group exists, and `reserveSeat` and
+          // `releaseSeats` in `groups.ts` move it as riders join and leave.
+          // The profile form sends back whatever it loaded, so a rider joining
+          // after the driver opened the page was undone by the driver's next
+          // save of anything at all - the bio, say - and the car could then
+          // take more riders than it seats.
+          //
+          // That rule is unchanged. What changed is *where it is evaluated*.
+          // It used to be `existingSearch?.carpoolId ? undefined :
+          // input.seatAvail`, and `existingSearch` is this transaction's
+          // REPEATABLE READ snapshot: an acceptance that committed after that
+          // read still shows `carpoolId: null` here, so the write went ahead
+          // and erased the rider's decrement. Restating the condition as the
+          // statement's own WHERE makes the database evaluate it against the
+          // current row instead, which is the only place it can be true.
+          //
+          // Skipped silently on 0 rows, rather than raised as a conflict, for
+          // the reason the old comment gave: a stale value is exactly what the
+          // form sends in that case, it is indistinguishable from an intended
+          // change, and refusing it would fail the bio save the user actually
+          // made. The form locks the field for a grouped user to match. This
+          // is the opposite choice from the role claim above, and deliberately
+          // so - a role the user did not ask for is a different thing from a
+          // seat count the form echoed back.
+          //
+          // Ordering matters. On success this statement holds the row's lock
+          // until commit, so a concurrent accept blocks behind it and then
+          // decrements the value this just wrote rather than racing it; on
+          // failure the accept has already committed and its decrement stands.
+          // Either interleaving leaves the count right.
+          //
+          // The outer `if` only avoids a pointless round trip in the common
+          // grouped case. The WHERE is what enforces the rule.
+          if (!existingSearch.carpoolId) {
+            await tx.$executeRaw`
+              UPDATE carpool_search
+              SET seats_avail = ${input.seatAvail}, date_modified = NOW(3)
+              WHERE id = ${existingSearch.id} AND carpoolId IS NULL
+            `;
+          }
+
           await tx.carpoolSearch.update({
             where: { id: existingSearch.id },
             data: carpoolSearchData,
@@ -533,6 +568,10 @@ export const userRouter = router({
             data: {
               userId: id,
               carpoolId: null,
+              // A brand-new search is never in a group, so the input is
+              // always what gets written - the condition above has nothing
+              // to test against.
+              seatsAvail: input.seatAvail,
               ...carpoolSearchData,
             },
           });

@@ -273,36 +273,115 @@ const buildGroupsDb = (opts?: {
     return hit ? [{ id: `${userId}->${counterpartId}` }] : [];
   });
 
-  // Two raw `UPDATE`s now route through `$executeRaw`, distinguished below by
-  // how many interpolated values each carries - neither compiles to the
-  // other's shape, so this is unambiguous:
+  // Every write in `groups.ts` that has to be a compare-and-swap is raw SQL
+  // rather than `updateMany`, because `updateMany`'s WHERE was verified
+  // against a real MySQL to match the calling transaction's own REPEATABLE
+  // READ snapshot rather than the current committed row on this Prisma
+  // version - so it did not actually close any of these races. There are six
+  // of them now, and they are dispatched below **on the statement text**.
   //
-  // - `reserveSeat`'s seat claim, one value: `UPDATE
-  //   carpool_search SET seatsAvail = seatsAvail - 1 WHERE userId = ${...}
-  //   AND seatsAvail > 0`.
-  // - The rider-linking compare-and-swap in `create` and `edit`'s add path,
-  //   three values - the `carpoolId` being set and the
-  //   `userId`/`role` from the WHERE: `UPDATE carpool_search SET carpoolId =
-  //   ${...} WHERE userId = ${...} AND role = ${...} AND carpoolId IS NULL`.
-  //
-  // Both are `updateMany`-shaped compare-and-swaps that moved to raw SQL for
-  // the same reason: `updateMany`'s WHERE was verified against a real MySQL
-  // to match this transaction's own snapshot rather than the current row on
-  // this Prisma version, so it did not actually close either race.
-  const executeRaw = jest.fn(
-    async (_strings: unknown, ...values: unknown[]) => {
-      if (values.length === 1) {
-        const [driverUserId] = values;
-        const row = searches.find((r) =>
-          matches(r, { userId: driverUserId, seatsAvail: { gt: 0 } }),
-        );
-        if (!row) {
-          return 0;
-        }
-        row.seatsAvail -= 1;
-        return 1;
-      }
+  // Dispatching on `values.length`, which this mock used to do, is no longer
+  // possible: the seat release and the rider link both carry three values,
+  // and the seat reservation and the group-wide unlink both carry one. It was
+  // never safe in the first place - it silently routed the driver link's two
+  // values into the three-value branch and relied on `matches` ignoring the
+  // `undefined` that produced. Matching the statement means one this mock
+  // does not recognise throws instead of quietly behaving like another.
+  const sqlOf = (strings: unknown) =>
+    (strings as unknown as string[]).join("?").replace(/\s+/g, " ").trim();
 
+  const executeRaw = jest.fn(async (strings: unknown, ...values: unknown[]) => {
+    const sql = sqlOf(strings);
+
+    // `reserveSeat`: one value, the driver's user id.
+    if (sql.includes("seats_avail = seats_avail - 1")) {
+      const [driverUserId] = values;
+      const row = searches.find((r) =>
+        matches(r, { userId: driverUserId, seatsAvail: { gt: 0 } }),
+      );
+      if (!row) {
+        return 0;
+      }
+      row.seatsAvail -= 1;
+      return 1;
+    }
+
+    // `releaseSeats`: the credit, the maximum and the search's own id. The
+    // arithmetic is `clampSeats` expressed in SQL, reproduced here rather
+    // than imported so that changing either one has to be a deliberate
+    // change to both.
+    if (sql.includes("GREATEST(0, LEAST(seats_avail")) {
+      const [seatsToRelease, maxSeats, searchId] = values as [
+        number,
+        number,
+        string,
+      ];
+      const row = searches.find((r) => r.id === searchId);
+      if (!row) {
+        return 0;
+      }
+      row.seatsAvail = Math.min(
+        Math.max(row.seatsAvail + seatsToRelease, 0),
+        maxSeats,
+      );
+      return 1;
+    }
+
+    // `markRequestAccepted`: the compare-and-swap on `PENDING`.
+    if (sql.includes("UPDATE `request`")) {
+      const [status, , requiredStatus, driverId, riderId] = values as [
+        RequestStatus,
+        Date,
+        RequestStatus,
+        string,
+        string,
+      ];
+      let count = 0;
+      for (const [a, b] of requests) {
+        const isPair =
+          (a === driverId && b === riderId) ||
+          (a === riderId && b === driverId);
+        const current = requestStatus.get(`${a}|${b}`) ?? RequestStatus.PENDING;
+        if (isPair && current === requiredStatus) {
+          requestStatus.set(`${a}|${b}`, status);
+          count += 1;
+        }
+      }
+      return count;
+    }
+
+    // `delete`'s group-wide unlink: one value, the group id. Its match count
+    // is what the seat credit is derived from.
+    if (
+      sql.includes("SET carpoolId = NULL") &&
+      sql.includes("WHERE carpoolId")
+    ) {
+      const [groupId] = values;
+      const rows = searches.filter((r) => matches(r, { carpoolId: groupId }));
+      for (const row of rows) {
+        row.carpoolId = null;
+      }
+      return rows.length;
+    }
+
+    // `edit`'s remove-path unlink: the rider's user id and the group they
+    // must still be in. Scoped and count-checked, so a duplicate leave
+    // credits nothing.
+    if (sql.includes("SET carpoolId = NULL")) {
+      const [riderId, groupId] = values;
+      const row = searches.find((r) =>
+        matches(r, { userId: riderId, carpoolId: groupId }),
+      );
+      if (!row) {
+        return 0;
+      }
+      row.carpoolId = null;
+      return 1;
+    }
+
+    // The driver and rider links in `create`, and the rider link in `edit`'s
+    // add path. The driver's carries no `role`, which `matches` then ignores.
+    if (sql.includes("SET carpoolId =")) {
       const [groupIdToSet, riderId, roleToMatch] = values;
       const row = searches.find((r) =>
         matches(r, { userId: riderId, role: roleToMatch, carpoolId: null }),
@@ -312,8 +391,10 @@ const buildGroupsDb = (opts?: {
       }
       row.carpoolId = groupIdToSet as string;
       return 1;
-    },
-  );
+    }
+
+    throw new Error(`Unrecognised raw statement in the groups mock: ${sql}`);
+  });
 
   // The groups mutations wrap their writes in `prisma.$transaction`,
   // so the mock rolls back on a throw. Restoring in place matters:
@@ -376,6 +457,38 @@ const buildGroupsDb = (opts?: {
     executeRaw,
   };
 };
+
+/**
+ * Replaces the behaviour of whichever raw statement's SQL contains `marker`,
+ * leaving every other statement on the mock's real implementation.
+ *
+ * These tests used to target a statement by how many values it interpolated.
+ * That never identified one uniquely - it only happened to, while there were
+ * two shapes - and it silently picked the wrong call more than once: the two
+ * "linking the rider fails" tests below faulted `reserveSeat`, the *first*
+ * raw statement, and then asserted about a rider link that had never run.
+ * `releaseSeats` and the rider link now both carry three values, so counting
+ * cannot tell them apart at all.
+ */
+const overrideRawStatement = (
+  db: { executeRaw: jest.Mock },
+  marker: string,
+  behaviour: () => Promise<number>,
+) => {
+  const original = db.executeRaw.getMockImplementation()!;
+  db.executeRaw.mockImplementation(
+    async (strings: unknown, ...values: unknown[]) =>
+      (strings as unknown as string[]).join("?").includes(marker)
+        ? behaviour()
+        : original(strings, ...values),
+  );
+};
+
+/** The rider-linking compare-and-swap: the only statement with a role in its WHERE. */
+const RIDER_LINK = "AND role =";
+
+/** `releaseSeats`: the only statement doing clamped arithmetic. */
+const SEAT_RELEASE = "GREATEST(0, LEAST(seats_avail";
 
 const sessionFor = (id: string): Session => ({
   expires: "2099-01-01T00:00:00.000Z",
@@ -1683,8 +1796,11 @@ describe("group mutations are atomic", () => {
     // By the time the rider link runs, the seat is already spent, the group
     // already exists and the driver is already linked. That is the state
     // that used to survive a failure here. The rider link is the raw
-    // `$executeRaw` claim, not a `carpoolSearch.updateMany`.
-    db.executeRaw.mockImplementationOnce(async () => {
+    // `$executeRaw` claim, not a `carpoolSearch.updateMany` - and it is
+    // targeted by its SQL, because `reserveSeat` is the *first* raw statement
+    // and a bare `mockImplementationOnce` faulted that one instead, leaving
+    // the assertions below about a link that had never run.
+    overrideRawStatement(db, RIDER_LINK, async () => {
       throw new Error("connection lost");
     });
 
@@ -1739,10 +1855,11 @@ describe("group mutations are atomic", () => {
     const { caller } = callerFor(sessionFor(DRIVER), db);
     const seatsBefore = db.seatsOf(DRIVER)!;
 
-    // The seat reservation (`updateMany`) already went through by the time
-    // the rider link - the raw `$executeRaw` claim - runs, so this fails with
-    // the seat already taken.
-    db.executeRaw.mockImplementationOnce(async () => {
+    // The seat reservation already went through by the time the rider link
+    // runs, so this fails with the seat already taken. Targeted by SQL for
+    // the same reason as the `create` case above: `reserveSeat` is the first
+    // raw statement, so `mockImplementationOnce` faulted that one.
+    overrideRawStatement(db, RIDER_LINK, async () => {
       throw new Error("connection lost");
     });
 
@@ -1765,7 +1882,9 @@ describe("group mutations are atomic", () => {
     const seatsBefore = db.seatsOf(DRIVER)!;
 
     // Release is the last write, after the rider has already been detached.
-    db.carpoolSearch.update.mockImplementationOnce(async () => {
+    // It is a raw statement now rather than a `carpoolSearch.update`, so it
+    // is targeted by its SQL - the unlink that precedes it is also raw.
+    overrideRawStatement(db, SEAT_RELEASE, async () => {
       throw new Error("connection lost");
     });
 
@@ -2839,13 +2958,11 @@ describe("the rider slot is re-checked at write time, not just at read time", ()
     const { caller } = callerFor(sessionFor(DRIVER), db);
 
     // The rider link - the call a concurrent `user.edit` would have raced -
-    // loses the compare-and-swap. Targeted by argument count rather than call
-    // order: `reserveSeat` now also routes through `$executeRaw`, and runs
-    // first.
-    const defaultExecuteRaw = db.executeRaw.getMockImplementation()!;
-    db.executeRaw.mockImplementation(async (strings: unknown, ...values) =>
-      values.length === 3 ? 0 : defaultExecuteRaw(strings, ...values),
-    );
+    // loses the compare-and-swap. Targeted by its SQL rather than by call
+    // order or argument count: several statements route through
+    // `$executeRaw`, `reserveSeat` runs first, and `releaseSeats` carries the
+    // same number of values as this one.
+    overrideRawStatement(db, RIDER_LINK, async () => 0);
 
     await expect(
       caller.user.groups.create({ driverId: DRIVER, riderId: RIDER_1 }),
@@ -2868,12 +2985,10 @@ describe("the rider slot is re-checked at write time, not just at read time", ()
     const seatsBefore = db.seatsOf(DRIVER)!;
 
     // The seat reservation (the raw claim) goes through; the rider
-    // link's compare-and-swap then loses the race. Targeted by argument count
-    // rather than call order - see the `create` test above for why.
-    const defaultExecuteRaw = db.executeRaw.getMockImplementation()!;
-    db.executeRaw.mockImplementation(async (strings: unknown, ...values) =>
-      values.length === 3 ? 0 : defaultExecuteRaw(strings, ...values),
-    );
+    // link's compare-and-swap then loses the race. Targeted by its SQL
+    // rather than by call order or argument count - see the `create` test
+    // above for why.
+    overrideRawStatement(db, RIDER_LINK, async () => 0);
 
     await expect(
       caller.user.groups.edit({
@@ -3373,6 +3488,246 @@ describe("a blocked pair cannot share a group", () => {
       expect(db.groupIds()).toEqual([]);
       expect(db.carpoolIdOf(RIDER_1)).toBeNull();
       expect(db.carpoolIdOf(RIDER_2)).toBeNull();
+    });
+  });
+});
+
+/**
+ * Seat accounting never writes a count it read earlier in the same
+ * transaction, and never credits a seat for a departure that did not happen.
+ *
+ * Three writes used to trust a snapshot. `releaseSeats` was
+ * `clampSeats(currentSeats + n)` against a `currentSeats` its caller had read
+ * earlier in the transaction, so a `reserveSeat` that committed in between
+ * was overwritten. The remove path's unlink matched on `userId` alone, so it
+ * "changed a row" whether or not the member was still in the group and the
+ * credit ran twice for one departure. And `markRequestAccepted` discarded its
+ * match count, so an accept whose request had been withdrawn committed a
+ * group and a spent seat with nothing behind them.
+ *
+ * All three are compare-and-swaps now, and what this file can prove about
+ * them is limited in a specific way: **a mocked Prisma has no isolation
+ * level**, so it cannot produce the stale read that makes any of these fail.
+ * These tests therefore drive each guard directly - the statement matches
+ * nothing, which is exactly what the real one does when it loses - and assert
+ * that the procedure then leaves nothing behind. The interleavings themselves
+ * are in `seatAccountingRace.db.test.ts`, against a real MySQL.
+ */
+describe("seat accounting is not a read-modify-write", () => {
+  describe("a removal that changed no row credits no seat", () => {
+    it("refuses the leave and leaves the driver's count alone", async () => {
+      const db = buildGroupsDb();
+      const { caller } = callerFor(sessionFor(RIDER_1), db);
+      const seatsBefore = db.seatsOf(DRIVER)!;
+
+      // The rider was already detached by a concurrent removal - a double
+      // submit, or the driver evicting them while they pressed Leave. Both
+      // calls pass the `targetMembership` check above, because that check
+      // runs before the transaction and against a snapshot; only the unlink
+      // itself can tell that this one has nothing left to do.
+      overrideRawStatement(db, "SET carpoolId = NULL", async () => 0);
+
+      await expect(
+        caller.user.groups.edit({
+          driverId: DRIVER,
+          riderId: RIDER_1,
+          groupId: GROUP,
+          add: false,
+        }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+      // The whole point: the second departure credits nothing. Before the
+      // guard, `releaseSeats` ran regardless and the car was advertised with
+      // one more seat than it had.
+      expect(db.seatsOf(DRIVER)).toBe(seatsBefore);
+      expect(db.groupIds()).toEqual([GROUP]);
+    });
+
+    it("still credits exactly one seat when the removal does change a row", async () => {
+      // The positive control for the test above. Without it, a guard that
+      // refused *every* leave would pass it.
+      const db = buildGroupsDb();
+      const { caller } = callerFor(sessionFor(RIDER_1), db);
+      const seatsBefore = db.seatsOf(DRIVER)!;
+
+      await caller.user.groups.edit({
+        driverId: DRIVER,
+        riderId: RIDER_1,
+        groupId: GROUP,
+        add: false,
+      });
+
+      expect(db.carpoolIdOf(RIDER_1)).toBeNull();
+      expect(db.seatsOf(DRIVER)).toBe(seatsBefore + 1);
+    });
+
+    it("does not pull a rider out of the group they moved to", async () => {
+      // The old unlink matched on `userId` alone, with no condition on the
+      // group at all. The only thing standing between it and the wrong row
+      // was the pre-transaction `targetMembership` read - and that read
+      // happens before the transaction opens, so a rider who leaves and joins
+      // another group in between is detached from the *new* group while this
+      // group's driver is credited for a departure that already paid out.
+      //
+      // Modelled by seeding the rider where they have moved to and answering
+      // only the `targetMembership` lookup with what it saw beforehand. This
+      // is the one mocked test that reaches the unlink with the row somewhere
+      // else, so it is what the group scope in the WHERE is pinned by.
+      const db = buildGroupsDb({
+        searches: defaultSearches().map((row) =>
+          row.userId === RIDER_1 ? { ...row, carpoolId: OTHER_GROUP } : row,
+        ),
+        groups: [{ id: GROUP }, { id: OTHER_GROUP }],
+      });
+      const { caller } = callerFor(sessionFor(DRIVER), db);
+      const seatsBefore = db.seatsOf(DRIVER)!;
+
+      const liveFindFirst = db.carpoolSearch.findFirst.getMockImplementation()!;
+      db.carpoolSearch.findFirst.mockImplementation(async (args: any) =>
+        args?.where?.userId === RIDER_1 && args?.where?.carpoolId === GROUP
+          ? defaultSearches().find((row) => row.userId === RIDER_1)!
+          : liveFindFirst(args),
+      );
+
+      await expect(
+        caller.user.groups.edit({
+          driverId: DRIVER,
+          riderId: RIDER_1,
+          groupId: GROUP,
+          add: false,
+        }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+      expect(db.carpoolIdOf(RIDER_1)).toBe(OTHER_GROUP);
+      expect(db.seatsOf(DRIVER)).toBe(seatsBefore);
+    });
+  });
+
+  describe("delete credits the riders it actually detached", () => {
+    it("ignores a membership snapshot that has gone stale", async () => {
+      const db = buildGroupsDb();
+      const { caller } = callerFor(sessionFor(DRIVER), db);
+
+      // The snapshot `delete` takes to find the driver misses `RIDER_2` -
+      // modelling a rider accepted after this transaction's first read, which
+      // under REPEATABLE READ it cannot see. The unlink is a current read and
+      // detaches both. The credit has to come from the unlink: deriving it
+      // from `memberCarpoolSearches.length` credits 1 where 2 riders left,
+      // and the driver stays a seat short for good.
+      const staleMembers = db.carpoolSearch.findMany.getMockImplementation()!;
+      db.carpoolSearch.findMany.mockImplementationOnce(async (args: any) => {
+        const rows = await staleMembers(args);
+        return rows.filter((row: any) => row.userId !== RIDER_2);
+      });
+
+      await caller.user.groups.delete({ groupId: GROUP });
+
+      expect(db.seatsOf(DRIVER)).toBe(2 + 2);
+      expect(db.groupIds()).toEqual([]);
+    });
+
+    it("clamps the credit at the maximum", async () => {
+      // `GREATEST(0, LEAST(seats_avail + n, MAX))` is `clampSeats` in SQL, and
+      // the release path is where the old clamp lived. A driver already at
+      // the maximum who dissolves a group cannot go above it.
+      const db = buildGroupsDb({
+        searches: defaultSearches().map((row) =>
+          row.userId === DRIVER
+            ? { ...row, seatsAvail: MAX_SEATS_AVAILABLE }
+            : row,
+        ),
+      });
+      const { caller } = callerFor(sessionFor(DRIVER), db);
+
+      await caller.user.groups.delete({ groupId: GROUP });
+
+      expect(db.seatsOf(DRIVER)).toBe(MAX_SEATS_AVAILABLE);
+    });
+  });
+
+  describe("an accept whose request is gone commits nothing", () => {
+    const unlinkedPair = (): SearchRow[] => [
+      {
+        id: "s-driver",
+        userId: DRIVER,
+        role: Role.DRIVER,
+        carpoolId: null,
+        seatsAvail: 3,
+      },
+      {
+        id: "s-rider-1",
+        userId: RIDER_1,
+        role: Role.RIDER,
+        carpoolId: null,
+        seatsAvail: 0,
+      },
+    ];
+
+    it("create rolls the group, the seat and both links back", async () => {
+      const db = buildGroupsDb({
+        searches: unlinkedPair(),
+        groups: [],
+        requests: [[RIDER_1, DRIVER]],
+      });
+      const { caller } = callerFor(sessionFor(DRIVER), db);
+
+      // The rider withdrew (`requests.delete`) after
+      // `requireAcceptableRequest` read the row as PENDING and before this
+      // transaction committed, so the resolution matches nothing. That check
+      // runs outside the transaction, which is why it cannot be the guard.
+      overrideRawStatement(db, "UPDATE `request`", async () => 0);
+
+      await expect(
+        caller.user.groups.create({ driverId: DRIVER, riderId: RIDER_1 }),
+      ).rejects.toMatchObject({ code: "CONFLICT" });
+
+      // What the discarded match count used to leave behind: a group with no
+      // request behind it, and a seat spent on an invitation taken back.
+      expect(db.groupIds()).toEqual([]);
+      expect(db.seatsOf(DRIVER)).toBe(3);
+      expect(db.carpoolIdOf(DRIVER)).toBeNull();
+      expect(db.carpoolIdOf(RIDER_1)).toBeNull();
+    });
+
+    it("edit-add rolls the seat and the rider link back", async () => {
+      const db = buildGroupsDb({
+        searches: defaultSearches(),
+        requests: [[OUTSIDER, DRIVER]],
+      });
+      const { caller } = callerFor(sessionFor(DRIVER), db);
+      const seatsBefore = db.seatsOf(DRIVER)!;
+
+      overrideRawStatement(db, "UPDATE `request`", async () => 0);
+
+      await expect(
+        caller.user.groups.edit({
+          driverId: DRIVER,
+          riderId: OUTSIDER,
+          groupId: GROUP,
+          add: true,
+        }),
+      ).rejects.toMatchObject({ code: "CONFLICT" });
+
+      expect(db.seatsOf(DRIVER)).toBe(seatsBefore);
+      expect(db.carpoolIdOf(OUTSIDER)).toBeNull();
+    });
+
+    it("still accepts a request that is still pending", async () => {
+      // The positive control for both tests above: the resolution is a
+      // compare-and-swap on PENDING now, so a guard that matched nothing at
+      // all would refuse every legitimate accept and those tests would not
+      // notice.
+      const db = buildGroupsDb({
+        searches: unlinkedPair(),
+        groups: [],
+        requests: [[RIDER_1, DRIVER]],
+      });
+      const { caller } = callerFor(sessionFor(DRIVER), db);
+
+      await caller.user.groups.create({ driverId: DRIVER, riderId: RIDER_1 });
+
+      expect(db.seatsOf(DRIVER)).toBe(2);
+      expect(db.requestStatusOf(RIDER_1, DRIVER)).toBe(RequestStatus.ACCEPTED);
     });
   });
 });

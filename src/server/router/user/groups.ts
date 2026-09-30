@@ -5,7 +5,10 @@ import _ from "lodash";
 import { Role, RequestStatus, Status } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import { convertCarpoolSearchToPublicWithExactHome } from "../../publicUser";
-import { NO_SEATS_MESSAGE, clampSeats } from "../../../utils/carpoolSeats";
+import {
+  NO_SEATS_MESSAGE,
+  MAX_SEATS_AVAILABLE,
+} from "../../../utils/carpoolSeats";
 import {
   GROUP_NOTES_MAX_LENGTH,
   GROUP_OPTION_MAX_LENGTH,
@@ -230,35 +233,61 @@ const requireAcceptableRequest = async (
  * `requests.create` blocked the pair from ever requesting each other again.
  *
  * Called inside the same transaction as the membership write, so group state
- * and request state cannot disagree: either both land or neither does.
- * `updateMany` over the pair rather than an id captured earlier, so the write is
- * idempotent and does not depend on a read taken before the transaction opened.
+ * and request state cannot disagree: either both land or neither does. Matched
+ * on the pair rather than an id captured earlier, so it does not depend on a
+ * read taken before the transaction opened.
+ *
+ * **`status = PENDING` in the WHERE is the guard, and the match count is
+ * checked.** This used to be a bare `request.updateMany` whose result was
+ * discarded, which made `requireAcceptableRequest`'s PENDING check advisory:
+ * that check runs *outside* the transaction, so between it and this write the
+ * rider can withdraw (`requests.delete`) or a concurrent accept can resolve
+ * the same request. The old write then matched nothing, said nothing, and the
+ * transaction committed anyway - a carpool group existed with no request
+ * behind it, and a seat was spent on an invitation that had been taken back.
+ * Restating the predicate here turns it into a real compare-and-swap:
+ * whichever transaction flips `PENDING` wins, and the loser rolls the group
+ * and the seat back with it.
+ *
+ * A raw `UPDATE`, not `request.updateMany`, for the same reason as the seat
+ * and membership claims above: verified against a real MySQL, `updateMany`'s
+ * WHERE matched this transaction's own REPEATABLE READ snapshot rather than
+ * the current committed row, so a row another transaction had already
+ * resolved - or deleted - still looked `PENDING` to it.
  *
  * Also marks the acceptance email as owed, in the same statement that flips
- * `status`: `acceptanceNotificationPendingSince`.
- * `requireAcceptableRequest` above only reaches here for a request that is
- * still `PENDING`, so this write is always a genuine new acceptance, never a
- * repeat of one already recorded. `sendAcceptanceNotification` clears the
- * marker in one conditional `UPDATE` before it sends, the same primitive
+ * `status`: `acceptanceNotificationPendingSince`. Because the flip is now
+ * exclusive, this write is always a genuine new acceptance, never a repeat of
+ * one already recorded. `sendAcceptanceNotification` clears the marker in one
+ * conditional `UPDATE` before it sends, the same primitive
  * `sendRequestNotification` and `sendMessageNotification` use.
+ *
+ * The timestamp is a parameter rather than SQL's `NOW(3)` so it stays the
+ * application clock's value, which is what the column has always held and what
+ * `sendAcceptanceNotification` reads back and restores on a send failure.
+ * Identifiers are backtick-quoted to match `email.ts`'s raw statements against
+ * this same table.
  */
 const markRequestAccepted = async (
   prisma: PrismaClientLike,
   driverId: string,
   riderId: string,
 ) => {
-  await prisma.request.updateMany({
-    where: {
-      OR: [
-        { fromUserId: driverId, toUserId: riderId },
-        { fromUserId: riderId, toUserId: driverId },
-      ],
-    },
-    data: {
-      status: RequestStatus.ACCEPTED,
-      acceptanceNotificationPendingSince: new Date(),
-    },
-  });
+  const accepted = await prisma.$executeRaw`
+    UPDATE \`request\`
+    SET \`status\` = ${RequestStatus.ACCEPTED},
+        \`acceptanceNotificationPendingSince\` = ${new Date()}
+    WHERE \`status\` = ${RequestStatus.PENDING}
+      AND ((\`fromUserId\` = ${driverId} AND \`toUserId\` = ${riderId})
+        OR (\`fromUserId\` = ${riderId} AND \`toUserId\` = ${driverId}))
+  `;
+
+  if (accepted === 0) {
+    throw membershipConflict(
+      "That carpool request was withdrawn or already accepted while this " +
+        "request was being processed. Ask them to send a new request.",
+    );
+  }
 };
 
 /**
@@ -297,21 +326,49 @@ const reserveSeat = async (prisma: PrismaClientLike, driverUserId: string) => {
 };
 
 /**
- * Gives seats back to a driver, never exceeding the maximum. Read-modify-write
- * rather than an atomic `increment`, because the value has to be clamped and
- * Prisma cannot express that in one statement. Over-crediting under concurrent
- * removals is bounded by the clamp.
+ * Gives seats back to a driver, atomically. The mirror of `reserveSeat`.
+ *
+ * This used to be a read-modify-write: `clampSeats(currentSeats + n)`, where
+ * `currentSeats` came from a read its caller had taken earlier in the same
+ * transaction. Its own doc comment claimed the clamp made that safe -
+ * "over-crediting under concurrent removals is bounded by the clamp" - which
+ * confuses two different things. The clamp caps the *result* at the maximum;
+ * it does nothing about the *input* being stale. Under MySQL REPEATABLE READ
+ * that earlier read is a snapshot, so a `reserveSeat` committed in between was
+ * simply overwritten by the absolute write: a driver with one free seat whose
+ * rider leaves while another rider is being accepted ends up advertising two,
+ * and the car is overbooked by one.
+ *
+ * So there is no read of the current value at all now - the increment happens
+ * where the truth is, inside the one statement, exactly as `reserveSeat`'s
+ * decrement does.
+ *
+ * `GREATEST(0, LEAST(seats_avail + n, MAX))` is `clampSeats` expressed in SQL.
+ * A bare `LEAST` would bound the result to (-inf, MAX] rather than [0, MAX],
+ * which differs from the old behaviour for the out-of-range rows the old
+ * accounting left behind - see `isSeatCountInRange` in `carpoolSeats.ts` and
+ * `scripts/repair-seat-residue.ts`, which own repairing those. This function
+ * keeps crediting them to 0 the way `clampSeats` did rather than quietly
+ * changing what a release does to a corrupted row.
+ *
+ * `date_modified` is assigned explicitly: raw SQL bypasses Prisma's
+ * `@updatedAt`, and this statement replaces a `carpoolSearch.update` that
+ * maintained the column.
+ *
+ * `seats_avail`, not `seatsAvail` - see `reserveSeat` above on the field
+ * mapping raw SQL does not get.
  */
 const releaseSeats = async (
   prisma: PrismaClientLike,
   carpoolSearchId: string,
-  currentSeats: number,
   seatsToRelease: number,
 ) => {
-  await prisma.carpoolSearch.update({
-    where: { id: carpoolSearchId },
-    data: { seatsAvail: clampSeats(currentSeats + seatsToRelease) },
-  });
+  await prisma.$executeRaw`
+    UPDATE carpool_search
+    SET seats_avail = GREATEST(0, LEAST(seats_avail + ${seatsToRelease}, ${MAX_SEATS_AVAILABLE})),
+        date_modified = NOW(3)
+    WHERE id = ${carpoolSearchId}
+  `;
 };
 
 // use this router to create and manage groups
@@ -663,22 +720,43 @@ export const groupsRouter = router({
         );
 
         // clear carpoolId for all group members
-        await tx.carpoolSearch.updateMany({
-          where: {
-            carpoolId: input.groupId,
-          },
-          data: { carpoolId: null },
-        });
+        //
+        // A raw `UPDATE` rather than `tx.carpoolSearch.updateMany`, because
+        // the number of rows it detaches is what the seat credit below is
+        // derived from, and that has to be a current read. `memberCarpoolSearches`
+        // above is this transaction's REPEATABLE READ snapshot: a rider
+        // accepted between that read and this write is invisible to it, so
+        // counting it would credit the driver one seat short of the riders
+        // actually released. InnoDB gives this statement the current row set
+        // instead, which is exactly the membership being dissolved.
+        const detached = await tx.$executeRaw`
+          UPDATE carpool_search
+          SET carpoolId = NULL, date_modified = NOW(3)
+          WHERE carpoolId = ${input.groupId}
+        `;
 
         // The seats belong to the driver, whoever pressed the button. This used
         // to read and write the *session user's* row, so a rider deleting the
         // group took the seats and the driver never got them back.
-        // The driver is taken from the membership captured above, before the
-        // carpoolIds were cleared.
-        if (driver) {
-          // Every member other than the driver was occupying a seat.
-          const releasedSeats = memberCarpoolSearches.length - 1;
-          await releaseSeats(tx, driver.id, driver.seatsAvail, releasedSeats);
+        // The driver's *identity* is still taken from the membership captured
+        // above, before the carpoolIds were cleared - it has to be, because
+        // the rows it is derived from no longer point at the group - but that
+        // is safe where the count was not: `user.edit` refuses every role
+        // change while the caller is in a group, so who the driver is cannot
+        // move under this transaction, only how many riders there are.
+        //
+        // `detached > 1` is "there were riders": the driver is one of the
+        // detached rows, so anything less is a group of one and nothing to
+        // credit. Stated rather than left to arithmetic, because the other
+        // way for `detached` to come back low is a concurrent dissolution
+        // that cleared the rows this transaction's snapshot still shows -
+        // and `releaseSeats` given a negative count would *take* a seat.
+        // That transaction rolls back on the `carpoolGroup.delete` below
+        // either way, but a write that only survives by being undone is not
+        // something to rely on.
+        if (driver && detached > 1) {
+          // Every detached member other than the driver was occupying a seat.
+          await releaseSeats(tx, driver.id, detached - 1);
         }
 
         return await tx.carpoolGroup.delete({
@@ -812,7 +890,7 @@ export const groupsRouter = router({
         // the departing member and dissolving the group both erase the very
         // `carpoolId` rows the driver is derived from, so reading it after the
         // fact would find nobody.
-        let groupDriver: { id: string; seatsAvail: number } | null = null;
+        let groupDriver: { id: string } | null = null;
 
         if (input.add) {
           // One group per user, checked in here for the same reason as in
@@ -938,14 +1016,43 @@ export const groupsRouter = router({
           // derives the driver this way.
           groupDriver = await tx.carpoolSearch.findFirst({
             where: { carpoolId: input.groupId, role: Role.DRIVER },
-            select: { id: true, seatsAvail: true },
+            select: { id: true },
           });
 
           // when removing rider, clear carpoolId for the rider
-          await tx.carpoolSearch.updateMany({
-            where: { userId: input.riderId },
-            data: { carpoolId: null },
-          });
+          //
+          // Scoped to *this* group and count-checked, which is what makes the
+          // seat credit below happen exactly once. Two removals of the same
+          // member race routinely - a double submit, or a driver evicting
+          // while the rider presses Leave - and both pass the
+          // `targetMembership` check above, because that check runs before the
+          // transaction and answers from a snapshot. The old write matched on
+          // `userId` alone, so it always found the row whether or not it was
+          // still in the group and always reported a change, and
+          // `releaseSeats` ran for both: the driver was credited twice for one
+          // departure and the car was overbooked.
+          //
+          // A raw `UPDATE`, not `tx.carpoolSearch.updateMany`, for the reason
+          // the claims on the add path give: `updateMany`'s WHERE was verified
+          // against a real MySQL to match this transaction's own snapshot
+          // rather than the current committed row, so it would go on matching
+          // a membership another transaction had already cleared.
+          const unlinked = await tx.$executeRaw`
+            UPDATE carpool_search
+            SET carpoolId = NULL, date_modified = NOW(3)
+            WHERE userId = ${input.riderId} AND carpoolId = ${input.groupId}
+          `;
+
+          // The same refusal as the pre-transaction `targetMembership` check,
+          // stated where it is authoritative. Throwing rolls the whole
+          // transaction back, so the loser of the race neither credits a seat
+          // nor dissolves a group the winner is already dissolving.
+          if (unlinked === 0) {
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "That user is not a member of this carpool group.",
+            });
+          }
         }
 
         // Check if group should be deleted (only 1 member left)
@@ -984,7 +1091,7 @@ export const groupsRouter = router({
         // one at a time is the only way its riders can get out. Throwing here
         // would take that away and trap them.
         if (!input.add && groupDriver) {
-          await releaseSeats(tx, groupDriver.id, groupDriver.seatsAvail, 1);
+          await releaseSeats(tx, groupDriver.id, 1);
         }
 
         return groupDissolved;
