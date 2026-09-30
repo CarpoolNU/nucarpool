@@ -779,24 +779,40 @@ const buildEditDb = (
         return row;
       }),
     },
-    // The role-change branch's compare-and-swap. This is a raw
-    // `UPDATE`, not `tx.carpoolSearch.updateMany` - `updateMany`'s WHERE was
-    // verified against a real MySQL to match this transaction's own
-    // snapshot rather than the current row on this Prisma version, so it did
-    // not actually close the race. `$executeRaw` is a template-tag call:
-    // `values` holds the interpolated `role` and `id`, in that order, from
-    // `UPDATE carpool_search SET role = ${input.role} WHERE id =
-    // ${existingSearch.id} AND carpoolId IS NULL`.
-    $executeRaw: jest.fn(async (_strings: unknown, ...values: unknown[]) => {
-      const [role, id] = values;
-      const row = searches.find((s) => s.id === id);
+    // `saveProfile`'s two compare-and-swaps. Both are raw `UPDATE`s rather
+    // than `tx.carpoolSearch.updateMany` - `updateMany`'s WHERE was verified
+    // against a real MySQL to match this transaction's own snapshot rather
+    // than the current row on this Prisma version, so it did not actually
+    // close either race. Both share the same `WHERE id = ? AND carpoolId IS
+    // NULL`, and they are told apart below by the column each one sets:
+    //
+    // - the role claim, `SET role = ${input.role}`;
+    // - the seat claim, `SET seats_avail = ${input.seatAvail}`, which used to
+    //   be an ordinary field of the `update` guarded in JavaScript by
+    //   `existingSearch.carpoolId` - a snapshot read, which is why it moved.
+    //
+    // A statement this mock does not recognise throws rather than silently
+    // behaving like one of these two.
+    $executeRaw: jest.fn(async (strings: unknown, ...values: unknown[]) => {
+      const sql = (strings as unknown as string[])
+        .join("?")
+        .replace(/\s+/g, " ")
+        .trim();
+      const row = searches.find((s) => s.id === values[1]);
       // Falsy, not strictly `=== null`, matching the same convention the
       // FORBIDDEN guard above this uses for "not in a group".
       if (!row || row.carpoolId) {
         return 0;
       }
-      row.role = role as Role;
-      return 1;
+      if (sql.includes("SET role =")) {
+        row.role = values[0] as Role;
+        return 1;
+      }
+      if (sql.includes("SET seats_avail =")) {
+        row.seatsAvail = values[0] as number;
+        return 1;
+      }
+      throw new Error(`Unrecognised raw statement in the user mock: ${sql}`);
     }),
   };
 
@@ -2317,18 +2333,26 @@ describe("user.edit — a role change re-checks carpoolId at write time", () => 
     });
   });
 
-  it("does not take the compare-and-swap path when the role is unchanged", async () => {
-    // Only a role change needs the extra check. Every other column on this
-    // row is exclusively this user's to write, so routing an ordinary save
-    // through the raw claim as well would just be a chance for it to be
-    // refused by a concurrent write to some other field.
+  it("does not claim the role when it is unchanged", async () => {
+    // Only a role change needs the role claim. `role` and `seats_avail` are
+    // the two columns on this row that `groups.ts` also writes, and they are
+    // guarded separately: the seat claim below runs on every save of a user
+    // with no group, because the form always sends a seat count. Every
+    // remaining column is exclusively this user's to write, so routing an
+    // ordinary save through a claim as well would just be a chance for it to
+    // be refused by a concurrent write to some other field.
     const db = riderWithNoGroup();
 
     await editCallerFor(SESSION_USER, db).user.edit(
       editInput({ role: Role.RIDER, seatAvail: 0 }),
     );
 
-    expect(db.prisma.$executeRaw).not.toHaveBeenCalled();
+    const statements = db.prisma.$executeRaw.mock.calls.map((call: unknown[]) =>
+      (call[0] as unknown as string[]).join("?"),
+    );
+    expect(statements.some((sql: string) => sql.includes("SET role ="))).toBe(
+      false,
+    );
     expect(db.prisma.carpoolSearch.update).toHaveBeenCalled();
     expect(db.searchFor(SESSION_USER)).toMatchObject({ role: Role.RIDER });
   });
