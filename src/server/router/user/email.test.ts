@@ -2,6 +2,10 @@ import { Permission, RequestStatus } from "@prisma/client";
 import type { Session } from "next-auth";
 import type { Context } from "../context";
 import { BLOCKED_PAIR_MESSAGE } from "../../db/blocks";
+import {
+  budgetWindowStart,
+  EMAILS_PER_BUDGET_WINDOW,
+} from "../../db/emailBudget";
 import { fakeBlockDelegate } from "../../../testing/blockFake";
 import type { BlockRow } from "../../../testing/blockFake";
 
@@ -137,11 +141,13 @@ const buildEmailDb = (opts?: {
   /** Makes SES reject every send, as a throttle or an outage would. */
   sesFails?: boolean;
   /**
-   * Rows behind `request.count`, which backs the per-sender budget on
-   * `sendRequestNotification`. Separate from `request` because the count is
-   * over the caller's whole recent history, not the one row being announced.
+   * Starting `email_send_budget` rows, as `{ [userId]: sendCount }` for the
+   * *current* window. The budget used to be derived from `request.count` over
+   * the caller's recent rows, which is the defect SCRUM-606 fixed: it counted
+   * rows the caller could delete. It is now its own table, so a test that
+   * wants a spent budget says so here rather than fabricating request history.
    */
-  senderRequests?: { fromUserId: string; dateCreated: Date }[];
+  budgets?: Record<string, number>;
   /** Block rows, either direction. None by default: nobody has blocked anybody. */
   blocks?: BlockRow[];
 }) => {
@@ -173,7 +179,16 @@ const buildEmailDb = (opts?: {
         ...rawRequest,
       }
     : rawRequest;
-  const senderRequests = opts?.senderRequests ?? [];
+  /**
+   * The `email_send_budget` table, keyed by the composite primary key the
+   * real one uses. Mutable, because the claim and the refund are writes.
+   */
+  const budgets = new Map<string, number>(
+    Object.entries(opts?.budgets ?? {}).map(([userId, count]) => [
+      `${userId}@${budgetWindowStart(new Date()).getTime()}`,
+      count,
+    ]),
+  );
   const messages = (opts?.messages ?? []).map((m) => ({
     notificationPending: true,
     ...m,
@@ -191,15 +206,6 @@ const buildEmailDb = (opts?: {
   const requestFindUnique = jest.fn(async ({ where }: any) =>
     request && request.id === where.id ? { ...request } : null,
   );
-
-  const requestCount = jest.fn(async ({ where }: any) => {
-    const since = where.dateCreated?.gte as Date | undefined;
-    return senderRequests.filter(
-      (r) =>
-        r.fromUserId === where.fromUserId &&
-        (since === undefined || r.dateCreated.getTime() >= since.getTime()),
-    ).length;
-  });
 
   // Only the SES-failure path writes through here now: it restores a marker
   // the claim cleared. Matches only while every condition in `where` holds.
@@ -274,20 +280,56 @@ const buildEmailDb = (opts?: {
   });
 
   /**
-   * The three claim statements, which `email.ts` runs as raw SQL because
-   * `updateMany` is not atomic under `relationMode = "prisma"`. Each checks the
-   * marker and clears it in one synchronous step, as the single InnoDB
-   * `UPDATE` does, and returns the rows changed. Anything else is an error, so
-   * a new raw statement cannot pass here unnoticed.
+   * The raw statements `email.ts` runs, because `updateMany` is not atomic
+   * under `relationMode = "prisma"`. Each marker claim checks the marker and
+   * clears it in one synchronous step, as the single InnoDB `UPDATE` does, and
+   * returns the rows changed. Anything else is an error, so a new raw
+   * statement cannot pass here unnoticed — which is what caught the budget
+   * statements below when they were added.
    *
+   * The budget branches come first, because they are the only ones that name
+   * `email_send_budget` and the marker branches match on looser substrings.
    * `acceptanceNotificationPendingSince` is checked before the plain
-   * `notificationPendingSince` branch below, since both templates start with
+   * `notificationPendingSince` branch, since both templates start with
    * `UPDATE \`request\``.
+   *
+   * **The budget branches model matched rows, not an `IF()` on the
+   * assignment.** `claimEmailBudget` puts the cap in the `WHERE` precisely so
+   * that a spent budget does not match, and this fake behaves the same way: a
+   * claim at the cap returns 0 because its filter excludes the row, not
+   * because it wrote the same value back.
    */
   const executeRaw = jest.fn(
     async (strings: TemplateStringsArray, ...values: unknown[]) => {
       const sql = strings.join("?");
       const [id] = values;
+
+      if (sql.includes("INSERT INTO `email_send_budget`")) {
+        const [userId, windowStart] = values as [string, Date];
+        const key = `${userId}@${windowStart.getTime()}`;
+        // `ON DUPLICATE KEY UPDATE user_id = user_id`: creates the row, and
+        // deliberately leaves an existing count alone.
+        if (!budgets.has(key)) budgets.set(key, 0);
+        return 1;
+      }
+
+      if (sql.includes("UPDATE `email_send_budget`")) {
+        const [userId, windowStart, bound] = values as [string, Date, number];
+        const key = `${userId}@${windowStart.getTime()}`;
+        const current = budgets.get(key);
+        if (current === undefined) return 0;
+        // The claim increments while under the cap; the refund decrements
+        // while above zero. Distinguished by the operator in the statement.
+        if (sql.includes("+ 1")) {
+          if (current >= bound) return 0;
+          budgets.set(key, current + 1);
+          return 1;
+        }
+        if (current <= 0) return 0;
+        budgets.set(key, current - 1);
+        return 1;
+      }
+
       if (sql.includes("acceptanceNotificationPendingSince")) {
         if (
           !request ||
@@ -337,7 +379,6 @@ const buildEmailDb = (opts?: {
       carpoolSearch: { findFirst: carpoolSearchFindFirst },
       request: {
         findUnique: requestFindUnique,
-        count: requestCount,
         updateMany: requestUpdateMany,
       },
       message: {
@@ -348,6 +389,9 @@ const buildEmailDb = (opts?: {
     },
     /** The fixture rows, as the procedures have left them. */
     request,
+    /** `email_send_budget` for `userId` in the current window. */
+    budgetFor: (userId: string) =>
+      budgets.get(`${userId}@${budgetWindowStart(new Date()).getTime()}`),
     messages,
     ses,
     /** Params of the nth SendTemplatedEmailCommand handed to SES. */
@@ -653,13 +697,9 @@ describe("user.emails.sendRequestNotification — participants only, addresses f
     expect(db.request?.notificationPendingSince).toEqual(OPENED_AT);
   });
 
-  it("stops a sender who has made more than ten requests in the last hour", async () => {
-    const recently = (minutesAgo: number) => ({
-      fromUserId: ALICE,
-      dateCreated: new Date(Date.now() - minutesAgo * 60 * 1000),
-    });
+  it("stops a sender whose budget for this window is spent", async () => {
     const db = buildEmailDb({
-      senderRequests: Array.from({ length: 11 }, (_, i) => recently(i)),
+      budgets: { [ALICE]: EMAILS_PER_BUDGET_WINDOW },
     });
     const { caller } = callerFor(sessionFor(ALICE), db);
 
@@ -671,21 +711,34 @@ describe("user.emails.sendRequestNotification — participants only, addresses f
     expect(db.ses).not.toHaveBeenCalled();
   });
 
-  it("counts only the caller's own recent requests toward that budget", async () => {
+  it("leaves the email owed when the budget refuses it, so a later window can send", async () => {
     const db = buildEmailDb({
-      senderRequests: [
-        // Someone else being busy must not silence Alice...
-        ...Array.from({ length: 20 }, () => ({
-          fromUserId: MALLORY,
-          dateCreated: new Date(),
-        })),
-        // ...nor must Alice's own requests from yesterday.
-        ...Array.from({ length: 20 }, () => ({
-          fromUserId: ALICE,
-          dateCreated: new Date(Date.now() - 25 * 60 * 60 * 1000),
-        })),
-        { fromUserId: ALICE, dateCreated: new Date() },
-      ],
+      budgets: { [ALICE]: EMAILS_PER_BUDGET_WINDOW },
+    });
+    const { caller } = callerFor(sessionFor(ALICE), db);
+
+    await caller.user.emails.sendRequestNotification({ requestId: REQUEST_ID });
+
+    // The marker is the thing that must survive: spending it on a send that
+    // never happened would lose the recipient's notification permanently.
+    expect(db.request?.notificationPendingSince).toEqual(OPENED_AT);
+  });
+
+  it("spends exactly one send on a successful notification", async () => {
+    const db = buildEmailDb({ budgets: { [ALICE]: 3 } });
+    const { caller } = callerFor(sessionFor(ALICE), db);
+
+    await expect(
+      caller.user.emails.sendRequestNotification({ requestId: REQUEST_ID }),
+    ).resolves.toEqual({ sent: true });
+
+    expect(db.budgetFor(ALICE)).toBe(4);
+  });
+
+  it("counts only the caller's own sends toward their budget", async () => {
+    // Someone else having spent their whole budget must not silence Alice.
+    const db = buildEmailDb({
+      budgets: { [MALLORY]: EMAILS_PER_BUDGET_WINDOW },
     });
     const { caller } = callerFor(sessionFor(ALICE), db);
 
@@ -695,6 +748,42 @@ describe("user.emails.sendRequestNotification — participants only, addresses f
       }),
     ).resolves.toEqual({ sent: true });
     expect(db.ses).toHaveBeenCalledTimes(1);
+    expect(db.budgetFor(MALLORY)).toBe(EMAILS_PER_BUDGET_WINDOW);
+  });
+
+  it("refunds the send when the notification turns out to be a replay", async () => {
+    const db = buildEmailDb({
+      request: {
+        id: REQUEST_ID,
+        fromUserId: ALICE,
+        toUserId: BOB,
+        conversationId: CONVERSATION_ID,
+        notificationPendingSince: null,
+      },
+      budgets: { [ALICE]: 5 },
+    });
+    const { caller } = callerFor(sessionFor(ALICE), db);
+
+    await expect(
+      caller.user.emails.sendRequestNotification({ requestId: REQUEST_ID }),
+    ).resolves.toEqual({ sent: false, reason: "already_notified" });
+
+    // An already-announced request is refused on the marker it read, before
+    // the budget is touched at all, so nothing to refund and nothing spent.
+    expect(db.budgetFor(ALICE)).toBe(5);
+  });
+
+  it("refunds the send when SES refuses the email", async () => {
+    const db = buildEmailDb({ sesFails: true, budgets: { [ALICE]: 5 } });
+    const { caller } = callerFor(sessionFor(ALICE), db);
+
+    await expect(
+      caller.user.emails.sendRequestNotification({ requestId: REQUEST_ID }),
+    ).rejects.toThrow("Throttling");
+
+    // No email went out, so the send is given back along with the marker.
+    expect(db.budgetFor(ALICE)).toBe(5);
+    expect(db.request?.notificationPendingSince).toEqual(OPENED_AT);
   });
 
   it("sends nothing when we hold no address for the recipient", async () => {
@@ -935,6 +1024,50 @@ describe("user.emails.sendAcceptanceNotification — only the party who accepted
         status,
       },
     });
+
+  it("stops the accepting party once their budget is spent", async () => {
+    const db = buildEmailDb({
+      request: {
+        id: REQUEST_ID,
+        fromUserId: ALICE,
+        toUserId: BOB,
+        conversationId: CONVERSATION_ID,
+        status: RequestStatus.ACCEPTED,
+      },
+      budgets: { [BOB]: EMAILS_PER_BUDGET_WINDOW },
+    });
+    const { caller } = callerFor(sessionFor(BOB), db);
+
+    await expect(
+      caller.user.emails.sendAcceptanceNotification({ requestId: REQUEST_ID }),
+    ).resolves.toEqual({ sent: false, reason: "rate_limited" });
+
+    expect(db.ses).not.toHaveBeenCalled();
+    // Owed, not lost: the requester still learns they were accepted, later.
+    expect(db.request?.acceptanceNotificationPendingSince).toEqual(OPENED_AT);
+  });
+
+  it("spends one send from the accepting party's budget", async () => {
+    const db = buildEmailDb({
+      request: {
+        id: REQUEST_ID,
+        fromUserId: ALICE,
+        toUserId: BOB,
+        conversationId: CONVERSATION_ID,
+        status: RequestStatus.ACCEPTED,
+      },
+      budgets: { [BOB]: 2 },
+    });
+    const { caller } = callerFor(sessionFor(BOB), db);
+
+    await caller.user.emails.sendAcceptanceNotification({
+      requestId: REQUEST_ID,
+    });
+
+    expect(db.budgetFor(BOB)).toBe(3);
+    // Charged to whoever called, not to the other party.
+    expect(db.budgetFor(ALICE)).toBeUndefined();
+  });
 
   it("resolves both parties from the request and copies the sender", async () => {
     const { caller, db } = callerFor(sessionFor(BOB), acceptedRequestDb());
