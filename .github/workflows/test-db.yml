@@ -109,3 +109,16 @@ jobs:
       - run: yarn test:db
         env:
           NUCARPOOL_TEST_TZ: America/New_York
+      # A third zone, east of UTC - see the longer note in test.yml for why the
+      # positive-offset direction is the one that was missing, and why Kolkata
+      # rather than Berlin.
+      #
+      # It earns its place here more than in the mocked suite. These tests write
+      # `@db.Time(0)` and `@db.Date` values through MySQL and read them back, so
+      # a zone assumption meets a driver and a server that each have their own
+      # opinion - and `@db.Date` at a +05:30 offset is exactly the shape the
+      # month-picker defect took. Truncation runs before every test, so this leg
+      # starts from the same clean state as the two before it.
+      - run: yarn test:db
+        env:
+          NUCARPOOL_TEST_TZ: Asia/Kolkata
