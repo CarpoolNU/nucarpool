@@ -102,9 +102,19 @@ const AccountSection = ({
                           backgroundColor: "#bdbdbd",
                         },
                       }}
+                      // State-neutral, because a switch's accessible name is
+                      // announced *with* its state. The old name was the
+                      // action its off position performs - "Mark profile
+                      // inactive" - while `checked` tracks ACTIVE, so a screen
+                      // reader read an active profile out as "Mark profile
+                      // inactive, switch, on" and an inactive one as "...,
+                      // off": in both cases the exact opposite of the truth.
+                      // Naming the state instead leaves "Profile active,
+                      // switch, on" and "Profile active, switch, off", which
+                      // agree with the visible ACTIVE/INACTIVE text above.
                       slotProps={{
                         input: {
-                          "aria-label": "Mark profile inactive",
+                          "aria-label": "Profile active",
                         },
                       }}
                     />

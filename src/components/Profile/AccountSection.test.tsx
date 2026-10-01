@@ -328,3 +328,59 @@ describe("AccountSection widths", () => {
     expect(dateRow(container)).toHaveClass("flex-col");
   });
 });
+
+/**
+ * SCRUM-610 item 5: the status switch's accessible name said the opposite of
+ * its state.
+ *
+ * A switch's name is announced together with its position, and these two were
+ * pulling in opposite directions: `checked` tracks ACTIVE, while the name was
+ * the action the *off* position performs. So an active profile was read out as
+ * "Mark profile inactive, switch, on" and an inactive one as "Mark profile
+ * inactive, switch, off" - in both cases the exact inverse of the truth, and
+ * worse than an unnamed control, because it is confidently wrong.
+ *
+ * Naming the state instead makes the two agree at both positions, and matches
+ * the visible ACTIVE/INACTIVE text the component already renders above it.
+ *
+ * Fully observable in jsdom: an accessible name and a checked state are both
+ * DOM, not geometry. Every case below fails against the pre-fix component.
+ */
+describe("the account status switch's accessible name", () => {
+  it.each([
+    { status: Status.ACTIVE, checked: true, label: "an active profile" },
+    { status: Status.INACTIVE, checked: false, label: "an inactive profile" },
+  ])("agrees with the switch's own state for $label", ({ status, checked }) => {
+    render(<Harness initial={{ status }} />);
+
+    // The positive control: the switch renders and is findable by role, so the
+    // name assertion below is about a control that exists. It is rendered only
+    // for a non-viewer, which the harness's default role satisfies.
+    const toggle = screen.getByRole("switch");
+    expect(toggle).toBeInTheDocument();
+
+    // The state the name has to agree with, read off the control rather than
+    // assumed from the prop.
+    if (checked) {
+      expect(toggle).toBeChecked();
+    } else {
+      expect(toggle).not.toBeChecked();
+    }
+
+    // State-neutral, so it stays true at both positions.
+    expect(screen.getByRole("switch", { name: "Profile active" })).toBe(toggle);
+  });
+
+  it("is not named after the action its off position performs", () => {
+    render(<Harness initial={{ status: Status.ACTIVE }} />);
+
+    // Control first, so the absence below is a real absence rather than a
+    // switch that failed to render.
+    expect(screen.getByRole("switch")).toBeInTheDocument();
+
+    // The old name, which an active profile announced as "on".
+    expect(
+      screen.queryByRole("switch", { name: /inactive/i }),
+    ).not.toBeInTheDocument();
+  });
+});

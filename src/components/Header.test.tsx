@@ -842,3 +842,71 @@ describe("Header controls inside the bar they have to fit", () => {
     expect(document.querySelector(".h-header-control")).not.toBeInTheDocument();
   });
 });
+
+/**
+ * SCRUM-610 item 6: the in-page logo routes to `/` and was a styled `<h1>`
+ * with an `onClick`, so it was a control reachable by pointer only - not in
+ * the tab order, and announced as a heading rather than as something that
+ * does anything.
+ *
+ * **Why the element changed rather than `tabIndex` being added.** A native
+ * button brings the tab stop, the role, and Enter/Space activation together;
+ * the alternative needs all three re-implemented and still leaves a heading
+ * claiming to be a button. The `<h1>` is no loss here: `Logo` is not a
+ * document outline, several pages render their own `h1`, and `DropDownMenu`
+ * renders one inside this same bar.
+ *
+ * `SigninLogo` is deliberately untouched, and the test below says so: it has
+ * no `onClick`, so it is the one place the brand mark really is just a
+ * heading. The styling tests above - which read declarations off the generated
+ * class - still apply unchanged, because the styled component kept its class;
+ * that the two didn't have to move together is why this is a small change.
+ */
+describe("the header's brand mark", () => {
+  beforeEach(() => {
+    setViewportWidth(DESKTOP_WIDTH);
+  });
+
+  it("is a button, so the keyboard can reach what the pointer can", () => {
+    renderHeader();
+
+    // Found by role rather than by text: that it *is* a button is the subject,
+    // and `getByText` would pass against the unfixed heading.
+    const brand = screen.getByRole("button", { name: "CarpoolNU" });
+    expect(brand.tagName).toBe("BUTTON");
+
+    // Inside the wizard-less header there is no form to submit, but the type
+    // is still explicit - the repo's own convention, recorded on
+    // `InitialStep`'s Get Started button.
+    expect(brand).toHaveAttribute("type", "button");
+  });
+
+  it("still routes home when activated", async () => {
+    renderHeader();
+
+    const brand = screen.getByRole("button", { name: "CarpoolNU" });
+
+    // Keyboard activation specifically, which is what the pre-fix element
+    // could not do at all: a click handler on an `<h1>` never sees Enter.
+    brand.focus();
+    expect(brand).toHaveFocus();
+    await act(async () => {
+      fireEvent.click(brand);
+    });
+
+    expect(mockPush).toHaveBeenCalledWith("/");
+  });
+
+  it("leaves the sign-in brand mark a heading, because it is not a control", () => {
+    render(<Header signIn={true} />);
+
+    // The control: the sign-in header renders its brand mark, so the absence
+    // below is a real absence and not an unrendered tree.
+    const brand = screen.getByText("CarpoolNU");
+    expect(brand.tagName).toBe("H1");
+
+    expect(
+      screen.queryByRole("button", { name: "CarpoolNU" }),
+    ).not.toBeInTheDocument();
+  });
+});

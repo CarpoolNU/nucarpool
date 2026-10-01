@@ -70,6 +70,52 @@ const Harness = ({
   );
 };
 
+/**
+ * SCRUM-610 item 4: the seven day checkboxes in this panel had no accessible
+ * name, so a screen reader announced seven identical, indistinguishable
+ * "checkbox" controls under one "Carpool Days Match" heading.
+ *
+ * **The conflict the ticket raised, resolved.** SCRUM-513 is recorded as having
+ * named "seven unnamed day checkboxes" and this panel's seven were still
+ * unnamed afterwards, which read as a regression. It is not one: that commit
+ * (`6c821f2`) named the seven in `Schedule/SelectDays.tsx` - the onboarding and
+ * profile schedule picker - and in *this* file touched only the four range
+ * sliders and the three day-mode buttons. They are two different sets of seven
+ * checkboxes on the same seven labels, and these were never covered.
+ */
+describe("Filters — the day checkboxes' accessible names", () => {
+  const DAYS = ["Su", "M", "Tu", "W", "Th", "F", "S"];
+
+  // The checkboxes only exist once a day mode is chosen, which `days: 0`
+  // ("Any days") is not - so a test that forgot this would find none at all.
+  it.each([
+    { days: 1, mode: "Exact" },
+    { days: 2, mode: "Flex" },
+  ])("names each of the seven in $mode mode", ({ days }) => {
+    render(<Harness initial={{ days, daysWorking: "" }} />);
+
+    // The positive control, and the one that makes the rest meaningful: the
+    // seven controls are present and findable by role before any claim about
+    // their names. A name query against an empty set passes vacuously.
+    expect(screen.getAllByRole("checkbox")).toHaveLength(DAYS.length);
+
+    for (const day of DAYS) {
+      expect(screen.getByRole("checkbox", { name: day })).toBeInTheDocument();
+    }
+  });
+
+  it("gives all seven distinct names", () => {
+    render(<Harness initial={{ days: 1, daysWorking: "" }} />);
+
+    const names = screen
+      .getAllByRole("checkbox")
+      .map((box) => box.getAttribute("aria-label"));
+
+    expect(names).toEqual(DAYS);
+    expect(new Set(names).size).toBe(DAYS.length);
+  });
+});
+
 const flexDaysInput = () => screen.getByTestId("flex-days") as HTMLInputElement;
 const shownFlexDays = () => flexDaysInput().value;
 const storedFlexDays = () => screen.getByTestId("state-flex-days").textContent;
