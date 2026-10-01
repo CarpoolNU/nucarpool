@@ -50,6 +50,10 @@ import BlueSquare from "../../public/user-dest.png";
 import BlueCircle from "../../public/blue-circle.png";
 import VisibilityToggle from "../components/Map/VisibilityToggle";
 import updateCompanyLocation from "../utils/map/updateCompanyLocation";
+import {
+  DISTANCE_FILTER_ANY,
+  TIME_FILTER_ANY,
+} from "../utils/filters/filterSentinels";
 import MessagePanel from "../components/Messages/MessagePanel";
 import InactiveBlocker from "../components/Map/InactiveBlocker";
 import updateGeoJsonUsers from "../utils/map/updateGeoJsonUsers";
@@ -199,11 +203,11 @@ const Home: NextPage<any> = () => {
   const initialFilters: FiltersState = {
     days: 0,
     flexDays: 1,
-    startDistance: 20,
-    endDistance: 20,
+    startDistance: DISTANCE_FILTER_ANY,
+    endDistance: DISTANCE_FILTER_ANY,
     daysWorking: "",
-    startTime: 4,
-    endTime: 4,
+    startTime: TIME_FILTER_ANY,
+    endTime: TIME_FILTER_ANY,
     startDate: new Date(Date.now()),
     endDate: new Date(Date.now()),
     dateOverlap: 0,

@@ -11,6 +11,10 @@ import {
   toggleSelectedDay,
 } from "../../utils/filters/dayMatch";
 import { formatDateToMonth, lastDayOfMonthUTC } from "../../utils/dateUtils";
+import {
+  DISTANCE_FILTER_ANY,
+  TIME_FILTER_ANY,
+} from "../../utils/filters/filterSentinels";
 import { TextField } from "../TextField";
 import StaticDayBox from "./StaticDayBox";
 
@@ -218,7 +222,7 @@ const Filters = ({
               id="startDistance"
               type="range"
               min="0"
-              max="20"
+              max={DISTANCE_FILTER_ANY}
               value={filters.startDistance}
               onChange={(e) => handleRangeChange("startDistance", e)}
               className="focus:ring-northeastern-red h-2 w-full appearance-none rounded-full focus:ring-2 focus:outline-hidden"
@@ -226,16 +230,16 @@ const Filters = ({
                 WebkitAppearance: "none",
                 appearance: "none",
                 background: `linear-gradient(to right, #C8102E 0%, #C8102E ${
-                  (filters.startDistance / 20) * 100
+                  (filters.startDistance / DISTANCE_FILTER_ANY) * 100
                 }%, #d3d3d3 ${
-                  (filters.startDistance / 20) * 100
+                  (filters.startDistance / DISTANCE_FILTER_ANY) * 100
                 }%, #d3d3d3 100%)`,
                 height: "8px",
                 borderRadius: "5px",
               }}
             />
             <div className="text-northeastern-red text-lg font-semibold">
-              {filters.startDistance === 20
+              {filters.startDistance === DISTANCE_FILTER_ANY
                 ? `${filters.startDistance}+`
                 : filters.startDistance}
             </div>
@@ -249,7 +253,7 @@ const Filters = ({
               id="endDistance"
               type="range"
               min="0"
-              max="20"
+              max={DISTANCE_FILTER_ANY}
               value={filters.endDistance}
               onChange={(e) => handleRangeChange("endDistance", e)}
               className="focus:ring-northeastern-red h-2 w-full appearance-none rounded-full focus:ring-2 focus:outline-hidden"
@@ -257,16 +261,16 @@ const Filters = ({
                 WebkitAppearance: "none",
                 appearance: "none",
                 background: `linear-gradient(to right, #C8102E 0%, #C8102E ${
-                  (filters.endDistance / 20) * 100
+                  (filters.endDistance / DISTANCE_FILTER_ANY) * 100
                 }%, #d3d3d3 ${
-                  (filters.endDistance / 20) * 100
+                  (filters.endDistance / DISTANCE_FILTER_ANY) * 100
                 }%, #d3d3d3 100%)`,
                 height: "8px",
                 borderRadius: "5px",
               }}
             />
             <div className="text-northeastern-red text-lg font-semibold">
-              {filters.endDistance === 20
+              {filters.endDistance === DISTANCE_FILTER_ANY
                 ? `${filters.endDistance}+`
                 : filters.endDistance}
             </div>
@@ -425,7 +429,7 @@ const Filters = ({
               id="startTimeDeviation"
               type="range"
               min="0"
-              max="4"
+              max={TIME_FILTER_ANY}
               value={filters.startTime}
               onChange={(e) => handleRangeChange("startTime", e)}
               className="focus:ring-northeastern-red h-2 w-full appearance-none rounded-full focus:ring-2 focus:outline-hidden"
@@ -433,14 +437,14 @@ const Filters = ({
                 WebkitAppearance: "none",
                 appearance: "none",
                 background: `linear-gradient(to right, #C8102E 0%, #C8102E ${
-                  (filters.startTime / 4) * 100
-                }%, #d3d3d3 ${(filters.startTime / 4) * 100}%,  #d3d3d3 100%)`,
+                  (filters.startTime / TIME_FILTER_ANY) * 100
+                }%, #d3d3d3 ${(filters.startTime / TIME_FILTER_ANY) * 100}%,  #d3d3d3 100%)`,
                 height: "8px",
                 borderRadius: "5px",
               }}
             />
             <div className="text-northeastern-red text-lg font-semibold">
-              {filters.startTime === 4
+              {filters.startTime === TIME_FILTER_ANY
                 ? `${filters.startTime}+`
                 : filters.startTime}
             </div>
@@ -453,7 +457,7 @@ const Filters = ({
               id="endTimeDeviation"
               type="range"
               min="0"
-              max="4"
+              max={TIME_FILTER_ANY}
               value={filters.endTime}
               onChange={(e) => handleRangeChange("endTime", e)}
               className="focus:ring-northeastern-red h-2 w-full appearance-none rounded-full focus:ring-2 focus:outline-hidden"
@@ -461,14 +465,16 @@ const Filters = ({
                 WebkitAppearance: "none",
                 appearance: "none",
                 background: `linear-gradient(to right, #C8102E 0%, #C8102E ${
-                  (filters.endTime / 4) * 100
-                }%,#d3d3d3 ${(filters.endTime / 4) * 100}%,  #d3d3d3 100%)`,
+                  (filters.endTime / TIME_FILTER_ANY) * 100
+                }%,#d3d3d3 ${(filters.endTime / TIME_FILTER_ANY) * 100}%,  #d3d3d3 100%)`,
                 height: "8px",
                 borderRadius: "5px",
               }}
             />
             <div className="text-northeastern-red text-lg font-semibold">
-              {filters.endTime === 4 ? `${filters.endTime}+` : filters.endTime}
+              {filters.endTime === TIME_FILTER_ANY
+                ? `${filters.endTime}+`
+                : filters.endTime}
             </div>
           </div>
         </div>

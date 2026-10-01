@@ -8,6 +8,7 @@ import { useSession } from "next-auth/react";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../api/auth/[...nextauth]";
 import { trpc } from "../../utils/trpc";
+import { TRPCClientError } from "@trpc/client";
 import { OnboardingFormInputs } from "../../utils/types";
 import {
   onboardSchema,
@@ -299,12 +300,32 @@ const Setup: NextPage = () => {
       }
     }
     const sessionName = session?.user?.name ?? "";
-    await updateUser({
-      userInfo,
-      sessionName,
-      mutation: editUserMutation,
-    });
-    trackFTUECompletion(userInfo.role);
+    try {
+      await updateUser({
+        userInfo,
+        sessionName,
+        mutation: editUserMutation,
+      });
+      trackFTUECompletion(userInfo.role);
+    } catch (error) {
+      // `useEditUserMutation`'s `onError` has already toasted and cleared
+      // `isLoading` for anything the mutation itself rejected - including a
+      // throw inside its own `onSuccess`, which React Query routes to
+      // `onError` before re-throwing. Reporting again here would double the
+      // toast, so only a throw that never reached the mutation is announced:
+      // building the arguments, or `updateUser`'s own preparation of them.
+      // Either way the rejection is handled and the button is released.
+      console.error("Onboarding submit failed:", error);
+      if (!(error instanceof TRPCClientError)) {
+        toast.error(
+          "Something went wrong finishing your setup. Please try again.",
+        );
+      }
+    } finally {
+      // Idempotent on the success path, where the mutation's settle callback
+      // has already cleared it after `router.push`.
+      setIsLoading(false);
+    }
   };
 
   const handleNextStep = async () => {

@@ -4,6 +4,7 @@ import {
   UNSPECIFIED_DAYS_LABEL,
 } from "./adminDashboardLabels";
 import { buildFunnelStages } from "./adminRequestFunnel";
+import { forCSV } from "./adminQuickStats";
 import { AdminDashboardSeries, AdminDashboardStats } from "./types";
 
 /**
@@ -240,7 +241,8 @@ export interface QuickStatsCSVInput {
   groupCount: number;
   percentDriversInGroup: string;
   percentRidersInGroup: string;
-  averageRidersPerGroup: number;
+  /** `number | string` for the same reason as `QuickStatsProps`. */
+  averageRidersPerGroup: number | string;
 }
 
 export function buildQuickStatsCSV(input: QuickStatsCSVInput): string {
@@ -261,9 +263,11 @@ export function buildQuickStatsCSV(input: QuickStatsCSVInput): string {
     input.avgConvWithMsg,
     input.avgMsg,
     input.groupCount,
-    input.percentDriversInGroup,
-    input.percentRidersInGroup,
-    input.averageRidersPerGroup,
+    // The three group figures can be `UNDEFINED_STAT`, which becomes a blank
+    // cell rather than an em dash in a numeric column - see `forCSV`.
+    forCSV(input.percentDriversInGroup),
+    forCSV(input.percentRidersInGroup),
+    forCSV(input.averageRidersPerGroup),
   ].join(",");
 
   return [headers.join(","), row].join("\n");

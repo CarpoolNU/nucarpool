@@ -9,6 +9,7 @@ import {
   csvTextField,
 } from "./adminDashboardCsv";
 import { AdminDashboardStats } from "./types";
+import { UNDEFINED_STAT, averagePerGroup, percentOf } from "./adminQuickStats";
 
 /**
  * CSV formatting for the admin dashboard export.
@@ -202,6 +203,51 @@ describe("buildQuickStatsCSV", () => {
       "Total Conversations,Total Conversations With > 1 Message,Avg Messages Per Conversation with > 1 Message,Avg Messages,Total Groups,PercentDriversInGroup,PercentRidersInGroup,AverageRidersPerGroup",
       "42,30,4.5,3.2,8,75%,60%,2.1",
     ]);
+  });
+
+  /**
+   * The acceptance criterion as written: *"the exported CSV contains no
+   * `NaN`"*. An all-zero dashboard is not a contrived fixture - it is a fresh
+   * deployment, and it is any filtered view that matched nobody.
+   */
+  it("carries no NaN and no em dash when every cohort is empty", () => {
+    const csv = buildQuickStatsCSV({
+      totalConversationCount: 0,
+      totalWithMsgCount: 0,
+      avgConvWithMsg: 0,
+      avgMsg: 0,
+      groupCount: 0,
+      percentDriversInGroup: percentOf(0, 0),
+      percentRidersInGroup: percentOf(0, 0),
+      averageRidersPerGroup: averagePerGroup(0, 0),
+    });
+
+    const [, row] = csv.split("\n");
+
+    expect(csv).not.toContain("NaN");
+    // Blank cells, so a spreadsheet reads the column as numeric-with-gaps
+    // rather than as text.
+    expect(csv).not.toContain(UNDEFINED_STAT);
+    expect(row).toBe("0,0,0,0,0,,,");
+  });
+
+  it("still writes defined zeroes as zeroes, not as blanks", () => {
+    // The control. A guard that blanked every falsy value would pass the test
+    // above and destroy a legitimate 0%.
+    const csv = buildQuickStatsCSV({
+      totalConversationCount: 0,
+      totalWithMsgCount: 0,
+      avgConvWithMsg: 0,
+      avgMsg: 0,
+      groupCount: 3,
+      percentDriversInGroup: percentOf(0, 9),
+      percentRidersInGroup: percentOf(0, 9),
+      averageRidersPerGroup: averagePerGroup(0, 3),
+    });
+
+    const [, row] = csv.split("\n");
+
+    expect(row).toBe("0,0,0,0,3,0%,0%,0");
   });
 });
 
