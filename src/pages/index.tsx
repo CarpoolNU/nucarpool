@@ -39,6 +39,12 @@ import AddressCombobox from "../components/Map/AddressCombobox";
 import updateUserLocation from "../utils/map/updateUserLocation";
 import { MapLegend } from "../components/Map/MapLegend";
 import { RecentreButton } from "../components/Map/RecentreButton";
+import { MapUsersError } from "../components/Map/MapUsersError";
+import {
+  mapHomeCentre,
+  mapHomeSubject,
+  type MapCentre,
+} from "../utils/map/mapHomeCentre";
 import Image from "next/image";
 import BlueSquare from "../../public/user-dest.png";
 import BlueCircle from "../../public/blue-circle.png";
@@ -186,10 +192,6 @@ const HANDLE_POSITION_CLASSES: Record<SheetDetent, string> = {
 const NO_USERS: PublicUser[] = [];
 const NO_REQUESTS = { sent: [], received: [] };
 
-/** Where the map opens for a VIEWER, who has no company of their own. */
-const NEU_LAT = 42.33907;
-const NEU_LNG = -71.088748;
-
 const Home: NextPage<any> = () => {
   const { data: session } = useSession();
   const [showTutorial, setShowTutorial] = useState(false);
@@ -261,8 +263,19 @@ const Home: NextPage<any> = () => {
     };
   }, [filters]);
 
-  const { data: geoJsonUsers } =
+  /*
+   * Held as the whole query object for the reason the comment below gives about
+   * `user.me`: this one feeds the map's pins, and `data` alone cannot tell a
+   * neighbourhood with nobody in it from a Mapbox or server failure. Every
+   * other list on this page already went through `toQueryState` after
+   * SCRUM-509; this query was missed, so an outage rendered an empty map with
+   * no message and nothing to retry - the single worst failure mode a matching
+   * product has, because it looks like an answer.
+   */
+  const geoJsonUsersQuery =
     trpc.mapbox.geoJsonUserList.useQuery(debouncedFilters);
+  const { data: geoJsonUsers } = geoJsonUsersQuery;
+  const mapUsersState = toQueryState(geoJsonUsersQuery);
 
   // Held as whole query objects rather than destructured to `data` alone: the
   // error and loading states are what tell an empty list apart from a failed one.
@@ -424,11 +437,10 @@ const Home: NextPage<any> = () => {
    * `mapState` is read by callbacks declared further down and `const` has no
    * hoisting to lean on.
    */
-  const mapCenter: [number, number] | null = user
-    ? user.role === "VIEWER"
-      ? [NEU_LNG, NEU_LAT]
-      : [user.companyCoordLng, user.companyCoordLat]
-    : null;
+  // One derivation, shared with the Recentre button below - see
+  // `mapHomeCentre.ts` for why these were two expressions of one fact and what
+  // their disagreement cost a VIEWER.
+  const mapCenter: MapCentre | null = user ? mapHomeCentre(user) : null;
 
   const { map: mapState, isLoaded: mapStateLoaded } = useMapInstance({
     containerId: "map",
@@ -1207,6 +1219,11 @@ const Home: NextPage<any> = () => {
                 className="pointer-events-auto relative z-0 h-full w-full flex-auto"
               >
                 {user.role === "VIEWER" && viewerBox}
+                {/* The map's own failure state. Lives in its own component
+                    so that "a failed map query shows an error with a retry" is
+                    assertable - this file is not renderable in jsdom. Must stay
+                    inside this container; its docblock says why. */}
+                <MapUsersError state={mapUsersState} />
                 {/* Ungated item 3. On mobile it moves to
                     the top of the map and starts collapsed - the bottom is
                     claimed by the navigation, the explore sheet and Mapbox's
@@ -1244,9 +1261,10 @@ const Home: NextPage<any> = () => {
                     because the only thing it needed to clear it now clears
                     geometrically. */}
                 <RecentreButton
+                  subject={mapHomeSubject(user)}
                   onRecentre={() =>
                     mapState?.flyTo({
-                      center: [user.companyCoordLng, user.companyCoordLat],
+                      center: mapHomeCentre(user),
                       essential: true,
                     })
                   }

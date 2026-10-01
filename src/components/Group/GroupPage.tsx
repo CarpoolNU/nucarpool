@@ -439,7 +439,35 @@ const GroupSection = ({
   onViewGroupRoute: (driver: PublicUser, riders: PublicUser[]) => void;
   onClose: () => void;
 }) => {
-  const groupQuery = trpc.user.groups.me.useQuery();
+  /*
+   * `refetchOnMount: "always"`, because membership changes under this component
+   * and nothing on this client is told.
+   *
+   * `utils/trpc.ts` turns `refetchOnMount` off globally as a cost decision, and
+   * the three invalidation sites - `requestHandlers.ts`, `useGroupDetails.ts`,
+   * `useGroupMembership.ts` - cover the party that performs the mutation. They
+   * cannot cover the other one: when a rider leaves, the invalidation runs in
+   * the rider's client, and the driver's cache is untouched. `GroupSection`
+   * unmounts whenever the modal closes or the sidebar tab changes, so the
+   * driver's next visit remounted it inside the 5-minute `gcTime` and was
+   * served the departed rider - with a "Remove" button beside them, and
+   * included in "Preview Group Route".
+   *
+   * **Invalidating from the other side would not have worked, and nor would
+   * invalidating from this one.** React Query's `shouldFetchOn` short-circuits
+   * on `refetchOnMount === false` before it ever consults staleness, so an
+   * invalidated-but-inactive query still serves cache on remount. The flag is
+   * what makes the remount re-ask; it also catches the eviction case, where the
+   * acting party is the driver and the stale cache is the rider's.
+   *
+   * `"always"` rather than `true` for the reason `index.tsx` gives on
+   * `requests.me`: `true` respects `staleTime`, and freshness here is a
+   * correctness requirement rather than an optimisation, so it should survive
+   * someone adding one.
+   */
+  const groupQuery = trpc.user.groups.me.useQuery(undefined, {
+    refetchOnMount: "always",
+  });
   const { data: group } = groupQuery;
   const users = group?.users ?? [];
   const driver = users.find((user) => user.role === Role.DRIVER);

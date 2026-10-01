@@ -38,6 +38,35 @@ interface SidebarProps {
 }
 
 export const SidebarPage = (props: SidebarProps) => {
+  /*
+   * Newest first, without mutating the caller's arrays.
+   *
+   * This used to be `props.received.reverse()` and `props.sent.reverse()` in
+   * the JSX below. `Array.prototype.reverse` reverses **in place** and returns
+   * the same array, so each of those reversed one of `index.tsx`'s `useMemo`
+   * results every time this component rendered - and the memo only recomputes
+   * when the request data changes. Two renders between two fetches therefore
+   * left the list back in its original order and an odd number left it
+   * reversed, so cards with equal timestamps changed places on re-renders that
+   * had nothing to do with requests. The same arrays are spread into
+   * `handleMobileSidebarExpand`'s lookup in `index.tsx`, which was being
+   * reordered underneath it as a side effect.
+   *
+   * **It is invisible in development.** StrictMode renders twice, which applies
+   * the reversal an even number of times per commit and lands back on the
+   * original order; only production shows it.
+   *
+   * Memoised rather than copied inline so the reference is stable as well as
+   * the order - `reverse()` at least returned the same array each time, and
+   * handing `RequestSidebar` a fresh one on every render would trade a
+   * correctness bug for a re-render one.
+   */
+  const received = React.useMemo(
+    () => [...props.received].reverse(),
+    [props.received],
+  );
+  const sent = React.useMemo(() => [...props.sent].reverse(), [props.sent]);
+
   let disabled = false;
   if (props.role === "VIEWER") {
     disabled = true;
@@ -64,8 +93,8 @@ export const SidebarPage = (props: SidebarProps) => {
   } else if (props.sidebarType === "requests") {
     return (
       <RequestSidebar
-        received={props.received.reverse()}
-        sent={props.sent.reverse()}
+        received={received}
+        sent={sent}
         requestsState={props.requestsState}
         disabled={disabled}
         viewRoute={props.onViewRouteClick}
