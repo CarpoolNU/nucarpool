@@ -7,6 +7,7 @@ import {
 import type { FInputs, Recommendation } from "../../utils/recommendation";
 import type { PrismaOrTransaction } from "./client";
 import { SEAT_AVAILABLE_FILTER } from "../../utils/carpoolSeats";
+import { DISTANCE_FILTER_ANY } from "../../utils/filters/filterSentinels";
 import {
   UNGROUPED_CANDIDATE_FILTER,
   searcherCanMatchNobody,
@@ -106,9 +107,6 @@ export const candidateLimitWarning = ({
     ? `${CANDIDATE_LIMIT_LOG_PREFIX} candidate query hit its ${CANDIDATE_LIMIT}-row ceiling for a ${role} sorting by "${sort}". Rows past the ceiling are dropped in id order, not by score, so this ranking is missing candidates that may outrank the ones kept.`
     : null;
 
-/** Distance filter values at or above this mean "any", so no bound applies. */
-const DISTANCE_FILTER_MAX = 20;
-
 /**
  * Latitude/longitude window that fully contains every point within `miles` of
  * the centre, under the same metric `calculateScore` uses.
@@ -169,9 +167,10 @@ const locationWithin = (
   coords: { coordLat: number; coordLng: number } | null | undefined,
   miles: number,
 ): Prisma.LocationWhereInput | undefined => {
-  // `>= 20` is the scorer's "any", and a missing centre means the scorer is
-  // comparing against (0, 0) for everyone — in both cases SQL must not narrow.
-  if (miles >= DISTANCE_FILTER_MAX || !coords) {
+  // `>= DISTANCE_FILTER_ANY` is the scorer's "any", and a missing centre means
+  // the scorer is comparing against (0, 0) for everyone — in both cases SQL
+  // must not narrow.
+  if (miles >= DISTANCE_FILTER_ANY || !coords) {
     return undefined;
   }
 

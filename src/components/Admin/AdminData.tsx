@@ -30,6 +30,7 @@ import {
   buildSupplyByCityCSV,
   buildUserCountsCSV,
 } from "../../utils/adminDashboardCsv";
+import { averagePerGroup, percentOf } from "../../utils/adminQuickStats";
 
 /**
  * The admin dashboard.
@@ -193,12 +194,9 @@ function AdminData() {
     viewerINO,
   } = stats.userCounts;
 
-  const percent = (part: number, whole: number) =>
-    Math.round((part / whole) * 1000) / 10 + "%";
-  const percentDriversInGroup = percent(driversInGroup, totalDrivers);
-  const percentRidersInGroup = percent(ridersInGroup, totalRiders);
-  const averageRidersPerGroup =
-    Math.round((ridersInGroup / groupCount) * 10) / 10;
+  const percentDriversInGroup = percentOf(driversInGroup, totalDrivers);
+  const percentRidersInGroup = percentOf(ridersInGroup, totalRiders);
+  const averageRidersPerGroup = averagePerGroup(ridersInGroup, groupCount);
 
   const formatter = (value: any) => format(new Date(value), "MMM dd, yyyy");
 

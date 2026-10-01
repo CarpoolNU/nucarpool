@@ -1,4 +1,3 @@
-import { MapLayerMouseEvent } from "mapbox-gl";
 import BlueEnd from "../../../public/user-dest.png";
 import BlueDriverEnd from "../../../public/user-dest-driver.png";
 import RedDriverEnd from "../../../public/driver-dest.png";
@@ -6,6 +5,28 @@ import OrangeRiderEnd from "../../../public/rider-dest.png";
 import { Role } from "@prisma/client";
 import { PublicUser } from "../types";
 import { getPointClickHandler } from "./handlers";
+
+/**
+ * Binds the map's point-click handler to one layer.
+ *
+ * The handler comes from `handlers.ts` rather than being wrapped in a fresh
+ * closure here, because `map.off` can only name a listener it is handed the
+ * identical function for - and a wrapper built at bind time is a different
+ * function every call, which is why the removal path could never unbind one.
+ * The wrapper this replaces only repeated the `!e.features` check that
+ * `createPointClickHandler` already does on entry.
+ *
+ * A missing handler binds nothing. `addMapEvents` registers it inside the
+ * map's `load`, before anything here runs, so this is a guard rather than a
+ * case - and binding a listener that would throw on the first click is not an
+ * improvement on binding none.
+ */
+const bindPointClick = (map: mapboxgl.Map, layerId: string): void => {
+  const handlePointClick = getPointClickHandler(map);
+  if (handlePointClick) {
+    map.on("click", layerId, handlePointClick);
+  }
+};
 
 const updateCompanyLocation = (
   map: mapboxgl.Map,
@@ -37,6 +58,18 @@ const updateCompanyLocation = (
       map.removeLayer(textLayerId);
     }
     if (map.getLayer(layerId)) {
+      // Unbind before the layer goes. Removing a layer does not remove the
+      // listeners scoped to it, and this function re-binds whenever it
+      // rebuilds the layer - so without this every remove/recreate cycle left
+      // another live handler behind and one click ran it once per cycle.
+      //
+      // `getPointClickHandler` returns the same function for a given map (a
+      // `WeakMap`, see `handlers.ts`), which is what makes `off` able to name
+      // the listener `on` added.
+      const handlePointClick = getPointClickHandler(map);
+      if (handlePointClick) {
+        map.off("click", layerId, handlePointClick);
+      }
       map.removeLayer(layerId);
     }
     if (map.getSource(sourceId)) {
@@ -98,11 +131,7 @@ const updateCompanyLocation = (
         );
 
         if (!isCurrent) {
-          const handlePointClick = getPointClickHandler(map);
-          map.on("click", layerId, (e) => {
-            if (!e.features) return;
-            handlePointClick!(e as MapLayerMouseEvent);
-          });
+          bindPointClick(map, layerId);
         }
       }
 
@@ -182,11 +211,7 @@ const updateCompanyLocation = (
 
       if (!isCurrent) {
         // click event for request user markers
-        const handlePointClick = getPointClickHandler(map);
-        map.on("click", layerId, (e) => {
-          if (!e.features) return;
-          handlePointClick!(e as MapLayerMouseEvent);
-        });
+        bindPointClick(map, layerId);
       }
     }
   });

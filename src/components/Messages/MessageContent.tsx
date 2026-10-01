@@ -23,8 +23,6 @@ interface MessageContentProps {
   selectedUser: EnhancedPublicUser;
 }
 
-import { isEqual } from "lodash";
-
 const MessageContent = ({ selectedUser }: MessageContentProps) => {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const utils = trpc.useUtils();
@@ -149,41 +147,85 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
     return [...conversationMessages];
   }, [initialMessage, conversationMessages, request?.message]);
 
-  const onSuccess = useCallback(() => {
-    utils.user.messages.getUnreadMessageCount.invalidate();
-    utils.user.requests.me.invalidate();
-  }, [utils.user.messages.getUnreadMessageCount, utils.user.requests.me]);
+  /**
+   * Which message ids `markMessagesAsRead` has **confirmed**, and which are
+   * out with a call that has not come back yet.
+   *
+   * This was one ref holding the last id list, advanced immediately after
+   * `mutate` whether the call succeeded or not. A failure therefore recorded
+   * its ids as handled: the guard below then saw an unchanged list and did
+   * nothing, so those messages stayed unread until the component remounted
+   * while `onError` only logged. The unread badge kept counting them.
+   *
+   * Two sets rather than one list, because they answer different questions.
+   * `confirmed` is what must never be sent again. `inFlight` is what must not
+   * be sent *concurrently* - it also makes the effect idempotent under
+   * StrictMode's double mount - and is released rather than confirmed on
+   * failure, so the next run of this effect retries those ids.
+   */
+  const confirmedMessageIdsRef = useRef<Set<string>>(new Set());
+  const inFlightMessageIdsRef = useRef<Set<string>>(new Set());
 
-  const onError = useCallback((error: any) => {
-    console.error("Failed to mark messages as read:", error);
-  }, []);
-
-  const markMessagesAsRead = trpc.user.messages.markMessagesAsRead.useMutation(
-    useMemo(
-      () => ({
-        onSuccess,
-        onError,
-      }),
-      [onSuccess, onError],
-    ),
+  const onSuccess = useCallback(
+    (_data: unknown, variables: { messageIds: string[] }) => {
+      for (const id of variables.messageIds) {
+        confirmedMessageIdsRef.current.add(id);
+        inFlightMessageIdsRef.current.delete(id);
+      }
+      utils.user.messages.getUnreadMessageCount.invalidate();
+      utils.user.requests.me.invalidate();
+    },
+    [utils.user.messages.getUnreadMessageCount, utils.user.requests.me],
   );
 
-  // useref to store previous unread messages
-  const prevUnreadMessageIdsRef = useRef<string[]>([]);
+  const onError = useCallback(
+    (error: any, variables: { messageIds: string[] }) => {
+      // Released, not confirmed. Retried the next time this effect runs - a
+      // new message over Pusher, a refetch, or a conversation switch - rather
+      // than immediately, which with the mutation's own state change as the
+      // trigger would be an unbounded retry loop against a failing server.
+      for (const id of variables.messageIds) {
+        inFlightMessageIdsRef.current.delete(id);
+      }
+      console.error("Failed to mark messages as read:", error);
+    },
+    [],
+  );
+
+  // `mutate` only, not the whole result object: React Query builds it fresh
+  // every render, so the object in this effect's dependency array re-ran it on
+  // every render and left the guard below doing all the work. `mutate` itself
+  // is `useCallback`-stable for the component's lifetime.
+  const { mutate: markMessagesAsRead } =
+    trpc.user.messages.markMessagesAsRead.useMutation(
+      useMemo(
+        () => ({
+          onSuccess,
+          onError,
+        }),
+        [onSuccess, onError],
+      ),
+    );
 
   useEffect(() => {
-    if (user) {
-      const unreadMessageIds = allMessages
-        .filter((message) => !message.isRead && message.userId !== user.id)
-        .map((message) => message.id);
+    if (!user) return;
 
-      if (!isEqual(unreadMessageIds, prevUnreadMessageIdsRef.current)) {
-        if (unreadMessageIds.length > 0) {
-          markMessagesAsRead.mutate({ messageIds: unreadMessageIds });
-        }
-        prevUnreadMessageIdsRef.current = unreadMessageIds;
-      }
+    const unsentMessageIds = allMessages
+      .filter(
+        (message) =>
+          !message.isRead &&
+          message.userId !== user.id &&
+          !confirmedMessageIdsRef.current.has(message.id) &&
+          !inFlightMessageIdsRef.current.has(message.id),
+      )
+      .map((message) => message.id);
+
+    if (unsentMessageIds.length === 0) return;
+
+    for (const id of unsentMessageIds) {
+      inFlightMessageIdsRef.current.add(id);
     }
+    markMessagesAsRead({ messageIds: unsentMessageIds });
   }, [user, allMessages, markMessagesAsRead]);
 
   // Group messages by date.

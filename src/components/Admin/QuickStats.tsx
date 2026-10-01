@@ -8,7 +8,10 @@ interface QuickStatsProps {
   avgMsg: number;
   groupCount: number;
   percentDriversInGroup: string;
-  averageRidersPerGroup: number;
+  // `number | string` so an empty cohort can render `UNDEFINED_STAT` - see
+  // `averagePerGroup` in `src/utils/adminQuickStats.ts`. `DisplayBox` has
+  // always accepted both.
+  averageRidersPerGroup: number | string;
   percentRidersInGroup: string;
 }
 

@@ -13,7 +13,10 @@ import {
 import { OnboardingFormInputs, User } from "../../utils/types";
 import ProfilePicture from "./ProfilePicture";
 import useIsMobile from "../../utils/useIsMobile";
-import { PROFILE_TEXT_MAX_LENGTH } from "../../utils/textLimits";
+import {
+  PROFILE_TEXT_MAX_LENGTH,
+  PRONOUNS_INPUT_MAX_LENGTH,
+} from "../../utils/textLimits";
 import { registerRoleWithSeatDefault } from "../../utils/profile/roleSeatDefault";
 import { seatAvailValueAs } from "../../utils/carpoolSeats";
 import {
@@ -264,7 +267,9 @@ const UserSection = ({
             id="pronouns"
             inputClassName={`h-12`}
             error={errors.pronouns}
-            charLimit={20}
+            // Not `PRONOUNS_MAX_LENGTH`: the value in this input is wrapped
+            // in parentheses for display and `maxLength` counts those.
+            charLimit={PRONOUNS_INPUT_MAX_LENGTH}
             isDisabled={isViewer}
             defaultValue={watch("pronouns") ? `(${watch("pronouns")})` : ""}
             type="text"

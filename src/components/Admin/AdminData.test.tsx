@@ -55,6 +55,7 @@ import {
   buildSupplyByCityCSV,
   buildUserCountsCSV,
 } from "../../utils/adminDashboardCsv";
+import { averagePerGroup, percentOf } from "../../utils/adminQuickStats";
 import type { AdminSupplyRow } from "../../utils/types";
 
 /** Set per test, one entry per procedure. */
@@ -417,26 +418,24 @@ describe("AdminData's Download Data button", () => {
 
     await waitFor(() => expect(mockSaveAs).toHaveBeenCalledTimes(1));
 
-    const percent = (part: number, whole: number) =>
-      Math.round((part / whole) * 1000) / 10 + "%";
     const expectedQuickStatsCSV = buildQuickStatsCSV({
       totalConversationCount: STATS.conversations.totalConversationCount,
       totalWithMsgCount: STATS.conversations.totalWithMsgCount,
       avgConvWithMsg: STATS.conversations.avgConvWithMsg,
       avgMsg: STATS.conversations.avgMsg,
       groupCount: STATS.groups.groupCount,
-      percentDriversInGroup: percent(
+      percentDriversInGroup: percentOf(
         STATS.groups.driversInGroup,
         STATS.groups.totalDrivers,
       ),
-      percentRidersInGroup: percent(
+      percentRidersInGroup: percentOf(
         STATS.groups.ridersInGroup,
         STATS.groups.totalRiders,
       ),
-      averageRidersPerGroup:
-        Math.round(
-          (STATS.groups.ridersInGroup / STATS.groups.groupCount) * 10,
-        ) / 10,
+      averageRidersPerGroup: averagePerGroup(
+        STATS.groups.ridersInGroup,
+        STATS.groups.groupCount,
+      ),
     });
 
     expect(mockZipFile).toHaveBeenCalledWith(

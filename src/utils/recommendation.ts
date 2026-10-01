@@ -6,6 +6,10 @@ import {
   searcherCanMatchNobody,
 } from "./candidateReachability";
 import { dayMatchApplies } from "./filters/dayMatch";
+import {
+  DISTANCE_FILTER_ANY,
+  TIME_FILTER_ANY,
+} from "./filters/filterSentinels";
 
 /** Type for storing recommendation scores associated with a particular user */
 export type Recommendation = {
@@ -38,8 +42,10 @@ const weights = {
  * The comments used to disagree with both the UI and the routers — `startTime`
  * claimed a 3-hour maximum against a 0-4 slider, and the distance pair said 19
  * where the slider says 20. The tests below the comparison are
- * `inputs.startTime < 4` and `inputs.startDistance < 20`, so the top value is
- * not a constraint that happens to be loose: it is switched off entirely.
+ * `inputs.startTime < TIME_FILTER_ANY` and
+ * `inputs.startDistance < DISTANCE_FILTER_ANY`, so the top value is not a
+ * constraint that happens to be loose: it is switched off entirely. Both
+ * sentinels are defined in `./filters/filterSentinels.ts`.
  */
 export type FInputs = {
   /** Miles, 0-20. 20 means any. */
@@ -289,8 +295,9 @@ export const calculateScore = (
       startTime = minutesApart(currentUser.startTime, user.startTime);
       endTime = minutesApart(currentUser.endTime, user.endTime);
       if (
-        (startTime > inputs.startTime * 60 && inputs.startTime < 4) ||
-        (endTime > inputs.endTime * 60 && inputs.endTime < 4)
+        (startTime > inputs.startTime * 60 &&
+          inputs.startTime < TIME_FILTER_ANY) ||
+        (endTime > inputs.endTime * 60 && inputs.endTime < TIME_FILTER_ANY)
       ) {
         return undefined;
       }
@@ -308,8 +315,10 @@ export const calculateScore = (
     );
 
     if (
-      (startDistance > inputs.startDistance && inputs.startDistance < 20) ||
-      (endDistance > inputs.endDistance && inputs.endDistance < 20) ||
+      (startDistance > inputs.startDistance &&
+        inputs.startDistance < DISTANCE_FILTER_ANY) ||
+      (endDistance > inputs.endDistance &&
+        inputs.endDistance < DISTANCE_FILTER_ANY) ||
       (dayFilterApplies &&
         inputs.days === 1 &&
         daysHelper.bothUsersDays !== daysHelper.currentUserDays) ||
