@@ -15,7 +15,11 @@ import {
 const prisma = new PrismaClient();
 
 /**
- * Every table the seed writes to, in an order safe to delete in.
+ * Every table the seed clears, in an order safe to delete in.
+ *
+ * Not the same as every table it writes to: `report`, `block`, `adminAuditLog`,
+ * `emailSendBudget`, `account` and `session` are cleared without being seeded,
+ * each for a reason given below.
  *
  * **The order is proved from `schema.prisma`, not assumed.** `relationMode =
  * "prisma"` means MySQL enforces no foreign key at all: every referential
@@ -56,6 +60,39 @@ const prisma = new PrismaClient();
  * ghosts. That is the same defect class as the 620 orphan conversations
  * found in production.
  *
+ * **The four entries before `user` are keyed on a user and ordered by nothing.**
+ * None of them constrains the order, for two different reasons, and they sit
+ * before `user` only to keep the list uniformly child-first:
+ *
+ *   - `adminAuditLog` and `emailSendBudget` declare **no `@relation` to
+ *     `User` at all** — `actorId`, `targetId` and `userId` are plain scalars
+ *     with an `@@index`. So there is no referential action to order against,
+ *     and nothing, emulated or otherwise, ever removed them. They were simply
+ *     missed, and a re-seed left them behind (SCRUM-615). `getAuditLog`
+ *     returns raw ids for the client to resolve through `getAllUsers`, so the
+ *     survivors render as actions by and against users who do not exist; and
+ *     because the seed assigns users the ids `"0"`–`"69"` rather than cuids, a
+ *     surviving `email_send_budget` row re-attaches to the *next* seed's user
+ *     of the same id and hands them a send count they did not earn. That is
+ *     the `_Favorites` failure mode below, on a table with no join to hide
+ *     behind.
+ *   - `account` and `session` are the opposite case: both declare
+ *     `onDelete: Cascade` on their relation to `User`, so `user.deleteMany`
+ *     below already removes them through Prisma's emulated cascade. They are
+ *     listed anyway for the reason `block` is — **deleting them explicitly
+ *     keeps what this list says and what gets deleted the same** — and it
+ *     also clears a row whose user was already gone, which the cascade cannot
+ *     reach. The end state is identical either way; a re-seed destroys the
+ *     developer's own `user` row, so it signs them out and the next sign-in
+ *     creates a fresh user regardless of what this list does.
+ *
+ * **`verification_token` is the one model deliberately left out**, and it is
+ * the only exclusion left to justify. It has no `userId` and no relation to
+ * anything: it is keyed by `identifier`/`token` and holds short-lived
+ * email-verification tokens for NextAuth's email provider, which this app does
+ * not configure — Azure AD and Google are OAuth. So there is nothing for a
+ * re-seed to orphan, and in practice nothing in the table.
+ *
  * **This tuple is the only source of truth.** {@link deletableModels} is typed
  * `Record<SeededModel, …>`, so a name added here without a delegate — or a
  * delegate without a name — is a compile error rather than a silent drift
@@ -70,6 +107,10 @@ export const SEED_DELETE_ORDER = [
   "carpoolSearch",
   "location",
   "carpoolGroup",
+  "adminAuditLog",
+  "emailSendBudget",
+  "account",
+  "session",
   "user",
 ] as const;
 
@@ -108,6 +149,10 @@ const deletableModels = (
   carpoolSearch: client.carpoolSearch,
   location: client.location,
   carpoolGroup: client.carpoolGroup,
+  adminAuditLog: client.adminAuditLog,
+  emailSendBudget: client.emailSendBudget,
+  account: client.account,
+  session: client.session,
   user: client.user,
 });
 
@@ -137,7 +182,7 @@ const FAVORITES_JOIN_TABLE = "_Favorites";
  * **Guarded independently of `main()`.** The entry point checks the target
  * before doing anything, and that is not enough on its own: this function is
  * exported, so an import, a future script, or a refactor that stops going
- * through `main()` would otherwise reach seven unconditional `deleteMany`
+ * through `main()` would otherwise reach a loop of unconditional `deleteMany`
  * calls against whatever `DATABASE_URL` names. The check is cheap and runs
  * before the first statement, so the destructive primitive is safe by itself
  * rather than by convention.
