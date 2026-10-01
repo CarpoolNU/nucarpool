@@ -2,10 +2,12 @@ import * as fs from "fs";
 import * as path from "path";
 import {
   AMPLIFY_EXEMPT,
+  AWS_CREDENTIAL_VARS,
   MIN_EXPECTED_AMPLIFY_PATTERNS,
   amplifyCoverage,
   amplifyGrepPatterns,
   commandTolerance,
+  credentialLeaks,
   envsafeOptionsAt,
   isOptional,
   matchingPatterns,
@@ -524,6 +526,88 @@ describe("strictnessIssues", () => {
   });
 });
 
+describe("credentialLeaks", () => {
+  // The defect this exists for: amplify.yml carried a comment asserting that
+  // its three narrow build-identity patterns could not sweep Amplify's own
+  // credentials into .env.production, while `ACCESS` and `SECRET` two dozen
+  // lines above matched `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` as
+  // substrings. Coverage checking is structurally blind to it - a pattern
+  // that matches too much covers everything it should and reports no gap - so
+  // this is a separate check rather than a stricter coverage rule.
+
+  it("catches the unanchored fragments that caused the defect", () => {
+    const leaks = credentialLeaks(["ACCESS", "SECRET"]);
+
+    expect(leaks).toEqual([
+      { credential: "AWS_ACCESS_KEY_ID", patterns: ["ACCESS"] },
+      { credential: "AWS_SECRET_ACCESS_KEY", patterns: ["ACCESS", "SECRET"] },
+    ]);
+  });
+
+  it("passes the app's own suffixed spellings", () => {
+    // The fix, and the reason it works without a `^` anchor: the suffixed
+    // names are not substrings of the AWS_-prefixed ones, though the
+    // fragments are.
+    expect(
+      credentialLeaks([
+        "ACCESS_KEY_ID_AWS",
+        "SECRET_ACCESS_KEY_AWS",
+        "REGION_AWS",
+      ]),
+    ).toEqual([]);
+  });
+
+  it("passes the build-identity patterns amplify.yml copies on purpose", () => {
+    // These share the AWS_ prefix and carry no credential, so a prefix-based
+    // rule would have to exempt them. Naming credentials explicitly does not.
+    expect(
+      credentialLeaks(["AWS_COMMIT_ID", "AWS_BRANCH", "AWS_JOB_ID"]),
+    ).toEqual([]);
+  });
+
+  it("reports nothing for an empty pattern list", () => {
+    expect(credentialLeaks([])).toEqual([]);
+  });
+
+  it("takes an injected credential list", () => {
+    expect(credentialLeaks(["TOKEN"], ["MY_TOKEN"])).toEqual([
+      { credential: "MY_TOKEN", patterns: ["TOKEN"] },
+    ]);
+  });
+
+  it("defaults to the real credential list", () => {
+    // A rename or an accidental emptying of AWS_CREDENTIAL_VARS would make
+    // every call above vacuous, so the default is pinned rather than assumed.
+    expect(AWS_CREDENTIAL_VARS).toContain("AWS_ACCESS_KEY_ID");
+    expect(AWS_CREDENTIAL_VARS).toContain("AWS_SECRET_ACCESS_KEY");
+    expect(AWS_CREDENTIAL_VARS).toContain("AWS_SESSION_TOKEN");
+    expect(credentialLeaks(["ACCESS"])).not.toEqual([]);
+  });
+
+  it("refuses a non-literal pattern rather than guessing", () => {
+    // Shares matchingPatterns() with the coverage half, so the anchored
+    // spelling the obvious fix reaches for is rejected here too - which is
+    // why amplify.yml spells the full name instead. fail() exits rather than
+    // throwing, so process.exit has to be stubbed to observe it.
+    const exit = jest.spyOn(process, "exit").mockImplementation((() => {
+      throw new Error("process.exit");
+    }) as never);
+    const error = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      expect(() => credentialLeaks(["^ACCESS_KEY_ID_AWS="])).toThrow(
+        "process.exit",
+      );
+      expect(error.mock.calls[0][0]).toMatch(
+        /not a plain variable-name fragment/,
+      );
+    } finally {
+      exit.mockRestore();
+      error.mockRestore();
+    }
+  });
+});
+
 describe("the real amplify.yml", () => {
   const real = fs.readFileSync(
     path.join(__dirname, "..", "amplify.yml"),
@@ -562,6 +646,25 @@ describe("the real amplify.yml", () => {
 
     expect(tolerant).toHaveLength(1);
     expect(tolerant[0].patterns).toEqual(["S3_"]);
+  });
+
+  it("copies no AWS credential variable into .env.production", () => {
+    // The live assertion behind amplify.yml's claim that it keeps Amplify's
+    // deploy identity out of the deployment artifact. `.env.production`
+    // travels in an artifact AWS documents as readable by anyone with
+    // `amplify:GetJob` plus artifact-store access (SCRUM-390).
+    const { patterns } = amplifyGrepPatterns(real);
+    expect(credentialLeaks(patterns)).toEqual([]);
+  });
+
+  it("still carries the app's own AWS variables after that narrowing", () => {
+    // The half a `^` anchor would have broken: narrowing must not cost
+    // coverage. Pinned by name, so re-spelling the pattern is fine and
+    // dropping it is not.
+    const { patterns } = amplifyGrepPatterns(real);
+    expect(matchingPatterns("ACCESS_KEY_ID_AWS", patterns)).not.toEqual([]);
+    expect(matchingPatterns("SECRET_ACCESS_KEY_AWS", patterns)).not.toEqual([]);
+    expect(matchingPatterns("REGION_AWS", patterns)).not.toEqual([]);
   });
 
   it("carries NEXT_PUBLIC_* rather than relying on build-time inlining", () => {

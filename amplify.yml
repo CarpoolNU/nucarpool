@@ -20,10 +20,22 @@
 # every secret the app has, rather than exposing a new kind of thing. The file
 # is gitignored, so it stays out of git; it does *not* stay out of the
 # deployment artifact, which is the subject of "What this file costs" below.
-# The patterns are left alone deliberately, because the obvious tightening
-# (anchoring with `^`) would silently *reduce* coverage:
-# `SECRET_ACCESS_KEY_AWS` is matched by
-# `ACCESS` in the middle of the name, not at the start, and so are two others.
+#
+# The three patterns that name an AWS variable are spelled in full -
+# `ACCESS_KEY_ID_AWS`, `SECRET_ACCESS_KEY_AWS`, `REGION_AWS` - rather than as
+# the fragments `ACCESS`, `SECRET` and `REGION` they used to be. Those
+# fragments are substrings of `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`,
+# so they swept Amplify's *own* deploy credentials into .env.production -
+# exactly what the build-identity comment further down claims this file does
+# not do. The suffixed names are not substrings of the `AWS_`-prefixed ones, so
+# the overlap is gone.
+#
+# Anchoring with `^` would also have fixed it, and is the wrong tool twice
+# over: it would silently *reduce* coverage where a fragment matches
+# mid-name, and `scripts/check-env-contract.js` compares names against literal
+# patterns only and fails hard on a pattern that is not a plain
+# `[A-Za-z0-9_]+` fragment. Keep these literal. Every variable each one covers
+# is listed by `yarn check:amplify --verbose`.
 #
 # ---------------------------------------------------------------------------
 # Exit codes: why one of these lines ends in `|| true`
@@ -194,24 +206,44 @@ frontend:
   phases:
     preBuild:
       commands:
+        # Node version: NOT pinned by this file, and not by `.nvmrc`.
+        #
+        # `.nvmrc` (22) and `engines.node` ("22.x") govern local development
+        # and CI, which reads `.nvmrc` explicitly in the workflow. Nothing
+        # here selects a Node version, so the deploy gets whatever the build
+        # image configured in the Amplify console provides. **Which version
+        # that is has not been confirmed** - it needs console access, and no
+        # file in this repository records it.
+        #
+        # It matters because `yarn install --frozen-lockfile` is the first
+        # thing that runs: a lockfile resolved under Node 22 against an image
+        # running something else fails here, at deploy time, with nothing in
+        # the repository having predicted it.
+        #
+        # To pin it, add `- nvm use $(cat .nvmrc)` as the first command below
+        # - Amplify's Amazon Linux images ship nvm - and confirm it on a real
+        # deploy before relying on it. Deliberately not added blind: a command
+        # that assumes nvm is on PATH turns an unknown into a certain failure
+        # if it is not. Until then, `node --version` in the deploy log is the
+        # answer, and the console's build-image setting is where it comes from.
         - yarn install --frozen-lockfile
         - npx prisma generate
     build:
       commands:
-        - env | grep -e ACCESS >> .env.production
+        - env | grep -e ACCESS_KEY_ID_AWS >> .env.production
         - env | grep -e DATABASE >> .env.production
         - env | grep -e GOOGLE >> .env.production
         - env | grep -e NEXTAUTH_URL >> .env.production
         - env | grep -e NEXTAUTH_SECRET >> .env.production
         - env | grep -e NEXT_PUBLIC_ >> .env.production
-        - env | grep -e REGION >> .env.production
+        - env | grep -e REGION_AWS >> .env.production
         # The one tolerant line. `S3_BUCKET_NAME` and `S3_REGION` are
         # optional - both default in `server.ts` to the values this deployment
         # already uses - so no `S3_*` variable need exist, and `grep` exits 1
         # when none does, which failed the whole build. See "Exit codes" above
         # before copying `|| true` onto any other line here.
         - env | grep -e S3_ >> .env.production || true
-        - env | grep -e SECRET >> .env.production
+        - env | grep -e SECRET_ACCESS_KEY_AWS >> .env.production
         - env | grep -e AZURE >> .env.production
         - env | grep -e PUSHER >> .env.production
         # Build identity, so the deployed app can say which commit it is.
@@ -228,6 +260,17 @@ frontend:
         # match - a file AWS's own documentation warns is readable by anyone
         # with access to the deployment artifacts. Three narrow patterns
         # cannot do that. Keep them narrow.
+        #
+        # This claim used to be true of these three lines and false of the
+        # file: `ACCESS` and `SECRET` above are substrings of
+        # `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`, so those two
+        # credentials were swept in regardless of how narrow these were. They
+        # are spelled in full now, and
+        # `scripts/check-env-contract.js --amplify` fails on any pattern that
+        # matches a known `AWS_*` credential name, so the guarantee is checked
+        # rather than asserted. Whether the build container actually sets
+        # those variables is a question only the Amplify console answers;
+        # the check does not depend on knowing.
         #
         # Strict, with no `|| true`. Read "Exit codes" above before changing
         # that: these are not optional-and-absent like `S3_`, they are set by

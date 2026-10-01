@@ -1,0 +1,11 @@
+# Dependencies for scripts/emailtemplate.py, the one Python script here.
+#
+#     python3 -m pip install -r scripts/requirements.txt
+#
+# Declared nowhere before this file existed: the script imported boto3 and
+# python-dotenv and failed with an ImportError on a machine that happened not
+# to have them. Unpinned on purpose — this is an operator tool run by hand, not
+# part of the build, and nothing in CI installs it.
+boto3
+botocore
+python-dotenv
