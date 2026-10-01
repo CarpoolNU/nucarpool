@@ -39,7 +39,7 @@ describe("StepFour accessible names", () => {
       screen.getByRole("textbox", { name: "Preferred Name" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("textbox", { name: "Prounouns" }),
+      screen.getByRole("textbox", { name: "Pronouns" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("textbox", { name: "About Me" }),

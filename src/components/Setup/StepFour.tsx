@@ -77,7 +77,7 @@ const StepFour = ({
           <EntryLabel
             htmlFor="pronouns"
             error={errors.pronouns}
-            label="Prounouns"
+            label="Pronouns"
           />
           <TextField
             id="pronouns"

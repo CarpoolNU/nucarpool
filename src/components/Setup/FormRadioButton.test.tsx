@@ -75,3 +75,60 @@ describe("FormRadioButton error association", () => {
     expect(radio.getAttribute("aria-describedby")).toBeNull();
   });
 });
+
+/**
+ * SCRUM-610 item 1: the input carried a class compiling to `display: none`.
+ *
+ * That is the one way of hiding a form control which removes it from the tab
+ * order *and* from the accessibility tree at once, so the `aria-label` the
+ * component is careful to set was never exposed, and step 1 of
+ * `/profile/setup` - choosing Viewer, Rider or Driver, the first thing every
+ * new user does - could not be completed without a pointer at all.
+ *
+ * **Every test above passes either way, and that is this block's reason for
+ * existing.** jsdom loads no stylesheet, so a Tailwind class name is an inert
+ * string here and `getByRole("radio")` found these controls perfectly well
+ * while every real browser was hiding them. No jsdom assertion can see the
+ * defect itself; what is assertable is the class contract that produced it,
+ * which is what the two cases below pin. That Tab reaches each radio and an
+ * arrow key moves between them was verified in Chromium against the compiled
+ * stylesheet - jsdom cannot answer it, and a green run here does not claim to.
+ */
+describe("FormRadioButton keyboard reachability", () => {
+  const renderRadio = () =>
+    render(
+      <RadioButton
+        label="Driver"
+        id="driver"
+        value="DRIVER"
+        currentlySelected="RIDER"
+      />,
+    );
+
+  it("hides the input visually rather than removing it from the page", () => {
+    renderRadio();
+    const radio = screen.getByRole("radio", { name: "Driver" });
+
+    const classes = radio.className.split(" ");
+    // The clipped-1px-box pattern, which stays focusable and announced.
+    expect(classes).toContain("sr-only");
+    // And specifically not the `display: none` one it replaced.
+    expect(classes).not.toContain("hidden");
+  });
+
+  it("puts the focus ring on the label, the only box the user can see", () => {
+    renderRadio();
+    const label = screen
+      .getByRole("radio", { name: "Driver" })
+      .closest("label");
+
+    // The control: the ring has to land on the wrapping label, so prove the
+    // label is found before asserting anything about its classes.
+    expect(label).not.toBeNull();
+
+    // Keyed off the hidden input's own focus state, and on `:focus-visible`
+    // rather than `:focus` so that a pointer click paints nothing.
+    expect(label!.className).toContain("has-[:focus-visible]:outline");
+    expect(label!.className).toContain("has-[:focus-visible]:outline-2");
+  });
+});

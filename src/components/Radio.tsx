@@ -1,7 +1,7 @@
 import { Role } from "@prisma/client";
 import React, { useEffect, useState } from "react";
 import { FieldError } from "react-hook-form";
-import styled from "styled-components";
+import styled, { css } from "styled-components";
 import { fieldErrorId } from "../utils/formA11y";
 
 type RadioOwnProps = {
@@ -13,6 +13,29 @@ type RadioOwnProps = {
 
 type RadioProps = RadioOwnProps &
   Omit<React.ComponentPropsWithoutRef<"input">, "role">;
+
+/**
+ * The focus indicator, shared by both arms below.
+ *
+ * The input is visually hidden (see `className` on it), so it has no box of
+ * its own for the browser's default ring to be drawn around - the control was
+ * reachable by keyboard and gave no sign of it. `:has()` keys the ring off the
+ * hidden input's state and draws it on the label the user can actually see.
+ *
+ * `:focus-visible` rather than `:focus`, so a pointer click does not paint a
+ * ring; and black rather than this repo's usual red, because the selected arm's
+ * background is that same red and the ring has to show on both.
+ *
+ * One fragment rather than a copy per arm: the two labels differ only in
+ * colour, and a focus ring that drifted between them would be a defect nobody
+ * would think to look for.
+ */
+const focusRing = css`
+  &:has(input:focus-visible) {
+    outline: 2px solid #000;
+    outline-offset: 2px;
+  }
+`;
 
 const StyledActiveRadioButton = styled.label`
   background-color: #c8102e;
@@ -27,6 +50,8 @@ const StyledActiveRadioButton = styled.label`
   display: flex;
   align-items: center;
   justify-content: center;
+
+  ${focusRing}
 `;
 
 const StyledInactiveRadioButton = styled.label`
@@ -43,6 +68,8 @@ const StyledInactiveRadioButton = styled.label`
   display: flex;
   align-items: center;
   justify-content: center;
+
+  ${focusRing}
 `;
 
 const Radio = React.forwardRef<HTMLInputElement, RadioProps>(

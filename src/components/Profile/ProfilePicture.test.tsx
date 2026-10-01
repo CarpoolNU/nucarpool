@@ -579,3 +579,87 @@ describe("the pending picture preview", () => {
     expect(liveUrls()).toEqual([]);
   });
 });
+
+/**
+ * SCRUM-610 item 3: the two halves of the upload control, both of which left a
+ * user stuck in front of a button that did nothing.
+ *
+ * **Keyboard reach.** The file input carried a class compiling to
+ * `display: none`, and the only visible control is a `<label>` - which is not
+ * focusable. So between them there was no focusable element anywhere in the
+ * upload control, and setting a profile picture on `/profile` or on setup step
+ * 4 was pointer-only. As in `Setup/FormRadioButton.test.tsx`, jsdom loads no
+ * stylesheet and so cannot see that; the class contract is what is assertable
+ * here, and the tab order was verified in Chromium.
+ *
+ * **Re-picking the same file.** A file input fires `change` when its value
+ * changes, not when the dialog closes. `handleFileChange` never cleared the
+ * value, so the sequence that actually happens - pick a photo, dislike the
+ * crop, cancel, pick the same photo again - set the input to the value it
+ * already held, fired nothing, and reopened no cropper.
+ *
+ * jsdom cannot reproduce that sequence either, and the obvious test is
+ * worthless *because* it cannot: `fireEvent.change` dispatches the event
+ * unconditionally, with no regard for whether the value changed, so "pick the
+ * same file twice and assert the dialog reopens" passes just as happily
+ * against the unfixed component. What is observable, and what the browser's
+ * behaviour is downstream of, is that the handler leaves the value empty - so
+ * that is asserted directly, against a value seeded the way a real pick leaves
+ * one.
+ */
+describe("the upload control", () => {
+  const uploadInput = () =>
+    screen.getByLabelText("Upload Profile Picture") as HTMLInputElement;
+
+  it("hides the file input visually rather than removing it from the page", () => {
+    render(<ProfilePicture selectedFile={null} onFileSelected={jest.fn()} />);
+
+    // The control: the input is reachable by its label at all, so the class
+    // assertions below are about the element the user would actually tab to.
+    const input = uploadInput();
+    expect(input).toBeInTheDocument();
+
+    const classes = input.className.split(" ");
+    expect(classes).toContain("sr-only");
+    expect(classes).not.toContain("hidden");
+  });
+
+  it("puts the focus ring on the label, the only box the user can see", () => {
+    render(<ProfilePicture selectedFile={null} onFileSelected={jest.fn()} />);
+
+    const input = uploadInput();
+    const label = document.querySelector<HTMLElement>('label[for="fileInput"]');
+    expect(label).not.toBeNull();
+
+    // A sibling variant only reaches *forward*, so the ordering is part of the
+    // contract: the label can only style itself from the input's focus state
+    // while the input precedes it.
+    expect(input.nextElementSibling).toBe(label);
+    expect(input.className.split(" ")).toContain("peer");
+    expect(label!.className).toContain("peer-focus-visible:outline");
+  });
+
+  it("clears the input's value so re-picking the same file is still a change", () => {
+    render(<ProfilePicture selectedFile={null} onFileSelected={jest.fn()} />);
+    const input = uploadInput();
+
+    // What a real pick leaves behind. Seeded explicitly because
+    // `fireEvent.change` sets only `files`, and against an untouched `value`
+    // of "" the assertion below would hold with the fix reverted.
+    Object.defineProperty(input, "value", {
+      configurable: true,
+      writable: true,
+      value: "C:\\fakepath\\photo.jpg",
+    });
+    expect(input.value).not.toBe("");
+
+    const file = new File(["photo"], "photo.jpg", { type: "image/jpeg" });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    // The handler still did its job with the file it was given - the clear
+    // must not cost the pick - and then left nothing for the next one to
+    // collide with.
+    expect(screen.getByTestId("cropper")).toBeInTheDocument();
+    expect(input.value).toBe("");
+  });
+});

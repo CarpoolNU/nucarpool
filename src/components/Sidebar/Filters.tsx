@@ -344,6 +344,15 @@ const Filters = ({
                       sx={{ padding: 0 }}
                       checked={selectedDays[index]}
                       onChange={() => toggleDaySelection(index)}
+                      // A day box is drawn entirely by `icon`/`checkedIcon`,
+                      // which MUI renders as decoration beside the real input -
+                      // so without this all seven announced as an unnamed
+                      // "checkbox" under one heading, indistinguishable from
+                      // each other. Following `Schedule/SelectDays`, which is
+                      // the same pattern on the same seven labels and is a
+                      // *different* set of checkboxes: SCRUM-513 named those
+                      // and never reached these.
+                      slotProps={{ input: { "aria-label": day } }}
                       checkedIcon={<StaticDayBox day={day} isSelected={true} />}
                       icon={<StaticDayBox day={day} isSelected={false} />}
                     />
