@@ -24,8 +24,8 @@
     "test:db": "jest --config jest.integration.config.js",
     "build:main": "prisma generate && next build",
     "startup": "yarn db:start && next dev",
-    "build:development": "NODE_ENV=development prisma generate && next build",
-    "build:production": "NODE_ENV=production prisma generate && next build"
+    "build:development": "yarn build:main",
+    "build:production": "yarn build:main"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

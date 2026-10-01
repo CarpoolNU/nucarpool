@@ -7,7 +7,15 @@ services:
     # override here — 5.7 was amd64-only and ran emulated on Apple Silicon.
     image: mysql:8.0
     ports:
-      - "${MYSQL_PORT}:3306"
+      # Bound to loopback, not to every interface. A bare "${MYSQL_PORT}:3306"
+      # publishes the container on the host's LAN address too, and the root
+      # password this reads comes from `.env.example`, which ships a known
+      # value and is documented as working unchanged - so a developer who
+      # copied the example and ran `yarn db:start` on a cafe or campus network
+      # was serving a root login with a published password. The port still
+      # reaches the host, so `DATABASE_URL` pointing at 127.0.0.1 is unaffected.
+      - "127.0.0.1:${MYSQL_PORT}:3306"
+    # Container-to-container only, and unaffected by the host binding above.
     expose:
       - "3306"
     environment:
@@ -17,5 +25,13 @@ services:
       # A bind mount, not a named volume: the data directory sits in the
       # repository root and is gitignored. 8.0 only starts on a data directory
       # left by 5.7 if 5.7 shut down cleanly, so an existing one usually has to
-      # be replaced — see "Upgrading an existing local database" in README.md.
+      # be replaced: stop the container, move `./nucarpool-db-data` aside, and
+      # start again to initialise a fresh one, then `yarn db:schema` to apply
+      # the migrations. It holds local development data only — nothing here is
+      # a copy of anything deployed.
+      #
+      # This used to point at "Upgrading an existing local database" in
+      # README.md, a section that has never existed. A tested 5.7-to-8.0
+      # in-place upgrade procedure needs someone who has actually performed
+      # one; re-initialising is what this comment can honestly describe.
       - ./nucarpool-db-data:/var/lib/mysql

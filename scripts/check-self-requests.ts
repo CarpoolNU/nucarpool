@@ -17,7 +17,9 @@
  * found **2** rows in production on 2026-09-09, against 0 on staging. Two rows
  * are still few enough to remove by hand and that is exactly the argument for
  * not doing it by hand, because an ad-hoc delete leaves no dry run, no
- * per-row log and no run-state entry.
+ * per-row log, and nothing anyone can record afterwards - see "Has a script
+ * been applied to staging or production?" in scripts/README.md for what
+ * recording a run means here.
  *
  * Removal is three deletes, not one — the request, its conversation, and the
  * messages inside it — which is why the counts below are printed per row.

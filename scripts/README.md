@@ -69,7 +69,7 @@ The `check-*` scripts exit `0` when clean and `1` when not, so they can gate a f
 | [`check-env-contract.js`](./check-env-contract.js) | CI: `yarn check:env` and `yarn check:amplify`, and the source of the placeholder build environment |
 | [`check-page-routes.js`](./check-page-routes.js)   | CI: `yarn check:routes` and the `build` job's manifest assertion                                   |
 | [`measure-layout.ts`](./measure-layout.ts)         | Serves a layout fixture for measuring in a real browser. **No database.**                          |
-| [`emailtemplate.py`](./emailtemplate.py)           | **Mutates AWS.** Creates and updates the SES templates the app sends                               |
+| [`emailtemplate.py`](./emailtemplate.py)           | **Mutates AWS.** Creates and updates the SES templates the app sends. Dry-run by default           |
 
 `measure-layout.ts` is the exception to this directory's opening sentence: it touches no database, connects to no environment, and has no `--apply` because it writes nothing anywhere. It compiles `src/styles/globals.css` and serves it with a fixture over HTTP on an OS-assigned loopback port, so a browser can measure boxes that jsdom reports as zero. [`docs/testing.md`](../docs/testing.md#measuring-layout-in-a-real-browser) covers what it proves and does not. It is not in CI and nothing schedules it.
 
@@ -77,6 +77,18 @@ The `check-*` scripts exit `0` when clean and `1` when not, so they can gate a f
 npx ts-node scripts/measure-layout.ts                            # list fixtures
 npx ts-node scripts/measure-layout.ts group-member-card-trigger  # serve one
 ```
+
+`emailtemplate.py` is the only Python script here and the only one that writes to something other than a database. Its dependencies are in [`requirements.txt`](./requirements.txt) — declared nowhere before, so it failed with an `ImportError` on a machine that happened not to have `boto3`.
+
+```bash
+python3 -m pip install -r scripts/requirements.txt
+python3 scripts/emailtemplate.py                 # dry run: diffs live vs local
+python3 scripts/emailtemplate.py --apply         # publish
+```
+
+It follows the same shape as the database scripts: **dry-run by default, `--apply` to write, no `--force`.** It used to publish immediately on invocation, overwriting every live template with no confirmation and printing neither the account nor the region — so nothing distinguished a staging run from a production one. It now prints the account, the identity and the region before anything is written, and the dry run shows a per-part diff against what SES currently holds.
+
+Its links default to `https://www.carpoolnu.com`. Publishing into a non-production account wants `--base-url` (or `EMAIL_TEMPLATE_BASE_URL`), or the templates will send that account's recipients to production. It has no `*.test.ts` — there is no Python test setup in this repository — so it is the one script here whose planning half nothing in `yarn test` covers.
 
 `*.test.ts` files next to each script cover argument parsing and the pure planning half, and run in `yarn test`. **A passing suite says nothing about what a script would do to a real database.**
 
@@ -118,7 +130,7 @@ There are two different questions, and only one is answerable from a database:
 
 To check the current state of any script in the table above:
 
-1. Run it (with `--force`/read-only, no `--apply`) against the target environment. That gives you the live count, not a stale figure.
+1. Run it read-only — that is the default, so just omit `--apply` — against the target environment. That gives you the live count, not a stale figure. There is no `--force` on any of them: each rejects an unrecognised flag, and all seven `.ts` writers have a test asserting that `--force` in particular throws.
 2. For the four `check-*` scripts, the sibling repair script's dry run reports the same population from the other side — cross-checking is free.
 3. A few scripts have counts that are **retained by decision, not pending**: `cleanup-orphan-conversations`'s orphan backlog on production is intentionally kept (see [Conversation ownership](../src/server/db/README.md#conversation-ownership)) — a rising count there means the fix that stops new orphans regressed, not that a backlog needs clearing.
 4. `repair-wallclock-schedule-times`'s candidate count depends on the day it runs, because its scope is "co-op running now" — a stale count from last month tells you nothing about today's population.

@@ -10,13 +10,22 @@ import { maskUnexpectedError } from "./errorMasking";
  * tRPC's own default for `isDev` is `NODE_ENV !== "production"`, and `isDev`
  * decides whether `error.stack` is attached to the shape as `data.stack`. The
  * first line of a stack *is* the message, so masking `message` while leaving
- * `isDev` to default would send the Prisma invocation to the browser anyway in
- * any environment that is not literally `production` - which includes the
- * staging build, since `build:development` sets `NODE_ENV=development`.
+ * `isDev` to default would send the Prisma invocation to the browser in any
+ * environment that is not literally `production`.
  *
- * Production behaviour is unchanged either way, because both expressions are
- * false there. Setting it explicitly is what makes the guarantee ours and
- * testable rather than a coincidence of two different definitions agreeing.
+ * This comment used to justify itself by saying the staging build sets
+ * `NODE_ENV=development` via `build:development`. It does not, and never did -
+ * a `VAR=value` prefix scopes the variable to the first command of a `&&`
+ * list, so it reached `prisma generate` and not `next build`, which sets
+ * `NODE_ENV=production` itself anyway. See "There is no development build" in
+ * `docs/deployment.md`. No deployed environment reaches this with
+ * `NODE_ENV` unset or set to anything else, so the two expressions agree
+ * everywhere it currently runs.
+ *
+ * It stays explicit regardless. Equality against one named value is a property
+ * this file states and a test can pin, rather than a coincidence of two
+ * independent definitions that happen to agree today - and the one that would
+ * flip, `NODE_ENV !== "production"`, fails *open*, disclosing more.
  */
 const isDevelopment = process.env.NODE_ENV === "development";
 

@@ -93,6 +93,37 @@ const AMPLIFY_EXEMPT = {};
 const MIN_EXPECTED_AMPLIFY_PATTERNS = 5;
 
 /**
+ * Credential variables an AWS build container may export, which amplify.yml's
+ * grep patterns must never match.
+ *
+ * These are *not* part of the app's environment contract - nothing in
+ * `src/utils/env/` reads them, and the app's own AWS variables use the
+ * suffixed spellings (`ACCESS_KEY_ID_AWS` and friends, per CLAUDE.md). They
+ * belong to Amplify itself. A pattern that matches one copies Amplify's deploy
+ * identity into `.env.production`, which travels in the deployment artifact
+ * AWS documents as readable by anyone with `amplify:GetJob` plus artifact
+ * store access.
+ *
+ * This existed only as a comment in amplify.yml asserting that three narrow
+ * patterns "cannot do that", while `ACCESS` and `SECRET` elsewhere in the same
+ * file matched `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` as substrings.
+ * Coverage checking could not see it: a pattern that matches too *much* covers
+ * everything it should and reports no gap. Hence a separate, explicit list.
+ *
+ * `AWS_SESSION_TOKEN` is here although no current pattern comes close - the
+ * point is the standing rule, not today's patterns. The build-identity
+ * variables amplify.yml copies on purpose (`AWS_COMMIT_ID`, `AWS_BRANCH`,
+ * `AWS_JOB_ID`) are deliberately absent: they carry no credential.
+ */
+const AWS_CREDENTIAL_VARS = [
+  "AWS_ACCESS_KEY_ID",
+  "AWS_SECRET_ACCESS_KEY",
+  "AWS_SESSION_TOKEN",
+  "AWS_SECURITY_TOKEN",
+  "AWS_CONTAINER_AUTHORIZATION_TOKEN",
+];
+
+/**
  * Provided by the platform or the CI runner, so they are never expected to be
  * documented in .env.example even if the env modules start reading them.
  */
@@ -577,6 +608,32 @@ function amplifyCoverage(names, patterns, exemptions = AMPLIFY_EXEMPT) {
 }
 
 /**
+ * Which grep patterns would sweep an AWS credential into .env.production.
+ *
+ * Uses the same substring semantics as amplifyCoverage(), via
+ * matchingPatterns(), so the two cannot disagree about what a pattern matches
+ * - and so a non-literal pattern is rejected by one definition rather than two.
+ *
+ * @param {string[]} patterns grep patterns from amplify.yml
+ * @param {string[]} [credentials] injectable so a test need not depend on the
+ *   module-level list
+ * @returns {{credential: string, patterns: string[]}[]} one entry per matched
+ *   credential, empty when the spec is safe
+ */
+function credentialLeaks(patterns, credentials = AWS_CREDENTIAL_VARS) {
+  const leaks = [];
+
+  for (const credential of credentials) {
+    const matches = matchingPatterns(credential, patterns);
+    if (matches.length) {
+      leaks.push({ credential, patterns: matches });
+    }
+  }
+
+  return leaks;
+}
+
+/**
  * The strictness rule, checked per command.
  *
  * A grep pattern's job is to copy values to the runtime, not to validate them:
@@ -681,6 +738,35 @@ function checkAmplifySpec(contract, verbose) {
     );
   }
 
+  // Before the coverage report, because this is the failure coverage cannot
+  // see: an over-broad pattern covers every variable it should and still
+  // leaks. A spec that would copy Amplify's own credentials into the
+  // deployment artifact should not be described as carrying the environment
+  // correctly, however complete its coverage is.
+  const leaks = credentialLeaks(patterns);
+  if (leaks.length) {
+    console.error(
+      `\n✖ ${leaks.length} AWS credential variable(s) would be copied ` +
+        `into ${ENV_PRODUCTION_FILE} by amplify.yml:`,
+    );
+    for (const { credential, patterns: matched } of leaks) {
+      console.error(`    ${credential}  <- ${matched.join(", ")}`);
+    }
+    console.error(
+      `\nThese belong to the Amplify build container, not to this app - ` +
+        `nothing in src/utils/env/ reads them, and the app's own AWS ` +
+        `variables use the suffixed spellings (ACCESS_KEY_ID_AWS and ` +
+        `friends). A pattern matching one writes Amplify's deploy identity ` +
+        `in plaintext into a file that travels in the deployment artifact.\n` +
+        `grep matches substrings, so the fix is to spell the pattern as the ` +
+        `full variable name rather than a fragment of it: ACCESS_KEY_ID_AWS ` +
+        `is not a substring of AWS_ACCESS_KEY_ID, while ACCESS is. Anchoring ` +
+        `with ^ is not an option - matchingPatterns() takes literal patterns ` +
+        `only.`,
+    );
+    process.exit(1);
+  }
+
   const { names, required, optional } = partitionContract(contract);
   const { covered, exempt, uncovered, unusedPatterns } = amplifyCoverage(
     names,
@@ -767,7 +853,8 @@ function checkAmplifySpec(contract, verbose) {
 
   console.log(
     `\n✓ amplify.yml carries every required variable into the deployed ` +
-      `environment, and each command's strictness matches what it covers.`,
+      `environment, each command's strictness matches what it covers, and no ` +
+      `pattern matches an AWS credential variable.`,
   );
 }
 
@@ -882,12 +969,14 @@ module.exports = {
   amplifyCoverage,
   amplifyGrepPatterns,
   commandTolerance,
+  credentialLeaks,
   envsafeOptionsAt,
   isOptional,
   matchingPatterns,
   parseGrepPatterns,
   strictnessIssues,
   AMPLIFY_EXEMPT,
+  AWS_CREDENTIAL_VARS,
   ENV_PRODUCTION_FILE,
   MIN_EXPECTED_AMPLIFY_PATTERNS,
 };
