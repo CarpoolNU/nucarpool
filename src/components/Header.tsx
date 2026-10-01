@@ -232,7 +232,7 @@ const MobileNavItem = styled.button<{ $active: boolean }>`
  * and 48px are different decisions about two different widths, and the cap is
  * the only thing they have in common.
  */
-export const Logo = styled.h1`
+export const Logo = styled.button`
   font-family: "Lato", sans-serif;
   height: 100%;
   font-style: normal;
@@ -243,6 +243,28 @@ export const Logo = styled.h1`
   align-items: center;
   text-align: center;
   color: #f4f4f4;
+
+  /* It routes to "/", so it is a control and not a heading - a styled h1
+     with an onClick is reachable by pointer only. These undo what the element
+     change brings with it rather than adding anything: the background, border
+     and padding a button carries by default, and the cursor the inline style
+     used to supply. The font and colour above already override the
+     font: inherit that Tailwind's preflight puts on buttons, which is why
+     they are unchanged. */
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+
+  /* Light, and inset. The bar behind this is #c8102e, so this repo's usual red
+     ring would be invisible on it; and the logo is height: 100% of that bar,
+     so a positive offset would draw outside it - the same reason
+     MobileNavItem above insets its own. */
+  &:focus-visible {
+    outline: 2px solid #f4f4f4;
+    outline-offset: -2px;
+  }
 
   @media ${DESKTOP_MEDIA_QUERY} {
     font-size: min(48px, ${HEADER_LOGO_MAX_FONT_SIZE});
@@ -772,7 +794,7 @@ const Header = (props: HeaderProps) => {
         {props.signIn ? (
           <SigninLogo>CarpoolNU</SigninLogo>
         ) : (
-          <Logo onClick={() => router.push("/")} style={{ cursor: "pointer" }}>
+          <Logo type="button" onClick={() => router.push("/")}>
             CarpoolNU
           </Logo>
         )}
