@@ -59,3 +59,26 @@ jobs:
       - run: yarn test
         env:
           NUCARPOOL_TEST_TZ: America/New_York
+      # A third zone, and the first one *east* of UTC.
+      #
+      # The two legs above are both at or behind UTC, which leaves the entire
+      # positive-offset direction unexercised - and that is the direction the
+      # month-picker defect lived in. `dateUtils.ts` records it: the antd picker
+      # hands back local midnight on the first of the month, these are `@db.Date`
+      # columns, and east of UTC that instant's UTC day is the *previous month*,
+      # so a Berlin user choosing a January-June co-op had December-May stored.
+      # `dateUtils.test.ts` says so in as many words - "a positive offset is the
+      # broken direction and is not among them" - because a zone cannot be
+      # simulated from inside a test: V8 caches it per isolate, which is why
+      # `jest.shared.config.js` pins it before the workers fork and why
+      # `NUCARPOOL_TEST_TZ` is the only way to exercise a second one.
+      #
+      # `Asia/Kolkata` rather than `Europe/Berlin`, though the defect is written
+      # up against Berlin and the suite passes in both. Kolkata is +05:30 all
+      # year: it has the positive offset the property needs, it adds a
+      # *non-integer* offset - a whole class of arithmetic that no other leg
+      # touches - and having no DST it means the same thing in January as in
+      # July, so this leg cannot start failing because of the date it ran on.
+      - run: yarn test
+        env:
+          NUCARPOOL_TEST_TZ: Asia/Kolkata

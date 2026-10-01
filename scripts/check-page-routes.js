@@ -47,6 +47,40 @@ const DEFAULT_PAGE_EXTENSIONS = ["tsx", "ts", "jsx", "js"];
 /** `foo.test.ts`, `foo.spec.tsx`, and the bare `test.ts` / `spec.ts` forms. */
 const TEST_FILE = /(^|\.)(test|spec)\./;
 
+/**
+ * Directory names that make a file test code whatever it is called.
+ *
+ * Both `testMatch` patterns in `jest.config.js` collect a `__tests__`
+ * directory recursively, whatever the files inside it are named, as well as
+ * the `.test.` / `.spec.` naming convention. So `src/pages/__tests__/foo.ts`
+ * is a suite Jest runs - and Next still compiles it into the route
+ * `/__tests__/foo`. `__mocks__` is included for the same reason: it is test
+ * support code that must never be reachable as a URL, even though Jest does
+ * not collect it as a suite.
+ */
+const TEST_DIR = /^__(tests|mocks)__$/;
+
+/**
+ * Whether a repo-relative page path is test code.
+ *
+ * Reads the whole path rather than the basename alone. The basename-only check
+ * this replaces passed every file in a `__tests__` directory: the pattern above
+ * needs a literal `test.` or `spec.` in the name, and `foo.ts` has neither, so
+ * a nested suite cleared the guard and shipped as a route.
+ *
+ * @param {string} file repo-relative path, as `pageFiles` returns it
+ * @returns {boolean}
+ */
+function isTestPath(file) {
+  const segments = file.split(path.sep);
+  const basename = segments.pop();
+
+  return (
+    TEST_FILE.test(basename) ||
+    segments.some((segment) => TEST_DIR.test(segment))
+  );
+}
+
 /** A route whose last segment ends in `.test` or `.spec`. */
 const TEST_ROUTE = /\.(test|spec)\b/;
 
@@ -165,7 +199,7 @@ function main() {
 
   const extensions = pageExtensions();
   const pages = pageFiles(extensions);
-  const offenders = pages.filter((file) => TEST_FILE.test(path.basename(file)));
+  const offenders = pages.filter(isTestPath);
 
   console.log(
     `${pages.length} file(s) under src/pages match pageExtensions ` +
@@ -210,4 +244,16 @@ function main() {
   }
 }
 
-main();
+// Only when run directly, so `isTestPath` can be imported by
+// scripts/check-page-routes.test.ts without the script executing - the same
+// pattern as scripts/check-env-contract.js.
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  isTestPath,
+  TEST_FILE,
+  TEST_DIR,
+  TEST_ROUTE,
+};
