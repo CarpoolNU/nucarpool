@@ -33,6 +33,29 @@ module.exports = {
   // A root-level option: `projects` entries do not carry their own.
   coverageProvider: "v8",
 
+  // How long one `it` may run before Jest kills it. Jest's default is 5000ms,
+  // exactly the `asyncUtilTimeout` that `jest.setup.dom.ts` gives Testing
+  // Library's `waitFor` (SCRUM-616). Left equal, the outer bound races the
+  // inner one and usually wins, because a test spends time before its first
+  // `waitFor` and often awaits more than one - so a slow wait reports
+  // "Exceeded timeout of 5000 ms for a test" rather than naming the element and
+  // the text content it gave up waiting for. Same failure, strictly less to go
+  // on. This raises the outer bound so the inner one is the one that reports.
+  //
+  // **Root-level, like `coverageProvider` above, and for the same reason.** A
+  // `testTimeout` set inside a `projects` entry is accepted, echoed back by
+  // `jest --showConfig`, and then ignored at runtime: tests still die at 5000ms.
+  // It was written into `jest.shared.config.js` first and verified there by
+  // reading `--showConfig`, which reported 20000 while a deliberately slow test
+  // went on failing at 5000. Only running one proves where this belongs.
+  //
+  // It is not a budget for slow tests. The whole default suite runs in about 35
+  // seconds on an idle machine and no single test comes close, so a suite that
+  // needs this headroom is a finding rather than a tuning problem.
+  // `jest.integration.config.js` declares no `projects` and sets its own
+  // 30000ms, so it is unaffected.
+  testTimeout: 20000,
+
   projects: [
     {
       ...sharedConfig,
