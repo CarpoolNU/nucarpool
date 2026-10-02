@@ -124,10 +124,47 @@ export const favoritesRouter = router({
         });
       }
 
+      // Favouriting yourself is not something the UI can ask for - `UserCard`
+      // only ever sends another user's id - but nothing stopped a hand-rolled
+      // call, and the row it wrote then showed up in `favorites.me` as the
+      // caller favouriting themselves.
+      //
+      // `assertNotBlocked` below does not catch it: a self pair has no `Block`
+      // row to find, because `applyBlock` refuses to create one. `BAD_REQUEST`
+      // matches the two other self-target refusals in this API, `blocks.block`
+      // and `reports.create`.
+      if (input.favoriteId === userId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "You cannot favorite yourself.",
+        });
+      }
+
       // Adding a favourite is reaching toward someone, so a block either way
       // refuses it. Removing one is not, and stays open: a user can always
       // take someone off their own list.
       if (input.add) {
+        // A `favoriteId` that names nobody used to reach Prisma, where
+        // `connect` cannot resolve the row and throws `P2025` - not a
+        // `TRPCError`, so the client got a masked 500 for what is an ordinary
+        // bad id. Checked here rather than caught below so the answer does not
+        // depend on which half of the write failed.
+        //
+        // Only on the add path: `disconnect` of an id that was never
+        // favourited is a no-op under an implicit many-to-many, so a remove
+        // stays open even if the other account has since been deleted.
+        const favorite = await ctx.prisma.user.findUnique({
+          where: { id: input.favoriteId },
+          select: { id: true },
+        });
+
+        if (!favorite) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "User not found.",
+          });
+        }
+
         await assertNotBlocked(ctx.prisma, userId, input.favoriteId);
       }
 

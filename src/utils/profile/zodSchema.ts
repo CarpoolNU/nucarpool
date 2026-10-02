@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { Role, Status } from "@prisma/client";
 import { MAX_SEATS_AVAILABLE } from "../carpoolSeats";
-import { PROFILE_TEXT_MAX_LENGTH } from "../textLimits";
+import { ADDRESS_MAX_LENGTH, PROFILE_TEXT_MAX_LENGTH } from "../textLimits";
 import {
   COOP_DATE_ORDER_MESSAGE,
   coopYearMessage,
@@ -11,6 +11,9 @@ import {
 
 const custom = z.ZodIssueCode.custom;
 const tooLong = `Cannot be longer than ${PROFILE_TEXT_MAX_LENGTH} characters`;
+// Same number, different column. The address fields land in `location`,
+// not on `user`, so they carry their own limit and their own message.
+const addressTooLong = `Cannot be longer than ${ADDRESS_MAX_LENGTH} characters`;
 export const onboardSchema = z
   .object({
     role: z.nativeEnum(Role),
@@ -35,8 +38,11 @@ export const onboardSchema = z
     // form rather than as a failed save. `maxLength` on the inputs
     // stops typing and pasting; this also catches anything set programmatically.
     companyName: z.string().max(PROFILE_TEXT_MAX_LENGTH, tooLong).optional(),
-    companyAddress: z.string().optional(),
-    startAddress: z.string().optional(),
+    companyAddress: z
+      .string()
+      .max(ADDRESS_MAX_LENGTH, addressTooLong)
+      .optional(),
+    startAddress: z.string().max(ADDRESS_MAX_LENGTH, addressTooLong).optional(),
     preferredName: z.string().max(PROFILE_TEXT_MAX_LENGTH, tooLong).optional(),
     pronouns: z.string().max(PROFILE_TEXT_MAX_LENGTH, tooLong).optional(),
     daysWorking: z.array(z.boolean()).optional(),

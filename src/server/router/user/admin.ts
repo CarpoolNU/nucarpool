@@ -499,6 +499,28 @@ export const adminDataRouter = router({
         throw new TRPCError({ code: "UNAUTHORIZED" });
       }
 
+      // A `userId` naming nobody is a manager's typo or a stale row in the
+      // table they clicked from, not a fault. It used to run straight into
+      // `tx.user.update`, where Prisma throws `P2025` for a record it cannot
+      // find — not a `TRPCError`, so it left the same masked 500 the FORBIDDEN
+      // checks above were written to remove, and the manager was told nothing
+      // about which part went wrong.
+      //
+      // Outside the transaction deliberately: it is a read, it commits
+      // nothing, and failing before the transaction opens keeps the atomic
+      // section to the two writes that genuinely belong together.
+      const target = await ctx.prisma.user.findUnique({
+        where: { id: input.userId },
+        select: { id: true },
+      });
+
+      if (!target) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "User not found.",
+        });
+      }
+
       // One transaction so the permission change and its audit entry either
       // both land or neither does — a permission change must never happen
       // without a corresponding record.

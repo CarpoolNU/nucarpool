@@ -28,6 +28,11 @@ const buildPrismaMock = () => {
       findMany: jest.fn().mockResolvedValue([]),
       aggregate: jest.fn().mockResolvedValue(NO_DATES),
       update: jest.fn().mockResolvedValue({}),
+      // The target-exists read `updateUserPermission` makes before it opens
+      // its transaction. Answers "found" by default so the tests about the
+      // write itself are unaffected; the NOT_FOUND test overrides it with
+      // `null`, which is what Prisma returns for a row that is not there.
+      findUnique: jest.fn().mockResolvedValue({ id: "someone-else" }),
     },
     carpoolGroup: {
       findMany: jest.fn().mockResolvedValue([]),
@@ -865,6 +870,43 @@ describe("updateUserPermission", () => {
       }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(prisma.adminAuditLog.create).not.toHaveBeenCalled();
+  });
+
+  it("answers NOT_FOUND for a userId naming nobody, instead of an opaque 500", async () => {
+    // Prisma throws P2025 for an update whose `where` matches no row. That is
+    // not a TRPCError, so it reached the manager as INTERNAL_SERVER_ERROR with
+    // the message replaced — the very masking the FORBIDDEN checks above were
+    // added to remove, left in place on the one branch nobody checked.
+    const { caller, prisma } = callerFor(adminSession(Permission.MANAGER));
+    prisma.user.findUnique.mockResolvedValue(null);
+
+    await expect(
+      caller.user.admin.updateUserPermission({
+        userId: "no-such-user",
+        permission: Permission.ADMIN,
+      }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+    // Refused before the transaction opens, so neither write was attempted —
+    // a permission change and its audit entry must never diverge.
+    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(prisma.adminAuditLog.create).not.toHaveBeenCalled();
+  });
+
+  it("checks the target against the id from the input, not the actor", async () => {
+    // Guards against a check that reads `ctx.session.user.id` and so passes
+    // for every target as long as the manager themselves exists.
+    const { caller, prisma } = callerFor(adminSession(Permission.MANAGER));
+
+    await caller.user.admin.updateUserPermission({
+      userId: "someone-else",
+      permission: Permission.ADMIN,
+    });
+
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({
+      where: { id: "someone-else" },
+      select: { id: true },
+    });
   });
 
   it("writes both the update and its audit entry through the same transaction", async () => {

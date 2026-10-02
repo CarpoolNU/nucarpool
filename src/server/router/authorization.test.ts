@@ -350,6 +350,12 @@ describe("adminRouter", () => {
 describe("admin.updateUserPermission manager gate", () => {
   it("lets a MANAGER change another user's permission", async () => {
     const { caller, prisma } = callerFor(sessionFor(Permission.MANAGER));
+    // The target-exists read the procedure now makes before it opens its
+    // transaction, so a `userId` naming nobody is a NOT_FOUND rather than a
+    // P2025 from inside `user.update`. The refusal tests below never reach it
+    // — the permission gate turns them away first — so only this one, the
+    // single path that gets as far as the write, has to answer it.
+    prisma.user.findUnique.mockResolvedValue({ id: "someone-else" });
     prisma.user.update.mockResolvedValue({
       id: "someone-else",
       permission: Permission.ADMIN,

@@ -76,6 +76,20 @@ const forbidden = (message: string) =>
 const membershipConflict = (message: string) =>
   new TRPCError({ code: "CONFLICT", message });
 
+/**
+ * Prisma's "the row this operation needed is not there any more".
+ *
+ * Matched on `code` rather than with `instanceof`, because the generated client
+ * is re-created by `prisma generate` and a worktree running an older one hands
+ * back an error whose prototype is a different class object with the same
+ * name - `instanceof` is false, the branch is skipped, and the 500 this exists
+ * to remove comes back. The code string is part of Prisma's documented API.
+ */
+const isMissingRecordError = (error: unknown): boolean =>
+  typeof error === "object" &&
+  error !== null &&
+  (error as { code?: unknown }).code === "P2025";
+
 const requireCallerId = (userId: string | undefined): string => {
   if (!userId) {
     throw new TRPCError({
@@ -759,11 +773,36 @@ export const groupsRouter = router({
           await releaseSeats(tx, driver.id, detached - 1);
         }
 
-        return await tx.carpoolGroup.delete({
-          where: {
-            id: input.groupId,
-          },
-        });
+        // A group row that is already gone is a bad request, not a fault.
+        //
+        // Unlike the other existence checks in this file this one cannot be a
+        // read beforehand, because the condition arises *between* any such read
+        // and this statement. `requireGroupDriver` above only ever reads
+        // `carpool_search`, never `carpool_group`, so two routes get here with
+        // the group row missing: a concurrent `delete`, or an `edit` whose
+        // dissolution path (`tx.carpoolGroup.delete`, below) landed in between.
+        // Prisma answers both with `P2025`, which is not a `TRPCError` and so
+        // reached the client as a masked 500 that the query layer then retried
+        // twice more into the same answer.
+        //
+        // Throwing here still aborts the transaction, so the detach above and
+        // the seat credit roll back together - which is right: this call did
+        // not dissolve the group, and whoever did credited the seats already.
+        try {
+          return await tx.carpoolGroup.delete({
+            where: {
+              id: input.groupId,
+            },
+          });
+        } catch (error) {
+          if (isMissingRecordError(error)) {
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Group does not exist",
+            });
+          }
+          throw error;
+        }
       });
     }),
   edit: protectedRouter
@@ -1127,18 +1166,22 @@ export const groupsRouter = router({
         });
       }
 
-      // Get all members via CarpoolSearch
-      const memberCarpoolSearches = await ctx.prisma.carpoolSearch.findMany({
-        where: { carpoolId: input.groupId },
-        include: { user: true },
-      });
-
-      const updatedGroup = {
-        ...group,
-        users: memberCarpoolSearches.map((cs) => cs.user),
-      };
-
-      return updatedGroup;
+      // The group row and nothing else.
+      //
+      // This used to append `users`, built from an unrestricted
+      // `include: { user: true }`, so every remaining member's whole `User` row
+      // went back - email, `permission`, `emailVerified`, the licence
+      // timestamps. To the wrong person, too: the caller here may be a rider
+      // who has just removed themselves, and a departed member is exactly who
+      // should not be handed the rest of the group's contact details.
+      //
+      // Narrowing it through a `PublicUser` converter, as `me` does, would
+      // still hand a departed member emails and exact home coordinates. It is
+      // dropped outright instead because nothing reads it: both callers use
+      // only `data === null` to tell "the group was dissolved" from "it
+      // survived", and both invalidate `groups.me` immediately afterwards,
+      // which is the read path for members and applies its own projection.
+      return group;
     }),
   /**
    * The driver's group ride preferences.

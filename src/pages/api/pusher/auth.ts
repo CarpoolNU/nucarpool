@@ -50,7 +50,27 @@ export default async function handler(
     return res.status(403).json({ message: "Forbidden" });
   }
 
-  return res
-    .status(200)
-    .json(pusherServer.authorizeChannel(socketId, channelName));
+  // `authorizeChannel` validates before it signs, and validation failure is a
+  // thrown `Error`, not a return value: `socket_id` must match `\d+\.\d+` and
+  // the channel name must be non-empty, within 200 characters and drawn from
+  // Pusher's own character set. The type checks above let a string through
+  // whatever its shape, so `socket_id=x` on a channel this caller genuinely
+  // owns passed `canSubscribe` and then threw here - an unhandled rejection
+  // that Next turned into a 500 for what is a malformed request.
+  //
+  // The thrown message quotes the offending value back ("Invalid socket id:
+  // 'x'"), so it is logged rather than returned; the client gets a fixed
+  // string. Nothing is leaked by saying which of the two was wrong, but
+  // nothing is gained either, and the caller sent both.
+  let authResponse;
+  try {
+    authResponse = pusherServer.authorizeChannel(socketId, channelName);
+  } catch (error) {
+    console.error("Pusher authorizeChannel rejected the request", error);
+    return res
+      .status(400)
+      .json({ message: "socket_id or channel_name is malformed" });
+  }
+
+  return res.status(200).json(authResponse);
 }

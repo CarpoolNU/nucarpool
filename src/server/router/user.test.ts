@@ -3,7 +3,10 @@ import { TRPCError } from "@trpc/server";
 import type { Session } from "next-auth";
 import { appRouter } from "./index";
 import type { Context } from "./context";
-import { PROFILE_TEXT_MAX_LENGTH } from "../../utils/textLimits";
+import {
+  ADDRESS_MAX_LENGTH,
+  PROFILE_TEXT_MAX_LENGTH,
+} from "../../utils/textLimits";
 import { CURRENT_TERMS_VERSION } from "../../utils/termsAcceptance";
 import { MAX_PROFILE_IMAGE_BYTES } from "../../utils/profileImage";
 import { cloneState, withTransaction } from "./transactionMock";
@@ -1495,15 +1498,67 @@ describe("user.edit — profile text is bounded by its columns", () => {
       caller.user.edit(editInput({ [field]: atLimit })),
     ).resolves.toBeDefined();
   });
+});
 
-  it("leaves the address fields unbounded", async () => {
-    // These are filled from a Mapbox suggestion rather than typed, and capping
-    // them would only exchange one kind of failed save for another.
+/**
+ * The eight address fields were the last strings here with no bound at all.
+ *
+ * They were left that way on the reasoning that nobody types them — they are
+ * parsed out of a Mapbox feature and posted by the form — so a place name the
+ * geocoder returned must already fit. Nothing checked that, and a long enough
+ * `place_name` does not: these write to `location`, whose columns are
+ * `VARCHAR(191)` exactly like the profile text above. The overflow surfaced as
+ * `P2000` from inside Prisma, which is not a `TRPCError`, so the whole profile
+ * save rolled back and the client was told "Something went wrong" with nothing
+ * naming the field.
+ *
+ * The limit is on the procedure rather than only on the form because this is
+ * the boundary that writes the row, and `onboardSchema` is a second copy of
+ * the same rule for the same reason the profile text has two.
+ */
+describe("user.edit — addresses are bounded by their columns", () => {
+  const fields = [
+    "companyAddress",
+    "startAddress",
+    "startStreet",
+    "startCity",
+    "startState",
+    "companyStreet",
+    "companyCity",
+    "companyState",
+  ] as const;
+  const atLimit = "a".repeat(ADDRESS_MAX_LENGTH);
+
+  it.each(fields)(
+    "refuses an over-length %s as a field error, writing nothing",
+    async (field) => {
+      const db = buildEditDb();
+      const caller = editCallerFor(SESSION_USER, db);
+
+      // The point of the fix: a named field error at the boundary, not a
+      // masked 500 from Prisma after the transaction has already opened.
+      expect(
+        await editIssues(
+          caller.user.edit(editInput({ [field]: `${atLimit}!` })),
+        ),
+      ).toContainEqual(
+        expect.objectContaining({ path: expect.arrayContaining([field]) }),
+      );
+
+      expect(db.prisma.location.create).not.toHaveBeenCalled();
+      expect(db.prisma.carpoolSearch.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(fields)("saves %s at exactly the column width", async (field) => {
+    // The positive control, and the reason the constant is 191 rather than a
+    // round number: a cap below the column width is a shorter product limit
+    // nobody chose, and would refuse a place name the database would take.
     const db = buildEditDb();
     const caller = editCallerFor(SESSION_USER, db);
 
     await expect(
-      caller.user.edit(editInput({ companyAddress: "a".repeat(500) })),
+      caller.user.edit(editInput({ [field]: atLimit })),
     ).resolves.toBeDefined();
   });
 });
