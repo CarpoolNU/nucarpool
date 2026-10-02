@@ -101,6 +101,23 @@ A spy placed after another render of the same component therefore passes against
 
 Static image imports and `mixpanel-browser` are stubbed for this project only. Both otherwise break at _load_ time — an image cannot be parsed by `ts-jest`, and `utils/mixpanel` starts an analytics session at module scope.
 
+### An async wait is a wall-clock budget, so read the wall clock first
+
+`waitFor` and `findBy*` poll until their callback stops throwing or a timeout expires, and that timeout is wall clock. A Jest worker does not get a wall clock to itself: under worker contention the process is simply descheduled, and a chain of a few macrotask turns — a query resolving, React Query batching the notification onto a `setTimeout(0)`, the re-render, the effect, the state update — takes time out of all proportion to the work in it. The same wait in [`useProfileFilterSeed.test.tsx`](../src/utils/explore/useProfileFilterSeed.test.tsx) settled in 8ms on an idle machine and 1703ms on a thrashing one, at the same commit (SCRUM-616).
+
+Two budgets bound this, and they are deliberately unequal:
+
+| Budget                             | Value   | Set in                                      |
+| ---------------------------------- | ------- | ------------------------------------------- |
+| `asyncUtilTimeout` — one `waitFor` | 5000ms  | [`jest.setup.dom.ts`](../jest.setup.dom.ts) |
+| `testTimeout` — one whole `it`     | 20000ms | [`jest.config.js`](../jest.config.js)       |
+
+The inner one is smaller so that it is the one that expires, because it names the element and the text it gave up on; the test timeout only says a number. Both default to 5000ms, which is why the outer one is raised rather than the inner one merely lowered.
+
+**`testTimeout` has to be root-level in `jest.config.js`.** Set inside a `projects` entry it is accepted, echoed back by `jest --showConfig`, and then ignored at runtime — tests still die at 5000ms. `--showConfig` is not evidence here; a deliberately slow test is.
+
+**So check the wall clock before debugging a surprising local failure.** Twenty consecutive runs of the default suite on an idle 10-core machine took 33.7–35.4s, and about 70s with other work on the machine. A multi-minute run with failures scattered across unrelated suites is reporting on the machine, not on the code — raising a timeout will not fix it, and neither will anything else in the test.
+
 ## The database suite
 
 `yarn test:db` collects `*.db.test.ts` against a real MySQL. `jest.config.js` excludes those files, so `yarn test` needs no database.
