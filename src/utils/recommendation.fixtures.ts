@@ -1,6 +1,10 @@
 import { Role, Status } from "@prisma/client";
 import type { CarpoolSearch, Location } from "@prisma/client";
 import type { FInputs } from "./recommendation";
+import {
+  DISTANCE_FILTER_ANY,
+  TIME_FILTER_ANY,
+} from "./filters/filterSentinels";
 
 /**
  * Test fixtures for `calculateScore`. Kept in their own module because
@@ -162,10 +166,10 @@ export const buildSearch = (options: SearchOptions = {}): SearchFixture => {
  * filter UI sends; `days: 0` and `dateOverlap: 0` mean no day or date requirement.
  */
 export const anyFilters = (overrides: Partial<FInputs> = {}): FInputs => ({
-  startDistance: 20,
-  endDistance: 20,
-  startTime: 4,
-  endTime: 4,
+  startDistance: DISTANCE_FILTER_ANY,
+  endDistance: DISTANCE_FILTER_ANY,
+  startTime: TIME_FILTER_ANY,
+  endTime: TIME_FILTER_ANY,
   days: 0,
   flexDays: 0,
   startDate: TERM_START,

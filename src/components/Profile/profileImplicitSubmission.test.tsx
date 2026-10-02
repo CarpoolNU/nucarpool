@@ -349,9 +349,7 @@ describe("AccountSection - Enter in a field is Save Changes", () => {
 
     expect(save).not.toHaveBeenCalled();
 
-    await user.click(
-      screen.getByRole("switch", { name: "Mark profile inactive" }),
-    );
+    await user.click(screen.getByRole("switch", { name: "Profile active" }));
     save.mockClear();
     await user.keyboard("{Enter}");
 

@@ -27,6 +27,36 @@ import * as React from "react";
  * `SCHEDULE_ANCHOR_DATE`, so the round trip is exact and neither the season nor
  * the viewer's timezone can affect it.
  */
+/**
+ * The wrapper antd's `TimePicker` needs to accept a `ref`, at module scope.
+ *
+ * **It used to be declared inside `ControlledTimePicker`'s body**, which made
+ * it a new function identity on every render. React compares `element.type` by
+ * identity, so a new one is a *different component*: the old tree was unmounted
+ * and a fresh `TimePicker` mounted in its place on every parent render. The
+ * panel is the picker's own internal state, so it closed on the render that
+ * picking an hour caused, and focus went with it - the control could not be
+ * used to pick a time, which is the only thing it is for.
+ *
+ * Hoisting is the whole fix: the identity is now fixed for the life of the
+ * module, so a parent render reconciles the same component and the panel
+ * survives. It also ends the shadowing that made the old version hard to read,
+ * where the wrapper's own `props` hid the outer component's.
+ *
+ * `forwardRef` because this is what `Controller`'s `field.ref` attaches to.
+ * antd's picker does not forward a DOM ref itself, so the ref lands on this
+ * wrapping element and react-hook-form has something to focus.
+ */
+const TimePickerWrapper = forwardRef<
+  HTMLDivElement,
+  React.ComponentProps<typeof TimePicker>
+>((props, ref) => (
+  <div ref={ref}>
+    <TimePicker {...props} />
+  </div>
+));
+TimePickerWrapper.displayName = "TimePickerWrapper";
+
 interface ControlledTimePickerProps {
   control: Control<OnboardingFormInputs>;
   name: "startTime" | "endTime";
@@ -45,16 +75,6 @@ const ControlledTimePicker = (props: ControlledTimePickerProps) => {
       </div>
     );
   };
-  const TimePickerWrapper = forwardRef<
-    HTMLDivElement,
-    React.ComponentProps<typeof TimePicker>
-  >((props, ref) => (
-    <div ref={ref}>
-      <TimePicker {...props} />
-    </div>
-  ));
-  TimePickerWrapper.displayName = "TimePickerWrapper";
-
   return (
     <Controller
       name={props.name}

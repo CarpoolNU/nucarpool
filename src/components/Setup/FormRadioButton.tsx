@@ -23,7 +23,14 @@ const RadioButton = React.forwardRef<
     return (
       <label
         htmlFor={id}
-        className={`font-montserrat flex cursor-pointer items-center justify-center rounded-lg border border-black px-6 py-2 text-2xl transition ${
+        // The focus ring lives here rather than on the input, because the input
+        // is visually hidden and has no box a ring could be drawn around. The
+        // `has-[...]` variant keys it off the hidden input's own state, so the
+        // styled button that stands in for it shows the focus the keyboard user
+        // actually has. Black on both arms: the selected arm's background is
+        // the same red as the repo's usual focus colour, which would make a red
+        // ring invisible exactly where selection matters most.
+        className={`font-montserrat flex cursor-pointer items-center justify-center rounded-lg border border-black px-6 py-2 text-2xl transition has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-black ${
           currentlySelected === value
             ? "bg-northeastern-red text-white"
             : "bg-white text-black"
@@ -35,7 +42,19 @@ const RadioButton = React.forwardRef<
           name="role"
           value={value}
           checked={currentlySelected === value}
-          className="hidden"
+          // Visually hidden, NOT `display: none`. The class this replaced
+          // compiled to `display: none`, which takes the input out of the tab
+          // order and out of the accessibility tree together - so the
+          // `aria-label` below was never exposed and a keyboard-only user
+          // could not select a role at all, the first thing onboarding asks
+          // for. The clipped 1px box keeps the input focusable and announced
+          // while the wrapping label remains the only thing on screen.
+          //
+          // jsdom cannot see this difference: it loads no stylesheet, so
+          // `getByRole("radio")` found these controls even while they were
+          // `display: none` in every real browser. The tab order is verified
+          // in Chromium against the compiled stylesheet instead.
+          className="sr-only"
           ref={forwardedRef}
           // Explicit, rather than left to "name from content" on the
           // wrapping `<label>`: the error paragraph below is also inside

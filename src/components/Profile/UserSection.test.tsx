@@ -7,6 +7,10 @@ import UserSection from "./UserSection";
 import { OnboardingFormInputs, User } from "../../utils/types";
 import { UnsavedChangesGuard } from "../../utils/profile/signOutWithGuard";
 import {
+  PRONOUNS_INPUT_MAX_LENGTH,
+  PRONOUNS_MAX_LENGTH,
+} from "../../utils/textLimits";
+import {
   MOBILE_WIDTH,
   restoreViewportAfterEach,
   setViewportWidth,
@@ -324,6 +328,26 @@ describe("the role lock for a user in a carpool group", () => {
  * exercises the association - a negative query would pass whether or not the
  * name was ever wired up.
  */
+/**
+ * The second of the two pronouns call sites - see the fuller note in
+ * `StepFour.test.tsx`. Both wrap the value in parentheses for display, and
+ * `maxLength` counts those, so a cap of 20 stored characters needs 22 here.
+ * Asserted at both sites because they were written out independently and a fix
+ * to one would not have moved the other.
+ */
+describe("the pronouns field's character cap", () => {
+  it("allows PRONOUNS_MAX_LENGTH stored characters, counting the parentheses", () => {
+    render(<Harness checkChanges={jest.fn()} />);
+
+    const pronouns = screen.getByRole("textbox", {
+      name: "Pronouns",
+    }) as HTMLInputElement;
+
+    expect(pronouns.maxLength).toBe(PRONOUNS_INPUT_MAX_LENGTH);
+    expect(pronouns.maxLength - 2).toBe(PRONOUNS_MAX_LENGTH);
+  });
+});
+
 describe("UserSection accessible names", () => {
   it("names the always-visible text fields after their labels", () => {
     render(<Harness checkChanges={jest.fn()} />);

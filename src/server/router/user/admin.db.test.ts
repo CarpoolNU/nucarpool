@@ -17,6 +17,7 @@ import {
   buildQuickStatsCSV,
   buildUserCountsCSV,
 } from "../../../utils/adminDashboardCsv";
+import { averagePerGroup, percentOf } from "../../../utils/adminQuickStats";
 
 /**
  * The CSV export against a real database.
@@ -161,26 +162,24 @@ describe("the admin dashboard CSV export against a real database", () => {
     expect(stats.conversations.totalConversationCount).toBe(1);
     expect(stats.conversations.totalWithMsgCount).toBe(1);
 
-    const percent = (part: number, whole: number) =>
-      Math.round((part / whole) * 1000) / 10 + "%";
     const quickStatsCSV = buildQuickStatsCSV({
       totalConversationCount: stats.conversations.totalConversationCount,
       totalWithMsgCount: stats.conversations.totalWithMsgCount,
       avgConvWithMsg: stats.conversations.avgConvWithMsg,
       avgMsg: stats.conversations.avgMsg,
       groupCount: stats.groups.groupCount,
-      percentDriversInGroup: percent(
+      percentDriversInGroup: percentOf(
         stats.groups.driversInGroup,
         stats.groups.totalDrivers,
       ),
-      percentRidersInGroup: percent(
+      percentRidersInGroup: percentOf(
         stats.groups.ridersInGroup,
         stats.groups.totalRiders,
       ),
-      averageRidersPerGroup:
-        Math.round(
-          (stats.groups.ridersInGroup / stats.groups.groupCount) * 10,
-        ) / 10,
+      averageRidersPerGroup: averagePerGroup(
+        stats.groups.ridersInGroup,
+        stats.groups.groupCount,
+      ),
     });
     const [, quickStatsRow] = quickStatsCSV.split("\n");
     expect(quickStatsRow).toBe(

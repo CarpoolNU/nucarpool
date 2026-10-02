@@ -117,8 +117,31 @@ describe("MixpanelIdentity with a signed-in user", () => {
     const { rerender } = render(<MixpanelIdentity />);
     await settle();
 
+    /*
+     * A *fresh* session object carrying the same id, which is the shape
+     * next-auth actually hands back: `useSession` builds a new object whenever
+     * the provider's state updates, so "the same user re-rendered" is a new
+     * object identity with an identical id rather than the same object twice.
+     * Re-using the previous object here would make the re-render weaker than
+     * the real thing.
+     *
+     * That is also what makes the assertion below able to fail for the right
+     * reason. A dependency array of `[status, session]` rather than
+     * `[status, userId]` re-runs the effect on every such update, and only the
+     * ref guard then stops a second `$identify` going out.
+     */
+    signedInAs(USER_ID);
     rerender(<MixpanelIdentity />);
 
+    /*
+     * The drain is load-bearing, not decoration. The identify call sits behind
+     * a deferred `import()`, so a bare synchronous `toHaveBeenCalledTimes(1)`
+     * here reports the count from *before* any second call could have landed -
+     * it would pass whether or not the re-render started one. Without this the
+     * assertion only ever failed as a side effect of the StrictMode test
+     * above, which is a different property.
+     */
+    await flushDeferredImport();
     expect(identifyUser).toHaveBeenCalledTimes(1);
   });
 

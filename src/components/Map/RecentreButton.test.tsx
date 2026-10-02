@@ -95,6 +95,41 @@ describe.each([
   });
 });
 
+describe("RecentreButton's label", () => {
+  /**
+   * The half of the `(0, 0)` defect that a corrected `flyTo` would not have
+   * fixed. The destination and the promise are one decision, made in
+   * `mapHomeCentre` and spelled out in `mapHomeCentre.test.ts`; what this
+   * covers is that the component actually honours the answer it is handed.
+   *
+   * A VIEWER has no workplace, so naming one was a false statement to about a
+   * third of production - and the control's own docblock used to make the same
+   * claim, which is how the caller came to fly there unconditionally.
+   */
+  it("names the campus when that is where it is going", () => {
+    render(<RecentreButton subject="campus" onRecentre={() => undefined} />);
+
+    expect(
+      screen.getByRole("button", { name: "Recentre the map on Northeastern" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: LABEL })).toBeNull();
+  });
+
+  it("names the workplace when told to, and by default", () => {
+    // The default is what keeps every existing caller and the cases above
+    // correct; asserting it here is what makes the negative query above mean
+    // something rather than pass because no button was rendered at all.
+    const { unmount } = render(
+      <RecentreButton subject="workplace" onRecentre={() => undefined} />,
+    );
+    expect(screen.getByRole("button", { name: LABEL })).toBeInTheDocument();
+    unmount();
+
+    render(<RecentreButton onRecentre={() => undefined} />);
+    expect(screen.getByRole("button", { name: LABEL })).toBeInTheDocument();
+  });
+});
+
 describe("RecentreButton's mobile placement", () => {
   beforeEach(() => {
     setViewportWidth(MOBILE_WIDTH);

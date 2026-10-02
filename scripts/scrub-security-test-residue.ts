@@ -464,8 +464,10 @@ const main = async () => {
     }
 
     // Read back from the database rather than trusting the writes. This is
-    // the answer to "is the residue gone?", and it is the only one worth
-    // recording in the run-state table.
+    // the answer to "is the residue gone?", and the one line worth quoting
+    // when the run is recorded. There is no run-state table in this
+    // repository - see "Has a script been applied to staging or production?"
+    // in scripts/README.md for where a run gets written down.
     const after = await readTarget(prisma);
     const verification = verifyScrubbed(after.user, after.searches[0] ?? null);
 

@@ -27,8 +27,29 @@ const AdminAuditLog = () => {
    */
   const isHydrated = useIsHydrated();
 
+  /*
+   * `refetchOnMount: "always"`, because every write to this table happens on a
+   * tab that is not this one.
+   *
+   * `admin.updateUserPermission` and `admin.resolveReport` each append an
+   * `AdminAuditLog` row inside their transaction, and they are reachable only
+   * from `UserManagement` and `AdminReports`. `/admin` renders exactly one
+   * panel at a time, so this query is always inactive when a row is written and
+   * always remounting when the admin comes back to look - which, with
+   * `refetchOnMount` off globally in `utils/trpc.ts`, meant being served a
+   * cached log missing the admin's own action for up to the 5-minute `gcTime`.
+   *
+   * **Invalidating from those two mutations instead was the obvious fix and it
+   * does not work.** `invalidateQueries` defaults to `refetchType: "active"`,
+   * so an inactive query is only marked; and React Query's `shouldFetchOn`
+   * tests `refetchOnMount` *before* staleness, so the mark changes nothing on
+   * the remount either. An `invalidate()` added there would have been dead
+   * code. This flag is also the only thing that can show another admin's
+   * actions, which no invalidation on this client could ever do.
+   */
   const auditLogQuery = trpc.user.admin.getAuditLog.useQuery(undefined, {
     enabled: isHydrated,
+    refetchOnMount: "always",
   });
   const usersQuery = trpc.user.admin.getAllUsers.useQuery(undefined, {
     enabled: isHydrated,

@@ -1,13 +1,40 @@
 import { RiFocus3Line } from "react-icons/ri";
 import useIsMobile from "../../utils/useIsMobile";
+import type { MapCentreSubject } from "../../utils/map/mapHomeCentre";
+
+/**
+ * What the label calls the place this flies to. The component owns the copy and
+ * the caller owns the choice, which keeps the role test in `index.tsx` where
+ * the rest of them are - this button's placement rules exist precisely so it
+ * does not have to know about roles.
+ */
+const SUBJECT_LABELS: Record<MapCentreSubject, string> = {
+  workplace: "Recentre the map on your workplace",
+  campus: "Recentre the map on Northeastern",
+};
 
 interface RecentreButtonProps {
-  /** Fly the map back to the signed-in user's workplace. */
+  /** Fly the map back to the user's home point. */
   onRecentre: () => void;
+  /**
+   * Which place that is. A VIEWER has no workplace - and nor does anyone whose
+   * address never resolved - so the map's home point for them is the campus,
+   * and the label said otherwise until `mapHomeCentre` gave both the same
+   * answer. Defaults to `workplace`, which is the case every existing caller
+   * and every existing test means.
+   */
+  subject?: MapCentreSubject;
 }
 
 /**
- * Puts the map back on the user's workplace.
+ * Puts the map back on the user's home point.
+ *
+ * **It used to promise a workplace to users who have none.** The label was a
+ * literal and the caller flew to the company coordinates unconditionally, so a
+ * VIEWER - about a third of production, and a role with no `Location` row at
+ * all - pressed "Recentre the map on your workplace" and arrived at `(0, 0)`.
+ * `mapHomeCentre` now answers both halves from one place: where to fly, and
+ * what to call it.
  *
  * **Previously desktop-only**, so a mobile user who panned away
  * from their workplace had no way back to it.
@@ -43,6 +70,7 @@ interface RecentreButtonProps {
  */
 export const RecentreButton = (props: RecentreButtonProps) => {
   const isMobile = useIsMobile();
+  const label = SUBJECT_LABELS[props.subject ?? "workplace"];
 
   return (
     <button
@@ -52,7 +80,7 @@ export const RecentreButton = (props: RecentreButtonProps) => {
           ? "absolute top-2 right-2 z-10 flex h-11 w-11 items-center justify-center rounded-md border-2 border-solid border-gray-300 bg-white shadow-xs hover:bg-gray-200"
           : "absolute right-[8px] bottom-[150px] z-10 flex h-8 w-8 items-center justify-center rounded-md border-2 border-solid border-gray-300 bg-white shadow-xs hover:bg-gray-200"
       }
-      aria-label="Recentre the map on your workplace"
+      aria-label={label}
       onClick={props.onRecentre}
     >
       <RiFocus3Line aria-hidden="true" />

@@ -31,10 +31,37 @@ export const MESSAGE_MAX_LENGTH = 255;
  * `carpool_search.company_name` — all `VARCHAR(191)`, Prisma's default width
  * for an unannotated `String` on MySQL.
  *
- * A ceiling, not a design: the name fields are held to 20 in the UI because
- * that is what the layout wants. This is the length past which a save fails.
+ * A ceiling, not a design: `pronouns` is held to a shorter
+ * {@link PRONOUNS_MAX_LENGTH} in the UI because that is what the layout
+ * wants. This is the length past which a save fails.
  */
 export const PROFILE_TEXT_MAX_LENGTH = 191;
+
+/**
+ * `user.pronouns`, as **stored** — a UI cap, not a column width.
+ *
+ * `PROFILE_TEXT_MAX_LENGTH` is what the column allows; this is what the
+ * layout wants, and it is what both call sites had written out as a bare `20`.
+ *
+ * The number means stored characters, as every other `charLimit` in this
+ * codebase does — `StepTwo` and `CarpoolSection` both pass
+ * `PROFILE_TEXT_MAX_LENGTH`, a column width. It needs saying because the two
+ * pronouns inputs are the only ones whose displayed value is not the stored
+ * value: both render it wrapped in parentheses, so a `maxLength` of 20 left
+ * room for only 18 typed characters. Use
+ * {@link PRONOUNS_INPUT_MAX_LENGTH} for the attribute.
+ */
+export const PRONOUNS_MAX_LENGTH = 20;
+
+/**
+ * What the pronouns input's `maxLength` must be to store
+ * {@link PRONOUNS_MAX_LENGTH} characters.
+ *
+ * The `+ 2` is the `(` and `)` that `UserSection` and `StepFour` add to the
+ * input's value for display and strip again before storing. `maxLength`
+ * counts what is in the input, which is the wrapped form.
+ */
+export const PRONOUNS_INPUT_MAX_LENGTH = PRONOUNS_MAX_LENGTH + 2;
 
 /**
  * `carpool_search.group_notes` — `VARCHAR(90)`.

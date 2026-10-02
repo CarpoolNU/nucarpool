@@ -10,17 +10,33 @@ Amplify's build phase writes the container's environment into `.env.production` 
 yarn run build:${BUILD_ENV}
 ```
 
-`BUILD_ENV` is set **per branch in the Amplify console**, so the repository cannot tell you which script runs. All three differ only in `NODE_ENV`:
+`BUILD_ENV` is set **per branch in the Amplify console**, so the repository cannot tell you which script runs. **All three do the same thing**, and two of them exist only so that whatever the console has in that field still resolves:
 
-| Script              | Command                                              |
-| ------------------- | ---------------------------------------------------- |
-| `build:main`        | `prisma generate && next build`                      |
-| `build:development` | `NODE_ENV=development prisma generate && next build` |
-| `build:production`  | `NODE_ENV=production prisma generate && next build`  |
+| Script              | Command                         |
+| ------------------- | ------------------------------- |
+| `build:main`        | `prisma generate && next build` |
+| `build:development` | `yarn build:main`               |
+| `build:production`  | `yarn build:main`               |
 
 The `&&` is load-bearing. With a single `&`, `prisma generate` is backgrounded and its exit code discarded, so the build can compile against a stale client.
 
+### There is no development build
+
+The two aliases used to read `NODE_ENV=development prisma generate && next build` and `NODE_ENV=production prisma generate && next build`, and this page used to say the three "differ only in `NODE_ENV`". Neither was true. A `VAR=value` prefix in a shell command list scopes the variable to **the first command only**, so `NODE_ENV` reached `prisma generate` and never `next build` — and `next build` sets `NODE_ENV=production` itself regardless. Every branch therefore got a production build, whichever script the console selected.
+
+They are now explicit aliases, so the three cannot drift apart again without someone meaning it. **Do not "fix" this by setting `NODE_ENV=development` for `next build`** — that opts the deployed app out of production optimisation, which is not what a staging branch wants. If a deployed environment ever needs to differ, `NEXT_PUBLIC_ENV` is the variable that already expresses which deployment this is, and it is validated against an allow-list in [`src/utils/env/browser.ts`](../src/utils/env/browser.ts).
+
+The names are kept rather than collapsed to one because **the console selects a script by name**. Deleting `build:development` breaks any branch whose `BUILD_ENV` is `development`, at deploy time, and the repository cannot see what that field holds.
+
 > **A `package.json` script is part of the deploy surface.** Because the console selects one by variable name, adding a `build:*` script puts it one console field away from running against a deployed environment. A previous `build:preview` entry force-pushed the schema and re-seeded; it was deleted for that reason.
+
+## Which Node version the deploy runs
+
+**Unconfirmed, and not pinned by the repository.** [`.nvmrc`](../.nvmrc) and `engines.node` in [`package.json`](../package.json) both say Node 22, and CI reads `.nvmrc` — but [`amplify.yml`](../amplify.yml) has no Node step, so the deployed build uses whatever the **build image selected in the Amplify console** provides. Nothing in this repository records what that is.
+
+It surfaces as a failure in the first `preBuild` command: `yarn install --frozen-lockfile` against a lockfile resolved under a different major is how a mismatch announces itself, at deploy time.
+
+To settle it, read `node --version` from a deploy log, or the build-image setting in the console. To pin it, add `nvm use $(cat .nvmrc)` ahead of `yarn install` — Amplify's Amazon Linux images ship nvm — and verify on a real deploy. `amplify.yml` carries the same note where the command would go.
 
 ## The environment contract
 

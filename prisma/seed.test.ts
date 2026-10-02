@@ -1,3 +1,5 @@
+import { readFileSync } from "fs";
+import { join } from "path";
 import {
   checkSeedIntegrity,
   deleteAllData,
@@ -11,7 +13,8 @@ import { SeedGuardError } from "../src/utils/seedGuard";
 /**
  * Safety regressions for the destructive half of the seed.
  *
- * `prisma/seed.ts` empties seven tables. The guard in `main()` is not the thing
+ * `prisma/seed.ts` empties every table in `SEED_DELETE_ORDER`, plus the
+ * `_Favorites` join table. The guard in `main()` is not the thing
  * under test here — `src/utils/seedGuard.test.ts` covers which targets are
  * refused — this file covers the property that matters after that decision is
  * made: **a refusal must reach zero deletes**, including when `deleteAllData`
@@ -138,8 +141,41 @@ describe("deleteAllData — the guard is on the primitive, not just the caller",
       "carpoolSearch",
       "location",
       "carpoolGroup",
+      "adminAuditLog",
+      "emailSendBudget",
+      "account",
+      "session",
       "user",
     ]);
+  });
+
+  // SCRUM-615. `admin_audit_log` and `email_send_budget` declare no relation to
+  // `User`, so no cascade — emulated or otherwise — ever reached them and a
+  // re-seed left their rows behind pointing at deleted users. Nothing but this
+  // list deletes them, which is why the assertion is on the list.
+  it.each(["adminAuditLog", "emailSendBudget"])(
+    "deletes %s, which has no relation to User to cascade from",
+    async (model) => {
+      const { client, deletes } = recordingClient();
+
+      await deleteAllData(client, { DATABASE_URL: LOCAL_URLS.localhost });
+
+      expect(deletes).toContain(model);
+      expect(deletes.indexOf(model)).toBeLessThan(deletes.indexOf("user"));
+    },
+  );
+
+  it("deletes account and session explicitly rather than via the cascade", async () => {
+    // Both declare `onDelete: Cascade`, so `user.deleteMany` would remove them
+    // anyway. Listed for the reason `block` is: what this list says and what
+    // gets deleted stay the same. It also reaches a row whose user is already
+    // gone, which the cascade cannot.
+    const { client, deletes } = recordingClient();
+
+    await deleteAllData(client, { DATABASE_URL: LOCAL_URLS.localhost });
+
+    expect(deletes.indexOf("account")).toBeLessThan(deletes.indexOf("user"));
+    expect(deletes.indexOf("session")).toBeLessThan(deletes.indexOf("user"));
   });
 
   it("clears the favorites join table before deleting users", async () => {
@@ -151,6 +187,93 @@ describe("deleteAllData — the guard is on the primitive, not just the caller",
     await deleteAllData(client, { DATABASE_URL: LOCAL_URLS.localhost });
 
     expect(raw).toEqual(["DELETE FROM `_Favorites`"]);
+  });
+});
+
+/**
+ * The defect in SCRUM-615 was not a wrong delete — it was a **missing** one,
+ * and no assertion about the tables in `SEED_DELETE_ORDER` can catch the table
+ * that is not in it. `admin_audit_log` and `email_send_budget` were each added
+ * to the schema long after this list, declare no relation to `User`, and so
+ * were reached by nothing: not the list, not an emulated cascade, not a test.
+ *
+ * This compares the list against `schema.prisma` itself, so the next model
+ * added without a decision about the wipe fails here rather than quietly
+ * surviving a re-seed. `VerificationToken` is the sole allowed exclusion and
+ * is named here deliberately: adding a model to this set is the decision, and
+ * it has to be made in a diff someone reads.
+ */
+describe("SEED_DELETE_ORDER covers the schema", () => {
+  /** Prisma names a delegate after its model with the first letter lowered. */
+  const delegateName = (model: string) =>
+    model.charAt(0).toLowerCase() + model.slice(1);
+
+  /**
+   * Models the seed deliberately leaves alone.
+   *
+   * `VerificationToken` has no `userId` and no relation to anything — it is
+   * keyed by `identifier`/`token` and holds short-lived tokens for NextAuth's
+   * email provider, which this app does not configure. There is nothing for a
+   * re-seed to orphan.
+   */
+  const DELIBERATELY_NOT_CLEARED = ["verificationToken"];
+
+  const schemaModels = () => {
+    const schema = readFileSync(join(__dirname, "schema.prisma"), "utf8");
+    const names = [...schema.matchAll(/^model\s+(\w+)\s*\{/gm)].map((m) =>
+      delegateName(m[1]),
+    );
+    // A regex that matched nothing — or that stopped matching after a
+    // reformat of `schema.prisma` — would make every assertion below vacuously
+    // true, so the fixture asserts itself first. Named models rather than a
+    // count: a count passes whatever the regex actually found, and these two
+    // are the ends of the question this block decides.
+    expect(names).toContain("user");
+    expect(names).toContain("verificationToken");
+    return names;
+  };
+
+  it("clears every model except the documented exclusions", () => {
+    const missing = schemaModels().filter(
+      (model) =>
+        !SEED_DELETE_ORDER.includes(model as never) &&
+        !DELIBERATELY_NOT_CLEARED.includes(model),
+    );
+
+    expect(missing).toEqual([]);
+  });
+
+  it("lists no model the schema does not declare", () => {
+    // The other direction: a rename in `schema.prisma` that left this tuple
+    // behind would be a `deleteMany` on `undefined` at seed time.
+    const models = schemaModels();
+
+    expect(
+      SEED_DELETE_ORDER.filter((model) => !models.includes(model)),
+    ).toEqual([]);
+  });
+
+  it("names only exclusions the schema still declares", () => {
+    // Keeps the allow-list from outliving the model it excuses.
+    const models = schemaModels();
+
+    expect(
+      DELIBERATELY_NOT_CLEARED.filter((model) => !models.includes(model)),
+    ).toEqual([]);
+  });
+
+  it("does not excuse a model it also clears", () => {
+    // The two lists are answers to the same question, so an entry in both is a
+    // contradiction — and the cheap way to silence the coverage test above is
+    // to add the model to the allow-list rather than to the wipe. This makes
+    // that visible when the model is in fact already cleared; when it is not,
+    // nothing but review can catch it, which is why the exclusion is one
+    // named entry with a reason rather than a pattern.
+    expect(
+      DELIBERATELY_NOT_CLEARED.filter((model) =>
+        SEED_DELETE_ORDER.includes(model as never),
+      ),
+    ).toEqual([]);
   });
 });
 

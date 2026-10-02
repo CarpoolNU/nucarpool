@@ -9,7 +9,10 @@ import { Note } from "../../styles/profile";
 import { EntryLabel } from "../EntryLabel";
 import { TextField } from "../TextField";
 import ProfilePicture from "../Profile/ProfilePicture";
-import { PROFILE_TEXT_MAX_LENGTH } from "../../utils/textLimits";
+import {
+  PROFILE_TEXT_MAX_LENGTH,
+  PRONOUNS_INPUT_MAX_LENGTH,
+} from "../../utils/textLimits";
 
 interface StepFourProps {
   errors: FieldErrors<OnboardingFormInputs>;
@@ -77,11 +80,13 @@ const StepFour = ({
           <EntryLabel
             htmlFor="pronouns"
             error={errors.pronouns}
-            label="Prounouns"
+            label="Pronouns"
           />
           <TextField
             id="pronouns"
-            charLimit={20}
+            // See the matching note in `UserSection`: the displayed value is
+            // parenthesised and `maxLength` counts the parentheses.
+            charLimit={PRONOUNS_INPUT_MAX_LENGTH}
             inputClassName={`h-12`}
             error={errors.pronouns}
             isDisabled={false}

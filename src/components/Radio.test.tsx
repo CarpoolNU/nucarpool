@@ -80,3 +80,91 @@ describe.each(BRANCHES)("Radio error association (%s)", (_branch, current) => {
     expect(radio.getAttribute("aria-describedby")).toBeNull();
   });
 });
+
+/**
+ * SCRUM-610 item 2: this radio's input is visually hidden but *focusable*, so
+ * unlike `FormRadioButton`'s it was always reachable by keyboard - and gave no
+ * sign of it. An input with no box of its own has nowhere for the browser's
+ * default ring to be drawn, so a keyboard user tabbing through the profile
+ * page's role selector could not see which of the three options they were on.
+ *
+ * Read off the stylesheet rather than off the template, so a rule that moves
+ * between the two arms or loses its `:focus-visible` is visible here. The
+ * matcher is a *prefix* match on `selectorText`, which is the difference from
+ * `Header.test.tsx`'s `rulesFor`: an exact match finds only the unconditional
+ * block and would drop the nested rule that is the entire subject.
+ *
+ * **What this cannot see is the ring.** jsdom computes no layout and paints
+ * nothing, and it never puts an element into `:focus-visible` on its own - so
+ * this proves the rule is emitted and targets the right selector, not that
+ * two pixels of outline appear. That was checked in Chromium.
+ */
+describe.each(BRANCHES)("Radio focus indicator (%s)", (_branch, current) => {
+  /**
+   * Every declaration block whose selector *starts with* one of this element's
+   * own generated class selectors, paired with that selector.
+   */
+  const rulesFor = (element: Element): string[] => {
+    const prefixes = Array.from(element.classList).map((name) => `.${name}`);
+    const collected: string[] = [];
+
+    // Duck-typed on `conditionText` rather than `instanceof CSSMediaRule`,
+    // for the reason `Header.test.tsx` records: those constructors are
+    // jsdom's.
+    const visit = (rule: CSSRule) => {
+      const asMedia = rule as CSSMediaRule;
+      if (typeof asMedia.conditionText === "string") {
+        for (const inner of Array.from(asMedia.cssRules)) visit(inner);
+        return;
+      }
+
+      const asStyle = rule as CSSStyleRule;
+      const selector = asStyle.selectorText;
+      if (
+        typeof selector === "string" &&
+        prefixes.some((prefix) => selector.startsWith(prefix))
+      ) {
+        collected.push(`${selector} { ${asStyle.style.cssText} }`);
+      }
+    };
+
+    for (const sheet of Array.from(document.styleSheets)) {
+      for (const rule of Array.from(sheet.cssRules)) visit(rule);
+    }
+
+    return collected;
+  };
+
+  const labelFor = (label: string) =>
+    screen.getByRole("radio", { name: label }).closest("label")!;
+
+  it("draws an outline on the label when the hidden input takes keyboard focus", () => {
+    render(
+      <Radio
+        label="Driver"
+        id="driver"
+        value={Role.DRIVER}
+        currentlySelected={current}
+        onChange={() => undefined}
+      />,
+    );
+
+    const rules = rulesFor(labelFor("Driver"));
+
+    // The positive control, and a necessary one: `rulesFor` returning nothing
+    // at all would satisfy a bare `find(...)` assertion by reading as "no
+    // focus rule" when the truth is "no rules were collected". A declaration
+    // this component has always carried proves the collection works.
+    expect(rules.join(" ")).toContain("border-radius: 10px");
+
+    const focusRule = rules.find((rule) =>
+      rule.includes(":has(input:focus-visible)"),
+    );
+    expect(focusRule).toBeDefined();
+    expect(focusRule).toContain("outline");
+
+    // `:focus-visible`, not a bare `:focus`: a pointer click on this label
+    // focuses the input too, and a ring on every click is noise.
+    expect(rules.join(" ")).not.toContain(":has(input:focus)");
+  });
+});

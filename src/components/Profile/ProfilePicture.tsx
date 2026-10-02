@@ -131,7 +131,21 @@ const ProfilePicture = ({
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+    const input = event.target;
+    const file = input.files?.[0];
+
+    // Cleared on the way out, so the *next* pick of the same file is still a
+    // change. A file input fires `change` on the value changing, not on the
+    // dialog closing: leaving the chosen path in place meant that cancelling
+    // the crop and re-picking the same photo - the common path, because the
+    // reason to re-pick is usually disliking your own crop - fired nothing and
+    // left the user tapping a button that did nothing at all.
+    //
+    // After reading `files`, and only after: assigning the value empties the
+    // `files` list. `file` is a reference to the `File` object rather than into
+    // the list, so it stays valid.
+    input.value = "";
+
     if (!file) {
       onFileSelected(null);
       return;
@@ -324,19 +338,29 @@ const ProfilePicture = ({
         )}
 
         <div className="ml-4">
-          <label
-            htmlFor="fileInput"
-            className="bg-northeastern-red font-montserrat ml-10 inline-block cursor-pointer rounded-lg border border-black px-4 py-2 text-xl text-white hover:bg-red-700"
-          >
-            Upload Profile Picture
-          </label>
+          {/* The input comes first in the DOM so the label can style itself
+              from the input's focus state: a sibling variant only reaches
+              *forward*, and the input is visually hidden, so moving it costs
+              no layout. */}
           <input
             id="fileInput"
             type="file"
             accept="image/*"
             onChange={handleFileChange}
-            className="hidden"
+            // Visually hidden, NOT `display: none`. The class this replaced
+            // compiled to `display: none`, which left the only keyboard path
+            // to a profile picture nowhere: the visible control is a `<label>`,
+            // which is not focusable, and a `display: none` input is not
+            // either - so the upload was pointer-only on `/profile` and on
+            // setup step 4.
+            className="peer sr-only"
           />
+          <label
+            htmlFor="fileInput"
+            className="bg-northeastern-red font-montserrat peer-focus-visible:outline-northeastern-red ml-10 inline-block cursor-pointer rounded-lg border border-black px-4 py-2 text-xl text-white peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 hover:bg-red-700"
+          >
+            Upload Profile Picture
+          </label>
         </div>
       </div>
     </>
