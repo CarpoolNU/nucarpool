@@ -140,15 +140,56 @@ const buildGroupsDb = (opts?: {
     return true;
   };
 
+  /**
+   * The joined `user` row, honouring whatever the query asked for.
+   *
+   * This exists so a projection assertion cannot pass vacuously. The fake used
+   * to answer `{ id }` no matter what was requested, which meant a test
+   * asserting "no email came back" held even against an unrestricted
+   * `include: { user: true }` — the fixture simply had no email to leak.
+   *
+   * So: a bare `true` hands back the whole row, sensitive columns and all,
+   * exactly as Prisma would; a `select` hands back only what it names. A test
+   * that asserts an absence now fails the moment the resolver over-fetches.
+   */
+  const projectUser = (userId: string, ask: any) => {
+    const full = {
+      id: userId,
+      name: `${userId} name`,
+      email: `${userId}@northeastern.edu`,
+      emailVerified: new Date("2024-01-01T00:00:00.000Z"),
+      image: null,
+      bio: "",
+      preferredName: userId,
+      pronouns: "",
+      permission: "USER",
+      isOnboarded: true,
+      tutorialCompleted: true,
+      licenseSigned: true,
+      licenseSignedAt: new Date("2024-01-01T00:00:00.000Z"),
+      licenseVersion: "v1",
+      profilePictureUpdatedAt: null,
+    };
+
+    const select = ask?.select;
+    if (!select) return full;
+
+    return Object.fromEntries(
+      Object.keys(select)
+        .filter((key) => select[key])
+        .map((key) => [key, (full as Record<string, unknown>)[key]]),
+    );
+  };
+
   const carpoolSearch = {
     findFirst: jest.fn(async ({ where }: any) => {
       const found = searches.find((r) => matches(r, where));
       return found ? { ...found } : null;
     }),
-    findMany: jest.fn(async ({ where }: any) =>
+    findMany: jest.fn(async ({ where, include }: any) =>
       searches
         .filter((r) => matches(r, where))
-        .map((r) => ({ ...r, user: { id: r.userId } })),
+        .map((r) => ({ ...r, user: projectUser(r.userId, include?.user) })),
     ),
     // `edit` counts a group's members before letting its driver leave.
     count: jest.fn(
@@ -623,6 +664,56 @@ describe("user.groups.delete — the driver dissolves the group", () => {
     expect(db.groupIds()).toEqual([GROUP]);
     expect(db.carpoolIdOf(DRIVER)).toBe(GROUP);
   });
+
+  it("answers NOT_FOUND when the group row is already gone, not an opaque 500", async () => {
+    // `requireGroupDriver` only ever reads `carpool_search`, never
+    // `carpool_group`, so the driver passes the membership check and the
+    // delete then finds nothing. Two routes get here: a concurrent delete, or
+    // an `edit` whose dissolution path landed in between. Prisma answers both
+    // with P2025, which is not a TRPCError — so it reached the client as a
+    // masked 500 that the query layer then retried into the same answer.
+    //
+    // This cannot be a read beforehand, which is why it is a catch: the
+    // condition arises between any such read and the delete itself.
+    const db = buildGroupsDb();
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    db.carpoolGroup.delete.mockImplementationOnce(async () => {
+      throw Object.assign(new Error("Record to delete does not exist."), {
+        code: "P2025",
+      });
+    });
+
+    await expect(
+      caller.user.groups.delete({ groupId: GROUP }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+    // Throwing still aborts the transaction, so the detach and the seat credit
+    // roll back together. That is right: this call did not dissolve the group,
+    // and whoever did credited the seats already.
+    expect(db.carpoolIdOf(DRIVER)).toBe(GROUP);
+    expect(db.carpoolIdOf(RIDER_1)).toBe(GROUP);
+    expect(db.carpoolIdOf(RIDER_2)).toBe(GROUP);
+  });
+
+  it("still surfaces a genuine database fault rather than calling it NOT_FOUND", async () => {
+    // The control for the test above: only P2025 is reinterpreted. A lost
+    // connection is a real fault and must keep its 500, or the catch would
+    // quietly convert every failure into "the group is gone" and the driver
+    // would be told their group vanished when it is still there.
+    const db = buildGroupsDb();
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    db.carpoolGroup.delete.mockImplementationOnce(async () => {
+      throw new Error("connection lost");
+    });
+
+    await expect(caller.user.groups.delete({ groupId: GROUP })).rejects.toThrow(
+      "connection lost",
+    );
+
+    expect(db.groupIds()).toEqual([GROUP]);
+  });
 });
 
 describe("user.groups.updatePreferences — self-scoped, replacing the double write", () => {
@@ -805,6 +896,94 @@ describe("user.groups.edit — removing a member", () => {
     });
 
     expect(db.carpoolIdOf(OUTSIDER)).toBeNull();
+  });
+});
+
+describe("user.groups.edit — the response carries no member rows", () => {
+  const leave = (riderId: string) => ({
+    driverId: DRIVER,
+    riderId,
+    groupId: GROUP,
+    add: false,
+  });
+
+  it("the fixture would leak, so the assertions below are not vacuous", async () => {
+    // The control for this whole describe. `buildGroupsDb`'s joined user row
+    // answers a bare `include: { user: true }` with the full row — email,
+    // permission, the licence timestamps — exactly as Prisma does. Without
+    // this check a "no email came back" assertion would hold against the
+    // unfixed resolver too, because the fake simply had nothing to give.
+    const db = buildGroupsDb();
+
+    const rows = await db.carpoolSearch.findMany({
+      where: { carpoolId: GROUP },
+      include: { user: true },
+    });
+
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows[0].user).toMatchObject({
+      email: expect.stringContaining("@"),
+      permission: expect.any(String),
+      licenseSignedAt: expect.any(Date),
+    });
+  });
+
+  it("returns the group row alone, with no users array at all", async () => {
+    // A rider removing themselves from a group of three: the group survives,
+    // and the response goes to someone who is no longer in it. It used to
+    // list every remaining member's whole User row.
+    const { caller } = callerFor(sessionFor(RIDER_1));
+
+    const result = await caller.user.groups.edit(leave(RIDER_1));
+
+    // Positive control first: a null result would satisfy every absence
+    // assertion below without proving anything.
+    expect(result).toMatchObject({ id: GROUP });
+    expect(Object.keys(result ?? {})).not.toContain("users");
+  });
+
+  it("leaks no member's email, permission or consent metadata anywhere in the payload", async () => {
+    // Asserted over the serialised response rather than field by field, so a
+    // future change that reintroduces the members under a different key is
+    // caught too.
+    const { caller } = callerFor(sessionFor(RIDER_1));
+
+    const result = await caller.user.groups.edit(leave(RIDER_1));
+    const payload = JSON.stringify(result);
+
+    for (const member of [DRIVER, RIDER_2]) {
+      expect(payload).not.toContain(`${member}@northeastern.edu`);
+    }
+    expect(payload).not.toContain("permission");
+    expect(payload).not.toContain("licenseSigned");
+    expect(payload).not.toContain("emailVerified");
+  });
+
+  it("still answers null when the removal dissolved the group", async () => {
+    // The one part of this response both callers actually read. A group of
+    // two cannot survive a member leaving, and `useGroupMembership` tells
+    // "dissolved" from "survived" by `data === null` alone.
+    const db = buildGroupsDb({
+      searches: [
+        {
+          id: "s-driver",
+          userId: DRIVER,
+          role: Role.DRIVER,
+          carpoolId: GROUP,
+          seatsAvail: 3,
+        },
+        {
+          id: "s-rider-1",
+          userId: RIDER_1,
+          role: Role.RIDER,
+          carpoolId: GROUP,
+          seatsAvail: 0,
+        },
+      ],
+    });
+    const { caller } = callerFor(sessionFor(RIDER_1), db);
+
+    await expect(caller.user.groups.edit(leave(RIDER_1))).resolves.toBeNull();
   });
 });
 

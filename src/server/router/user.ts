@@ -2,7 +2,10 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedRouter, router } from "./createRouter";
 import { MAX_SEATS_AVAILABLE } from "../../utils/carpoolSeats";
-import { PROFILE_TEXT_MAX_LENGTH } from "../../utils/textLimits";
+import {
+  ADDRESS_MAX_LENGTH,
+  PROFILE_TEXT_MAX_LENGTH,
+} from "../../utils/textLimits";
 import { CURRENT_TERMS_VERSION } from "../../utils/termsAcceptance";
 import { Role } from "@prisma/client";
 import { Status } from "@prisma/client";
@@ -186,7 +189,13 @@ export const userRouter = router({
           // `companyName` at all, so a pasted value over the width failed the
           // whole profile save inside Prisma instead of at the boundary.
           companyName: z.string().max(PROFILE_TEXT_MAX_LENGTH),
-          companyAddress: z.string(),
+          // The `location` columns these six address fields write to are
+          // `VARCHAR(191)` just like the profile text above, and were the last
+          // strings here with no bound at all. Nobody types them - they come
+          // back from Mapbox - which is why they were overlooked, but a long
+          // enough `place_name` still overflows the column, and the write
+          // happens inside the same transaction as the rest of the save.
+          companyAddress: z.string().max(ADDRESS_MAX_LENGTH),
           // This is the boundary that writes coordinates to `location`, and it
           // range-checked none of them. The columns are plain
           // `Float`, so MySQL accepts any number, and `locationWithin` /
@@ -196,7 +205,7 @@ export const userRouter = router({
           // enforces the same bounds; the two share one definition.
           companyCoordLng: longitudeSchema,
           companyCoordLat: latitudeSchema,
-          startAddress: z.string(),
+          startAddress: z.string().max(ADDRESS_MAX_LENGTH),
           startCoordLng: longitudeSchema,
           startCoordLat: latitudeSchema,
           preferredName: z.string().max(PROFILE_TEXT_MAX_LENGTH),
@@ -234,12 +243,12 @@ export const userRouter = router({
           coopStartDate: z.date().nullable(),
           coopEndDate: z.date().nullable(),
           bio: z.string().max(PROFILE_TEXT_MAX_LENGTH),
-          startStreet: z.string(),
-          startCity: z.string(),
-          startState: z.string(),
-          companyStreet: z.string(),
-          companyCity: z.string(),
-          companyState: z.string(),
+          startStreet: z.string().max(ADDRESS_MAX_LENGTH),
+          startCity: z.string().max(ADDRESS_MAX_LENGTH),
+          startState: z.string().max(ADDRESS_MAX_LENGTH),
+          companyStreet: z.string().max(ADDRESS_MAX_LENGTH),
+          companyCity: z.string().max(ADDRESS_MAX_LENGTH),
+          companyState: z.string().max(ADDRESS_MAX_LENGTH),
         })
         // Two things `.max()` cannot express, both of which used to be stored
         // as submitted and then fail silently at match time.

@@ -64,3 +64,21 @@ export const GROUP_OPTION_MAX_LENGTH = 40;
  * incident, and cutting it off at a tweet's length would lose detail.
  */
 export const REPORT_MESSAGE_MAX_LENGTH = 500;
+
+/**
+ * `location.street`, `.street_address`, `.city` and `.state` — all
+ * `VARCHAR(191)`.
+ *
+ * Nobody types these: they are parsed out of a Mapbox feature and posted by
+ * the form. That is exactly why they were the last unbounded strings in
+ * `user.edit` — the reasoning was that a place name the geocoder returned must
+ * fit, and nothing checked. A long enough `place_name` does not, and because
+ * the profile save is one transaction the overflow took the whole save down
+ * with it and reported a masked "Something went wrong" rather than naming the
+ * field.
+ *
+ * Numerically the same as `PROFILE_TEXT_MAX_LENGTH`, and deliberately a
+ * separate constant: these are different columns, and giving them their own
+ * name is what lets one widen without silently widening the other.
+ */
+export const ADDRESS_MAX_LENGTH = 191;

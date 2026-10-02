@@ -38,10 +38,17 @@ const TARGET = "target-user";
  */
 const buildFavoritesDb = (
   seed: Record<string, string[]> = { [USER_A]: [], [USER_B]: [] },
+  /**
+   * Which user rows exist, for the `findUnique` the add path now makes before
+   * it connects. Separate from `seed`, whose keys are only the users who *own*
+   * a list — `TARGET` is favourited by both and owns nothing.
+   */
+  knownUsers: string[] = [USER_A, USER_B, TARGET],
 ) => {
   const favorites = new Map<string, Set<string>>(
     Object.entries(seed).map(([userId, ids]) => [userId, new Set(ids)]),
   );
+  const users = new Set(knownUsers);
 
   const update = jest.fn(async ({ where, data }: any) => {
     const owner = favorites.get(where?.id);
@@ -62,16 +69,23 @@ const buildFavoritesDb = (
     return { id: where.id };
   });
 
+  // Prisma's own answer for a row that is not there: `null`, not a throw. The
+  // resolver turning that into NOT_FOUND is what these tests pin.
+  const findUnique = jest.fn(async ({ where }: any) =>
+    users.has(where?.id) ? { id: where.id } : null,
+  );
+
   // No blocks unless a test adds one.
   const block = fakeBlockDelegate();
 
   return {
-    prisma: { user: { update }, block },
+    prisma: { user: { update, findUnique }, block },
     /** Live block rows: push to block, splice to unblock. */
     blocks: block.rows,
     /** Final favorites for a user, sorted so assertions are order-independent. */
     favoritesOf: (userId: string) => [...(favorites.get(userId) ?? [])].sort(),
     update,
+    findUnique,
   };
 };
 
@@ -204,6 +218,69 @@ describe("user.favorites.edit — a caller cannot redirect the write", () => {
       expect(where.id).toBe(USER_A);
     }
     expect(db.favoritesOf(USER_B)).toEqual([]);
+  });
+});
+
+describe("user.favorites.edit — expected refusals are not masked 500s", () => {
+  it("answers NOT_FOUND for a favoriteId naming nobody, instead of an opaque 500", async () => {
+    // Without the existence check the id reaches Prisma, `connect` cannot
+    // resolve the row, and the P2025 it throws is not a TRPCError — so tRPC
+    // classifies it INTERNAL_SERVER_ERROR and `maskUnexpectedError` replaces
+    // the message. The caller is told nothing, and the query layer retries it.
+    const { caller, db } = callerFor(sessionFor(USER_A));
+
+    await expect(
+      caller.user.favorites.edit({ favoriteId: "no-such-user", add: true }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+    expect(db.update).not.toHaveBeenCalled();
+    expect(db.favoritesOf(USER_A)).toEqual([]);
+  });
+
+  it("still lets a favourite be removed after the other account is gone", async () => {
+    // The check is add-only on purpose. `disconnect` of a row that is not
+    // there is a no-op under an implicit m-n, so a NOT_FOUND here would strand
+    // the entry: the star is the only way to take it off the list, and it
+    // lives on the card that would no longer be reachable.
+    const db = buildFavoritesDb({ [USER_A]: ["deleted-user"] }, [USER_A]);
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await caller.user.favorites.edit({
+      favoriteId: "deleted-user",
+      add: false,
+    });
+
+    expect(db.favoritesOf(USER_A)).toEqual([]);
+    expect(db.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("refuses a caller favouriting themselves with BAD_REQUEST", async () => {
+    // `UserCard` never sends the caller's own id, so this is only reachable by
+    // a hand-rolled call — and `assertNotBlocked` does not catch it, because a
+    // self pair has no Block row to find.
+    const { caller, db } = callerFor(sessionFor(USER_A));
+
+    await expect(
+      caller.user.favorites.edit({ favoriteId: USER_A, add: true }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    expect(db.update).not.toHaveBeenCalled();
+    expect(db.favoritesOf(USER_A)).toEqual([]);
+  });
+
+  it("refuses a self-targeted removal too, so the two paths cannot diverge", async () => {
+    // A self row could only exist if one had been written before this guard.
+    // Refusing the removal as well is the deliberate choice: the guard is
+    // about the shape of the request, and an API that accepts `add: false` for
+    // an id it rejects on `add: true` invites the pair to drift apart again.
+    const db = buildFavoritesDb({ [USER_A]: [USER_A] });
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await expect(
+      caller.user.favorites.edit({ favoriteId: USER_A, add: false }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    expect(db.update).not.toHaveBeenCalled();
   });
 });
 

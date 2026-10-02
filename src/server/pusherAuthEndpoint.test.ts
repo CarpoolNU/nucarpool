@@ -21,8 +21,36 @@ import type { NextApiRequest, NextApiResponse } from "next";
  */
 
 const mockGetServerSession = jest.fn();
-const mockAuthorizeChannel = jest.fn(() => ({ auth: "signature" }));
 const mockCanSubscribe = jest.fn();
+
+/**
+ * Stands in for `Pusher.prototype.authorizeChannel`, *including its
+ * validation* — it validates before it signs, and a validation failure is a
+ * thrown `Error` rather than a return value.
+ *
+ * Reproduced here rather than faked as a bare success because the defect this
+ * covers is precisely that the endpoint's own `typeof === "string"` checks say
+ * nothing about shape, so a malformed `socket_id` reached the signer and threw.
+ * A mock that always succeeds cannot express that, and a mock that throws
+ * unconditionally would pass even if the handler stopped forwarding the
+ * caller's values. These are the real regexes, from
+ * `node_modules/pusher/lib/pusher.js`.
+ */
+const mockAuthorizeChannel = jest.fn((...args: unknown[]) => {
+  const [socketId, channel] = args as [string, string];
+
+  if (typeof socketId !== "string" || !/^\d+\.\d+$/.test(socketId)) {
+    throw new Error(`Invalid socket id: '${socketId}'`);
+  }
+  if (typeof channel !== "string" || channel === "") {
+    throw new Error(`Invalid channel name: '${channel}'`);
+  }
+  if (channel.length > 200) {
+    throw new Error(`Channel name too long: '${channel}'`);
+  }
+
+  return { auth: "signature" };
+});
 
 jest.mock("next-auth", () => ({
   __esModule: true,
@@ -42,7 +70,7 @@ jest.mock("./db/client", () => ({
 jest.mock("./pusher", () => ({
   __esModule: true,
   pusherServer: {
-    authorizeChannel: (...args: unknown[]) => mockAuthorizeChannel(),
+    authorizeChannel: (...args: unknown[]) => mockAuthorizeChannel(...args),
   },
 }));
 
@@ -155,5 +183,75 @@ describe("POST /api/pusher/auth", () => {
     expect(res.statusCode).toBe(405);
     expect(mockGetServerSession).not.toHaveBeenCalled();
     expect(mockAuthorizeChannel).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * A malformed `socket_id` on a channel the caller genuinely owns.
+ *
+ * The two checks above it both pass — it is a string, and `canSubscribe` says
+ * the channel is theirs — so the value reached `authorizeChannel`, which threw
+ * on the shape. Nothing caught it, so Next turned an ordinary bad request into
+ * an unhandled rejection and a 500, which the client then retried.
+ */
+describe("POST /api/pusher/auth — a malformed socket_id is a 400, not a 500", () => {
+  let errorSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    // The handler logs the underlying error. Silenced so a deliberate failure
+    // path does not look like a broken test run, and asserted on below.
+    errorSpy = jest.spyOn(console, "error").mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    errorSpy.mockRestore();
+  });
+
+  it("passes the caller's values through to the signer, which is how this arises", async () => {
+    // The control for the fake: if the handler did not forward what the caller
+    // sent, every assertion below would hold for the wrong reason.
+    await call({ body: { socket_id: "123.456", channel_name: CHANNEL } });
+
+    expect(mockAuthorizeChannel).toHaveBeenCalledWith("123.456", CHANNEL);
+  });
+
+  it("answers 400 rather than letting the validation error escape", async () => {
+    const res = await call({ body: { socket_id: "x", channel_name: CHANNEL } });
+
+    expect(res.statusCode).toBe(400);
+    // Reached the signer, which is the point: the handler's own type check
+    // admits any string, so the shape is only caught here.
+    expect(mockAuthorizeChannel).toHaveBeenCalledWith("x", CHANNEL);
+  });
+
+  it("logs the underlying error instead of returning it", async () => {
+    // Pusher quotes the offending value back ("Invalid socket id: 'x'"). The
+    // client gets a fixed string; the detail goes to the log.
+    const res = await call({ body: { socket_id: "x", channel_name: CHANNEL } });
+
+    expect(res.body).toEqual({
+      message: "socket_id or channel_name is malformed",
+    });
+    expect(JSON.stringify(res.body)).not.toContain("Invalid socket id");
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it("refuses an empty socket_id, which the type check alone admits", async () => {
+    // `typeof "" === "string"`, so the required-fields branch passes it.
+    const res = await call({ body: { socket_id: "", channel_name: CHANNEL } });
+
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("still answers 200 for a well-formed socket_id", async () => {
+    // The positive control: the catch must not have turned the success path
+    // into a blanket refusal.
+    const res = await call({
+      body: { socket_id: "123.456", channel_name: CHANNEL },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ auth: "signature" });
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 });

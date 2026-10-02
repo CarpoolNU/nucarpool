@@ -5,7 +5,7 @@ import {
   coopYearBounds,
   coopYearMessage,
 } from "../dateUtils";
-import { PROFILE_TEXT_MAX_LENGTH } from "../textLimits";
+import { ADDRESS_MAX_LENGTH, PROFILE_TEXT_MAX_LENGTH } from "../textLimits";
 
 /**
  * `onboardSchema` is the gate that decides whether a profile is complete enough to
@@ -241,6 +241,50 @@ describe("onboardSchema — text bounded by its column", () => {
         [field]: "a".repeat(PROFILE_TEXT_MAX_LENGTH),
       }),
     ).not.toContain(field);
+  });
+});
+
+describe("onboardSchema — addresses bounded by their columns", () => {
+  // `companyAddress` and `startAddress` write to `location`, not `user`, and
+  // were the last strings in this schema with no bound. Nobody types them —
+  // they come back from Mapbox — which is why they were missed, but a long
+  // enough `place_name` still overflows `VARCHAR(191)`, and the failure landed
+  // as a masked save error rather than on the field.
+  const fields = ["companyAddress", "startAddress"] as const;
+
+  it.each(fields)("rejects an over-length %s", (field) => {
+    expect(
+      issuePaths({
+        ...completeRider,
+        [field]: "a".repeat(ADDRESS_MAX_LENGTH + 1),
+      }),
+    ).toContain(field);
+  });
+
+  it.each(fields)("accepts %s at exactly the column width", (field) => {
+    expect(
+      issuePaths({
+        ...completeRider,
+        [field]: "a".repeat(ADDRESS_MAX_LENGTH),
+      }),
+    ).not.toContain(field);
+  });
+
+  it("names the address limit in its message rather than the profile one", () => {
+    // Same number today, separate constants on purpose: the two sets of fields
+    // are different columns, and one has to be able to widen without silently
+    // widening the other. A shared message would re-tie them.
+    const issues = onboardSchema.safeParse({
+      ...completeRider,
+      companyAddress: "a".repeat(ADDRESS_MAX_LENGTH + 1),
+    });
+
+    expect(issues.success).toBe(false);
+    expect(
+      issues.error?.issues.find((issue) =>
+        issue.path.includes("companyAddress"),
+      )?.message,
+    ).toBe(`Cannot be longer than ${ADDRESS_MAX_LENGTH} characters`);
   });
 });
 
