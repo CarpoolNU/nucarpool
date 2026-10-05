@@ -46,11 +46,32 @@ updates:
     # of life, a Prisma advisory would only ever be fixed in v5+, so no
     # automated PR will appear for one. Alerts still surface in the Security
     # tab; acting on one means deliberately lifting this pin.
+    #
+    # `@types/node` is held on the major that `.nvmrc` names. This ceiling is
+    # not a preference: the declared range, `engines.node`, `.nvmrc` and the
+    # installed tree all have to agree on one major, and
+    # `node-version-contract.test.ts` fails when they do not. A major bump here
+    # does not break the type check, it makes it pass *more* than it should —
+    # describing APIs the deployed runtime does not have — so a proposal is a
+    # pull request that cannot be merged and should not be (SCRUM-614 found the
+    # drift; SCRUM-617 added this entry after Dependabot re-proposed it).
+    #
+    # Lifting this belongs to a Node runtime upgrade, which moves `.nvmrc`,
+    # `engines.node`, the Amplify runtime and CI together. The test hard-codes
+    # the major for that reason: the upgrade has to be a deliberate edit rather
+    # than something inferred from a devDependency bump.
+    #
+    # The security caveat above barely applies here. `@types/node` contributes
+    # no code to any build output or deployed runtime, so there is effectively
+    # no vulnerability surface for the suppression to matter to.
     ignore:
       - dependency-name: "prisma"
         update-types:
           - "version-update:semver-major"
       - dependency-name: "@prisma/client"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "@types/node"
         update-types:
           - "version-update:semver-major"
     groups:
