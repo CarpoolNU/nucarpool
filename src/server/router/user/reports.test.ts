@@ -23,6 +23,24 @@ import { REPORT_SNAPSHOT_MESSAGE_LIMIT } from "../../../utils/reports";
 const ME = "user-me";
 const THEM = "user-them";
 const OTHER = "user-other";
+/** Someone with neither name set, for `me`'s "Unknown user" fallback. */
+const NAMELESS = "user-nameless";
+
+/**
+ * The users the fake knows, and the names `reports.me` resolves through.
+ *
+ * `OTHER` has no preferred name and `NAMELESS` has neither, which is the
+ * `preferredName || name || "Unknown user"` chain `blocks.me` established.
+ */
+const USER_NAMES: Record<
+  string,
+  { preferredName: string | null; name: string | null }
+> = {
+  [ME]: { preferredName: "Me", name: "Me Full" },
+  [THEM]: { preferredName: "Them", name: "Them Full" },
+  [OTHER]: { preferredName: null, name: "Other Full" },
+  [NAMELESS]: { preferredName: null, name: null },
+};
 
 type ReportRow = {
   id: string;
@@ -34,6 +52,7 @@ type ReportRow = {
   conversationSnapshot: string | null;
   status: ReportStatus;
   dateCreated?: Date;
+  dateModified?: Date;
 };
 type BlockRow = { blockerId: string; blockedId: string };
 type MessageRow = {
@@ -51,7 +70,7 @@ const buildReportsDb = (opts?: {
   carpoolIds?: Record<string, string | null>;
   upsertFails?: boolean;
 }) => {
-  const users = new Set([ME, THEM, OTHER]);
+  const users = new Map(Object.entries(USER_NAMES));
   const requests = opts?.requests ?? {};
   const messages = opts?.messages ?? [];
   const reports: ReportRow[] = opts?.reports ?? [];
@@ -81,6 +100,28 @@ const buildReportsDb = (opts?: {
       ),
     },
     report: {
+      // `me` reads this: the caller's rows, newest first, with the
+      // reported user's names joined on. `dateCreated` falls back to "now"
+      // as `count` below does, for the fixtures that seed reports without
+      // one.
+      findMany: jest.fn(async ({ where }: any) =>
+        reports
+          .filter((r) => r.reporterId === where.reporterId)
+          .sort((a, b) => {
+            const byDate =
+              (b.dateCreated ?? new Date()).getTime() -
+              (a.dateCreated ?? new Date()).getTime();
+            return byDate !== 0 ? byDate : b.id.localeCompare(a.id);
+          })
+          .map((r) => ({
+            ...r,
+            dateModified: r.dateModified ?? r.dateCreated ?? new Date(),
+            reportedUser: users.get(r.reportedUserId) ?? {
+              preferredName: null,
+              name: null,
+            },
+          })),
+      ),
       findFirst: jest.fn(async ({ where }: any) => {
         const match = reports.find(
           (r) =>
@@ -553,5 +594,195 @@ describe("Also block", () => {
     ).rejects.toThrow();
     expect(db.reports).toEqual([]);
     expect(db.blocks).toEqual([]);
+  });
+});
+
+/**
+ * `user.reports.me`.
+ *
+ * The property that matters most is negative and cannot be seen by looking at
+ * one caller's list: the rows come from `ctx.session`, never from input, so no
+ * caller can reach another reporter's reports. The fake holds rows for two
+ * reporters in most of these, and the cross-user case is also asserted against
+ * a real database in `reports.db.test.ts`.
+ */
+describe("user.reports.me", () => {
+  /** A row for the fake, with the fields `me` reads. */
+  const reportRow = (
+    id: string,
+    reporterId: string,
+    reportedUserId: string,
+    overrides: Partial<ReportRow> = {},
+  ): ReportRow => ({
+    id,
+    reporterId,
+    reportedUserId,
+    reason: ReportReason.HARASSMENT,
+    message: null,
+    requestId: null,
+    conversationSnapshot: null,
+    status: ReportStatus.OPEN,
+    dateCreated: new Date(Date.UTC(2026, 0, 1)),
+    ...overrides,
+  });
+
+  it("returns only the caller's own reports, newest first", async () => {
+    const db = buildReportsDb({
+      reports: [
+        reportRow("r-1", ME, THEM, {
+          dateCreated: new Date(Date.UTC(2026, 0, 1)),
+        }),
+        reportRow("r-2", ME, OTHER, {
+          dateCreated: new Date(Date.UTC(2026, 0, 3)),
+          reason: ReportReason.NO_SHOW,
+        }),
+        // Someone else's report, about the caller. Listing this would tell a
+        // reported user that they had been reported.
+        reportRow("r-3", OTHER, ME, {
+          dateCreated: new Date(Date.UTC(2026, 0, 5)),
+        }),
+      ],
+    });
+    const { caller } = callerFor(sessionFor(ME), db);
+
+    const list = await caller.user.reports.me();
+
+    expect(list.map((row) => row.id)).toEqual(["r-2", "r-1"]);
+    expect(db.prisma.report.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { reporterId: ME } }),
+    );
+  });
+
+  it("derives the reporter from the session, not from anything a caller sends", async () => {
+    const db = buildReportsDb({ reports: [reportRow("r-1", OTHER, THEM)] });
+    const { caller } = callerFor(sessionFor(ME), db);
+
+    // `me` takes no input at all, so the only way to ask for someone else's
+    // rows would be a procedure that read one. This is the assertion that
+    // adding such an input would have to break.
+    await expect(caller.user.reports.me()).resolves.toEqual([]);
+  });
+
+  it("refuses a caller with no session", async () => {
+    const { caller } = callerFor(null);
+
+    await expect(caller.user.reports.me()).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+  });
+
+  it("carries the reason, status, dates and the reporter's own words", async () => {
+    const db = buildReportsDb({
+      reports: [
+        reportRow("r-1", ME, THEM, {
+          reason: ReportReason.SAFETY_CONCERN,
+          message: "They drove off while I was still getting in.",
+          status: ReportStatus.REVIEWED,
+          dateCreated: new Date(Date.UTC(2026, 0, 1)),
+          dateModified: new Date(Date.UTC(2026, 0, 9)),
+        }),
+      ],
+    });
+    const { caller } = callerFor(sessionFor(ME), db);
+
+    expect(await caller.user.reports.me()).toEqual([
+      {
+        id: "r-1",
+        reportedName: "Them",
+        reason: ReportReason.SAFETY_CONCERN,
+        message: "They drove off while I was still getting in.",
+        status: ReportStatus.REVIEWED,
+        filedAt: new Date(Date.UTC(2026, 0, 1)),
+        updatedAt: new Date(Date.UTC(2026, 0, 9)),
+      },
+    ]);
+  });
+
+  /*
+   * The whole of what a row says about the reported person is their display
+   * name. The conversation snapshot in particular is the other party's words
+   * as well as the reporter's, and it is kept for admins to read, not to be
+   * handed back.
+   */
+  it("says nothing about the reported user beyond the display name", async () => {
+    const db = buildReportsDb({
+      reports: [
+        reportRow("r-1", ME, THEM, {
+          requestId: "request-1",
+          conversationSnapshot: '[{"senderId":"user-them","content":"no"}]',
+        }),
+      ],
+    });
+    const { caller } = callerFor(sessionFor(ME), db);
+
+    const [row] = await caller.user.reports.me();
+
+    expect(Object.keys(row).sort()).toEqual([
+      "filedAt",
+      "id",
+      "message",
+      "reason",
+      "reportedName",
+      "status",
+      "updatedAt",
+    ]);
+  });
+
+  it("falls back from preferred name to account name to Unknown user", async () => {
+    const db = buildReportsDb({
+      reports: [
+        reportRow("r-1", ME, THEM, {
+          dateCreated: new Date(Date.UTC(2026, 0, 3)),
+        }),
+        reportRow("r-2", ME, OTHER, {
+          dateCreated: new Date(Date.UTC(2026, 0, 2)),
+        }),
+        reportRow("r-3", ME, NAMELESS, {
+          dateCreated: new Date(Date.UTC(2026, 0, 1)),
+        }),
+      ],
+    });
+    const { caller } = callerFor(sessionFor(ME), db);
+
+    const names = (await caller.user.reports.me()).map(
+      (row) => row.reportedName,
+    );
+
+    // `THEM` has a preferred name, `OTHER` only an account name, `NAMELESS`
+    // neither.
+    expect(names).toEqual(["Them", "Other Full", "Unknown user"]);
+  });
+
+  it("breaks a same-instant tie on id rather than leaving the order open", async () => {
+    const sameMoment = new Date(Date.UTC(2026, 0, 4));
+    const db = buildReportsDb({
+      reports: [
+        reportRow("r-a", ME, THEM, { dateCreated: sameMoment }),
+        reportRow("r-b", ME, OTHER, { dateCreated: sameMoment }),
+      ],
+    });
+    const { caller } = callerFor(sessionFor(ME), db);
+
+    expect((await caller.user.reports.me()).map((row) => row.id)).toEqual([
+      "r-b",
+      "r-a",
+    ]);
+    expect(db.prisma.report.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderBy: [{ dateCreated: "desc" }, { id: "desc" }],
+      }),
+    );
+  });
+});
+
+/**
+ * The refusal of a second OPEN report has to name somewhere the reporter can
+ * actually go, which is the heading `ReportsFiledSection` renders. A rename on
+ * either side fails here.
+ */
+describe("DUPLICATE_REPORT_MESSAGE", () => {
+  it("points at the profile section that now lists the first report", () => {
+    expect(DUPLICATE_REPORT_MESSAGE).toContain("Reports You've Filed");
+    expect(DUPLICATE_REPORT_MESSAGE).toContain("profile");
   });
 });

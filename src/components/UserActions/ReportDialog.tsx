@@ -52,6 +52,13 @@ const ReportDialog = ({
 
   const { mutate: report, isPending } = trpc.user.reports.create.useMutation({
     onSuccess: async (result) => {
+      // The profile's "Reports You've Filed" list, which this report now
+      // belongs in. Without this it would be missing from a cached list: the
+      // app's `defaultQueryOptions` set `refetchOnMount: false`, so returning
+      // to a profile visited earlier in the session shows what was fetched
+      // then - and the reporter, told their report was received, would find
+      // no sign of it where they were sent to look.
+      await utils.user.reports.me.invalidate();
       if (result.blocked) {
         await invalidateBlockCaches(utils);
       }

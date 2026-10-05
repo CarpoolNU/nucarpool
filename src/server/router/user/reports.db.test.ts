@@ -21,21 +21,24 @@ import { parseConversationSnapshot } from "../../reportSnapshot";
 
 const prisma = integrationPrisma();
 
-const sessionFor = (id: string): Session => ({
+const sessionFor = (
+  id: string,
+  permission: Permission = Permission.USER,
+): Session => ({
   expires: new Date(Date.now() + 60_000).toISOString(),
   user: {
     id,
     isOnboarded: true,
     tutorialCompleted: true,
-    permission: Permission.USER,
+    permission,
   },
 });
 
-const callerFor = (userId: string) =>
+const callerFor = (userId: string, permission: Permission = Permission.USER) =>
   appRouter.createCaller({
     req: undefined,
     res: undefined,
-    session: sessionFor(userId),
+    session: sessionFor(userId, permission),
     prisma,
     sesClient: { send: jest.fn() },
   } as unknown as Context);
@@ -150,5 +153,105 @@ describe("a report made from a conversation, against a real database", () => {
     await expect(report()).rejects.toMatchObject({ code: "CONFLICT" });
 
     expect(await prisma.report.count()).toBe(1);
+  });
+});
+
+/**
+ * `user.reports.me` against a real database.
+ *
+ * The scoping is what earns a real MySQL here. A fake answers whatever its
+ * `findMany` was written to answer, so "A cannot read B's reports" against one
+ * tests the fake; against real rows it tests the `where` clause. Three
+ * reporters' rows are present in each of these, and only one caller's come
+ * back.
+ */
+describe("the reports a user has filed, against a real database", () => {
+  /** Three users, so a list can be wrong in both directions. */
+  const seedThree = async () => {
+    const [alex, blair, casey] = await Promise.all(
+      ["alex", "blair", "casey"].map((who) =>
+        prisma.user.create({
+          data: { name: who, email: `${who}@northeastern.edu` },
+        }),
+      ),
+    );
+    return { alex, blair, casey };
+  };
+
+  it("returns the caller's own rows and never another reporter's", async () => {
+    const { alex, blair, casey } = await seedThree();
+
+    await callerFor(alex.id).user.reports.create({
+      reportedUserId: casey.id,
+      reason: ReportReason.NO_SHOW,
+      message: "Alex's words",
+      alsoBlock: false,
+    });
+    await callerFor(blair.id).user.reports.create({
+      reportedUserId: casey.id,
+      reason: ReportReason.HARASSMENT,
+      message: "Blair's words",
+      alsoBlock: false,
+    });
+    // Blair reports Alex too, so Alex is a reported user as well as a
+    // reporter. A list keyed on the wrong column would surface this one.
+    await callerFor(blair.id).user.reports.create({
+      reportedUserId: alex.id,
+      reason: ReportReason.FAKE_PROFILE,
+      alsoBlock: false,
+    });
+
+    expect(await prisma.report.count()).toBe(3);
+
+    const mine = await callerFor(alex.id).user.reports.me();
+
+    expect(mine).toHaveLength(1);
+    expect(mine[0]).toMatchObject({
+      reportedName: "casey",
+      reason: ReportReason.NO_SHOW,
+      message: "Alex's words",
+      status: ReportStatus.OPEN,
+    });
+  });
+
+  it("shows the reporter a resolution an admin made, with no other change", async () => {
+    const { alex, blair, casey } = await seedThree();
+
+    const { reportId } = await callerFor(alex.id).user.reports.create({
+      reportedUserId: casey.id,
+      reason: ReportReason.SAFETY_CONCERN,
+      alsoBlock: false,
+    });
+
+    const [beforeResolution] = await callerFor(alex.id).user.reports.me();
+    expect(beforeResolution.status).toBe(ReportStatus.OPEN);
+
+    await callerFor(blair.id, Permission.ADMIN).user.admin.resolveReport({
+      reportId,
+      status: ReportStatus.REVIEWED,
+    });
+
+    const [afterResolution] = await callerFor(alex.id).user.reports.me();
+
+    expect(afterResolution.status).toBe(ReportStatus.REVIEWED);
+    expect(afterResolution.id).toBe(reportId);
+
+    /*
+     * The two dates are the two columns, the right way round. The client
+     * renders `updatedAt` as when the decision was made, which is only sound
+     * while `resolveReport` is the one thing that writes a report after it is
+     * created — so a swap of these two, or a `filedAt` quietly sourced from
+     * `dateModified`, would put a resolution date under "Filed".
+     *
+     * Asserted as equality against the stored row rather than as "later than
+     * the filing": `DATETIME(3)` means a fast test can resolve a report
+     * inside the same millisecond it was filed, and an ordering assertion
+     * would be a coin flip there.
+     */
+    const stored = await prisma.report.findUniqueOrThrow({
+      where: { id: reportId },
+    });
+    expect(afterResolution.filedAt).toEqual(stored.dateCreated);
+    expect(afterResolution.updatedAt).toEqual(stored.dateModified);
   });
 });
