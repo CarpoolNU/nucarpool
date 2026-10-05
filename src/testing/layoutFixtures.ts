@@ -247,6 +247,180 @@ const groupMemberCardTrigger: LayoutFixture = {
 };
 
 /*
+ * The overflow menu added to a group member row, against the confirmation the
+ * row already had. SCRUM-622.
+ *
+ * `GroupMemberCard` had one control. This puts a second 44px target in the
+ * same shrink-wrapped slot, beside a Confirm button that an earlier fix
+ * (SCRUM-480, the fixture above) went to some trouble to keep out of the
+ * *first* trigger's footprint. The question this answers is whether the new
+ * trigger reintroduces what that fix removed - not against Remove, which is
+ * replaced when the confirmation opens, but against Confirm, which is drawn
+ * beside the menu trigger and stays there.
+ *
+ * **The row is in its confirming state**, which is the only state where the
+ * question exists. Outside it the slot holds a 44px button and the row is
+ * 48px tall; inside it the slot is a ~132px column and the row grows to match,
+ * which is what moves the menu trigger relative to Confirm.
+ *
+ * `self-start` on the menu wrapper is the thing under measurement. The row is
+ * `items-center`, so without it the trigger is centred in a 132px row - top
+ * 44, bottom 88 - and Confirm, at the bottom of its column, starts at 88. Zero
+ * overlap by the `against` metric and zero clearance by the rects, which is a
+ * worse property than it sounds: the two are then edge-to-edge across a 12px
+ * horizontal gap. Pinned to the top the trigger ends where the row's padding
+ * ends and the clearance becomes the whole column above Confirm.
+ *
+ * Two rows again, for the same reason the fixture above has two: `divide-y` in
+ * Tailwind v4 is `:not(:last-child)`, so a single-row fixture is the one case
+ * that cannot show the border it exists to account for.
+ */
+const GROUP_MEMBER_MENU_WRAPPER_CLASS = "flex-shrink-0 self-start";
+
+const GROUP_MEMBER_MENU_TRIGGER_CLASS =
+  "flex h-11 w-11 items-center justify-center rounded-full text-gray-700 hover:bg-stone-200";
+
+const GROUP_MEMBER_CONFIRM_PAIR_CLASS = "flex flex-col gap-6";
+
+const GROUP_MEMBER_CONFIRM_CLASS =
+  "rounded-lg bg-red-600 p-3 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50";
+
+const GROUP_MEMBER_CANCEL_CLASS =
+  "rounded-lg bg-gray-100 p-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200";
+
+/** The confirming slot and the menu beside it, one row's worth. */
+const groupMemberConfirmingRow = (
+  initial: string,
+  name: string,
+  email: string,
+  badge: string,
+  badgeClass: string,
+  prompt: string,
+  probeSuffix: string,
+) => `
+          <div class="${GROUP_MEMBER_ROW_CLASS}" data-probe="row${probeSuffix}">
+            <div class="flex-shrink-0">
+              <div class="flex h-12 w-12 items-center justify-center rounded-full bg-gray-200">
+                <span class="text-lg font-medium text-gray-600">${initial}</span>
+              </div>
+            </div>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2">
+                <h3 class="truncate text-base font-semibold text-gray-900">${name}</h3>
+                <span class="inline-flex items-center rounded-full ${badgeClass} px-2 py-1 text-xs font-medium">${badge}</span>
+              </div>
+              <p class="truncate text-sm text-gray-600">${email}</p>
+            </div>
+            <div class="flex-shrink-0">
+              <div class="flex flex-col items-end gap-1">
+                <p class="text-xs text-gray-600">${prompt}</p>
+                <div class="${GROUP_MEMBER_CONFIRM_PAIR_CLASS}">
+                  <button type="button" class="${GROUP_MEMBER_CANCEL_CLASS}" data-probe="cancel${probeSuffix}">Cancel</button>
+                  <button type="button" class="${GROUP_MEMBER_CONFIRM_CLASS}" data-probe="confirm${probeSuffix}">Confirm</button>
+                </div>
+              </div>
+            </div>
+            <div class="${GROUP_MEMBER_MENU_WRAPPER_CLASS}">
+              <button type="button" aria-label="More actions for ${name}" class="${GROUP_MEMBER_MENU_TRIGGER_CLASS}" data-probe="menu${probeSuffix}">
+                <svg class="h-5 w-5" aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="3" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="8" cy="13" r="1.5"/></svg>
+              </button>
+            </div>
+          </div>`;
+
+const groupMemberCardActionsMenu: LayoutFixture = {
+  name: "group-member-card-actions-menu",
+  summary:
+    "The new report/block trigger against the row's Confirm button, mid-confirmation",
+  source: "src/components/Group/GroupMemberCard.tsx:296",
+  issue: "SCRUM-622",
+  viewportWidth: 375,
+  insets: [
+    { name: "page px-4", x: 32 },
+    { name: "panel border", x: 2 },
+    { name: "card px-2", x: 16 },
+  ],
+  markup: `
+    <div class="space-y-6 px-4 py-6">
+      <div class="rounded-lg border border-gray-200 bg-white shadow-xs">
+        <div class="divide-y divide-gray-100">
+${groupMemberConfirmingRow(
+  "A",
+  "Alex Rivera",
+  "alex.rivera@northeastern.edu",
+  "Rider",
+  "bg-green-100 text-green-800",
+  "Remove Alex Rivera from the group?",
+  "-divided",
+)}
+${groupMemberConfirmingRow(
+  "S",
+  "Sam Okafor",
+  "sam.okafor@northeastern.edu",
+  "Viewer",
+  "bg-gray-200 text-gray-700",
+  "Remove Sam Okafor from the group?",
+  "-last",
+)}
+        </div>
+      </div>
+    </div>
+  `,
+  widthProbe: "[data-probe='row-divided']",
+  probe: {
+    boxes: [
+      "[data-probe='row-divided']",
+      "[data-probe='menu-divided']",
+      "[data-probe='cancel-divided']",
+      "[data-probe='confirm-divided']",
+    ],
+    footprint: "[data-probe='menu-divided']",
+    against: [
+      "[data-probe='confirm-divided']",
+      "[data-probe='cancel-divided']",
+    ],
+  },
+  recorded: [
+    "menu trigger clientHeight 44, width 44 — h-11/w-11, the same figure the Confirm pair and the Remove trigger already meet.",
+    "menu trigger top 37, bottom 81; Confirm top 125. Clearance 44px — the criterion.",
+    "Confirm occupies 0% of the menu trigger's footprint, and the footprint is reachable at all 9 probe points with nothing on top.",
+    "COUNTERFACTUAL, measured by removing self-start from the wrapper in the page and re-reading: menu trigger moves to top 81, bottom 125, and Confirm starts at 125. Clearance 0px, edge to edge. The footprint share stays 0% because the two are horizontally disjoint across the row's 12px gap — which is exactly why the share alone is the wrong number to read here, and the clearance is the one that moves.",
+    "Cancel sits at top 57, inside the menu trigger's vertical band either way. It is the non-destructive half of the pair and horizontally disjoint, so its share of the footprint is 0% as well.",
+    "row contentHeight 132 = the prompt's 16px line + gap-1's 4 + the pair's 44 + 24 + 44. The prompt is one line at this width; a wrapped one only increases the clearance.",
+    "row-divided clientHeight 156, rect 157; row-last 156 by both. divide-y's border again, for the reason the fixture above gives.",
+    "row contentWidth 325, matching the predicted chain, as the fixture above.",
+    "RESTING STATE, measured by swapping the confirming column for the Remove trigger in the page: row clientHeight 72 and rect 73, both unchanged from the fixture above — the 44px menu fits inside the h-12 avatar's box and the row does not grow. Remove stays 76.6px wide. 12px between it and the menu, and the menu sits 2px above it, which is all self-start costs visually.",
+    "WHAT THE MENU COSTS, same swap: the identity column goes 176.4px to 120.4px — 44 for the trigger and 12 for the gap. On this fixture's deliberately long strings the name goes from 0px clipped to 18px and the email from 14px to 70px. Both are `truncate`, so this degrades rather than overflows, and a real preferredName is usually a first name.",
+    "NO WEBFONT, and it matters in one direction only: buildFixturePage serves no font link, so text here resolves in the narrower system fallback and the clipping figures above are the optimistic end. They are a cost being recorded, not a criterion being met, so the direction is the safe one.",
+  ],
+  reproduces: [
+    {
+      file: "src/components/Group/GroupMemberCard.tsx",
+      className: GROUP_MEMBER_ROW_CLASS,
+    },
+    {
+      file: "src/components/Group/GroupMemberCard.tsx",
+      className: GROUP_MEMBER_MENU_WRAPPER_CLASS,
+    },
+    {
+      file: "src/components/Group/GroupMemberCard.tsx",
+      className: GROUP_MEMBER_CONFIRM_PAIR_CLASS,
+    },
+    {
+      file: "src/components/Group/GroupMemberCard.tsx",
+      className: GROUP_MEMBER_CONFIRM_CLASS,
+    },
+    {
+      file: "src/components/Group/GroupMemberCard.tsx",
+      className: GROUP_MEMBER_CANCEL_CLASS,
+    },
+    {
+      file: "src/components/UserActions/UserActionsMenu.tsx",
+      className: GROUP_MEMBER_MENU_TRIGGER_CLASS,
+    },
+  ],
+};
+
+/*
  * The two fixtures below, and the one thing they have in common: a
  * percentage-height container holding a fixed-pixel child.
  *
@@ -1933,6 +2107,7 @@ const profileDropdownPanel: LayoutFixture = {
 
 export const LAYOUT_FIXTURES: readonly LayoutFixture[] = [
   groupMemberCardTrigger,
+  groupMemberCardActionsMenu,
   headerLogoBar,
   adminConsoleChartFold,
   profileContentColumnWidth,

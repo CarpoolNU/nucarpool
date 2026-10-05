@@ -1,3 +1,4 @@
+import { format } from "date-fns";
 import { toast } from "react-toastify/unstyled";
 import { Note } from "../../styles/profile";
 import { QueryError } from "../QueryError";
@@ -60,7 +61,35 @@ const BlockedUsersSection = () => {
               key={entry.userId}
               className="flex items-center justify-between gap-4 px-4 py-3"
             >
-              <span className="font-montserrat font-medium">{entry.name}</span>
+              {/*
+                The name, and when the block was placed.
+
+                `blocks.me` has always returned `blockedAt` - it selects
+                `dateCreated` and renames it - and this list threw it away, so
+                a reader looking at a list of names had no way to place any of
+                them in time or context. The query is unchanged; this is the
+                field being rendered rather than discarded.
+
+                `MMM dd yyyy`, the same vocabulary `AdminReports` uses, minus
+                its clock: a report is triaged against a timeline and the
+                hour matters there, whereas this answers "when did I do this",
+                for which it does not.
+
+                A `<time>` element, so the machine-readable instant survives
+                the formatting - `superjson` means `blockedAt` arrives as a
+                real `Date`, not a string that has to be reparsed.
+              */}
+              <div className="min-w-0">
+                <span className="font-montserrat block font-medium">
+                  {entry.name}
+                </span>
+                <time
+                  dateTime={entry.blockedAt.toISOString()}
+                  className="font-montserrat block text-sm text-gray-600"
+                >
+                  Blocked {format(entry.blockedAt, "MMM dd yyyy")}
+                </time>
+              </div>
               <button
                 type="button"
                 disabled={
@@ -69,7 +98,7 @@ const BlockedUsersSection = () => {
                 }
                 onClick={() => unblock.mutate({ userId: entry.userId })}
                 aria-label={`Unblock ${entry.name}`}
-                className="rounded-md border border-black px-4 py-2 text-sm font-medium hover:bg-stone-200 disabled:opacity-40"
+                className="flex-shrink-0 rounded-md border border-black px-4 py-2 text-sm font-medium hover:bg-stone-200 disabled:opacity-40"
               >
                 Unblock
               </button>

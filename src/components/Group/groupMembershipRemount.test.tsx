@@ -55,6 +55,10 @@ jest.mock("../../utils/trpc", () =>
     // cache mid-assertion.
     "user.groups.edit": { inertMutation: true },
     "user.groups.delete": { inertMutation: true },
+    // `UserActionsMenu` now sits on every member row that is not the reader's
+    // own, and its block confirmation mounts with the row. Inert for the same
+    // reason as the two above.
+    "user.blocks.block": { inertMutation: true },
   }),
 );
 

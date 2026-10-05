@@ -43,11 +43,68 @@
  * why they are there.
  */
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Role } from "@prisma/client";
 import { GroupMemberCard } from "./GroupMemberCard";
 import { PublicUser } from "../../utils/types";
+
+/**
+ * `trpc` for `UserActionsMenu` only.
+ *
+ * Every test above renders without `showUserActions` and never reaches a hook,
+ * which is why this file could do without a client until now and why the
+ * default stays off. The menu's block confirmation mounts with the row, so the
+ * moment the prop is on, `useUtils` and `blocks.block.useMutation` both run.
+ *
+ * `mockBlock` is declared below this and read from inside the stub body, not
+ * captured at factory time - `jest.mock` is hoisted above both.
+ */
+jest.mock("../../utils/trpc", () => ({
+  trpc: {
+    useUtils: () => ({
+      user: {
+        blocks: { me: { invalidate: jest.fn() } },
+        recommendations: { me: { invalidate: jest.fn() } },
+        favorites: { me: { invalidate: jest.fn() } },
+        requests: { me: { invalidate: jest.fn() } },
+        messages: {
+          getUnreadMessageCount: { invalidate: jest.fn() },
+          conversation: { invalidate: jest.fn() },
+        },
+      },
+      mapbox: { geoJsonUserList: { invalidate: jest.fn() } },
+    }),
+    user: {
+      blocks: {
+        block: {
+          useMutation: () => ({ mutate: mockBlock, isPending: false }),
+        },
+      },
+      reports: {
+        create: {
+          useMutation: () => ({ mutate: jest.fn(), isPending: false }),
+        },
+      },
+    },
+  },
+}));
+
+jest.mock("react-toastify/unstyled", () =>
+  require("../../testing/toastStub").buildToastMock(),
+);
+
+const mockBlock = jest.fn();
+
+// `MenuItems anchor` positions through Floating UI, which observes the
+// trigger once the menu opens. jsdom has neither `ResizeObserver` nor any
+// layout for one to report; the same inert stand-in `UserActionsMenu.test.tsx`
+// uses.
+(global as { ResizeObserver: unknown }).ResizeObserver = class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
 
 /**
  * A member row as `groups.me` returns one. Cast rather than filled in: the
@@ -238,4 +295,176 @@ describe("the destructive confirmation on a group member row", () => {
       expect(trigger).not.toHaveClass("px-3");
     },
   );
+});
+
+/**
+ * Report and Block on a group member's row.
+ *
+ * Until this, `UserActionsMenu` was on the user cards and the conversation
+ * header and nowhere else, so acting against someone you are actually sharing
+ * a car with meant navigating back to the thread.
+ *
+ * What is assertable here is reachability and wiring. The geometry half - that
+ * the new 44px trigger does not put Confirm back inside a footprint the last
+ * fix cleared - is a Chromium measurement recorded in the component's comment,
+ * for the reasons the header of this file gives. The class proxy below is a
+ * proxy, as the ones above are.
+ */
+describe("the report and block menu on a group member row", () => {
+  const renderRow = (props: Partial<Parameters<typeof GroupMemberCard>[0]>) =>
+    render(
+      <GroupMemberCard
+        user={MEMBER}
+        isCurrentUser={false}
+        confirmPrompt="Remove Alex from the group?"
+        {...props}
+      />,
+    );
+
+  it("is not drawn unless the call site asks for it", () => {
+    renderRow({});
+
+    expect(
+      screen.queryByRole("button", { name: /more actions/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("names its trigger after the member", () => {
+    renderRow({ showUserActions: true });
+
+    expect(
+      screen.getByRole("button", { name: "More actions for Alex" }),
+    ).toBeInTheDocument();
+  });
+
+  /*
+   * The reader's own row. `applyBlock` refuses a self-block with
+   * `BAD_REQUEST` and a self-report is as meaningless, so the card withholds
+   * the menu rather than drawing two controls that cannot succeed - and the
+   * list passes `showUserActions` to every row including the caller's, so this
+   * guard is the only thing standing between them.
+   */
+  it("is withheld from the reader's own row even when the call site asks", () => {
+    renderRow({ showUserActions: true, isCurrentUser: true });
+
+    expect(
+      screen.queryByRole("button", { name: /more actions/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers Report and Block", async () => {
+    renderRow({ showUserActions: true });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "More actions for Alex" }),
+    );
+
+    expect(
+      await screen.findByRole("menuitem", { name: "Report" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Block" })).toBeInTheDocument();
+  });
+
+  /*
+   * The `userId` half of the wiring, which no accessible name exposes: the
+   * only way to see which id the card handed down is to drive a block all the
+   * way to the mutation. A row passing `curUser.id`, or the group id, would
+   * name its trigger "Alex" exactly the same way.
+   */
+  it("sends this member's id when a block is confirmed", async () => {
+    renderRow({ showUserActions: true });
+
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole("button", { name: "More actions for Alex" }),
+    );
+    await user.click(await screen.findByRole("menuitem", { name: "Block" }));
+    const dialog = await screen.findByRole("dialog", { name: "Block Alex?" });
+    await user.click(within(dialog).getByRole("button", { name: "Block" }));
+
+    expect(mockBlock).toHaveBeenCalledTimes(1);
+    expect(mockBlock).toHaveBeenCalledWith({ userId: MEMBER.id });
+  });
+
+  /*
+   * The second way the menu and the confirmation can collide, and the one no
+   * clearance figure can see: `MenuItems` is portaled with `anchor="bottom
+   * end"` and is 176px wide, so an open panel is drawn straight over the
+   * Confirm button 12px to the trigger's left. Opening the menu dismisses the
+   * confirmation rather than stacking the two.
+   *
+   * jsdom cannot see the overlap - it does no layout - but it can see the
+   * state, and the state is what the fix is.
+   *
+   * **Nothing here is asserted by role while the menu is open**, and the first
+   * draft of this test was wrong for exactly that reason. Headless UI's `Menu`
+   * is modal: an open panel marks the rest of the document inert, so every
+   * `queryByRole` outside it resolves to nothing whether the fix is present or
+   * not, and `not.toBeInTheDocument()` would hold against a component that had
+   * never closed anything. `getByText` is a plain DOM query and is unaffected,
+   * which is why the prompt is what the open-menu assertion reads. The role
+   * queries happen after Escape, where they mean what they say - and the
+   * `getByRole` for Remove there is the positive control that proves the tree
+   * is visible again rather than still inert.
+   */
+  it("dismisses a pending confirmation rather than drawing the menu over it", async () => {
+    const onAction = jest.fn();
+    renderRow({ showUserActions: true, actionLabel: "Remove", onAction });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Remove" }));
+    expect(screen.getByText("Remove Alex from the group?")).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "More actions for Alex" }),
+    );
+
+    // The menu did open: cancelling the confirmation is not instead of what
+    // the press was for.
+    expect(
+      await screen.findByRole("menuitem", { name: "Report" }),
+    ).toBeInTheDocument();
+    // DOM-level, so the open menu's inertness cannot answer it vacuously.
+    expect(
+      screen.queryByText("Remove Alex from the group?"),
+    ).not.toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+
+    // Back to one control, and the two-step still reachable rather than merely
+    // closed. `onAction` uncalled separates "the confirmation closed" from
+    // "the confirmation fired", which both remove the prompt.
+    expect(screen.getByRole("button", { name: "Remove" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Confirm" }),
+    ).not.toBeInTheDocument();
+    expect(onAction).not.toHaveBeenCalled();
+  });
+
+  /*
+   * A proxy for the Chromium measurement, in the same spirit as the `p-3` and
+   * `gap-6` assertions above and with the same limits.
+   *
+   * `self-start` is what keeps the trigger at the top of the row rather than
+   * centred in it. Centred, its bottom edge lands exactly on Confirm's top
+   * edge once the action slot grows into its confirming column - zero
+   * clearance. This fails loudly if someone takes it off to make the row look
+   * evenly aligned, which is precisely what it costs.
+   */
+  it("keeps the alignment class that holds the trigger clear of Confirm", async () => {
+    renderRow({
+      showUserActions: true,
+      actionLabel: "Remove",
+      onAction: jest.fn(),
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Remove" }));
+
+    const trigger = screen.getByRole("button", {
+      name: "More actions for Alex",
+    });
+
+    expect(trigger.parentElement).toHaveClass("self-start");
+    expect(screen.getByRole("button", { name: "Confirm" })).toBeInTheDocument();
+  });
 });

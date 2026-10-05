@@ -20,9 +20,36 @@ import type { PrismaOrTransaction } from "../../db/client";
  * are still riding together unable to message, and one of them unable to see
  * why. Leaving comes first. That is a product decision, not a technical
  * limitation.
+ *
+ * **The reason is now in the message, which it was not.** The rule asks the
+ * user to take the irreversible, socially costly step - leaving a carpool -
+ * before the protective one, and the refusal gave no account of why that
+ * order. Two ways out were weighed:
+ *
+ *  1. *Explain, don't automate.* Keep the rule and say why, which is this.
+ *  2. *A combined "leave and block".* One control that leaves, then blocks.
+ *
+ * The second was rejected, and not on cost. It compounds two actions of which
+ * one is irreversible in practice, and its failure mode is the dangerous one:
+ * a leave that succeeds followed by a block that fails leaves somebody out of
+ * their carpool *and* believing they are protected when they are not. The
+ * refusal itself is cheap to act on - Leave is one control away on the same
+ * screen - so the combined path buys a small amount of convenience with a
+ * state nobody can see they are in. If it is ever built, the server sequence
+ * and its partial failure need their own real-database test first.
+ *
+ * The order of the sentences is deliberate: the remedy, then the rule, then
+ * the reason. This is read in a toast by someone who has just been told no,
+ * and the first thing they need is what to do instead.
+ *
+ * Note that this is the *only* outcome a Block from the group page can have -
+ * every row on that screen is by definition a groupmate - so this copy is not
+ * an error path there, it is the feature. See `GroupMemberCard`.
  */
 export const BLOCK_GROUP_MEMBER_MESSAGE =
-  "Leave the group first. You can't block someone you're carpooling with.";
+  "Leave the group first. You can't block someone you're carpooling with: a " +
+  "block hides you both from each other everywhere, which would strand two " +
+  "people who are still sharing a car.";
 
 const requireCallerId = (userId: string | undefined): string => {
   if (!userId) {

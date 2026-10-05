@@ -65,8 +65,21 @@ jest.mock("react-toastify/unstyled", () =>
 );
 const mockToast = toastSpies();
 
-const TAYLOR = { userId: "user-taylor", name: "Taylor", blockedAt: new Date() };
-const JORDAN = { userId: "user-jordan", name: "Jordan", blockedAt: new Date() };
+/*
+ * Fixed instants, not `new Date()`: the rendered date is an assertion now, and
+ * `format` is local-time. Midday UTC so the calendar day is the same in both
+ * timezones CI runs the suite under - see `jest.shared.config.js`.
+ */
+const TAYLOR = {
+  userId: "user-taylor",
+  name: "Taylor",
+  blockedAt: new Date("2026-03-04T12:00:00.000Z"),
+};
+const JORDAN = {
+  userId: "user-jordan",
+  name: "Jordan",
+  blockedAt: new Date("2025-11-19T12:00:00.000Z"),
+};
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -105,8 +118,8 @@ describe("BlockedUsersSection", () => {
 
     const rows = within(screen.getByRole("list")).getAllByRole("listitem");
     expect(rows.map((row) => row.textContent)).toEqual([
-      "TaylorUnblock",
-      "JordanUnblock",
+      "TaylorBlocked Mar 04 2026Unblock",
+      "JordanBlocked Nov 19 2025Unblock",
     ]);
 
     await userEvent
@@ -115,6 +128,30 @@ describe("BlockedUsersSection", () => {
 
     expect(mockUnblock).toHaveBeenCalledTimes(1);
     expect(mockUnblock).toHaveBeenCalledWith({ userId: JORDAN.userId });
+  });
+
+  /*
+   * The defect this closes: `blocks.me` returns `blockedAt` for every row and
+   * the list rendered a name and a button. A reader looking at the list had no
+   * way to place any of it in time.
+   *
+   * The `<time>` is asserted separately from the visible text because the two
+   * carry different things - the machine-readable instant survives whatever
+   * the display format becomes, and it is what would break silently if
+   * somebody stringified the date on the way through.
+   */
+  it("says when each block was placed, machine-readably as well as visibly", () => {
+    mockQuery.data = [TAYLOR, JORDAN];
+    const { container } = render(<BlockedUsersSection />);
+
+    expect(screen.getByText("Blocked Mar 04 2026")).toBeInTheDocument();
+    expect(screen.getByText("Blocked Nov 19 2025")).toBeInTheDocument();
+
+    const stamps = Array.from(container.querySelectorAll("time"));
+    expect(stamps.map((stamp) => stamp.getAttribute("dateTime"))).toEqual([
+      TAYLOR.blockedAt.toISOString(),
+      JORDAN.blockedAt.toISOString(),
+    ]);
   });
 
   it("refreshes what the block was hiding, and names who was unblocked", async () => {
