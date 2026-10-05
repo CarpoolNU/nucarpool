@@ -88,6 +88,10 @@ jest.mock("../../utils/trpc", () => ({
         edit: { useMutation: jest.fn() },
         delete: { useMutation: jest.fn() },
       },
+      // `UserActionsMenu` on the member rows. Its block confirmation mounts
+      // with the row rather than on open - the dialog has no form to reset -
+      // so this hook runs even though nothing in this file opens the menu.
+      blocks: { block: { useMutation: jest.fn() } },
     },
   },
 }));
@@ -109,6 +113,7 @@ const mockedTrpc = trpc as unknown as {
       edit: { useMutation: jest.Mock };
       delete: { useMutation: jest.Mock };
     };
+    blocks: { block: { useMutation: jest.Mock } };
   };
 };
 
@@ -181,6 +186,13 @@ beforeEach(() => {
   });
   mockedTrpc.user.groups.delete.useMutation.mockReturnValue({
     mutate: deleteGroup,
+    isPending: false,
+  });
+  // Inert. This file is about which actions each group state offers, not
+  // about performing one, and `jest.clearAllMocks()` above would otherwise
+  // leave this returning `undefined` to a destructuring call site.
+  mockedTrpc.user.blocks.block.useMutation.mockReturnValue({
+    mutate: jest.fn(),
     isPending: false,
   });
 
@@ -308,6 +320,28 @@ describe.each([
       add: false,
       groupId: GROUP_ID,
     });
+  });
+
+  /**
+   * Report and Block, on the screen where the counterpart is somebody the
+   * reader is actually sharing a car with. `UserActionsMenu` reached the user
+   * cards and the conversation header and stopped there, so this was the one
+   * relationship in the app whose moderation controls were a navigation away.
+   *
+   * Through `GroupPage` rather than the card, deliberately: `GroupMemberCard`
+   * takes `showUserActions` as a prop and defaults it off, so the card's own
+   * suite can only show that the menu *can* be drawn. Whether it is reachable
+   * in the product depends on this list passing the prop, which is what this
+   * asserts. It is also where the self-row exclusion is worth re-checking,
+   * because the list passes the prop to the caller's row too.
+   */
+  it("offers report and block on the other members, and not on the reader", () => {
+    renderDriverlessGroup([SAM, ALEX, JO]);
+
+    expect(button("More actions for Alex")).toBeInTheDocument();
+    expect(button("More actions for Jo")).toBeInTheDocument();
+    // The caller. `applyBlock` refuses a self-block outright.
+    expect(maybeButton("More actions for Sam")).not.toBeInTheDocument();
   });
 
   /**

@@ -3,6 +3,7 @@ import { PublicUser } from "../../utils/types";
 import { useContext, useState } from "react";
 import { UserContext } from "../../utils/userContext";
 import Spinner from "../Spinner";
+import UserActionsMenu from "../UserActions/UserActionsMenu";
 import { useGroupMembership } from "./useGroupMembership";
 
 /**
@@ -111,6 +112,7 @@ const GroupMembersList = ({
       onAction={() => handleRemoveRider(curUser.id)}
       confirmPrompt="Leave this group?"
       disabled={isMutating}
+      showUserActions
     />
   );
 
@@ -123,6 +125,7 @@ const GroupMembersList = ({
       onAction={canManage ? () => handleRemoveRider(member.id) : undefined}
       confirmPrompt={`Remove ${member.preferredName} from the group?`}
       disabled={isMutating}
+      showUserActions
     />
   ));
 
@@ -145,6 +148,7 @@ const GroupMembersList = ({
         onAction={canManage ? handleDeleteGroup : undefined}
         confirmPrompt="Delete this group for everyone?"
         disabled={isMutating}
+        showUserActions
       />
 
       {!canManage && leaveCard}
@@ -210,6 +214,17 @@ interface GroupMemberCardProps {
   onAction?: () => void;
   confirmPrompt: string;
   disabled?: boolean;
+  /**
+   * Draws Report and Block for this row. The group list passes it for every
+   * row; the card withholds it from the caller's own, below.
+   *
+   * A prop rather than something the card decides for itself, because
+   * `UserActionsMenu` needs a trpc client and the card has not needed one
+   * until now. Anything rendering a row without a provider - a layout
+   * fixture, `GroupMemberCard.test.tsx` - leaves it off and gets the card it
+   * had.
+   */
+  showUserActions?: boolean;
 }
 
 export const GroupMemberCard = ({
@@ -219,6 +234,7 @@ export const GroupMemberCard = ({
   onAction,
   confirmPrompt,
   disabled = false,
+  showUserActions = false,
 }: GroupMemberCardProps) => {
   const [isConfirming, setIsConfirming] = useState(false);
   const roleBadge = ROLE_BADGES[user.role];
@@ -374,6 +390,95 @@ export const GroupMemberCard = ({
               {actionLabel}
             </button>
           )}
+        </div>
+      )}
+
+      {/*
+        Report and Block, on the people the reader is actually sharing a car
+        with. Until now this menu was on the user cards and the conversation
+        header only, so acting against a groupmate meant navigating back to
+        the thread - the highest-stakes relationship in the app reached by the
+        longest route.
+
+        **Never on the reader's own row.** `applyBlock` refuses a self-block
+        with `BAD_REQUEST` and a self-report is equally meaningless, so the
+        menu would offer two controls that cannot succeed. `isCurrentUser` is
+        already resolved per row by the list above.
+
+        **No `onBlocked`, and that is not an oversight.** On a conversation the
+        handler closes a thread that has just become unavailable; there is no
+        thread here. More to the point, a Block from this screen *always*
+        fails: every row in this list shares the reader's `carpoolId`, which is
+        the exact condition `applyBlock` refuses on. So the refusal copy is not
+        an error path on this screen, it is the outcome - which is why that
+        message now carries its own reason rather than only the rule. The one
+        case that could still succeed is a list left stale by a departure in
+        another tab, and there the group query is refetched by its own
+        invalidation rather than by anything this menu could do.
+
+        **Geometry.** `self-start`, not the row's inherited `items-center`, and
+        it is the confirming state that asks for it. The trigger is 44px and
+        the row's content box is 48px, so pinned to the top it sits 2px above
+        where centring would put it - invisible. But once Remove or Delete
+        Group is pressed, the action slot grows into a 132px column with
+        Confirm at the bottom of it, and a *centred* menu trigger's bottom edge
+        lands exactly on Confirm's top edge. `self-start` holds the trigger at
+        the top of the row instead.
+
+        Measured in Chromium at 375px against this project's compiled
+        stylesheet, both arms read off the same page by toggling the one class,
+        as the share of the menu trigger's own footprint that Confirm comes to
+        occupy and the vertical clearance between them:
+
+                               centred        self-start
+          Remove, confirming   0%, 0px gap    0%, 44px gap
+
+        **Read the clearance, not the share.** The share is 0% either way,
+        because the column and the trigger are horizontally disjoint across the
+        row's 12px gap - so the metric the previous fix turned on is exactly
+        the one that cannot see this, and a press drifting off the trigger's
+        bottom edge meets Confirm's top edge with nothing in between.
+
+        The row does not grow: 72px by `clientHeight` resting, the same figure
+        before this menu existed, because 44px fits inside the `h-12` avatar's
+        box. What the menu does cost is width - the identity column goes from
+        176.4px to 120.4px, which is the trigger's 44 plus the 12px gap. Both
+        the name and the email are already `truncate`, so that degrades rather
+        than overflows.
+
+        jsdom measures none of it - `GroupMemberCard.test.tsx` asserts the tree
+        and the wiring and says so. The fixture is
+        `group-member-card-actions-menu` in `src/testing/layoutFixtures.ts`,
+        served by `scripts/measure-layout.ts`, and it carries the full figures.
+
+        **One control at a time, which is `onClickCapture`'s whole job.**
+        Clearance between the trigger and Confirm is not the only way the two
+        can collide. `MenuItems` carries `anchor="bottom end"`, so the open
+        panel is portaled, right-aligned to this trigger and 176px wide - which
+        at 375px puts it directly over the Confirm button sitting 12px to its
+        left. Reaching for the overflow menu while a destructive confirmation
+        is pending therefore draws a menu on top of Confirm, and whether a
+        press that dismisses the menu also reaches what is underneath is
+        Headless UI's business rather than something this card should be
+        relying on.
+
+        So opening the menu cancels the pending confirmation instead. That is
+        also the honest reading of the gesture: the two-step asks "are you
+        sure", and reaching for a different control is not a yes.
+
+        This costs nothing in movement, which is the other half of why
+        `self-start` is the right alignment rather than merely a safe one. The
+        trigger sits at the row's top padding edge in *both* states - measured
+        at top 37 confirming and top 37 resting - so collapsing the column
+        underneath it leaves the anchor exactly where it was and the panel
+        opens where the finger expects.
+      */}
+      {showUserActions && !isCurrentUser && (
+        <div
+          className="flex-shrink-0 self-start"
+          onClickCapture={() => setIsConfirming(false)}
+        >
+          <UserActionsMenu userId={user.id} userName={user.preferredName} />
         </div>
       )}
     </div>

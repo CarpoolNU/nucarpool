@@ -189,6 +189,26 @@ describe("user.blocks.block", () => {
     expect(db.rows).toEqual([]);
   });
 
+  /*
+   * The copy carries the reason, not just the rule.
+   *
+   * This is the one refusal a user meets by ordinary use, and on the group
+   * page it is the *only* outcome a Block can have - every row there is a
+   * groupmate. A message that says "no" and stops leaves the user to guess
+   * why the costly step has to come first, which is the defect this asserts
+   * against.
+   *
+   * Two facts, loosely matched so the wording can be edited without breaking
+   * this, but not deleted: the remedy leads, and the consequence of blocking
+   * someone you still ride with is stated. The reasoning for choosing this
+   * over a combined leave-and-block is on the constant itself.
+   */
+  it("says why leaving has to come first, not only that it does", () => {
+    expect(BLOCK_GROUP_MEMBER_MESSAGE).toMatch(/^Leave the group first\./);
+    expect(BLOCK_GROUP_MEMBER_MESSAGE).toMatch(/hides you both/i);
+    expect(BLOCK_GROUP_MEMBER_MESSAGE).toMatch(/still sharing a car/i);
+  });
+
   it.each([
     ["both ungrouped", { [ME]: null, [THEM]: null }],
     ["in different groups", { [ME]: "group-1", [THEM]: "group-2" }],
