@@ -34,26 +34,40 @@ const mockMutationOptions: {
   onError?: (error: { message: string }) => void;
 } = {};
 
+/**
+ * Every `invalidate` the dialog makes, by path.
+ *
+ * It records the path because two different refreshes now run on success and
+ * they have to be told apart: the reporter's own list is refreshed on every
+ * report, and the seven block caches only when "Also block" went through. A
+ * single anonymous spy would make "the block caches were left alone" pass on
+ * a call that was really the reports list.
+ */
 const mockInvalidate = jest.fn();
+const invalidatedPaths = () =>
+  mockInvalidate.mock.calls.map(([path]) => path as string);
 
 jest.mock("../../utils/trpc", () => {
-  const invalidator = {
-    invalidate: (...args: unknown[]) => mockInvalidate(...args),
-  };
+  const invalidator = (path: string) => ({
+    invalidate: (...args: unknown[]) => mockInvalidate(path, ...args),
+  });
   return {
     trpc: {
       useUtils: () => ({
         user: {
-          blocks: { me: invalidator },
-          recommendations: { me: invalidator },
-          favorites: { me: invalidator },
-          requests: { me: invalidator },
+          reports: { me: invalidator("user.reports.me") },
+          blocks: { me: invalidator("user.blocks.me") },
+          recommendations: { me: invalidator("user.recommendations.me") },
+          favorites: { me: invalidator("user.favorites.me") },
+          requests: { me: invalidator("user.requests.me") },
           messages: {
-            getUnreadMessageCount: invalidator,
-            conversation: invalidator,
+            getUnreadMessageCount: invalidator(
+              "user.messages.getUnreadMessageCount",
+            ),
+            conversation: invalidator("user.messages.conversation"),
           },
         },
-        mapbox: { geoJsonUserList: invalidator },
+        mapbox: { geoJsonUserList: invalidator("mapbox.geoJsonUserList") },
       }),
       user: {
         reports: {
@@ -191,7 +205,10 @@ describe("ReportDialog", () => {
       });
     });
 
-    expect(mockInvalidate).toHaveBeenCalled();
+    // Eight: the reporter's own list, plus the seven in
+    // `invalidateBlockCaches`.
+    expect(invalidatedPaths()).toContain("user.blocks.me");
+    expect(mockInvalidate).toHaveBeenCalledTimes(8);
     expect(mockToast.success).toHaveBeenCalledWith(
       "Thanks. We've received your report, and you blocked Taylor.",
     );
@@ -214,9 +231,31 @@ describe("ReportDialog", () => {
       "Thanks. We've received your report.",
     );
     expect(mockToast.info).toHaveBeenCalledWith(BLOCK_GROUP_MEMBER_MESSAGE);
-    expect(mockInvalidate).not.toHaveBeenCalled();
+    // The reporter's own list still refreshes - the report was saved. Nothing
+    // the block was hiding changes, because no block was placed.
+    expect(invalidatedPaths()).toEqual(["user.reports.me"]);
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(onBlocked).not.toHaveBeenCalled();
+  });
+
+  /*
+   * The report the user has just filed has to appear in the profile list the
+   * duplicate-report refusal sends them to. `defaultQueryOptions` sets
+   * `refetchOnMount: false`, so a profile visited earlier in the session
+   * would otherwise show the list as it was before this report existed.
+   */
+  it("refreshes the reporter's own list of reports, block or no block", async () => {
+    renderDialog();
+
+    await act(async () => {
+      await mockMutationOptions.onSuccess?.({
+        reportId: "r1",
+        blocked: false,
+        blockRefusal: null,
+      });
+    });
+
+    expect(invalidatedPaths()).toEqual(["user.reports.me"]);
   });
 
   it("on an error, shows the server's words and stays open", () => {

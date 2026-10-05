@@ -86,6 +86,12 @@ const PROCEDURE_AUTHORIZATION: Record<string, ProcedureClass> = {
   "user.blocks.block": "protected",
   "user.blocks.unblock": "protected",
   "user.reports.create": "protected",
+  // `me` lists only the caller's own reports, scoped by `ctx.session` and
+  // taking no input at all - so "signed in" really is the whole gate here,
+  // and a downgrade to `public` would expose nothing, because an anonymous
+  // caller has no reports. It is `protected` because there is no caller to
+  // scope to without a session, not as a second line of defence.
+  "user.reports.me": "protected",
   // The admin surface. Each of these reads or writes something a student must
   // not reach: the full user table, the dashboard aggregates, the report queue
   // (which carries message text from reported conversations), the permission

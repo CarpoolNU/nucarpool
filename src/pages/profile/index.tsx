@@ -39,6 +39,7 @@ import PageTitle from "../../components/PageTitle";
 import CarpoolSection from "../../components/Profile/CarpoolSection";
 import AccountSection from "../../components/Profile/AccountSection";
 import BlockedUsersSection from "../../components/Profile/BlockedUsersSection";
+import ReportsFiledSection from "../../components/Profile/ReportsFiledSection";
 import UnsavedModal from "../../components/Profile/UnsavedModal";
 import useIsMobile from "../../utils/useIsMobile";
 
@@ -566,8 +567,11 @@ const Index: NextPage = () => {
                     setValue={setValue}
                   />
                   {/* Beside the form rather than in it: unblocking takes
-                      effect immediately and is not part of Save Changes. */}
+                      effect immediately and is not part of Save Changes.
+                      The reports list is read-only and belongs to Save
+                      Changes even less. */}
                   <BlockedUsersSection />
+                  <ReportsFiledSection />
                 </>
               ) : (
                 <></>
@@ -616,8 +620,11 @@ const Index: NextPage = () => {
                     setValue={setValue}
                   />
                   {/* Beside the form rather than in it: unblocking takes
-                      effect immediately and is not part of Save Changes. */}
+                      effect immediately and is not part of Save Changes.
+                      The reports list is read-only and belongs to Save
+                      Changes even less. */}
                   <BlockedUsersSection />
+                  <ReportsFiledSection />
                 </>
               ) : (
                 <></>

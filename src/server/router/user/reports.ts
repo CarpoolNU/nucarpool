@@ -17,9 +17,19 @@ import { applyBlock } from "./blocks";
  * only, through `user.admin.getReports`.
  */
 
-/** What a second OPEN report about the same person is refused with. */
+/**
+ * What a second OPEN report about the same person is refused with.
+ *
+ * It names where the first one can be read. Before `me` existed the refusal
+ * pointed at a row the reporter had no way to look at, so somebody who had
+ * forgotten whether they had already reported this person - or who now had
+ * more to say - was told only that they could not proceed. The wording tracks
+ * the heading in `ReportsFiledSection`; the two have to stay in step, which is
+ * what `reports.test.ts` asserts.
+ */
 export const DUPLICATE_REPORT_MESSAGE =
-  "You already have an open report about this user. An admin will review it.";
+  "You already have an open report about this user. You can see it, and any " +
+  'decision an admin makes, under "Reports You\'ve Filed" in your profile.';
 
 /**
  * How many reports one reporter may file inside `REPORT_RATE_LIMIT_WINDOW_MS`.
@@ -58,6 +68,70 @@ const createInput = z
   .strict();
 
 export const reportsRouter = router({
+  /**
+   * The reports the caller has filed, newest first.
+   *
+   * Only rows where the caller is the *reporter*. Reports filed **against**
+   * the caller are never listed and must not be: the product deliberately
+   * tells a reported user nothing, and a list keyed on `reportedUserId` would
+   * undo that in one query.
+   *
+   * The reported person's display name is resolved here rather than by
+   * sending back a `PublicUser`, exactly as `blocks.me` does and for the same
+   * reason: the row needs a name to be legible, and the reporter already had
+   * that name when they filed. Nothing else about that user crosses the wire.
+   *
+   * `conversationSnapshot` is deliberately **not** selected. It is the other
+   * party's words as well as the reporter's, kept for admins to review; the
+   * reporter saw the thread when they filed it, and replaying it here would
+   * hand back a copy that outlives a deleted conversation.
+   *
+   * `dateModified` is `@updatedAt`, and `admin.resolveReport` is the only
+   * thing that writes a report after it is created - so for a row that has
+   * left `OPEN` it is when that decision was made. A future procedure that
+   * edits a report for any other reason would make that read wrong, which is
+   * why the client shows it only for a resolved report.
+   */
+  me: protectedRouter.query(async ({ ctx }) => {
+    const reporterId = ctx.session.user?.id;
+    if (!reporterId) {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "User not authenticated.",
+      });
+    }
+
+    const rows = await ctx.prisma.report.findMany({
+      where: { reporterId },
+      // `id` breaks ties, as the snapshot read below does: two reports filed
+      // in the same second would otherwise come back in an arbitrary order,
+      // and a list that reorders itself between loads reads as a bug.
+      orderBy: [{ dateCreated: "desc" }, { id: "desc" }],
+      select: {
+        id: true,
+        reason: true,
+        message: true,
+        status: true,
+        dateCreated: true,
+        dateModified: true,
+        reportedUser: { select: { preferredName: true, name: true } },
+      },
+    });
+
+    return rows.map((row) => ({
+      id: row.id,
+      reportedName:
+        row.reportedUser.preferredName ||
+        row.reportedUser.name ||
+        "Unknown user",
+      reason: row.reason,
+      message: row.message,
+      status: row.status,
+      filedAt: row.dateCreated,
+      updatedAt: row.dateModified,
+    }));
+  }),
+
   /**
    * Files a report, and optionally blocks the same person.
    *
