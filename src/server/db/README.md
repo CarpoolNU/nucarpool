@@ -321,6 +321,19 @@ A report is filed through `user.reports.create` and read by admins through `user
 - **One OPEN report per reporter and person.** It is a read before the insert, not a constraint, because it depends on `status`. Two simultaneous submissions can both pass.
 - **"Also block" goes through the same `applyBlock` as the Block button.** The report and the block commit together. A refusal for someone in the reporter's group is the one exception: the report still saves and the refusal is returned as a note.
 - **The snapshot is the one place admins read message text.** `getReports` reads the copy on the report, never the `message` table.
+- **Which reports email the admins depends on the reason, not on the report.** `REPORT_URGENCY` in `src/utils/reports.ts` classifies each `ReportReason` as `IMMEDIATE` or `DIGEST`. Only `SAFETY_CONCERN` is immediate; the rest are counted in the weekly digest below, which a critical report also appears in. There is **no severity column** on `report` and there should not be — the classification is a product decision over an existing enum, and a `Record` over it fails the type check until a newly added reason has been placed.
+
+## The weekly report digest
+
+`report_digest_delivery` holds one row per Monday-to-Sunday reporting window, and answers only "has this week been delivered". `src/server/db/reportDigestDelivery.ts` owns it; `src/server/reportDigestWindow.ts` derives the windows.
+
+- **The window is derived from the calendar, never stored as "last sent".** A "last sent at" timestamp makes the period a digest covers depend on when the job ran, so a late or repeated run reports a different week. Derived, a retry covers exactly the same reports.
+- **A week in `America/New_York` is 167, 168 or 169 hours.** No boundary is found by adding a week's milliseconds to another — `Mon 2026-10-26 00:00 EDT + 168h` is `Sun 2026-11-01 23:00 EST`. The day arithmetic runs on a UTC-anchored plain date and only the final midnight is resolved into the zone.
+- **The claim is the duplicate guard, and it is a raw conditional `UPDATE`.** `window_start` is the whole primary key, so concurrent runs contend for one row and MySQL serialises them. Same reason as the notification markers above: `updateMany` is not a compare-and-swap under `relationMode = "prisma"`, and `reportDigestDelivery.db.test.ts` demonstrates that against a real database rather than asserting it.
+- **`SENT` is written only after SES resolves**, so a failed send leaves the week retryable instead of marked delivered. A released claim becomes `FAILED`, which is claimable — the status differs from `PENDING` only so an operator can see that something went wrong.
+- **`claim_token` is what stops a stalled run undoing a healthy one.** A claim expires after a lease so a crashed run cannot strand a week forever; whoever takes over writes a new token, and the original run's attempt to mark the week `SENT` then matches no row.
+- **Nothing schedules the digest.** It is sent by `scripts/send-report-digest.ts`; see [that directory's README](../../../scripts/README.md#scheduling-the-report-digest) for why, and for why correctness does not depend on the trigger.
+- **The digest claims no email budget.** There is no sender to charge, and the recipients are staff resolved from `Permission` rather than an address a caller can choose.
 
 ## Notification markers
 

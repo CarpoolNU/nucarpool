@@ -58,6 +58,8 @@ yarn db:schema                        # prisma migrate dev && prisma generate
 **External services with real side effects**
 
 - `user.email.*` sends **real mail** through AWS SES.
+- `user.reports.create` sends **real mail to every admin** — but only for a reason `REPORT_URGENCY` marks `IMMEDIATE`, currently `SAFETY_CONCERN` alone. Every other reason is counted in the weekly digest instead.
+- [`scripts/send-report-digest.ts --apply`](scripts/send-report-digest.ts) sends **real mail to every admin**. Dry-run without `--apply`, which claims nothing and sends nothing.
 - `user.message.sendMessage` fires **real Pusher events**.
 - `mapbox.*` consumes Mapbox API quota. The seed script does not, unless `SEED_REVERSE_GEOCODE=1`.
 - [`scripts/emailtemplate.py`](scripts/emailtemplate.py) **mutates SES templates** in the configured AWS account.

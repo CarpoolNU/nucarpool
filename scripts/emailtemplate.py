@@ -198,6 +198,57 @@ def build_templates(base_url):
         """
             % {"base": base_url},
         },
+        # The weekly digest of a completed Monday-to-Sunday week, and the
+        # second template addressed to staff. Most reports no longer mail
+        # anybody on filing — only the critical reasons do, via the template
+        # above — so this is how admins learn about the rest.
+        #
+        # Like that one it carries no user-authored substitution and, going
+        # further, nothing that identifies a user at all: the repeat-subject
+        # figures are counts rather than names, because a name in staff mail
+        # would attach a reported person to an accusation they have not been
+        # told about and cannot answer, while adding nothing an admin can act
+        # on outside the dashboard. Every value below is a number this
+        # repository counted or a label it wrote.
+        #
+        # An empty week still sends. A silent week cannot be told apart from a
+        # broken digest, and this is the thing that tells staff a safety queue
+        # needs attention, so it says "no reports" rather than saying nothing.
+        # See `src/server/reportDigestSend.ts`.
+        {
+            "TemplateName": "AdminReportDigestTemplate",
+            "SubjectPart": "NUCarpool weekly report digest: {{windowLabelPlain}}",
+            "HtmlPart": """
+        <p>Weekly summary of NUCarpool reports for <strong>{{windowLabelHtml}}</strong>.</p>
+        <ul>
+          <li><strong>{{reportCount}}</strong> new report(s)</li>
+          <li><strong>{{uniqueReportedUsers}}</strong> user(s) reported</li>
+          <li><strong>{{repeatedReportedUsers}}</strong> user(s) with more than one report this week</li>
+          <li>Most reports about a single user: <strong>{{highestReportsAboutOneUser}}</strong></li>
+          <li><strong>{{criticalReports}}</strong> of these were urgent enough to have been emailed when filed</li>
+        </ul>
+        <p>By reason: {{reasonBreakdownHtml}}</p>
+        <p><a href="%(base)s/admin">Open the report queue</a></p>
+        <p>These are counts only. Who was reported, and what was said, is in the queue.</p>
+        """
+            % {"base": base_url},
+            "TextPart": """
+        Weekly summary of NUCarpool reports for {{windowLabelPlain}}.
+
+        New reports:                      {{reportCount}}
+        Users reported:                   {{uniqueReportedUsers}}
+        Users with more than one report:  {{repeatedReportedUsers}}
+        Most reports about one user:      {{highestReportsAboutOneUser}}
+        Already emailed when filed:       {{criticalReports}}
+
+        By reason: {{reasonBreakdownPlain}}
+
+        Open the report queue: %(base)s/admin
+
+        These are counts only. Who was reported, and what was said, is in the queue.
+        """
+            % {"base": base_url},
+        },
     ]
 
 

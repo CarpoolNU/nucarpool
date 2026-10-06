@@ -3,7 +3,10 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedRouter, router } from "../createRouter";
 import { REPORT_MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
-import { REPORT_SNAPSHOT_MESSAGE_LIMIT } from "../../../utils/reports";
+import {
+  isCriticalReportReason,
+  REPORT_SNAPSHOT_MESSAGE_LIMIT,
+} from "../../../utils/reports";
 import { buildConversationSnapshot } from "../../reportSnapshot";
 import { notifyAdminsOfReport } from "../../adminReportAlert";
 import { applyBlock } from "./blocks";
@@ -17,10 +20,15 @@ import { applyBlock } from "./blocks";
  * Nothing here tells the reported user anything. A report is read by admins
  * only, through `user.admin.getReports`.
  *
- * Filing one does now **email the admins** — the fact of a report and its
- * reason, never a word of it — so the queue is no longer pull-only. See
- * `adminReportAlert.ts`, including why that send claims no email budget and
- * why it can never fail the report.
+ * Filing one reaches the admins by mail — the fact of a report and its
+ * reason, never a word of it — so the queue is no longer pull-only. **Which
+ * mail depends on the reason.** A critical one (`REPORT_URGENCY` in
+ * `utils/reports.ts`, currently `SAFETY_CONCERN` alone) sends an immediate
+ * alert from here; every other reason is counted in the weekly digest
+ * instead, and a critical report appears in that too. See
+ * `adminReportAlert.ts` for the immediate path, including why its send claims
+ * no email budget and why it can never fail the report, and
+ * `reportDigestSend.ts` for the weekly one.
  */
 
 /**
@@ -321,7 +329,22 @@ export const reportsRouter = router({
       //
       // It is passed the reason and nothing else about the report — no id, no
       // message, no snapshot. See `AdminReportEmailSchema`.
-      await notifyAdminsOfReport(ctx.prisma, ctx.sesClient, input.reason);
+      //
+      // **Only the critical reasons mail anybody here.** Every reason used to,
+      // which made a `NO_SHOW` report arrive at the same urgency as somebody
+      // saying they felt unsafe in a car — and since `REPORTS_PER_WINDOW`
+      // admits 20 reports per reporter per day, each mailing the whole
+      // roster, the mail was mostly not urgent and therefore at risk of not
+      // being read at all. The rest are counted in the weekly digest
+      // (`reportDigestSend.ts`), which a critical report also appears in, so
+      // nothing is dropped and nothing is reported twice over.
+      //
+      // `isCriticalReportReason` is the only thing consulted, and
+      // `REPORT_URGENCY` beside it is the only place that decides. Moving a
+      // reason between the two behaviours is a one-line change there.
+      if (isCriticalReportReason(input.reason)) {
+        await notifyAdminsOfReport(ctx.prisma, ctx.sesClient, input.reason);
+      }
 
       return result;
     }),

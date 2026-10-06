@@ -109,6 +109,12 @@ export const SEED_DELETE_ORDER = [
   "carpoolGroup",
   "adminAuditLog",
   "emailSendBudget",
+  // Cleared, because the seed deletes every `report` above: a delivery row
+  // saying "this week was mailed, 5 reports" would describe rows that no
+  // longer exist. Leaving it would also make a re-seeded database refuse to
+  // send a digest for any week already marked SENT, which is the duplicate
+  // guard working against the person trying to test the digest.
+  "reportDigestDelivery",
   "account",
   "session",
   "user",
@@ -151,6 +157,7 @@ const deletableModels = (
   carpoolGroup: client.carpoolGroup,
   adminAuditLog: client.adminAuditLog,
   emailSendBudget: client.emailSendBudget,
+  reportDigestDelivery: client.reportDigestDelivery,
   account: client.account,
   session: client.session,
   user: client.user,

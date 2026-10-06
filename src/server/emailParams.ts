@@ -198,6 +198,64 @@ export function generateAdminReportEmailParams(
   };
 }
 
+/**
+ * The weekly digest of the reports a Monday-to-Sunday week produced. See
+ * `reportDigestSend.ts`.
+ *
+ * **Every value in here is a number this repository counted or a string it
+ * wrote.** Nothing a user typed reaches it, and nothing identifies a user at
+ * all — not the people reported, not the people reporting, not a count of
+ * reports attached to anyone nameable. The aggregate is the message and
+ * `/admin` is where a name is attached to it; `reportDigest.ts` argues why at
+ * length, and `emailParams.test.ts` asserts the exact key set so that a
+ * future edit cannot quietly add a seventh field holding an id.
+ *
+ * The two string values are escaped under the usual `Html` / `Plain` pair,
+ * matching every other builder here. Neither can contain markup —
+ * `windowLabel` is formatted from two `Date`s and `reasonBreakdown` from
+ * `REPORT_REASON_LABELS` — and they are escaped anyway, for the reason the
+ * admin alert above gives: a file where some substitutions are escaped and
+ * some are not is how the next one gets it wrong.
+ *
+ * The counts are emitted once each rather than as pairs. A number has no
+ * injection surface and renders identically in both parts, so a second key
+ * would be noise that still has to be kept in step.
+ */
+export interface AdminReportDigestEmailSchema {
+  /** Staff, resolved from `Permission` on the server. Never input. */
+  recipientEmails: string[];
+  /** The week covered, e.g. `29 Sep – 5 Oct 2026`. */
+  windowLabel: string;
+  /** Per-reason counts as one line, already formatted. */
+  reasonBreakdown: string;
+  reportCount: number;
+  uniqueReportedUserCount: number;
+  repeatedReportedUserCount: number;
+  highestReportsAboutOneUser: number;
+  criticalReportCount: number;
+}
+
+export function generateAdminReportDigestEmailParams(
+  schema: AdminReportDigestEmailSchema,
+): SendTemplatedEmailCommandInput {
+  return {
+    Source: "no-reply@carpoolnu.com",
+    Destination: { ToAddresses: schema.recipientEmails },
+    Template: "AdminReportDigestTemplate",
+    TemplateData: JSON.stringify({
+      windowLabelHtml: escapeHtmlAttribute(schema.windowLabel),
+      windowLabelPlain: schema.windowLabel,
+      reasonBreakdownHtml: escapeHtmlAttribute(schema.reasonBreakdown),
+      reasonBreakdownPlain: schema.reasonBreakdown,
+      reportCount: String(schema.reportCount),
+      uniqueReportedUsers: String(schema.uniqueReportedUserCount),
+      repeatedReportedUsers: String(schema.repeatedReportedUserCount),
+      highestReportsAboutOneUser: String(schema.highestReportsAboutOneUser),
+      criticalReports: String(schema.criticalReportCount),
+    }),
+  };
+}
+
 export function generateEmailParams(
   schema: RequestEmailSchema | MessageEmailSchema | AcceptanceEmailSchema,
   type: "request" | "message" | "acceptance",
