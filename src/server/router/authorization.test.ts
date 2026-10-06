@@ -341,6 +341,9 @@ describe("adminRouter", () => {
       await expect(caller.user.admin.getReports()).resolves.toEqual({
         reports: [],
         nextCursor: null,
+        // The slice `reportsAboutUser` was counted over. OPEN by default,
+        // like the page itself.
+        countedStatus: "OPEN",
       });
       expect(prisma.user.findMany).toHaveBeenCalled();
     },

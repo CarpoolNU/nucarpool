@@ -1,8 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { router, protectedRouter } from "../createRouter";
-import { generateEmailParams } from "../../emailParams";
-import { browserEnv } from "../../../utils/env/browser";
+import { generateEmailParams, isDeliverableRecipient } from "../../emailParams";
 import { SendTemplatedEmailCommand } from "@aws-sdk/client-ses";
 import type {
   SESClient,
@@ -53,6 +52,19 @@ import { claimEmailBudget } from "../../db/emailBudget";
  * a marker, and refunds on every path that then declines to send. So a replay
  * costs nothing, a staging-refused recipient costs nothing and an SES failure
  * costs nothing: the budget tracks mail that actually went out.
+ *
+ * **One sender in the app is deliberately exempt from all of this**: the
+ * admin alert that a report was filed, in `src/server/adminReportAlert.ts`.
+ * It is not a procedure here and it claims no budget, because the budget is
+ * keyed to the sender and claiming it against the reporter would let a
+ * reporter who had already sent request and message notifications that hour
+ * **silence their own safety alert**. A reserved key of its own was rejected
+ * for a related reason — a global per-window cap is spendable by other
+ * people's reports — and the bound is instead the report write itself, which
+ * `reports.ts` rate-limits per reporter. The full argument, including why
+ * that path cannot be aimed at an arbitrary recipient the way these three
+ * can, is in that file's header. **A fourth email added to this router is not
+ * covered by that reasoning** and claims from the budget like the rest.
  */
 
 /** Per-sender, per-conversation cooldown for message notifications. */
@@ -65,12 +77,13 @@ type Party = { id: string; name: string; email: string };
  * client-supplied address; addresses now come from the database, so the same
  * rule is applied to the resolved recipient instead. The code and message are
  * unchanged so the behaviour a staging user sees is the same.
+ *
+ * The rule itself is `isDeliverableRecipient` in `emailParams.ts`, shared with
+ * the admin report alert, which has to filter rather than throw. Only the
+ * refusal is this procedure's own.
  */
 const assertDeliverable = (email: string) => {
-  if (
-    browserEnv.NEXT_PUBLIC_ENV === "staging" &&
-    !email.toLowerCase().endsWith("@gmail.com")
-  ) {
+  if (!isDeliverableRecipient(email)) {
     throw new TRPCError({
       code: "BAD_REQUEST",
       message:

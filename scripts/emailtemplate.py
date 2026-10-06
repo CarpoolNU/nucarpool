@@ -167,6 +167,37 @@ def build_templates(base_url):
         """
             % {"base": base_url},
         },
+        # The admin alert that a report was filed. The only template here
+        # addressed to staff rather than to a student, and the only one with
+        # no user-authored substitution in it at all: no reporter message, no
+        # conversation snapshot, not even the two users' names. The report
+        # itself is read in the queue, behind `adminRouter`, and the link
+        # below is the whole point of the email.
+        #
+        # `reason` is a label from `REPORT_REASON_LABELS`, so SAFETY_CONCERN
+        # is distinguishable from SPAM in the subject line without disclosing
+        # anything a reporter typed. See `src/server/adminReportAlert.ts`.
+        {
+            "TemplateName": "AdminReportTemplate",
+            "SubjectPart": "New NUCarpool report: {{reasonPlain}}",
+            "HtmlPart": """
+        <p>A NUCarpool user has filed a report.</p>
+        <p>Reason given: <strong>{{reasonHtml}}</strong></p>
+        <p><a href="%(base)s/admin">Open the report queue</a></p>
+        <p>This notice deliberately carries no details of the report. Read it in the queue.</p>
+        """
+            % {"base": base_url},
+            "TextPart": """
+        A NUCarpool user has filed a report.
+
+        Reason given: {{reasonPlain}}
+
+        Open the report queue: %(base)s/admin
+
+        This notice deliberately carries no details of the report. Read it in the queue.
+        """
+            % {"base": base_url},
+        },
     ]
 
 

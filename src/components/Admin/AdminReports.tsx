@@ -22,6 +22,26 @@ const STATUS_FILTERS = [
 ] as const;
 
 /**
+ * What the per-user count column is called, for the slice it counted.
+ *
+ * Taken from the page's own `countedStatus` rather than from the filter
+ * state, so the heading always describes the numbers on screen. The two
+ * disagree for one render after a filter change — React Query serves the
+ * previous page while the new one loads — and a heading that said "Open"
+ * over counts that were still "all statuses" would be a number with the
+ * wrong scope attached, which is the one thing this column must not be.
+ */
+const COUNT_HEADINGS: Record<ReportStatus, string> = {
+  OPEN: "Open reports about them",
+  REVIEWED: "Reviewed reports about them",
+  DISMISSED: "Dismissed reports about them",
+};
+const countHeading = (countedStatus: ReportStatus | null) =>
+  countedStatus === null
+    ? "Reports about them (all statuses)"
+    : COUNT_HEADINGS[countedStatus];
+
+/**
  * The report queue: most recent first, defaulting to OPEN and
  * paginated so a flood of reports makes the queue longer rather
  * than pushing genuinely unresolved ones out of what `getReports`'s bounded
@@ -70,9 +90,12 @@ const AdminReports = () => {
     ? combineQueryStates(toQueryState(reportsQuery), toQueryState(usersQuery))
     : HELD_QUERY_STATE;
 
-  const reports = (reportsQuery.data?.pages ?? []).flatMap(
-    (page) => page.reports,
-  );
+  const pages = reportsQuery.data?.pages ?? [];
+  const reports = pages.flatMap((page) => page.reports);
+
+  // Every page of one infinite query was fetched with the same `status`, so
+  // any page reports the same scope and the first is as good as the last.
+  const countedStatus = pages[0]?.countedStatus ?? null;
 
   const emailById = new Map(
     (usersQuery.data ?? []).map((user) => [user.id, user.email]),
@@ -119,6 +142,7 @@ const AdminReports = () => {
                   <th className="py-2 pr-4">When</th>
                   <th className="py-2 pr-4">Reporter</th>
                   <th className="py-2 pr-4">Reported</th>
+                  <th className="py-2 pr-4">{countHeading(countedStatus)}</th>
                   <th className="py-2 pr-4">Reason</th>
                   <th className="py-2 pr-4">Status</th>
                   <th className="py-2 pr-4">Details</th>
@@ -151,6 +175,19 @@ const AdminReports = () => {
                       </td>
                       <td className="py-2 pr-4">
                         {nameFor(report.reportedUserId)}
+                      </td>
+                      {/* Bold past the first, so a repeat offender is
+                          visible while scanning rather than only on being
+                          read. One report about someone is the ordinary
+                          case and should not draw the eye. */}
+                      <td
+                        className={
+                          report.reportsAboutUser > 1
+                            ? "py-2 pr-4 font-bold"
+                            : "py-2 pr-4"
+                        }
+                      >
+                        {report.reportsAboutUser}
                       </td>
                       <td className="py-2 pr-4">
                         {REPORT_REASON_LABELS[report.reason]}

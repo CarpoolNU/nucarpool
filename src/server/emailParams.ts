@@ -1,4 +1,20 @@
 import { SendTemplatedEmailCommandInput } from "@aws-sdk/client-ses";
+import { browserEnv } from "../utils/env/browser";
+
+/**
+ * Whether staging is allowed to mail this address.
+ *
+ * Staging may only send to gmail.com. The rule lives here, with the other
+ * send-shaped code and no router dependency, because two callers need it and
+ * they need opposite things from it: `assertDeliverable` in
+ * `router/user/email.ts` throws, so a staging user sees why their
+ * notification was refused, while `adminReportAlert.ts` filters, because an
+ * admin alert must never fail the report that caused it. One predicate, so
+ * the two cannot drift into disagreeing about what staging may send.
+ */
+export const isDeliverableRecipient = (email: string): boolean =>
+  browserEnv.NEXT_PUBLIC_ENV !== "staging" ||
+  email.toLowerCase().endsWith("@gmail.com");
 
 /**
  * Template selection.
@@ -128,6 +144,58 @@ export interface MessageEmailSchema extends BaseEmailSchema {
 export interface AcceptanceEmailSchema extends BaseEmailSchema {
   /** Does the *recipient* drive? See the note at the top of this file. */
   recipientIsDriver: boolean;
+}
+
+/**
+ * The admin alert that a report was filed. See `adminReportAlert.ts`.
+ *
+ * **There is deliberately no user-authored value in here at all** — no
+ * reporter message, no snapshot, and not even the two users' names. The
+ * reporter's `message` and the `conversationSnapshot` are unvalidated past a
+ * length cap (`textLimits.ts` checks length and nothing else), and SCRUM-225
+ * established that caller-supplied text must not reach an email body. The
+ * alert therefore carries the *fact* of a report and its reason, and the
+ * queue itself is where the content is read, behind `adminRouter`.
+ *
+ * `reasonLabel` is a value from `REPORT_REASON_LABELS`, keyed by a Prisma
+ * enum: a string this repository wrote, not one a caller chose. It is escaped
+ * anyway, under the same two keys as everything else here, because the cost
+ * is a few bytes and the alternative is a file where some substitutions are
+ * escaped and some are not — which is how the next one gets it wrong.
+ */
+export interface AdminReportEmailSchema {
+  /**
+   * Every admin the alert goes to, resolved from the database on the server.
+   * Never input, and never an address derived from the reporter.
+   */
+  recipientEmails: string[];
+  /** The report's reason, already turned into its on-screen label. */
+  reasonLabel: string;
+}
+
+/**
+ * Built here rather than as a fourth `type` on `generateEmailParams` below.
+ * That function's three cases all address one recipient and share
+ * `nameVariables`, and its `BaseEmailSchema` requires a sender and a
+ * receiver; this alert has many recipients and no sender in that sense. The
+ * useful half of the convention — one file builds every `TemplateData`, and
+ * nothing else in the app constructs one — is unchanged.
+ */
+export function generateAdminReportEmailParams(
+  schema: AdminReportEmailSchema,
+): SendTemplatedEmailCommandInput {
+  return {
+    Source: "no-reply@carpoolnu.com",
+    // All recipients are staff holding the same privilege over the same
+    // queue, so a visible `To` discloses nothing between them that
+    // `getAllUsers` does not already show each of them.
+    Destination: { ToAddresses: schema.recipientEmails },
+    Template: "AdminReportTemplate",
+    TemplateData: JSON.stringify({
+      reasonHtml: escapeHtmlAttribute(schema.reasonLabel),
+      reasonPlain: schema.reasonLabel,
+    }),
+  };
 }
 
 export function generateEmailParams(

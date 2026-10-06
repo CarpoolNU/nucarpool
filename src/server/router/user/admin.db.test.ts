@@ -486,6 +486,127 @@ describe("updateUserPermission's audit trail against a real database", () => {
  * Prisma cannot prove either side of — it only ever returns what the test
  * told it to, regardless of what `resolveReport` actually wrote.
  */
+/**
+ * The per-reported-user count in `getReports`, against a real `GROUP BY`.
+ *
+ * `admin.test.ts` can only show the query's shape: its mocked `groupBy`
+ * returns whatever the test handed it, so it cannot show that the numbers are
+ * right. The properties that need a real database are that the count spans
+ * reporters (several people reporting one person is exactly the pattern the
+ * column exists to surface), that it respects the status filter, and that a
+ * report moving out of `OPEN` moves the count with it.
+ */
+describe("getReports' per-user count against a real database", () => {
+  const reporterSession = (id: string): Session => ({
+    expires: new Date(Date.now() + 60_000).toISOString(),
+    user: {
+      id,
+      isOnboarded: true,
+      tutorialCompleted: true,
+      permission: Permission.USER,
+    },
+  });
+
+  /** `count` reporters, all reporting one person. */
+  const seedReportsAbout = async (count: number) => {
+    const reported = await prisma.user.create({
+      data: { name: "Subject", email: "subject@northeastern.edu" },
+    });
+
+    const reportIds: string[] = [];
+    for (let i = 0; i < count; i += 1) {
+      const reporter = await prisma.user.create({
+        data: {
+          name: `Reporter ${i}`,
+          email: `reporter-${i}@northeastern.edu`,
+        },
+      });
+      const { reportId } = await callerFor(
+        reporterSession(reporter.id),
+      ).user.reports.create({
+        reportedUserId: reported.id,
+        reason: ReportReason.HARASSMENT,
+        alsoBlock: false,
+      });
+      reportIds.push(reportId);
+    }
+
+    return { reported, reportIds };
+  };
+
+  it("counts every reporter's report about one person, on each of their rows", async () => {
+    const { reported } = await seedReportsAbout(3);
+    // A fourth report about somebody else, so a count that ignored the
+    // grouping entirely would read 4 and fail here.
+    const other = await prisma.user.create({
+      data: { name: "Other", email: "other@northeastern.edu" },
+    });
+    const bystander = await prisma.user.create({
+      data: { name: "Bystander", email: "bystander@northeastern.edu" },
+    });
+    await callerFor(reporterSession(bystander.id)).user.reports.create({
+      reportedUserId: other.id,
+      reason: ReportReason.OTHER,
+      alsoBlock: false,
+    });
+
+    const { reports, countedStatus } =
+      await callerFor(managerSession()).user.admin.getReports();
+
+    expect(reports).toHaveLength(4);
+    expect(countedStatus).toBe(ReportStatus.OPEN);
+    for (const row of reports) {
+      expect(row.reportsAboutUser).toBe(
+        row.reportedUserId === reported.id ? 3 : 1,
+      );
+    }
+  });
+
+  it("counts only the status being viewed", async () => {
+    const { reported, reportIds } = await seedReportsAbout(3);
+    await callerFor(managerSession()).user.admin.resolveReport({
+      reportId: reportIds[0],
+      status: ReportStatus.DISMISSED,
+    });
+
+    const open = await callerFor(managerSession()).user.admin.getReports();
+    expect(open.reports).toHaveLength(2);
+    // Two left open, and the count says two rather than three: the resolved
+    // one is out of the slice being viewed and out of its count with it.
+    expect(open.reports.map((r) => r.reportsAboutUser)).toEqual([2, 2]);
+
+    const dismissed = await callerFor(managerSession()).user.admin.getReports({
+      status: ReportStatus.DISMISSED,
+    });
+    expect(dismissed.reports.map((r) => r.reportsAboutUser)).toEqual([1]);
+
+    const all = await callerFor(managerSession()).user.admin.getReports({
+      status: null,
+    });
+    expect(all.countedStatus).toBeNull();
+    expect(all.reports).toHaveLength(3);
+    for (const row of all.reports) {
+      expect(row.reportedUserId).toBe(reported.id);
+      expect(row.reportsAboutUser).toBe(3);
+    }
+  });
+
+  it("counts reports beyond the page, not merely the ones on it", async () => {
+    await seedReportsAbout(3);
+
+    // One row per page. The count must still be 3 on that single row —
+    // otherwise the column would say "1" about someone with three open
+    // reports, which is worse than showing nothing.
+    const firstPage = await callerFor(managerSession()).user.admin.getReports({
+      limit: 1,
+    });
+
+    expect(firstPage.reports).toHaveLength(1);
+    expect(firstPage.nextCursor).not.toBeNull();
+    expect(firstPage.reports[0].reportsAboutUser).toBe(3);
+  });
+});
+
 describe("resolveReport against a real database", () => {
   const reporterSession = (id: string): Session => ({
     expires: new Date(Date.now() + 60_000).toISOString(),
