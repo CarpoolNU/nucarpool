@@ -255,3 +255,125 @@ describe("the reports a user has filed, against a real database", () => {
     expect(afterResolution.updatedAt).toEqual(stored.dateModified);
   });
 });
+
+/**
+ * The admin alert must never cost the report.
+ *
+ * `reports.test.ts` asserts this against a fake whose `$transaction` restores
+ * two in-memory arrays on a throw, which is a model of a rollback rather than
+ * one. The property worth a real MySQL is that the row is **committed** and
+ * still there after the send has failed — if the alert were inside the
+ * transaction, or its rejection reached the mutation, this is where that
+ * would show.
+ */
+describe("a failing admin alert against a real database", () => {
+  /**
+   * Returns the send mock alongside the caller so each test can assert the
+   * throw actually happened. Without that, a run where the alert stopped
+   * earlier — no admin seeded, or `NEXT_PUBLIC_ENV=staging` filtering a
+   * northeastern.edu roster out — would pass these tests having never failed
+   * a send at all.
+   */
+  const failingSesCaller = (userId: string) => {
+    const send = jest.fn(async () => {
+      // What SES answers until someone runs
+      // `scripts/emailtemplate.py --apply` to publish AdminReportTemplate,
+      // which is the state this ships in.
+      throw new Error("TemplateDoesNotExist");
+    });
+
+    return {
+      send,
+      caller: appRouter.createCaller({
+        req: undefined,
+        res: undefined,
+        session: sessionFor(userId),
+        prisma,
+        sesClient: { send },
+      } as unknown as Context),
+    };
+  };
+
+  beforeEach(() => {
+    jest.spyOn(console, "error").mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("commits the report even though the send threw", async () => {
+    const reporter = await prisma.user.create({
+      data: { name: "Reporter", email: "reporter@northeastern.edu" },
+    });
+    const reported = await prisma.user.create({
+      data: { name: "Reported", email: "reported@northeastern.edu" },
+    });
+    // An admin, so the alert gets as far as the send rather than stopping at
+    // "no recipients" — otherwise this would pass without a throw happening.
+    await prisma.user.create({
+      data: {
+        name: "Admin",
+        email: "admin@northeastern.edu",
+        permission: Permission.ADMIN,
+      },
+    });
+
+    const { caller, send } = failingSesCaller(reporter.id);
+    const { reportId } = await caller.user.reports.create({
+      reportedUserId: reported.id,
+      reason: ReportReason.SAFETY_CONCERN,
+      message: "they followed me to my car",
+      alsoBlock: false,
+    });
+
+    // The premise: a send was attempted and it threw. Without this the test
+    // would pass on a run where the alert never reached SES.
+    expect(send).toHaveBeenCalledTimes(1);
+
+    // Read back on a fresh query, not from the mutation's return value: the
+    // question is whether it committed.
+    const stored = await prisma.report.findUniqueOrThrow({
+      where: { id: reportId },
+    });
+    expect(stored).toMatchObject({
+      reporterId: reporter.id,
+      reportedUserId: reported.id,
+      reason: ReportReason.SAFETY_CONCERN,
+      status: ReportStatus.OPEN,
+      message: "they followed me to my car",
+    });
+    expect(await prisma.report.count()).toBe(1);
+  });
+
+  it("still applies an accompanying block when the send throws", async () => {
+    const reporter = await prisma.user.create({
+      data: { name: "Reporter B", email: "reporter-b@northeastern.edu" },
+    });
+    const reported = await prisma.user.create({
+      data: { name: "Reported B", email: "reported-b@northeastern.edu" },
+    });
+    await prisma.user.create({
+      data: {
+        name: "Admin B",
+        email: "admin-b@northeastern.edu",
+        permission: Permission.ADMIN,
+      },
+    });
+
+    const { caller, send } = failingSesCaller(reporter.id);
+    const result = await caller.user.reports.create({
+      reportedUserId: reported.id,
+      reason: ReportReason.HARASSMENT,
+      alsoBlock: true,
+    });
+
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(result.blocked).toBe(true);
+    expect(
+      await prisma.block.findFirst({
+        where: { blockerId: reporter.id, blockedId: reported.id },
+      }),
+    ).not.toBeNull();
+  });
+});

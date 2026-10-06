@@ -25,6 +25,9 @@ const THEM = "user-them";
 const OTHER = "user-other";
 /** Someone with neither name set, for `me`'s "Unknown user" fallback. */
 const NAMELESS = "user-nameless";
+/** Where the admin alert goes. Not a user in `USER_NAMES`: the alert resolves
+ *  its recipients by `permission`, not from anything a report references. */
+const ADMIN_EMAIL = "admin@northeastern.edu";
 
 /**
  * The users the fake knows, and the names `reports.me` resolves through.
@@ -82,6 +85,10 @@ const buildReportsDb = (opts?: {
       findUnique: jest.fn(async ({ where }: any) =>
         users.has(where.id) ? { id: where.id } : null,
       ),
+      // The admin roster `notifyAdminsOfReport` mails after a successful
+      // create. Every test in this file goes through that path, so the fake
+      // supplies one rather than leaving each one to log a caught failure.
+      findMany: jest.fn(async () => [{ email: ADMIN_EMAIL }]),
     },
     request: {
       findUnique: jest.fn(async ({ where }: any) => requests[where.id] ?? null),
@@ -202,16 +209,22 @@ const sessionFor = (id: string): Session => ({
   },
 });
 
-const callerFor = (session: Session | null, db = buildReportsDb()) => {
+const callerFor = (
+  session: Session | null,
+  db = buildReportsDb(),
+  // Returned so a test can read what the admin alert handed SES, and
+  // overridable so one can make the send fail. Resolves by default.
+  sesSend: jest.Mock = jest.fn(async () => ({})),
+) => {
   const ctx = {
     req: undefined,
     res: undefined,
     session,
     prisma: db.prisma,
-    sesClient: { send: jest.fn() },
+    sesClient: { send: sesSend },
   } as unknown as Context;
 
-  return { caller: appRouter.createCaller(ctx), db };
+  return { caller: appRouter.createCaller(ctx), db, sesSend };
 };
 
 const baseInput = {
@@ -784,5 +797,139 @@ describe("DUPLICATE_REPORT_MESSAGE", () => {
   it("points at the profile section that now lists the first report", () => {
     expect(DUPLICATE_REPORT_MESSAGE).toContain("Reports You've Filed");
     expect(DUPLICATE_REPORT_MESSAGE).toContain("profile");
+  });
+});
+
+/**
+ * The admin alert `create` fires once the report is written.
+ *
+ * The module's own behaviour — recipients, the cap, the budget exemption — is
+ * in `src/server/adminReportAlert.test.ts`. What belongs here is the join: that
+ * filing a report sends it at all, that no word of the report travels with it,
+ * and that a send which fails leaves the report in place.
+ */
+describe("user.reports.create fires the admin alert", () => {
+  beforeEach(() => {
+    jest.spyOn(console, "error").mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("mails the admins without anyone opening /admin", async () => {
+    const { caller, sesSend } = callerFor(sessionFor(ME));
+
+    await caller.user.reports.create(baseInput);
+
+    expect(sesSend).toHaveBeenCalledTimes(1);
+    const sent = sesSend.mock.calls[0][0].input;
+    expect(sent.Template).toBe("AdminReportTemplate");
+    expect(sent.Destination.ToAddresses).toEqual([ADMIN_EMAIL]);
+  });
+
+  /**
+   * The acceptance criterion this feature most needs to keep. Both
+   * user-authored fields are given distinctive text and the whole serialised
+   * command is searched for it — not just `TemplateData`, because an address
+   * or a subject built from a report would be just as much of a disclosure.
+   */
+  it("carries neither the reporter's message nor the snapshot", async () => {
+    const db = buildReportsDb({
+      requests: { "req-1": { fromUserId: ME, toUserId: THEM } },
+      messages: threadOf("req-1", 3),
+    });
+    const { caller, sesSend } = callerFor(sessionFor(ME), db);
+
+    await caller.user.reports.create({
+      ...baseInput,
+      message: "UNIQUE-REPORTER-PROSE",
+      requestId: "req-1",
+    });
+
+    // The fixture really did store both, so the assertion below is about the
+    // email and not about an empty report.
+    expect(db.reports[0].message).toBe("UNIQUE-REPORTER-PROSE");
+    expect(db.reports[0].conversationSnapshot).toContain("message 0");
+
+    const serialised = JSON.stringify(sesSend.mock.calls[0][0].input);
+    expect(serialised).not.toContain("UNIQUE-REPORTER-PROSE");
+    expect(serialised).not.toContain("message 0");
+    // Nor either party's identity.
+    expect(serialised).not.toContain(ME);
+    expect(serialised).not.toContain(THEM);
+  });
+
+  it("names the reason, so a safety concern is triageable from the subject", async () => {
+    const { caller, sesSend } = callerFor(sessionFor(ME));
+
+    await caller.user.reports.create({
+      ...baseInput,
+      reason: ReportReason.SAFETY_CONCERN,
+    });
+
+    const data = JSON.parse(sesSend.mock.calls[0][0].input.TemplateData);
+    expect(data.reasonPlain).toBe("Safety concern");
+  });
+
+  it("still writes the report when the send throws", async () => {
+    const db = buildReportsDb();
+    const { caller } = callerFor(
+      sessionFor(ME),
+      db,
+      jest.fn(async () => {
+        throw new Error("TemplateDoesNotExist");
+      }),
+    );
+
+    // Resolves, and with the ordinary payload: the reporter is told nothing
+    // about an admin mailbox being unreachable.
+    await expect(caller.user.reports.create(baseInput)).resolves.toEqual({
+      reportId: "report-1",
+      blocked: false,
+      blockRefusal: null,
+    });
+    expect(db.reports).toHaveLength(1);
+  });
+
+  it("still writes the report when the admin roster cannot be read", async () => {
+    const db = buildReportsDb();
+    db.prisma.user.findMany.mockRejectedValueOnce(new Error("connection lost"));
+    const { caller } = callerFor(sessionFor(ME), db);
+
+    await expect(caller.user.reports.create(baseInput)).resolves.toEqual({
+      reportId: "report-1",
+      blocked: false,
+      blockRefusal: null,
+    });
+    expect(db.reports).toHaveLength(1);
+  });
+
+  /**
+   * A refusal must not mail anyone. The alert runs after the transaction, so
+   * anything that throws before it — here the duplicate-report guard — should
+   * leave SES untouched.
+   */
+  it("sends nothing when the report itself is refused", async () => {
+    const db = buildReportsDb({
+      reports: [
+        {
+          id: "report-existing",
+          reporterId: ME,
+          reportedUserId: THEM,
+          reason: ReportReason.HARASSMENT,
+          message: null,
+          requestId: null,
+          conversationSnapshot: null,
+          status: ReportStatus.OPEN,
+        },
+      ],
+    });
+    const { caller, sesSend } = callerFor(sessionFor(ME), db);
+
+    await expect(caller.user.reports.create(baseInput)).rejects.toThrow(
+      DUPLICATE_REPORT_MESSAGE,
+    );
+    expect(sesSend).not.toHaveBeenCalled();
   });
 });

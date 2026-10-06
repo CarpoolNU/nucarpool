@@ -5,6 +5,7 @@ import { protectedRouter, router } from "../createRouter";
 import { REPORT_MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
 import { REPORT_SNAPSHOT_MESSAGE_LIMIT } from "../../../utils/reports";
 import { buildConversationSnapshot } from "../../reportSnapshot";
+import { notifyAdminsOfReport } from "../../adminReportAlert";
 import { applyBlock } from "./blocks";
 
 /**
@@ -15,6 +16,11 @@ import { applyBlock } from "./blocks";
  *
  * Nothing here tells the reported user anything. A report is read by admins
  * only, through `user.admin.getReports`.
+ *
+ * Filing one does now **email the admins** — the fact of a report and its
+ * reason, never a word of it — so the queue is no longer pull-only. See
+ * `adminReportAlert.ts`, including why that send claims no email budget and
+ * why it can never fail the report.
  */
 
 /**
@@ -265,7 +271,7 @@ export const reportsRouter = router({
           )
         : null;
 
-      return ctx.prisma.$transaction(async (tx) => {
+      const result = await ctx.prisma.$transaction(async (tx) => {
         const report = await tx.report.create({
           data: {
             reporterId,
@@ -298,5 +304,25 @@ export const reportsRouter = router({
 
         return { reportId: report.id, blocked, blockRefusal };
       });
+
+      // **Outside the transaction, and after it has committed.** Inside it an
+      // SES failure would roll the report back — exactly backwards, since the
+      // report is the thing that matters and the alert is best-effort.
+      //
+      // Awaited for completion but not for its value. `notifyAdminsOfReport`
+      // resolves on every failure path and logs its own, so there is no
+      // rejection to catch here and nothing a reporter sees changes because
+      // an admin mailbox was briefly unreachable. It is still awaited rather
+      // than left dangling, because this runs in a Next.js API route: a
+      // promise in flight when the handler returns can be cut off when the
+      // process is frozen between invocations, so a fire-and-forget send
+      // would be dropped silently on exactly the deployment it has to work
+      // on. The cost is that filing a report waits for one SES call.
+      //
+      // It is passed the reason and nothing else about the report — no id, no
+      // message, no snapshot. See `AdminReportEmailSchema`.
+      await notifyAdminsOfReport(ctx.prisma, ctx.sesClient, input.reason);
+
+      return result;
     }),
 });

@@ -60,6 +60,10 @@ const buildPrismaMock = () => {
     report: {
       findMany: jest.fn().mockResolvedValue([]),
       findUnique: jest.fn().mockResolvedValue(null),
+      // The per-reported-user count beside each `getReports` row. Empty by
+      // default, which the resolver reads as "one report about this user" —
+      // see the `?? 1` there.
+      groupBy: jest.fn().mockResolvedValue([]),
     },
   };
 
@@ -1094,6 +1098,131 @@ describe("getReports", () => {
       },
     ]);
     expect(reports[1].conversationSnapshot).toBeNull();
+  });
+
+  /**
+   * The per-reported-user count. Query *shape* here; that the numbers are
+   * right across several reports and several statuses needs a real GROUP BY
+   * and is in `admin.db.test.ts`.
+   */
+  describe("reportsAboutUser", () => {
+    const reportRow = (id: string, reportedUserId: string) => ({
+      id,
+      reporterId: "reporter-1",
+      reportedUserId,
+      reason: "HARASSMENT",
+      message: null,
+      requestId: null,
+      conversationSnapshot: null,
+      status: "OPEN",
+      dateCreated: new Date(2026, 8, 1),
+    });
+
+    it("groups over only the reported users on this page", async () => {
+      const { caller, prisma } = callerFor();
+      prisma.report.findMany.mockResolvedValue([
+        reportRow("report-1", "user-a"),
+        reportRow("report-2", "user-b"),
+        // A second report about user-a: the `in` list must not repeat it.
+        reportRow("report-3", "user-a"),
+      ]);
+
+      await caller.user.admin.getReports();
+
+      expect(prisma.report.groupBy).toHaveBeenCalledWith({
+        by: ["reportedUserId"],
+        where: {
+          reportedUserId: { in: ["user-a", "user-b"] },
+          status: "OPEN",
+        },
+        _count: { _all: true },
+      });
+    });
+
+    it("counts the status being viewed, and says which that was", async () => {
+      const { caller, prisma } = callerFor();
+      prisma.report.findMany.mockResolvedValue([
+        reportRow("report-1", "user-a"),
+      ]);
+
+      const dismissed = await caller.user.admin.getReports({
+        status: "DISMISSED",
+      });
+
+      expect(prisma.report.groupBy).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ status: "DISMISSED" }),
+        }),
+      );
+      expect(dismissed.countedStatus).toBe("DISMISSED");
+    });
+
+    it("counts every status when asked for every status", async () => {
+      const { caller, prisma } = callerFor();
+      prisma.report.findMany.mockResolvedValue([
+        reportRow("report-1", "user-a"),
+      ]);
+
+      const all = await caller.user.admin.getReports({ status: null });
+
+      expect(prisma.report.groupBy).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          where: { reportedUserId: { in: ["user-a"] } },
+        }),
+      );
+      expect(all.countedStatus).toBeNull();
+    });
+
+    it("puts each group's count on every row about that user", async () => {
+      const { caller, prisma } = callerFor();
+      prisma.report.findMany.mockResolvedValue([
+        reportRow("report-1", "user-a"),
+        reportRow("report-2", "user-b"),
+        reportRow("report-3", "user-a"),
+      ]);
+      prisma.report.groupBy.mockResolvedValue([
+        { reportedUserId: "user-a", _count: { _all: 3 } },
+        { reportedUserId: "user-b", _count: { _all: 1 } },
+      ]);
+
+      const { reports } = await caller.user.admin.getReports();
+
+      expect(reports.map((r) => [r.id, r.reportsAboutUser])).toEqual([
+        ["report-1", 3],
+        ["report-2", 1],
+        ["report-3", 3],
+      ]);
+    });
+
+    it("spends no query on an empty page", async () => {
+      const { caller, prisma } = callerFor();
+      prisma.report.findMany.mockResolvedValue([]);
+
+      const { reports } = await caller.user.admin.getReports();
+
+      expect(reports).toEqual([]);
+      expect(prisma.report.groupBy).not.toHaveBeenCalled();
+    });
+
+    /**
+     * The count is an aggregate and must stay one. A `select` or `include`
+     * reaching the other reporters would hand every admin reading one row a
+     * copy of other people's reports, which is the thing this column was
+     * deliberately kept narrow to avoid.
+     */
+    it("reads no column but the one it groups by", async () => {
+      const { caller, prisma } = callerFor();
+      prisma.report.findMany.mockResolvedValue([
+        reportRow("report-1", "user-a"),
+      ]);
+
+      await caller.user.admin.getReports();
+
+      const args = prisma.report.groupBy.mock.calls[0][0];
+      expect(Object.keys(args).sort()).toEqual(["_count", "by", "where"]);
+      expect(selectsField(args, "message")).toBe(false);
+      expect(selectsField(args, "conversationSnapshot")).toBe(false);
+    });
   });
 });
 

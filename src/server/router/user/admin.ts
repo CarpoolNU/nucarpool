@@ -585,6 +585,26 @@ export const adminDataRouter = router({
    * reason as `messages.conversation`: two reports filed in the same request
    * can share a timestamp, and a cursor over a non-total order can skip or
    * repeat a row across pages.
+   *
+   * **Each row carries `reportsAboutUser`**, how many reports concern the same
+   * `reportedUserId`. Without it the queue is a flat list of rows and a
+   * repeat offender reads as several unrelated reports: recency is the only
+   * thing the ordering surfaces, and repetition — the other signal that
+   * should escalate a report — was invisible unless an admin read the whole
+   * queue and remembered names.
+   *
+   * **The count is scoped to the status being viewed**, and `countedStatus`
+   * says which that was so the client can label it rather than leaving the
+   * reader to guess. "Three open reports about this person" and "three
+   * reports ever, two already dismissed" call for different things from an
+   * admin, so a number without its scope is worse than no number. Viewing
+   * `All` counts every status, which is the same statement with a wider
+   * scope.
+   *
+   * It is deliberately only a count. Naming the other reporters, or carrying
+   * any of their text, would hand each admin a second copy of content the
+   * queue already shows one row at a time — and the point here is to rank the
+   * queue, not to widen what one read discloses.
    */
   getReports: adminRouter
     .input(getReportsInput)
@@ -621,12 +641,46 @@ export const adminDataRouter = router({
       const hasMore = rows.length > limit;
       const page = hasMore ? rows.slice(0, limit) : rows;
 
+      // One `GROUP BY` over the reported users *on this page*, not over the
+      // whole table: the `in` bounds the scan the way the page bounds the
+      // read, while each group still counts every report about that user and
+      // not merely the ones that fit on the page. An empty page needs no
+      // query at all — `in: []` is a statement with no possible match.
+      //
+      // A plain aggregate, so `relationMode = "prisma"` has nothing to do
+      // here: there is no relation to traverse and no join to emulate.
+      const reportedUserIds = [...new Set(page.map((r) => r.reportedUserId))];
+      const countsByUser = new Map<string, number>(
+        reportedUserIds.length === 0
+          ? []
+          : (
+              await ctx.prisma.report.groupBy({
+                by: ["reportedUserId"],
+                where: {
+                  reportedUserId: { in: reportedUserIds },
+                  // The same slice the page is showing, so the number beside
+                  // a row and the rows an admin can reach by paging are
+                  // answers to one question. `countedStatus` below reports
+                  // which slice that was.
+                  ...(status === null ? undefined : { status }),
+                },
+                _count: { _all: true },
+              })
+            ).map((group) => [group.reportedUserId, group._count._all]),
+      );
+
       return {
         reports: page.map(({ conversationSnapshot, ...row }) => ({
           ...row,
           conversationSnapshot: parseConversationSnapshot(conversationSnapshot),
+          // The row itself is always in its own group, so the floor is 1 and
+          // the `?? 1` is for a report deleted between the two queries rather
+          // than for a missing group.
+          reportsAboutUser: countsByUser.get(row.reportedUserId) ?? 1,
         })),
         nextCursor: hasMore ? page[page.length - 1].id : null,
+        /** Which statuses `reportsAboutUser` counted. `null` is every one. */
+        countedStatus: status,
       };
     }),
 
