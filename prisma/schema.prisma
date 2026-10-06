@@ -14,9 +14,24 @@ datasource db {
 
 // Boilerplate--we would only change this if we wanted to change how 
 // the Prisma Client is generated.
+// `binaryTargets` names every platform a query engine is generated for, and
+// each one is a separate ~15 MB download on every `prisma generate` - so the
+// list is a cost paid by CI, by Amplify and by every worktree bootstrap, and
+// nothing should be added to it speculatively.
+//
+//   native               a developer's own machine
+//   rhel-openssl-1.0.x   Amplify's build image: Amazon Linux 2, OpenSSL 1
+//   rhel-openssl-3.0.x   the report digest Lambda: Amazon Linux 2023, OpenSSL 3
+//
+// The third is SCRUM-626's. `nodejs22.x` runs on Amazon Linux 2023 and will not
+// load the OpenSSL 1 engine; the mismatch would appear as a failure on the
+// function's first query rather than at build or deploy time. It is x86_64 -
+// arm64 would be `linux-arm64-openssl-3.0.x` - which is why
+// `infra/report-digest/template.yaml` pins the architecture and a test asserts
+// it does.
 generator client {
   provider      = "prisma-client-js"
-  binaryTargets = ["native", "rhel-openssl-1.0.x"]
+  binaryTargets = ["native", "rhel-openssl-1.0.x", "rhel-openssl-3.0.x"]
 }
 
 // Represents a Role.

@@ -101,6 +101,19 @@ export const REPORT_DIGEST_SCHEDULE = {
   utcHour: 12,
   /** Standard five-field crontab, interpreted in UTC. */
   cron: "0 12 * * 1",
+  /**
+   * The same instant in EventBridge Scheduler's spelling, which is what
+   * actually fires the job — `infra/report-digest/template.yaml` carries this
+   * string as its `ScheduleExpression` default, and a test there reads the
+   * template back and fails if the two drift.
+   *
+   * Scheduler takes **six** fields, not five: minutes, hours, day-of-month,
+   * month, day-of-week, year. It also rejects `*` in both day fields at once,
+   * which is why day-of-month is `?` rather than the `*` the crontab above
+   * uses. Those two differences are the entire reason this is a second value
+   * instead of the first one reused.
+   */
+  eventBridge: "cron(0 12 ? * MON *)",
   /** What `utcHour` is in Boston, on each side of the year. */
   etHours: { daylight: 8, standard: 7 },
 } as const;

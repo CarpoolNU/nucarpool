@@ -1,0 +1,340 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+
+# The weekly admin report digest: an EventBridge Scheduler schedule, the Lambda
+# it invokes, and the three alarms that make a broken digest visible.
+#
+# SCRUM-626. The digest itself was built by SCRUM-625 and is unchanged by this
+# stack — `infra/report-digest/handler.ts` is an adapter over the same
+# `sendReportDigest` the ops script calls.
+#
+# Deploy steps are in README.md beside this file. Nothing here has been applied
+# to an AWS account: it has not been through `sam validate`, `sam deploy` or a
+# change set, because the session that wrote it had no AWS credentials. Treat
+# the first deploy as the first test of this file, and read the change set.
+#
+# ## Why every intrinsic is written in long form
+#
+# `Ref:` rather than `!Ref`, `Fn::Sub:` rather than `!Sub`. The short forms are
+# YAML custom tags, and `yarn check:format` runs Prettier across every file this
+# repository does not gitignore. Long form is ordinary YAML that any parser
+# reads the same way, which costs a few characters and removes a class of
+# problem that would otherwise surface as a formatting check failing on a file
+# nobody expected it to touch.
+
+Description: >-
+  Weekly admin report digest for NUCarpool: an EventBridge Scheduler schedule,
+  the Lambda that sends it, and alarms for a failed or missed run.
+
+Parameters:
+  DatabaseUrl:
+    Type: String
+    NoEcho: true
+    Description: >-
+      The production MySQL connection string, the same value Amplify holds as
+      DATABASE_URL. Pass it from an SSM SecureString rather than typing it, so
+      it does not reach a shell history - README.md has the command. Consider
+      appending connection_limit=1: a Lambda handles one invocation at a time,
+      so a larger pool only holds connections open on a frozen container.
+
+  AlarmEmail:
+    Type: String
+    Description: >-
+      Where a failed, missed or dead-lettered run is reported. SNS sends a
+      confirmation link that has to be clicked before any alarm can arrive.
+    AllowedPattern: ".+@.+"
+
+  DeployEnv:
+    Type: String
+    Default: production
+    AllowedValues: [production, staging]
+    Description: >-
+      NEXT_PUBLIC_ENV. On staging the digest is deliverable only to gmail.com
+      addresses, which `isDeliverableRecipient` enforces - so a staging stack
+      with no gmail address on the admin roster sends nothing and skips with
+      `no_recipients`, which is a successful invocation rather than an alarm.
+
+  SesRegion:
+    Type: String
+    Default: ""
+    Description: >-
+      REGION_AWS - the region holding the verified identity and the
+      AdminReportDigestTemplate. Leave empty when SES lives in the same region
+      as this stack; the handler then falls back to the AWS_REGION the Lambda
+      runtime sets.
+
+  # The four below are public by construction: Next inlines every NEXT_PUBLIC_*
+  # variable into the client bundle, so every browser already has them. They are
+  # here only because `browserEnv` validates all five as one group with envsafe,
+  # which throws at import time for any one that is missing - and
+  # `emailParams.ts` needs the fifth, NEXT_PUBLIC_ENV, for the staging recipient
+  # filter. Verified by loading the built bundle with them absent, which fails
+  # with "Missing environment variables" before the handler runs.
+  #
+  # They are NOT NoEcho, deliberately. Marking a public token secret would imply
+  # the stack holds five secrets when it holds one.
+  MapboxAccessToken:
+    Type: String
+    Description: NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN. Unused by the digest.
+  MixpanelProjectToken:
+    Type: String
+    Description: NEXT_PUBLIC_MIXPANEL_PROJECT_TOKEN. Unused by the digest.
+  PusherKey:
+    Type: String
+    Description: NEXT_PUBLIC_PUSHER_KEY. Unused by the digest.
+  PusherCluster:
+    Type: String
+    Description: NEXT_PUBLIC_PUSHER_CLUSTER. Unused by the digest.
+
+  ScheduleExpression:
+    Type: String
+    Default: cron(0 12 ? * MON *)
+    Description: >-
+      Monday 12:00 UTC, which is 08:00 in Boston during daylight time and 07:00
+      during standard time. This is REPORT_DIGEST_SCHEDULE.eventBridge in
+      src/server/reportDigestWindow.ts, and a test pins the two together.
+
+  ScheduleState:
+    Type: String
+    Default: ENABLED
+    AllowedValues: [ENABLED, DISABLED]
+    Description: >-
+      Deploy with DISABLED to create the stack without arming the schedule, then
+      invoke the function by hand once before enabling it. README.md recommends
+      exactly that for the first deploy.
+
+  LogRetentionDays:
+    Type: Number
+    Default: 365
+    Description: >-
+      A year. The logs are the record of which weeks were sent, and the digest
+      is a safety mechanism, so a retention shorter than the audit question is
+      the wrong trade. Counts only - the log lines carry no user data.
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    # Required, not a preference. The package ships Prisma's
+    # `rhel-openssl-3.0.x` query engine, which is x86_64; arm64 would need
+    # `linux-arm64-openssl-3.0.x` in prisma/schema.prisma's binaryTargets and a
+    # rebuild. Changing this without that is a runtime failure on the first
+    # query, not a build error.
+    Architectures: [x86_64]
+    # The job opens a MySQL connection, runs four short queries and makes one
+    # SES call. Two minutes is generous for that and still well short of a
+    # fifteen-minute bill if the database is unreachable.
+    Timeout: 120
+    MemorySize: 512
+
+Resources:
+  ReportDigestFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      # Named rather than generated so the log group below is deterministic and
+      # so the deploy steps in README.md can name the function.
+      FunctionName:
+        Fn::Sub: "${AWS::StackName}-send"
+      Description: >-
+        Sends the weekly admin report digest for the previous completed
+        Monday-to-Sunday week. Safe to invoke repeatedly.
+      CodeUri: ../../build/report-digest-lambda/dist
+      Handler: index.handler
+      Environment:
+        Variables:
+          DATABASE_URL:
+            Ref: DatabaseUrl
+          NEXT_PUBLIC_ENV:
+            Ref: DeployEnv
+          REGION_AWS:
+            Ref: SesRegion
+          NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN:
+            Ref: MapboxAccessToken
+          NEXT_PUBLIC_MIXPANEL_PROJECT_TOKEN:
+            Ref: MixpanelProjectToken
+          NEXT_PUBLIC_PUSHER_KEY:
+            Ref: PusherKey
+          NEXT_PUBLIC_PUSHER_CLUSTER:
+            Ref: PusherCluster
+          # The packaging script emits a sourcemap; without this the stack
+          # traces in CloudWatch point at bundled line numbers.
+          NODE_OPTIONS: --enable-source-maps
+      Policies:
+        # The only AWS permission the job needs. Scoped to the one From address
+        # `generateAdminReportDigestEmailParams` sets, so this role cannot send
+        # mail as anybody else even if it were used for something it should not
+        # be. Resource has to stay "*" - SES authorises a send against the
+        # identity, and the condition is what narrows it.
+        - Statement:
+            - Effect: Allow
+              Action: ses:SendTemplatedEmail
+              Resource: "*"
+              Condition:
+                StringEquals:
+                  ses:FromAddress: no-reply@carpoolnu.com
+      Events:
+        Weekly:
+          Type: ScheduleV2
+          Properties:
+            ScheduleExpression:
+              Ref: ScheduleExpression
+            # The expression above is UTC. Stated rather than left to default,
+            # because Scheduler's default is UTC but its absence reads as
+            # "unspecified" to anyone editing this later.
+            #
+            # Scheduler *can* hold a fixed local hour, which a plain UTC cron
+            # cannot - set this to America/New_York and the hour to 8 and the
+            # digest would land at 08:00 Boston all year. That is deliberately
+            # not done here: SCRUM-625 decided the cadence and its test pins
+            # utcHour, so changing it is its own decision rather than a side
+            # effect of adding a trigger. README.md records the option.
+            ScheduleExpressionTimezone: UTC
+            State:
+              Ref: ScheduleState
+            # Scheduler's own retries, which are free and cover a transient
+            # database or SES failure without waiting a week. The job is
+            # idempotent per week, so a retry after a *successful* send that
+            # Scheduler failed to observe still sends nothing twice - the
+            # delivery claim refuses it.
+            RetryPolicy:
+              MaximumRetryAttempts: 3
+              MaximumEventAgeInSeconds: 3600
+            DeadLetterConfig:
+              Arn:
+                Fn::GetAtt: [ReportDigestDlq, Arn]
+
+  # Declared rather than left to Lambda's implicit creation, which makes a group
+  # with no expiry. The name is the one Lambda would use.
+  ReportDigestLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: "/aws/lambda/${AWS::StackName}-send"
+      RetentionInDays:
+        Ref: LogRetentionDays
+
+  # Where Scheduler puts an invocation it could not deliver after its retries.
+  # Without one, a delivery failure is discarded and the week passes silently -
+  # the same invisible failure this ticket exists to remove.
+  ReportDigestDlq:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName:
+        Fn::Sub: "${AWS::StackName}-dlq"
+      MessageRetentionPeriod: 1209600 # 14 days, the maximum.
+
+  AlarmTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName:
+        Fn::Sub: "${AWS::StackName}-alarms"
+      DisplayName: NUCarpool report digest
+      Subscription:
+        - Protocol: email
+          Endpoint:
+            Ref: AlarmEmail
+
+  # A run that threw. `runReportDigest` throws for both `failed` outcomes and
+  # returns for every `skipped` one, so this fires when a digest was genuinely
+  # not sent and stays quiet when the duplicate guard refused a second run.
+  FailedRunAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName:
+        Fn::Sub: "${AWS::StackName}-failed"
+      AlarmDescription: >-
+        The weekly admin report digest raised an error. The week was not sent.
+        Check the function's logs; the claim is released, so the next run
+        retries the same week. A TemplateDoesNotExist error means
+        AdminReportDigestTemplate has not been published to SES.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value:
+            Fn::Sub: "${AWS::StackName}-send"
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - Ref: AlarmTopic
+
+  # A run that never happened, which is the failure the ticket singled out: a
+  # schedule that quietly stopped firing looks exactly like a week with no
+  # reports. Eight days of no invocation at all cannot be a healthy weekly job.
+  #
+  # `TreatMissingData: breaching` is the whole mechanism. Lambda publishes no
+  # Invocations datapoint when nothing invoked the function, so a "below
+  # threshold" rule alone would sit in INSUFFICIENT_DATA forever and never fire.
+  MissedRunAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName:
+        Fn::Sub: "${AWS::StackName}-missed"
+      AlarmDescription: >-
+        The weekly admin report digest has not run for eight days. The schedule
+        is disabled, deleted, or failing before it reaches the function. A week
+        that was missed can still be sent afterwards by invoking the function
+        with {"week": "YYYY-MM-DD"}.
+      Namespace: AWS/Lambda
+      MetricName: Invocations
+      Dimensions:
+        - Name: FunctionName
+          Value:
+            Fn::Sub: "${AWS::StackName}-send"
+      Statistic: Sum
+      Period: 86400
+      EvaluationPeriods: 8
+      DatapointsToAlarm: 8
+      Threshold: 1
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: breaching
+      AlarmActions:
+        - Ref: AlarmTopic
+
+  DeadLetterAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName:
+        Fn::Sub: "${AWS::StackName}-dead-lettered"
+      AlarmDescription: >-
+        EventBridge Scheduler could not invoke the digest function and gave up.
+        The message in the dead-letter queue says why. Nothing was sent, and the
+        week is still claimable.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value:
+            Fn::Sub: "${AWS::StackName}-dlq"
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - Ref: AlarmTopic
+
+Outputs:
+  FunctionName:
+    Description: Invoke this by hand to send a week the schedule missed.
+    Value:
+      Ref: ReportDigestFunction
+
+  LogGroupName:
+    Description: Where a run records the week, the counts and the recipient count.
+    Value:
+      Ref: ReportDigestLogGroup
+
+  AlarmTopicArn:
+    Description: Confirm the email subscription before relying on any alarm.
+    Value:
+      Ref: AlarmTopic
+
+  DeadLetterQueueUrl:
+    Description: Non-empty means Scheduler could not invoke the function.
+    Value:
+      Ref: ReportDigestDlq

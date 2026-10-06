@@ -2,7 +2,7 @@
 
 Operational scripts, run by hand against a real database.
 
-Nothing in CI invokes the `.ts` scripts and nothing schedules them.
+Nothing in CI invokes the `.ts` scripts. One of them is scheduled, from outside this repository: see [Scheduling the report digest](#scheduling-the-report-digest).
 
 > **Before running anything, confirm what `DATABASE_URL` points at.** None of these scripts print the connection string, so none of them will tell you that you are pointed at production. Nine of them write, and one of those also **sends mail**.
 
@@ -15,7 +15,7 @@ Node 22, per [`.nvmrc`](../.nvmrc). `ts-node` comes from `node_modules`, so run 
 
 **Why these are not `yarn` scripts.** Most are one-shot tools meant to be [retired](#retiring-a-script) once applied everywhere. A `package.json` entry each would recreate a mess this repository has had once — several entries pointing at long-deleted files — and the explicit `npx ts-node` keeps `--apply` visible at the call site rather than hidden behind an alias.
 
-**`send-report-digest.ts` is the exception to both opening sentences**, and it is worth reading before the tables below. It is **recurring rather than one-shot** — it is meant to run every Monday, for as long as the app exists — and it is the only script here whose job is to be scheduled. Nothing schedules it: see [Scheduling the report digest](#scheduling-the-report-digest).
+**`send-report-digest.ts` is the exception to both opening sentences**, and it is worth reading before the tables below. It is **recurring rather than one-shot** — it is meant to run every Monday, for as long as the app exists — and it is the only script here whose job is to be scheduled. A Lambda defined in [`infra/report-digest/`](../infra/report-digest/) does the scheduling, and calls the same code rather than this file: see [Scheduling the report digest](#scheduling-the-report-digest).
 
 ## Scripts that write
 
@@ -47,9 +47,11 @@ No backfill here exists as a Prisma migration on purpose: `prisma/migrations/` i
 
 ### Scheduling the report digest
 
-**Nothing schedules it, and the repository has nothing to schedule it with.** There is no EventBridge rule, no Lambda and no Amplify scheduled build; the only `schedule:` trigger in `.github/workflows/` belongs to `codeql.yml`, and no workflow holds a `DATABASE_URL` or an AWS credential. Adding a trigger is therefore a decision about where production credentials live rather than a file to add, which is why SCRUM-625 left it to its own ticket instead of improvising one.
+**An EventBridge Scheduler schedule invokes a Lambda every Monday.** It is defined in [`infra/report-digest/`](../infra/report-digest/) — a SAM template plus a thin handler that calls the same `sendReportDigest` this script calls, so the window and the delivery claim exist in one place. SCRUM-626 chose a Lambda over a scheduled GitHub Actions workflow because the execution role needs no AWS credential at all and the only secret involved is the `DATABASE_URL` Amplify already holds; a workflow would have put the production credential set into repository secrets that every workflow could reach.
 
-Until then the digest goes out when somebody runs it:
+**Whether it is deployed is not a question this repository can answer.** The template is committed; a stack may or may not exist in AWS. [`infra/report-digest/README.md`](../infra/report-digest/README.md) has the deploy steps and the one-line check for whether the schedule is armed, and a run is recorded in the SCRUM-626 Jira comment — the same convention as every other script here.
+
+Nothing about the Lambda replaces running it by hand, which stays the way to send a week that was missed and the only way to see what would go out:
 
 ```bash
 npx ts-node scripts/send-report-digest.ts                   # what would go out
@@ -57,7 +59,9 @@ npx ts-node scripts/send-report-digest.ts --apply           # send last week
 npx ts-node scripts/send-report-digest.ts --week 2026-09-28 # a week that was missed
 ```
 
-`REPORT_DIGEST_SCHEDULE` in [`src/server/reportDigestWindow.ts`](../src/server/reportDigestWindow.ts) records the intended cadence — `0 12 * * 1`, read in UTC, which is Monday 08:00 in Boston during daylight time and 07:00 during standard time. A UTC cron cannot hold a fixed Boston hour; both of those are Monday morning, which is what the requirement asks for. **Whatever eventually fires it does not have to fire reliably**, because the window is derived and the delivery is claimed: a missed Monday is sent by naming the week, and a doubled one sends nothing twice.
+`REPORT_DIGEST_SCHEDULE` in [`src/server/reportDigestWindow.ts`](../src/server/reportDigestWindow.ts) records the cadence in both spellings — `0 12 * * 1` as a crontab, and `cron(0 12 ? * MON *)` as the six-field expression Scheduler actually reads. Both are UTC, which is Monday 08:00 in Boston during daylight time and 07:00 during standard time. A UTC cron cannot hold a fixed Boston hour; both of those are Monday morning, which is what the requirement asks for. The template carries the second string and a test reads it back out of the file, so the two cannot drift.
+
+**The trigger does not have to fire reliably**, because the window is derived and the delivery is claimed: a missed Monday is sent by naming the week, and a doubled one sends nothing twice. That property is what made the choice of trigger replaceable rather than load-bearing — and what lets the stack be deleted without touching a row.
 
 ## Read-only scripts
 
