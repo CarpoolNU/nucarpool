@@ -89,8 +89,14 @@ export type AdminAlertOutcome =
  * and `yarn check:amplify` enforce as two separate contracts, and nothing
  * would notice if it were pointed at a mailbox no one reads any more.
  * Deriving it from `Permission` has one source of truth and no new contract.
+ *
+ * Exported for the weekly digest, which addresses the same population and
+ * must keep addressing it: a digest and an immediate alert that disagreed
+ * about who is staff would be two rosters to maintain, and the one that
+ * drifted would go unnoticed because mail arriving for most people looks
+ * like mail arriving. See `reportDigestSend.ts`.
  */
-const resolveAdminRecipients = async (
+export const resolveAdminRecipients = async (
   prisma: Pick<PrismaClient, "user">,
 ): Promise<string[]> => {
   const admins = await prisma.user.findMany({

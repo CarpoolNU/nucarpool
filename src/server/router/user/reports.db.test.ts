@@ -364,7 +364,12 @@ describe("a failing admin alert against a real database", () => {
     const { caller, send } = failingSesCaller(reporter.id);
     const result = await caller.user.reports.create({
       reportedUserId: reported.id,
-      reason: ReportReason.HARASSMENT,
+      // `SAFETY_CONCERN` rather than `HARASSMENT`, which this used before
+      // SCRUM-625. Only a reason `REPORT_URGENCY` marks `IMMEDIATE` sends mail
+      // on filing now, so a digest reason here would reach the assertion below
+      // having attempted no send at all — and the point of this test is that a
+      // send which *throws* does not take the block with it.
+      reason: ReportReason.SAFETY_CONCERN,
       alsoBlock: true,
     });
 

@@ -443,3 +443,72 @@ model EmailSendBudget {
   @@id([userId, windowStart])
   @@map("email_send_budget")
 }
+
+enum ReportDigestStatus {
+  // The row exists; nobody is sending it. The state a window is created in
+  // and the state a released claim returns to.
+  PENDING
+  // A run holds the lease and is working on it.
+  CLAIMED
+  // Delivered. Terminal, and the only status that stops a retry.
+  SENT
+  // A run tried and the send failed. Retryable, and distinguished from
+  // PENDING only so an operator can see that something went wrong.
+  FAILED
+}
+
+// One row per weekly reporting window for the admin report digest.
+//
+// **This is a claim, not a log.** The alternative — recording "last sent at"
+// and mailing everything since — makes the period a digest covers depend on
+// when the job happened to run, so a late or repeated run silently reports a
+// different week. Here the window is derived from the calendar
+// (`reportDigestWindow.ts`) and this table only answers whether that window
+// has been delivered, which makes a retry cover exactly the same reports.
+//
+// `windowStart` is the whole key, and that is what makes duplicate prevention
+// a database guarantee rather than a convention: two concurrent runs computing
+// the same window both try to own one row, and MySQL serialises them on it.
+// The claim is taken with the compare-and-swap primitive `emailBudget.ts`
+// establishes — `INSERT ... ON DUPLICATE KEY UPDATE col = col` to make the row
+// exist idempotently, then one `UPDATE` whose guard is in the `WHERE`.
+// `updateMany` must not be used for it: under `relationMode = "prisma"` it
+// reads matching ids first and updates by id, so concurrent callers all report
+// `count: 1` (SCRUM-559, SCRUM-565).
+//
+// `claimToken` is why a stalled run cannot undo a healthy one. A claim expires
+// after a lease so that a crashed run does not strand a window forever, and
+// whoever takes it over writes a new token; the original run's attempt to mark
+// the window SENT then matches no row, because that write requires both
+// CLAIMED and its own token. Without the token, a process that resumed after
+// its lease expired could mark a window delivered that somebody else was in
+// the middle of delivering.
+//
+// `windowEnd` is derivable from `windowStart` and is stored anyway: it makes a
+// row say which seven days it covers without trusting the reader to recompute
+// them under the right DST rules, which is the thing most likely to be wrong.
+//
+// **Deliberately no relation to `User`,** for the reasons `EmailSendBudget`
+// gives above. One row per week, so growth is 52 rows a year and nothing
+// prunes them — the history is small and worth keeping.
+model ReportDigestDelivery {
+  // Monday 00:00 America/New_York, as a UTC instant.
+  windowStart    DateTime           @id @map("window_start")
+  // The following Monday 00:00, exclusive.
+  windowEnd      DateTime           @map("window_end")
+  status         ReportDigestStatus @default(PENDING)
+  // Identifies the run holding the claim. Cleared when a claim is released.
+  claimToken     String?            @map("claim_token") @db.VarChar(64)
+  claimedAt      DateTime?          @map("claimed_at")
+  // Set only once a send has actually succeeded.
+  sentAt         DateTime?          @map("sent_at")
+  // Claims taken, including retries. An operator reading 4 here knows three
+  // runs failed before this one.
+  attemptCount   Int                @default(0) @map("attempt_count")
+  // What was delivered, recorded for the audit trail rather than read back.
+  // Null until a send succeeds; `0` reports is a real and expected value.
+  reportCount    Int?               @map("report_count")
+  recipientCount Int?               @map("recipient_count")
+
+  @@map("report_digest_delivery")
+}

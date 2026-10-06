@@ -53,17 +53,27 @@ import { claimEmailBudget } from "../../db/emailBudget";
  * costs nothing, a staging-refused recipient costs nothing and an SES failure
  * costs nothing: the budget tracks mail that actually went out.
  *
- * **One sender in the app is deliberately exempt from all of this**: the
- * admin alert that a report was filed, in `src/server/adminReportAlert.ts`.
- * It is not a procedure here and it claims no budget, because the budget is
- * keyed to the sender and claiming it against the reporter would let a
- * reporter who had already sent request and message notifications that hour
+ * **Two senders in the app are deliberately exempt from all of this**, and
+ * both mail staff rather than students:
+ *
+ *  - the immediate alert that a `SAFETY_CONCERN` report was filed, in
+ *    `src/server/adminReportAlert.ts`;
+ *  - the weekly digest of every other report, in
+ *    `src/server/reportDigestSend.ts`.
+ *
+ * Neither is a procedure here and neither claims a budget. For the alert, the
+ * budget is keyed to the sender and claiming it against the reporter would let
+ * a reporter who had already sent request and message notifications that hour
  * **silence their own safety alert**. A reserved key of its own was rejected
  * for a related reason — a global per-window cap is spendable by other
  * people's reports — and the bound is instead the report write itself, which
- * `reports.ts` rate-limits per reporter. The full argument, including why
- * that path cannot be aimed at an arbitrary recipient the way these three
- * can, is in that file's header. **A fourth email added to this router is not
+ * `reports.ts` rate-limits per reporter. The digest has no sender to charge at
+ * all, and sends once a week.
+ *
+ * What makes both safe without a cap is that the recipients are **staff
+ * resolved from `Permission`**, so unlike these three procedures neither path
+ * can be aimed at a chosen person. The full argument is in
+ * `adminReportAlert.ts`'s header. **A fourth email added to this router is not
  * covered by that reasoning** and claims from the budget like the rest.
  */
 

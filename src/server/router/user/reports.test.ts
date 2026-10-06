@@ -9,7 +9,11 @@ import {
   REPORT_REQUEST_MISMATCH_MESSAGE,
 } from "./reports";
 import { REPORT_MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
-import { REPORT_SNAPSHOT_MESSAGE_LIMIT } from "../../../utils/reports";
+import {
+  isCriticalReportReason,
+  REPORT_REASONS,
+  REPORT_SNAPSHOT_MESSAGE_LIMIT,
+} from "../../../utils/reports";
 
 /**
  * `user.reports.create`.
@@ -231,6 +235,20 @@ const baseInput = {
   reportedUserId: THEM,
   reason: ReportReason.HARASSMENT,
   alsoBlock: false,
+};
+
+/**
+ * A report that mails the admins the moment it is filed.
+ *
+ * `baseInput`'s `HARASSMENT` is a `DIGEST` reason (`REPORT_URGENCY` in
+ * `utils/reports.ts`), so since SCRUM-625 it sends no mail at all. Every test
+ * about the immediate alert has to use a reason that still fires one, or it
+ * passes while asserting nothing — which is exactly what `expect(sesSend).not`
+ * would have done with `baseInput`.
+ */
+const criticalInput = {
+  ...baseInput,
+  reason: ReportReason.SAFETY_CONCERN,
 };
 
 /** A thread of `count` messages, alternating senders, one minute apart. */
@@ -807,6 +825,11 @@ describe("DUPLICATE_REPORT_MESSAGE", () => {
  * in `src/server/adminReportAlert.test.ts`. What belongs here is the join: that
  * filing a report sends it at all, that no word of the report travels with it,
  * and that a send which fails leaves the report in place.
+ *
+ * **Every test here files a critical reason.** Since SCRUM-625 only those mail
+ * anybody on filing; the other five are counted in the weekly digest instead,
+ * which `reportDigestSend.test.ts` covers. The describe below this one is the
+ * other half of that contract.
  */
 describe("user.reports.create fires the admin alert", () => {
   beforeEach(() => {
@@ -820,7 +843,7 @@ describe("user.reports.create fires the admin alert", () => {
   it("mails the admins without anyone opening /admin", async () => {
     const { caller, sesSend } = callerFor(sessionFor(ME));
 
-    await caller.user.reports.create(baseInput);
+    await caller.user.reports.create(criticalInput);
 
     expect(sesSend).toHaveBeenCalledTimes(1);
     const sent = sesSend.mock.calls[0][0].input;
@@ -842,7 +865,7 @@ describe("user.reports.create fires the admin alert", () => {
     const { caller, sesSend } = callerFor(sessionFor(ME), db);
 
     await caller.user.reports.create({
-      ...baseInput,
+      ...criticalInput,
       message: "UNIQUE-REPORTER-PROSE",
       requestId: "req-1",
     });
@@ -884,7 +907,7 @@ describe("user.reports.create fires the admin alert", () => {
 
     // Resolves, and with the ordinary payload: the reporter is told nothing
     // about an admin mailbox being unreachable.
-    await expect(caller.user.reports.create(baseInput)).resolves.toEqual({
+    await expect(caller.user.reports.create(criticalInput)).resolves.toEqual({
       reportId: "report-1",
       blocked: false,
       blockRefusal: null,
@@ -897,7 +920,7 @@ describe("user.reports.create fires the admin alert", () => {
     db.prisma.user.findMany.mockRejectedValueOnce(new Error("connection lost"));
     const { caller } = callerFor(sessionFor(ME), db);
 
-    await expect(caller.user.reports.create(baseInput)).resolves.toEqual({
+    await expect(caller.user.reports.create(criticalInput)).resolves.toEqual({
       reportId: "report-1",
       blocked: false,
       blockRefusal: null,
@@ -909,6 +932,10 @@ describe("user.reports.create fires the admin alert", () => {
    * A refusal must not mail anyone. The alert runs after the transaction, so
    * anything that throws before it — here the duplicate-report guard — should
    * leave SES untouched.
+   *
+   * Filed with a critical reason deliberately: on a digest reason nothing
+   * would be sent whether the refusal worked or not, and the assertion below
+   * would hold for the wrong reason.
    */
   it("sends nothing when the report itself is refused", async () => {
     const db = buildReportsDb({
@@ -917,7 +944,7 @@ describe("user.reports.create fires the admin alert", () => {
           id: "report-existing",
           reporterId: ME,
           reportedUserId: THEM,
-          reason: ReportReason.HARASSMENT,
+          reason: ReportReason.SAFETY_CONCERN,
           message: null,
           requestId: null,
           conversationSnapshot: null,
@@ -927,9 +954,82 @@ describe("user.reports.create fires the admin alert", () => {
     });
     const { caller, sesSend } = callerFor(sessionFor(ME), db);
 
-    await expect(caller.user.reports.create(baseInput)).rejects.toThrow(
+    await expect(caller.user.reports.create(criticalInput)).rejects.toThrow(
       DUPLICATE_REPORT_MESSAGE,
     );
     expect(sesSend).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The other half of the urgency contract: a routine report mails nobody.
+ *
+ * This is the behaviour SCRUM-625 introduced, and the one most likely to be
+ * undone by accident — removing the `if` in `create` would restore the old
+ * behaviour, break nothing that looks related, and quietly put every admin
+ * back on an interrupt for every `NO_SHOW`.
+ *
+ * The positive control lives in the describe above: with a critical reason the
+ * same fixture sends exactly one mail. Both halves are needed, because a test
+ * that only asserts "no mail" also passes if the alert is broken outright.
+ */
+describe("user.reports.create defers routine reports to the digest", () => {
+  beforeEach(() => {
+    jest.spyOn(console, "error").mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  const digestReasons = REPORT_REASONS.filter(
+    (reason) => !isCriticalReportReason(reason),
+  );
+
+  // Named rather than only counted, so that this cannot silently become an
+  // empty loop if the urgency map is edited — an empty `it.each` would report
+  // as a pass with nothing run.
+  it("has a digest reason set that excludes only the critical ones", () => {
+    expect(digestReasons).toEqual([
+      ReportReason.HARASSMENT,
+      ReportReason.INAPPROPRIATE_MESSAGES,
+      ReportReason.FAKE_PROFILE,
+      ReportReason.NO_SHOW,
+      ReportReason.OTHER,
+    ]);
+    expect(digestReasons).not.toContain(ReportReason.SAFETY_CONCERN);
+  });
+
+  it.each(digestReasons)("sends no immediate mail for %s", async (reason) => {
+    const db = buildReportsDb();
+    const { caller, sesSend } = callerFor(sessionFor(ME), db);
+
+    await expect(
+      caller.user.reports.create({ ...baseInput, reason }),
+    ).resolves.toEqual({
+      reportId: "report-1",
+      blocked: false,
+      blockRefusal: null,
+    });
+
+    // The report is written — it is deferred, not dropped.
+    expect(db.reports).toHaveLength(1);
+    expect(db.reports[0].reason).toBe(reason);
+    expect(sesSend).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The roster read is the other observable the alert performs. Asserting it
+   * never happens proves the whole alert path was skipped rather than just
+   * its final send, which is what stops a future refactor from reading the
+   * admin list on every report for nothing.
+   */
+  it("does not even resolve the admin roster for a routine report", async () => {
+    const db = buildReportsDb();
+    const { caller } = callerFor(sessionFor(ME), db);
+
+    await caller.user.reports.create(baseInput);
+
+    expect(db.prisma.user.findMany).not.toHaveBeenCalled();
   });
 });

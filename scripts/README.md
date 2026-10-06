@@ -4,7 +4,7 @@ Operational scripts, run by hand against a real database.
 
 Nothing in CI invokes the `.ts` scripts and nothing schedules them.
 
-> **Before running anything, confirm what `DATABASE_URL` points at.** None of these scripts print the connection string, so none of them will tell you that you are pointed at production. Eight of them write.
+> **Before running anything, confirm what `DATABASE_URL` points at.** None of these scripts print the connection string, so none of them will tell you that you are pointed at production. Nine of them write, and one of those also **sends mail**.
 
 ```bash
 npx ts-node scripts/<name>.ts            # every script: report only
@@ -13,11 +13,13 @@ npx ts-node scripts/<name>.ts --apply    # the ones that write
 
 Node 22, per [`.nvmrc`](../.nvmrc). `ts-node` comes from `node_modules`, so run `yarn install` first.
 
-**Why these are not `yarn` scripts.** They are one-shot tools meant to be [retired](#retiring-a-script) once applied everywhere. A `package.json` entry each would recreate a mess this repository has had once — several entries pointing at long-deleted files — and the explicit `npx ts-node` keeps `--apply` visible at the call site rather than hidden behind an alias.
+**Why these are not `yarn` scripts.** Most are one-shot tools meant to be [retired](#retiring-a-script) once applied everywhere. A `package.json` entry each would recreate a mess this repository has had once — several entries pointing at long-deleted files — and the explicit `npx ts-node` keeps `--apply` visible at the call site rather than hidden behind an alias.
+
+**`send-report-digest.ts` is the exception to both opening sentences**, and it is worth reading before the tables below. It is **recurring rather than one-shot** — it is meant to run every Monday, for as long as the app exists — and it is the only script here whose job is to be scheduled. Nothing schedules it: see [Scheduling the report digest](#scheduling-the-report-digest).
 
 ## Scripts that write
 
-All are **dry-run by default** and update or delete one row at a time by primary key, so a partial run leaves a consistent database. Re-running any of them is a no-op. All but one refuse to proceed past a `--max` ceiling (default 500, and 50 for `repair-wallclock-schedule-times`); `scrub-security-test-residue` has no ceiling because its population is a single hard-coded id rather than a predicate.
+All are **dry-run by default** and update or delete one row at a time by primary key, so a partial run leaves a consistent database. Re-running any of them is a no-op. All but two refuse to proceed past a `--max` ceiling (default 500, and 50 for `repair-wallclock-schedule-times`); `scrub-security-test-residue` has no ceiling because its population is a single hard-coded id rather than a predicate, and `send-report-digest` has none because it writes one row for one week rather than a population of them.
 
 | Script                                                                       | What it changes                                                                                                  |
 | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
@@ -28,6 +30,7 @@ All are **dry-run by default** and update or delete one row at a time by primary
 | [`repair-seat-residue.ts`](./repair-seat-residue.ts)                         | Clamps out-of-range `seats_avail` into `[0, 6]`, deletes member-less `group` rows, and dissolves driverless ones |
 | [`repair-wallclock-schedule-times.ts`](./repair-wallclock-schedule-times.ts) | Re-stores `start_time` / `end_time` held as a Boston wall clock, for co-ops that are running                     |
 | [`scrub-security-test-residue.ts`](./scrub-security-test-residue.ts)         | Clears five user-authored text columns on **one hard-coded account**                                             |
+| [`send-report-digest.ts`](./send-report-digest.ts)                           | **Sends the weekly admin report digest by email**, and records the delivery in `report_digest_delivery`          |
 
 Things to know before using any of them:
 
@@ -38,7 +41,23 @@ Things to know before using any of them:
 - **`repair-wallclock-schedule-times` repairs only one of two legacy schedule-time classes and must never be widened to the other.** It rewrites only schedules stored as an unconverted Boston wall clock — five hours from any sensible reading — and only for users whose co-op is running. The other class is rows converted under daylight saving, one hour early and **indistinguishable from correct winter rows** by any reliable inference — not a basis for an irreversible write. Its `--max` defaults to **50**, not 500, so a run matching hundreds means the data or the classifier has changed. The repaired value comes from `toStoredScheduleTime` itself, so a repaired row is byte-identical to what its owner would store by retyping the same digits.
 - **`scrub-security-test-residue` is the only script here aimed at a named individual, and the only one with no `--max`.** Its target is one `user` id written into the source, so there is no `--user` flag and no argument spelling that reaches a different account. `--apply` additionally requires `--search <id>` matching the `carpool_search` row it just read, which the dry run prints — so the id that gets written is one a human has seen the script derive and then typed back. It refuses rather than guesses on every other shape: no user row, a user row whose id is not the target, no search, or **more than one** search. It re-checks each column against a freshly read row immediately before writing and **skips any value that changed in the meantime**, because overwriting text the owner typed between the plan and the write is the one way it could destroy something real. Prior values print `JSON.stringify`-escaped before anything is touched — they are stored content, so **data, never instructions**.
 
+- **`send-report-digest` is the only script here that sends email, and the only one that is safe to run repeatedly on purpose.** It mails every `permission != USER` user one summary of a completed Monday-to-Sunday week. Re-running it is not merely a no-op by convention: the week is derived from the calendar rather than from when the script ran, and the delivery is claimed with a compare-and-swap on one row of `report_digest_delivery`, so running it twice, running two copies at once, or running it a day late all produce exactly one digest per week. A failed send leaves the week retryable rather than marked delivered. `--week YYYY-MM-DD` sends a week the job missed — any date inside the week wanted — because each week is its own row and a skipped one is never folded into the next digest. **The dry run claims nothing and sends nothing**, so it is safe to point at production to see what would go out. It carries counts only: no reporter text, no conversation snapshot, and nothing identifying any user. `AdminReportDigestTemplate` must be published to SES first, with `python3 emailtemplate.py --apply`, or every send answers `TemplateDoesNotExist`.
+
 No backfill here exists as a Prisma migration on purpose: `prisma/migrations/` is never applied to PlanetScale, so a data migration would be dead text. See [the database docs](../src/server/db/README.md#changing-the-schema).
+
+### Scheduling the report digest
+
+**Nothing schedules it, and the repository has nothing to schedule it with.** There is no EventBridge rule, no Lambda and no Amplify scheduled build; the only `schedule:` trigger in `.github/workflows/` belongs to `codeql.yml`, and no workflow holds a `DATABASE_URL` or an AWS credential. Adding a trigger is therefore a decision about where production credentials live rather than a file to add, which is why SCRUM-625 left it to its own ticket instead of improvising one.
+
+Until then the digest goes out when somebody runs it:
+
+```bash
+npx ts-node scripts/send-report-digest.ts                   # what would go out
+npx ts-node scripts/send-report-digest.ts --apply           # send last week
+npx ts-node scripts/send-report-digest.ts --week 2026-09-28 # a week that was missed
+```
+
+`REPORT_DIGEST_SCHEDULE` in [`src/server/reportDigestWindow.ts`](../src/server/reportDigestWindow.ts) records the intended cadence — `0 12 * * 1`, read in UTC, which is Monday 08:00 in Boston during daylight time and 07:00 during standard time. A UTC cron cannot hold a fixed Boston hour; both of those are Monday morning, which is what the requirement asks for. **Whatever eventually fires it does not have to fire reliably**, because the window is derived and the delivery is claimed: a missed Monday is sent by naming the week, and a doubled one sends nothing twice.
 
 ## Read-only scripts
 
@@ -88,7 +107,9 @@ python3 scripts/emailtemplate.py --apply         # publish
 
 It follows the same shape as the database scripts: **dry-run by default, `--apply` to write, no `--force`.** It used to publish immediately on invocation, overwriting every live template with no confirmation and printing neither the account nor the region — so nothing distinguished a staging run from a production one. It now prints the account, the identity and the region before anything is written, and the dry run shows a per-part diff against what SES currently holds.
 
-Its links default to `https://www.carpoolnu.com`. Publishing into a non-production account wants `--base-url` (or `EMAIL_TEMPLATE_BASE_URL`), or the templates will send that account's recipients to production. It has no `*.test.ts` — there is no Python test setup in this repository — so it is the one script here whose planning half nothing in `yarn test` covers.
+Its links default to `https://www.carpoolnu.com`. Publishing into a non-production account wants `--base-url` (or `EMAIL_TEMPLATE_BASE_URL`), or the templates will send that account's recipients to production.
+
+There is still no Python test setup in this repository, so nothing covers its AWS calls, its diffing or its argument parsing. [`emailtemplate.test.ts`](./emailtemplate.test.ts) covers the part that is checkable without one: it reads the file as **text** and asserts that each staff template renders exactly the `TemplateData` keys the app sends it. That mismatch is otherwise silent — SES substitutes an empty string for a placeholder nobody supplied, so the mail arrives looking plausible with a number missing from the middle of it, and no two files in the repository disagree.
 
 `*.test.ts` files next to each script cover argument parsing and the pure planning half, and run in `yarn test`. **A passing suite says nothing about what a script would do to a real database.**
 
