@@ -280,6 +280,40 @@ describe("REPORT_DIGEST_SCHEDULE", () => {
   });
 
   /**
+   * The same fact a third time, in the spelling that actually fires the job.
+   * `infra/report-digest/template.yaml` carries this string, and
+   * `template.test.ts` reads it back out of the file — so the chain from
+   * `utcHour` to the deployed schedule is pinned end to end and no link can be
+   * changed on its own.
+   *
+   * Parsed rather than string-compared for the reason the test above is:
+   * asserting `"cron(0 12 ? * MON *)"` equals itself would pass whatever
+   * `utcHour` said.
+   */
+  it("spells the same hour and weekday in its EventBridge expression", () => {
+    const expression = REPORT_DIGEST_SCHEDULE.eventBridge;
+
+    expect(expression).toMatch(/^cron\(.+\)$/);
+
+    const fields = expression.slice("cron(".length, -1).split(" ");
+
+    // Six, not the crontab's five: Scheduler adds a trailing year field.
+    expect(fields).toHaveLength(6);
+
+    const [minute, hour, dayOfMonth, month, weekday, year] = fields;
+    const schedulerWeekdays = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+
+    expect(minute).toBe("0");
+    expect(Number(hour)).toBe(REPORT_DIGEST_SCHEDULE.utcHour);
+    // `?`, not `*`. Scheduler rejects `*` in day-of-month and day-of-week at
+    // the same time, so the crontab's spelling is not transferable here.
+    expect(dayOfMonth).toBe("?");
+    expect(month).toBe("*");
+    expect(weekday).toBe(schedulerWeekdays[REPORT_DIGEST_SCHEDULE.weekday]);
+    expect(year).toBe("*");
+  });
+
+  /**
    * The requirement is "Monday morning ET", and a UTC cron cannot hold a fixed
    * Boston hour — so the honest test is that both of the hours it does land on
    * are morning ones, and that `etHours` says which they are rather than

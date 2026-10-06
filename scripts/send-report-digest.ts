@@ -21,26 +21,27 @@
  * separate row in `report_digest_delivery`, so a week the job missed is still
  * sendable afterwards and is never silently folded into the next digest.
  *
- * ## Nothing schedules this, and that is not an oversight here
+ * ## What schedules this, and why running it by hand still matters
  *
- * This repository has no scheduled-job infrastructure to reuse. There is no
- * EventBridge rule, no Lambda, and no Amplify scheduled build;
- * `scripts/README.md` states the general case ("Nothing in CI invokes the
- * `.ts` scripts and nothing schedules them") and the only `schedule:` trigger
- * in `.github/workflows/` belongs to `codeql.yml`. No workflow holds a
- * `DATABASE_URL` or an AWS credential, so wiring a trigger is a decision
- * about where production credentials live rather than a file to add — see
- * SCRUM-625 and the ticket it raises for that.
+ * An EventBridge Scheduler schedule invokes a Lambda every Monday, defined in
+ * `infra/report-digest/`. Its handler calls `sendReportDigest` — the same
+ * function `main` below calls — so there is one implementation of the window
+ * and the claim and this script is not a second copy of the job. SCRUM-626
+ * added it; whether a stack is actually deployed is not something this
+ * repository records, and `infra/report-digest/README.md` has the check.
  *
- * What makes the absence survivable is that **correctness does not depend on
- * the trigger.** The window is derived from the calendar rather than from
- * when this ran (`src/server/reportDigestWindow.ts`), and the delivery claim
- * is a compare-and-swap on one row
- * (`src/server/db/reportDigestDelivery.ts`), so running this twice, running
- * it late, running two copies at once, or running it by hand on a Monday all
- * produce exactly one digest per week.
- * `REPORT_DIGEST_SCHEDULE` records the intended cadence and its crontab
- * spelling for whatever eventually fires it.
+ * This remains the way to **see** what would go out, because the Lambda has no
+ * dry run, and the way to send a week the schedule missed.
+ *
+ * **Correctness does not depend on the trigger**, which is what made the
+ * choice of one a question of operational fit. The window is derived from the
+ * calendar rather than from when this ran
+ * (`src/server/reportDigestWindow.ts`), and the delivery claim is a
+ * compare-and-swap on one row (`src/server/db/reportDigestDelivery.ts`), so
+ * running this twice, running it late, running two copies at once, or running
+ * it by hand on a Monday while the Lambda also fires all produce exactly one
+ * digest per week. `REPORT_DIGEST_SCHEDULE` records the cadence in both the
+ * crontab and the EventBridge spelling.
  *
  * Exits 0 when a digest was sent or deliberately skipped, 1 when a send
  * failed, so it can gate a follow-up.

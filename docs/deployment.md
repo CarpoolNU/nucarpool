@@ -61,6 +61,20 @@ Both checks derive their variable list from the `envsafe` modules, so the list c
 
 > Every secret the app uses ends up in `.env.production`, which AWS documents as readable by anyone with access to the deployment artifacts. That is why the `AWS_COMMIT_ID` patterns match by exact name — a prefix match would sweep the build container's own IAM credentials into the same file.
 
+### Amplify is not the only deployed runtime
+
+The weekly report digest runs in a Lambda, deployed from [`infra/report-digest/`](../infra/report-digest/) by `sam deploy` rather than by Amplify. **It is a third place the environment has to be right, and neither check above looks at it** — `yarn check:env` reads `.env.example` and `yarn check:amplify` reads `amplify.yml`.
+
+Both checks nonetheless stay correct for it, by construction rather than by luck: they derive their list from the two `envsafe` modules, and the Lambda **adds no variable to either**. It needs `DATABASE_URL` and the five `NEXT_PUBLIC_*` variables — the app's existing contract, satisfied in a second runtime. A variable added to `src/utils/env/server.ts` later would be caught for Amplify and silently missing here, so that is the case to watch.
+
+|                     | Amplify                                                     | The digest Lambda                                               |
+| ------------------- | ----------------------------------------------------------- | --------------------------------------------------------------- |
+| Gets variables from | the console, copied into `.env.production` by `amplify.yml` | CloudFormation parameters in the stack                          |
+| AWS credentials     | `ACCESS_KEY_ID_AWS` and `SECRET_ACCESS_KEY_AWS`, as values  | **none** — an execution role scoped to `ses:SendTemplatedEmail` |
+| Checked by          | `yarn check:amplify`                                        | nothing automated; `infra/report-digest/README.md` lists them   |
+
+That the Lambda holds no AWS key is the reason SCRUM-626 chose it over a scheduled GitHub Actions workflow, which would have needed the production credential set as repository secrets.
+
 ## Checking what is live
 
 `GET /api/version` reports the build identity of whatever is running, so "has this shipped?" is answerable without console access:
