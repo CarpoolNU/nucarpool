@@ -185,20 +185,17 @@ const buildRequestsDb = (
    * Reproduced deliberately, the way `groups.test.ts` reproduces `clampSeats`
    * in its seat-release branch: a mock that shared the predicate with the code
    * under test could only ever agree with it. The values arrive in the
-   * statement's own order — id, sender, recipient, then the status the guard
-   * is keyed on and the two ids the EXISTS correlates.
+   * statement's own order — id, sender, recipient, and then the sender and
+   * recipient again for the EXISTS to correlate on. There is no status among
+   * them: the guard is membership alone, so a row's status does not reach
+   * this statement at all.
    *
    * What it cannot reproduce is the defect itself. A mock has no isolation
    * level, so nothing here is a stale snapshot; these tests pin the predicate,
    * and `requestDeleteRace.db.test.ts` pins the interleaving.
    */
   const rawDelete = jest.fn(
-    (
-      id: string,
-      fromUserId: string,
-      toUserId: string,
-      acceptedStatus: RequestStatus,
-    ) => {
+    (id: string, fromUserId: string, toUserId: string) => {
       const row = requests.get(id);
       if (!row || row.fromUserId !== fromUserId || row.toUserId !== toUserId) {
         return 0;
@@ -209,11 +206,7 @@ const buildRequestsDb = (
         senderGroup !== null &&
         senderGroup === (groupMembership[toUserId] ?? null);
 
-      if (
-        row.status === acceptedStatus &&
-        fromUserId !== toUserId &&
-        sameGroup
-      ) {
+      if (fromUserId !== toUserId && sameGroup) {
         return 0;
       }
 
@@ -226,13 +219,8 @@ const buildRequestsDb = (
     const sql = sqlOf(strings);
 
     if (sql.startsWith("DELETE FROM `request`")) {
-      const [id, fromUserId, toUserId, acceptedStatus] = values as [
-        string,
-        string,
-        string,
-        RequestStatus,
-      ];
-      return rawDelete(id, fromUserId, toUserId, acceptedStatus);
+      const [id, fromUserId, toUserId] = values as [string, string, string];
+      return rawDelete(id, fromUserId, toUserId);
     }
 
     throw new Error(`Unrecognised raw statement in the requests mock: ${sql}`);
@@ -1163,12 +1151,20 @@ describe("user.requests.delete — not while still carpooling together", () => {
    * The server half of the fix, which fixed only the client half.
    *
    * That ticket removed the "Leave Conversation" button, because a pair in an
-   * active carpool pressing it deleted their accepted request and with it -
+   * active carpool pressing it deleted the request between them and with it -
    * the conversation and every message, permanently and with
    * no route to recovery. The button is gone; the procedure was never guarded,
    * so a direct call, a stale bundle or the next caller to reuse `delete`
    * could still do it. `create` has refused the same pair with CONFLICT for
    * some time; these are the mirror of its four cases.
+   *
+   * **The question is membership, not status**, and this block used to
+   * assume otherwise. Every fixture here hardcoded ACCEPTED and the comment
+   * above described "their accepted request", so nothing ever varied the
+   * status - which is how the PENDING-and-grouped pair stayed unguarded on
+   * both sides. The fixtures below are parameterised for that reason, and
+   * `Object.values(RequestStatus)` drives the refusal so a future status
+   * cannot be added without one.
    *
    * The assertion that matters on the refusal path is that the transaction is
    * never entered - `conversationDeleteMany` and `messageDeleteMany` never
@@ -1180,39 +1176,55 @@ describe("user.requests.delete — not while still carpooling together", () => {
     [USER_B]: "group-1",
   });
 
-  const acceptedPair = (membership: Record<string, string | null>) =>
+  /**
+   * Parameterised over status rather than hardcoding ACCEPTED, because the
+   * status is exactly what the guard must stop depending on.
+   *
+   * `status` defaults to ACCEPTED so the cases that are genuinely about an
+   * accepted row still read as such, and the grouped-refusal case below
+   * drives it from `Object.values(RequestStatus)` - so a third status added
+   * to the enum arrives with its case already written rather than silently
+   * unguarded, which is how PENDING was missed in the first place.
+   */
+  const pairRequest = (
+    membership: Record<string, string | null>,
+    status: RequestStatus = RequestStatus.ACCEPTED,
+  ) =>
     buildRequestsDb(
       [
         requestRow("req-1", USER_A, USER_B, {
-          status: RequestStatus.ACCEPTED,
+          status,
           conversationId: "conversation-req-1",
         }),
       ],
       membership,
     );
 
-  it("refuses the sender with CONFLICT and deletes nothing", async () => {
-    const db = acceptedPair(grouped());
-    const { caller } = callerFor(sessionFor(USER_A), db);
+  it.each(Object.values(RequestStatus))(
+    "refuses the sender with CONFLICT and deletes nothing — %s",
+    async (status) => {
+      const db = pairRequest(grouped(), status);
+      const { caller } = callerFor(sessionFor(USER_A), db);
 
-    await expect(
-      caller.user.requests.delete({ invitationId: "req-1" }),
-    ).rejects.toMatchObject({ code: "CONFLICT" });
+      await expect(
+        caller.user.requests.delete({ invitationId: "req-1" }),
+      ).rejects.toMatchObject({ code: "CONFLICT" });
 
-    expect(db.rawDelete).not.toHaveBeenCalled();
-    expect(db.conversationDeleteMany).not.toHaveBeenCalled();
-    expect(db.messageDeleteMany).not.toHaveBeenCalled();
-    expect(db.rows()).toEqual([expect.objectContaining({ id: "req-1" })]);
-    expect(db.conversations()).toEqual([
-      { id: "conversation-req-1", requestId: "req-1" },
-    ]);
-  });
+      expect(db.rawDelete).not.toHaveBeenCalled();
+      expect(db.conversationDeleteMany).not.toHaveBeenCalled();
+      expect(db.messageDeleteMany).not.toHaveBeenCalled();
+      expect(db.rows()).toEqual([expect.objectContaining({ id: "req-1" })]);
+      expect(db.conversations()).toEqual([
+        { id: "conversation-req-1", requestId: "req-1" },
+      ]);
+    },
+  );
 
   it("refuses the recipient too, not just the sender", async () => {
     // Either party may clear a request, so either party could destroy the
     // thread. Guarding one direction would leave the bug in place for the
     // other.
-    const db = acceptedPair(grouped());
+    const db = pairRequest(grouped());
     const { caller } = callerFor(sessionFor(USER_B), db);
 
     await expect(
@@ -1227,7 +1239,7 @@ describe("user.requests.delete — not while still carpooling together", () => {
     // conversation - `useGroupMembership` does not touch the request row. Once
     // they are no longer grouped this same call succeeds, which the test below
     // covers. A CONFLICT with no route out would just be a dead end.
-    const db = acceptedPair(grouped());
+    const db = pairRequest(grouped());
     const { caller } = callerFor(sessionFor(USER_A), db);
 
     await expect(
@@ -1274,7 +1286,7 @@ describe("user.requests.delete — not while still carpooling together", () => {
   });
 
   it("allows deletion once the two are in different groups", async () => {
-    const db = acceptedPair({ [USER_A]: "group-1", [USER_B]: "group-2" });
+    const db = pairRequest({ [USER_A]: "group-1", [USER_B]: "group-2" });
     const { caller } = callerFor(sessionFor(USER_A), db);
 
     await expect(
@@ -1289,7 +1301,7 @@ describe("user.requests.delete — not while still carpooling together", () => {
     // The pair who carpooled and have since parted. Earlier work
     // both worked to make this row clearable, which is why the guard is
     // ACCEPTED *and* grouped rather than ACCEPTED alone.
-    const db = acceptedPair({ [USER_A]: null, [USER_B]: null });
+    const db = pairRequest({ [USER_A]: null, [USER_B]: null });
     const { caller } = callerFor(sessionFor(USER_A), db);
 
     await expect(
@@ -1303,7 +1315,7 @@ describe("user.requests.delete — not while still carpooling together", () => {
     // Reads as `undefined` rather than `null`. Two people with no group are
     // not in the same group, and `fromGroup &&` is what keeps this from
     // firing on a pair of absent values.
-    const db = acceptedPair({ [USER_A]: null });
+    const db = pairRequest({ [USER_A]: null });
     const { caller } = callerFor(sessionFor(USER_A), db);
 
     await expect(
@@ -1313,18 +1325,55 @@ describe("user.requests.delete — not while still carpooling together", () => {
     expect(db.rows()).toEqual([]);
   });
 
-  it("still withdraws a PENDING request between two users who share a group", async () => {
-    // Reachable through the reopen path, and it must stay withdrawable: a
-    // request nobody accepted carries no history worth protecting, and
-    // that change's behaviour for PENDING is unchanged by this ticket. The guard
-    // is keyed on status first, so this does not even issue the group query.
-    const db = buildRequestsDb(
-      [
-        requestRow("req-1", USER_A, USER_B, {
-          conversationId: "conversation-req-1",
-        }),
-      ],
-      grouped(),
+  it("refuses a PENDING request between two users who share a group", async () => {
+    // Two riders in one group are carpooling together whatever the request
+    // between them says. `markRequestAccepted` only ever resolves the row
+    // between the driver and the joining rider, so every other pair of
+    // co-members keeps whatever request they already had - and that request
+    // carries the conversation they have been using.
+    //
+    // This case used to assert the opposite, on the reasoning that "a request
+    // nobody accepted carries no history worth protecting". That is the part
+    // that was wrong: the history is the conversation, and PENDING or
+    // ACCEPTED makes no difference to what is lost when it goes.
+    const db = pairRequest(grouped(), RequestStatus.PENDING);
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await expect(
+      caller.user.requests.delete({ invitationId: "req-1" }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+
+    expect(db.rawDelete).not.toHaveBeenCalled();
+    expect(db.conversationDeleteMany).not.toHaveBeenCalled();
+    expect(db.messageDeleteMany).not.toHaveBeenCalled();
+    expect(db.rows()).toEqual([expect.objectContaining({ id: "req-1" })]);
+    expect(db.conversations()).toEqual([
+      { id: "conversation-req-1", requestId: "req-1" },
+    ]);
+  });
+
+  it("still withdraws a PENDING request between two users in different groups", async () => {
+    // The control for the case above, and the common path by a wide margin:
+    // widening the guard to every status must not cost an ordinary decline or
+    // withdrawal, which still takes the conversation with it.
+    const db = pairRequest(
+      { [USER_A]: "group-1", [USER_B]: "group-2" },
+      RequestStatus.PENDING,
+    );
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await expect(
+      caller.user.requests.delete({ invitationId: "req-1" }),
+    ).resolves.not.toThrow();
+
+    expect(db.rows()).toEqual([]);
+    expect(db.conversations()).toEqual([]);
+  });
+
+  it("still withdraws a PENDING request when neither user is grouped", async () => {
+    const db = pairRequest(
+      { [USER_A]: null, [USER_B]: null },
+      RequestStatus.PENDING,
     );
     const { caller } = callerFor(sessionFor(USER_A), db);
 
@@ -1340,7 +1389,7 @@ describe("user.requests.delete — not while still carpooling together", () => {
     // The participant check runs first and must keep doing so. A stranger
     // learning "those two are carpooling" from the error code would be a
     // disclosure this guard introduced.
-    const db = acceptedPair(grouped());
+    const db = pairRequest(grouped());
     const { caller } = callerFor(sessionFor(USER_C), db);
 
     await expect(
@@ -1363,28 +1412,42 @@ describe("user.requests.delete — not while still carpooling together", () => {
    * rows that already exist - and stops the degenerate comparison returning if
    * one is ever created again.
    */
-  const selfRequest = (membership: Record<string, string | null>) =>
+  const selfRequest = (
+    membership: Record<string, string | null>,
+    status: RequestStatus = RequestStatus.ACCEPTED,
+  ) =>
     buildRequestsDb(
       [
         requestRow("req-self", USER_A, USER_A, {
-          status: RequestStatus.ACCEPTED,
+          status,
           conversationId: "conversation-req-self",
         }),
       ],
       membership,
     );
 
-  it("lets the owner clear an accepted self-request while in a group", async () => {
-    const db = selfRequest({ [USER_A]: "group-1", [USER_B]: "group-1" });
-    const { caller } = callerFor(sessionFor(USER_A), db);
+  it.each(Object.values(RequestStatus))(
+    "lets the owner clear a self-request while in a group — %s",
+    async (status) => {
+      // Parameterised for the same reason as the pair fixture above. The
+      // exemption used to be reached only on the ACCEPTED branch, so a
+      // PENDING self-request never met the degenerate comparison at all;
+      // now that the guard runs for every status, `fromUserId <> toUserId`
+      // is the only thing holding it open and has to be proved for each one.
+      const db = selfRequest(
+        { [USER_A]: "group-1", [USER_B]: "group-1" },
+        status,
+      );
+      const { caller } = callerFor(sessionFor(USER_A), db);
 
-    await expect(
-      caller.user.requests.delete({ invitationId: "req-self" }),
-    ).resolves.not.toThrow();
+      await expect(
+        caller.user.requests.delete({ invitationId: "req-self" }),
+      ).resolves.not.toThrow();
 
-    expect(db.rows()).toEqual([]);
-    expect(db.conversations()).toEqual([]);
-  });
+      expect(db.rows()).toEqual([]);
+      expect(db.conversations()).toEqual([]);
+    },
+  );
 
   it("takes the self-request's conversation and messages with it", async () => {
     // The whole point of deleting through this path rather than by hand: the
@@ -1415,7 +1478,7 @@ describe("user.requests.delete — not while still carpooling together", () => {
   it("still refuses a genuine pair in the same group", async () => {
     // The exemption is keyed on the two ids being equal, so it must not soften
     // the guard for anybody else. This is the case the guard exists for.
-    const db = acceptedPair(grouped());
+    const db = pairRequest(grouped());
     const { caller } = callerFor(sessionFor(USER_A), db);
 
     await expect(
@@ -1624,12 +1687,9 @@ describe("user.requests.delete — the delete carries its own condition", () => 
 
     await caller.user.requests.delete({ invitationId: "req-1" });
 
-    expect(db.rawDelete).toHaveBeenCalledWith(
-      "req-1",
-      USER_A,
-      USER_B,
-      RequestStatus.ACCEPTED,
-    );
+    // Three values, not four: the statement no longer binds a status, which
+    // is the whole of the widened guard expressed as an argument list.
+    expect(db.rawDelete).toHaveBeenCalledWith("req-1", USER_A, USER_B);
   });
 
   it("does not re-read when the delete matched, so the ordinary path costs one statement", async () => {
