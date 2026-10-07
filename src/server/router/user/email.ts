@@ -256,6 +256,12 @@ const claimAcceptanceNotification = async (
  * Otherwise a failed send would still use up the one email, and the recipient
  * would never be told. Putting it back cannot cause an extra email, because no
  * email went out.
+ *
+ * `release` owes two things, in this order: restore the marker, then
+ * `budget.refund()`. The marker first, so a failed refund write still leaves
+ * the email owed. All three callers do both — the acceptance path once did
+ * only the first, which left an SES failure charging a send that never went
+ * out.
  */
 const sendOrRelease = async (
   ses: Pick<SESClient, "send">,
@@ -624,12 +630,13 @@ export const emailsRouter = router({
         true,
       );
 
-      await sendOrRelease(ctx.sesClient, emailParams, () =>
-        ctx.prisma.request.updateMany({
+      await sendOrRelease(ctx.sesClient, emailParams, async () => {
+        await ctx.prisma.request.updateMany({
           where: { id: request.id, acceptanceNotificationPendingSince: null },
           data: { acceptanceNotificationPendingSince: pendingSince },
-        }),
-      );
+        });
+        await budget.refund();
+      });
       return { sent: true as const };
     }),
 });

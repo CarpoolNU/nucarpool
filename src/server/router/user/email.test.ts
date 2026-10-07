@@ -970,6 +970,7 @@ describe("user.emails.sendMessageNotification — participants only, stored body
   it("keeps the email owed when SES refuses it", async () => {
     const db = buildEmailDb({
       sesFails: true,
+      budgets: { [ALICE]: 5 },
       messages: [
         {
           id: "message-1",
@@ -987,6 +988,10 @@ describe("user.emails.sendMessageNotification — participants only, stored body
     ).rejects.toThrow("Throttling");
 
     expect(db.messages[0]?.notificationPending).toBe(true);
+    // Refunded as well as re-marked. This passes today; it is pinned so that
+    // the next edit to this path cannot quietly drop the refund the way the
+    // acceptance copy did.
+    expect(db.budgetFor(ALICE)).toBe(5);
   });
 
   it("sends nothing when the caller has no message in the thread", async () => {
@@ -1286,6 +1291,32 @@ describe("user.emails.sendAcceptanceNotification — only the party who accepted
     ).rejects.toThrow("Throttling");
 
     expect(db.request?.acceptanceNotificationPendingSince).toEqual(OPENED_AT);
+  });
+
+  it("refunds the send when SES refuses the acceptance email", async () => {
+    const db = buildEmailDb({
+      sesFails: true,
+      request: {
+        id: REQUEST_ID,
+        fromUserId: ALICE,
+        toUserId: BOB,
+        conversationId: CONVERSATION_ID,
+        status: RequestStatus.ACCEPTED,
+      },
+      budgets: { [BOB]: 5 },
+    });
+    const { caller } = callerFor(sessionFor(BOB), db);
+
+    await expect(
+      caller.user.emails.sendAcceptanceNotification({
+        requestId: REQUEST_ID,
+      }),
+    ).rejects.toThrow("Throttling");
+
+    // No email went out, so the accepting party is charged nothing. Without
+    // this the marker was correctly restored but the send stayed spent, so an
+    // SES outage silently ate the retries it provoked.
+    expect(db.budgetFor(BOB)).toBe(5);
   });
 
   /**
