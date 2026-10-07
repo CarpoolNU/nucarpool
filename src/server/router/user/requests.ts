@@ -649,17 +649,35 @@ export const requestsRouter = router({
       // now it was the only thing standing between an active carpool and
       // irreversible loss of their messages.
       //
-      // The condition is deliberately `ACCEPTED` **and** grouped, not
-      // `ACCEPTED` alone. A pair who once carpooled and have since parted must
-      // still be able to clear the row: `connectAction` reads it to decide
-      // whether Connect is offered, `create`'s reopen branch acts on it, and
-      // Earlier work made that state escapable.
-      // Refusing on status alone would strand every one of those.
+      // The condition is **grouped, and nothing else** - not grouped and
+      // ACCEPTED.
       //
-      // A PENDING decline or withdrawal is untouched and does not even pay for
-      // the query - which is why the read sits inside this branch. That path is
-      // the common one, it is the point, and nothing of value is
-      // lost when a request nobody accepted goes away.
+      // It used to carry `status === ACCEPTED`, and that was wrong in a way
+      // worth spelling out, because the mistake is easy to make again. Being
+      // in the same group and having an accepted request between you are not
+      // the same thing: `markRequestAccepted` resolves only the row between
+      // the driver and the joining rider, so every *other* pair of co-members
+      // keeps whatever request they already had. One driver and two riders is
+      // enough - the two riders share a group, share a route and can message
+      // each other, and a PENDING request between them from an earlier co-op
+      // cycle still carries their whole conversation. The status-gated guard
+      // never even asked whether they were grouped, so either of them could
+      // delete it and take every message with it, permanently.
+      //
+      // Dropping the status does **not** strand the pair who have parted. The
+      // test the guard applies is "are these two in the same group *now*", so
+      // an ACCEPTED row between two people who have since left is still
+      // clearable: `connectAction` reads it to decide whether Connect is
+      // offered, and `create`'s reopen branch acts on it. Refusing on status
+      // alone would have stranded every one of those; refusing on membership
+      // does not.
+      //
+      // The cost is that the group lookup now runs for every delete rather
+      // than only the accepted ones, so an ordinary PENDING decline or
+      // withdrawal - the common path by a wide margin - pays for one more
+      // query. It is an indexed read of at most two rows from a table this
+      // procedure's own transaction touches moments later, and the thing it
+      // buys is the difference between losing a conversation and not.
       //
       // **A self-request is exempt, because the comparison degenerates for
       // one.** With `fromUserId === toUserId` the guard below compares a user's
@@ -676,10 +694,7 @@ export const requestsRouter = router({
       // it is here so the affected user is not stranded in the meantime, and so
       // the degenerate comparison cannot resurface if one is ever created
       // again.
-      if (
-        invitation.status === RequestStatus.ACCEPTED &&
-        invitation.fromUserId !== invitation.toUserId
-      ) {
+      if (invitation.fromUserId !== invitation.toUserId) {
         const searches = await ctx.prisma.carpoolSearch.findMany({
           where: {
             userId: { in: [invitation.fromUserId, invitation.toUserId] },
@@ -751,13 +766,18 @@ export const requestsRouter = router({
         // guard alone is a snapshot read.** `invitation` and the
         // `carpoolSearch` rows behind it are both read with `ctx.prisma`,
         // outside this transaction, and the delete used to match on the
-        // primary key and nothing else. So a request that was `PENDING` when
-        // it was read skipped the branch entirely - the group lookup lives
-        // inside it and never ran - and if `groups.create` committed in the
-        // window, this statement deleted the now-`ACCEPTED` request backing a
-        // live carpool, taking the `Conversation` and every `Message` with it.
-        // That is precisely the state the guard exists to prevent, reached by
-        // timing instead of by a direct call.
+        // primary key and nothing else. So if `groups.create` committed in
+        // the window between those reads and this statement, the request
+        // backing a live carpool was deleted anyway, taking the
+        // `Conversation` and every `Message` with it. That is precisely the
+        // state the guard exists to prevent, reached by timing instead of by
+        // a direct call.
+        //
+        // The predicate here tracks the guard above exactly, which now means
+        // membership alone: no `status` term, because two people in one group
+        // are carpooling together whatever the request between them says.
+        // Keeping a `status` condition on this side while the guard dropped
+        // it would reopen the same race one status wider.
         //
         // Restating the predicate in the statement makes it a real
         // compare-and-swap, the same primitive `markRequestAccepted`,
@@ -792,8 +812,7 @@ export const requestsRouter = router({
             AND \`fromUserId\` = ${invitation.fromUserId}
             AND \`toUserId\` = ${invitation.toUserId}
             AND NOT (
-              \`status\` = ${RequestStatus.ACCEPTED}
-              AND \`fromUserId\` <> \`toUserId\`
+              \`fromUserId\` <> \`toUserId\`
               AND EXISTS (
                 SELECT 1
                 FROM carpool_search AS sender
@@ -840,9 +859,17 @@ export const requestsRouter = router({
             return;
           }
 
-          // The row survived the condition, so it is `ACCEPTED` and the pair
-          // share a group - the guard above, arrived at a moment later. Same
-          // code and same message, because it is the same refusal.
+          // The row survived the condition, so the pair share a group - the
+          // guard above, arrived at a moment later. Same code and same
+          // message, because it is the same refusal.
+          //
+          // That used to read "so it is `ACCEPTED` and the pair share a
+          // group". Dropping the status from the predicate widens what
+          // reaching here means, and the widening is in the safe direction:
+          // this branch now also catches the PENDING-and-grouped pair, which
+          // is the case the guard was missing. What it still cannot be is a
+          // plain double-clear - that row is gone, and the `FOR SHARE` read
+          // above returns nothing for it.
           throw new TRPCError({
             code: "CONFLICT",
             message: CARPOOLING_PAIR_DELETE_MESSAGE,

@@ -11,13 +11,19 @@ import { appRouter } from "../index";
  * The guard that refuses a currently-carpooling pair is correct, and every
  * read it depends on is taken outside the transaction: the request row with
  * `ctx.prisma.request.findUnique`, and the two `carpoolSearch` rows with
- * `ctx.prisma.carpoolSearch.findMany` - the latter only inside the
- * `ACCEPTED` branch, so a request that reads `PENDING` skips the group lookup
- * altogether. The delete itself then matched on the primary key and nothing
- * else. Sequence a withdrawal against an accept and the guard simply is not
- * consulted about the state that actually exists at commit time: the accepted
- * request is deleted, and the `Conversation` and every `Message` go with it -
- * exactly the loss the guard exists to prevent, reached by timing.
+ * `ctx.prisma.carpoolSearch.findMany`. The delete itself then matched on the
+ * primary key and nothing else. Sequence a withdrawal against an accept and
+ * the guard simply is not consulted about the state that actually exists at
+ * commit time: the request is deleted, and the `Conversation` and every
+ * `Message` go with it - exactly the loss the guard exists to prevent,
+ * reached by timing.
+ *
+ * The guard asks about group membership **and nothing else**. It used to ask
+ * about membership *and* an ACCEPTED status, which left a second hole beside
+ * the timing one: two riders in a group keep whatever request they had
+ * between them, because an acceptance resolves only the driver's row, and a
+ * PENDING request never reached the group lookup on either side. The cases
+ * below cover both routes into that state - seeded directly, and raced.
  *
  * The same defect class as the writes made compare-and-swaps earlier, and it
  * needs the same kind of proof. `requests.test.ts` drives the new predicate
@@ -216,11 +222,12 @@ describe("requests.delete against a concurrent accept", () => {
   /**
    * The same interleaving with no group at the end of it.
    *
-   * The condition has to be `ACCEPTED` **and** grouped in SQL for the reason
-   * it is in JavaScript: refusing on status alone would strand a pair who
-   * have parted, and a raced accept that produced no membership is not a
-   * carpool to protect. Without this case the statement could be "refuse
-   * anything accepted" and every other test here would still pass.
+   * The condition is grouped-and-nothing-else in SQL for the reason it is in
+   * JavaScript, and this is the half that keeps it honest in the other
+   * direction: refusing on status would strand a pair who have parted, and a
+   * raced accept that produced no membership is not a carpool to protect.
+   * Without this case the statement could be "refuse anything accepted" and
+   * every other test here would still pass.
    */
   it("deletes an accepted request whose pair are not in a group together", async () => {
     const sender = await seedUser("Sender Sam", "sender-sam@northeastern.edu", {
@@ -320,6 +327,185 @@ describe("requests.delete against a concurrent accept", () => {
   });
 
   /**
+   * Two riders in one group, with a PENDING request between them.
+   *
+   * The guard used to be gated on `status = ACCEPTED`, on both the read side
+   * and inside the `DELETE`, and this is the state that showed it to be the
+   * wrong question. `markRequestAccepted` resolves only the row between the
+   * driver and the joining rider, so a group of one driver and two riders
+   * leaves the two riders carpooling together with whatever request they
+   * already had between them - and that request carries their conversation.
+   * Status-gated, neither side of the guard ever asked whether they were
+   * grouped, and either of them could delete the thread outright.
+   *
+   * Against a real MySQL rather than the mock because the predicate being
+   * widened lives in a raw `DELETE`, and a `WHERE` the mock agrees with is
+   * not evidence that MySQL evaluates it the same way.
+   */
+  it("refuses a PENDING request between two riders who share a group", async () => {
+    const group = await prisma.carpoolGroup.create({ data: {} });
+    // The driver is seeded because a group of two riders and nobody driving
+    // is not the state being described, even though the guard never reads
+    // them: it compares the two parties' `carpoolId` and nothing else.
+    await seedUser("Driver Del", "driver-del@northeastern.edu", {
+      role: Role.DRIVER,
+      seatsAvail: 1,
+      carpoolId: group.id,
+    });
+    const riderOne = await seedUser(
+      "Rider Robin",
+      "rider-robin@northeastern.edu",
+      { role: Role.RIDER, seatsAvail: 0, carpoolId: group.id },
+    );
+    const riderTwo = await seedUser("Rider Rue", "rider-rue@northeastern.edu", {
+      role: Role.RIDER,
+      seatsAvail: 0,
+      carpoolId: group.id,
+    });
+
+    // Between the two riders, not involving the driver at all - which is
+    // precisely why accepting the driver's requests left it PENDING.
+    const { request } = await seedRequestWithThread(
+      riderOne.user.id,
+      riderTwo.user.id,
+    );
+
+    await expect(
+      callerFor(riderOne.user.id).user.requests.delete({
+        invitationId: request.id,
+      }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+
+    expect(await requestById(request.id)).not.toBeNull();
+    expect(await conversationCount()).toBe(1);
+    expect(await messageCount()).toBe(1);
+
+    // Either party could have destroyed it, so the refusal has to hold from
+    // both directions.
+    await expect(
+      callerFor(riderTwo.user.id).user.requests.delete({
+        invitationId: request.id,
+      }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+
+    expect(await messageCount()).toBe(1);
+  });
+
+  /**
+   * The same state reached by timing, which is what this file exists for.
+   *
+   * The withdrawing rider's guard reads are taken before the transaction
+   * opens and see the other rider ungrouped, so the pre-transaction check
+   * passes honestly. The join then commits in the window, and by the time the
+   * `DELETE` runs the two are co-members. Only the statement's own `WHERE`
+   * can refuse at that point - and before this ticket it could not, because
+   * the row is PENDING and the predicate was gated on ACCEPTED.
+   *
+   * `groups.edit` with `add: true` rather than `groups.create`: the second
+   * rider joins a group the driver already has, which is the real path into
+   * the two-rider state and the one `create` cannot produce, since it demands
+   * an ungrouped driver.
+   */
+  it("refuses a PENDING withdrawal whose co-rider joined in the window", async () => {
+    const group = await prisma.carpoolGroup.create({ data: {} });
+    const driver = await seedUser("Driver Dru", "driver-dru@northeastern.edu", {
+      role: Role.DRIVER,
+      seatsAvail: 3,
+      carpoolId: group.id,
+    });
+    const settled = await seedUser(
+      "Rider Reese",
+      "rider-reese@northeastern.edu",
+      { role: Role.RIDER, seatsAvail: 0, carpoolId: group.id },
+    );
+    const joining = await seedUser(
+      "Rider Rory",
+      "rider-rory@northeastern.edu",
+      {
+        role: Role.RIDER,
+        seatsAvail: 0,
+      },
+    );
+
+    // The invitation the joining rider is about to accept.
+    await prisma.request.create({
+      data: {
+        message: "room for one more",
+        fromUserId: driver.user.id,
+        toUserId: joining.user.id,
+        status: RequestStatus.PENDING,
+      },
+    });
+
+    // The thread at risk: between the two riders, from before either joined.
+    const { request } = await seedRequestWithThread(
+      settled.user.id,
+      joining.user.id,
+    );
+
+    const join = () =>
+      callerFor(joining.user.id).user.groups.edit({
+        driverId: driver.user.id,
+        riderId: joining.user.id,
+        groupId: group.id,
+        add: true,
+      });
+
+    await expect(
+      callerFor(
+        settled.user.id,
+        buildDelayedClient(prisma, join),
+      ).user.requests.delete({ invitationId: request.id }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+
+    expect(await requestById(request.id)).not.toBeNull();
+    expect(await conversationCount()).toBe(1);
+    expect(await messageCount()).toBe(1);
+
+    // The join that raced it is intact, rather than rolled back by the
+    // refusal it caused.
+    const joiningSearch = await prisma.carpoolSearch.findFirst({
+      where: { userId: joining.user.id },
+    });
+    expect(joiningSearch?.carpoolId).toBe(group.id);
+  });
+
+  /**
+   * The control for the two above, and the common path: a PENDING withdrawal
+   * between two people who are *not* co-members still succeeds and still
+   * takes the thread with it.
+   *
+   * Without it, "refuse every PENDING request" would pass both cases above.
+   * One of the two is in a group here, so this also pins that the guard
+   * compares the pair's groups rather than asking whether either of them is
+   * in one.
+   */
+  it("still withdraws a PENDING request when only one of the pair is grouped", async () => {
+    const group = await prisma.carpoolGroup.create({ data: {} });
+    const grouped = await seedUser(
+      "Rider Quinn",
+      "rider-quinn@northeastern.edu",
+      { role: Role.RIDER, seatsAvail: 0, carpoolId: group.id },
+    );
+    const loner = await seedUser("Rider Lane", "rider-lane@northeastern.edu", {
+      role: Role.RIDER,
+      seatsAvail: 0,
+    });
+    const { request } = await seedRequestWithThread(
+      grouped.user.id,
+      loner.user.id,
+    );
+
+    await callerFor(grouped.user.id).user.requests.delete({
+      invitationId: request.id,
+    });
+
+    expect(await requestById(request.id)).toBeNull();
+    expect(await conversationCount()).toBe(0);
+    expect(await messageCount()).toBe(0);
+  });
+
+  /**
    * The self-request exemption, in SQL. `fromUserId` <> `toUserId` is what
    * keeps the EXISTS from comparing one user's group against their own and
    * matching whenever they are in any group at all - which would make these
@@ -327,24 +513,31 @@ describe("requests.delete against a concurrent accept", () => {
    * deliberately lets them through. Two exist in production, one ACCEPTED
    * with its owner in a real group.
    */
-  it("clears an accepted self-request from a user who is in a group", async () => {
-    const group = await prisma.carpoolGroup.create({ data: {} });
-    const owner = await seedUser("Owner Ola", "owner-ola@northeastern.edu", {
-      role: Role.DRIVER,
-      seatsAvail: 2,
-      carpoolId: group.id,
-    });
-    const { request } = await seedRequestWithThread(
-      owner.user.id,
-      owner.user.id,
-      RequestStatus.ACCEPTED,
-    );
+  it.each(Object.values(RequestStatus))(
+    "clears a self-request from a user who is in a group — %s",
+    async (status) => {
+      // Every status, now that the guard is no longer gated on one. A PENDING
+      // self-request never reached the degenerate comparison before, because
+      // the branch it lives in only ran for ACCEPTED rows; `fromUserId` <>
+      // `toUserId` is the only thing holding it open today.
+      const group = await prisma.carpoolGroup.create({ data: {} });
+      const owner = await seedUser("Owner Ola", "owner-ola@northeastern.edu", {
+        role: Role.DRIVER,
+        seatsAvail: 2,
+        carpoolId: group.id,
+      });
+      const { request } = await seedRequestWithThread(
+        owner.user.id,
+        owner.user.id,
+        status,
+      );
 
-    await callerFor(owner.user.id).user.requests.delete({
-      invitationId: request.id,
-    });
+      await callerFor(owner.user.id).user.requests.delete({
+        invitationId: request.id,
+      });
 
-    expect(await requestById(request.id)).toBeNull();
-    expect(await conversationCount()).toBe(0);
-  });
+      expect(await requestById(request.id)).toBeNull();
+      expect(await conversationCount()).toBe(0);
+    },
+  );
 });
