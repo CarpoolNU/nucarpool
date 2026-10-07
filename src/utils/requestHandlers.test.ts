@@ -26,6 +26,7 @@ import { CURRENT_TERMS_VERSION } from "./termsAcceptance";
 import { createRequestHandlers } from "./requestHandlers";
 import type { EnhancedPublicUser, User } from "./types";
 import { toastSpies } from "../testing/toastStub";
+import { recordInvalidations } from "../testing/invalidationRecorder";
 
 type MutationOptions = {
   onSuccess?: (data: unknown, variables: unknown) => void;
@@ -125,30 +126,32 @@ const mockToastError = toastSpies().error;
 const mockToastSuccess = toastSpies().success;
 
 /**
- * A spy per cache rather than one shared between them: `groups.me` was the
- * cache nobody invalidated, and a single counter asserting "two calls" could
- * not say *which* two, so adding the missing one and dropping an existing
- * one would read the same.
+ * Which caches were invalidated, recorded rather than declared.
+ *
+ * This was four named spies behind a literal `utils` tree, one per cache -
+ * better than a shared counter, which could not say *which* calls it had
+ * counted, but still a fixture that enumerated the expected set. It therefore
+ * could not fail on a cache that was missing from the set altogether, and
+ * SCRUM-629 was two of those: `recommendations.me` and `geoJsonUserList`, the
+ * queries behind Explore and the map. The proxy materialises any path, so the
+ * fixture states nothing and the assertion states the whole set.
  */
-const mockInvalidateUserMe = jest.fn();
-const mockInvalidateRequestsMe = jest.fn();
-const mockInvalidateRecommendationsMe = jest.fn();
-const mockInvalidateGroupsMe = jest.fn();
+const recorder = recordInvalidations();
+
+const handlers = () => createRequestHandlers(recorder.utils);
 
 /**
- * Only the four caches the mutations' `onSuccess` handlers touch. Cast because
- * the real argument is the whole router's worth of query helpers.
+ * Everything a membership change makes stale, which is the list in
+ * `src/utils/groups/invalidateMembershipCaches.ts`. Written out rather than
+ * imported from it, so the assertion is not the code compared with itself.
  */
-const utils = {
-  user: {
-    me: { invalidate: mockInvalidateUserMe },
-    requests: { me: { invalidate: mockInvalidateRequestsMe } },
-    recommendations: { me: { invalidate: mockInvalidateRecommendationsMe } },
-    groups: { me: { invalidate: mockInvalidateGroupsMe } },
-  },
-} as unknown as Parameters<typeof createRequestHandlers>[0];
-
-const handlers = () => createRequestHandlers(utils);
+const MEMBERSHIP_CACHES = [
+  "mapbox.geoJsonUserList.invalidate",
+  "user.groups.me.invalidate",
+  "user.me.invalidate",
+  "user.recommendations.me.invalidate",
+  "user.requests.me.invalidate",
+];
 
 const user = (overrides: Partial<User> = {}): User => ({
   id: "user-1",
@@ -249,10 +252,7 @@ beforeEach(() => {
   mockCreateGroup.reset();
   mockToastError.mockClear();
   mockToastSuccess.mockClear();
-  mockInvalidateUserMe.mockClear();
-  mockInvalidateRequestsMe.mockClear();
-  mockInvalidateRecommendationsMe.mockClear();
-  mockInvalidateGroupsMe.mockClear();
+  recorder.reset();
 });
 
 describe("handleAcceptRequest — a refused acceptance", () => {
@@ -467,13 +467,17 @@ describe("handleAcceptRequest — the writes a real acceptance makes", () => {
 
     await handleAcceptRequest(user(), otherUser(), request);
 
-    // `requests.me` and `user.me`: the request's status and the accepter's own
-    // carpoolId and seat count have all changed.
-    expect(mockInvalidateRequestsMe).toHaveBeenCalledTimes(1);
-    expect(mockInvalidateUserMe).toHaveBeenCalledTimes(1);
-    // `groups.me` is the member list itself, and it was the one nobody
-    // invalidated here.
-    expect(mockInvalidateGroupsMe).toHaveBeenCalledTimes(1);
+    // The whole set, not a subset: `requests.me` and `user.me` for the
+    // request's status and the accepter's own carpoolId and seat count;
+    // `groups.me` for the member list, which was the cache nobody invalidated
+    // here; and the two discovery queries, which an accept has just made wrong
+    // in the other direction - the accepter keeps a full list of drivers they
+    // can no longer connect to (SCRUM-629).
+    //
+    // Each exactly once, since the two discovery queries are the expensive
+    // ones: `recommendations.me` runs the full scoring pass and
+    // `geoJsonUserList` is metered against the Mapbox quota.
+    expect([...recorder.calls].sort()).toEqual(MEMBERSHIP_CACHES);
   });
 
   /**
@@ -502,7 +506,10 @@ describe("handleAcceptRequest — the writes a real acceptance makes", () => {
     expect(accepted).toBe(true);
     expect(mockEditGroup.mutateAsync).toHaveBeenCalledTimes(1);
     expect(mockCreateGroup.mutateAsync).not.toHaveBeenCalled();
-    expect(mockInvalidateGroupsMe).toHaveBeenCalledTimes(1);
+    // The same set as `groups.create` above. Both mutations share one
+    // `onSuccess`, and the whole point of the shared helper is that the two
+    // shapes of group write cannot answer this differently.
+    expect([...recorder.calls].sort()).toEqual(MEMBERSHIP_CACHES);
   });
 });
 
@@ -564,6 +571,24 @@ describe("handleRejectRequest", () => {
     expect(mockToastError).toHaveBeenCalledWith(
       "Something went wrong: NOT_FOUND",
     );
+  });
+
+  /*
+   * The over-invalidation control, and the reason the accept assertions mean
+   * something. A rejection changes no membership, so it keeps its own narrower
+   * pair and must not pick up the shared set - in particular not
+   * `geoJsonUserList`, which is metered against the Mapbox quota. If the
+   * shared helper leaked into this handler, this is what would say so.
+   */
+  it("invalidates only what a rejection changed, not the membership set", async () => {
+    const { handleRejectRequest } = handlers();
+
+    await handleRejectRequest(user(), otherUser(), request);
+
+    expect([...recorder.calls].sort()).toEqual([
+      "user.recommendations.me.invalidate",
+      "user.requests.me.invalidate",
+    ]);
   });
 });
 

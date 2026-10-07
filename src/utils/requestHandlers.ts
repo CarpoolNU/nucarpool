@@ -13,6 +13,7 @@ import { trpc } from "./trpc";
 import { toast } from "react-toastify/unstyled";
 import { requestUnavailableExplanation } from "./roleCompatibility";
 import { hasSeatAvailable } from "./carpoolSeats";
+import { invalidateMembershipCaches } from "./groups/invalidateMembershipCaches";
 
 interface RequestHandlers {
   /**
@@ -60,24 +61,22 @@ export const createRequestHandlers = (
    * What an accepted request has just made stale, whichever shape the group
    * write took.
    *
-   * One function rather than the same body written out beside each mutation,
-   * because writing it twice before is exactly how the two copies drifted:
-   * both were missing `groups.me` while `useGroupMembership.ts` - calling the
-   * *same* `groups.edit` procedure - invalidated it. Nothing came along
-   * afterwards to paper over the gap either, since `utils/trpc.ts` sets
-   * `refetchOnMount` and `refetchOnWindowFocus` to false globally.
+   * This used to be a list written out here, and the comment it carried said
+   * why that was already a mistake: the same body had existed twice beside the
+   * two mutations and the copies drifted, both missing `groups.me` while
+   * `useGroupMembership.ts` - calling the *same* `groups.edit` procedure -
+   * invalidated it. Collapsing the two into one local function fixed that
+   * instance and left the real shape of the problem untouched, which is that
+   * the list also exists in `useGroupMembership.ts`. It drifted again, this
+   * time in the other direction: both files were missing the two discovery
+   * queries behind Explore and the map (SCRUM-629).
    *
-   * `groups.me` is the one that was missing and it is the member list itself.
-   * A driver already in a group who accepts a second rider keeps the same
-   * `carpoolId`, so `GroupPage` does not remount and does not refetch - My
-   * Group showed the pre-accept membership, without the new rider and without
-   * them on "Preview Group Route", for the rest of the session.
+   * So the list now lives in exactly one place for all three call sites. This
+   * wrapper is kept only because both mutations name it as their `onSuccess`,
+   * and `invalidateMembershipCaches` takes `utils`.
    */
-  const invalidateAcceptedRequestCaches = () => {
-    utils.user.requests.me.invalidate();
-    utils.user.me.invalidate();
-    utils.user.groups.me.invalidate();
-  };
+  const invalidateAcceptedRequestCaches = () =>
+    invalidateMembershipCaches(utils);
 
   // Neither of these reports its own failure. `handleAcceptRequest` below
   // catches it instead, because the interesting failures here are the server's
