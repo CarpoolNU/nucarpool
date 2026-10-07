@@ -45,9 +45,11 @@
  * unfinished sign-up rather than an unmatchable user — it was never in
  * matching, so it cannot have been excluded from it.
  *
- * On production that is 579 of 626 reported rows, and on staging all 521 of
- * them. Exiting `1` on the total made the gate permanently red, which gates
- * nothing and buried the 47 rows that do need action.
+ * When the split was introduced — `SCRUM-408`, measured 2026-09-16 — that was
+ * 579 of 626 reported rows on production, and all 521 of them on staging.
+ * Exiting `1` on the total made the gate permanently red, which gates nothing
+ * and buried the 47 rows that did need action. Those are the figures that
+ * motivated the split, not a current count: run the script for that.
  *
  * So every finding is still reported, and each carries `actionable`:
  *
@@ -58,9 +60,9 @@
  *   Out-of-range coordinates and a missing `location` row are not explained by
  *   an abandoned sign-up whoever owns them, and a **reversed co-op range stays
  *   actionable regardless of onboarding state or `status`** — the dates are
- *   wrong now and nothing corrects them when that search goes live. 7 of
- *   production's 47 are not `ACTIVE`, and a search reactivates without its
- *   dates being touched.
+ *   wrong now and nothing corrects them when that search goes live. At that
+ *   same 2026-09-16 measurement 7 of production's 47 were not `ACTIVE`, and a
+ *   search reactivates without its dates being touched.
  *
  * Usage:
  *   npx ts-node scripts/check-profile-coordinates.ts

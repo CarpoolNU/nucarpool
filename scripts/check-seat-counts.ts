@@ -29,10 +29,14 @@
  *   npx ts-node scripts/check-seat-counts.ts
  *
  * Exits 0 when every row is in range, 1 when any is not, so it can gate the
- * repair. **Run this against production**: the count there is unknown, because
- * read queries against the PlanetScale `main` branch return 403 with the
- * credentials available in this repository. One driver on staging is a lower
- * bound, not the answer.
+ * repair. **Run it against the environment you care about rather than trusting
+ * a figure here.** This paragraph used to say production's count was unknown
+ * because reads of the PlanetScale `main` branch returned 403. That holds for
+ * the MCP read tool only — the `pscale` CLI's reader role reaches `main` — so
+ * the count has been measurable for some time, and the one staging row this
+ * header quoted as a lower bound is no longer there. Neither figure belongs in
+ * a header; see "Has a script been applied to staging or production?" in
+ * scripts/README.md.
  */
 
 import { PrismaClient } from "@prisma/client";

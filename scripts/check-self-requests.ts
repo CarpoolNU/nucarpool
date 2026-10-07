@@ -11,15 +11,17 @@
  * **Read-only. This script deletes nothing**, and that stays true: keeping the
  * four `check-*` scripts uniformly read-only is worth more than saving a file.
  *
- * **The repair now lives in `cleanup-self-requests.ts`.** This header used to
- * say the expected count was zero and that anything turning up should be
- * removed by hand — reasonable while the set was empty, and it is not: a later check
- * found **2** rows in production on 2026-09-09, against 0 on staging. Two rows
- * are still few enough to remove by hand and that is exactly the argument for
+ * **The repair lives in `cleanup-self-requests.ts`.** This header used to say
+ * the expected count was zero and that anything turning up should be removed
+ * by hand — reasonable while the set was empty, and it was not: a check on
+ * 2026-09-09 found **2** such rows in production, against 0 on staging. Two
+ * rows are few enough to remove by hand and that is exactly the argument for
  * not doing it by hand, because an ad-hoc delete leaves no dry run, no
  * per-row log, and nothing anyone can record afterwards - see "Has a script
  * been applied to staging or production?" in scripts/README.md for what
- * recording a run means here.
+ * recording a run means here. `SCRUM-409` is where that script and those two
+ * rows come from; the rows are gone from production now. All of that is
+ * history, not a count to act on.
  *
  * Removal is three deletes, not one — the request, its conversation, and the
  * messages inside it — which is why the counts below are printed per row.
@@ -36,7 +38,10 @@
  *   npx ts-node scripts/check-self-requests.ts
  *
  * Exits 0 when there are none, 1 when there are, so it can gate a follow-up.
- * Today it exits 1 against production, and will until the cleanup has run.
+ * What it exits against any particular environment is deliberately not recorded
+ * here. A header naming a live count is wrong from the moment the count moves,
+ * and this one went on announcing a pending cleanup long after the rows it
+ * named had gone. Run the script for the live figure.
  */
 
 import { PrismaClient } from "@prisma/client";
