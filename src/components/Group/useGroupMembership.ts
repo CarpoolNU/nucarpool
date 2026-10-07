@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { toast } from "react-toastify/unstyled";
 import { trpc } from "../../utils/trpc";
+import { invalidateMembershipCaches } from "../../utils/groups/invalidateMembershipCaches";
 import { toastCarpoolEnded } from "./CarpoolEndedToast";
 
 /**
@@ -80,8 +81,7 @@ export const useGroupMembership = ({
         toast.error(`Something went wrong: ${error.message}`);
       },
       onSuccess: () => {
-        utils.user.me.invalidate();
-        utils.user.groups.me.invalidate();
+        invalidateMembershipCaches(utils);
         toastCarpoolEnded("Group has been successfully deleted");
         onLeftGroup?.();
       },
@@ -101,8 +101,7 @@ export const useGroupMembership = ({
       // removes their last rider now gets the modal dismissed too, which the
       // riderId comparison alone would miss.
       onSuccess: (data, variables) => {
-        utils.user.me.invalidate();
-        utils.user.groups.me.invalidate();
+        invalidateMembershipCaches(utils);
 
         const callerLeft = variables.riderId === currentUserId;
         const groupDissolved = data === null;
