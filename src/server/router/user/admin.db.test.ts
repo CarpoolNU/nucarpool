@@ -473,6 +473,80 @@ describe("updateUserPermission's audit trail against a real database", () => {
       actorId: "manager-1",
       action: "user.admin.updateUserPermission",
       targetId: target.id,
+      // A user target is its own person, so there is no second id to resolve.
+      targetUserId: null,
+    });
+  });
+});
+
+/**
+ * `getAuditLog`'s report-target resolution against a real database.
+ *
+ * `admin.test.ts` can only show the query's shape: its mocked `report.findMany`
+ * returns whatever the test handed it, so it cannot show that a resolution
+ * row's `targetId` actually finds its report, or that the id it yields is the
+ * *reported* user rather than the reporter. Both are joins, which is the part
+ * a mock cannot prove.
+ */
+describe("getAuditLog's reported-user resolution against a real database", () => {
+  /** A report by one real user about another, left OPEN for `resolveReport`. */
+  const seedReport = async () => {
+    const reporter = await prisma.user.create({
+      data: { name: "Reporter", email: "audit-reporter@northeastern.edu" },
+    });
+    const reported = await prisma.user.create({
+      data: { name: "Reported", email: "audit-reported@northeastern.edu" },
+    });
+    const report = await prisma.report.create({
+      data: {
+        reporterId: reporter.id,
+        reportedUserId: reported.id,
+        reason: ReportReason.HARASSMENT,
+      },
+    });
+
+    return { reporter, reported, report };
+  };
+
+  it("resolves a resolution row's report id to the reported user", async () => {
+    const { reporter, reported, report } = await seedReport();
+
+    const caller = callerFor(managerSession());
+    await caller.user.admin.resolveReport({
+      reportId: report.id,
+      status: ReportStatus.REVIEWED,
+    });
+
+    const log = await caller.user.admin.getAuditLog();
+    const entry = log.find((row) => row.targetId === report.id);
+
+    expect(entry).toMatchObject({
+      action: "user.admin.resolveReport",
+      targetId: report.id,
+      targetUserId: reported.id,
+    });
+    // The person the decision was about, not the person who filed it.
+    expect(entry?.targetUserId).not.toBe(reporter.id);
+  });
+
+  it("yields null once the report behind a logged resolution is gone", async () => {
+    const { report } = await seedReport();
+
+    const caller = callerFor(managerSession());
+    await caller.user.admin.resolveReport({
+      reportId: report.id,
+      status: ReportStatus.DISMISSED,
+    });
+    // The audit row outlives the report it refers to — nothing cascades an
+    // `AdminAuditLog` row away, by design.
+    await prisma.report.delete({ where: { id: report.id } });
+
+    const log = await caller.user.admin.getAuditLog();
+    const entry = log.find((row) => row.targetId === report.id);
+
+    expect(entry).toMatchObject({
+      action: "user.admin.resolveReport",
+      targetUserId: null,
     });
   });
 });

@@ -25,9 +25,10 @@ import {
  *
  * Only `actorId` is always a user. `targetId` names whatever the action acted
  * on — a user for `updateUserPermission`, a *report* for `resolveReport` — so
- * the Target cell asks `adminAuditLabels` which table the id belongs to rather
- * than resolving every row against the user map. That map-everything approach
- * is what left every report-resolution row showing a bare cuid (SCRUM-647).
+ * the Target cell asks `adminAuditLabels` which of the row's two ids names a
+ * person, and resolves that one. `getAuditLog` supplies the second id,
+ * `targetUserId`, because a report's reported user is not reachable from
+ * `getAllUsers` alone.
  */
 const AdminAuditLog = () => {
   /*
@@ -73,6 +74,7 @@ const AdminAuditLog = () => {
   const emailById = new Map(
     (usersQuery.data ?? []).map((user) => [user.id, user.email]),
   );
+  const emailFor = (id: string) => emailById.get(id);
   /** Actor is always a user, so a plain lookup is correct here. */
   const actorFor = (id: string) => emailById.get(id) ?? id;
 
@@ -108,10 +110,11 @@ const AdminAuditLog = () => {
               </thead>
               <tbody>
                 {auditLogQuery.data.map((entry) => {
-                  const target = describeAuditTarget(
+                  const target = describeAuditTarget(entry, emailFor);
+                  const details = describeAuditDetails(
                     entry.action,
+                    entry.metadata,
                     entry.targetId,
-                    emailById.get(entry.targetId),
                   );
 
                   return (
@@ -123,13 +126,13 @@ const AdminAuditLog = () => {
                       <td className="py-2 pr-4">
                         {describeAuditAction(entry.action)}
                       </td>
-                      {/* `title` carries the full id back when the cell
+                      {/* `title` carries the full id back when a cell
                           abbreviated one; undefined when it did not. */}
                       <td className="py-2 pr-4" title={target.title}>
                         {target.text}
                       </td>
-                      <td className="py-2 pr-4">
-                        {describeAuditDetails(entry.action, entry.metadata)}
+                      <td className="py-2 pr-4" title={details.title}>
+                        {details.text}
                       </td>
                     </tr>
                   );
