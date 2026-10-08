@@ -88,7 +88,7 @@ describe("AdminAuditLog", () => {
   it("labels a report target, which getAllUsers can never resolve", async () => {
     // `resolveReport` writes a *report* id as `targetId`, so resolving it
     // against the user map misses by construction — not because the user is
-    // missing. Before SCRUM-647 that printed a bare cuid.
+    // missing.
     auditLogQueryFn.mockResolvedValue([
       {
         id: "log-1",

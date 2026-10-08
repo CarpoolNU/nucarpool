@@ -65,12 +65,12 @@ describe("AdminData's scroll port", () => {
 
   it("spaces itself with padding, never a vertical margin", () => {
     /*
-     * The defect, stated as the thing that must not come back. A `h-full` box
-     * inside an `overflow-hidden` parent is exactly as tall as that parent, so
-     * a vertical margin cannot make room - it pushes the box past the clip,
-     * and the 16px that leaves the bottom is unreachable at any scroll
-     * position rather than merely below the fold. Measured at 16px at 1440x900
-     * and 667x582 alike before the fix, and at 0 at both after it.
+     * Stated as the thing that must not come back. An `h-full` box inside an
+     * `overflow-hidden` parent is exactly as tall as that parent, so a
+     * vertical margin cannot make room for itself - it pushes the box past
+     * the clip, and the margin's height is unreachable at any scroll
+     * position rather than merely below the fold. Measured at 16px for a
+     * `my-4` at both 1440x900 and 667x582.
      */
     const classes = port.split(/\s+/);
 
@@ -83,13 +83,13 @@ describe("AdminData's scroll port", () => {
      * The control. Without it the matcher could be wrong in the direction that
      * passes silently - a regex that matches nothing agrees with every file.
      *
-     * The sample is the utility this element used to carry rather than an
-     * invented one, and that is not fussiness: **Tailwind v4 scans this
-     * repository, test files included, so naming a utility here emits it as
-     * real CSS.** `my-4` is still in the bundle because `UnsavedModal` uses
-     * it, so naming it costs nothing; an invented one would ship a rule that
-     * applies to no element in the app, which `measure-layout.test.ts` records
-     * having done once, at 52 bytes.
+     * The sample is a real margin utility already used elsewhere
+     * (`UnsavedModal`), not an invented one, and that is not fussiness:
+     * **Tailwind v4 scans this repository, test files included, so naming a
+     * utility here emits it as real CSS.** `my-4` is still in the bundle
+     * because `UnsavedModal` uses it, so naming it costs nothing; an invented
+     * one would ship a rule that applies to no element in the app, which
+     * `measure-layout.test.ts` records having done once, at 52 bytes.
      */
     expect(VERTICAL_MARGIN.test("my-4")).toBe(true);
     expect(VERTICAL_MARGIN.test("py-4")).toBe(false);
@@ -107,11 +107,11 @@ describe("BarChartDaysFrequency's root", () => {
   it("refuses to be shrunk out of it", () => {
     /*
      * `ADMIN_SHORTEST_CHART_HEIGHT_PX` derives the gate from this 500, and
-     * previously the box never rendered at it: as a flex item of a
-     * column whose children always sum to more than the row, with
-     * `flex-shrink` defaulting to 1 and `min-height: auto` not stopping it, it
-     * was measured at 151.5px at 1440x900 and 24px at 667x582. The height and
-     * the no-shrink are one request; either alone is the defect.
+     * without `shrink-0` the box would never render at it: as a flex item of
+     * a column whose children always sum to more than the row, with
+     * `flex-shrink` defaulting to 1 and `min-height: auto` not stopping it,
+     * it would measure 151.5px at 1440x900 and 24px at 667x582. The height
+     * and the no-shrink are one request; either alone would be a defect.
      */
     const classes = root.split(/\s+/);
 

@@ -19,9 +19,8 @@ interface RecentreButtonProps {
   /**
    * Which place that is. A VIEWER has no workplace - and nor does anyone whose
    * address never resolved - so the map's home point for them is the campus,
-   * and the label said otherwise until `mapHomeCentre` gave both the same
-   * answer. Defaults to `workplace`, which is the case every existing caller
-   * and every existing test means.
+   * and `mapHomeCentre` gives both the same answer. Defaults to `workplace`,
+   * which is the case every existing caller and every existing test means.
    */
   subject?: MapCentreSubject;
 }
@@ -29,40 +28,34 @@ interface RecentreButtonProps {
 /**
  * Puts the map back on the user's home point.
  *
- * **It used to promise a workplace to users who have none.** The label was a
- * literal and the caller flew to the company coordinates unconditionally, so a
- * VIEWER - about a third of production, and a role with no `Location` row at
- * all - pressed "Recentre the map on your workplace" and arrived at `(0, 0)`.
- * `mapHomeCentre` now answers both halves from one place: where to fly, and
- * what to call it.
+ * A VIEWER - about a third of production, and a role with no `Location` row
+ * at all - has no workplace, so a literal label promising one would be
+ * wrong, and flying to company coordinates unconditionally would land at
+ * `(0, 0)`. `mapHomeCentre` answers both halves from one place: where to
+ * fly, and what to call it.
  *
- * **Previously desktop-only**, so a mobile user who panned away
- * from their workplace had no way back to it.
+ * Renders on both platforms: a mobile user who pans away from their
+ * workplace needs a way back to it too.
  *
- * Lifted out of `index.tsx` rather than un-gated in place, for the reason
- * given about that file: it is ~1300 lines behind Mapbox, NextAuth
- * and a dozen tRPC queries and has no test, so a control living inside it is a
- * control nothing checks. Reachability is exactly what this ticket is about -
- * five of its six defects were controls that existed on one platform and not
- * the other - so "this button is in the tree at a mobile width" is worth being
- * able to assert rather than read off a diff.
+ * Lives as its own component rather than inline in `index.tsx`, because
+ * that file is ~1300 lines behind Mapbox, NextAuth and a dozen tRPC queries
+ * and has no test, so a control living inside it would be a control nothing
+ * checks. Reachability matters here - this button needs to exist at every
+ * viewport - so "this button is in the tree at a mobile width" is worth
+ * being able to assert rather than read off a diff.
  *
- * **Its mobile position is not from the phase 1 tokens**, which is a departure
- * from what the ticket expected. Those tokens position against the bottom
- * navigation, and the bottom is the one edge this control cannot use: Mapbox's
- * own `NavigationControl` is added at `bottom-right` in `addMapEvents.tsx`,
- * the explore sheet covers the lower viewport at `z-20`, and the navigation
- * sits above both at `z-index: 100`. The top edge is the only side nothing
- * else claims.
+ * **Its mobile position does not use the bottom-navigation-relative tokens
+ * used elsewhere**, because the bottom is the one edge this control cannot
+ * use: Mapbox's own `NavigationControl` is added at `bottom-right` in
+ * `addMapEvents.tsx`, the explore sheet covers the lower viewport at
+ * `z-20`, and the navigation sits above both at `z-index: 100`. The top
+ * edge is the only side nothing else claims.
  *
  * **`absolute` here only works because the caller renders this inside `#map`**,
- * which is `relative`. That was not true when this was written: the docblock
- * argued "the map row is already offset below the banner in `index.tsx`, so the
- * top of the map is clear", which was true of the map and not of this button -
- * it was a *sibling* of the map container with nothing positioned between it
- * and `#__next`, so `top-2` measured from the viewport and landed 16px under
- * `MobileBanner`. The call site was moved inside `#map` to fix that; keep it there.
- * The offsets below are relative to the map, not to the page.
+ * which is `relative`. Moved to a sibling of the map container with nothing
+ * positioned between it and `#__next`, `top-2` would measure from the
+ * viewport instead and land under `MobileBanner`. Keep the call site inside
+ * `#map`. The offsets below are relative to the map, not to the page.
  *
  * 44px on mobile against the desktop 32px, matching the touch target
  * settled on for the explore sheet's handle. jsdom measures nothing,

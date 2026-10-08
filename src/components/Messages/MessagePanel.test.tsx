@@ -5,11 +5,10 @@ import { UserContext } from "../../utils/userContext";
 import { EnhancedPublicUser, User } from "../../utils/types";
 
 /**
- * The Message/Map tab strip signalled the active tab by colour
- * alone - no `role="tab"`, no `aria-selected` - so both tabs announced
- * identically. Of the five segmented controls the accessibility sweep
- * covered, this is the one close enough to a real tablist to get full tab
- * semantics rather than `aria-pressed`.
+ * The Message/Map tab strip signals the active tab with `role="tab"` and
+ * `aria-selected`, not colour alone. Of the five segmented controls the
+ * accessibility sweep covers, this is the one close enough to a real
+ * tablist to get full tab semantics rather than `aria-pressed`.
  *
  * The header, message list and composer are stubbed out: the subject here is
  * the tab strip `MessagePanel` owns directly, and each child already has its
@@ -18,7 +17,7 @@ import { EnhancedPublicUser, User } from "../../utils/types";
  *
  * **That stubbing is why `MessagePanel.conversationSwitch.test.tsx` is a
  * separate file and must stay one.** It renders the real `MessageContent` and
- * `SendBar`, with Pusher and a real React Query behind them, because the defect
+ * `SendBar`, with Pusher and a real React Query behind them, because the risk
  * it covers lives inside `MessageContent`'s merge-by-id - stubbing that child
  * out would test nothing. A `jest.mock` is per module per file, so one file
  * cannot have `MessageContent` both stubbed and real. Reconciling the two

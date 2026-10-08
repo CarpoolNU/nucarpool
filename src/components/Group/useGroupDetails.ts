@@ -10,19 +10,12 @@ import {
 } from "./groupDetails";
 
 /**
- * The group-details form, owned in one place.
+ * The group-details form, owned in one place rather than once each in
+ * `NoGroupInfo`, `MobileNoGroupInfo`, `GroupInfo` and `MobileGroupInfo`.
  *
- * This state, the sync effect and the submit path used to be written out four
- * times - once each in `NoGroupInfo`, `MobileNoGroupInfo`, `GroupInfo`
- * and `MobileGroupInfo`.
- *
- * There is also only one thing to write. The old save issued two
- * mutations - `updateMessage` for `group.message` and `updateUserMessage` for
- * `carpool_search.group_message` - carrying the same JSON blob to two columns
- * that could then disagree, and `group.message` was VARCHAR(191) so the group
- * copy could fail while the driver's own copy landed. One self-scoped write
- * replaces both, `groupId` is no longer needed because the group no longer
- * stores a copy, and both columns have since been dropped.
+ * There is also only one thing to write: `group.message` and
+ * `carpool_search.group_message` have both been dropped from the schema, so
+ * the single self-scoped write below needs no `groupId` either.
  */
 
 type UseGroupDetailsArgs = {
@@ -87,9 +80,9 @@ export const useGroupDetails = ({ stored, canEdit }: UseGroupDetailsArgs) => {
     setDetails((prev) => (detailsEqual(prev, next) ? prev : next));
   }, [stored]);
 
-  // `mutateAsync`, not `mutate`. The old code did `await mutate(...)` and then
-  // fired a success toast - but `mutate` returns void, so the await resolved
-  // immediately and the toast appeared whether or not the write landed.
+  // `mutateAsync`, not `mutate`: `mutate` returns void, so `await mutate(...)`
+  // would resolve immediately and a success toast after it would fire
+  // whether or not the write landed.
   const { mutateAsync: updatePreferences } =
     trpc.user.groups.updatePreferences.useMutation({
       onSuccess: () => {

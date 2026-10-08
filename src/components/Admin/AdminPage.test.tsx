@@ -137,9 +137,8 @@ describe("/admin's header", () => {
   it("is absent from the server render, so nothing hydrates it", async () => {
     const { serverHtml } = await hydrateAdminAt(MOBILE_WIDTH);
 
-    // The pre-fix page rendered `<Header admin={true} />` unconditionally,
-    // above its own spinner branch, so this contained the desktop header at
-    // every width.
+    // An unconditional `<Header admin={true} />` above the spinner branch
+    // would contain the desktop header at every width.
     expect(headerIsIn(serverHtml)).toBe(false);
   });
 
@@ -165,9 +164,9 @@ describe("/admin's layout below the mobile breakpoint", () => {
   it("shows the notice instead of the dashboard on a phone", async () => {
     const { hydratedText } = await hydrateAdminAt(MOBILE_WIDTH);
 
-    // The dashboard is a 175px sidebar beside four charts, which left them
-    // about 200px at this width. The ticket's choice was to say so rather
-    // than render into it.
+    // The dashboard is a 175px sidebar beside four charts, which would leave
+    // them about 200px at this width - this says so rather than render into
+    // it.
     expect(hydratedText).toContain("mobile notice");
     expect(hydratedText).not.toContain("sidebar");
     expect(hydratedText).not.toContain("management");
@@ -206,17 +205,17 @@ describe("/admin's layout below the mobile breakpoint", () => {
 /**
  * The same choice, decided on height rather than width.
  *
- * The gate above was width-only, so a phone held in landscape is 667px wide,
- * lands above the breakpoint, and was served the full console into a content
- * row 343px tall - measured, at 667x375, against the compiled stylesheet. The
- * charts are the tallest fixed blocks in the repository, so what arrived was a
- * 600px chart showing 57% of itself.
+ * A width-only gate alone would let a phone through in landscape - 667px
+ * wide, above the breakpoint - and serve the full console into a content row
+ * 343px tall - measured, at 667x375, against the compiled stylesheet. The
+ * charts are the tallest fixed blocks in the repository, so what would
+ * arrive is a 600px chart showing 57% of itself.
  *
  * **None of this is a layout assertion**, and the distinction matters more
  * here than usual because the subject *is* geometry. jsdom does no layout, so
  * nothing below observes that 8.5% of 375px is 31.88px or that a chart
  * overflowed anything; it observes which subtree the page chose. The geometry
- * was measured in Chromium through `scripts/measure-layout.ts` and is recorded
+ * is measured in Chromium through `scripts/measure-layout.ts` and recorded
  * on the `admin-console-chart-fold` fixture, and it is regression-testable
  * only in the project's Playwright suite.
  */
@@ -224,8 +223,7 @@ describe("/admin's layout on a viewport that is wide enough but too short", () =
   it("shows the notice to a phone held in landscape", async () => {
     const { hydratedText } = await hydrateAdminAt(667, 375);
 
-    // The case the ticket was filed for, and the one the width-only gate let
-    // through.
+    // The case a width-only gate alone would let through.
     expect(hydratedText).toContain("mobile notice");
     expect(hydratedText).not.toContain("sidebar");
     expect(hydratedText).not.toContain("management");

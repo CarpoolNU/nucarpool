@@ -15,16 +15,18 @@ import {
  * My Group shows the membership as it is now, not as it was when the driver
  * last looked.
  *
- * **The defect.** `groups.me` took no options, `utils/trpc.ts` turns
- * `refetchOnMount` off globally, and `GroupSection` unmounts whenever the modal
- * closes or the sidebar tab changes. The three existing invalidation sites -
- * `requestHandlers.ts`, `useGroupDetails.ts`, `useGroupMembership.ts` - all run
- * in the client of whoever performed the mutation, so when a rider left, the
- * driver's cache was untouched. The driver reopened My Group inside the
- * five-minute `gcTime` and was shown the departed rider, with a "Remove"
- * button beside them and included in "Preview Group Route".
+ * **Why `groups.me` needs explicit invalidation reach.** `groups.me` takes
+ * no refetch options, `utils/trpc.ts` turns `refetchOnMount` off globally,
+ * and `GroupSection` unmounts whenever the modal closes or the sidebar tab
+ * changes. The three invalidation sites - `requestHandlers.ts`,
+ * `useGroupDetails.ts`, `useGroupMembership.ts` - all run in the client of
+ * whoever performed the mutation, so a rider leaving does not touch the
+ * driver's cache on its own. Without something re-asking the server, a
+ * driver reopening My Group inside the five-minute `gcTime` would be shown
+ * the departed rider, with a "Remove" button beside them and included in
+ * "Preview Group Route".
  *
- * **Invalidation could not have fixed it from either side.** Not from the
+ * **Invalidation alone cannot fix this from either side.** Not from the
  * rider's client, which cannot reach the driver's cache; and not from the
  * driver's, because React Query's `shouldFetchOn` short-circuits on
  * `refetchOnMount === false` before it ever consults staleness, so an
@@ -35,9 +37,9 @@ import {
  * **The client is built from the app's real `defaultQueryOptions`**, reached
  * through `requireActual` past this file's own mock of that module. A
  * `QueryClient` with test-local defaults carries React Query's permissive
- * `refetchOnMount`, under which this suite would pass against the unfixed
- * component - so the count alone would prove nothing. The control case is what
- * establishes that the real policy is in force.
+ * `refetchOnMount`, under which this suite would pass even if the real
+ * policy were never applied - so the count alone would prove nothing. The
+ * control case is what establishes that the real policy is in force.
  *
  * Desktop width throughout: the mobile branch is a different view of the same
  * query, and which view renders is not what this file is about. jsdom does no

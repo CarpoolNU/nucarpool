@@ -1,15 +1,12 @@
 /**
  * The driver's group preferences.
  *
- * Extracted from `GroupPage.tsx`, where four components each held
- * their own copy of the parse/serialise/state wiring. Pure functions live here
- * so they can be unit tested; the React wiring is in `useGroupDetails.ts`.
+ * Pure functions, kept out of `GroupPage.tsx`'s components so they can be
+ * unit tested independently of React; the wiring that uses them is in
+ * `useGroupDetails.ts`.
  *
- * These are real columns on the driver's `CarpoolSearch`. They were once a
- * `GROUP_DETAILS_V1:` JSON blob in `carpool_search.group_message`, read through
- * a fallback here while rows were migrated; the column was dropped after
- * `scripts/backfill-group-preferences.ts` had run in every environment, and the
- * fallback went with it. Reads are now just the three columns.
+ * These are real columns on the driver's `CarpoolSearch`. Reads are just the
+ * three columns.
  */
 
 import { GROUP_NOTES_MAX_LENGTH } from "../../utils/textLimits";
@@ -55,17 +52,15 @@ export const conversationStyleOptions = [
 /**
  * Tidies a value without shortening it. Both paths use it.
  *
- * A separate `normalizeDetails` used to clamp on read, because a corrupt
- * `GROUP_DETAILS_V1:` blob surfaced as raw note text that could be far longer
- * than `group_notes` accepts. With the legacy column dropped every value
- * reaching a read has come out of a `VARCHAR(90)` or `VARCHAR(40)` column,
- * written through a Zod input holding it to the same limit, so the clamp was a
- * no-op and the two functions were identical.
+ * Every value reaching a read comes out of a `VARCHAR(90)` or `VARCHAR(40)`
+ * column, written through a Zod input holding it to the same limit, so a
+ * separate read-time clamp would be a no-op - there is only this one
+ * function.
  *
- * Removing it is also the safer half. `textLimits.ts` counts UTF-16 code units
- * while MySQL counts characters, so a column-legal note of emoji has a JS
- * `length` above the limit; a `slice` on read would have cut a value the
- * database was perfectly happy to store. Not clamping on write is the same
+ * Not clamping at all is also the safer choice. `textLimits.ts` counts UTF-16
+ * code units while MySQL counts characters, so a column-legal note of emoji
+ * has a JS `length` above the limit; a `slice` on read would cut a value the
+ * database is perfectly happy to store. Not clamping on write is the same
  * decision made deliberately — the server rejects an over-length value visibly
  * rather than truncating it behind the driver's back.
  */
@@ -123,17 +118,11 @@ export type StoredGroupPreferences = {
 };
 
 /**
- * The single read path every screen uses.
+ * The single read path every screen uses, so a driver sees the same
+ * preferences whether or not they have a group yet.
  *
- * `NoGroupSection` used to read `user.groupMessage` while `GroupSection` read
- * `group.message`, so a driver could see different preferences depending on
- * whether they had a group yet. Both now resolve through this.
- *
- * Null and `""` both read as empty, and no longer need telling apart. While the
- * legacy column existed all-three-null meant "never saved" and selected the
- * fallback, so a driver who cleared the form had to store `""` to stop the old
- * blob coming back. With the column dropped there is nothing to fall back to,
- * and a save still writes all three regardless.
+ * Null and `""` both read as empty and are not told apart: a save always
+ * writes all three columns, so there is nothing to fall back to.
  */
 export const resolveGroupDetails = (
   stored: StoredGroupPreferences | null | undefined,

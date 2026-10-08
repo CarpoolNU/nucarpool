@@ -36,11 +36,9 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
   /**
    * The thread's own paginated source.
    *
-   * This used to read `request.conversation.messages`, which arrived inside
-   * `user.requests.me` and carried the complete history of *every* conversation
-   * on every mount. That payload is now bounded to one message per card, so the
-   * thread has to fetch its own — which also means it is no longer refetched
-   * wholesale every time the user navigates back to `/`.
+   * Fetched independently of `user.requests.me`, whose payload is bounded to
+   * one message per card: the thread needs its own source, which also means
+   * it is not refetched wholesale every time the user navigates back to `/`.
    *
    * "Next page" is *older*, because the procedure returns newest-first. Pages
    * are concatenated newest-page-first, so flattening walks backwards through
@@ -151,11 +149,12 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
    * Which message ids `markMessagesAsRead` has **confirmed**, and which are
    * out with a call that has not come back yet.
    *
-   * This was one ref holding the last id list, advanced immediately after
-   * `mutate` whether the call succeeded or not. A failure therefore recorded
-   * its ids as handled: the guard below then saw an unchanged list and did
-   * nothing, so those messages stayed unread until the component remounted
-   * while `onError` only logged. The unread badge kept counting them.
+   * A single ref holding one id list, advanced immediately after `mutate`
+   * regardless of outcome, would get this wrong: a failed call would record
+   * its ids as handled anyway, the guard below would then see an unchanged
+   * list and do nothing, and those messages would stay unread until the
+   * component remounts - with `onError` only logging, and the unread badge
+   * still counting them.
    *
    * Two sets rather than one list, because they answer different questions.
    * `confirmed` is what must never be sent again. `inFlight` is what must not
@@ -274,11 +273,10 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
   /**
    * Only follow the tail, never a prepend.
    *
-   * This used to fire on any change to `allMessages`, which was fine while the
-   * whole history arrived at once. With "load older" it would yank the reader
-   * from the message they had scrolled back to down to the newest one — the
-   * opposite of what they asked for. Keyed on the id of the *last* message, so
-   * appends scroll and prepends do not.
+   * Keying this on any change to `allMessages` would yank the reader from
+   * the message they scrolled back to down to the newest one on a "load
+   * older" prepend — the opposite of what they asked for. Keyed on the id
+   * of the *last* message instead, so appends scroll and prepends do not.
    */
   const lastMessageId = allMessages[allMessages.length - 1]?.id;
 
@@ -287,10 +285,10 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
   }, [lastMessageId, scrollToBottom]);
 
   /**
-   * Three answers, where this panel used to give one.
+   * Three answers, not one.
    *
-   * The message list rendered unconditionally, so "nobody has written
-   * anything", "still loading" and "the request failed" were one
+   * Rendering the message list unconditionally would make "nobody has
+   * written anything", "still loading" and "the request failed" one
    * pixel-identical empty white panel - with a live send box above it offering
    * to add to a conversation that might not have loaded.
    *
@@ -370,7 +368,7 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
       )}
       {messagesByDate.map(({ date, messages }, dateIndex) => (
         // React keys must be strings or numbers; `date` is a Date (and typed
-        // nullable), so it was being coerced on every render.
+        // nullable), so it needs coercing rather than using it directly.
         <div key={date ? date.toISOString() : `group-${dateIndex}`}>
           <div className="my-2 text-center text-sm text-gray-500">
             {date ? format(date, "EEEE, MMMM d, yyyy") : ""}
@@ -402,8 +400,8 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
                 {/* `whitespace-pre-line` keeps the newlines the composer already
                     stores. SendBar sets `white-space: pre-wrap` on the input box,
                     so a Shift+Enter on desktop or a plain Enter on mobile puts a
-                    literal newline in `message.content` — and this element, left
-                    at the initial `normal`, collapsed it to a space. `pre-line`
+                    literal newline in `message.content` — and this element would
+                    collapse it to a space if left at the initial `normal`. `pre-line`
                     rather than `pre-wrap` because the content arrives trim()-ed
                     from a contentEditable that accumulates incidental spaces:
                     keep the line breaks, still collapse the runs of spaces. */}
@@ -413,7 +411,7 @@ const MessageContent = ({ selectedUser }: MessageContentProps) => {
                   widen, it wraps. Measured, the same 26-character message is
                   44px tall against a 1040px panel and 112px against the 267px
                   one a landscape phone gets - four lines inside a conversation
-                  box that had 83px to show it in, so the message the cap was
+                  box with 83px to show it in, so the message the cap is
                   meant to keep readable could not be read at all.
 
                   So the cap follows the rest of the panel's chrome onto

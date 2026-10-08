@@ -35,11 +35,9 @@ import { averagePerGroup, percentOf } from "../../utils/adminQuickStats";
 /**
  * The admin dashboard.
  *
- * Every number here is aggregated by `user.admin` on the server.
- * This component used to download the user, group, request, conversation and
- * message tables and reduce them in the browser; it now receives finished
- * counts, so moving the slider narrows the query rather than re-filtering a
- * dataset that was already transferred in full.
+ * Every number here is aggregated by `user.admin` on the server, so moving
+ * the slider narrows the query rather than re-filtering an already-transferred
+ * dataset.
  */
 function AdminData() {
   // What the slider currently shows, updated continuously while dragging.

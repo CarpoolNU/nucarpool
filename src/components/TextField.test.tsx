@@ -1,17 +1,13 @@
 /**
- * SCRUM-593: `TextField` rendered its error message as a sibling `<span>`
- * with no `id`, no `role` and no `aria-invalid`/`aria-describedby` on the
- * input - so a screen-reader user who reached a failed field heard its name
- * and value and nothing else. The fix computes one id from the field's own
- * id/name, points the input's `aria-describedby` at it, and gives the
- * rendered message that id plus `role="alert"` so it is both resolvable and
- * announced.
+ * `TextField` computes one id from the field's own id/name, points the
+ * input's `aria-describedby` at it, and gives the rendered error message
+ * that id plus `role="alert"`, so a screen-reader user who reaches a failed
+ * field hears the error too, not just the name and value.
  *
  * `toHaveAccessibleDescription` is used throughout, not
  * `toHaveAttribute("aria-describedby", ...)`, because an attribute pointing
  * at a missing id passes the attribute check and still fails the user - the
- * dangling-reference case the ticket calls out as the likeliest way to get
- * this wrong.
+ * likeliest way to get this kind of wiring wrong.
  */
 import { render, screen } from "@testing-library/react";
 import type { FieldError } from "react-hook-form";

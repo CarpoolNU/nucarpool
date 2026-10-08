@@ -5,29 +5,30 @@ import AdminAuditLog from "./AdminAuditLog";
 /**
  * The audit log is re-read when the admin comes back to it.
  *
- * **The defect.** `admin.updateUserPermission` and `admin.resolveReport` each
+ * **The risk.** `admin.updateUserPermission` and `admin.resolveReport` each
  * append an `AdminAuditLog` row inside their transaction, and both are
  * reachable only from `UserManagement` and `AdminReports`. `/admin` renders
  * exactly one panel at a time, so this query is always inactive when a row is
  * written and always remounting when the admin returns - and `utils/trpc.ts`
- * turns `refetchOnMount` off globally. The admin changed a permission, clicked
- * back to Audit Log, and their own action was not there.
+ * turns `refetchOnMount` off globally by default. Without `refetchOnMount:
+ * "always"` on this query, an admin who changes a permission and clicks back
+ * to Audit Log would not see their own action there.
  *
- * **Why this is a remount test and not an invalidation test.** The obvious fix
- * was an `invalidate()` in those two mutations' `onSuccess`, and it does not
- * work: `invalidateQueries` defaults to `refetchType: "active"` so an inactive
- * query is only marked, and React Query's `shouldFetchOn` consults
+ * **Why this is a remount test and not an invalidation test.** The obvious
+ * alternative is an `invalidate()` in those two mutations' `onSuccess`, and it
+ * does not work: `invalidateQueries` defaults to `refetchType: "active"` so an
+ * inactive query is only marked, and React Query's `shouldFetchOn` consults
  * `refetchOnMount` *before* staleness, so the mark changes nothing on the
  * remount either. The behaviour that matters is therefore "a second mount
- * re-asks", which is what this counts. It is also the only version of the fix
- * that can show another admin's actions.
+ * re-asks", which is what this counts. It is also the only version of that
+ * fix that can show another admin's actions.
  *
  * **The client is built from the app's own `defaultQueryOptions`**, taken
  * through `requireActual` because this file mocks the module they live in. That
  * is the whole point: a `QueryClient` built with test-local defaults has
  * `refetchOnMount` at React Query's permissive default, under which this suite
- * would pass against the unfixed component. The control case below is what
- * proves the real policy is in force.
+ * would pass even if the real `refetchOnMount` policy were never applied. The
+ * control case below is what proves the real policy is in force.
  *
  * Counts are read off the `queryFn`, not off a render-time spy, for the reason
  * `trpcHarness.ts` gives: a render-time mock fires on passes React discards and

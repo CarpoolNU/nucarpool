@@ -1,10 +1,9 @@
 /**
- * SCRUM-596: `Radio` - the role selector on the profile page - rendered its
- * error as a bare `<p>` inside the `<label>` with no `id`, no `role="alert"`
- * and no `aria-describedby` on the input, the defect SCRUM-593 fixed on
- * `FormRadioButton`. It also had that component's second defect: the `<p>`
- * sits inside the wrapping label, so "name from content" folded the error
- * text into the radio's accessible *name*.
+ * `Radio` - the role selector on the profile page - gives its error an `id`,
+ * `role="alert"` and `aria-describedby` on the input, rather than a bare
+ * `<p>` with none of those. The `<p>` sits inside the wrapping `<label>`, so
+ * without `aria-label` on the input, "name from content" would fold the
+ * error text into the radio's accessible *name*.
  *
  * Asserted with `toHaveAccessibleDescription` rather than an attribute
  * check, for the dangling-reference reason `TextField.test.tsx` gives.
@@ -82,11 +81,12 @@ describe.each(BRANCHES)("Radio error association (%s)", (_branch, current) => {
 });
 
 /**
- * SCRUM-610 item 2: this radio's input is visually hidden but *focusable*, so
- * unlike `FormRadioButton`'s it was always reachable by keyboard - and gave no
- * sign of it. An input with no box of its own has nowhere for the browser's
- * default ring to be drawn, so a keyboard user tabbing through the profile
- * page's role selector could not see which of the three options they were on.
+ * This radio's input is visually hidden but *focusable*, unlike
+ * `FormRadioButton`'s - so it is reachable by keyboard, and needs its own
+ * visible sign of that: an input with no box of its own has nowhere for the
+ * browser's default ring to be drawn, so without `focusRing` a keyboard user
+ * tabbing through the profile page's role selector could not see which of
+ * the three options they were on.
  *
  * Read off the stylesheet rather than off the template, so a rule that moves
  * between the two arms or loses its `:focus-visible` is visible here. The

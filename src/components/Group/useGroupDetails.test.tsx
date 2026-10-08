@@ -5,8 +5,8 @@
  * `resolveGroupDetails`, `trimDetails`, `hasAnyDetail`. What it cannot
  * reach is the React wiring those functions were extracted *away* from, which
  * is where the interesting invariants live: a sync effect that must not
- * overwrite what the driver is typing, and a save path whose two previous bugs
- * were both about ordering rather than about values.
+ * overwrite what the driver is typing, and a save path whose correctness is
+ * about ordering rather than about values.
  *
  * This file also stands as the pattern for testing a hook that talks to tRPC.
  * `trpc` is mocked as a shape rather than through a real client and provider:
@@ -17,13 +17,13 @@
  * required - before any `const` in this file is initialised - so anything it
  * closed over would be read in its temporal dead zone.
  *
- * **`stored` no longer has to be referentially stable.** It did
- * when this file was written: the sync effect keyed on the identity of `stored`
- * and wrote a freshly built object into state, so a caller passing a new object
- * literal each render never converged, and `stored: freshStored()` inline in
- * `renderHook` cost about ninety seconds of climbing memory and then a 4GB
- * heap-limit abort. The effect now bails out when the resolved value is
- * unchanged, and the first two tests below are the ones that hold it to that.
+ * **`stored` does not have to be referentially stable.** If the sync effect
+ * keyed on the identity of `stored` and wrote a freshly built object into
+ * state regardless, a caller passing a new object literal each render would
+ * never converge, and `stored: freshStored()` inline in `renderHook` would
+ * climb memory for real, eventually hitting a heap-limit abort. The effect
+ * instead bails out when the resolved value is unchanged, and the first two
+ * tests below are the ones that hold it to that.
  *
  * The frozen module-level constants are kept anyway. They are not a workaround
  * any more, just the clearer way to write a test whose subject is the values
@@ -353,10 +353,10 @@ describe("useGroupDetails", () => {
         await result.current.save({ successMessage: "should not appear" });
       });
 
-      // The predecessor of this hook `await`ed a `mutate()` that returns void,
-      // so the success toast fired whether or not the write landed. That is the
-      // regression this asserts against - and `isSaving` clearing in `finally`
-      // is what keeps the button usable after a failure.
+      // `mutate()` returns void, so `await`ing it would make a success toast
+      // fire whether or not the write landed - the risk this asserts against.
+      // `isSaving` clearing in `finally` is what keeps the button usable
+      // after a failure.
       expect(mockedToast.success).not.toHaveBeenCalled();
       expect(mockedToast.error).toHaveBeenCalledWith(
         "Could not save your group details: Notes are too long",

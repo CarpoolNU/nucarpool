@@ -14,38 +14,37 @@ import {
  * it is worth being precise about why. jsdom does no layout and computes no
  * media queries, so it can never tell you that a button *looks* bigger at
  * 1440px — see `testing/viewport.ts`. What it can tell you is which tokens
- * React wrote into the `class` attribute, and that is exactly where this defect
- * lived: the desktop branch built each button's className as
- * `baseButton + (option === "user" && selectedButton)`, string concatenation
- * with no separator and a boolean as the right operand.
- *
- * Both outcomes were coerced into the string and destroyed the class that
- * happened to sit last in `baseButton`:
+ * React wrote into the `class` attribute, and that is exactly where a risk
+ * like this would live: building a button's className by string
+ * concatenation with no separator and a boolean as the right operand -
+ * `baseButton + (option === "user" && selectedButton)` - coerces both
+ * outcomes into the string and can destroy the class that happens to sit
+ * last in `baseButton`:
  *
  *   unselected -> `… text-xl lg:text-2xlfalse`
  *   selected   -> `… text-xl lg:text-2xlfont-bold !text-northeastern-red`
  *
- * So `lg:text-2xl` never applied to any of the three buttons, and the selected
- * one was red but never bold - only `!text-northeastern-red` survived, because
- * it happens to follow a space inside `selectedButton`.
+ * `lg:text-2xl` would then apply to none of the three buttons, and the
+ * selected one would be red but never bold - only `!text-northeastern-red`
+ * would survive, because it happens to follow a space inside
+ * `selectedButton`.
  *
- * Neither corrupted token is in the compiled stylesheet, which is the part
- * worth remembering: Tailwind scans *source text*, and these strings only ever
- * existed at runtime. So the browser matched no rule at all, and no amount of
- * looking at the CSS output would have shown it. The `class` attribute is the
- * only place the bug is visible.
+ * Neither corrupted token would be in the compiled stylesheet, which is the
+ * part worth remembering: Tailwind scans *source text*, and a string built
+ * this way only ever exists at runtime. So the browser would match no rule
+ * at all, and no amount of looking at the CSS output would show it. The
+ * `class` attribute is the only place a defect like this is visible.
  *
  * Asserted as **discrete tokens**, never as substrings of the whole string:
- * `className.includes("lg:text-2xl")` is true of `lg:text-2xlfalse`, so the
- * substring form passes against the bug it is meant to catch.
+ * `className.includes("lg:text-2xl")` would be true of `lg:text-2xlfalse`,
+ * so the substring form would pass against the very risk it is meant to
+ * catch.
  *
- * Buttons are found by their **exact** accessible name. They were once found
- * by a regular expression over the label instead, because each icon inside them
- * contributed its `alt` text to that name - "user User Profile", "car Carpool
- * Details". That was a second defect, and the matchers tightened along with
- * the fix: the regex form is precisely what could not see it,
- * since /User Profile/ matches "user User Profile" as happily as it matches the
- * right answer.
+ * Buttons are found by their **exact** accessible name, not a regular
+ * expression over the label: each icon inside them contributes its `alt`
+ * text to that name - "user User Profile", "car Carpool Details" - so
+ * /User Profile/ would match "user User Profile" as happily as it matches
+ * the exact answer, and could not catch a wrong or missing icon `alt`.
  */
 
 restoreViewportAfterEach();

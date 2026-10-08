@@ -6,12 +6,10 @@ import { toQueryState, type QueryState } from "../../utils/queryState";
 /**
  * The map's failure state.
  *
- * `mapbox.geoJsonUserList` was the one list on `/` that SCRUM-509 missed: it
- * was destructured to `data` alone, so a Mapbox or server failure rendered an
- * empty map with no message and nothing to press. The acceptance criterion is
- * "a failed map query shows an error with a retry", and this is the level it
- * can be checked at - `index.tsx` cannot be rendered in jsdom, which is why the
- * overlay was lifted out of it in the first place.
+ * The acceptance criterion is "a failed map query shows an error with a
+ * retry", and this is the level it can be checked at - `index.tsx` cannot
+ * be rendered in jsdom, which is why this overlay is its own component
+ * rather than a branch inside that page.
  *
  * The states are built with the real `toQueryState` over a `QueryLike` literal
  * rather than with hand-written `{ status }` objects. That is deliberate: the
@@ -77,17 +75,18 @@ describe("MapUsersError", () => {
   });
 
   it("renders nothing when the query succeeded, including with no users", () => {
-    // The distinction the whole fix is about, from the other side: a ready
-    // query with an empty result is a genuine answer and must not be dressed
-    // up as a failure.
+    // The distinction this component exists to make, from the other side: a
+    // ready query with an empty result is a genuine answer and must not be
+    // dressed up as a failure.
     const { container } = render(<MapUsersError state={fromQuery({})} />);
 
     expect(container).toBeEmptyDOMElement();
   });
 
   it("reports a query that is both failed and loading as failed", () => {
-    // `toQueryState` checks `isError` first on purpose - a spinner that is
-    // really a failure is the bug it replaced. Asserted through this component
+    // `toQueryState` checks `isError` first on purpose - checking `isLoading`
+    // first would show a spinner for what is really a failure. Asserted
+    // through this component
     // because that ordering is what decides whether the retry is reachable
     // during a refetch of an already-failed query.
     render(

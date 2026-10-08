@@ -18,9 +18,10 @@ type RadioProps = RadioOwnProps &
  * The focus indicator, shared by both arms below.
  *
  * The input is visually hidden (see `className` on it), so it has no box of
- * its own for the browser's default ring to be drawn around - the control was
- * reachable by keyboard and gave no sign of it. `:has()` keys the ring off the
- * hidden input's state and draws it on the label the user can actually see.
+ * its own for the browser's default ring to be drawn around - without this,
+ * the control would be reachable by keyboard and give no visible sign of it.
+ * `:has()` keys the ring off the hidden input's state and draws it on the
+ * label the user can actually see.
  *
  * `:focus-visible` rather than `:focus`, so a pointer click does not paint a
  * ring; and black rather than this repo's usual red, because the selected arm's
@@ -108,7 +109,7 @@ const Radio = React.forwardRef<HTMLInputElement, RadioProps>(
         // Explicit, rather than left to "name from content" on the wrapping
         // `<label>`: the error paragraph is also inside that label, so
         // content-based naming would fold its text into the accessible
-        // *name* the instant an error renders (SCRUM-593 / SCRUM-596).
+        // *name* the instant an error renders.
         aria-label={label}
         // Not `aria-invalid`: the ARIA spec doesn't support it on `radio`.
         aria-describedby={errorId}

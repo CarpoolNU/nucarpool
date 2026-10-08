@@ -39,11 +39,11 @@ const UserManagement = ({ permission }: UserManagementProps) => {
    * pass too and then fetches exactly as before. `useProfileImage` gates its
    * presigned-URL call the same way and for the same reason.
    *
-   * Nothing flashes while it is held back, but that now takes saying so:
-   * React Query reads a disabled query as `ready` rather than as loading, so
-   * `HELD_QUERY_STATE` supplies the spinner for the deferred pass. That used
-   * to be a `useState(true)` cleared only by `users` arriving - which is
-   * precisely why a *failed* query never cleared it either.
+   * Nothing flashes while it is held back, but that takes saying so: React
+   * Query reads a disabled query as `ready` rather than as loading, so
+   * `HELD_QUERY_STATE` supplies the spinner for the deferred pass. A
+   * `useState(true)` cleared only by `users` arriving would have exactly
+   * that problem: a *failed* query would never clear it either.
    */
   const isHydrated = useIsHydrated();
 
@@ -56,7 +56,8 @@ const UserManagement = ({ permission }: UserManagementProps) => {
   /*
    * `HELD_QUERY_STATE` only while the query is gated; `toQueryState` the
    * moment it is live. Reading the real flags is what lets a failure be a
-   * failure - the previous boolean could only ever count up to "arrived".
+   * failure - a boolean that only tracks "has data arrived" could never
+   * express that.
    */
   const usersState = isHydrated ? toQueryState(usersQuery) : HELD_QUERY_STATE;
   const utils = trpc.useUtils();

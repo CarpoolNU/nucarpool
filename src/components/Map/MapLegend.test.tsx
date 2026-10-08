@@ -9,14 +9,12 @@ import {
 } from "../../testing/viewport";
 
 /**
- * The pin-colour key, now that mobile has one.
+ * The pin-colour key, on both mobile and desktop.
  *
- * The legend was `!isMobile`-gated in `index.tsx`, so the colour encoding was
- * unexplained on the platform where the map is most of the screen. It is
- * reachable now, but collapsed behind a toggle rather than simply un-gated -
+ * Mobile reaches the legend behind a toggle rather than simply un-gated -
  * a three-row panel permanently over a phone-sized map costs more than it
- * explains, and the bottom-left anchor it used on desktop is under the explore
- * sheet on mobile anyway.
+ * explains, and the bottom-left anchor desktop uses would sit under the
+ * explore sheet on mobile anyway.
  *
  * So there are two claims to pin, and they pull in opposite directions:
  * mobile must be able to *reach* the entries, and must not show them
@@ -102,10 +100,10 @@ describe("MapLegend on desktop", () => {
   });
 
   it("shows the entries with no toggle at all", () => {
-    // Desktop is unchanged, and this is the assertion that says so. It would
-    // fail against a version that applied the collapse state on both
-    // platforms - which would have hidden a panel that has always been open
-    // here, with a control that had never existed.
+    // Desktop has no toggle and no collapse state: this would fail against
+    // a version that applied the collapse state on both platforms, hiding
+    // a panel that should always be open here behind a control that should
+    // not exist.
     render(<MapLegend role="RIDER" />);
 
     expect(screen.getByText(MY_DESTINATION)).toBeInTheDocument();
@@ -116,7 +114,7 @@ describe("MapLegend on desktop", () => {
 
   it("shows every entry a viewer should see", () => {
     // VIEWER is the role that gets all three rows, so it is the one that
-    // catches an entry dropped while the entries were moved inside a wrapper.
+    // would catch a dropped entry.
     render(<MapLegend role="VIEWER" />);
 
     for (const label of [

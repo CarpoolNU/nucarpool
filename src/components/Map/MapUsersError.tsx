@@ -5,13 +5,13 @@ import type { QueryState } from "../../utils/queryState";
  * The map's own failure state: `mapbox.geoJsonUserList` could not be loaded, so
  * the map has no pins.
  *
- * **Why this exists at all.** That query was the one list on `/` that
- * SCRUM-509 missed. Every other one goes through `toQueryState` and renders a
- * `QueryError` with a retry; this one was destructured to `data` alone, so a
- * Mapbox or server failure left the primary map with no pins, no message and
- * nothing to press - indistinguishable from an area where nobody has signed
- * up. That is the worst failure mode a matching product has, because it looks
- * like an answer rather than an outage.
+ * **Why this exists at all.** Every other query on `/` goes through
+ * `toQueryState` and renders a `QueryError` with a retry; `mapbox.geoJsonUserList`
+ * needs the same treatment, or a Mapbox or server failure leaves the primary
+ * map with no pins, no message and nothing to press - indistinguishable from
+ * an area where nobody has signed up. That is the worst failure mode a
+ * matching product has, because it looks like an answer rather than an
+ * outage.
  *
  * **Why it is a component rather than a branch inside `index.tsx`.** For the
  * reason `RecentreButton`'s docblock gives: that file is ~1300 lines behind

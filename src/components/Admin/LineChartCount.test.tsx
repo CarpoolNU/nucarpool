@@ -5,11 +5,10 @@ import { buildLineChartCSV } from "../../utils/adminDashboardCsv";
 import { IMPORTED_SIGNUP_DATE_NOTE } from "../../utils/adminDashboardLabels";
 
 /**
- * The growth chart and its CSV export used to name their series
- * separately, so the export could go on calling a column "InactiveUserCount"
- * after the chart stopped claiming to know that. This pins the CSV headers to
- * the labels the chart actually hands Chart.js, not to a shared constant, so a
- * label written inline in the component again would fail here.
+ * The growth chart and its CSV export must name their series from the same
+ * source, not separately: this pins the CSV headers to the labels the chart
+ * actually hands Chart.js, not to a shared constant, so a label written
+ * inline in the component again would fail here.
  *
  * Canvas is unreachable from jsdom, so `Line` is replaced with a stub that
  * records the data it was given.

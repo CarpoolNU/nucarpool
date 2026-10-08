@@ -5,36 +5,20 @@ import { invalidateMembershipCaches } from "../../utils/groups/invalidateMembers
 import { toastCarpoolEnded } from "./CarpoolEndedToast";
 
 /**
- * Deleting a group and removing a rider from it, owned in one place.
+ * Deleting a group and removing a rider from it, owned in one place rather
+ * than duplicated between desktop and mobile.
  *
- * These mutations and handlers used to exist twice: once in
- * `GroupMembers` (desktop) and once in `MobileGroupMembers`. The two had already
- * drifted in three ways, all resolved here:
+ * The rule for closing the view is "leave the view when the caller is the
+ * one who left" - not a count of the *other* riders, which says nothing
+ * about whether the caller is still in the group.
  *
- *  1. `MobileGroupMembers` carried an empty `if (riders.length <= 1) {}` branch
- *     where the desktop copy closed the modal - so on mobile that path skipped
- *     `groups.me` invalidation entirely and the member list went stale after a
- *     removal.
- *  2. The desktop condition was itself wrong. `riders.length <= 1` counts the
- *     *other* riders, which says nothing about whether the caller is still in
- *     the group: a rider leaving a group with two other riders stayed on a page
- *     for a group they had just left, while a driver removing one rider from a
- *     two-person group had the modal shut on them. The rule is now "leave the
- *     view when the caller is the one who left", which is what both cases
- *     actually wanted.
- *  3. Desktop threw a `TRPCClientError` from inside a click handler when
- *     `carpoolId` was missing (unhandled, no feedback); mobile silently did
- *     nothing. Both now surface an error toast.
+ * A missing `carpoolId` surfaces as an error toast through `react-toastify`,
+ * rather than an unhandled throw or silence.
  *
- * Toasts go through `react-toastify`. The desktop copy used a second toast
- * library for the same three events; that one has since been removed, so
- * `react-toastify` is now the only one.
- *
- * This took the whole driver row as an argument until that was fixed, purely
- * to read two fields off it, which made the hook uncallable for a group that
- * has no DRIVER member - the one group whose members most need the removal path, since
- * leaving is all the server will let them do. It now takes the group id and an
- * optional driver id instead.
+ * Taking the whole driver row as an argument, rather than the group id plus
+ * an optional driver id, would make this hook uncallable for a group that
+ * has no DRIVER member - the one group whose members most need the removal
+ * path, since leaving is all the server will let them do.
  */
 
 type UseGroupMembershipArgs = {
@@ -43,9 +27,9 @@ type UseGroupMembershipArgs = {
    * the driver's.
    *
    * Both name the same group whenever there is a driver, and a group with no
-   * DRIVER member has no driver row to read it off at all - which was enough to
-   * make this hook uncallable in exactly the state whose only permitted action
-   * is the one it exists to perform.
+   * DRIVER member has no driver row to read it off at all, so deriving it
+   * from the driver would make this hook uncallable in exactly the state
+   * whose only permitted action is the one it exists to perform.
    */
   groupId: string | null;
   /**
@@ -53,8 +37,8 @@ type UseGroupMembershipArgs = {
    *
    * `groups.edit` requires the field but deliberately ignores it on the remove
    * path, deriving the driver from the group's own membership instead - its
-   * input schema says so, and crediting the seat to client input is the bug
-   * that made it stop. It is still sent when known, so the payload for a group
+   * input schema says so, because crediting the seat to client input would be
+   * exploitable. It is still sent when known, so the payload for a group
    * that has a driver is unchanged.
    */
   driverId?: string;

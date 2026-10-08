@@ -105,13 +105,13 @@ function BarChartDaysFrequency({
      *
      * This is a flex item of `AdminData`'s column, and that column's children
      * sum to more than the content row at every viewport. `flex-shrink`
-     * defaults to 1 and `min-height: auto` does not stop it, so previously
-     * the box was shrunk to whatever was left - measured in Chromium
-     * at 151.5px at 1440x900 and 24px at 667x582, against a class string that
-     * says 500. It is silent, which is what made it survive: nothing about the
-     * markup reads as wrong. The other two chart blocks escape it by declaring
-     * a `min-h-` floor instead, because a minimum is a floor a shrink cannot
-     * cross.
+     * defaults to 1 and `min-height: auto` does not stop it, so without
+     * `shrink-0` the box would be shrunk to whatever was left - measured in
+     * Chromium at 151.5px at 1440x900 and 24px at 667x582, against a class
+     * string that says 500. That would be silent, since nothing about the
+     * markup would read as wrong. The other two chart blocks escape it by
+     * declaring a `min-h-` floor instead, because a minimum is a floor a
+     * shrink cannot cross.
      *
      * A fixed height plus no shrink rather than that same floor, and the
      * difference is about the canvas rather than about house style.

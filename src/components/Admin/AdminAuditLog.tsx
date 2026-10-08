@@ -26,8 +26,8 @@ import {
  * Only `actorId` is always a user. `targetId` names whatever the action acted
  * on — a user for `updateUserPermission`, a *report* for `resolveReport` — so
  * the Target cell asks `adminAuditLabels` which table the id belongs to rather
- * than resolving every row against the user map. That map-everything approach
- * is what left every report-resolution row showing a bare cuid (SCRUM-647).
+ * than resolving every row against the user map, which would show a bare
+ * cuid for every report-resolution row.
  */
 const AdminAuditLog = () => {
   /*

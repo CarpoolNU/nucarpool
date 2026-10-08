@@ -14,31 +14,27 @@ import {
 /**
  * What a map pin tap opens, and whether it can be closed again.
  *
- * This assertion was written earlier and deferred to this
- * ticket, because the capability did not exist to test: `MapConnectPortal` was
- * `!isMobile`-gated in `index.tsx` while the map's click handlers ran on every
- * platform, so a phone tap set `popupUsers` and nothing rendered - and nothing
- * could clear it again, for the rest of the session. A test for a capability
- * that does not exist is a failing test rather than a guard, so phase 5 left
- * it here.
+ * `MapConnectPortal` renders on every platform with no viewport gate, since
+ * the map's click handlers that set `popupUsers` run on every platform too:
+ * gating the portal alone would leave a phone tap setting state that
+ * nothing renders and nothing can clear, for the rest of the session.
  *
- * The dismissal half is the point. "Something renders" was never the whole
- * defect: the state being unclearable was the worse half, and it is the half a
- * presence assertion misses entirely.
+ * The dismissal half is the point, not just "something renders": an
+ * unclearable state is worse than nothing rendering, and a presence
+ * assertion alone misses that entirely.
  *
- * **Whether an opened sheet can be acted on came later**, and is the other
- * reason to read this file. The original seven tests asked only whether the
- * sheet appeared and whether it went away; the card inside it had no Connect
- * control at a phone width and nothing here noticed for a release. "Offers a
- * way to act on the person it is describing" is that gap closed, and the
- * desktop block's "keeps exactly the two controls it had" is the other side of
- * it - the fix is viewport-conditional, so both viewports need an assertion.
+ * **Whether an opened sheet can be acted on matters too.** The card inside
+ * it needs a Connect control at a phone width - "offers a way to act on the
+ * person it is describing" - while the desktop block keeps exactly the two
+ * controls `UserCard` already gives it. The two assertions cover both sides
+ * of one viewport-conditional behaviour.
  *
  * *Not covered, and not coverable here:* that the sheet clears the bottom
  * navigation, that its height is reasonable, or that it sits above the
  * navigation's `z-index: 100`. jsdom does no layout and computes no stacking -
- * see `src/testing/viewport.ts`. The positioning is arithmetic from that change's
- * tokens, not a measurement, and wants a look on a real phone.
+ * see `src/testing/viewport.ts`. The positioning is arithmetic from
+ * `MapConnectPortal.tsx`'s own tokens, not a measurement, and wants a look
+ * on a real phone.
  */
 
 /** Asserted by name below; `mock`-prefixed for `jest.mock`'s hoisting. */
@@ -152,20 +148,17 @@ describe("a map pin tap at a mobile viewport", () => {
 
   it("opens something showing the tapped user", () => {
     /*
-     * **This one passes before the fix as well, and saying so matters.** The
-     * defect was the `!isMobile` gate in `index.tsx`; this suite renders the
-     * component directly, so it never sees that gate. The old component had no
-     * viewport logic at all and rendered its cards whenever it was given any,
-     * so of course it satisfies this.
+     * **A positive control.** This renders the component directly, so it
+     * never sees any viewport gate in `index.tsx` - that gate's absence is
+     * verified by reading the diff, since `index.tsx` has no test of its
+     * own: it is ~1300 lines behind Mapbox, NextAuth and a dozen tRPC
+     * queries, which is the same reason decisions get lifted out of it.
+     * There is no decision left here to lift - the answer is "always
+     * render" - so there is nothing to make pure and test.
      *
-     * What is genuinely covered below is the component's half of the contract -
-     * that a mobile render carries a control able to clear the selection - and
-     * that is what could regress. The gate's removal is verified by reading the
-     * diff, because `index.tsx` has no test: it is ~1300 lines behind Mapbox,
-     * NextAuth and a dozen tRPC queries, which is the same reason earlier work
-     * had for lifting decisions out of it. There is no decision left here to
-     * lift - the answer is now "always render" - so there is nothing to make
-     * pure and test.
+     * What is genuinely covered below is the component's half of the
+     * contract - that a mobile render carries a control able to clear the
+     * selection - and that is what could regress.
      */
     renderPortal();
 
@@ -203,18 +196,16 @@ describe("a map pin tap at a mobile viewport", () => {
 
   it("offers a way to act on the person it is describing", async () => {
     /*
-     * The assertion this suite was missing, and the one the sheet failed.
-     * Seven tests covered whether it opened and whether it closed; none asked
-     * whether the card inside it could be *used*. It could not: `UserCard`'s
-     * `View Route` + `Connect` row is behind `!isMobile`, the replacement
-     * `Connect!` was behind a prop this component does not pass, and no
-     * card-tap path existed to turn either on. A user tapped a pin, read who
-     * they could carpool with, and had the favourite star and a close button.
+     * Driven through to a card the reader can act on, not just a card that
+     * is present: `UserCard`'s `View Route` + `Connect` row is desktop-only,
+     * and the `Connect!` replacement needs `variant` threaded to this card
+     * specifically. Without that wiring, a user tapping a pin would read who
+     * they could carpool with and have only the favourite star and a close
+     * button to act on.
      *
      * Driven through to `requests.create` rather than stopping at presence,
-     * because "a Connect button exists" is what the fix would satisfy
-     * accidentally if `variant` were threaded to the wrong card in a
-     * multi-pin sheet.
+     * because "a Connect button exists" is satisfied even if `variant` were
+     * threaded to the wrong card in a multi-pin sheet.
      */
     renderPortal();
 
@@ -249,12 +240,12 @@ describe("a map pin tap at a mobile viewport", () => {
 
   it("keeps its own height cap rather than the desktop one", () => {
     /*
-     * The two branches stay separate expressions; merging them was considered
-     * and rejected, because this sheet is bottom-anchored against
-     * the navigation and the desktop column is top-anchored under desktop
-     * chrome, so the two budgets share no term. The desktop token reserves
-     * four margins that do not exist here, and applying it to the sheet would
-     * make its height a function of chrome it sits nowhere near.
+     * The two branches stay separate expressions rather than merging,
+     * because this sheet is bottom-anchored against the navigation and the
+     * desktop column is top-anchored under desktop chrome, so the two
+     * budgets share no term. The desktop token reserves four margins that
+     * do not exist here, and applying it to the sheet would make its height
+     * a function of chrome it sits nowhere near.
      *
      * The positive half is the assertion that makes the negative one mean
      * something - without it this passes just as well when the element is not
@@ -275,8 +266,8 @@ describe("a map pin click at a desktop viewport", () => {
   });
 
   it("still opens showing the clicked user", () => {
-    // Passes before and after. Desktop was never the broken side, and this is
-    // what says the mobile branch did not cost it anything.
+    // A positive control: desktop's own render, unaffected by the
+    // mobile-only branch elsewhere in this component.
     renderPortal();
 
     expect(screen.getByText("Riley")).toBeInTheDocument();
@@ -309,14 +300,12 @@ describe("a map pin click at a desktop viewport", () => {
 
   it("caps the card list with the token that reserves the chrome above it", () => {
     /*
-     * A class-request assertion and deliberately nothing more. The defect
-     * fixed here was arithmetic - the budget reserved 128px for chrome
-     * that measures 106.73px, so the list was capped 21px shorter than its own
-     * container at every window height - and **none of that is assertable
-     * here**. jsdom does no layout and evaluates no `calc()` against a
-     * viewport, so the numbers were measured in Chromium against the compiled
-     * stylesheet and the geometry belongs in the Playwright suite that covers
-     * this component's layout directly.
+     * A class-request assertion and deliberately nothing more. The
+     * arithmetic behind the token is not assertable here: jsdom does no
+     * layout and evaluates no `calc()` against a viewport, so the
+     * underlying numbers are measured in Chromium against the compiled
+     * stylesheet, and the geometry belongs in the Playwright suite that
+     * covers this component's layout directly.
      *
      * What this catches is the regression that has no other symptom: the cap
      * reverting to a literal. The token's *value* is verified by the four
@@ -332,9 +321,9 @@ describe("a map pin click at a desktop viewport", () => {
 
   it("adds no close button, so the desktop tab order is unchanged", () => {
     // Deliberate rather than an omission. `Dialog` already gives desktop
-    // backdrop-click and Escape, and the ticket's criterion is that no desktop
-    // behaviour changes - an extra focusable control in the panel would be
-    // one. This is also why the branch is `useIsMobile` and not a breakpoint
+    // backdrop-click and Escape, and an extra focusable control in the
+    // panel would be an unwanted desktop behaviour change. This is also why
+    // the branch is `useIsMobile` and not a breakpoint
     // utility: a control hidden by CSS would still be in the tree, and this
     // assertion would pass while the tab order had in fact changed.
     renderPortal();

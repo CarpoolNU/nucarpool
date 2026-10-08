@@ -1,26 +1,26 @@
 /**
  * The Terms and Conditions gate, and whether assistive technology can see it.
  *
- * `ComplianceModal` used to wrap both its backdrop and its `Dialog.Panel` in a
- * single `div` carrying `aria-hidden="true"`. `aria-hidden` applies to the
- * whole subtree and no descendant can opt back in, so every control in the
- * dialog was removed from the accessibility tree - while still rendering,
- * still being visible, and still being clickable with a mouse.
+ * `aria-hidden` applies to the whole subtree and no descendant can opt back
+ * in, so the backdrop and the `Dialog.Panel` must never share one wrapping
+ * element carrying it - that would remove every control in the dialog from
+ * the accessibility tree while it still renders, is still visible, and is
+ * still clickable with a mouse.
  *
- * That mattered more here than anywhere else in the app. This dialog is
+ * That matters more here than anywhere else in the app: this dialog is
  * rendered over everything for any user who has not accepted the terms, its
  * `onClose` is a deliberate no-op, and "I Agree" is the only way past it. A
- * screen-reader user was handed a dialog with no announced exit.
+ * screen-reader user excluded from it would have no announced exit.
  *
  * **What makes these tests work at all**: Testing Library resolves `*ByRole`
  * against the accessibility tree, so `getByRole` *without* `{ hidden: true }`
- * fails on the defect and passes on the fix, for markup that is byte-identical
- * to `getByText` either way. That difference is the whole assertion - a
- * `getByText` here would have passed against the bug.
+ * would fail if `aria-hidden` ever applied here, for markup that is
+ * byte-identical to `getByText` either way. That difference is the whole
+ * assertion - a `getByText` here would pass regardless.
  *
  * The backdrop assertions are not decoration. Deleting `aria-hidden` outright
- * would also make the role queries pass, so the fix needs pinning from both
- * sides: the panel reachable, the blur layer still hidden.
+ * would also make the role queries pass, so the invariant needs pinning from
+ * both sides: the panel reachable, the blur layer still hidden.
  *
  * jsdom computes no layout and no `backdrop-filter`, so the blur is asserted as
  * the class that produces it and nothing more. See `src/testing/viewport.ts`.

@@ -1,24 +1,25 @@
 /**
- * The first-run driver.js tour, and the two things that used to destroy it.
+ * The first-run driver.js tour, and the two reasons a dependency on the
+ * wrong value would destroy it on every render.
  *
- * `WelcomeTutorial` built and started its tour inside a `useEffect` whose
- * dependency array contained `handleComplete`, a `useCallback` over the object
- * returned by `trpc.user.completeTutorial.useMutation()`. React Query v5's
+ * `handleComplete` is a `useCallback` over the object
+ * `trpc.user.completeTutorial.useMutation()` returns. React Query v5's
  * `useMutation` ends in `return { ...result, mutate, mutateAsync: result.mutate }`
- * - a fresh object literal on *every* render - so that dependency never
- * compared equal and the effect's cleanup-plus-setup pair ran on every render
- * of the component, not once per mount.
+ * - a fresh object literal on *every* render - so that object is never
+ * referentially stable. If the tour effect depended on it directly, the
+ * effect's cleanup-plus-setup pair would run on every render of the
+ * component, not once per mount.
  *
- * The cleanup was `driverInstance.destroy()`, and driver.js's public `destroy`
+ * The cleanup is `driverInstance.destroy()`, and driver.js's public `destroy`
  * is bound to `h(false)`. The `false` is what makes it skip the
  * `onDestroyStarted` guard and fall straight through to the real teardown,
- * which still invokes `onDestroyed` - which was wired to `handleComplete`. So
- * every re-render tore the live tour down, marked the tutorial complete in the
- * database, and started a new tour from step 1.
+ * which still invokes `onDestroyed` - wired to `handleComplete`. So that
+ * dependency would tear the live tour down, mark the tutorial complete in the
+ * database, and start a new tour from step 1, on every single render.
  *
  * ---
  *
- * **Why the driver.js fake is shaped the way it is.** The defect lives in the
+ * **Why the driver.js fake is shaped the way it is.** The risk lives in the
  * interaction between React's effect lifecycle and driver.js's teardown, so the
  * fake has to reproduce driver.js's teardown faithfully or the test proves
  * nothing. Read off `node_modules/driver.js/dist/driver.js.cjs` v1.8.0:
@@ -43,12 +44,12 @@
  * double-invokes effects on mount - setup, cleanup, setup - so "exactly one
  * driver.js instance is constructed" is not a statement that can be true
  * there, however correct the component is. The acceptance criteria are counts
- * of *constructions*, so they are asserted with `reactStrictMode: false`, which
- * is what the ticket's original measurement used and what production actually
- * runs. The last block puts StrictMode back and asserts the thing that does
- * survive the double-invoke: one *live* tour and zero mutations. Both matter -
- * the first is the regression, the second is what proves the cleanup no longer
- * completes the tutorial even when React is the one calling it.
+ * of *constructions*, so they are asserted with `reactStrictMode: false`,
+ * which matches what production actually runs. The last block puts
+ * StrictMode back and asserts the thing that does survive the double-invoke:
+ * one *live* tour and zero mutations. Both matter - the first catches a
+ * construction-count regression, the second proves the cleanup does not
+ * complete the tutorial even when React is the one calling it.
  */
 
 import { act, configure, render } from "@testing-library/react";
@@ -130,21 +131,15 @@ jest.mock("react-toastify/unstyled", () =>
 
 /**
  * `completeTutorial` is React Query's **real** `useMutation`, through
- * `testing/trpcHarness.ts`.
+ * `testing/trpcHarness.ts`. Nothing here is hand-reproduced: the object whose
+ * identity the effect must not depend on is the one React Query itself
+ * builds, so the test's subject is a property of the real hook rather than
+ * of a fake that could only ever be as faithful as its author made it.
  *
- * This file used to hand-write the result as `() => ({ mutateAsync, isPending:
- * false })`, with a comment explaining that the fresh object literal per call
- * was reproducing what v5 returns and that "a fake returning one frozen object
- * would hide the defect". That is the whole premise of the suite, and holding it
- * up by hand is the weakest possible way to state it - the test's subject was a
- * property of the fake, so it could only ever be as true as the fake's author
- * believed. Now nothing is being reproduced: the object whose identity the
- * effect must not depend on is the one React Query itself builds.
- *
- * Two things follow that the old shape did not give. `onSuccess` now genuinely
- * fires, on React Query's own timeline, so `handleComplete`'s completion path -
- * `invalidate`, the session `update`, the ref reset - is exercised rather than
- * skipped. And `mutationFn` counts mutations the client actually *ran*.
+ * That buys two things. `onSuccess` genuinely fires, on React Query's own
+ * timeline, so `handleComplete`'s completion path - `invalidate`, the session
+ * `update`, the ref reset - is exercised rather than skipped. And
+ * `mutationFn` counts mutations the client actually *ran*.
  *
  * `user.me` is declared with no hooks because the component never queries it.
  * It is here for `useUtils`, which mirrors the spec's paths: `onSuccess` reaches
@@ -177,16 +172,13 @@ const completeTutorial = () => trpcSpies("user.completeTutorial").mutationFn;
  * Lets a fired mutation reach its `mutationFn`, and its `onSuccess` run.
  *
  * React Query dispatches a mutation through a retryer that starts on a
- * microtask, so nothing is recorded during the call that triggers it. The old
- * fake's `mutateAsync` was a bare `jest.fn()` and therefore recorded
- * synchronously, which is the only reason the assertions here used to be
- * makeable in the same tick - a fact about the fake, not about the component.
+ * microtask, so nothing is recorded during the call that triggers it.
  *
  * Draining is what keeps the *negative* cases honest too. "Fired no mutation"
  * is trivially true of every one of these tests at the instant the trigger
  * returns, so without this they would pass against a component that completes
- * the tutorial on every teardown - which is exactly the defect this file
- * exists for.
+ * the tutorial on every teardown - which is exactly what this file guards
+ * against.
  */
 const settleMutations = () =>
   act(async () => {
@@ -361,7 +353,7 @@ describe.each([
 
     /*
      * Both teardowns before the drain, and the title says "in one tick"
-     * because with the real mutation that is now a distinction the test has to
+     * because with the real mutation this is a distinction the test has to
      * make. `isCompletingRef` is what blocks the second completion, and it is
      * only held *while the first mutation is in flight* - `onSuccess` clears
      * it. Draining between the two calls would therefore see two mutations.
