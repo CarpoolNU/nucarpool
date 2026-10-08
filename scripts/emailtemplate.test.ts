@@ -169,9 +169,8 @@ describe("AdminReportDigestTemplate", () => {
 
 describe("AdminReportTemplate", () => {
   /**
-   * The immediate alert, covered by the same check. It is not changed by
-   * SCRUM-625, and this is here so that the pair of staff templates is held to
-   * one rule rather than the newer one being the only one checked.
+   * The immediate alert, covered by the same check, so that the pair of staff
+   * templates is held to one rule rather than only one of them being checked.
    */
   it("renders exactly the keys the immediate alert supplies", () => {
     const params = generateAdminReportEmailParams({

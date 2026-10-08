@@ -19,9 +19,8 @@
  *
  * ## On "refuses an unauthenticated caller"
  *
- * SCRUM-626's testing requirements ask for that, written before the trigger was
- * chosen. A Lambda invoked by EventBridge Scheduler has no in-code
- * authentication to test: the only principal that may invoke it is the
+ * A Lambda invoked by EventBridge Scheduler has no in-code authentication to
+ * test: the only principal that may invoke it is the
  * scheduler role named in `template.yaml`, enforced by IAM before this code
  * runs, and there is no HTTP surface and no shared secret. The nearest real
  * equivalent is the payload check — the one untrusted input a console

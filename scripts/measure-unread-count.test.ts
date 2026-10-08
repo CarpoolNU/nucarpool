@@ -243,7 +243,7 @@ describe("indexVerdict", () => {
 
   it("recommends the composite - never isRead alone - once rows examined grow", () => {
     // The one case where an index becomes the answer while the plan is still
-    // fully indexed. It must not recommend the column the ticket guessed at.
+    // fully indexed. It must not recommend the two-valued column on its own.
     const verdict = indexVerdict({
       ...base,
       plan: summarisePlan([

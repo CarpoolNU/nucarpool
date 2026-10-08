@@ -26,9 +26,9 @@
  * An EventBridge Scheduler schedule invokes a Lambda every Monday, defined in
  * `infra/report-digest/`. Its handler calls `sendReportDigest` — the same
  * function `main` below calls — so there is one implementation of the window
- * and the claim and this script is not a second copy of the job. SCRUM-626
- * added it; whether a stack is actually deployed is not something this
- * repository records, and `infra/report-digest/README.md` has the check.
+ * and the claim and this script is not a second copy of the job. Whether a
+ * stack is actually deployed is not something this repository records;
+ * `infra/report-digest/README.md` has the check.
  *
  * This remains the way to **see** what would go out, because the Lambda has no
  * dry run, and the way to send a week the schedule missed.

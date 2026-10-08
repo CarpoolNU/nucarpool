@@ -2,15 +2,12 @@
  * Clear the confirmed security-test residue from one named account's five
  * user-authored text columns.
  *
- * An earlier investigation looked into an apparent stored-XSS probe — the
- * canonical harmless test string — and deliberately stopped short of touching
- * anything: *"No remediation of any record is authorised by this ticket — if
- * a suspicious value is confirmed, what to do about it is a separate decision
- * requiring a separate ticket and a human call."* A later ticket was that
- * separate ticket and human call, and this script is the tool it produced,
- * and nothing else in `scripts/` fits: every other write script operates on a
- * population defined by a predicate, and this one has a population of
- * exactly one account, named in the source.
+ * The residue is the canonical harmless stored-XSS test string. Removing it
+ * was an explicit human decision about one named account rather than
+ * something a predicate found, which is why this script is shaped unlike
+ * every other write script in `scripts/`: those operate on a population
+ * defined by a predicate, and this one has a population of exactly one
+ * account, named in the source.
  *
  * **What it changes**, and nothing else:
  *

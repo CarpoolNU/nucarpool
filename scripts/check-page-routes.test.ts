@@ -5,17 +5,16 @@ import { isTestPath } from "./check-page-routes";
  * Which paths under `src/pages` the route guard calls test code.
  *
  * Under the Pages Router a filename is a URL, so this predicate is the whole
- * check: anything it misses gets compiled into a route and deployed. It used to
- * read `path.basename` alone, which meant it only ever saw the `.test.` naming
- * convention. `jest.config.js` also collects a `__tests__` directory
- * recursively, whatever the files inside it are named, so
- * `src/pages/__tests__/foo.ts` was a suite Jest ran *and* the live route
- * `/__tests__/foo`, and the guard passed it.
+ * check: anything it misses gets compiled into a route and deployed. It reads
+ * the full path rather than `path.basename` alone, because `jest.config.js`
+ * collects a `__tests__` directory recursively whatever the files inside it
+ * are named — so `src/pages/__tests__/foo.ts` is both a suite Jest runs *and*
+ * the live route `/__tests__/foo`, and a basename check would pass it.
  *
- * The move from basename to full path is the kind of widening that invites
- * false positives, so the negative cases below are as load-bearing as the
- * positive ones: a directory or filename that merely contains the letters
- * "test" is not test code.
+ * Matching the full path is the kind of widening that invites false
+ * positives, so the negative cases below are as load-bearing as the positive
+ * ones: a directory or filename that merely contains the letters "test" is
+ * not test code.
  *
  * `path.join` throughout rather than literal `/`, because the predicate splits
  * on `path.sep` and the values it is given come from `path.relative`.

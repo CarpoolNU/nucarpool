@@ -7,10 +7,8 @@
  *   npx ts-node scripts/measure-layout.ts group-member-card-trigger --width 320
  *   npx ts-node scripts/measure-layout.ts header-logo-bar --width 667 --height 375
  *
- * This is the harness that got built once eight separate earlier fixes each
- * needed a real pixel, hand-rolled the same four steps in their own session,
- * and threw them away. The recipe was identical every time and is now here
- * instead of in ticket prose.
+ * Measuring a layout in a real browser is the same four steps every time, so
+ * the recipe lives here rather than being hand-rolled per session.
  *
  * **It touches no database.** Every other `.ts` script in this directory does;
  * this one reads two files and opens a local socket. There is no `--apply`, it
@@ -36,9 +34,9 @@
  *     browser chrome, and no `dvh` behaviour as that chrome moves.
  *  3. **Nothing runs it.** It is not in `yarn test`, not in CI, and not
  *     scheduled. A criterion measured through this is measured once, by a
- *     human who chose to. The regression protection those earlier fixes left
- *     behind is still their class-name assertions, which are proxies and say
- *     so. Making this durable means a browser in CI, which means a new dev
+ *     human who chose to. The regression protection in the suite is class-name
+ *     assertions, which are proxies and say so. Making this durable means a
+ *     browser in CI, which means a new dev
  *     dependency - a decision deliberately left settled here, in this
  *     comment, rather than smuggled in later.
  *

@@ -1,11 +1,11 @@
 /**
  * Measures what `user.messages.getUnreadMessageCount` actually costs.
  *
- * The ticket was filed on the shape of the generated SQL: four levels of nested
- * `IN` subqueries, the outermost a self-reference to `message` — the
- * fastest-growing table in the schema — filtered on a column carrying no index.
- * That description was accurate. What it did not establish was whether any of it
- * costs anything, which is what this script is for.
+ * The concern is the shape of the generated SQL: four levels of nested `IN`
+ * subqueries, the outermost a self-reference to `message` — the
+ * fastest-growing table in the schema — filtered on a column carrying no
+ * index. That shape is real; whether it costs anything is a separate
+ * question, and this script is what answers it.
  *
  * It is **read-only** — `count`, `findFirst` and `EXPLAIN`, no writes of any kind
  * — and it never prints the connection string.
@@ -160,10 +160,10 @@ export const summariseTimings = (durations: number[]): Timings => ({
 /**
  * Whether the measurement justifies adding an index, and why.
  *
- * Deliberately opinionated rather than a bare dump of numbers. The ticket's
- * suggested criterion is "if warranted", and leaving that to whoever reads the
- * output invites the default answer — add the index, it cannot hurt — which is
- * wrong here for a specific reason the plan shows and a row count does not.
+ * Deliberately opinionated rather than a bare dump of numbers. "Add an index
+ * if warranted", left to whoever reads the output, invites the default answer
+ * — add it, it cannot hurt — which is wrong here for a specific reason the
+ * plan shows and a row count does not.
  *
  * `isRead` is a boolean: two distinct values across the whole table. An index on
  * a two-valued column can only ever help if the query *starts* from it, and this
@@ -310,8 +310,8 @@ const main = async () => {
   const prisma = new PrismaClient({
     log: [{ emit: "event", level: "query" }],
   });
-  // The generated SQL is half the evidence in the ticket, and the only way to
-  // see it is to ask Prisma. Captured rather than printed as it arrives, so the
+  // The generated SQL is half the evidence, and the only way to see it is to
+  // ask Prisma. Captured rather than printed as it arrives, so the
   // measurement queries below do not interleave with it.
   prisma.$on("query" as never, (event: never) => {
     generatedSql.push((event as unknown as { query: string }).query);

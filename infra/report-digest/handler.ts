@@ -17,8 +17,8 @@ import {
  * **This is an adapter and nothing else.** It decides which week to send by
  * calling the same `resolveDigestWindow` the script calls, and it sends by
  * calling the same `sendReportDigest`, so the window derivation and the
- * compare-and-swap delivery claim exist in exactly one place and are covered by
- * the tests SCRUM-625 wrote against a real MySQL. The only logic that is new
+ * compare-and-swap delivery claim exist in exactly one place and are covered
+ * by the tests that run against a real MySQL. The only logic that is new
  * here is the mapping from a `DigestRunOutcome` onto a Lambda invocation
  * result, which is the one thing a script's exit code could not express.
  *
@@ -28,8 +28,8 @@ import {
  * fired twice. None of that threatens correctness: the window comes from the
  * calendar rather than from when this ran, and `claimDigestWindow` is a
  * compare-and-swap on one row, so a late run, a double run and two concurrent
- * runs all produce exactly one digest per week. That property is what made the
- * trigger a replaceable choice in SCRUM-626 rather than a design constraint.
+ * runs all produce exactly one digest per week. That property is what makes
+ * the trigger a replaceable choice rather than a design constraint.
  *
  * ## Why this does not import `src/server/ses.ts`
  *

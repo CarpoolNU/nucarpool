@@ -1,11 +1,11 @@
 /**
  * Measures rows read by the explore page's candidate query, before and after
  *
- * The ticket asks for rows read per explore page load, measured both ways. That
- * cannot be done from the repository alone: a developer's local database holds a
- * row or two, so the numbers only mean something against a database with real
- * data. This script exists so the measurement is reproducible by whoever has
- * that access, rather than being a number someone quotes once.
+ * Rows read per explore page load cannot be measured from the repository
+ * alone: a developer's local database holds a row or two, so the numbers only
+ * mean something against a database with real data. This script exists so the
+ * measurement is reproducible by whoever has that access, rather than being a
+ * number someone quotes once.
  *
  * It is **read-only** — `findMany` and `count`, no writes of any kind — and it
  * never prints the connection string.
@@ -50,11 +50,9 @@
  * against a database with representative data.
  *
  * **Run it against the environment you care about, and do not reuse a figure
- * from another one.** `staging` is production-derived but much smaller, and
- * reading its numbers as production's is the specific mistake SCRUM-643 found:
- * on 2026-10-08 the worst case was 751 rows on `staging` and 1,463 on
- * production, which is 38% of the ceiling against 73%. Record what you measure
- * per "Has a script been applied to staging or production?" in
+ * from another one.** `staging` is production-derived but much smaller, so a
+ * headroom figure taken there can understate production's by half. Record what
+ * you measure per "Has a script been applied to staging or production?" in
  * scripts/README.md.
  */
 
@@ -67,9 +65,9 @@ import {
 import type { FInputs } from "../src/utils/recommendation";
 
 /**
- * The `where` both endpoints built before this change, kept verbatim so the
- * comparison is against what actually shipped rather than a reconstruction.
- * It was typed `any` in both routers; that is the point of AC 4.
+ * The `where` both endpoints built before the candidate query was narrowed,
+ * kept verbatim so the comparison is against what actually shipped rather than
+ * a reconstruction. It was typed `any` in both routers.
  */
 const legacyWhere = (
   excludedUserIds: string[],
@@ -332,9 +330,9 @@ const main = async () => {
     );
     console.log();
 
-    // First, because it is the number with a decision attached. The before/after
-    // scenarios below describe a change that already shipped; this one says
-    // whether the bound that change introduced is still comfortable.
+    // First, because it is the number with a decision attached. The
+    // before/after scenarios below describe the saving; this one says whether
+    // the `CANDIDATE_LIMIT` bound is still comfortable.
     formatHeadroom(await measureHeadroom(prisma));
 
     const excludedUserIds = [subject.userId];

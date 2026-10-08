@@ -1,33 +1,23 @@
 /**
  * Report `Request` rows whose two ends are the same user.
  *
- * `user.requests.create` used to accept `toId === ctx.session.user.id`. The
- * duplicate guard could not catch it — for a self-request both halves of its
- * `OR` are the same pair, so the first attempt always passed — and the UI never
- * produced one, so any such row came from a direct API call. The guard now
- * rejects them, which makes this a one-off check of what already exists rather
- * than something to run on a schedule.
+ * No UI path produces one and `user.requests.create` rejects them, so any row
+ * found here arrived through a direct API call. The duplicate guard cannot
+ * catch one by itself — for a self-request both halves of its `OR` match the
+ * same pair, so a first attempt always passes — which is why this checks what
+ * already exists rather than running on a schedule.
  *
  * **Read-only. This script deletes nothing**, and that stays true: keeping the
  * four `check-*` scripts uniformly read-only is worth more than saving a file.
  *
- * **The repair lives in `cleanup-self-requests.ts`.** This header used to say
- * the expected count was zero and that anything turning up should be removed
- * by hand — reasonable while the set was empty, and it was not: a check on
- * 2026-09-09 found **2** such rows in production, against 0 on staging. Two
- * rows are few enough to remove by hand and that is exactly the argument for
- * not doing it by hand, because an ad-hoc delete leaves no dry run, no
- * per-row log, and nothing anyone can record afterwards - see "Has a script
- * been applied to staging or production?" in scripts/README.md for what
- * recording a run means here. `SCRUM-409` is where that script and those two
- * rows come from; the rows are gone from production now. All of that is
- * history, not a count to act on.
+ * **The repair lives in `cleanup-self-requests.ts`.** Even a couple of rows go
+ * through that script rather than an ad-hoc delete, which would leave no dry
+ * run, no per-row log and nothing anyone can record afterwards — see "Has a
+ * script been applied to staging or production?" in `scripts/README.md` for
+ * what recording a run means here.
  *
  * Removal is three deletes, not one — the request, its conversation, and the
  * messages inside it — which is why the counts below are printed per row.
- * `user.requests.delete` has done all three in one transaction;
- * before that it removed only the `Request` row and stranded the other two,
- * which is where production's 620 orphan conversations came from.
  *
  * `relationMode = "prisma"` means MySQL cannot compare two columns for us
  * through a relation filter, and Prisma 4's field references are not relied on
@@ -38,10 +28,8 @@
  *   npx ts-node scripts/check-self-requests.ts
  *
  * Exits 0 when there are none, 1 when there are, so it can gate a follow-up.
- * What it exits against any particular environment is deliberately not recorded
- * here. A header naming a live count is wrong from the moment the count moves,
- * and this one went on announcing a pending cleanup long after the rows it
- * named had gone. Run the script for the live figure.
+ * No live count is recorded here: a figure in a header is wrong from the
+ * moment it moves. Run the script for the current one.
  */
 
 import { PrismaClient } from "@prisma/client";

@@ -1,15 +1,14 @@
 /**
  * `scripts/wt-state.sh` - the generated-state fingerprints.
  *
- * The defect these replace is worth restating, because it is the
- * thing these tests exist to make impossible: `wt-bootstrap.sh` used to decide
- * whether `node_modules/.prisma/client` was current by comparing the
- * worktree's `prisma/schema.prisma` against the **primary checkout's** copy.
- * That compares two working trees and says nothing about which schema actually
+ * A fingerprint records which schema actually generated
+ * `node_modules/.prisma/client`. Comparing the worktree's
+ * `prisma/schema.prisma` against the **primary checkout's** copy would not:
+ * that compares two working trees and says nothing about which schema
  * generated the client, so a client built from a third schema could be
  * reported as current.
  *
- * So the assertions that matter most are the two the old logic got wrong:
+ * So the assertions that matter most are:
  *
  *   - a client whose stamp does not match **this** schema is regenerated, even
  *     when the primary checkout's schema is byte-identical to this one;

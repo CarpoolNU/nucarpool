@@ -110,7 +110,7 @@ describe("a failed or missed run is observable", () => {
    * `INSUFFICIENT_DATA` and never fires — so `TreatMissingData: breaching` is
    * not a tuning choice here, it is the entire mechanism. Losing that line
    * would leave an alarm that looks right and can never trigger, which is
-   * exactly the invisible failure SCRUM-626 was filed about.
+   * exactly the invisible failure this alarm exists to catch.
    */
   it("treats missing Invocations data as breaching", () => {
     const missedRun = TEMPLATE.slice(TEMPLATE.indexOf("MissedRunAlarm:"));

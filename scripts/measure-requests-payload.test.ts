@@ -9,8 +9,8 @@ import {
 
 /**
  * The arithmetic behind measurement, tested for the same reason as
- * `measure-candidate-rows.test.ts`: a measurement that quietly counts wrong is
- * worse than no measurement, and this one is quoted in the ticket and the PR.
+ * `measure-candidate-rows.test.ts`: a measurement that quietly counts wrong
+ * is worse than no measurement, and this one gets quoted.
  */
 
 const message = (id: string, userId: string) => ({

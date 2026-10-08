@@ -3,25 +3,25 @@
  * the `Message` rows inside them.
  *
  * The schema's cascade points the wrong way: `Request` holds the foreign key,
- * so `onDelete: Cascade` runs Conversation -> Request. Nothing ran the other
- * direction, so every decline and withdrawal used to leave a conversation and
- * its messages behind. `requests.delete` now removes both in one transaction,
- * which makes this a one-off for the backlog -- a second run should report zero.
+ * so `onDelete: Cascade` runs Conversation -> Request and nothing runs the
+ * other direction. `requests.delete` removes both in one transaction, so a
+ * decline or withdrawal strands nothing; this is a one-off for the backlog --
+ * a second run should report zero.
  *
- * **The production backlog is retained by decision, not pending deletion.** 620
- * conversations and 1,258 messages are kept, revisited only if they cause a
- * problem. This script's job today is to *report*: it is the instrument that
- * would show the population growing, which would mean that fix had regressed.
+ * **The production backlog is retained by decision, not pending deletion.**
+ * Those conversations and their messages are kept, revisited only if they
+ * cause a problem. This script's job is to *report*: it is the instrument that
+ * would show the population growing, which would mean `requests.delete` had
+ * regressed.
  * **Do not run `--apply` against production without a new explicit decision.**
  *
- * **Unreachability needs both links dead, and that was measured.** The
+ * **Unreachability needs both links dead.** The
  * relationship is stored twice: `getConversationMessages` reads
  * `Conversation.requestId`, while `requests.me` and the unread count read
  * `Request.conversationId`. `findOrphanConversationIds` tests both, which is
  * the same definition the pre-delete re-check uses, so the plan and the action
- * cannot disagree. On production, read-only: all 620 fail both links and none
- * is still referenced either way. Staging holds 11 conversations, 25 messages,
- * so staging is no guide to the scale.
+ * cannot disagree. Staging holds a small fraction of production's population,
+ * so it is no guide to the scale.
  *
  * Safety, because this deletes real message content:
  *
@@ -40,8 +40,8 @@
  *     run leaves a consistent database. Counters are reported even if a
  *     candidate throws.
  *
- * **Use `--limit`, not `--max`, for a population above the ceiling.** The
- * backlog is 620 against a default of 500, so a bare `--apply` exits 2.
+ * **Use `--limit`, not `--max`, for a population above the ceiling.** A
+ * backlog larger than the 500 default makes a bare `--apply` exit 2.
  * `--limit 400` acts on the oldest 400 and defers the rest; raising `--max`
  * restores exactly the single command the ceiling exists to prevent.
  *
