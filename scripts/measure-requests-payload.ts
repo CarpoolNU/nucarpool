@@ -26,8 +26,8 @@
  *   npx ts-node scripts/measure-requests-payload.ts
  *   npx ts-node scripts/measure-requests-payload.ts --user <userId>
  *
- * `--synthetic` needs no database at all: it builds the scenario the ticket
- * describes (10 conversations averaging 60 messages) from representative row
+ * `--synthetic` needs no database at all: it builds a representative worst
+ * case (10 conversations averaging 60 messages) from representative row
  * shapes and reports the same figures. Use it to see the size of the effect;
  * use a real database to confirm it against real data. Confirm `DATABASE_URL`
  * points where you intend before running without `--synthetic` - nothing is
@@ -38,7 +38,7 @@ import { PrismaClient } from "@prisma/client";
 import superjson from "superjson";
 
 /**
- * The message selection this change introduced, mirrored from
+ * The narrowed message selection, mirrored from
  * `src/server/router/user/requests.ts` so the comparison is against what
  * actually shipped.
  */

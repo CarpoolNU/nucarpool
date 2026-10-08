@@ -150,10 +150,10 @@ describe("deleteAllData — the guard is on the primitive, not just the caller",
     ]);
   });
 
-  // SCRUM-615. `admin_audit_log` and `email_send_budget` declare no relation to
-  // `User`, so no cascade — emulated or otherwise — ever reached them and a
-  // re-seed left their rows behind pointing at deleted users. Nothing but this
-  // list deletes them, which is why the assertion is on the list.
+  // `admin_audit_log` and `email_send_budget` declare no relation to `User`,
+  // so no cascade — emulated or otherwise — reaches them, and a re-seed would
+  // leave their rows behind pointing at deleted users. Nothing but this list
+  // deletes them, which is why the assertion is on the list.
   it.each(["adminAuditLog", "emailSendBudget"])(
     "deletes %s, which has no relation to User to cascade from",
     async (model) => {
@@ -192,11 +192,11 @@ describe("deleteAllData — the guard is on the primitive, not just the caller",
 });
 
 /**
- * The defect in SCRUM-615 was not a wrong delete — it was a **missing** one,
- * and no assertion about the tables in `SEED_DELETE_ORDER` can catch the table
- * that is not in it. `admin_audit_log` and `email_send_budget` were each added
- * to the schema long after this list, declare no relation to `User`, and so
- * were reached by nothing: not the list, not an emulated cascade, not a test.
+ * The failure this guards against is not a wrong delete but a **missing**
+ * one, and no assertion about the tables in `SEED_DELETE_ORDER` can catch the
+ * table that is not in it. A model added to the schema after this list, and
+ * declaring no relation to `User`, is reached by nothing: not the list, not an
+ * emulated cascade, not a test.
  *
  * This compares the list against `schema.prisma` itself, so the next model
  * added without a decision about the wipe fails here rather than quietly

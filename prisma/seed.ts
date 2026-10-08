@@ -53,12 +53,11 @@ const prisma = new PrismaClient();
  * `Block` cascades from `User`, so it would not, but deleting it explicitly
  * keeps what this list says and what gets deleted the same.
  *
- * `conversation` is in the list because it was once missed. With no
- * database-level foreign key, orphaned conversations simply survived a re-seed
- * pointing at deleted requests — and since `Conversation.requestId` is
+ * `conversation` is listed explicitly rather than left to a cascade. With no
+ * database-level foreign key, a conversation omitted from this list survives a
+ * re-seed pointing at deleted requests — and since `Conversation.requestId` is
  * `@unique`, a later request reusing an id would collide with one of those
- * ghosts. That is the same defect class as the 620 orphan conversations
- * found in production.
+ * ghosts.
  *
  * **The four entries before `user` are keyed on a user and ordered by nothing.**
  * None of them constrains the order, for two different reasons, and they sit
@@ -67,15 +66,14 @@ const prisma = new PrismaClient();
  *   - `adminAuditLog` and `emailSendBudget` declare **no `@relation` to
  *     `User` at all** — `actorId`, `targetId` and `userId` are plain scalars
  *     with an `@@index`. So there is no referential action to order against,
- *     and nothing, emulated or otherwise, ever removed them. They were simply
- *     missed, and a re-seed left them behind (SCRUM-615). `getAuditLog`
- *     returns raw ids for the client to resolve through `getAllUsers`, so the
- *     survivors render as actions by and against users who do not exist; and
- *     because the seed assigns users the ids `"0"`–`"69"` rather than cuids, a
- *     surviving `email_send_budget` row re-attaches to the *next* seed's user
- *     of the same id and hands them a send count they did not earn. That is
- *     the `_Favorites` failure mode below, on a table with no join to hide
- *     behind.
+ *     and nothing, emulated or otherwise, removes them unless this list does.
+ *     Survivors are actively wrong: `getAuditLog` returns raw ids for the
+ *     client to resolve through `getAllUsers`, so they render as actions by
+ *     and against users who do not exist; and because the seed assigns users
+ *     the ids `"0"`–`"69"` rather than cuids, a surviving `email_send_budget`
+ *     row re-attaches to the *next* seed's user of the same id and hands them
+ *     a send count they did not earn. That is the `_Favorites` failure mode
+ *     below, on a table with no join to hide behind.
  *   - `account` and `session` are the opposite case: both declare
  *     `onDelete: Cascade` on their relation to `User`, so `user.deleteMany`
  *     below already removes them through Prisma's emulated cascade. They are
@@ -490,9 +488,9 @@ const createUserData = async (resolveAddress: AddressResolver) => {
   for (const userData of usersData) {
     try {
       // A Location belongs to one slot of one CarpoolSearch, so every user gets
-      // their own pair of rows. This used to reuse an existing row whose
-      // address text matched, which silently gave the seeded user the *other*
-      // user's coordinates - so local data did not reproduce the geometry the
+      // their own pair of rows. Reusing an existing row whose address text
+      // matched would silently give the seeded user the *other* user's
+      // coordinates, and local data would then not reproduce the geometry the
       // recommendation algorithm is scored on.
       const homeLocation = await prisma.location.create({
         data: {
@@ -544,9 +542,9 @@ const createUserData = async (resolveAddress: AddressResolver) => {
         },
       });
     } catch (error) {
-      // Fail the whole run. This used to log and continue, so a partially
+      // Fail the whole run rather than logging and continuing: a partially
       // seeded database — some users with no location or carpool search —
-      // looked like a successful seed.
+      // would otherwise look like a successful seed.
       throw new Error(
         `Failed to seed location and carpool search for user ${userData.id}`,
         { cause: error },

@@ -2,42 +2,22 @@
  * Delete `Request` rows whose two ends are the same user, and the
  * `Conversation` and `Message` rows that hang off them.
  *
- * `check-self-requests.ts` finds them and stops. This is the repair half, and
- * it exists because the expected count stopped being zero: production holds
- * **2** of these, measured read-only on 2026-09-09, against 0 on
- * staging. That check's header argued against shipping a destructive tool for
- * an expected-empty set, which was the right call while the set was empty.
+ * `check-self-requests.ts` finds them and stops; this is the repair half. The
+ * two share `findSelfRequestIds`, so they cannot disagree about what a
+ * self-request is.
  *
- * **How the rows got there, and why no more can.** `requests.create` used to
- * accept `toId === ctx.session.user.id`. Its duplicate guard could not catch
- * one — for a self-request both halves of the `OR` match the same pair, so the
- * first attempt always passed — and no UI path produces one, so each row came
- * from a direct API call. The guard is explicit now, so this is a one-off for
- * the backlog: running it a second time should report zero.
+ * `user.requests.create` rejects self-requests, which makes this a backlog
+ * tool rather than a scheduled job: a second run over the same database should
+ * report zero.
  *
- * **What the two production rows actually hold**, so the operator knows what
- * `--apply` destroys before running it. Read-only, 2026-09-09, lengths rather
- * than content:
+ * It writes through Prisma rather than `user.requests.delete`, so it does not
+ * depend on the router's guards — one of which refuses an ACCEPTED request
+ * when both parties share a group, a comparison that for a self-request comes
+ * out true whenever the user is in any group at all.
  *
- *   - PENDING, created 2026-02-18: one conversation, one message, **3
- *     characters**, unread, written by the user to themselves.
- *   - ACCEPTED, created 2026-04-15: one conversation, one message, **0
- *     characters**, unread, likewise.
- *
- * Both messages were written the same day as their request, which is
- * `requests.create` storing its opening message. So this deletes three
- * characters of one user's own text and an empty string — not correspondence
- * between two people, which is what makes it a different decision from
- * `cleanup-orphan-conversations` and its 1,258 retained messages.
- *
- * **The ACCEPTED row cannot be cleared by its owner**, which is why a script is
- * needed rather than a nudge. `requests.delete` refuses an ACCEPTED request
- * when both parties are in the same group, and for a self-request that
- * comparison is a user against themselves — so it matches whenever the user is
- * in any group at all, and the CONFLICT tells them to leave a carpool they are
- * really in to clear a request that is not real. That guard is fixed as
- * well; this script does not depend on the fix, because it writes through
- * Prisma rather than through the router.
+ * A self-request's messages are a user writing to themselves, which is what
+ * makes deleting them a different decision from `cleanup-orphan-conversations`,
+ * where correspondence between two people is retained.
  *
  * Deletion order is `requests.delete`'s, and the reuse is the point: both take
  * the request first, because the declared Conversation → Request cascade runs

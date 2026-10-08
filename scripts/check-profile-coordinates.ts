@@ -1,11 +1,9 @@
 /**
  * Report `CarpoolSearch` rows that are silently unmatchable.
  *
- * `user.edit` used to accept any number as a coordinate and any pair of co-op
- * dates in any order. Neither is rejected by the columns — `coord_lat` /
- * `coord_lng` are plain `Float`, `start_date` / `end_date` are independent
- * `Date` — and neither fails at save time. They fail later, inside matching,
- * where nothing reports:
+ * Nothing rejects these at save time — `coord_lat` / `coord_lng` are plain
+ * `Float`, `start_date` / `end_date` are independent `Date` — so they fail
+ * later, inside matching, where nothing reports:
  *
  * - **Unresolved coordinates.** `(0, 0)` is the "no address picked yet"
  *   sentinel from `useAddressSelection`, roughly 4000 miles from Boston.
@@ -22,15 +20,18 @@
  *   term-date-overlap search. Bounded by `coopYearBounds`; a VIEWER is not a
  *   finding, for the reason `implausibleCoopYearFields` gives.
  *
+ * `user.edit` rejects both shapes at the boundary, so no new rows join these
+ * populations.
+ *
  * **Read-only. This script writes nothing.**
  *
  * That is the right shape for it. There is no correct value to write: a bad
  * coordinate cannot be re-derived without re-geocoding an address string that
  * may itself be empty, and only the student knows which way round their co-op
  * runs. What a fix looks like is an email asking the affected users to re-save
- * their profile, which the boundary now validates. So this answers "does the
- * backfill on the ticket have anything to do", and the remedy stays a human
- * decision — the same reasoning as `check-self-requests.ts`.
+ * their profile. So this answers "does the backfill on the ticket have
+ * anything to do", and the remedy stays a human decision — the same reasoning
+ * as `check-self-requests.ts`.
  *
  * A VIEWER at `(0, 0)` is **not** a finding. A VIEWER is browsing rather than
  * matching, has no address to resolve, and `user.me` already reports `(0, 0)`
@@ -43,13 +44,10 @@
  * an address leaves exactly the shape the coordinate check looks for: role
  * `RIDER`, coordinates `(0, 0)`, `is_onboarded = false`. That row is an
  * unfinished sign-up rather than an unmatchable user — it was never in
- * matching, so it cannot have been excluded from it.
- *
- * When the split was introduced — `SCRUM-408`, measured 2026-09-16 — that was
- * 579 of 626 reported rows on production, and all 521 of them on staging.
- * Exiting `1` on the total made the gate permanently red, which gates nothing
- * and buried the 47 rows that did need action. Those are the figures that
- * motivated the split, not a current count: run the script for that.
+ * matching, so it cannot have been excluded from it. It is much the larger of
+ * the two populations, so exiting `1` on the combined total would leave the
+ * gate permanently red, which gates nothing and buries the rows that do need
+ * action.
  *
  * So every finding is still reported, and each carries `actionable`:
  *
@@ -60,9 +58,8 @@
  *   Out-of-range coordinates and a missing `location` row are not explained by
  *   an abandoned sign-up whoever owns them, and a **reversed co-op range stays
  *   actionable regardless of onboarding state or `status`** — the dates are
- *   wrong now and nothing corrects them when that search goes live. At that
- *   same 2026-09-16 measurement 7 of production's 47 were not `ACTIVE`, and a
- *   search reactivates without its dates being touched.
+ *   wrong now, nothing corrects them when that search goes live, and a search
+ *   reactivates without its dates being touched.
  *
  * Usage:
  *   npx ts-node scripts/check-profile-coordinates.ts

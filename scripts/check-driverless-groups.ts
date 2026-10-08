@@ -7,41 +7,33 @@
  * anybody and nobody can dissolve it, and `groups.me` resolves preferences
  * through the driver's own search, so the riders' shared notes read as blank.
  *
- * Two guards now prevent new ones - `user.edit` refuses a role change away from
+ * Two guards prevent new ones: `user.edit` refuses a role change away from
  * DRIVER while the caller is in a group, and `groups.edit` refuses to let a
- * driver leave a group of three or more. Neither is retroactive, and the
- * client-side-only guard that preceded them was deleted in December 2024, so
- * this reports what the intervening period may have left behind.
+ * driver leave a group of three or more. Neither is retroactive, so this
+ * reports what already exists.
  *
  * **Read-only. This script changes nothing.**
  *
  * Deliberately so, following `check-self-requests.ts` rather than
- * `cleanup-orphan-locations.ts`. This header used to say the repair could not
- * be automated because only the people in the group know whether they want a
- * member promoted back to DRIVER or the group dissolved. That reasoning held
- * only while promotion was a candidate, and an audit of driverless groups
- * established it is not: `groups.create` did not enforce `Role.DRIVER` until a
- * later fix, and the client
- * named whichever party did not accept the request as the driver without
- * checking, so a group could be *born* driverless with no original driver to
- * restore. Dissolving is the single correct repair, and it lives in
- * `repair-seat-residue.ts`. This script stays read-only so that every `check-*`
- * is uniformly safe to point at production.
+ * `cleanup-orphan-locations.ts`. Dissolving is the single correct repair and
+ * it lives in `repair-seat-residue.ts`. Nobody is promoted: a group can be
+ * *born* driverless, because the named driver's role was never checked at
+ * creation, so there is no original driver to restore. This script stays
+ * read-only so that every `check-*` is uniformly safe to point at production.
  *
  * Three shapes are reported separately because they are not the same problem.
- * The file is named for the first, which it originally only reported; the third
- * is created by the overwritten-membership bug:
+ * The file is named for the first of them:
  *
  *   - **Driverless with members.** The members are listed so someone can
  *     contact them; repair is clearing `carpoolId` for all of them and deleting
  *     the group row. Nobody is promoted.
  *   - **Empty.** A group row no `CarpoolSearch` points at. Nobody is affected
  *     and nothing reads it; it is a leaked row, safe to delete once confirmed.
- *   - **Driver only.** A group holding its driver and nobody else, left behind
- *     when a rider's membership was overwritten by a join elsewhere - the
+ *   - **Driver only.** A group holding its driver and nobody else, left
+ *     behind when a rider's membership is overwritten by a join elsewhere: the
  *     dissolve-at-one-member rule runs in the mutation that removed someone,
- *     and that was a different group. Safe to dissolve, but the same event also
- *     cost that driver a seat, which this script cannot see.
+ *     and that is a different group. Safe to dissolve, but the same event also
+ *     costs that driver a seat, which this script cannot see.
  *
  * Usage:
  *   npx ts-node scripts/check-driverless-groups.ts

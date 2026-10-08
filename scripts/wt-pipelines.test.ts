@@ -2,12 +2,11 @@
  * One invariant, asserted across every `scripts/wt-*.sh`: **no pipeline
  * consumer may leave before its input is exhausted.**
  *
- * The locked-slot refusal in `wt-recycle.sh` exited 141 rather than 1 on CI,
- * because `git worktree list --porcelain | awk '...; exit'` left git killed by
- * SIGPIPE and `set -o pipefail` reports a signalled producer as the pipeline's
- * status. `wt-bootstrap.sh` and `wt-cleanup.sh` each carried the
- * same shape and were fixed separately; this file is the generalisation
- * that stops a fourth instance appearing in any of them.
+ * The shape that breaks it: `git worktree list --porcelain | awk '...; exit'`
+ * leaves git killed by SIGPIPE, and `set -o pipefail` reports a signalled
+ * producer as the pipeline's status — so a refusal meant to exit 1 exits 141
+ * instead. Any `wt-*.sh` can grow that shape, which is why this file asserts
+ * the invariant across all of them rather than per script.
  *
  * Reading from a shell variable is not the fix and this is not a style rule:
  * `printf` is a builtin, but bash takes SIGPIPE like any other producer. Nor
@@ -16,10 +15,9 @@
  *
  * It is asserted statically because the defect is a race. It needs the
  * producer still writing at the instant the consumer goes away, so a short
- * worktree table on a fast machine wins it by luck: the original instance of
- * this defect passed every local run and failed on CI. The property holds of
- * the source or
- * it does not hold at all, which is the only thing a test can pin down here.
+ * worktree table on a fast machine wins it by luck, so an instance can pass
+ * every local run and fail on CI. The property holds of the source or it does
+ * not hold at all, which is the only thing a test can pin down here.
  */
 
 import * as fs from "fs";

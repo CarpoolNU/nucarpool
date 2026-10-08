@@ -2,18 +2,16 @@
  * Report `CarpoolSearch` rows whose `seats_avail` is outside
  * `[0, MAX_SEATS_AVAILABLE]`.
  *
- * The invariant has been claimed in `carpoolSeats.ts` since it was written and
- * enforced by nothing: not the column (a plain `Int`; `UNSIGNED` and CHECK are
- * both a PlanetScale deploy-request exercise under `relationMode = "prisma"`,
- * and Prisma 4 cannot express a CHECK at all), not the router, and not any
- * script. `clampSeats` bounds computed values only on the release path.
+ * `carpoolSeats.ts` claims the invariant and nothing enforces it: not the
+ * column (a plain `Int`; `UNSIGNED` and CHECK are both a PlanetScale
+ * deploy-request exercise under `relationMode = "prisma"`, and Prisma 4 cannot
+ * express a CHECK at all), not the router, and not any script. `clampSeats`
+ * bounds computed values only on the release path.
  *
- * So when the accounting bugs since fixed pushed a driver to `-1`, nothing
- * noticed, and nothing has since. That row was found by hand-written SQL a
- * year and a half later — still ACTIVE, still being offered to riders, still
- * refusing every one of them. **This script is the piece whose absence let
- * that happen**, which is why it exists even though the read path no longer
- * cares what the column holds.
+ * So a row pushed out of range stays out of range, unnoticed — ACTIVE, offered
+ * to riders, and refusing every one of them. **This script is the piece whose
+ * absence allows that**, which is why it exists even though the read path
+ * already filters such rows out of matching.
  *
  * A negative count is the shape that has actually occurred. Above
  * MAX_SEATS_AVAILABLE is reported too and has never been seen: `user.edit`'s
@@ -30,13 +28,9 @@
  *
  * Exits 0 when every row is in range, 1 when any is not, so it can gate the
  * repair. **Run it against the environment you care about rather than trusting
- * a figure here.** This paragraph used to say production's count was unknown
- * because reads of the PlanetScale `main` branch returned 403. That holds for
- * the MCP read tool only — the `pscale` CLI's reader role reaches `main` — so
- * the count has been measurable for some time, and the one staging row this
- * header quoted as a lower bound is no longer there. Neither figure belongs in
- * a header; see "Has a script been applied to staging or production?" in
- * scripts/README.md.
+ * a figure here**: no count is recorded in this header, because one would be
+ * wrong from the moment it moved. See "Has a script been applied to staging or
+ * production?" in `scripts/README.md`.
  */
 
 import { PrismaClient } from "@prisma/client";

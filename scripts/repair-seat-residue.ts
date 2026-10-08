@@ -1,14 +1,13 @@
 /**
- * Repair the three data defects earlier bugs left behind: seat counts
- * outside `[0, MAX_SEATS_AVAILABLE]`, `CarpoolGroup` rows with no members, and
- * `CarpoolGroup` rows whose members include no `DRIVER`.
+ * Repair three data defects that pre-date the guards now preventing them:
+ * seat counts outside `[0, MAX_SEATS_AVAILABLE]`, `CarpoolGroup` rows with no
+ * members, and `CarpoolGroup` rows whose members include no `DRIVER`.
  *
- * All three code paths were fixed and no fix was retroactive. `reserveSeat` is
- * an atomic compare-and-swap now, so no new negative can be written,
- * `groups.edit` verifies membership, so no new group can be leaked, and
- * `groups.create` requires the named driver to actually hold `Role.DRIVER`
- * now, so no new group can be born driverless — but the rows already
- * written stayed, one of them an ACTIVE driver at `-1`.
+ * All three paths are guarded — `reserveSeat` is an atomic compare-and-swap,
+ * `groups.edit` verifies membership, and `groups.create` requires the named
+ * driver to hold `Role.DRIVER` — so no new rows join these populations. None
+ * of those guards was retroactive, which is why the rows already written need
+ * a script.
  *
  * `repair-` rather than `backfill-` or `cleanup-`: it writes a column *and*
  * deletes a row, so neither existing verb describes it, and the parts are one
@@ -44,25 +43,22 @@
  *
  * The driverless repair **dissolves** — it clears `carpoolId` for every member
  * and deletes the group row. It does not promote anyone to `DRIVER`, and that
- * is a decision rather than an omission. The server did not enforce
- * `Role.DRIVER` on `groups.create` until a later fix, and the client named
- * whichever party did not accept the request as the group's driver without
- * checking their role — so a group could be *born* driverless. There is
- * therefore no "original driver" to restore: promoting a member would invent a
- * driver who never existed, and would put someone in charge of a car they may
- * not own. Dissolving presumes nothing about the group's history, which is why
- * it is correct whichever way a given group got here.
+ * is a decision rather than an omission. A driverless group was not
+ * necessarily abandoned by its driver: the named driver's role was never
+ * checked at creation, so a group could be *born* driverless. There is
+ * therefore no "original driver" to restore — promoting a member would invent
+ * a driver who never existed, and would put someone in charge of a car they
+ * may not own. Dissolving presumes nothing about how a given group got here,
+ * which is why it is correct for all of them.
  *
  * A dissolve deliberately touches **only** `carpoolId` and the group row.
  * Seats are not credited back: there is no driver to credit, and the members'
  * own `seatsAvail` is not a debt this repair created. Roles, profiles, users
  * and the searches themselves are left exactly as they are.
  *
- * Ordering: **deploy the read-path fix before running this.** With
- * `hasSeatAvailable` deployed, a negative row is already excluded from
+ * This is data hygiene rather than the fix itself, which is the right way
+ * round: `SEAT_AVAILABLE_FILTER` already excludes a negative row from
  * matching, so the user-facing dead end is closed whether or not this has run.
- * That makes the repair a data-hygiene step rather than the fix itself, which
- * is the right way round.
  *
  * Usage:
  *   npx ts-node scripts/repair-seat-residue.ts              # report only

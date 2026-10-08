@@ -2,19 +2,18 @@
  * Repair the schedule times that were stored as a Boston wall clock in a
  * column that holds a UTC time of day, for users whose co-op is running.
  *
- * Two of the four historical `ControlledTimePicker` implementations wrote the
- * digits the user typed straight into the column with no conversion, so a
- * 9-to-5 is stored as `09:00`-`17:00` and every surface renders it as 4:00 AM
- * to 12:00 PM. A later fix corrected the write path — `toStoredScheduleTime` pins
- * both sides to a fixed EST anchor now, so no new row can be written this way
- * — and the fix was not retroactive. `src/server/db/scheduleTimeIntegrity.ts`
- * owns which rows those are and what each should have held; this script is the
- * reads and the writes.
+ * Two of the four `ControlledTimePicker` implementations this table's rows were
+ * written through stored the digits the user typed with no conversion, so a
+ * 9-to-5 sits in the column as `09:00`-`17:00` and every surface renders it as
+ * 4:00 AM to 12:00 PM. `toStoredScheduleTime` pins both sides to a fixed EST
+ * anchor, so no new row can be written this way, but it was not retroactive —
+ * which is why the rows already stored need a script.
+ * `src/server/db/scheduleTimeIntegrity.ts` owns which rows those are and what
+ * each should have held; this script is the reads and the writes.
  *
- * **Scope, and why it is this narrow.** A measurement of production on
- * 2026-09-21: 4,173 `carpool_search` rows, 283 with a co-op running, and eight
- * of those holding a wall clock. The repair is deliberately confined to that
- * intersection.
+ * **Scope, and why it is this narrow.** The repair is confined to rows that
+ * hold a wall clock *and* belong to a co-op that is currently running, which
+ * is a small intersection of the table.
  *
  *   - *Only wall-clock rows.* The other defect on that ticket is a one-hour
  *     split between rows converted under EDT and rows converted under EST, and
@@ -35,7 +34,7 @@
  *     in between keeps what they entered — adding five hours to an
  *     already-correct value is the one way this script could do real harm.
  *   - Refuses to proceed when the candidate count exceeds `--max` (default 50,
- *     an order of magnitude above the eight rows measured). A run that
+ *     well above the population this is expected to match). A run that
  *     suddenly matches hundreds means the classifier or the data has changed,
  *     and that should stop a human rather than proceed.
  *   - **Prints the prior value of every row before touching it.** That is the

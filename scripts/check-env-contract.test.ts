@@ -652,7 +652,7 @@ describe("the real amplify.yml", () => {
     // The live assertion behind amplify.yml's claim that it keeps Amplify's
     // deploy identity out of the deployment artifact. `.env.production`
     // travels in an artifact AWS documents as readable by anyone with
-    // `amplify:GetJob` plus artifact-store access (SCRUM-390).
+    // `amplify:GetJob` plus artifact-store access.
     const { patterns } = amplifyGrepPatterns(real);
     expect(credentialLeaks(patterns)).toEqual([]);
   });

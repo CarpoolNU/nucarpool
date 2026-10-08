@@ -75,7 +75,7 @@ describe("reduction", () => {
 });
 
 /**
- * The ceiling half, added under SCRUM-643.
+ * The ceiling half.
  *
  * `reduction` above answers "did the optimisation help". These answer "is the
  * bound it introduced still comfortable" — a different question with a
@@ -109,7 +109,7 @@ describe("WIDEST_SUBJECTS", () => {
 
 describe("the widest where, against the SQL the figures were measured with", () => {
   /**
-   * SCRUM-643's production figures were taken with `pscale sql`, because no
+   * The recorded production figures were taken with `pscale sql`, because no
    * Prisma script can reach that database. These pin the predicate this script
    * builds to the one those queries ran, so a recorded figure and a future run
    * of this script are answering the same question.

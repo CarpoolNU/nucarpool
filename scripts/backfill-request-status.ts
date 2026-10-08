@@ -1,12 +1,12 @@
 /**
  * Backfill `Request.status` for pairs who are already carpooling.
  *
- * The new column defaults to `PENDING`, which is right for every row created
- * from now on but wrong for history: accepting a request never wrote anything,
- * so a pair who accepted months ago look identical to a pair who never answered.
- * Left alone, those rows keep the two symptoms the ticket is about — a request
- * that cannot be cleared, and a `CONFLICT` that stops the pair ever requesting
- * each other again once they leave the group.
+ * `Request.status` defaults to `PENDING`, which is right for every new row but
+ * wrong for rows predating the column: accepting a request wrote nothing, so a
+ * pair who accepted months ago look identical to a pair who never answered.
+ * Left alone, those rows carry two symptoms — a request that cannot be
+ * cleared, and a `CONFLICT` that stops the pair ever requesting each other
+ * again once they leave the group.
  *
  * Why a script rather than a data migration: `prisma/migrations/` is never
  * applied to PlanetScale. The schema reaches an environment through

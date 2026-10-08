@@ -1,11 +1,9 @@
 /**
  * Delete `Location` rows that no `CarpoolSearch` points at.
  *
- * `user.edit` used to "find or create" a Location by address text, so every
- * address change left the previous row behind and nothing ever deleted it.
- * `resolveOwnedLocations` no longer abandons rows, which makes this a one-off
- * for the backlog rather than a recurring chore — running it a second time
- * should report zero.
+ * `resolveOwnedLocations` does not abandon rows, so no new orphans are
+ * created. This is a one-off for the backlog rather than a recurring chore —
+ * running it a second time should report zero.
  *
  * Safety, because this deletes production rows:
  *
