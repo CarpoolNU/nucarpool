@@ -552,15 +552,60 @@ export const adminDataRouter = router({
    * paginated — a simple list view is all that's needed here, and admin
    * mutations are rare enough that a static ceiling is sufficient for now.
    *
-   * Returns raw `actorId`/`targetId`; the client resolves those to emails
-   * through `getAllUsers`, which it already fetches for `UserManagement`,
-   * rather than this procedure joining and denormalizing that itself.
+   * Returns raw ids; the client resolves them to emails through
+   * `getAllUsers`, which it already fetches for `UserManagement`, rather than
+   * this procedure denormalizing an email onto every row.
+   *
+   * **`targetId` is not always a user**, which is why each row also carries
+   * `targetUserId`. `resolveReport` writes a report id, and the person an
+   * admin's decision concerned is that report's reported user — an id the
+   * client cannot reach, since the only other query it holds is
+   * `getAllUsers`. Resolving it here is what lets the Target column name a
+   * person on every row instead of printing a cuid.
+   *
+   * The reported user is read as two columns, deliberately not by reusing
+   * `getReports`: that query carries a full conversation snapshot per report,
+   * and nothing about naming a user needs message text. One `findMany` over
+   * the page's report ids, so the query count does not grow with the number
+   * of resolution rows.
    */
   getAuditLog: adminRouter.query(async ({ ctx }) => {
-    return ctx.prisma.adminAuditLog.findMany({
+    const entries = await ctx.prisma.adminAuditLog.findMany({
       orderBy: { dateCreated: "desc" },
       take: AUDIT_LOG_PAGE_SIZE,
     });
+
+    const reportIds = [
+      ...new Set(
+        entries
+          .filter((entry) => entry.action === AdminAuditAction.RESOLVE_REPORT)
+          .map((entry) => entry.targetId),
+      ),
+    ];
+
+    // `in: []` is a statement with no possible match, so a page with no
+    // resolution rows asks nothing.
+    const reportedUserByReport = new Map<string, string>(
+      reportIds.length === 0
+        ? []
+        : (
+            await ctx.prisma.report.findMany({
+              where: { id: { in: reportIds } },
+              select: { id: true, reportedUserId: true },
+            })
+          ).map((report) => [report.id, report.reportedUserId]),
+    );
+
+    return entries.map((entry) => ({
+      ...entry,
+      /*
+       * `null` for a row whose target is a user already — the client reads
+       * `targetId` for those — and for a report id with no surviving row,
+       * which the Target column renders differently from a user it cannot
+       * name.
+       */
+      targetUserId: reportedUserByReport.get(entry.targetId) ?? null,
+    }));
   }),
 
   /**
