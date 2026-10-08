@@ -50,10 +50,19 @@ import type { BlockReader } from "./blocks";
  * This is a cost bound, **not** pagination. Prisma appends
  * `ORDER BY carpool_search.id ASC` to satisfy `take`, and id order is
  * unrelated to match quality — so if this limit is ever actually reached, the
- * rows dropped are arbitrary rather than the worst matches. It is set well
- * above the platform's current size so that it bounds pathological growth
- * without changing today's results. Raising the real ceiling means ranking in
- * SQL, which is a larger change than this ticket.
+ * rows dropped are arbitrary rather than the worst matches. Raising the real
+ * ceiling means ranking in SQL, which is a larger change than the one that
+ * introduced this.
+ *
+ * It was set "well above the platform's current size". **That is no longer the
+ * right description**: production's worst case was 73% of it on 2026-10-08,
+ * against the 38% recorded when this was written — a gap that turned out to be
+ * staging quoted as production rather than growth. `candidateLimitWarning`
+ * below carries the current figures, what the remaining headroom is made of,
+ * and the threshold at which ranking in SQL becomes the active ticket.
+ *
+ * **Changing this number is not the response to approaching it**, in either
+ * direction, and SCRUM-643 deliberately left it alone.
  *
  * Reaching it is no longer silent — see `candidateLimitWarning`.
  */
@@ -74,25 +83,76 @@ export const CANDIDATE_LIMIT_LOG_PREFIX = "[candidate-limit]";
  * exist, which is indistinguishable from there being no good matches. This
  * turns that into a log line.
  *
- * **How full is it really?** Measured against the production-derived `staging`
- * branch, in the widest case (distance filters "any", so no bounding box, and
- * no date filter), the query reads:
+ * **How full is it really? Re-measured 2026-10-08 under SCRUM-643**, read-only
+ * against the PlanetScale `main` branch, in the widest case (distance filters
+ * "any", so no bounding box, and no date filter):
  *
- *   - 48 rows for a RIDER — only drivers, and only with a seat
- *   - 685 rows for a DRIVER
- *   - 751 rows for a VIEWER, who is offered both roles
+ *   - **66** rows for a RIDER — only drivers, and only with a seat
+ *   - **1,317** rows for a DRIVER — only ungrouped riders
+ *   - **1,463** rows for a VIEWER, who is offered both roles and narrowed by
+ *     neither the seat rule nor the group rule, and is therefore the worst case
  *
- * So the worst case is about **38% of the ceiling**, and reaching it needs the
- * matchable population to grow by roughly 165%. An earlier estimate of 64% on
- * an earlier count included every ACTIVE `carpool_search` row; the query also requires
- * `user.isOnboarded` and a compatible role, and 521 of staging's rows are
- * un-onboarded signups sitting at the `(0, 0)` sentinel.
+ * So the worst case is **73% of the ceiling**, and reaching it needs the
+ * matchable population to grow by **37%**.
  *
- * That headroom is why ranking in SQL is deliberately **not** done here: it
- * would have to reproduce `calculateScore`'s ordering closely enough to keep
- * the scoring tests meaningful, and nothing today needs it. This warning is
- * what makes deferring it safe rather than a bet — the ceiling can no longer
- * be reached quietly while everyone assumes there is room.
+ * **The figures this replaced said 38% and 165%, and were not wrong when they
+ * were taken — they were `staging`'s.** Re-running the same predicate against
+ * staging on the same day still returns 751 for a VIEWER, so the number had
+ * not drifted; staging simply holds 764 matchable rows against production's
+ * 2,550. Reading one as the other is the trap, and it understated production's
+ * position by half. (The old DRIVER figure of 685 was also staging's `RIDER`
+ * count before `UNGROUPED_CANDIDATE_FILTER`; the comparable value is 667.)
+ *
+ * *Matchable* throughout means `status: ACTIVE` **and** `user.isOnboarded` —
+ * the floor every branch of this query shares, before role, seats or group.
+ * It is well below the raw `ACTIVE` count, which on production is 3,001: an
+ * un-onboarded signup sits at the `(0, 0)` sentinel and was never in matching.
+ * An estimate taken against `ACTIVE` alone overstates the pool, which is how
+ * an even earlier figure of 64% arose.
+ * Re-derive all of this with `scripts/measure-candidate-rows.ts`, which now
+ * reports headroom per role — **name the environment whenever you quote it.**
+ *
+ * **What the remaining 27% is made of matters more than its size.** 1,123 of
+ * those 1,463 rows — 77% — are searches whose `end_date` has already passed.
+ * Only 296 are co-ops still running. So the ceiling is being approached by
+ * rows that should not be in the candidate set on any reading, not by the
+ * platform outgrowing the bound, and SCRUM-631's liveness rule would take the
+ * worst case to roughly 340 rows, about 17% of the ceiling.
+ *
+ * **The threshold, so this is a decision and not a vibe (SCRUM-643 AC 3).**
+ * Ranking in SQL becomes the active ticket when the worst case exceeds **80%
+ * of `CANDIDATE_LIMIT`** — that is 1,600 rows, 137 above where production sat
+ * on 2026-10-08. Raise it with SCRUM-631 instead if that is still open, since
+ * it is the cheaper move and buys back four times as much. Below 80%, ranking
+ * in SQL stays deliberately undone: it would have to reproduce
+ * `calculateScore`'s ordering closely enough to keep the scoring tests
+ * meaningful, and nothing today needs it.
+ *
+ * **Do not raise `CANDIDATE_LIMIT` as the response to crossing that line.** The
+ * bound exists because reading the whole table is what this change removed, and
+ * a higher number keeps the arbitrary-drop defect while making it cost more.
+ *
+ * ---
+ *
+ * **Where this warning actually goes, which SCRUM-643 AC 1 asked and the
+ * answer is "nowhere confirmed".** `console.warn` reaches the Amplify SSR
+ * runtime's output and no further that anyone in this repository can
+ * demonstrate. That is not specific to this line — it is the same unanswered
+ * question recorded in `router/errorLog.ts` ("nobody has yet confirmed where
+ * the deployed server's output is read") and acted on in
+ * `profile/coopRangeNotice.ts`, which chose to tell the affected user rather
+ * than "a log nobody has located". Settling it needs Amplify console access,
+ * which no credential in this repository carries, so it cannot be closed here.
+ *
+ * **So the bound is not left resting on that line.** A log line only fires
+ * *after* the ceiling is breached, by which point users have already silently
+ * lost matches. `scripts/measure-candidate-rows.ts` answers the same question
+ * *before* the breach and against whichever environment you point it at, which
+ * is strictly the stronger signal and needs no log destination to exist. Treat
+ * the warning as the backstop and a dated run of that script as the control;
+ * record each run per "Has a script been applied to staging or production?" in
+ * `scripts/README.md`. A third-party error reporter is deliberately still not
+ * adopted — `errorLog.ts` records both reasons, and neither has changed.
  */
 export const candidateLimitWarning = ({
   rowsFetched,

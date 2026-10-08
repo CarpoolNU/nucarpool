@@ -23,6 +23,24 @@
  *   - **narrowed** — distances at 6 miles, the scorer's own default cutoffs.
  *     This is where the bounding box does its work.
  *
+ * **Then a third thing, and the one with a decision attached: headroom.**
+ * `CANDIDATE_LIMIT` is a cost bound that does not degrade gracefully — past it
+ * rows are dropped in id order, not by score — so what matters is not the
+ * saving but how close the widest query is to the ceiling. The two scenarios
+ * above cannot answer that, for two reasons that both point the same way:
+ *
+ *   - They measure **one** subject, chosen as a RIDER or a DRIVER because a
+ *     VIEWER "would understate the change". For the saving that is the right
+ *     choice. For the ceiling it is the wrong one exactly backwards: a VIEWER
+ *     is filtered least, so a VIEWER *is* the worst case.
+ *   - They report a reduction, never a percentage of `CANDIDATE_LIMIT`.
+ *
+ * So `measureHeadroom` below reports all three searcher roles at their widest
+ * filters, against the ceiling. It builds its `where` through the real
+ * `buildCandidateWhere` rather than restating the predicate, so it cannot
+ * drift from what the app runs — the same rule `SEAT_AVAILABLE_FILTER` and
+ * `UNGROUPED_CANDIDATE_FILTER` exist to enforce.
+ *
  * Usage:
  *   npx ts-node scripts/measure-candidate-rows.ts
  *   npx ts-node scripts/measure-candidate-rows.ts --user <userId>
@@ -30,6 +48,14 @@
  * Confirm DATABASE_URL points where you intend before running. Pointing it at
  * production is safe — nothing is written — but the numbers are only meaningful
  * against a database with representative data.
+ *
+ * **Run it against the environment you care about, and do not reuse a figure
+ * from another one.** `staging` is production-derived but much smaller, and
+ * reading its numbers as production's is the specific mistake SCRUM-643 found:
+ * on 2026-10-08 the worst case was 751 rows on `staging` and 1,463 on
+ * production, which is 38% of the ceiling against 73%. Record what you measure
+ * per "Has a script been applied to staging or production?" in
+ * scripts/README.md.
  */
 
 import { PrismaClient, Prisma, Role, Status } from "@prisma/client";
@@ -95,6 +121,81 @@ export const reduction = (before: number, after: number): number => {
   return Math.max(0, Math.round(((before - after) / before) * 100));
 };
 
+/**
+ * The widest possible searcher of each role, as `buildCandidateWhere` reads one.
+ *
+ * Synthetic rather than loaded from the database, and that is the point: the
+ * ceiling question is "how large can the candidate set get for *anybody* in
+ * this role", not "how large is it for the first matching row". A real subject
+ * would carry coordinates, and coordinates mean a bounding box.
+ *
+ * Both locations are `null`, which `locationWithin` reads as "no centre, so
+ * SQL must not narrow" — the same branch a distance slider at `any` takes. So
+ * these three are the unfiltered pools, which is what the ceiling applies to.
+ *
+ * The two non-obvious fields each disarm one half of `searcherCanMatchNobody`,
+ * which would otherwise empty the result set before a single candidate is
+ * looked at:
+ *
+ *   - `carpoolId: null` — a grouped RIDER can join nobody.
+ *   - `seatsAvail: 1` for the DRIVER — a DRIVER with no seat can take nobody.
+ *
+ * A VIEWER is subject to neither rule and to no seat or group narrowing at
+ * all, which is why a VIEWER is the worst case rather than merely another one.
+ */
+export const WIDEST_SUBJECTS = [
+  { role: Role.RIDER, carpoolId: null, seatsAvail: 0 },
+  { role: Role.DRIVER, carpoolId: null, seatsAvail: 1 },
+  { role: Role.VIEWER, carpoolId: null, seatsAvail: 0 },
+].map((subject) => ({
+  ...subject,
+  homeLocation: null,
+  companyLocation: null,
+}));
+
+/** Filters with every narrowing switched off: distances "any", no date rule. */
+export const widestFilters = (): FInputs & { favorites: boolean } => ({
+  ...baseFilters({}),
+  favorites: false,
+});
+
+export type Headroom = {
+  role: Role;
+  rows: number;
+  /** `rows` as a percentage of `CANDIDATE_LIMIT`, rounded. */
+  percentOfLimit: number;
+  /**
+   * How much the matchable population must grow before this role's query
+   * truncates, as a percentage. `null` once it already has — at that point
+   * growth is not the question any more.
+   */
+  growthToBreach: number | null;
+};
+
+/**
+ * Headroom for one measured pool.
+ *
+ * Separated from the query so the arithmetic is testable without a database,
+ * which is the half that can be wrong in a way nobody notices: a percentage
+ * reported against the wrong denominator still looks like a percentage.
+ *
+ * `rows` is the count the ceiling actually applies to — `carpool_search` rows.
+ * Not `RowCounts.total`, which adds the user and location rows the `include`
+ * pulls along. Those are real reads and the scenarios above are right to count
+ * them, but `take: CANDIDATE_LIMIT` bounds the search rows alone, so measuring
+ * the bound against a total that is roughly four times larger would report the
+ * ceiling as breached long before it is.
+ */
+export const headroom = (role: Role, rows: number): Headroom => ({
+  role,
+  rows,
+  percentOfLimit: Math.round((rows / CANDIDATE_LIMIT) * 100),
+  growthToBreach:
+    rows > CANDIDATE_LIMIT
+      ? null
+      : Math.round((CANDIDATE_LIMIT / Math.max(rows, 1) - 1) * 100),
+});
+
 const SCENARIOS: { name: string; filters: Partial<FInputs> }[] = [
   {
     name: "initial load (distances any, no date filter)",
@@ -119,6 +220,65 @@ const baseFilters = (overrides: Partial<FInputs>): FInputs => ({
   daysWorking: "0,1,1,1,1,1,0",
   ...overrides,
 });
+
+/**
+ * Rows the widest query of each searcher role would read, against the ceiling.
+ *
+ * `count` rather than `findMany`: the ceiling is about how many rows *exist*
+ * for the predicate, and `findMany` with `take` would cap the answer at the
+ * very number being tested. No `include` either — see `headroom`.
+ */
+export const measureHeadroom = async (prisma: {
+  carpoolSearch: {
+    count: (args: {
+      where: Prisma.CarpoolSearchWhereInput;
+    }) => PromiseLike<number>;
+  };
+}): Promise<Headroom[]> => {
+  const filters = widestFilters();
+
+  return Promise.all(
+    WIDEST_SUBJECTS.map(async (subject) =>
+      headroom(
+        subject.role,
+        await prisma.carpoolSearch.count({
+          where: buildCandidateWhere({
+            currentSearch: subject,
+            filters,
+            // Nobody excluded. A real caller excludes at least themselves, so
+            // this overstates by one row per blocked or already-messaged
+            // counterpart — the direction that cannot report false headroom.
+            excludedUserIds: [],
+            favoriteUserIds: [],
+          }),
+        }),
+      ),
+    ),
+  );
+};
+
+const formatHeadroom = (results: Headroom[]) => {
+  console.log(`headroom against CANDIDATE_LIMIT (${CANDIDATE_LIMIT})`);
+
+  for (const result of results) {
+    const growth =
+      result.growthToBreach === null
+        ? "ALREADY TRUNCATING — rows past the ceiling are dropped in id order"
+        : `needs +${result.growthToBreach}% growth to truncate`;
+
+    console.log(
+      `  a ${result.role} sees ${result.rows} rows ` +
+        `(${result.percentOfLimit}% of the ceiling, ${growth})`,
+    );
+  }
+
+  const worst = results.reduce((a, b) => (b.rows > a.rows ? b : a));
+  console.log(
+    `  worst case: ${worst.role}, ${worst.rows} rows, ` +
+      `${worst.percentOfLimit}% of the ceiling`,
+  );
+  console.log();
+};
 
 const format = (label: string, counts: RowCounts) => {
   console.log(`  ${label}`);
@@ -171,6 +331,11 @@ const main = async () => {
       `measured for: role ${subject.role}, take bound ${CANDIDATE_LIMIT}`,
     );
     console.log();
+
+    // First, because it is the number with a decision attached. The before/after
+    // scenarios below describe a change that already shipped; this one says
+    // whether the bound that change introduced is still comfortable.
+    formatHeadroom(await measureHeadroom(prisma));
 
     const excludedUserIds = [subject.userId];
 
