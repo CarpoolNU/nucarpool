@@ -1,10 +1,10 @@
 /*
  * The one place the product's name is spelled in a document title.
  *
- * `/` and `/sign-in` used to disagree ("CarpoolNU" against "NU Carpool"), and
- * the repository, the README and the setup wizard's own heading all use
+ * The repository, the README and the setup wizard's own heading all spell it
  * CarpoolNU, so that is the spelling here. Building every title through this
- * function is what keeps the next page from picking a third.
+ * function is what keeps `/` and `/sign-in` - and every page after them -
+ * from picking a different spelling.
  */
 export const APP_NAME = "CarpoolNU";
 

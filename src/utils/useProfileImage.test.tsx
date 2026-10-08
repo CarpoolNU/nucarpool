@@ -16,14 +16,13 @@
  * report one call before and after.
  *
  * What actually had to be established is that the *fetch* went out, and
- * whether the fix stops it. That depends on React Query's own timing - its
- * observer subscribes in a passive effect, and whether that runs before or
- * after React's corrective re-render is a fact about React, not about this
- * repo. So `useQuery` here is the real one, keyed and fetched through a spy
- * `queryFn`, which is what tRPC's `useQuery` reduces to anyway. The counts
- * below are therefore measurements rather than restatements of the mock.
- *
- * Measured against the pre-fix hook, the mobile case reported **1**.
+ * whether disabling the query during the discarded pass stops it. That
+ * depends on React Query's own timing - its observer subscribes in a passive
+ * effect, and whether that runs before or after React's corrective re-render
+ * is a fact about React, not about this repo. So `useQuery` here is the real
+ * one, keyed and fetched through a spy `queryFn`, which is what tRPC's
+ * `useQuery` reduces to anyway. The counts below are therefore measurements
+ * rather than restatements of the mock.
  */
 
 import { render } from "@testing-library/react";
@@ -143,7 +142,7 @@ describe("useProfileImage on a hydration pass that is discarded", () => {
     // ...and the client corrected to the bottom bar, discarding it.
     expect(text).toBe("bottom");
 
-    // The whole ticket: that discarded mount used to cost one authenticated
+    // Without this guard, that discarded mount would cost one authenticated
     // presigned-URL request for an avatar no mobile visitor ever sees.
     expect(queryFn).not.toHaveBeenCalled();
   });
@@ -183,10 +182,10 @@ const GatedAvatar = ({ enabled }: { enabled: boolean }) => {
 describe("useProfileImage when the caller says it will not render the result", () => {
   /*
    * `MessageHeader` calls this hook above an `if (ismobile)` branch that draws
-   * no avatar, so on a phone it used to fire an authenticated presigned-URL
-   * request - and an S3 HeadObject behind it - per conversation opened, for a
-   * picture nobody saw. Rules of hooks forbid not calling it, so the caller
-   * passes `enabled` instead.
+   * no avatar, so without `enabled`, a phone would fire an authenticated
+   * presigned-URL request per conversation opened, for a picture nobody saw.
+   * Rules of hooks forbid not calling it, so the caller passes `enabled`
+   * instead.
    */
 
   it("fires no request", () => {

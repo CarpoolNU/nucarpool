@@ -6,11 +6,11 @@ import {
 } from "./queryState";
 
 /**
- * Every page used to destructure `data` alone, so a failed query looked
- * exactly like an empty result - and on the map page like a load that never
- * finished. These tests pin the collapse from a React Query result to the three
- * states the UI renders differently, which is the part that decides whether a
- * user sees "nothing here" or "this broke, try again".
+ * Destructuring `data` alone makes a failed query look exactly like an empty
+ * result - and on the map page like a load that never finished. These tests
+ * pin the collapse from a React Query result to the three states the UI
+ * renders differently, which is the part that decides whether a user sees
+ * "nothing here" or "this broke, try again".
  */
 
 /** `refetch` stays a mock so the retry assertions can see it. */
@@ -37,8 +37,9 @@ describe("toQueryState", () => {
   });
 
   /**
-   * The precedence that matters. A spinner standing in for a failure is the
-   * original bug, so if a result ever claims both, the failure has to win.
+   * The precedence that matters: a spinner standing in for a failure would
+   * mislead the user, so if a result ever claims both, the failure has to
+   * win.
    */
   it("prefers error over loading when a result claims both", () => {
     expect(toQueryState(query({ isError: true, isLoading: true })).status).toBe(

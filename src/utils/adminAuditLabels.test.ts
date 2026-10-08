@@ -66,9 +66,9 @@ describe("describeAuditTarget", () => {
   });
 
   it("names the reported user, not the report, for a report target", () => {
-    // SCRUM-653: the row's id is a report's, but the person the admin's
-    // decision was about is the user that report named. `getAuditLog` resolves
-    // the one to the other, so this cell can say who rather than which.
+    // The row's id is a report's, but the person the admin's decision was
+    // about is the user that report named. `getAuditLog` resolves the one to
+    // the other, so this cell can say who rather than which.
     expect(
       describeAuditTarget(
         { action: RESOLVE, targetId: CUID, targetUserId: USER_CUID },

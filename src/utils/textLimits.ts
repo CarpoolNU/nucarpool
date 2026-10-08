@@ -4,10 +4,10 @@
  *
  * Each value is the width of the column the text ends up in. That is the point:
  * these columns are `VARCHAR`, MySQL runs in strict mode, and an oversized
- * value makes the write throw rather than truncate. Before this existed the
- * chat box had no cap at all, so a pasted paragraph was accepted by the input,
- * accepted by the Zod schema, and then rejected by the database after the box
- * had already been cleared.
+ * value makes the write throw rather than truncate. Without a cap matching the
+ * column, a pasted paragraph can be accepted by the input and by the Zod
+ * schema, then rejected by the database after the compose box has already
+ * cleared the user's text.
  *
  * These count JavaScript string length (UTF-16 code units) while MySQL counts
  * characters, so an astral character such as an emoji costs 2 here and 1 in the
@@ -67,9 +67,7 @@ export const PRONOUNS_INPUT_MAX_LENGTH = PRONOUNS_MAX_LENGTH + 2;
  * `carpool_search.group_notes` — `VARCHAR(90)`.
  *
  * The driver's free-text note on their group ride preferences. 90 is what the
- * textarea has always allowed and what the column is now sized to;
- * before that the value went into a shared JSON blob and was silently sliced to
- * this length on the way in, whatever the user had typed.
+ * textarea allows and what the column is sized to match.
  */
 export const GROUP_NOTES_MAX_LENGTH = 90;
 
@@ -97,12 +95,10 @@ export const REPORT_MESSAGE_MAX_LENGTH = 500;
  * `VARCHAR(191)`.
  *
  * Nobody types these: they are parsed out of a Mapbox feature and posted by
- * the form. That is exactly why they were the last unbounded strings in
- * `user.edit` — the reasoning was that a place name the geocoder returned must
- * fit, and nothing checked. A long enough `place_name` does not, and because
- * the profile save is one transaction the overflow took the whole save down
- * with it and reported a masked "Something went wrong" rather than naming the
- * field.
+ * the form. That does not make them safe to leave unbounded — a long enough
+ * `place_name` can still overflow the column, and because the profile save is
+ * one transaction, the overflow fails the whole save and reports a masked
+ * "Something went wrong" rather than naming the field.
  *
  * Numerically the same as `PROFILE_TEXT_MAX_LENGTH`, and deliberately a
  * separate constant: these are different columns, and giving them their own

@@ -1,7 +1,7 @@
 import { contrastRatio } from "./contrast";
 
 /**
- * The two colour pairs the audit found below WCAG AA, after the fix. Each
+ * The two colour pairs that must clear WCAG AA. Each
  * pair's threshold depends on where it renders, not on the hex
  * values themselves - 4.5:1 for body text, 3:1 for the ~19px/700 popover
  * title, per https://www.w3.org/TR/WCAG21/#contrast-minimum.
@@ -40,8 +40,9 @@ describe("contrastRatio", () => {
   });
 
   it("still fails on the pre-fix colours, as a control", () => {
-    // The literal background the popover used before this ticket, and
-    // text-stone-400, the counter's pre-fix normal-state colour.
+    // The popover's previous background, and text-stone-400, the counter's
+    // previous normal-state colour - both used here only to prove the check
+    // can fail.
     expect(contrastRatio("#FFFFFF", "#D5706A")).toBeLessThan(BODY_TEXT_MIN);
     expect(contrastRatio("#A8A29E", "#FFFFFF")).toBeLessThan(BODY_TEXT_MIN);
   });

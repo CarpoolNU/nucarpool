@@ -2,13 +2,13 @@
  * The "any" sentinels, and the agreement between the slider's ceiling and the
  * scorer's.
  *
- * 20 miles and 4 hours were bare literals in five places: the slider's `max`,
- * its gradient arithmetic and its `20+` label in `Filters.tsx`; the initial
- * filter state in `pages/index.tsx`; `DISTANCE_FILTER_MAX` in
- * `candidateSearch.ts`; the two comparisons in `recommendation.ts`; and
- * `anyFilters` in `recommendation.fixtures.ts`. Raising the slider's ceiling
- * to 30 while the scorer still stopped filtering at 20 would have shown
- * unfiltered results for the top third of the track, silently.
+ * 20 miles and 4 hours are shared across five places: the slider's `max`, its
+ * gradient arithmetic and its `20+` label in `Filters.tsx`; the initial filter
+ * state in `pages/index.tsx`; `DISTANCE_FILTER_MAX` in `candidateSearch.ts`;
+ * the two comparisons in `recommendation.ts`; and `anyFilters` in
+ * `recommendation.fixtures.ts`. Raising the slider's ceiling to 30 while the
+ * scorer still stopped filtering at 20 would silently show unfiltered results
+ * for the top third of the track.
  *
  * **Asserting the numbers would be worthless.** A test saying
  * `DISTANCE_FILTER_ANY === 20` restates the definition and keeps passing

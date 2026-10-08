@@ -70,8 +70,7 @@ const cellForId = (
 /**
  * Keyed by `AdminAuditAction` rather than `string`, which is the point: adding
  * a member to that union fails `yarn tsc` here until it is given wording, so
- * the log cannot quietly start printing procedure paths again. SCRUM-619's
- * account-suspension action is the next one expected to trip it.
+ * the log cannot quietly start printing procedure paths again.
  */
 const DISPLAY: Record<AdminAuditAction, AuditDisplay> = {
   "user.admin.updateUserPermission": {

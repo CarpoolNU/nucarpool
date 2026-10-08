@@ -29,8 +29,9 @@ const storedAt = (utcHour: number, utcMinute = 0): Date =>
  *
  * Built with an explicit zone rather than a bare `dayjs()` so the season is a
  * property of the test rather than of `jest.shared.config.js`'s `TZ`. In
- * `America/New_York`, 9:00 AM is 14:00Z in January and 13:00Z in July — that
- * gap is the bug, and these two values are what carry it into the assertions.
+ * `America/New_York`, 9:00 AM is 14:00Z in January and 13:00Z in July — these
+ * two values are what let the assertions below tell a correct conversion
+ * apart from a seasonal one.
  */
 const pickedOn = (day: string, wallClock: string) =>
   dayjs.tz(`${day} ${wallClock}`, SCHEDULE_TIMEZONE);
@@ -49,10 +50,10 @@ describe("formatScheduleTime", () => {
 
   describe("early shifts", () => {
     /**
-     * The old copies reinterpreted the value as UTC whenever the Boston hour
-     * landed in [01:00, 05:00), which is exactly the range a genuine early
-     * shift occupies. A 2:00 AM start is stored as 07:00 UTC and used to
-     * display as 7:00 AM.
+     * A genuine early shift falls in the Boston hour range [01:00, 05:00) and
+     * must display as what it is: a 2:00 AM start is stored as 07:00 UTC and
+     * must display as 2:00 AM, not be reinterpreted as already-UTC and shown
+     * as 7:00 AM.
      */
     it("displays a 02:00 start as 02:00", () => {
       expect(formatScheduleTime(storedAt(7))).toBe("2:00 AM");
@@ -65,8 +66,9 @@ describe("formatScheduleTime", () => {
     });
 
     it("orders the early hours correctly against the rest of the day", () => {
-      // A guessed hour broke ordering as well as labelling: 2 AM read as 7 AM,
-      // which is after a real 6 AM start rather than before it.
+      // A mislabelled hour would break ordering as well as labelling: a 2 AM
+      // start misread as 7 AM would sort after a real 6 AM start rather than
+      // before it.
       expect(formatScheduleTime(storedAt(7))).toBe("2:00 AM");
       expect(formatScheduleTime(storedAt(11))).toBe("6:00 AM");
     });
@@ -75,8 +77,8 @@ describe("formatScheduleTime", () => {
   describe("missing times", () => {
     /**
      * `startTime` and `endTime` are both nullable and `UserCard` renders them
-     * unconditionally. The old copies passed `null` straight into `dayjs.tz`,
-     * which throws `RangeError: Invalid time value`.
+     * unconditionally, so a bare `dayjs.tz(null, ...)` - which throws
+     * `RangeError: Invalid time value` - cannot be what runs here.
      */
     it("returns a placeholder instead of throwing on null", () => {
       expect(() => formatScheduleTime(null)).not.toThrow();
@@ -101,18 +103,18 @@ describe("formatScheduleTime", () => {
 });
 
 /**
- * The write path used to resolve Boston's offset from whatever date
- * the picker happened to be anchored on, while the read path always resolved it
- * on `SCHEDULE_ANCHOR_DATE`. These pin the property that closes the gap: what
- * gets stored depends on the digits the user picked and on nothing else.
+ * The write path resolves Boston's offset at `SCHEDULE_ANCHOR_DATE`, the same
+ * date the read path always resolves it on. These pin the property that
+ * guarantees: what gets stored depends on the digits the user picked and on
+ * nothing else.
  */
 describe("toStoredScheduleTime", () => {
   const WINTER = "2026-01-15";
   const SUMMER = "2026-07-15";
 
   it("stores the same value for the same wall clock in either season", () => {
-    // The headline assertion. Before the fix these differed by an hour, and
-    // two students with identical schedules scored 60 minutes apart.
+    // The headline assertion: if these differed by an hour, two students
+    // with identical schedules would score 60 minutes apart.
     const winter = toStoredScheduleTime(pickedOn(WINTER, "09:00"));
     const summer = toStoredScheduleTime(pickedOn(SUMMER, "09:00"));
 
@@ -123,7 +125,8 @@ describe("toStoredScheduleTime", () => {
   it("is fed genuinely different offsets, so the helper is doing the work", () => {
     // Guards the test itself: if both inputs resolved to one offset the
     // assertion above would pass without proving anything. This is the raw
-    // `.toDate()` the component used to send.
+    // `.toDate()` value antd's picker produces, before `toStoredScheduleTime`
+    // normalises it.
     const utcTimeOfDay = (day: string) =>
       pickedOn(day, "09:00").toDate().toISOString().slice(11, 16);
 
@@ -202,8 +205,7 @@ describe("toPickerScheduleTime", () => {
 
 /**
  * The property that matters to a user: open a profile, save it without touching
- * the schedule, and the stored value is unchanged. Before the fix, doing that
- * during DST shifted the time by an hour every single time.
+ * the schedule, and the stored value is unchanged.
  */
 describe("toScheduleTimeInput", () => {
   // Three states the wire has to keep apart, because Prisma reads `undefined`
@@ -213,8 +215,8 @@ describe("toScheduleTimeInput", () => {
   });
 
   it("sends null when the user cleared the pick", () => {
-    // The defect: `?.toISOString()` turned this into `undefined`, so the
-    // intent to clear was discarded before the request left the browser.
+    // A bare `?.toISOString()` would turn this into `undefined`, discarding
+    // the intent to clear before the request even leaves the browser.
     expect(toScheduleTimeInput(null)).toBeNull();
   });
 

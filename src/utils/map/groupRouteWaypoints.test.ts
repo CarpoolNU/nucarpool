@@ -1,11 +1,9 @@
 /**
  * The group route's pickup and dropoff ordering.
  *
- * Extracted from `pages/index.tsx` so that it could be tested at
- * all; the behaviour is unchanged. The constraint is what matters here — a
- * plain nearest neighbour over all four corners would happily drop a rider off
- * before collecting them, and nothing downstream would notice: Mapbox draws
- * whatever order it is handed.
+ * The constraint is what matters here — a plain nearest neighbour over all
+ * four corners would happily drop a rider off before collecting them, and
+ * nothing downstream would notice: Mapbox draws whatever order it is handed.
  */
 
 import { Role, Status } from "@prisma/client";

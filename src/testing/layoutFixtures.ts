@@ -248,15 +248,14 @@ const groupMemberCardTrigger: LayoutFixture = {
 
 /*
  * The overflow menu added to a group member row, against the confirmation the
- * row already had. SCRUM-622.
+ * row already had.
  *
- * `GroupMemberCard` had one control. This puts a second 44px target in the
- * same shrink-wrapped slot, beside a Confirm button that an earlier fix
- * (SCRUM-480, the fixture above) went to some trouble to keep out of the
- * *first* trigger's footprint. The question this answers is whether the new
- * trigger reintroduces what that fix removed - not against Remove, which is
- * replaced when the confirmation opens, but against Confirm, which is drawn
- * beside the menu trigger and stays there.
+ * `GroupMemberCard` has two 44px targets in the same shrink-wrapped slot: the
+ * menu trigger here, beside a Confirm button that the fixture above checks
+ * stays clear of the *first* trigger's footprint. The question this answers
+ * is whether the menu trigger keeps the same clearance - not against Remove,
+ * which is replaced when the confirmation opens, but against Confirm, which
+ * is drawn beside the menu trigger and stays there.
  *
  * **The row is in its confirming state**, which is the only state where the
  * question exists. Outside it the slot holds a 44px button and the row is
@@ -703,11 +702,10 @@ const adminConsoleChartFold: LayoutFixture = {
     { name: "sidebar border-r-4", x: 4 },
     { name: "AdminData px-8", x: 64 },
     /*
-     * Not a CSS length, and the only inset here that is not. Before this
-     * chart-scroll fix the scroll port never scrolled - the column's one shrinkable child
-     * absorbed the whole overflow, so `scrollHeight` equalled `clientHeight`
-     * and no scrollbar was laid out. Stopping that shrink is what gives the
-     * port real scroll range, and a classic scrollbar takes width from the
+     * Not a CSS length, and the only inset here that is not. The scroll port
+     * has real scroll range: its one shrinkable child does not absorb the
+     * whole overflow, so `scrollHeight` exceeds `clientHeight` and a
+     * scrollbar is laid out, and a classic scrollbar takes width from the
      * content when it appears.
      *
      * 11px is Chromium's, measured here at both 667 and 1440. It is the one
@@ -915,11 +913,9 @@ const profileContentColumnWidth: LayoutFixture = {
   summary:
     "The profile page's two 700px desktop rows, now capped, inside the content column an overflow-x-hidden grid gives them",
   source: "src/components/Profile/AccountSection.tsx:89",
-  /* This fixture was originally built to record the defect; a later fix
-     corrected it and re-measured against the same chain. The live criterion
-     is that fix's, so that is what the banner should name - the original
-     figures are kept below as the before, labelled, because a fixture that
-     only carries the after cannot show that anything moved. */
+  /* This fixture carries both the current figures and the ones they
+     replaced, labelled as such, because a fixture that only carries the
+     after cannot show that anything moved. */
   issue: "SCRUM-490",
   viewportWidth: 667,
   viewportHeight: 375,
@@ -1244,10 +1240,10 @@ const SEND_BAR_ROW_CLASS =
  * The composer is a `contentEditable` div, not a `textarea`, and its height
  * comes from the inline `minHeight: 20px` rather than from any utility - so a
  * fixture that stands it in with a line of `text-lg` text measures 72px where
- * the real control measures 36. The first draft of this fixture did exactly
- * that and reported the send bar overflowing the viewport by 34px, which is an
- * artefact of the stand-in and not a fact about the app. The inline style is
- * reproduced on the element below for that reason.
+ * the real control measures 36, which would make the send bar appear to
+ * overflow the viewport by 34px - an artefact of the stand-in, not a fact
+ * about the app. The inline style is reproduced on the element below so this
+ * fixture does not fall into that trap.
  */
 const SEND_BAR_COMPOSER_CLASS =
   "placeholder w-full flex-1 resize-none border-0 bg-gray-100 p-2 text-lg focus:outline-hidden";
@@ -1618,16 +1614,14 @@ const centredDialogPanels: LayoutFixture = {
 };
 
 /**
- * The explore page's mobile content row, after this fix removed the
- * "use desktop instead" banner it used to be pushed down by.
+ * The explore page's mobile content row. Nothing sits above it: the row
+ * starts at the top of the viewport and carries no top margin.
  *
- * `h-mobile-row` used to be `calc(100% - 1.5rem - MOBILE_NAV_SPACE)`, and the
- * row carried a matching `mt-6`. Both are gone: the token is now
- * `calc(100% - MOBILE_NAV_SPACE)` and the row has no top margin. This fixture
- * is what this fix's acceptance criterion asks for directly - the row starts
- * at y=0 and its height is the viewport less `MOBILE_NAV_SPACE` - measured
- * rather than read off the class names, per an earlier lesson that a
- * class no longer appearing in the output is not a valid check.
+ * `h-mobile-row` resolves to `calc(100% - MOBILE_NAV_SPACE)`. This fixture
+ * checks that directly - the row starts at y=0 and its height is the
+ * viewport less `MOBILE_NAV_SPACE` - measured rather than read off the class
+ * names, because a class name appearing in the compiled output is not itself
+ * proof of the value it resolves to.
  *
  * The wrapper (`m-0 h-full w-full`) is included because the row's `100%` in
  * `h-mobile-row` resolves against *its* height, not `#__next`'s directly - so
@@ -1757,18 +1751,16 @@ const mobileTourMapStepSheetOverlap: LayoutFixture = {
  * compiled class string.
  *
  * **One fixture covers both insets the criteria ask for, because the inset is
- * not something the fixture's CSS can vary at all.** The first draft here
- * tried to fake a 34px inset by giving `env(safe-area-inset-bottom)` a 34px
- * fallback, reasoning that a browser with no notch leaves the variable
- * undefined. Measured and wrong: Chromium defines it as an actual `0px`,
- * fallback or no, so `env(x, 34px)` resolved to `0px` there exactly as it does
- * with the real `0px` fallback `MobileNav` declares - the two fixtures were
- * reporting the same number under different names. The only way to make
- * Chromium report a nonzero inset is to tell it to, with the CDP call this
- * measures: `session.send("Emulation.setSafeAreaInsetsOverride", { insets: {
- * bottom: 34, bottomMax: 34 } })`, which `scripts/measure-layout.ts` does not
- * issue - it is a manual step, taken once per inset, against the one fixture
- * below. `recorded` carries both results.
+ * not something the fixture's CSS can vary at all.** A fallback value cannot
+ * stand in for a real inset: Chromium defines `env(safe-area-inset-bottom)`
+ * as an actual `0px` when no override is set, fallback or no, so giving it a
+ * 34px fallback resolves to `0px` there regardless - indistinguishable from
+ * the real `0px` fallback `MobileNav` declares. The only way to make Chromium
+ * report a nonzero inset is to tell it to, with the CDP call this measures:
+ * `session.send("Emulation.setSafeAreaInsetsOverride", { insets: { bottom:
+ * 34, bottomMax: 34 } })`, which `scripts/measure-layout.ts` does not issue -
+ * it is a manual step, taken once per inset, against the one fixture below.
+ * `recorded` carries both results.
  */
 const MOBILE_NAV_CSS = `
   position: fixed;
@@ -1914,12 +1906,12 @@ const mobileNavActiveUnderline: LayoutFixture = {
  * safe-area-inset applied.
  *
  * `viewport-fit=cover` opts every page into drawing under a notched or
- * Dynamic Island iPhone's sensor housing, and `env(safe-area-inset-bottom)`
- * was the only one of the four insets this repository read - `-left` and
- * `-right` appeared nowhere. In portrait the horizontal insets are 0, so that
- * was very nearly correct; in landscape a notched iPhone reports roughly 44px
- * on whichever side the housing rotated to, and before this fix nothing here
- * moved the four `space-around` tabs out from under it.
+ * Dynamic Island iPhone's sensor housing, so `MobileNav` reads all three of
+ * `env(safe-area-inset-bottom)`, `-left` and `-right`. In portrait the
+ * horizontal insets are 0, so only the bottom one is observable there; in
+ * landscape a notched iPhone reports roughly 44px on whichever side the
+ * housing rotated to, and the four `space-around` tabs need that inset to
+ * stay clear of it.
  *
  * Same reasoning as `mobileNavActiveUnderline` above for why one fixture
  * covers every inset the criteria ask for: Chromium only reports a nonzero
@@ -1928,8 +1920,8 @@ const mobileNavActiveUnderline: LayoutFixture = {
  * measured by hand against that CDP call rather than derived from a chain of
  * classes. BEFORE was measured by removing the three lines
  * `padding-right`/`padding-bottom`/`padding-left` from this markup and
- * restoring the single `padding: 0px 0;` shorthand `MobileNav` used to
- * declare instead.
+ * reverting to a single unconditional padding declaration with no horizontal
+ * allowance.
  */
 const mobileNavHorizontalSafeArea: LayoutFixture = {
   name: "mobile-nav-horizontal-safe-area",
@@ -2019,14 +2011,14 @@ const mobileNavHorizontalSafeArea: LayoutFixture = {
  * The profile dropdown, open, at the desktop widths this fix's Impact section
  * names - 1280x800 and 1440x900.
  *
- * `[data-probe='dropdown-wrapper']` is `relative z-30` - the fix - and is the
- * only positioned element between `[data-probe='panel']` and the viewport.
- * Before the fix it was a plain `z-30`, `right-0` resolved against the
- * viewport instead of the trigger, and the two right edges disagreed by
- * however far the trigger sat from the window's own right edge. Reproduced
- * with the fix in place, because a fixture holds the current source
- * (`layoutFixtures.ts`'s own header says so); the BEFORE figures below were
- * measured by removing `relative` from this same markup.
+ * `[data-probe='dropdown-wrapper']` is `relative z-30` - the only positioned
+ * element between `[data-probe='panel']` and the viewport, which is what
+ * anchors `right-0` to the trigger rather than the browser window. Without
+ * `relative` here, `right-0` resolves against the viewport instead, and the
+ * two right edges disagree by however far the trigger sits from the window's
+ * own right edge. Reproduced with the current source (`layoutFixtures.ts`'s
+ * own header says so); the BEFORE figures below were measured by removing
+ * `relative` from this same markup.
  *
  * `[data-probe="bar"]` and its inset are carried over from `header-control-row`
  * unchanged, so the same measurement that proves the panel's own alignment
@@ -2126,8 +2118,8 @@ const profileDropdownPanel: LayoutFixture = {
  *  - `card-worst` carries `10:44 AM` twice, the widest of all 1,440 strings
  *    `formatScheduleTime`'s `h:mm A` can produce. It is the card the budget
  *    is sized against.
- *  - `card-reported` carries `10:00 AM` and `12:00 AM`, the pair a user
- *    reported, which needs 284.50px of 284 - half a pixel over.
+ *  - `card-reported` carries `10:00 AM` and `12:00 AM`, which needs 284.50px
+ *    of 284 - half a pixel over.
  *  - `card-short-company` holds that same pair beside a one-word company
  *    name. **It is the control for the width chain**, and the claim the
  *    chain encodes: the card is a block-level `flex-col` in a fixed `w-[25rem]`

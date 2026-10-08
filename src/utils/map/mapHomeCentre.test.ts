@@ -9,12 +9,11 @@ import {
 /**
  * Where the map belongs, and what to call it.
  *
- * The defect this covers was a *disagreement* rather than a wrong answer:
- * `index.tsx` computed the initial centre with a VIEWER case and the Recentre
- * button's handler took the company coordinates unconditionally. So the
- * interesting assertions here are not "a VIEWER gets the campus" on its own -
- * they are that the point, the button's label and the predicate behind both
- * always agree, because two of those three disagreeing is the bug.
+ * The interesting assertions here are not "a VIEWER gets the campus" on its
+ * own - they are that the point, the button's label and the predicate behind
+ * both always agree. The initial centre, the Recentre button's destination
+ * and its label all have to derive from the same rule, because any one of
+ * them disagreeing with the other two is what breaks the feature.
  */
 
 const user = (over: Partial<Parameters<typeof mapHomeCentre>[0]> = {}) => ({
@@ -31,8 +30,9 @@ describe("mapHomeCentre", () => {
 
   it("centres a VIEWER on campus rather than on (0, 0)", () => {
     // The production case. `user.me` reports `?? 0` for both components of a
-    // missing `Location`, and a VIEWER has no `Location` at all - so the old
-    // recentre handler flew a third of production into the Gulf of Guinea.
+    // missing `Location`, and a VIEWER has no `Location` at all - so a
+    // recentre handler that took the coordinates unconditionally would send
+    // about a third of production into the Gulf of Guinea.
     expect(
       mapHomeCentre(
         user({ role: Role.VIEWER, companyCoordLng: 0, companyCoordLat: 0 }),
@@ -42,16 +42,17 @@ describe("mapHomeCentre", () => {
 
   it("keeps a VIEWER on campus even when stale company coordinates survive on the row", () => {
     // Switching DRIVER -> VIEWER leaves the old company location on the
-    // `CarpoolSearch`. The role test is kept ahead of the coordinate test
+    // `CarpoolSearch`. The role check is kept ahead of the coordinate check
     // precisely so a browsing user is not centred on a workplace they no
-    // longer commute to, which is the behaviour SCRUM-508 settled.
+    // longer commute to.
     expect(mapHomeCentre(user({ role: Role.VIEWER }))).toEqual(NEU_CENTRE);
   });
 
   it("centres a non-VIEWER whose address never resolved on campus too", () => {
     // Not a VIEWER, but carrying the same `(0, 0)` sentinel - a profile saved
-    // before its address resolved. The old role-only test sent these rows to
-    // the Gulf as well; this is the case a role check alone does not reach.
+    // before its address resolved. A role check alone would send these rows
+    // to the Gulf as well, which is why the coordinate check exists alongside
+    // it.
     expect(
       mapHomeCentre(
         user({ role: Role.DRIVER, companyCoordLng: 0, companyCoordLat: 0 }),
@@ -81,10 +82,10 @@ describe("mapHomeSubject", () => {
 
 describe("the point and the label", () => {
   /**
-   * The invariant the defect broke, asserted directly: the label says
-   * "workplace" exactly when the destination *is* the workplace. A fix that
-   * corrected the `flyTo` and left the copy promising a workplace would pass
-   * every case above and fail here.
+   * The invariant asserted directly: the label says "workplace" exactly when
+   * the destination *is* the workplace. A change that corrected the `flyTo`
+   * and left the copy promising a workplace would pass every case above and
+   * fail here.
    */
   it.each([
     ["a rider with a workplace", user()],

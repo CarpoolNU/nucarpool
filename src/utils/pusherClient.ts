@@ -4,15 +4,16 @@ import { browserEnv } from "./env/browser";
 /**
  * The one browser-side Pusher client.
  *
- * Both subscriptions used to call `new Pusher(...)` inside their own
- * `useEffect` and, on cleanup, only `unsubscribe` — never `disconnect`. Each
- * construction opens a WebSocket, so unsubscribing left the socket open and
- * connections accumulated for the lifetime of the tab. In `Header` the effect
- * also depended on an object literal rebuilt on every parent render, so it tore
- * down and re-ran continuously, opening a fresh socket each time. Pusher meters
- * peak concurrent connections, so that was a running cost as well as a leak.
+ * A subscription that constructed its own `Pusher(...)` inside a `useEffect`
+ * and only called `unsubscribe` on cleanup — never `disconnect` — would leak
+ * a socket: each construction opens a WebSocket, and unsubscribing alone
+ * leaves it open, so connections accumulate for the lifetime of the tab. A
+ * `useEffect` whose dependency is an object literal rebuilt on every parent
+ * render makes this worse, tearing down and re-running continuously and
+ * opening a fresh socket each time. Pusher meters peak concurrent
+ * connections, so that would be a running cost as well as a leak.
  *
- * Callers now acquire the shared client and release it on cleanup. The client is
+ * Callers acquire the shared client and release it on cleanup. The client is
  * built on first acquire and disconnected when the last holder lets go, so a
  * page with both the header and an open conversation uses exactly one socket.
  *

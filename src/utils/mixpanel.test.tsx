@@ -27,8 +27,9 @@ import { identifyUser, resetIdentity, trackEvent } from "./mixpanel";
 /*
  * Only the four methods `utils/mixpanel` is allowed to use are defined, which
  * is load-bearing rather than merely minimal: `people.set` and `register` would
- * put profile properties into Mixpanel, and this ticket deliberately sends
- * none, so reaching for either throws here instead of passing quietly.
+ * put profile properties into Mixpanel, and nothing in `utils/mixpanel` is
+ * meant to send any, so reaching for either throws here instead of passing
+ * quietly.
  *
  * The spies are created *inside* the factory and read back afterwards, rather
  * than declared above and closed over. `jest.mock` is hoisted above the import

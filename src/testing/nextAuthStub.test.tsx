@@ -3,10 +3,10 @@
  * that lets a suite reach its spies.
  *
  * `trpcHarness.test.tsx` covers the equivalent ground for the tRPC stub. The
- * other three stubs added alongside this one are pass-throughs over a literal
- * surface, and a test asserting that a one-line stub returns its own constant
- * would be noise - the exception is the one behaviour here that is not a
- * constant, which is the status-to-`data` mapping.
+ * other stubs in this directory are pass-throughs over a literal surface, and
+ * a test asserting that a one-line stub returns its own constant would be
+ * noise - the exception is the one behaviour here that is not a constant,
+ * which is the status-to-`data` mapping.
  *
  * The file mocks `next-auth/react` at the top, the way a real consumer does,
  * so the `require`-inside-factory form and the identity of the exported
@@ -74,9 +74,9 @@ describe("the states buildNextAuthMock can produce", () => {
   });
 
   it("carries an expiry, which every hand-rolled mock omitted", () => {
-    // The gap this stub closes by construction: a component that started
-    // reading `session.expires` saw a string in production and `undefined`
-    // in all six suites that spelled the session out by hand.
+    // The gap this stub closes by construction: a mock that omits `expires`
+    // shows `undefined` to a component reading `session.expires`, against a
+    // string in production.
     expect(typeof buildNextAuthMock().useSession().data?.expires).toBe(
       "string",
     );

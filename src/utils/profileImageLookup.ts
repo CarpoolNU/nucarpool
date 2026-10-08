@@ -1,12 +1,9 @@
 /**
  * Where a user's profile picture lives in S3.
  *
- * Whether a user *has* one is no longer an S3 question. `User.profilePictureUpdatedAt`
+ * Whether a user *has* one is not an S3 question: `User.profilePictureUpdatedAt`
  * records it, `getPresignedDownloadUrl` signs only when it is set, and a null
- * column means "no picture". That became true once a one-off backfill had
- * recorded every picture uploaded before the column existed — until then a
- * null row still asked S3 with a `HeadObject`, and this module held the
- * predicate that told the two apart.
+ * column means "no picture". This module is only the key layout.
  */
 
 /**

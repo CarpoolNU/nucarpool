@@ -133,9 +133,9 @@ beforeEach(() => {
 
 describe("refetch-on-focus policy", () => {
   it("refetches the messaging queries when the tab comes back", async () => {
-    // The bug: three messages arrive while the phone is locked, and returning
-    // to the tab refetched nothing, so the thread and the badge stayed short of
-    // the server for the rest of the session.
+    // The risk this guards against: messages arriving while the phone is
+    // locked must be picked up on return, or the thread and the badge stay
+    // short of the server for the rest of the session.
     await renderApp(spies);
 
     await backgroundAndReturn();

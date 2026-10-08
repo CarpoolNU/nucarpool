@@ -2,11 +2,11 @@
  * Takes every *other* user's pin off the map — icon, label, source and image.
  *
  * **Asks the map which layers exist rather than remembering which were added.**
- * Cleanup used to be keyed by identity, so removing a pin required having
- * remembered whose it was; `onViewGroupRoute` adds one per group member and
- * remembered none, so nothing ever removed them and they survived a route drawn
- * over the top, a tab change and every later preview. A sweep cannot forget a
- * pin, and a bookkeeping slip here is invisible until somebody looks at the map.
+ * Identity-keyed cleanup would require every caller to track whose pin is
+ * whose; `onViewGroupRoute` adds one pin per group member, and a caller that
+ * forgets even one leaves it to survive a route drawn over the top, a tab
+ * change and every later preview. A sweep cannot forget a pin, so a
+ * bookkeeping slip here is invisible until somebody looks at the map.
  *
  * **A sweep is safe because of where it is called** — at the *start* of each
  * handler, before that handler draws its own pins. `onViewGroupRoute` sweeps
@@ -34,11 +34,10 @@
  * `other-user-x-company-layer` and `other-user-x-company-text-layer` capture
  * `other-user-x-company`, and the `Set` below collapses them into one removal.
  *
- * A regex rather than `id.replace("-layer", "-source")`, which is what
- * `clearRiderStartMarkers` did: on a text layer that produces
- * `...-start-text-source`, a source that has never existed. It went unnoticed
- * only because its `-start-layer` filter never matched a text layer in the
- * first place.
+ * A regex rather than `id.replace("-layer", "-source")`: a naive replace on a
+ * text layer id produces `...-start-text-source`, a source that never exists,
+ * because the icon and label layers share one source named after the stem
+ * alone.
  */
 const PIN_LAYER = /^(other-user-.+-(?:company|start))-(?:text-)?layer$/;
 

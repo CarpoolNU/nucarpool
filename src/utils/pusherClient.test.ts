@@ -1,14 +1,14 @@
 /**
  * Shared Pusher client lifecycle.
  *
- * Both subscriptions used to construct their own client inside a `useEffect`
- * and only `unsubscribe` on cleanup — never `disconnect` — so every
- * construction leaked a WebSocket for the lifetime of the tab. Pusher meters
- * peak concurrent connections, so the leak cost money as well as sockets.
+ * A subscription that constructed its own client inside a `useEffect` and
+ * only called `unsubscribe` on cleanup — never `disconnect` — would leak a
+ * WebSocket for the lifetime of the tab. Pusher meters peak concurrent
+ * connections, so that would cost money as well as sockets.
  *
- * These tests pin the reference counting, which is the whole of the fix: one
- * client however many holders, and exactly one disconnect when the last of them
- * lets go. `pusher-js` is mocked, so nothing here opens a connection.
+ * These tests pin the reference counting that avoids it: one client however
+ * many holders, and exactly one disconnect when the last of them lets go.
+ * `pusher-js` is mocked, so nothing here opens a connection.
  */
 
 // Marks this file as a module. Without it TypeScript treats the file as a
@@ -147,7 +147,7 @@ describe("releasePusherClient", () => {
 
 describe("holder count tracks the two real subscribers", () => {
   it("stays at one socket with both the header and a conversation mounted", async () => {
-    // The shape this fix exists for: Header plus MessageContent, one socket.
+    // The real-world shape: Header plus MessageContent share one socket.
     const { acquirePusherClient, releasePusherClient, pusherClientHolders } =
       await load();
 

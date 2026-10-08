@@ -14,9 +14,10 @@
  * The uncomfortable finding this pins: passing `ContentType` to
  * `PutObjectCommand` does **not** constrain the upload, because
  * `S3RequestPresigner.prepareRequest` unconditionally adds `content-type` to its
- * unsignable set. Before this change the URL was signed over `host` alone, so it
- * would accept a PUT of any content type at the user's key. An allow-list on the
- * tRPC input, on its own, would have left that completely intact.
+ * unsignable set. Without the `signableHeaders` override, the URL is signed
+ * over `host` alone, so it accepts a PUT of any content type at the user's
+ * key. An allow-list on the tRPC input, on its own, cannot constrain that,
+ * because S3 never sees it.
  */
 
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";

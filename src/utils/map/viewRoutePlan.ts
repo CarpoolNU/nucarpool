@@ -20,11 +20,11 @@
  * where the drawing happens: `viewRouteClick.test.ts` asserts `viewRoute` is
  * reached for every combination of these inputs.
  *
- * Extracted as a pure function because the decision was previously inline in
- * `onViewRouteClick` in a shape that could never be true — a contradictory
- * condition is invisible in review and invisible to a suite that cannot reach
- * the code. Stating it where a test can enumerate every input is what makes
- * "this branch can never run" a failing assertion rather than a comment.
+ * Extracted as a pure function so a contradictory condition becomes a failing
+ * assertion rather than a comment: inline in `onViewRouteClick`, a
+ * contradictory condition is invisible in review and invisible to a suite
+ * that cannot reach the code. Stating the decision here, where a test can
+ * enumerate every input, is what catches "this branch can never run."
  */
 
 export type ViewRoutePlan = {
@@ -32,16 +32,17 @@ export type ViewRoutePlan = {
    * Whether the click came from the Map tab inside `MessagePanel`, which passes
    * the same id as both the selected and the clicked user.
    *
-   * This is the one path that worked before the fix, which is why the defect
-   * survived: the route someone would deliberately test is the route that was
-   * never broken.
+   * This is the path most straightforward to test by hand, which is exactly
+   * why a defect confined to the other paths is easy to miss: manually
+   * confirming the route works here says nothing about whether it draws for
+   * anyone else.
    */
   isInRequestContext: boolean;
 
   /**
    * Whether the page should point its `otherUser` state at the clicked user.
    *
-   * Skipped in request context, exactly as before. `otherUser` is what holds
+   * Skipped in request context. `otherUser` is what holds
    * the "initial route rendering" effect shut - that effect is guarded on
    * `!otherUser` and redraws the viewer's own route - and in request context
    * `MessagePanel` owns the selection instead.
@@ -52,44 +53,28 @@ export type ViewRoutePlan = {
    * Whether to add the clicked user's destination pin
    * (`updateCompanyLocation`, `isCurrent: false`).
    *
-   * Outside request context this is the fix: it is now `true` for a user the
-   * map is not plotting, which is what the unreachable branch was written to
-   * do. It stays `false` for a user already in `geoJsonUsers`, because the
-   * cluster layer is already drawing them at that same company coordinate and a
-   * pin would double it.
+   * Outside request context this is `true` for a user the map is not
+   * plotting and `false` for one already in `geoJsonUsers`, because the
+   * cluster layer is already drawing them at that same company coordinate and
+   * a pin would double it.
    *
-   * In request context it is unconditional, which is *deliberately* asymmetric:
-   * that is what the working path did before, and `MessagePanel`'s Map tab is
-   * the regression this change has to protect. The asymmetry is only observable
-   * with the "messaged" filter turned on, where a request counterpart can be on
-   * the map and gets a pin over their cluster point - pre-existing behaviour,
-   * left alone on purpose.
+   * In request context it is unconditional, which is *deliberately* asymmetric
+   * with the rule above: `MessagePanel`'s Map tab depends on that asymmetry
+   * holding, so it is pinned here rather than left to fall out of the general
+   * rule. The asymmetry is only observable with the "messaged" filter turned
+   * on, where a request counterpart can be on the map and gets a pin over
+   * their cluster point - pre-existing behaviour, left alone on purpose.
    */
   addsDestinationMarker: boolean;
 
   /**
-   * **Removed**, along with the `markedDestinationUserId` input it
-   * was computed from: `removesDestinationMarkerFor`, naming the one previously
-   * added pin to take off first.
-   *
-   * That field existed because pin removal was keyed by identity - a pin is a
-   * named layer, so you could only remove one you had remembered adding - and
-   * this doc argued against the alternative: "Only ever names the one
-   * remembered pin, never a sweep of every `other-user-*` layer.
-   * `onViewGroupRoute` puts a pin on every group member, and a sweep here would
-   * erase them."
-   *
-   * That was right about the danger and wrong about the remedy. The pins it was
-   * protecting were the ones nothing *ever* removed - they
-   * outlived the route they belonged to, the tab they were drawn on, and the
-   * session. `clearOtherUserMarkers` now sweeps them at the *start* of both
-   * handlers, before either draws its own, so the group preview re-adds every
-   * member immediately after and no pin it owns is ever the one erased.
-   *
-   * With the sweep there is no remembered pin left to name, so the field, the
-   * page`s `destinationMarker` ref and `removeDestinationMarker` all went with
-   * it. Recorded here rather than deleted silently because the argument above
-   * is the one a future reader is most likely to re-derive.
+   * No field names a pin to remove: there is nothing to remember. A sweep
+   * naming one remembered pin at a time cannot work once `onViewGroupRoute`
+   * puts a pin on every group member, so removal goes by asking the map what
+   * exists instead of tracking identity. `clearOtherUserMarkers` runs that
+   * sweep at the *start* of both handlers, before either draws its own pin, so
+   * the group preview re-adds every member immediately after and no pin it
+   * owns is ever the one erased.
    */
 };
 

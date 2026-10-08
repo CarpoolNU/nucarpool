@@ -1,13 +1,11 @@
 /**
  * The shared fake of `next-auth/react`.
  *
- * Fourteen test files mock this module, in five shapes that differ only in
- * which session they hand back: six return `{ data: { user: { name: "Test
- * User" } } }`, three return an unauthenticated session, two expose a local
- * `jest.fn()` so the suite can vary it per test, and two mock `signOut` alone.
- * None of them is wrong; the point of collapsing them is that the *sixth*
- * shape a new test needs should not be invented from whichever neighbour the
- * author happened to open.
+ * `useSession` can report three states - authenticated, unauthenticated, and
+ * loading - and a suite that needs the session to vary per test reaches the
+ * underlying spy directly. Collapsing every shape a consumer might need into
+ * one builder means a new test reaches for an existing state rather than
+ * inventing one from whichever neighbouring test happened to be open.
  *
  * ---
  *
@@ -87,16 +85,16 @@ export type NextAuthMockOptions = {
 };
 
 /**
- * The name six of the fourteen files already used. Kept as the default so
- * those migrations are a pure deletion rather than a behaviour change.
+ * Kept as the default so migrating an existing suite onto this stub is a pure
+ * deletion rather than a behaviour change.
  */
 const DEFAULT_USER: StubSessionUser = { name: "Test User" };
 
 /**
  * Far enough out that a component comparing it against `Date.now()` treats the
- * session as live. Real sessions always carry this; the hand-rolled mocks
- * omitted it, so a component that started reading it would have seen
- * `undefined` in every test and a string in production.
+ * session as live. Real sessions always carry this, so a mock that omits it
+ * would show `undefined` to a component reading it, in a test, against a
+ * string in production.
  */
 const FAR_FUTURE_EXPIRY = "2999-01-01T00:00:00.000Z";
 

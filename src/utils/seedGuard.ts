@@ -7,18 +7,11 @@
  * reset during `yarn db:schema` or `prisma migrate reset`, because Prisma runs
  * the configured seed command after a reset. The check therefore lives in the
  * script itself rather than in any one command, so no invocation path can skip
- * it. (A `yarn build:preview` script used to be a fourth; it was deleted for
- * force-pushing the schema and re-seeding, and the note here outlived it.)
+ * it.
  *
- * **There is no override, and that is the design.** `SEED_ALLOW_REMOTE=1` used
- * to turn the remote-host refusal off for any host, production included, on the
- * argument that seeding a shared branch was something a human might one day
- * legitimately need. Nothing in this repository ever set it, the one plausible
- * consumer was the deleted `build:preview`, and `CLAUDE.md` had already reduced
- * it to "must never be set to make something work" — which is a deletion
- * waiting to happen rather than a feature. A single environment variable
- * standing between a shell history entry and an unrecoverable production wipe
- * is not a trade worth keeping.
+ * **There is no override, and that is the design.** A single environment
+ * variable standing between a shell history entry and an unrecoverable
+ * production wipe is not a trade worth keeping.
  *
  * This module is deliberately dependency-free and side-effect-free so it can be
  * unit tested without a database or a Prisma client. It is tooling, not
@@ -46,9 +39,8 @@ export type SeedBlockReason =
 
 /**
  * `reason` is a single-member union rather than a bare marker, deliberately:
- * there was a second member (`"override"`) and callers switched on it. Keeping
- * the shape makes adding another way to say yes a visible, reviewed change to
- * this type rather than a quiet extra branch.
+ * adding another way to say yes should require a visible, reviewed change to
+ * this type, not a quiet extra branch.
  */
 export type AllowedSeedTarget = {
   allowed: true;

@@ -1,13 +1,13 @@
 /**
  * `createRequestHandlers` — the accept/reject gate.
  *
- * `handleAcceptRequest` used to resolve `undefined` whether the acceptance had
- * happened or not, so `MessagePanel.handleAccept` could not tell success from
- * refusal and sent the acceptance email and closed the conversation either way.
- * A driver with no seats left got a toast explaining the refusal while the rider
- * got mail saying they had been accepted into a carpool that was never created,
- * and `sendAcceptanceNotification` is deliberately not rate limited, so that
- * call was a real email to a real person.
+ * If `handleAcceptRequest` resolved `undefined` whether the acceptance had
+ * happened or not, `MessagePanel.handleAccept` could not tell success from
+ * refusal and would send the acceptance email and close the conversation
+ * either way. A driver with no seats left would get a toast explaining the
+ * refusal while the rider gets mail saying they were accepted into a carpool
+ * that was never created, and `sendAcceptanceNotification` is deliberately
+ * not rate limited, so that would be a real email to a real person.
  *
  * It returns the boolean these tests pin: `true` only once a group write has
  * landed. Everything that tells either party the acceptance happened now hangs
@@ -128,12 +128,9 @@ const mockToastSuccess = toastSpies().success;
 /**
  * Which caches were invalidated, recorded rather than declared.
  *
- * This was four named spies behind a literal `utils` tree, one per cache -
- * better than a shared counter, which could not say *which* calls it had
- * counted, but still a fixture that enumerated the expected set. It therefore
- * could not fail on a cache that was missing from the set altogether, and
- * SCRUM-629 was two of those: `recommendations.me` and `geoJsonUserList`, the
- * queries behind Explore and the map. The proxy materialises any path, so the
+ * A fixture of named spies behind a literal `utils` tree, one per cache,
+ * cannot fail on a cache missing from the set altogether - only on one it
+ * named and got wrong. The proxy materialises any path instead, so the
  * fixture states nothing and the assertion states the whole set.
  */
 const recorder = recordInvalidations();
@@ -469,10 +466,10 @@ describe("handleAcceptRequest — the writes a real acceptance makes", () => {
 
     // The whole set, not a subset: `requests.me` and `user.me` for the
     // request's status and the accepter's own carpoolId and seat count;
-    // `groups.me` for the member list, which was the cache nobody invalidated
-    // here; and the two discovery queries, which an accept has just made wrong
-    // in the other direction - the accepter keeps a full list of drivers they
-    // can no longer connect to (SCRUM-629).
+    // `groups.me` for the member list; and the two discovery queries, which an
+    // accept makes wrong in the other direction - without invalidating them,
+    // the accepter would keep a full list of drivers they can no longer
+    // connect to.
     //
     // Each exactly once, since the two discovery queries are the expensive
     // ones: `recommendations.me` runs the full scoring pass and
@@ -481,18 +478,17 @@ describe("handleAcceptRequest — the writes a real acceptance makes", () => {
   });
 
   /**
-   * The case the defect was actually reached through.
-   *
    * A driver already in a group accepts a second rider. That is `groups.edit`,
    * not `groups.create`, and `carpoolId` does not change - so nothing remounts
-   * and nothing refetches. With `refetchOnMount` and `refetchOnWindowFocus`
-   * both false globally (`utils/trpc.ts`), My Group served its cached
-   * pre-accept membership for the rest of the session: the new rider absent
-   * from the list and from "Preview Group Route".
+   * and nothing refetches on its own. With `refetchOnMount` and
+   * `refetchOnWindowFocus` both false globally (`utils/trpc.ts`), My Group
+   * would otherwise serve its cached pre-accept membership for the rest of the
+   * session: the new rider absent from the list and from "Preview Group
+   * Route".
    *
    * `useGroupMembership.ts` calls the *same* `groups.edit` procedure and does
-   * invalidate `groups.me`. The two call sites disagreeing is how this arose,
-   * so both are asserted rather than only the one that was wrong.
+   * invalidate `groups.me`, so both call sites are asserted here rather than
+   * only this one - the two must not be allowed to disagree.
    */
   it("invalidates the group when a rider joins a driver's existing group", async () => {
     const { handleAcceptRequest } = handlers();
@@ -515,10 +511,11 @@ describe("handleAcceptRequest — the writes a real acceptance makes", () => {
 
 describe("handleRejectRequest", () => {
   /**
-   * Reject and Withdraw Request are two buttons on one handler, and
-   * they used to share one sentence — so withdrawing your own request reported
-   * that the *other* person's request to *you* had been deleted. Wrong person,
-   * wrong direction, and a claim they had asked you when you had asked them.
+   * Reject and Withdraw Request are two buttons on one handler. A single
+   * sentence for both would report, when withdrawing your own request, that
+   * the *other* person's request to *you* had been deleted: the wrong
+   * person, the wrong direction, and a claim they had asked you when you had
+   * asked them.
    */
   it("says the request was withdrawn when the caller is the sender", async () => {
     const { handleRejectRequest } = handlers();
@@ -619,12 +616,12 @@ describe("isMutating", () => {
 /**
  * A pair who can no longer carpool.
  *
- * `user.requests.me` used to drop these requests, so this button never saw one:
- * hiding it did not stop it blocking new requests, and left the sender no way to
- * withdraw it. Now the request stays, which means the accept path has to answer
- * for it - and it cannot go through, because the branches below treat "I am not
- * a DRIVER" as "they are". Two riders would have named one of themselves as the
- * driver; two drivers would have spent a seat filing another driver as a rider.
+ * `user.requests.me` does not drop these requests: hiding one would not stop
+ * it blocking new requests, and would leave the sender no way to withdraw it.
+ * Because the request stays, the accept path has to answer for it - and it
+ * cannot go through, because the branches below treat "I am not a DRIVER" as
+ * "they are". Two riders would have named one of themselves as the driver;
+ * two drivers would have spent a seat filing another driver as a rider.
  *
  * `groups.create` and `groups.edit` refuse the same pairs server-side. This is
  * the fast half, and the only one that can name whose role moved.

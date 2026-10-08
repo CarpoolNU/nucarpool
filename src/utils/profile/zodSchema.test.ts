@@ -148,15 +148,15 @@ describe("onboardSchema", () => {
   });
 
   /**
-   * `seatAvail` used to be the one field in this schema with no custom
-   * messages, so Zod's own wording reached the screen verbatim -
+   * `seatAvail` is the field most exposed to Zod's own default wording -
    * "Invalid input: expected number, received NaN", "Too big: expected
-   * number to be <=6", "Invalid input: expected int, received number".
-   * Asserting the exact project string, rather than merely that
-   * `seatAvail` has an issue, is what stops a Zod upgrade that changes its
-   * default wording from silently restoring the defect: this schema names
-   * its own message for every check, so an upgrade cannot make one reappear
-   * without also making one of these assertions fail.
+   * number to be <=6", "Invalid input: expected int, received number" -
+   * if its custom messages were ever dropped. Asserting the exact project
+   * string, rather than merely that `seatAvail` has an issue, is what stops
+   * a Zod upgrade that changes its default wording from silently
+   * reintroducing that output: this schema names its own message for every
+   * check, so an upgrade cannot make one reappear without also making one of
+   * these assertions fail.
    *
    * `NaN` here is the schema's own defence, exercised directly. The route a
    * user actually takes - clearing the box - is intercepted earlier, by
@@ -245,11 +245,10 @@ describe("onboardSchema — text bounded by its column", () => {
 });
 
 describe("onboardSchema — addresses bounded by their columns", () => {
-  // `companyAddress` and `startAddress` write to `location`, not `user`, and
-  // were the last strings in this schema with no bound. Nobody types them —
-  // they come back from Mapbox — which is why they were missed, but a long
-  // enough `place_name` still overflows `VARCHAR(191)`, and the failure landed
-  // as a masked save error rather than on the field.
+  // `companyAddress` and `startAddress` write to `location`, not `user`.
+  // Nobody types them directly - they come back from Mapbox - so the input's
+  // `maxLength` cannot cap them, and a long enough `place_name` can still
+  // overflow `VARCHAR(191)` without this bound.
   const fields = ["companyAddress", "startAddress"] as const;
 
   it.each(fields)("rejects an over-length %s", (field) => {
@@ -289,9 +288,10 @@ describe("onboardSchema — addresses bounded by their columns", () => {
 });
 
 /**
- * A reversed co-op range was accepted here and stored as submitted, which made
- * the user invisible to every full-overlap search with nothing on the form to
- * say so.
+ * A reversed co-op range would otherwise be stored exactly as submitted,
+ * leaving the user invisible to every full-overlap search with nothing on the
+ * form to say so - the reason this schema enforces ordering itself rather
+ * than leaving it to the server alone.
  */
 describe("onboardSchema — co-op date ordering", () => {
   const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
@@ -347,10 +347,10 @@ describe("onboardSchema — co-op date ordering", () => {
   );
 
   it("exempts a VIEWER, whose pickers are disabled", () => {
-    // It used to check a VIEWER too. But both pickers are `disabled` for a
-    // VIEWER and every save re-sends the stored dates, so a VIEWER holding a
-    // reversed range could save nothing at all - name, bio, role - and was
-    // routed to fields they could not change.
+    // Both pickers are `disabled` for a VIEWER, and every save re-sends the
+    // stored dates, so refusing a VIEWER's reversed range would fail every
+    // save they make - name, bio, role - over fields they have no way to
+    // change.
     expect(
       onboardSchema.safeParse({
         ...withRange("2027-01-31", "2026-01-31"),

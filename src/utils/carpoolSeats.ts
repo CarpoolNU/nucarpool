@@ -41,21 +41,23 @@ export const seatAvailValueAs = (value: string): number | undefined =>
 /**
  * "This driver has a seat a rider can take."
  *
- * One definition, because the app used to hold two. `reserveSeat` has always
- * decremented under `seatsAvail: { gt: 0 }`, while the read path — the
- * candidate query, `calculateScore`, and the two buttons — tested `=== 0`.
- * They agree on every value the app can now produce and disagree on exactly
- * one: a negative count, which the read path reads as "has space" and the
+ * One definition, shared by the write path and the read path so they cannot
+ * disagree. `reserveSeat` decrements under `seatsAvail: { gt: 0 }`; the read
+ * path — the candidate query, `calculateScore`, and the two buttons — uses
+ * this same predicate rather than its own `=== 0` check, which would agree on
+ * every value the app can produce today and disagree on exactly one: a
+ * negative count, which a bare `=== 0` check reads as "has space" and the
  * write path as "does not".
  *
- * The compare-and-swap above stopped new negatives, but rows the
- * old accounting had already corrupted stayed, and one belonged to an ACTIVE
- * driver. That driver was recommended to riders as having room and then
- * refused every acceptance with NO_SEATS_MESSAGE — a message naming
- * themselves, which neither party could act on.
+ * That disagreement matters because a negative count can still be stored: the
+ * compare-and-swap above stops new negatives, but says nothing about a row a
+ * prior write already corrupted. A driver holding one is recommended to
+ * riders as having room, then refuses every acceptance with
+ * `NO_SEATS_MESSAGE` — a message naming the driver themselves, which neither
+ * party can act on.
  *
- * Non-positive is unavailable, everywhere. The write path was already right;
- * this is what the read path now uses so it cannot drift again.
+ * Non-positive is unavailable, everywhere, so the read path cannot drift from
+ * the write path's definition again.
  */
 export const hasSeatAvailable = (seats: number) => seats > 0;
 

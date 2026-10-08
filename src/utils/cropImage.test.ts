@@ -11,15 +11,13 @@ import { croppedCanvasSize, MAX_CROPPED_IMAGE_PX } from "./cropImage";
  * behaviour this cap exists to prevent cannot be reproduced here either - see
  * the PR for the manual pass.
  *
- * What is testable is the number that reaches `canvas.width`, and that is
- * exactly where this was silently wrong: the canvas used to be sized from the
- * crop rectangle directly, which react-easy-crop reports in the *source*
- * image's pixels rather than the output's.
+ * What is testable is the number that reaches `canvas.width`: sizing the
+ * canvas from the crop rectangle directly would use react-easy-crop's
+ * *source*-image pixels rather than the output's.
  */
 
 /**
- * The crop rectangle a 4032x3024 iPhone photo actually produces, which is the
- * case the ticket was filed for.
+ * The crop rectangle a 4032x3024 iPhone photo actually produces.
  *
  * Derived from react-easy-crop 6.2.3's own `computeCroppedArea`: with
  * `objectFit="contain"` the image lays out at 359x269.25 in the modal's
@@ -29,12 +27,11 @@ import { croppedCanvasSize, MAX_CROPPED_IMAGE_PX } from "./cropImage";
  * 3024px height and `0.75 * 4032` of the width. With `aspect={1}` the library
  * squares it itself, so both sides are 3024 - not merely close to equal.
  *
- * **This was 3369x3369 before the fix**, when the cropper opened at a flat
- * `zoom: 1` and the crop box was 111% of the displayed image's height: the
- * rectangle overhung the photo by 173px top and bottom, and those bands
- * reached the encoded JPEG as opaque black. The framing changed, so this
- * number did; `croppedCanvasSize` itself is unchanged and still caps either
- * one at 512.
+ * **A flat `zoom: 1`, with the crop box at 111% of the displayed image's
+ * height, would produce 3369x3369 instead**: the rectangle would overhang the
+ * photo by 173px top and bottom, and those bands would reach the encoded JPEG
+ * as opaque black. `croppedCanvasSize` itself does not depend on the framing -
+ * it caps either one at 512 regardless.
  */
 const IPHONE_CROP = { width: 3024, height: 3024 };
 
@@ -50,9 +47,10 @@ describe("croppedCanvasSize", () => {
   });
 
   it("brings that crop under the iOS canvas ceiling it used to exceed", () => {
-    // The whole ticket in two assertions. Before: ~11.3MP, over the older-device
-    // cap, where iOS hands back a blank canvas and `toBlob` still succeeds - so
-    // the user uploads a blank avatar and nothing reports a failure.
+    // Two assertions covering the whole hazard: the raw crop is ~11.3MP, over
+    // the older-device cap, where iOS hands back a blank canvas while
+    // `toBlob` still succeeds - so the user would upload a blank avatar with
+    // nothing reporting a failure.
     const before = IPHONE_CROP.width * IPHONE_CROP.height;
     expect(before).toBeGreaterThan(IOS_CANVAS_AREA_CAP_PX);
 

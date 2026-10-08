@@ -11,10 +11,10 @@
  *
  * **What is fingerprinted is the prose, not the file.** The body of every
  * `<p>` outside the error alert, with tags, JSX expressions and all whitespace
- * normalised away. That distinction is the point: the terms have survived
- * seven commits that rewrote the mutation, migrated the dialog to Tailwind v4
- * and restructured it for assistive technology, and this fingerprint is
- * unchanged across all of them. It moves only when somebody edits the words.
+ * normalised away. That distinction is the point: the fingerprint is
+ * unaffected by changes to the mutation, the markup framework, or the
+ * accessibility structure around the text. It moves only when somebody edits
+ * the words.
  *
  * Reading the source file rather than rendering the component is deliberate.
  * Rendering would also pick up the title and the button, both of which are

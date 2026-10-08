@@ -166,9 +166,8 @@ describe("parseMapboxFeature", () => {
     });
 
     it("reads the state regardless of which city-ish entry precedes it", () => {
-      // The old chain used `else if`, so matching one field on a context entry
-      // skipped the remaining checks for that entry. Each field is now read
-      // independently.
+      // Each field on a context entry is read independently, so matching one
+      // (e.g. a place) does not skip checking the same entry for a region.
       const result = parseMapboxFeature(
         feature({
           context: [

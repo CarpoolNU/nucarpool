@@ -1,12 +1,10 @@
 /**
  * What tapping an item in the mobile bottom navigation should do.
  *
- * `handleMobileNavClick` decided this inline, and one of the cases it decided
- * was wrong: leaving the profile page went straight to
- * `window.location.href`, tearing the page down along with every unsaved form
- * value. `checkChanges` — the unsaved-changes guard the profile page hands to
- * `Header` — was consulted by the desktop map button and by nothing else, so
- * `UnsavedModal` could not appear on mobile at all.
+ * Leaving the profile page must ask `checkChanges` — the unsaved-changes
+ * guard the profile page hands to `Header` — before navigating away, the same
+ * guard the desktop map button already consults, so `UnsavedModal` can appear
+ * on mobile too.
  *
  * The decision is lifted out here for the same reason `viewRoutePlan.ts` was:
  * `Header` cannot be executed without a router, a tRPC client, a portal and a
@@ -14,13 +12,11 @@
  * the established shape — a plan that decides, and a caller that
  * carries it out.
  *
- * **The hard navigation is kept deliberately.** It fixed "can't switch
- * from profile to explore/requests on a real phone despite that it works on a
- * simulator" by replacing a client-side push with a full page load, and that
- * is load-bearing on real devices. A full load does defeat any client-side
- * guard — but only if it happens first. Asking the page *before* navigating
- * costs the guard nothing and leaves that change's behaviour untouched, which is
- * why no `beforeunload` fallback is needed.
+ * **The hard navigation is kept deliberately.** A full page load, rather than
+ * a client-side push, is load-bearing on real devices for leaving the profile
+ * page for explore/requests. A full load does defeat any client-side guard —
+ * but only if it happens first. Asking the page *before* navigating costs the
+ * guard nothing, so no `beforeunload` fallback is needed.
  */
 
 /** The three destinations the bottom navigation can reach besides the profile. */
@@ -63,10 +59,10 @@ export type MobileNavPlan =
  *   showing can be told apart from one that switches in from elsewhere.
  *   `setSidebar(sameValue)` is a same-value `setState` and React bails out of
  *   it without firing the effects a real switch would - which is exactly the
- *   effect that resets the My Group sheet to its resting position. Nothing
- *   consulted this before `reselected` existed, so tapping My Group again
- *   while its sheet sat collapsed (from the header's Close button) did
- *   nothing at all; only leaving for another tab and back reopened it.
+ *   effect that resets the My Group sheet to its resting position. Without
+ *   `reselected`, tapping My Group again while its sheet sits collapsed (from
+ *   the header's Close button) would do nothing at all; only leaving for
+ *   another tab and back would reopen it.
  */
 export function planMobileNav({
   option,
@@ -108,16 +104,14 @@ export function planMobileNav({
  * Which bottom-navigation item should be lit, or `null` when the current page
  * is not one of them.
  *
- * Split out here for the same reason `planMobileNav` is: this used to be an
- * inline ternary inside `renderMobileNav`, and one of its cases was wrong.
- * `/admin` supplies no `data`, so the highlight fell through to `activeNav` —
- * whose initial value is `"explore"` — and the bar claimed the user was on the
- * map while they were looking at the admin dashboard. There is no fourth tab
- * for `/admin` and there should not be one, so the honest answer is that none
- * of them is current.
+ * Split out here for the same reason `planMobileNav` is. `/admin` supplies no
+ * `sidebarValue`, and there is no fourth tab for it and there should not be
+ * one, so the honest answer is that none of the tabs is current — not a
+ * fallback value that happens to look like one of them.
  *
  * `null` rather than a tab is therefore load-bearing: it is what lets the bar
- * render with nothing selected, which is a state the ternary could not express.
+ * render with nothing selected, which a value drawn only from `NavTab` could
+ * not express.
  */
 export type ActiveNavItem = NavTab | "profile" | null;
 
@@ -163,8 +157,7 @@ export function activeMobileNavItem({
 
   const candidate = sidebarValue || lastTapped;
 
-  // The ternary compared this against each item's id and simply matched
-  // nothing when it was not a tab. Stated explicitly so the return type can
-  // be the three tabs rather than `string`.
+  // Matches none of the tabs when `candidate` is not one, stated explicitly
+  // so the return type can be the three tabs rather than `string`.
   return isNavTab(candidate) ? candidate : null;
 }

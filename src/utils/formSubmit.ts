@@ -2,7 +2,7 @@ import type { KeyboardEvent } from "react";
 
 /**
  * A form `onKeyDown` that stops Enter in a **read-only input** from submitting
- * the form (SCRUM-594).
+ * the form.
  *
  * The onboarding wizard and the profile tabs are real forms now, so Enter in a
  * field is implicit submission. That is right for a text box and wrong for the

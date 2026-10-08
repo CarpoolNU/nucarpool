@@ -8,12 +8,12 @@ import {
 /**
  * URL construction for the Mapbox proxy procedures.
  *
- * The previous implementation concatenated the user's raw search text into the
- * upstream path. These tests are written as assertions about the *parsed*
- * URL — pathname and searchParams — rather than about string contents, because
- * that is the only way to show that hostile text ends up as data rather than
- * as URL syntax. A substring check would pass on a URL whose query string the
- * caller had rewritten.
+ * Building a URL from raw user search text risks the text being read as URL
+ * syntax rather than as data. These tests are written as assertions about the
+ * *parsed* URL — pathname and searchParams — rather than about string
+ * contents, because that is the only way to show that hostile text ends up as
+ * data rather than as URL syntax. A substring check would pass on a URL whose
+ * query string the caller had rewritten.
  *
  * No network: these build strings, they do not fetch. Nothing here consumes
  * Mapbox quota.
@@ -53,9 +53,9 @@ describe("buildGeocodingSearchUrl", () => {
   });
 
   it("keeps the wire format the previous implementation sent for types", () => {
-    // The old code interpolated the literal string "address%2Cpostcode", so
-    // the bytes on the wire must not change even though the client now sends
-    // a semantic name.
+    // Mapbox expects the literal string "address%2Cpostcode" on the wire, so
+    // the bytes sent must not change even though the client sends a semantic
+    // type name instead.
     expect(
       buildGeocodingSearchUrl({
         value: "x",
@@ -73,7 +73,8 @@ describe("buildGeocodingSearchUrl", () => {
   });
 
   it("searches for an ampersand instead of starting a new parameter", () => {
-    // The reported break: nobody could look up an address containing "&".
+    // An address containing "&" must be searched for, not treated as the
+    // start of a new query parameter.
     const url = search("Marks & Spencer");
 
     expect(url.pathname).toBe(`${GEOCODING_PREFIX}Marks%20%26%20Spencer.json`);

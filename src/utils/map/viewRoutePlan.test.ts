@@ -12,9 +12,9 @@ const plan = (overrides: Partial<Parameters<typeof planViewRoute>[0]> = {}) =>
   });
 
 /**
- * Every combination of the two inputs that used to decide whether a route got
- * drawn, with the plan each one should produce. Named so a failure says which
- * combination, because "the fourth case" is exactly how this defect hid.
+ * Every combination of the two inputs, with the plan each one should produce.
+ * Named so a failure says which combination: a contradictory boolean
+ * condition can hide in any single untested case.
  *
  * Whether the route is *drawn* is asserted in `viewRouteClick.test.ts`, at the
  * call itself - there is no plan field for it. This table pins the other half:
@@ -67,8 +67,8 @@ describe("planViewRoute", () => {
       },
     );
 
-    // The regression proper: a favourite the discovery query filtered off the
-    // map is the click that used to do nothing at all.
+    // A favourite the discovery query filtered off the map still gets a pin
+    // and a selection, same as any other off-map click.
     it("gives an off-map favourite a pin and a selection", () => {
       expect(
         plan({ isClickedUserOnMap: false, selectedUserId: null }),
@@ -157,8 +157,8 @@ describe("planViewRoute", () => {
     });
 
     it("is added in request context even for a user on the map", () => {
-      // Deliberately asymmetric - this is what the working path did before
-      // the extraction, and MessagePanel's Map tab is the regression to protect.
+      // Deliberately asymmetric - MessagePanel's Map tab depends on this
+      // holding even for a user the cluster layer already draws.
       expect(
         plan({ isClickedUserOnMap: true, selectedUserId: CLICKED })
           .addsDestinationMarker,
@@ -167,10 +167,7 @@ describe("planViewRoute", () => {
   });
 
   /**
-   * The `removesDestinationMarkerFor` block was here until it removed
-   * the field, along with the remembered-pin bookkeeping it drove.
-   *
-   * Nothing replaces it *in this file*, because the plan no longer decides
+   * No test here covers pin removal, because the plan does not decide
    * removal - `clearOtherUserMarkers` sweeps every `other-user-*` layer at the
    * top of the handler, so there is no pin to name. What those tests were
    * protecting has moved: that the sweep takes the right layers and spares the

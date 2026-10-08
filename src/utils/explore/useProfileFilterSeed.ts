@@ -4,13 +4,13 @@ import { FiltersState, User } from "../types";
 /**
  * Seeds the explore filters' dates and days from the signed-in user's profile.
  *
- * **Keyed on the profile's values, not on the `user` object.** This effect
- * used to depend on `[user]` in `pages/index.tsx`, and every `user.me` refetch
- * hands back a new object. Accepting a request, leaving a group and saving
- * group preferences all invalidate `user.me`, so each of them silently wrote
- * the profile's days and dates back over whatever the user had set in the
- * filter panel - and, because `filters` then changed, refetched
- * recommendations as well.
+ * **Keyed on the profile's four scalar values, not on the `user` object.**
+ * Accepting a request, leaving a group and saving group preferences all
+ * invalidate `user.me`, and every refetch hands back a new object - so
+ * depending on `[user]` instead would silently write the profile's days and
+ * dates back over whatever the user had set in the filter panel on every one
+ * of those refetches, and, because `filters` would then change, refetch
+ * recommendations too.
  *
  * The dates are compared by timestamp because superjson rebuilds a `Date` on
  * every fetch: the same stored day arrives as a different object each time.

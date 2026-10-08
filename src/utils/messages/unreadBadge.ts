@@ -1,26 +1,15 @@
 /**
  * What the unread-message badge shows, and whether it shows at all.
  *
- * `Header` held a second unread count beside the server's and *preferred* it:
- *
- * ```ts
- * {currentunreadMessagesCount !== 0 ? currentunreadMessagesCount : unreadMessagesCount}
- * ```
- *
- * A local counter incremented on each Pusher `sendNotification` therefore
- * replaced the real number rather than adding to it, so a user with five
- * unread messages who received a sixth saw the badge change from `5` to `1`.
- * The local counter is gone: the server count is the only source,
- * and a notification invalidates it — see
+ * The server's unread count (`user.messages.getUnreadMessageCount`) is the
+ * only source for the badge; a Pusher notification invalidates that query
+ * rather than feeding a separate local counter — see
  * [`useUnreadNotifications`](./useUnreadNotifications.ts).
  *
- * That leaves nothing to reconcile, so this function is small. It exists for
- * the other half of the bug, which is duplication: the count and the decision
- * to render it were written out **four** times — the desktop badge's
- * visibility test and its value, then the mobile badge's — as separate
- * expressions that could disagree. Returning both from one place makes
- * "shown when and only when the number is non-zero" true by construction
- * rather than by four authors agreeing.
+ * The desktop and mobile badges each need both the count and the decision to
+ * show it. Returning both from one function makes "shown when and only when
+ * the number is non-zero" true by construction, rather than depending on the
+ * desktop and mobile call sites computing that condition the same way.
  */
 
 export type UnreadBadge = {
@@ -32,10 +21,10 @@ export type UnreadBadge = {
 
 /**
  * @param serverCount `user.messages.getUnreadMessageCount`'s data, which is
- *   `undefined` until the query first settles. The old expression tested
- *   `unreadMessagesCount !== 0`, which is *true* for `undefined` — so the badge
- *   rendered an empty circle on every fresh mount, before any count was known.
- *   Treated as zero here, because "not yet known" is not "you have mail".
+ *   `undefined` until the query first settles. Treated as zero here, because
+ *   "not yet known" is not "you have mail" — a test like `serverCount !== 0`
+ *   would be true for `undefined` too, and render an empty badge on every
+ *   fresh mount before any count was known.
  */
 export function unreadBadge(serverCount: number | undefined): UnreadBadge {
   const count = serverCount ?? 0;

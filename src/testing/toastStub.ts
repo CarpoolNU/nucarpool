@@ -1,19 +1,13 @@
 /**
  * The shared fake of `react-toastify/unstyled`.
  *
- * Twelve test files mock this module, and between them they declare four
- * different subsets of `toast`: eight pin `success` and `error`, one adds
- * `warning`, one adds `info`, and one routes both through locally declared
- * spies.
- *
- * The subsets are the reason this is worth sharing. The app calls
- * `toast.error`, `toast.success`, `toast.warning` and `toast.info`, so a
- * component that starts reporting something with `toast.info` fails, in the
- * ten suites that pinned only two methods, as `toast.info is not a function`
- * thrown from inside a mutation callback. That reads like a broken component
- * rather than like a stub nobody updated - the failure
- * `mixpanelBrowserStub.js` was shaped to prevent. Pinning the whole surface
- * once makes the subset impossible to get wrong.
+ * The app calls `toast.error`, `toast.success`, `toast.warning` and
+ * `toast.info`. A mock that pins only a subset of those breaks the moment a
+ * component starts reporting something through a method it never pinned, as
+ * `toast.info is not a function` thrown from inside a mutation callback -
+ * which reads like a broken component rather than like a stub nobody
+ * updated, the failure `mixpanelBrowserStub.js` is shaped to prevent. Pinning
+ * the whole surface once makes the subset impossible to get wrong.
  *
  * ---
  *

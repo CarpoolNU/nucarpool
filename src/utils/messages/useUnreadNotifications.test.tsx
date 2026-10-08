@@ -6,11 +6,6 @@ import { useUnreadNotifications } from "./useUnreadNotifications";
 /**
  * The unread-count notification subscription.
  *
- * This effect lived inside `Header`, where nothing could reach it: the
- * component needs a router, a tRPC client, a portal and a `GroupPage` to
- * render at all. That is why the increment it performed *inside a `setState`
- * updater* survived to be found by an audit rather than by a test.
- *
  * `trpc` and `pusherClient` are mocked as shapes rather than driven through a
  * real client and a real socket, the pattern `useGroupDetails.test.tsx`
  * established: the hook's contract is "subscribe to my own notification
@@ -18,11 +13,11 @@ import { useUnreadNotifications } from "./useUnreadNotifications";
  * QueryClient here would be testing @tanstack/react-query instead.
  *
  * **These run under `<StrictMode>`** — `jest.setup.dom.ts` configures it
- * globally, and cites this very bug as the reason. So every effect below
- * mounts, tears down and mounts again, exactly as it does in development.
- * Assertions are written against that: the invariant is never "subscribed
- * once" in absolute terms but "a re-render adds no subscription", which is the
- * property that actually matters and the one StrictMode cannot fake.
+ * globally. So every effect below mounts, tears down and mounts again, exactly
+ * as it does in development. Assertions are written against that: the
+ * invariant is never "subscribed once" in absolute terms but "a re-render adds
+ * no subscription", which is the property that actually matters and the one
+ * StrictMode cannot fake.
  */
 
 jest.mock("../trpc", () => ({
@@ -147,11 +142,9 @@ describe("useUnreadNotifications — subscribing", () => {
   });
 
   it("does not re-subscribe when the user id is unchanged", () => {
-    // that change's acceptance criterion, and the churn fix this hook inherited.
-    // `Header` used to depend on `props.data` — an object literal `Home`
-    // rebuilds on every filter change, query settle, map event and hover — so
-    // the effect tore down and re-ran continuously and opened a fresh
-    // WebSocket each time. Pusher meters peak concurrent connections.
+    // A less stable dependency would tear down and re-run the effect on every
+    // re-render, opening a fresh WebSocket each time, and Pusher meters peak
+    // concurrent connections.
     //
     // Compared against the count after mount rather than against 1, because
     // StrictMode legitimately mounts twice.
@@ -218,9 +211,6 @@ describe("useUnreadNotifications — subscribing", () => {
 
 describe("useUnreadNotifications — receiving a notification", () => {
   it("invalidates the unread count", () => {
-    // The fix. This used to increment a local counter that the badge then
-    // displayed *instead of* the server's count, so five unread plus one
-    // notification read `1`.
     renderHook(() => useUnreadNotifications("user-1"));
 
     receiveNotification();
@@ -229,13 +219,8 @@ describe("useUnreadNotifications — receiving a notification", () => {
   });
 
   it("counts one notification once, even though StrictMode mounts twice", () => {
-    // The third defect in the ticket: the increment ran inside an updater
-    // handed to `setSidebar`, and updaters must be pure because React may call
-    // them twice — which `reactStrictMode: true` guarantees in development. The
-    // badge therefore moved by two per message locally.
-    //
     // The first assertion is what stops this being a restatement of the test
-    // above: it establishes that the double-invocation really is happening
+    // above: it establishes that StrictMode's double-mount really is happening
     // here, so the second assertion is measuring idempotence rather than an
     // environment that quietly turned StrictMode off.
     renderHook(() => useUnreadNotifications("user-1"));
@@ -258,12 +243,10 @@ describe("useUnreadNotifications — receiving a notification", () => {
   });
 
   it("invalidates regardless of which tab is open", () => {
-    // Deliberate departure from the old `prev !== "requests"` condition, which
-    // suppressed the bump while the Requests tab was open. The notification
-    // channel is per *user*, not per conversation, so a message in another
-    // thread is real unread mail. The hook is not given the sidebar at all —
-    // that is the point, and it is why no `setState` updater has to be read
-    // from any more.
+    // The notification channel is per *user*, not per conversation, so a
+    // message in another thread is real unread mail and should be counted
+    // regardless of which tab is open. The hook is not given the sidebar at
+    // all, so there is nothing to filter the count by.
     renderHook(() => useUnreadNotifications("user-1"));
 
     expect(mockedTrpc.useUtils).toHaveBeenCalled();
@@ -273,12 +256,11 @@ describe("useUnreadNotifications — receiving a notification", () => {
   });
 
   it("recovers a notification missed while the socket was down", () => {
-    // The gap this hook exists to close a second time. `sendNotification` is
-    // the *only* thing that moves the count, and `Header` never unmounts while
-    // the user stays on `/`, so an event that fired while the transport was
-    // down is not merely late - it is gone, and the badge stays wrong for the
-    // rest of the session. Reconciling when the transport says it is back
-    // asks the server what the count really is.
+    // `sendNotification` is the *only* thing that moves the count, and
+    // `Header` never unmounts while the user stays on `/`, so an event that
+    // fires while the transport is down is not merely late - it is gone, and
+    // the badge stays wrong for the rest of the session. Reconciling when the
+    // transport says it is back asks the server what the count really is.
     renderHook(() => useUnreadNotifications("user-1"));
 
     reachConnected(); // the initial connect
@@ -293,8 +275,7 @@ describe("useUnreadNotifications — receiving a notification", () => {
     // The trap in reconciling on a transport event: the state machine emits
     // `connected` on the *initial* connection too, so a handler that does not
     // distinguish them fires a second `getUnreadMessageCount` on every page
-    // load - doubling the query this change is meant to make cheaper to reason
-    // about.
+    // load.
     renderHook(() => useUnreadNotifications("user-1"));
 
     reachConnected();
@@ -308,8 +289,7 @@ describe("useUnreadNotifications — receiving a notification", () => {
     // may have acquired and connected it before `Header` mounted, and
     // StrictMode's second mount arrives at an already-connected socket either
     // way. A plain "skip the first event I see" flag would swallow the next
-    // genuine reconnect in both cases, which is the failure this hook is
-    // supposed to fix.
+    // genuine reconnect in both cases.
     connection.state = "connected";
 
     renderHook(() => useUnreadNotifications("user-1"));
@@ -321,8 +301,8 @@ describe("useUnreadNotifications — receiving a notification", () => {
 
   it("stops listening to the transport when it releases the client", () => {
     // The shared client outlives this hook, so a handler left bound would keep
-    // invalidating through a torn-down subscription. This is also the guard on
-    // the socket-leak fix: the hook must unbind and release, never disconnect.
+    // invalidating through a torn-down subscription. The hook must unbind and
+    // release, never disconnect.
     const { unmount } = renderHook(() => useUnreadNotifications("user-1"));
     const handler = liveConnectedHandler();
 

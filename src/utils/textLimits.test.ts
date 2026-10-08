@@ -123,9 +123,7 @@ describe("the parser this suite depends on", () => {
 
   it("does not confuse fields of the same name on different models", () => {
     // `message` exists on both Request and User and means different things:
-    // an annotated VarChar column on one, a relation list on the other. This
-    // used to pair Request with CarpoolGroup, until a schema change dropped
-    // `group.message`.
+    // an annotated VarChar column on one, a relation list on the other.
     expect(declaredVarCharWidth("Request", "message")).toBe(255);
     expect(declaredVarCharWidth("User", "message")).toBeNull();
   });

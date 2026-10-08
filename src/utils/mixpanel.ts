@@ -3,11 +3,11 @@ import { browserEnv } from "./env/browser";
 
 /**
  * No local "is the token set" check, and that is not an oversight.
- * There used to be one here that threw at module scope, and it
- * was **unreachable**: `browserEnv` declares this variable with `str({ input })`
- * and no default, so `envsafe` rejects a missing or empty value when
- * `env/browser.ts` is imported - which is the line above. The token is a
- * non-empty string by the time it is read here, or nothing got this far.
+ * A check here would be **unreachable**: `browserEnv` declares this variable
+ * with `str({ input })` and no default, so `envsafe` rejects a missing or
+ * empty value when `env/browser.ts` is imported - which is the line above.
+ * The token is a non-empty string by the time it is read here, or nothing got
+ * this far.
  *
  * A second check could therefore only ever fire in a world where the first
  * already had, while adding an import-time failure mode of its own.
@@ -35,13 +35,13 @@ export const trackEvent = (
 /**
  * Attach every subsequent event to a user rather than to a browser.
  *
- * Until this existed, each event carried an anonymous per-device distinct id.
+ * Without this, each event carries an anonymous per-device distinct id.
  * `mixpanel-browser` collects `$initial_referrer`, `$initial_referring_domain`
- * and any `utm_*` parameters by itself, so the acquisition data was already
+ * and any `utm_*` parameters by itself, so the acquisition data is already
  * there - it just could not be joined to a signup, a role, or to whether the
- * person went on to form a carpool. It also meant one person on a laptop and a
- * phone was two users, which is enough to make the FTUE funnel's drop-off
- * rates wrong by an unknown amount.
+ * person went on to form a carpool, without this. It would also mean one
+ * person on a laptop and a phone counts as two users, which is enough to make
+ * the FTUE funnel's drop-off rates wrong by an unknown amount.
  *
  * **`identify` is the whole stitch; `alias` is not needed and would be wrong.**
  * Reading `identify` in `mixpanel-browser` 2.82: it registers `$user_id` and

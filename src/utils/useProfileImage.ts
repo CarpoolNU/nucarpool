@@ -25,10 +25,8 @@ export const PRESIGNED_URL_CACHE_TIME_MS = 30 * 60 * 1000;
  * in a card, a modal and a chat header costs one request, not three, and
  * revisiting a view costs none at all.
  *
- * This deliberately has no forced refetch. It used to fire a second request on
- * a 600ms timer after every mount, which doubled the load and still could not
- * refresh a picture uploaded later in the session. Invalidation is now
- * explicit and happens at the point of upload - see useInvalidateProfileImage.
+ * This deliberately has no forced refetch: invalidation is explicit and
+ * happens at the point of upload instead - see useInvalidateProfileImage.
  *
  * @param options.enabled pass `false` when the caller will not render the
  *   result. The hook cannot work this out for itself, and the gate below is

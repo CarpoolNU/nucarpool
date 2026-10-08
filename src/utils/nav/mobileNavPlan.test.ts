@@ -8,16 +8,15 @@ import {
 /**
  * The mobile bottom navigation's decision.
  *
- * The defect: leaving the profile page went straight to a full page load, so
- * every unsaved form value went with it and `UnsavedModal` could not appear on
- * mobile at all. The guard existed and was wired to the desktop map button
- * only.
+ * Leaving the profile page must ask `checkChanges` before navigating, so
+ * `UnsavedModal` can appear on mobile the same way it does on the desktop map
+ * button.
  *
  * These tests are as much about what must *not* change. Two behaviours are
- * load-bearing and easy to break while fixing the first:
+ * load-bearing and easy to break while changing the first:
  *
- *  - the full page load itself, which is that change's fix for "can't switch
- *    from profile to explore/requests on a real phone"; and
+ *  - the full page load itself, which real phones need for leaving profile
+ *    for explore/requests; and
  *  - immediate navigation from pages that supply no guard, which is every page
  *    except the profile one.
  */
@@ -33,7 +32,6 @@ describe("planMobileNav — leaving the profile page", () => {
   it.each(["explore", "requests", "mygroup"] as const)(
     "asks the guard before leaving for %s",
     (option) => {
-      // The whole ticket: this used to navigate immediately.
       expect(onProfile(option)).toEqual({
         kind: "guard",
         href: `/?tab=${option}`,
@@ -60,8 +58,8 @@ describe("planMobileNav — leaving the profile page", () => {
   });
 
   it("keeps the full page load rather than a client-side push", () => {
-    // Both profile plans must be href-carrying, because a router
-    // push here did not work on real devices.
+    // Both profile plans must be href-carrying, because a router push does
+    // not work reliably here on real devices.
     for (const guard of [true, false]) {
       const plan = from("/profile", guard)("mygroup");
       expect(plan).toHaveProperty("href", "/?tab=mygroup");
@@ -97,8 +95,7 @@ describe("planMobileNav — elsewhere", () => {
     (option) => {
       // The case `reselected` exists for: My Group's sheet can be collapsed
       // by the header's Close button while the tab itself stays active, and
-      // tapping that same tab again is the only way back in once the pill
-      // that used to reopen it is gone.
+      // tapping that same tab again is the only way back in.
       expect(from("/")(option, option)).toMatchObject({ reselected: true });
     },
   );
@@ -120,9 +117,9 @@ describe("planMobileNav — elsewhere", () => {
   });
 
   it("treats a nested profile route as the profile page", () => {
-    // `pathname.includes` is the test the inline version used, so
-    // /profile/setup counts. Preserved rather than tightened: narrowing it
-    // here would silently drop the guard on a route that has one.
+    // `pathname.includes` means /profile/setup counts as the profile page.
+    // Preserved rather than tightened: narrowing it here would silently drop
+    // the guard on a route that has one.
     expect(from("/profile/setup")("explore").kind).toBe("guard");
   });
 });
@@ -153,9 +150,8 @@ describe("activeMobileNavItem", () => {
     });
 
   it("lights nothing on the admin page", () => {
-    // The whole point. `/admin` supplies no `sidebarValue`, so the inline
-    // ternary this replaced fell through to `activeNav` - initial value
-    // "explore" - and the bar claimed the user was on the map.
+    // `/admin` supplies no `sidebarValue` and has no fourth tab, so this
+    // must be null rather than falling back to whatever `lastTapped` holds.
     expect(active({ isAdmin: true })).toBeNull();
   });
 
@@ -170,9 +166,8 @@ describe("activeMobileNavItem", () => {
   });
 
   it("pins the profile page ahead of everything else", () => {
-    // Preserved precedence: this used to be the first arm of the ternary, and
-    // it is what stops a cancelled unsaved-changes modal leaving a tab lit
-    // that was never reached.
+    // Checked first: this is what stops a cancelled unsaved-changes modal
+    // leaving a tab lit that was never reached.
     expect(active({ pathname: "/profile", lastTapped: "requests" })).toBe(
       "profile",
     );
@@ -188,7 +183,8 @@ describe("activeMobileNavItem", () => {
 
   it("prefers the page's sidebar over the last tap", () => {
     // `index.tsx` supplies `sidebarValue`; the fallback is for pages that do
-    // not, which is how the admin page came to borrow "explore".
+    // not, which is why the admin page needs its own branch above rather than
+    // defaulting to "explore".
     expect(active({ sidebarValue: "requests", lastTapped: "explore" })).toBe(
       "requests",
     );
@@ -199,8 +195,8 @@ describe("activeMobileNavItem", () => {
   });
 
   it("lights nothing for a value that is not a tab", () => {
-    // The ternary compared a bare string against each id and matched none.
-    // Same outcome, now stated in the type.
+    // Matches none of the tabs when the value is not one, now stated in the
+    // return type rather than left implicit.
     expect(active({ sidebarValue: "settings" })).toBeNull();
     expect(active({ sidebarValue: "", lastTapped: "" })).toBeNull();
   });

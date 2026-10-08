@@ -5,12 +5,12 @@ import { Dispatch, SetStateAction } from "react";
 /**
  * The point-click handler, keyed to the map it belongs to.
  *
- * This was a single module-scope variable, which was invisible while the page
- * built one map and never destroyed it. The map is now torn down and rebuilt
- * across a client-side navigation, and that made the singleton wrong twice
- * over: the second map's handler replaced the first's globally while the first
- * map's listeners still held the old closure, and nothing ever cleared it, so
- * a handler bound to an unmounted page's `setPopupUser` outlived that page.
+ * A single module-scope variable would make every map overwrite it: once a
+ * map is torn down and rebuilt across a client-side navigation, a second
+ * map's handler would replace the first's globally while the first map's
+ * listeners still held the old closure. It would also never clear on its
+ * own, so a handler bound to an unmounted page's `setPopupUser` would outlive
+ * that page.
  *
  * A `WeakMap` rather than a `Map`: the entry must not be what keeps a removed
  * map alive. There is no `delete` to forget, because there is no strong

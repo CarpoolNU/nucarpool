@@ -2,15 +2,13 @@
  * The admin dashboard's three group figures, and what they say about an empty
  * cohort.
  *
- * `percent = (part, whole) => Math.round((part / whole) * 1000) / 10 + "%"`
- * divided by zero whenever there were no drivers, no riders or no groups, so
- * the dashboard rendered `NaN%` and the exported CSV carried a literal `NaN`
- * into a column an admin may well have charted.
+ * `percentOf`'s formula divides by zero whenever there are no drivers, no
+ * riders or no groups, which would render `NaN%` on the dashboard and write a
+ * literal `NaN` into a column an admin may well have charted.
  *
- * The zero case went uncovered because the formula was written out four times
- * - in the component and verbatim in two test files, which recomputed the very
- * expression they were checking. `NaN` on both sides of the comparison made
- * the assertion pass. Both of those files import from this module now.
+ * `AdminData.tsx`'s test and `admin.db.test.ts` import from this module
+ * rather than recomputing the formula themselves, so neither one can pass by
+ * having a bug and its own test agree on it.
  *
  * The table below is the point of the file: every denominator that can be zero
  * in production, checked for a defined result.
@@ -38,7 +36,7 @@ describe("percentOf", () => {
   });
 
   it("never returns NaN for any zero denominator", () => {
-    // The defect, stated directly: this is what reached the screen and the CSV.
+    // Stated directly: this is what would otherwise reach the screen and the CSV.
     expect(percentOf(0, 0)).not.toContain("NaN");
     expect(percentOf(3, 0)).not.toContain("NaN");
   });

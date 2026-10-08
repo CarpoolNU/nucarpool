@@ -17,10 +17,9 @@ import {
 /**
  * Dragging the mobile explore sheet by its handle.
  *
- * The handle looked draggable and was not: an 8×80px grabber pill with nothing
- * but `onClick` behind it, in a repository that contained no touch or pointer
- * handling anywhere. This hook is the gesture; `sheetDetents.ts` is the
- * arithmetic it defers to, and that split is where the testable half lives.
+ * The handle is an 8×80px grabber pill. This hook is the gesture;
+ * `sheetDetents.ts` is the arithmetic it defers to, and that split is where
+ * the testable half lives.
  *
  * **Pointer events rather than touch events**, so the same code path serves a
  * mouse, a stylus and a finger, and `setPointerCapture` keeps delivering moves
@@ -41,11 +40,11 @@ import {
  * thing a drag cannot afford. So the height is written straight to the node,
  * and React is told only that a drag is in progress.
  *
- * That is the same *technique* the sidebar's old imperative `classList` calls
- * used, and those were a bug, so the difference matters: React owns the
+ * The same *technique* would be a bug applied to `class`: React owns the
  * sheet's `class` attribute and reassigns the whole of it on any re-render,
- * which is exactly how `classList.add("hidden")` got wiped. It does **not**
- * own `style.height` here, because no render of this page ever puts `height`
+ * so an imperative `classList.add(...)` on it would be wiped on the very next
+ * one. It does **not** own `style.height` here, because no render of this page
+ * ever puts `height`
  * in a `style` prop. React only removes style keys it previously set itself,
  * so nothing can clobber the drag mid-gesture, and clearing the property on
  * release hands the height back to the class.
@@ -58,21 +57,20 @@ import {
  *
  * ---
  *
- * **Where the drag's range comes from, and why it is no longer a cache.**
- * The expanded height was measured off the sheet during an expanded render and
- * kept in a ref, on the reasoning that `h-mobile-sheet` is a `calc()` no
- * JavaScript should try to reproduce. That held only while every role opened
- * the sheet expanded. Once a VIEWER got a `collapsed` opening detent instead,
- * for a third of the user base the ref was still zero when the first finger
- * arrived and the gesture fell through to the tap path.
+ * **Where the drag's range comes from, and why it is not cached.**
+ * `expandedSheetHeightPx` derives the range from the sheet's own bottom edge
+ * at the moment the gesture starts — see there for why that is exact rather
+ * than an estimate, and why it needs one shared constant instead of the three
+ * the `calc()` contains.
  *
- * `expandedSheetHeightPx` derives the range instead, from the sheet's own
- * bottom edge at the moment the gesture starts — see there for why that is
- * exact rather than an estimate, and why it needs one shared constant instead
- * of the three the `calc()` contains. Three things follow. There is no longer a
- * state in which the sheet is undraggable; a rotation cannot leave a stale
- * range behind, because nothing is kept between gestures; and the `resize`
- * listener this hook used to install is gone with the cache it maintained.
+ * A cached measurement, taken once off an expanded render and kept in a ref,
+ * would go stale for any role whose opening detent is not `expanded`: for a
+ * VIEWER's `collapsed` opening detent, a cached ref would still read zero when
+ * the first finger arrives, and the gesture would fall through to the tap
+ * path. Deriving it live instead means there is no state in which the sheet is
+ * undraggable, a rotation cannot leave a stale range behind because nothing is
+ * kept between gestures, and there is no `resize` listener needed to maintain
+ * a cache that could drift.
  */
 
 /**
@@ -121,7 +119,7 @@ type UseSheetDragArgs = {
   view: ExploreSidebarView;
   /** Where a released drag lands. */
   onDetentChange: (detent: SheetDetent) => void;
-  /** What a tap does — the behaviour that existed before this hook. */
+  /** What a tap does, for a gesture this hook decides was not a drag. */
   onTap: () => void;
 };
 
@@ -259,9 +257,7 @@ export const useSheetDrag = ({
       // The pill rides the sheet's top edge, held at the same clearance its
       // resting classes hold and floored at `collapsed`'s clearance above the
       // navigation - `handleBottomPx` in `sheetDetents.ts` has the arithmetic
-      // and why the floor is needed rather than a uniform offset. This used to
-      // write the edge itself with no clearance, which was a second
-      // relationship the docblocks here used to claim was the same one.
+      // and why the floor is needed rather than a uniform offset.
       gesture.handle.style.bottom = `${handleBottomPx({
         sheetBottomInsetPx: gesture.sheetBottomInsetPx,
         heightPx,

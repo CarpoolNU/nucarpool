@@ -195,7 +195,8 @@ describe("useInfiniteQuery", () => {
    * `direction` is the key a `.strict()` tRPC input rejects on page one while
    * both a caller test and a plain-object component test pass. It only appears
    * because the fetch goes through the real client, so this is the assertion
-   * that keeps the harness able to catch SCRUM-571's class of defect.
+   * that keeps the harness able to catch a `.strict()` input rejecting
+   * `direction` in production when no literal-returning mock ever sent one.
    */
   it("reaches the stub with React Query's own pageParam and direction", async () => {
     const { result } = renderHook(
@@ -290,8 +291,9 @@ describe("useUtils", () => {
 
   /**
    * The default `invalidate` records and resolves - it does not reach the
-   * cache - which is what the fifteen migrated suites relied on. A suite that
-   * needs the real thing declares it and is handed the live client.
+   * cache - which keeps an unrelated query from refetching mid-assertion. A
+   * suite that needs the real thing declares it and is handed the live
+   * client.
    */
   it("runs a declared invalidate against the live client, and refetches", async () => {
     const { result } = renderHook(

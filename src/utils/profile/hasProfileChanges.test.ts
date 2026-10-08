@@ -1,24 +1,20 @@
 /**
  * The unsaved-changes rule.
  *
- * Two of its fourteen comparisons used `getDate()` — the day of the month — on
- * the co-op dates. The profile's month controls are antd `DatePicker`s storing
- * `date.toDate()`, which for a month selection is always **the first of that
- * month**, so the form's day-of-month was `1` whatever the user picked and
- * every month-to-month change compared equal. The page then navigated away
- * with no modal and the edit was gone.
+ * The co-op dates need their own comparison because the profile's month
+ * controls are antd `DatePicker`s storing `date.toDate()`, which for a month
+ * selection is always **the first of that month** — so comparing by day of
+ * month would read every month-to-month change as unchanged.
  *
- * The dates below are shaped like the real ones rather than like the ticket's:
- * the ticket assumed `lastDayOfMonthUTC` wrote these fields and predicted that
- * only months sharing a last day would collide. It writes the map *filters*,
- * not the profile, so the defect was total rather than partial. `coopMonth`
- * models what actually reaches the form.
+ * The dates below are shaped like what the form actually produces, not like
+ * `lastDayOfMonthUTC`'s output: that function backs the map *filters*, not the
+ * profile, so `coopMonth` models what actually reaches this form instead.
  *
  * The suite is built around **which** term fires rather than only whether one
  * did. `profileChanges` returns field names for that reason: a boolean cannot
  * tell "detected because the date changed" from "detected because some
- * unrelated term is always true", and it is exactly that kind of confusion
- * that let one wrong comparison sit among thirteen right ones.
+ * unrelated term is always true", and that confusion is exactly what would let
+ * one wrong comparison sit among thirteen right ones.
  */
 
 import { Permission, Role, Status } from "@prisma/client";
@@ -92,10 +88,9 @@ const form = (
 describe("profileChanges", () => {
   describe("the co-op dates", () => {
     /**
-     * The regression. Every one of these compared equal under `getDate()`,
-     * because both sides are the first of a month. The first three are the
-     * pairs the ticket named; February is included precisely because it
-     * expected it to be *detected* and it was not.
+     * Every one of these compares equal under `getDate()`, because both
+     * sides are the first of a month. February is included to confirm the
+     * check does not depend on the two months sharing a last day.
      */
     const COLLIDING = [
       {
@@ -213,8 +208,8 @@ describe("profileChanges", () => {
   });
 
   describe("every other field still participates", () => {
-    // One case per field: the fix is to one term, not a rewrite of the rule,
-    // so each of the remaining twelve has to still be able to fire.
+    // One case per field, since this rule compares each field independently
+    // and all fourteen have to still be able to fire.
     const CASES: { field: string; changed: Partial<OnboardingFormInputs> }[] = [
       { field: "role", changed: { role: Role.RIDER } },
       { field: "seatAvail", changed: { seatAvail: 5 } },
@@ -244,8 +239,8 @@ describe("profileChanges", () => {
     });
 
     it("detects a start-time change that keeps the same calendar day", () => {
-      // The counterpart of the co-op bug: `startTime` was always compared by
-      // instant, and this is the assertion that says so.
+      // `startTime` is also compared by instant rather than by calendar day,
+      // and this is the assertion that confirms it.
       expect(
         profileChanges(
           form({ startTime: new Date("2026-01-01T23:00:00.000Z") }),
@@ -296,11 +291,10 @@ describe("profileChanges", () => {
     /**
      * A cropped file with nothing else touched.
      *
-     * This is the case the rule could not see at all: the picture is the one
-     * profile edit that never reaches the form, so `pristine` really is
-     * pristine as far as the fourteen comparisons go, and the page navigated
-     * away without a modal. The upload only ever runs inside the save handler,
-     * so the file was simply dropped.
+     * The picture is the one profile edit that never reaches the form: the
+     * upload only runs inside the save handler, so `pristine` really is
+     * pristine as far as the fourteen form comparisons go, and only the
+     * presence of a pending file marks this as a change.
      *
      * A `File` rather than a stub because `profileChanges` only tests presence
      * and a stub would pass an assertion that a plain `{}` also passes - which
@@ -334,7 +328,7 @@ describe("profileChanges", () => {
 
     it("is listed after the form fields when both changed", () => {
       // `profileChanges` names terms so a test can say *which* fired. The
-      // picture is appended last because it is not part of the original chain.
+      // picture is appended last because it is not one of the form fields.
       expect(
         profileChanges(form({ bio: "Changed bio" }), user, croppedFile()),
       ).toEqual(["bio", "profilePicture"]);
@@ -343,17 +337,17 @@ describe("profileChanges", () => {
 
   describe("edge cases carried over unchanged", () => {
     it("treats an unresolved user as everything having changed", () => {
-      // `user` is null while the query is in flight. The original compared
-      // through `user?.`, so the form's own values read as changes; preserved
-      // rather than made quieter, because a modal is the safe direction.
+      // `user` is null while the query is in flight, and every comparison
+      // reads through `user?.`, so the form's own values read as changes.
+      // Deliberately not made quieter: a modal is the safer direction.
       expect(profileChanges(pristine, null).length).toBeGreaterThan(0);
     });
 
     it("ignores stored working days beyond the form's array length", () => {
-      // Documented, not fixed - this was confirmed and
-      // recorded. The form always produces seven booleans, so an eighth stored
-      // day is unreachable; widening the comparison would change what the
-      // modal does for input the form cannot make.
+      // Deliberate, not an oversight: the form always produces seven
+      // booleans, so an eighth stored day is unreachable, and widening the
+      // comparison would change what the modal does for input the form
+      // cannot make.
       expect(
         profileChanges(form(), { ...user, daysWorking: "1,1,1,1,1,0,0,1" }),
       ).toEqual([]);

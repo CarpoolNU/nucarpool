@@ -27,10 +27,11 @@ export const PRESIGNED_UPLOAD_EXPIRY_SECONDS = 3600;
  *
  * `S3RequestPresigner.prepareRequest` unconditionally runs
  * `unsignableHeaders.add("content-type")`, so passing `ContentType` to
- * `PutObjectCommand` does *not* bind it: the URL this used to return was signed
- * over `host` alone, and would accept a PUT of any content type — `text/html`
- * included — at the user's key. Validating the input without this set would have
- * looked like a fix and changed nothing.
+ * `PutObjectCommand` does *not* bind it: without this set, the signed URL
+ * covers `host` alone, and would accept a PUT of any content type —
+ * `text/html` included — at the user's key. Validating the input server-side
+ * would look like a fix and change nothing, because S3 itself would still
+ * accept anything.
  *
  * `signableHeaders` overrides `unsignableHeaders` in `getCanonicalHeaders`,
  * which is what puts both headers into `X-Amz-SignedHeaders`. That is pinned
@@ -91,9 +92,7 @@ function profileImageKey(fileName: string): string {
  * **This makes no network call.** `getSignedUrl` is a local HMAC computation,
  * which is the fact the timestamp column turns on: `getPresignedDownloadUrl`
  * calls this only once `User.profilePictureUpdatedAt` says a picture exists,
- * so rendering an avatar makes no S3 request at all. It used to be preceded by
- * a `HeadObject` asking S3 the same question, which was the entire AWS cost of
- * an avatar until that call was removed.
+ * so rendering an avatar makes no S3 request at all.
  *
  * Returns null only if signing itself fails, which means misconfigured
  * credentials rather than a missing picture. The caller cannot tell those apart
