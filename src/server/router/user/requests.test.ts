@@ -11,15 +11,18 @@ import { fakeBlockDelegate } from "../../../testing/blockFake";
 /**
  * Authorization tests for the `user.requests` router.
  *
- * Three defects are pinned here:
+ * Three guards are pinned here:
  *
- *  1. `create` took the sender as a client-supplied `fromId` and connected it as
- *     the request's `fromUser`, so any signed-in caller could send a carpool
- *     request that appeared to come from someone else.
- *  2. `delete` looked the request up by id and deleted it with no check that the
- *     caller was a party to it, so anyone could clear strangers' requests.
- *  3. `edit` rewrote any request's stored message by id, also unchecked. It had
- *     no caller anywhere in `src/` and was removed rather than authorized.
+ *  1. `create` takes the sender from the session rather than a client-supplied
+ *     `fromId` connected as the request's `fromUser` — a client-supplied sender
+ *     would let any signed-in caller send a carpool request that appeared to
+ *     come from someone else.
+ *  2. `delete` checks that the caller is a party to the request before looking
+ *     it up and deleting it — without that check, anyone could clear
+ *     strangers' requests.
+ *  3. `edit` is not exposed by the router at all — a version that rewrote any
+ *     request's stored message by id, with no caller check anywhere in `src/`,
+ *     was removed rather than authorized.
  *
  * Following `favorites.test.ts` and `authorization.test.ts`, these drive the
  * real `appRouter` through `createCaller` with a fabricated session and a mocked
@@ -159,14 +162,14 @@ const buildRequestsDb = (
   });
 
   /**
-   * `request.delete` is no longer reachable, and saying so loudly is the
+   * `request.delete` is not reachable here, and saying so loudly is the
    * point.
    *
-   * The withdrawal used to be `tx.request.delete({ where: { id } })` - the
-   * primary key and nothing else - which is what let an accept that committed
-   * after the guard's snapshot lose its request anyway. It is a conditional
-   * raw `DELETE` now. Leaving a working delegate here would let that
-   * regression back in silently and, worse, would make every
+   * The withdrawal goes through a conditional raw `DELETE`, not
+   * `tx.request.delete({ where: { id } })` - the primary key and nothing else
+   * would let an accept that committed after the guard's snapshot lose its
+   * request anyway. Leaving a working delegate here would let that regression
+   * back in silently and, worse, would make every
    * `expect(destroy).not.toHaveBeenCalled()` below pass for the wrong reason.
    */
   const destroy = jest.fn(async () => {
@@ -610,23 +613,22 @@ describe("user.requests.create — the duplicate guard still holds", () => {
  * a double-clicked Send must not build the pair two of everything.
  *
  * The duplicate-guard tests above all *seed* an existing row, so they prove the
- * guard reads correctly — but none of them ever ran `create` twice, which is
- * the sequence a double-click actually produces and the one the defect lived
- * in. The lookup used to happen outside any transaction, so two calls could
- * both find nothing and both take the create branch, leaving two `Request`
- * rows, two `Conversation`s, two first `Message`s and two notification emails.
- *
- * The end state was worse than untidy: withdrawing deleted one row by id and
- * left the other, so the next attempt was refused with CONFLICT for a request
- * neither party could see — unrecoverable through the UI.
+ * guard reads correctly — but none of them ever run `create` twice, which is
+ * the sequence a double-click actually produces. Reading the duplicate lookup
+ * outside the transaction, with the branch it selects committing separately,
+ * would let two calls both find nothing and both take the create branch,
+ * leaving two `Request` rows, two `Conversation`s, two first `Message`s and two
+ * notification emails — and withdrawing would then delete one row by id and
+ * leave the other, so the next attempt is refused with CONFLICT for a request
+ * neither party can see, unrecoverable through the UI.
  *
  * These run the real sequence. What they cannot show is the concurrency: the
  * mock is single-threaded, so the second call always observes the first. That
- * is a genuine limit rather than an oversight — moving the read inside the
- * transaction narrows the window but does not close it, because MySQL will not
- * lock rows a non-locking SELECT did not find. The control that removes the
- * realistic path is the in-flight guard on `ConnectModal`'s Send button, which
- * still has no component test pinning it - possible, not
+ * is a genuine limit rather than an oversight — the transaction narrows the
+ * window but does not close it, because MySQL will not lock rows a non-locking
+ * SELECT did not find. The control that removes the realistic path is the
+ * in-flight guard on `ConnectModal`'s Send button, which still has no
+ * component test pinning it - possible, not
  * written. See "One request per
  * pair" in `src/server/db/README.md` for why no unique constraint was added.
  */
@@ -697,13 +699,12 @@ describe("user.requests.create — pressing Send twice", () => {
 /**
  * Reopening an accepted request.
  *
- * Accepting used to leave the row pending forever, and the duplicate guard above
- * refuses any existing request between a pair in either direction — so once two
- * people had carpooled together, they could never request each other again. The
- * guard now only counts PENDING rows, and an ACCEPTED one is reopened in place
- * rather than joined by a second row: `extendPublicUser` resolves a user's
- * request with `.find()`, so two rows would make the conversation the UI shows
- * arbitrary.
+ * The duplicate guard above refuses any existing request between a pair in
+ * either direction, but only counts PENDING rows — if it also matched ACCEPTED
+ * ones, two people who had carpooled together could never request each other
+ * again. An ACCEPTED row is reopened in place instead, rather than joined by a
+ * second row: `extendPublicUser` resolves a user's request with `.find()`, so
+ * two rows would make the conversation the UI shows arbitrary.
  */
 describe("user.requests.create — an accepted request is reopened, not duplicated", () => {
   const accepted = (id: string, from: string, to: string) =>
@@ -787,16 +788,15 @@ describe("user.requests.create — an accepted request is reopened, not duplicat
 });
 
 /**
- * reopening a request with no conversation used to destroy the
- * message.
+ * Reopening a request with no conversation must not destroy the message.
  *
- * The reopen branch wrote the message only `if (input.message &&
- * reopened.conversationId)`. Those are two unrelated conditions sharing one
- * guard, and the second one was wrong: a request with a null link had the
- * user's text dropped while the mutation still resolved. `ConnectModal` then
- * raised its success toast and emailed the recipient a `messagePreview` of a
- * message that had never been stored, so the recipient opened an empty thread
- * holding an email that quoted it.
+ * Gating the message write on `input.message && reopened.conversationId` would
+ * bundle two unrelated conditions into one guard, and the second is wrong: a
+ * request with a null link would have the user's text dropped while the
+ * mutation still resolves. `ConnectModal` would then raise its success toast
+ * and email the recipient a `messagePreview` of a message that was never
+ * stored, so the recipient would open an empty thread holding an email that
+ * quoted it.
  *
  * Not a guard against an impossible state: `Conversation` arrived in migration
  * `20240910182030_conversationmodel`, and every older request has
@@ -806,7 +806,7 @@ describe("user.requests.create — an accepted request is reopened, not duplicat
  * in production.
  *
  * The four combinations below are {null link, existing link} × {empty message,
- * non-empty message}. Only two of them had coverage before.
+ * non-empty message}.
  */
 describe("user.requests.create — reopening repairs a missing conversation", () => {
   /** An accepted legacy request: no conversation, as 462 rows have. */
@@ -823,7 +823,7 @@ describe("user.requests.create — reopening repairs a missing conversation", ()
     });
 
   it("stores the message instead of discarding it", async () => {
-    // The regression this ticket exists for.
+    // The regression this guards against.
     const db = buildRequestsDb([legacy("legacy", USER_A, USER_B)]);
     const { caller } = callerFor(sessionFor(USER_A), db);
 
@@ -1148,23 +1148,22 @@ describe("user.requests.delete — only a participant may clear a request", () =
 
 describe("user.requests.delete — not while still carpooling together", () => {
   /**
-   * The server half of the fix, which fixed only the client half.
+   * The server-side guard, which the UI fix for "Leave Conversation" does not
+   * replace.
    *
-   * That ticket removed the "Leave Conversation" button, because a pair in an
-   * active carpool pressing it deleted the request between them and with it -
-   * the conversation and every message, permanently and with
-   * no route to recovery. The button is gone; the procedure was never guarded,
-   * so a direct call, a stale bundle or the next caller to reuse `delete`
-   * could still do it. `create` has refused the same pair with CONFLICT for
-   * some time; these are the mirror of its four cases.
+   * Removing that button stops a pair in an active carpool from deleting the
+   * request between them — and with it the conversation and every message,
+   * permanently and with no route to recovery — through that one surface. A
+   * direct call, a stale bundle or the next caller to reuse `delete` can still
+   * reach it, because nothing in the procedure itself depends on the button
+   * being there. `create` refuses the same pair with CONFLICT; these are the
+   * mirror of its four cases.
    *
-   * **The question is membership, not status**, and this block used to
-   * assume otherwise. Every fixture here hardcoded ACCEPTED and the comment
-   * above described "their accepted request", so nothing ever varied the
-   * status - which is how the PENDING-and-grouped pair stayed unguarded on
-   * both sides. The fixtures below are parameterised for that reason, and
-   * `Object.values(RequestStatus)` drives the refusal so a future status
-   * cannot be added without one.
+   * **The question is membership, not status.** Hardcoding every fixture here
+   * to ACCEPTED would leave the PENDING-and-grouped pair unguarded, because
+   * nothing would ever vary the status. The fixtures below are parameterised
+   * for that reason, and `Object.values(RequestStatus)` drives the refusal so
+   * a future status cannot be added without a case already covering it.
    *
    * The assertion that matters on the refusal path is that the transaction is
    * never entered - `conversationDeleteMany` and `messageDeleteMany` never
@@ -1184,7 +1183,8 @@ describe("user.requests.delete — not while still carpooling together", () => {
    * accepted row still read as such, and the grouped-refusal case below
    * drives it from `Object.values(RequestStatus)` - so a third status added
    * to the enum arrives with its case already written rather than silently
-   * unguarded, which is how PENDING was missed in the first place.
+   * unguarded, the gap a hardcoded ACCEPTED fixture would otherwise leave for
+   * any status besides it.
    */
   const pairRequest = (
     membership: Record<string, string | null>,
@@ -1253,7 +1253,7 @@ describe("user.requests.delete — not while still carpooling together", () => {
     // state the guard is about: accepted, and grouped.
     //
     // `membership` is mutated rather than passed pre-grouped because `create`
-    // itself refuses a grouped pair - the two guards are now consistent, which
+    // itself refuses a grouped pair - the two guards are consistent, which
     // means this state can only be reached in the order it happens in real
     // life. `db.update` stands in for `groups.create`, which lives in another
     // router and another harness.
@@ -1298,9 +1298,9 @@ describe("user.requests.delete — not while still carpooling together", () => {
   });
 
   it("allows deletion when neither user is in a group", async () => {
-    // The pair who carpooled and have since parted. Earlier work
-    // both worked to make this row clearable, which is why the guard is
-    // ACCEPTED *and* grouped rather than ACCEPTED alone.
+    // The pair who carpooled and have since parted. This row must stay
+    // clearable, which is why the guard considers group membership rather
+    // than status alone.
     const db = pairRequest({ [USER_A]: null, [USER_B]: null });
     const { caller } = callerFor(sessionFor(USER_A), db);
 
@@ -1332,10 +1332,10 @@ describe("user.requests.delete — not while still carpooling together", () => {
     // co-members keeps whatever request they already had - and that request
     // carries the conversation they have been using.
     //
-    // This case used to assert the opposite, on the reasoning that "a request
-    // nobody accepted carries no history worth protecting". That is the part
-    // that was wrong: the history is the conversation, and PENDING or
-    // ACCEPTED makes no difference to what is lost when it goes.
+    // This case must not assert the opposite on the reasoning that "a request
+    // nobody accepted carries no history worth protecting": the history is the
+    // conversation, and PENDING or ACCEPTED makes no difference to what is
+    // lost when it goes.
     const db = pairRequest(grouped(), RequestStatus.PENDING);
     const { caller } = callerFor(sessionFor(USER_A), db);
 
@@ -1402,15 +1402,15 @@ describe("user.requests.delete — not while still carpooling together", () => {
    * a real group of two.
    *
    * The guard compares the two parties' groups, and for a self-request that is
-   * one user against themselves - so it matched whenever they were in any group
-   * at all, and told them to leave a carpool they really are in before they
-   * could clear a request that is not real. There is no pair here to protect
-   * and no thread between two people: the "conversation" is the user's own
-   * opening message to themselves.
+   * one user against themselves — so without the exemption below it would
+   * match whenever they were in any group at all, telling them to leave a
+   * carpool they really are in before they could clear a request that is not
+   * real. There is no pair here to protect and no thread between two people:
+   * the "conversation" is the user's own opening message to themselves.
    *
    * `requests.create` refuses new self-requests, so this pins behaviour for the
-   * rows that already exist - and stops the degenerate comparison returning if
-   * one is ever created again.
+   * rows that already exist, and keeps the degenerate comparison from
+   * resurfacing if one is ever created again.
    */
   const selfRequest = (
     membership: Record<string, string | null>,
@@ -1429,11 +1429,10 @@ describe("user.requests.delete — not while still carpooling together", () => {
   it.each(Object.values(RequestStatus))(
     "lets the owner clear a self-request while in a group — %s",
     async (status) => {
-      // Parameterised for the same reason as the pair fixture above. The
-      // exemption used to be reached only on the ACCEPTED branch, so a
-      // PENDING self-request never met the degenerate comparison at all;
-      // now that the guard runs for every status, `fromUserId <> toUserId`
-      // is the only thing holding it open and has to be proved for each one.
+      // Parameterised for the same reason as the pair fixture above: the
+      // guard runs for every status, not only ACCEPTED, so
+      // `fromUserId <> toUserId` is the only thing holding the self-request
+      // exemption open and has to be proved for each one.
       const db = selfRequest(
         { [USER_A]: "group-1", [USER_B]: "group-1" },
         status,
@@ -1452,7 +1451,7 @@ describe("user.requests.delete — not while still carpooling together", () => {
   it("takes the self-request's conversation and messages with it", async () => {
     // The whole point of deleting through this path rather than by hand: the
     // conversation and its messages go in the same transaction, which is what
-    // was fixed and what stops this becoming another orphan.
+    // stops this becoming another orphan.
     const db = selfRequest({ [USER_A]: "group-1" });
     const { caller } = callerFor(sessionFor(USER_A), db);
 
@@ -1463,8 +1462,8 @@ describe("user.requests.delete — not while still carpooling together", () => {
   });
 
   it("clears a self-request from an ungrouped user too", async () => {
-    // This case already worked - with no group the comparison was false - so
-    // it is here to prove the exemption did not narrow anything.
+    // With no group the comparison is false, so this case proves the
+    // exemption does not narrow anything.
     const db = selfRequest({ [USER_A]: null });
     const { caller } = callerFor(sessionFor(USER_A), db);
 
@@ -1494,13 +1493,14 @@ describe("user.requests.delete — not while still carpooling together", () => {
  * The guard above is a snapshot read, so the `DELETE` has to be the guard too.
  *
  * Every read the refusal depends on is taken with `ctx.prisma`, before the
- * transaction opens: the request row, and the two `carpoolSearch` rows. The
- * delete then matched on the primary key and nothing else. So a request that
- * was `PENDING` when it was read skipped the branch entirely - the group
- * lookup lives inside it and never ran - and if `groups.create` committed in
- * the window, the accepted request backing a live carpool was deleted anyway,
- * taking the conversation and every message with it. The end state the guard
- * exists to prevent, reached by timing rather than by a direct call.
+ * transaction opens: the request row, and the two `carpoolSearch` rows.
+ * Matching the delete on the primary key alone would mean a request that was
+ * `PENDING` when it was read skips the branch entirely - the group lookup
+ * lives inside it and never runs - and if `groups.create` commits in the
+ * window, the accepted request backing a live carpool is deleted anyway,
+ * taking the conversation and every message with it. That is precisely the
+ * state the guard exists to prevent, reached by timing rather than by a
+ * direct call.
  *
  * These drive that window directly: the interleaved write commits after the
  * router has taken its snapshot and before the transaction opens, which is
@@ -1558,9 +1558,9 @@ describe("user.requests.delete — the delete carries its own condition", () => 
   };
 
   it("refuses when the request is accepted into a group after the guard read it", async () => {
-    // The ticket's sequence. `requests.delete` reads PENDING and skips the
-    // branch; `groups.create` commits; the delete then used to run
-    // unconditionally and take the live carpool's thread with it.
+    // `requests.delete` reads PENDING and skips the branch; `groups.create`
+    // commits; an unconditional delete would then run regardless and take the
+    // live carpool's thread with it.
     const membership: Record<string, string | null> = {
       [USER_A]: null,
       [USER_B]: null,
@@ -1659,8 +1659,8 @@ describe("user.requests.delete — the delete carries its own condition", () => 
     // than assuming. Telling someone who withdrew a request the other party
     // had just declined that they are "carpooling with this user" would be a
     // lie, and the one thing they asked for - that this request stop existing
-    // - is already true. The unconditional delete used to throw Prisma's
-    // P2025 here, which reaches the client as a 500.
+    // - is already true. An unconditional delete would throw Prisma's P2025
+    // here instead, which reaches the client as a 500.
     const db = pendingPair({ [USER_A]: null, [USER_B]: null });
     const { caller } = callerFor(
       sessionFor(USER_A),
@@ -1687,8 +1687,8 @@ describe("user.requests.delete — the delete carries its own condition", () => 
 
     await caller.user.requests.delete({ invitationId: "req-1" });
 
-    // Three values, not four: the statement no longer binds a status, which
-    // is the whole of the widened guard expressed as an argument list.
+    // Three values, not four: the statement binds no status, which is the
+    // whole of the widened guard expressed as an argument list.
     expect(db.rawDelete).toHaveBeenCalledWith("req-1", USER_A, USER_B);
   });
 
@@ -1804,8 +1804,10 @@ describe("user.requests.create — the opening message is bounded", () => {
       caller.user.requests.create({ toId: USER_B, message: `${atLimit}!` }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
 
-    // The row, its conversation and its message are three separate writes, and
-    // the length failure used to land on the last of them.
+    // The row, its conversation and its message are three separate writes;
+    // without validation here, the length failure would land on the last of
+    // them - a column-width error on the message insert, after the other two
+    // already happened.
     expect(db.rows()).toEqual([]);
     expect(db.messages()).toEqual([]);
   });
@@ -1826,11 +1828,11 @@ describe("user.requests.create — the opening message is bounded", () => {
 /**
  * Atomicity of `user.requests.create`.
  *
- * A request, its conversation, the link between them and the first message used
- * to be four independent awaits, so a failure part-way through could leave a
- * request with no conversation, or a conversation never linked back to its
- * request. `relationMode = "prisma"` rejects neither, and nothing reconciles
- * them afterwards, so the half-built thread persisted.
+ * A request, its conversation, the link between them and the first message are
+ * one unit: four independent awaits here could leave a request with no
+ * conversation, or a conversation never linked back to its request.
+ * `relationMode = "prisma"` rejects neither, and nothing reconciles them
+ * afterwards, so a half-built thread would persist.
  */
 describe("user.requests.create is atomic", () => {
   it("leaves no request, conversation or message when the link write fails", async () => {
@@ -1838,7 +1840,8 @@ describe("user.requests.create is atomic", () => {
     const { caller } = callerFor(sessionFor(USER_A), db);
 
     // The request and the conversation-with-message are already written by the
-    // time the link is set, so this is the failure that used to survive.
+    // time the link is set, so without a transaction this is the failure that
+    // would survive.
     db.update.mockImplementationOnce(async () => {
       throw new Error("connection lost");
     });
@@ -1867,8 +1870,8 @@ describe("user.requests.create is atomic", () => {
 
   it("no longer looks for a conversation that cannot exist yet", async () => {
     // The request is created a statement earlier with a fresh cuid, so nothing
-    // could reference it: the old `conversation.findUnique({ requestId })` could
-    // only ever return null, making the false branch of its `if` unreachable.
+    // could reference it yet: a `conversation.findUnique({ requestId })` here
+    // could only ever return null.
     const db = buildRequestsDb();
     const { caller } = callerFor(sessionFor(USER_A), db);
 
@@ -1881,11 +1884,11 @@ describe("user.requests.create is atomic", () => {
 /**
  * A request has to be notifiable.
  *
- * ConnectModal used to hold this check on its own, reading `otherUser.email`
- * from the recommendation payload. That payload no longer carries the field -
- * it was shipping every active user's Northeastern address to every signed-in
- * viewer - and a client-only check was skipped entirely by anything calling the
- * procedure directly. The rule lives here now.
+ * Holding this check only in ConnectModal, reading `otherUser.email` from the
+ * recommendation payload, would be skipped entirely by anything calling the
+ * procedure directly — and that payload does not carry the field, because
+ * including it would ship every active user's Northeastern address to every
+ * signed-in viewer. The rule lives here instead.
  */
 describe("user.requests.create — both people must be reachable", () => {
   it("refuses when the recipient has no email, writing nothing", async () => {
@@ -1940,19 +1943,19 @@ describe("user.requests.create — both people must be reachable", () => {
 });
 
 /**
- * `user.requests.me` no longer role-filters an existing request.
+ * `user.requests.me` does not role-filter an existing request.
  *
- * The filter it used to apply - counterpart's role must differ from the
- * caller's, and must not be VIEWER - is the recommendations predicate, and it
- * disagreed with `create`'s duplicate guard above, which has no role condition.
- * A role change on either side therefore removed the request from the Requests
- * tab while every retry still failed with `CONFLICT`. `delete` needs the
- * request id and nothing else surfaces one, so the pair were stuck until the
- * other person switched back.
+ * A filter requiring the counterpart's role to differ from the caller's, and
+ * not be VIEWER, is the recommendations predicate and belongs there, not here:
+ * applied to existing requests it would disagree with `create`'s duplicate
+ * guard above, which has no role condition. A role change on either side would
+ * then remove the request from the Requests tab while every retry still fails
+ * with `CONFLICT`. `delete` needs the request id and nothing else surfaces
+ * one, so the pair would be stuck until the other person switched back.
  *
  * Read alongside "the duplicate guard still holds" above: that pins what
  * `create` does to a pending request whatever the two roles are, and these pin
- * the list that now shows the same request.
+ * the list that shows the same request.
  */
 /**
  * A home `Location` for the disclosure tests, which are the only ones that care
@@ -2072,11 +2075,11 @@ const buildRequestsMeDb = (
     const ids: string[] = where?.userId?.in ?? [];
 
     // Applies whatever status condition the query actually carries, rather
-    // than a hard-coded one. It used to exclude INACTIVE unconditionally,
-    // mirroring the `status: { not: "INACTIVE" }` the resolver then had — which
-    // meant the double produced the filtered result whether or not the query
-    // asked for it, and that change's removal of that filter would have passed
-    // every test in this file unnoticed.
+    // than a hard-coded one: hard-coding an INACTIVE exclusion here, mirroring
+    // a `status: { not: "INACTIVE" }` the resolver might carry, would make the
+    // double produce the filtered result whether or not the query asked for
+    // it — so removing that filter from the resolver would pass every test in
+    // this file unnoticed.
     const excluded: Status | undefined = where?.status?.not;
 
     return ids
@@ -2128,8 +2131,8 @@ const meCallerFor = (
 
 describe("user.requests.me - an existing request survives a role change", () => {
   it("returns a sent request to a counterpart who now shares the caller's role", async () => {
-    // The ticket's scenario: rider A asked driver B, then B switched to Rider.
-    // Before this fix the request vanished from A's tab while `create` kept
+    // The scenario: rider A asked driver B, then B switched to Rider. Without
+    // this, the request would vanish from A's tab while `create` kept
     // answering `CONFLICT - Existing request between ...`.
     const { caller } = meCallerFor(
       USER_A,
@@ -2183,8 +2186,8 @@ describe("user.requests.me - an existing request survives a role change", () => 
   });
 
   it("returns a request whose counterpart has switched to VIEWER", async () => {
-    // Also filtered out before, and the same dead end: a VIEWER cannot answer
-    // the request, so leaving the sender no way to withdraw it stranded both.
+    // The same dead end: a VIEWER cannot answer the request, so without this,
+    // leaving the sender no way to withdraw it would strand both.
     const { caller } = meCallerFor(
       USER_A,
       [requestRow("request-1", USER_A, USER_B)],
@@ -2212,7 +2215,7 @@ describe("user.requests.me - an existing request survives a role change", () => 
 
   it("returns an accepted request as well, whatever the two roles are", async () => {
     // Accepted requests stay attached to the pair so they keep their
-    // conversation; the role filter used to take those with it.
+    // conversation; a role filter here would take those with it.
     const { caller } = meCallerFor(
       USER_A,
       [
@@ -2234,15 +2237,13 @@ describe("user.requests.me - an existing request survives a role change", () => 
   });
 
   /**
-   * This case used to assert the opposite — that an INACTIVE counterpart was
-   * dropped — and was written to stop the role fix being read as covering
-   * status too. It was established that this should never have been the
-   * exception: pausing a search is something any user can do from their own
-   * profile, and the moment either party did, the request vanished from both
-   * Requests tabs while `create`'s duplicate guard went on refusing every
-   * retry with CONFLICT. Neither party could withdraw it, decline it or
-   * replace it until the other reactivated. It is the same dead end earlier work
-   * closed for roles, one filter away in the same function.
+   * An INACTIVE counterpart's request must not be hidden here: pausing a
+   * search is something any user can do from their own profile, so hiding it
+   * would vanish the request from both Requests tabs while `create`'s
+   * duplicate guard went on refusing every retry with CONFLICT. Neither party
+   * could withdraw it, decline it or replace it until the other reactivated —
+   * the same dead end earlier work closed for roles, one filter away in the
+   * same function.
    */
   it("returns a sent request whose counterpart has paused their search", async () => {
     const { caller } = meCallerFor(
@@ -2418,12 +2419,11 @@ describe("user.requests.me - what it asks the database for", () => {
   });
 
   it("asks for the newest message only, not the thread", async () => {
-    // This asserted `{ dateCreated: "asc" }` and no `take`, on the grounds that
-    // "the renderer depends on it". The renderer no longer reads this payload:
-    // `MessageContent` loads the open thread from
-    // `user.messages.conversation`, which is paginated and participant-scoped.
+    // `MessageContent` loads the open thread from `user.messages.conversation`,
+    // which is paginated and participant-scoped — this payload is not the
+    // thread.
     //
-    // What is left reading these messages is the card list, and it wants one
+    // What reads these messages is the card list, and it wants one
     // row — the newest, for the preview text and the unread dot. `desc` is
     // load-bearing rather than cosmetic: with `take: 1`, `asc` would keep the
     // *oldest* message and every card would preview the first thing ever said.
@@ -2889,12 +2889,12 @@ describe("user.requests.me - the status is read per request, not per response", 
  * before it reads or writes anything else in its transaction. `me` hides a
  * request with a blocked counterpart without deleting it.
  *
- * `delete` used to let either party clear the row regardless - "a user must
- * always be able to leave" - but `me` already hides this exact row for both
- * parties the moment a block exists, so nothing is actually stranded by
- * refusing the delete too. What refusing protects is the report that has not
- * been filed yet: the blocked party could otherwise erase the thread before
- * the blocker gets to `reports.create`.
+ * `delete` refuses across a block too, even though "a user must always be
+ * able to leave" might argue otherwise - `me` already hides this exact row
+ * for both parties the moment a block exists, so nothing is actually
+ * stranded by refusing the delete. What refusing protects is the report that
+ * has not been filed yet: the blocked party could otherwise erase the thread
+ * before the blocker gets to `reports.create`.
  */
 const USER_D = "user-d";
 

@@ -184,25 +184,24 @@ export const userRouter = router({
           status: z.nativeEnum(Status),
           seatAvail: z.number().int().min(0).max(MAX_SEATS_AVAILABLE),
           // `company_name`, `preferred_name`, `pronouns` and `bio` are all
-          // `VARCHAR(191)`, and every one of them was unbounded here.
-          // The forms cap the two name fields and the bio, but nothing capped
-          // `companyName` at all, so a pasted value over the width failed the
-          // whole profile save inside Prisma instead of at the boundary.
+          // `VARCHAR(191)`. Capping each one here, matching
+          // `PROFILE_TEXT_MAX_LENGTH`, makes an oversize value fail at this
+          // boundary instead of inside Prisma, which would otherwise fail the
+          // whole profile save.
           companyName: z.string().max(PROFILE_TEXT_MAX_LENGTH),
           // The `location` columns these six address fields write to are
-          // `VARCHAR(191)` just like the profile text above, and were the last
-          // strings here with no bound at all. Nobody types them - they come
-          // back from Mapbox - which is why they were overlooked, but a long
-          // enough `place_name` still overflows the column, and the write
-          // happens inside the same transaction as the rest of the save.
+          // `VARCHAR(191)`, just like the profile text above. These come back
+          // from Mapbox rather than being typed, but a long enough
+          // `place_name` still overflows the column, and the write happens
+          // inside the same transaction as the rest of the save.
           companyAddress: z.string().max(ADDRESS_MAX_LENGTH),
-          // This is the boundary that writes coordinates to `location`, and it
-          // range-checked none of them. The columns are plain
-          // `Float`, so MySQL accepts any number, and `locationWithin` /
-          // `milesBetween` then produce arbitrary answers rather than failing -
-          // an out-of-range row is silently unmatchable and also skews the
-          // bounding-box query. `getDirections` in `mapbox.ts`
-          // enforces the same bounds; the two share one definition.
+          // This is the boundary that writes coordinates to `location`. The
+          // columns are plain `Float`, so MySQL accepts any number, and
+          // `locationWithin` / `milesBetween` would otherwise produce
+          // arbitrary answers rather than failing - an out-of-range row is
+          // silently unmatchable and also skews the bounding-box query.
+          // `getDirections` in `mapbox.ts` enforces the same bounds; the two
+          // share one definition.
           companyCoordLng: longitudeSchema,
           companyCoordLat: latitudeSchema,
           startAddress: z.string().max(ADDRESS_MAX_LENGTH),
@@ -213,8 +212,9 @@ export const userRouter = router({
           isOnboarded: z.boolean(),
           // Seven comma-separated flags, Sunday first - the shape every reader
           // (`adminDataUtils`, `recommendation.ts`) splits on and the only one
-          // the profile form produces. It was `z.string()`, so any string was
-          // stored and then read as whatever `split(",")` made of it.
+          // the profile form produces. The regex below enforces that shape,
+          // rather than accepting any string and reading it as whatever
+          // `split(",")` makes of it.
           //
           // Production's only other shape is `""`, the column default, on
           // searches that never saved a schedule. The form reads that as seven
@@ -227,9 +227,10 @@ export const userRouter = router({
           // omitted leaves the column alone, explicit `null` clears it.
           // Without `.nullable()` a cleared schedule is unexpressible.
           //
-          // A string has to be a time. `""` or an unparseable value used to be
-          // converted to `null` and so cleared the schedule by another route -
-          // see `isScheduleTimeString`.
+          // A string has to be a time: `isScheduleTimeString` rejects `""` and
+          // other unparseable values here, rather than letting them through to
+          // be converted to `null` - and so clear the schedule - by another
+          // route.
           startTime: z
             .string()
             .refine(isScheduleTimeString, SCHEDULE_TIME_INVALID_MESSAGE)
@@ -250,8 +251,8 @@ export const userRouter = router({
           companyCity: z.string().max(ADDRESS_MAX_LENGTH),
           companyState: z.string().max(ADDRESS_MAX_LENGTH),
         })
-        // Two things `.max()` cannot express, both of which used to be stored
-        // as submitted and then fail silently at match time.
+        // Two things `.max()` cannot express. Left unchecked, either one would
+        // be stored as submitted and fail silently at match time instead.
         //
         // They live on the input rather than in the resolver so a stale or
         // hand-rolled client gets the same answer as the form, and so the paths
@@ -335,10 +336,9 @@ export const userRouter = router({
         }),
     )
     .mutation(async ({ input, ctx }) => {
-      // `fromScheduleTimeInput` keeps `undefined` and `null` apart, which the
-      // truthy ternary here did not: it mapped both to `undefined`, and Prisma
-      // reads that in an `update` as "omit this field". So a cleared schedule
-      // was silently discarded.
+      // `fromScheduleTimeInput` keeps `undefined` and `null` apart: Prisma
+      // reads `undefined` in an `update` as "omit this field", so collapsing
+      // the two together would silently discard a cleared schedule.
       const startTimeDate = fromScheduleTimeInput(input.startTime);
       const endTimeDate = fromScheduleTimeInput(input.endTime);
 
@@ -351,12 +351,13 @@ export const userRouter = router({
       }
 
       // One profile save touches `user`, two `Location` rows and a
-      // `CarpoolSearch`. These used to be four independent awaits, so a failure
-      // part-way through committed the earlier writes and abandoned the rest —
-      // profile fields saved against stale carpool data, or Location rows
-      // written for a CarpoolSearch that was never created. `relationMode =
-      // "prisma"` means the database rejects none of that, and there is no
-      // reconciliation job, so the inconsistency was permanent.
+      // `CarpoolSearch`. Wrapped in one transaction because `relationMode =
+      // "prisma"` means the database enforces none of the relations between
+      // them, and there is no reconciliation job: independent awaits would let
+      // a failure part-way through commit the earlier writes and abandon the
+      // rest - profile fields saved against stale carpool data, or Location
+      // rows written for a CarpoolSearch that was never created - and that
+      // inconsistency would be permanent.
       //
       // What this protects on the read side: `user.me` above spreads
       // `carpoolSearches[0]` and both its Locations onto one flat object, so it
@@ -369,11 +370,10 @@ export const userRouter = router({
             pronouns: input.pronouns,
             isOnboarded: input.isOnboarded,
             bio: input.bio,
-            // `licenseSigned` is deliberately absent. Saving a profile is not
-            // accepting the terms, and this procedure used to set it to true on
-            // every save - so the field recorded "this user saved a profile"
-            // rather than "this user agreed". Only `acceptTerms`
-            // writes it now.
+            // `licenseSigned` is deliberately absent: saving a profile is not
+            // accepting the terms. Only `acceptTerms` writes this field, so it
+            // records "this user agreed" rather than "this user saved a
+            // profile".
           },
         });
 
@@ -394,12 +394,11 @@ export const userRouter = router({
         // group, and the riders' shared preferences - read through the
         // driver's own search - vanish.
         //
-        // *Towards* DRIVER is the mirror image, and used to be unguarded: the
-        // guard fired only for a driver leaving the role. A rider
-        // who made themselves DRIVER then passed `requireGroupDriver`, and
-        // could dissolve the group, evict the real driver, or add riders
-        // against their own seat count. The profile form offered it as one
-        // click on the Driver radio.
+        // *Towards* DRIVER is the mirror image, and just as necessary to
+        // guard: without it, a rider could make themselves DRIVER, pass
+        // `requireGroupDriver`, and then dissolve the group, evict the real
+        // driver, or add riders against their own seat count - all via one
+        // click on the Driver radio in the profile form.
         //
         // RIDER to VIEWER is refused too, deliberately. A viewer has no
         // Locations and cannot request a ride, so a viewer in a group is not a
@@ -407,10 +406,8 @@ export const userRouter = router({
         // Group, which the remove path in `groups.edit` never refuses a rider.
         // Changing role afterwards is then unrestricted.
         //
-        // The toast this once was in the profile page was deleted by the
-        // profile redesign; it was never server-side at all, so a direct call
-        // always bypassed it. It lives here because this is the only place the
-        // invariant cannot be routed around.
+        // This check is server-side rather than only a UI affordance, because
+        // it is the only place the invariant cannot be routed around.
         //
         // Throwing inside the transaction rolls back the `user.update` above.
         if (existingSearch?.carpoolId && input.role !== existingSearch.role) {
@@ -426,9 +423,9 @@ export const userRouter = router({
         }
 
         // Home and company Locations belong to this CarpoolSearch and nobody
-        // else, so the coordinates just submitted are always what gets stored.
-        // This used to match an existing row on address text alone
-        // and reuse whatever coordinates that row already had.
+        // else, so the coordinates just submitted are always what gets stored,
+        // rather than reusing whatever coordinates an existing row matched on
+        // address text alone.
         const { homeLocationId, companyLocationId } =
           await resolveOwnedLocations(tx, {
             carpoolSearchId: existingSearch?.id ?? null,
@@ -454,9 +451,10 @@ export const userRouter = router({
 
         // `seatsAvail` is deliberately absent, and is written separately on
         // each branch below. It is the only field here whose write is
-        // *conditional on group membership*, and expressing that condition in
-        // JavaScript against `existingSearch` - a read taken earlier in this
-        // transaction - was the bug. See the claim in the `existingSearch`
+        // *conditional on group membership*, and that condition must not be
+        // expressed in JavaScript against `existingSearch` - a read taken
+        // earlier in this transaction - because a concurrent acceptance could
+        // commit after that read. See the claim in the `existingSearch`
         // branch.
         const carpoolSearchData = {
           role: input.role,
@@ -483,16 +481,15 @@ export const userRouter = router({
           //
           // This has to be a raw `UPDATE`, not `tx.carpoolSearch.updateMany`.
           // The obvious Prisma-idiomatic compare-and-swap is `updateMany`'s
-          // WHERE re-checking `carpoolId` - the same shape `reserveSeat` in
-          // `groups.ts` used for seats before it was fixed - but verified
-          // against a real MySQL (a throwaway container, forcing the exact
-          // interleaving): on this Prisma version, `updateMany`'s WHERE
-          // matched against this transaction's own REPEATABLE READ snapshot
-          // instead of the current committed row, so it happily "won" a race
-          // it should have lost. A raw `UPDATE ... WHERE ...` does not have
-          // that problem - InnoDB gives it a current read - which the same
-          // throwaway database confirmed. `reserveSeat` had the identical
-          // defect and now uses the same raw-`UPDATE` primitive.
+          // WHERE re-checking `carpoolId` - but verified against a real MySQL
+          // (a throwaway container, forcing the exact interleaving): on this
+          // Prisma version, `updateMany`'s WHERE matches against this
+          // transaction's own REPEATABLE READ snapshot instead of the current
+          // committed row, so it happily "wins" a race it should lose. A raw
+          // `UPDATE ... WHERE ...` does not have that problem - InnoDB gives
+          // it a current read - which the same throwaway database confirmed.
+          // `reserveSeat` in `groups.ts` has the identical problem with seats
+          // and uses the same raw-`UPDATE` primitive there.
           //
           // Reachable only with `existingSearch.carpoolId === null`: the
           // FORBIDDEN guard above already threw if it was truthy and the
@@ -534,23 +531,22 @@ export const userRouter = router({
           // save of anything at all - the bio, say - and the car could then
           // take more riders than it seats.
           //
-          // That rule is unchanged. What changed is *where it is evaluated*.
-          // It used to be `existingSearch?.carpoolId ? undefined :
-          // input.seatAvail`, and `existingSearch` is this transaction's
-          // REPEATABLE READ snapshot: an acceptance that committed after that
-          // read still shows `carpoolId: null` here, so the write went ahead
-          // and erased the rider's decrement. Restating the condition as the
-          // statement's own WHERE makes the database evaluate it against the
+          // That rule is enforced in the database rather than in JavaScript.
+          // `existingSearch` is this transaction's REPEATABLE READ snapshot:
+          // an acceptance that committed after that read still shows
+          // `carpoolId: null` here, so a JS condition against it would let the
+          // write through and erase the rider's decrement. The statement's own
+          // WHERE makes the database evaluate the condition against the
           // current row instead, which is the only place it can be true.
           //
-          // Skipped silently on 0 rows, rather than raised as a conflict, for
-          // the reason the old comment gave: a stale value is exactly what the
-          // form sends in that case, it is indistinguishable from an intended
-          // change, and refusing it would fail the bio save the user actually
-          // made. The form locks the field for a grouped user to match. This
-          // is the opposite choice from the role claim above, and deliberately
-          // so - a role the user did not ask for is a different thing from a
-          // seat count the form echoed back.
+          // Skipped silently on 0 rows, rather than raised as a conflict: a
+          // stale value is exactly what the form sends in that case, it is
+          // indistinguishable from an intended change, and refusing it would
+          // fail the bio save the user actually made. The form locks the
+          // field for a grouped user to match. This is the opposite choice
+          // from the role claim above, and deliberately so - a role the user
+          // did not ask for is a different thing from a seat count the form
+          // echoed back.
           //
           // Ordering matters. On success this statement holds the row's lock
           // until commit, so a concurrent accept blocks behind it and then
@@ -630,9 +626,10 @@ export const userRouter = router({
    * size, and both are bounded here and then bound into the signature — see
    * `generatePresignedUrl` for why the second half is load-bearing.
    *
-   * Throws rather than resolving `undefined` when there is no session user: a
-   * missing URL was previously indistinguishable from a successful call, and
-   * React Query reports a query that resolves `undefined` as a failure anyway.
+   * Throws rather than resolving `undefined` when there is no session user:
+   * resolving `undefined` would be indistinguishable from a successful call
+   * that returned nothing, and React Query reports a query that resolves
+   * `undefined` as a failure anyway.
    */
   getPresignedUrl: protectedRouter
     .input(
@@ -678,10 +675,10 @@ export const userRouter = router({
    *
    * React Query treats a query function that resolves `undefined` as a
    * failure ("... data is undefined"), and a query in the error state
-   * refetches on every mount regardless of staleTime or refetchOnMount. This
-   * procedure used to return `undefined` for a user with no profile picture,
-   * so those users - the majority - were never cacheable and paid an S3
-   * HeadObject on every avatar mount. `{ url: null }` is a cacheable success.
+   * refetches on every mount regardless of staleTime or refetchOnMount.
+   * Resolving `undefined` for a user with no profile picture would make those
+   * users - the majority - never cacheable, paying an S3 HeadObject on every
+   * avatar mount. `{ url: null }` is a cacheable success instead.
    *
    * "No picture" is the only thing `{ url: null }` means. A session
    * carrying no user is not a picture-state, so it throws instead of borrowing
@@ -718,11 +715,9 @@ export const userRouter = router({
         // A primary-key lookup on an already-open connection is the whole cost
         // of an avatar: signing is a local HMAC, so no S3 request is made for
         // anyone. The column is the only record that a picture exists, and a
-        // null one - including a user row that does not exist - means none.
-        //
-        // That reading became safe only once the backfill had recorded every
-        // picture uploaded before the column existed; until then a null row
-        // asked S3 with a `HeadObject` instead.
+        // null one - including a user row that does not exist - means none,
+        // now that the backfill has recorded every picture uploaded before
+        // the column existed.
         const owner = await ctx.prisma.user.findUnique({
           where: { id: userId },
           select: { profilePictureUpdatedAt: true },
@@ -785,9 +780,7 @@ export const userRouter = router({
   /**
    * Records that the caller accepted the terms shown by `ComplianceModal`.
    *
-   * This is the only writer of `licenseSigned`. Nothing used to write it
-   * on acceptance at all: the "I Agree" button fired a Mixpanel event and
-   * closed the dialog, and the flag was set as a side effect of `user.edit`.
+   * This is the only writer of `licenseSigned`.
    *
    * Note on reading the columns: they are trustworthy as evidence of acceptance
    * only for values written here. Rows that already had the boolean set may have

@@ -32,13 +32,13 @@ import { appRouter } from "../index";
 /**
  * Authorization tests for `user.emails`.
  *
- * The four procedures used to take sender name, sender address, recipient name,
- * recipient address and the body straight from client input, making them an
- * open relay through the NUCarpool SES identity: any signed-in user could send
+ * Accepting sender name, sender address, recipient name, recipient address or
+ * the body straight from client input would make these procedures an open
+ * relay through the NUCarpool SES identity: any signed-in user could send
  * arbitrary text to an arbitrary address under our branding.
  *
- * These tests pin the fixed behaviour — every address is resolved server-side,
- * and no client-supplied address can reach SES. The load-bearing assertion
+ * These tests pin that none of that is possible — every address is resolved
+ * server-side, and no client-supplied address can reach SES. The load-bearing assertion
  * throughout is `expect(ses).not.toHaveBeenCalled()`: on every rejection path,
  * no mail is attempted at all.
  *
@@ -142,10 +142,10 @@ const buildEmailDb = (opts?: {
   sesFails?: boolean;
   /**
    * Starting `email_send_budget` rows, as `{ [userId]: sendCount }` for the
-   * *current* window. The budget used to be derived from `request.count` over
-   * the caller's recent rows, which is the defect SCRUM-606 fixed: it counted
-   * rows the caller could delete. It is now its own table, so a test that
-   * wants a spent budget says so here rather than fabricating request history.
+   * *current* window. The budget is kept in its own table rather than derived
+   * from `request.count` over the caller's recent rows — counting deletable
+   * rows is the defect SCRUM-606 fixed — so a test that wants a spent budget
+   * says so here rather than fabricating request history.
    */
   budgets?: Record<string, number>;
   /** Block rows, either direction. None by default: nobody has blocked anybody. */
@@ -284,8 +284,7 @@ const buildEmailDb = (opts?: {
    * under `relationMode = "prisma"`. Each marker claim checks the marker and
    * clears it in one synchronous step, as the single InnoDB `UPDATE` does, and
    * returns the rows changed. Anything else is an error, so a new raw
-   * statement cannot pass here unnoticed — which is what caught the budget
-   * statements below when they were added.
+   * statement cannot pass here unnoticed.
    *
    * The budget branches come first, because they are the only ones that name
    * `email_send_budget` and the marker branches match on looser substrings.
@@ -531,9 +530,10 @@ describe("user.emails.sendRequestNotification — participants only, addresses f
   });
 
   /**
-   * The body used to be `input.messagePreview`, sent to SES unchecked. With the
-   * replay below, that let a requester mail the recipient any text they liked,
-   * repeatedly, and none of it was stored where a report could capture it.
+   * Accepting `input.messagePreview` straight to SES unchecked would let a
+   * requester mail the recipient any text they liked, repeatedly, with
+   * nothing stored where a report could capture it. The replay below pins
+   * against that.
    */
   it("no longer accepts a preview from the client", async () => {
     const db = buildEmailDb({ messages: [openingMessage("stored text")] });
@@ -584,9 +584,9 @@ describe("user.emails.sendRequestNotification — participants only, addresses f
   });
 
   it("refuses a caller who is not part of the request", async () => {
-    // The reported hole: this used to take a bare `toId`, and
-    // every PublicUser the map and recommendations return carries a user id,
-    // so any signed-in student could mail any other registered user.
+    // The reported hole: taking a bare `toId` would let any signed-in student
+    // mail any other registered user, since every `PublicUser` the map and
+    // recommendations return carries a user id.
     const { caller, db } = callerFor(sessionFor(MALLORY));
 
     await expect(
@@ -626,8 +626,8 @@ describe("user.emails.sendRequestNotification — participants only, addresses f
   });
 
   /**
-   * The replay these cases pin. The only control used to be "the
-   * request is under five minutes old", so inside that window every call sent
+   * The replay these cases pin: a control based only on "the request is
+   * under five minutes old" would let every call inside that window send
    * another email. The count of SES calls is the assertion that matters.
    */
   it("sends one email for a request however many times it is called", async () => {
@@ -915,9 +915,10 @@ describe("user.emails.sendMessageNotification — participants only, stored body
   });
 
   /**
-   * The replay. The cooldown counts the caller's *other* recent
-   * messages, so after one message every call saw none and sent. The marker
-   * is what stops that; the cooldown only limits bursts of new messages.
+   * The replay. The cooldown counts the caller's *other* recent messages, so
+   * without the marker, after one message every call would see none and
+   * send. The marker is what stops that; the cooldown only limits bursts of
+   * new messages.
    */
   it("sends one email for a message however many times it is called", async () => {
     const db = withMessage();
@@ -988,9 +989,10 @@ describe("user.emails.sendMessageNotification — participants only, stored body
     ).rejects.toThrow("Throttling");
 
     expect(db.messages[0]?.notificationPending).toBe(true);
-    // Refunded as well as re-marked. This passes today; it is pinned so that
-    // the next edit to this path cannot quietly drop the refund the way the
-    // acceptance copy did.
+    // Refunded as well as re-marked. Pinned so that a future edit to this
+    // path cannot quietly drop the refund while still restoring the marker —
+    // doing only the marker would leave an SES failure charging a send that
+    // never went out.
     expect(db.budgetFor(ALICE)).toBe(5);
   });
 
@@ -1012,8 +1014,8 @@ describe("user.emails.sendAcceptanceNotification — only the party who accepted
    * An acceptance email asserts a specific fact about a specific person, so
    * the procedure requires more than the shared "are you a participant" check:
    * the request must be `ACCEPTED`, and the caller must be the party it was
-   * addressed to. The fixture default is a fresh `PENDING` request, which is
-   * no longer this flow, so every genuine case builds the accepted row.
+   * addressed to. The fixture default is a fresh `PENDING` request, which does
+   * not satisfy this flow, so every genuine case builds the accepted row.
    */
   const acceptedRequestDb = (
     fromUserId = ALICE,
@@ -1100,12 +1102,12 @@ describe("user.emails.sendAcceptanceNotification — only the party who accepted
   });
 
   /**
-   * The defect these three cases exist to pin.
+   * The defect these three cases guard against.
    *
-   * The procedure did not read `Request.status` at all, and the shared party
-   * check admits either side of a request. Together that let the *sender* of a
-   * still-pending request make the platform email their target "Alice accepted
-   * your carpool request" — about a request the target never made and nobody
+   * Without checking `Request.status`, and with the shared party check
+   * admitting either side of a request, the *sender* of a still-pending
+   * request could make the platform email their target "Alice accepted your
+   * carpool request" — about a request the target never made and nobody
    * accepted — from our verified SES identity, as many times as they liked.
    *
    * Both halves are asserted separately because either one alone still leaves
@@ -1166,10 +1168,10 @@ describe("user.emails.sendAcceptanceNotification — only the party who accepted
    *   DriverAcceptanceTemplate  "...accepted your request for them to join your group"
    *   RiderAcceptanceTemplate   "...accepted your request to join their Carpool group"
    *
-   * The flow used to supply the *caller's* role. Because the two roles in a
-   * pair are complementary that was always the wrong one, so every acceptance
-   * email was worded for the other party. Asserting both directions is the
-   * point: a test that only checks one could pass with the role hard-coded.
+   * Supplying the *caller's* role would always select the wrong one, because
+   * the two roles in a pair are complementary — every acceptance email would
+   * be worded for the other party. Asserting both directions is the point: a
+   * test that only checks one could pass with the role hard-coded.
    */
   it("tells a rider their request was accepted, when a driver accepts", async () => {
     // Alice (rider) asked to join Bob's (driver) carpool; Bob accepts.
@@ -1201,10 +1203,10 @@ describe("user.emails.sendAcceptanceNotification — only the party who accepted
   });
 
   /**
-   * The replay this test exists to close. Before, the procedure
-   * checked only direction and status, both of which stay true forever once a
-   * request is accepted, so every call after the first sent another copy of
-   * "<name> accepted your carpool request". The marker is what stops that.
+   * The replay this test exists to close: checking only direction and status,
+   * both of which stay true forever once a request is accepted, would let
+   * every call after the first send another copy of "<name> accepted your
+   * carpool request". The marker is what stops that.
    */
   it("sends one email for an acceptance however many times it is called", async () => {
     const { caller, db } = callerFor(sessionFor(BOB), acceptedRequestDb());
@@ -1314,8 +1316,8 @@ describe("user.emails.sendAcceptanceNotification — only the party who accepted
     ).rejects.toThrow("Throttling");
 
     // No email went out, so the accepting party is charged nothing. Without
-    // this the marker was correctly restored but the send stayed spent, so an
-    // SES outage silently ate the retries it provoked.
+    // this the marker would be correctly restored but the send would stay
+    // spent, so an SES outage would silently eat the retries it provoked.
     expect(db.budgetFor(BOB)).toBe(5);
   });
 

@@ -159,10 +159,10 @@ describe("user.getPresignedDownloadUrl", () => {
   });
 
   it('refuses a session with no user rather than calling it "no picture"', async () => {
-    // A session with no `user` is the only way to reach this branch. It used to
-    // answer `{ url: null }`, which is the same thing this procedure says about
-    // a user who simply has not uploaded anything - so a broken session was
-    // indistinguishable from an empty avatar.
+    // A session with no `user` is the only way to reach this branch.
+    // Answering `{ url: null }` here would be the same thing this procedure
+    // says about a user who simply has not uploaded anything, making a broken
+    // session indistinguishable from an empty avatar.
     //
     // `{ url: null }` is still the answer for
     // every *successful* lookup that finds no object, which is the case that
@@ -240,9 +240,9 @@ describe("user.getPresignedDownloadUrl", () => {
  * Upload constraints for `user.getPresignedUrl`.
  *
  * This procedure hands out a URL that writes to `profile-pictures/{env}/{id}`.
- * It used to accept `contentType: z.string()` with no size bound at all, so a
- * crafted call could obtain a URL that stored `text/html` of any length at the
- * caller's key - content later served back from an amazonaws.com origin.
+ * `contentType` and `contentLength` are both bounded, so a crafted call cannot
+ * obtain a URL that stores `text/html` of unbounded length at the caller's key
+ * - content that would later be served back from an amazonaws.com origin.
  *
  * The key is derived from the session and never from input, which is why there
  * is no "upload to someone else's key" case to test: there is no parameter that
@@ -256,10 +256,9 @@ describe("user.getPresignedDownloadUrl", () => {
 /**
  * The recorded picture timestamp is the only answer to "has a picture?".
  *
- * It used to be one of two: a null column fell back to an S3 `HeadObject`,
- * because every row predating the column was null whether or not an object
- * existed. The backfill recorded all of those, so a null column now means
- * "no picture" and resolves `{ url: null }` without signing.
+ * A null column means "no picture" and resolves `{ url: null }` without
+ * signing, now that the backfill has recorded every picture uploaded before
+ * the column existed - so no row predating the column is ambiguous.
  * Signing is a local HMAC, so no path here makes an S3 request - pinned
  * against the real module in `uploadToS3.test.ts`.
  *
@@ -351,8 +350,8 @@ describe("user.getPresignedDownloadUrl — recorded picture state", () => {
   });
 
   it("returns { url: null } without signing when nothing has been recorded", async () => {
-    // Was the S3 fallback until the backfill ran everywhere. A null column is
-    // now a user who has never uploaded a picture, which is most of them.
+    // A null column means a user who has never uploaded a picture, which is
+    // most of them, now that the backfill has run everywhere.
     mockUserFindUnique.mockResolvedValue({ profilePictureUpdatedAt: null });
     const caller = callerFor(sessionFor(SESSION_USER));
 
@@ -628,7 +627,7 @@ describe("user.getPresignedUrl", () => {
   });
 
   it("throws rather than resolving undefined when the session has no user", async () => {
-    // It used to fall off the end of the resolver here and resolve `undefined`,
+    // Falling off the end of the resolver here would resolve `undefined`,
     // which React Query reports as a failed query and the UI cannot explain.
     const caller = callerFor({
       expires: "2099-01-01T00:00:00.000Z",
@@ -785,14 +784,14 @@ const buildEditDb = (
     // `saveProfile`'s two compare-and-swaps. Both are raw `UPDATE`s rather
     // than `tx.carpoolSearch.updateMany` - `updateMany`'s WHERE was verified
     // against a real MySQL to match this transaction's own snapshot rather
-    // than the current row on this Prisma version, so it did not actually
+    // than the current row on this Prisma version, so it would not actually
     // close either race. Both share the same `WHERE id = ? AND carpoolId IS
     // NULL`, and they are told apart below by the column each one sets:
     //
     // - the role claim, `SET role = ${input.role}`;
-    // - the seat claim, `SET seats_avail = ${input.seatAvail}`, which used to
-    //   be an ordinary field of the `update` guarded in JavaScript by
-    //   `existingSearch.carpoolId` - a snapshot read, which is why it moved.
+    // - the seat claim, `SET seats_avail = ${input.seatAvail}`, guarded in the
+    //   WHERE rather than in JavaScript against `existingSearch.carpoolId` -
+    //   a snapshot read that a concurrent acceptance could invalidate.
     //
     // A statement this mock does not recognise throws rather than silently
     // behaving like one of these two.
@@ -927,12 +926,12 @@ const editIssues = async (
 };
 
 /**
- * Terms acceptance is recorded by `user.acceptTerms` and by nothing else.
- * It used to be set to `true` by every profile save, which made
- * `licenseSigned` a record of "this user saved a profile" rather than of consent
- * to a liability disclaimer written on behalf of the university.
+ * Terms acceptance is recorded by `user.acceptTerms` and by nothing else, so
+ * `licenseSigned` is evidence of consent to a liability disclaimer written on
+ * behalf of the university - not merely a record that this user saved a
+ * profile.
  *
- * It now records *when* and *to what* as well, and all three columns move
+ * It records *when* and *to what* as well, and all three columns move
  * together. A row with the boolean set and the other two null is not a partial
  * write from here - it is a row that predates the columns, and the only thing
  * that distinguishes the untrusted legacy cohort.
@@ -1036,8 +1035,8 @@ describe("user.edit — terms acceptance is not a profile field", () => {
     const db = buildEditDb();
     const caller = editCallerFor(SESSION_USER, db);
 
-    // An older client would still send this; Zod strips it and the resolver no
-    // longer reads it, so a stale bundle cannot flip the flag.
+    // An older client would still send this; Zod strips it, and the resolver
+    // does not read it either, so a stale bundle cannot flip the flag.
     await caller.user.edit(editInput({ licenseSigned: true }));
 
     expect(db.prisma.user.update).toHaveBeenCalled();
@@ -1069,7 +1068,7 @@ describe("user.edit — Location ownership", () => {
   });
 
   it("does not adopt another user's row for an identical address", async () => {
-    // The reported bug: whoever saved these strings first decided where
+    // Without this, whoever saved these strings first would decide where
     // everyone else's pin went.
     const db = buildEditDb(
       [
@@ -1120,7 +1119,7 @@ describe("user.edit — Location ownership", () => {
 
   it("lets a user correct their own coordinates without changing the address", async () => {
     // Re-picking a nearby Mapbox suggestion that parses to the same strings
-    // used to appear to save and move nothing.
+    // would otherwise appear to save and move nothing.
     const db = buildEditDb();
     const caller = editCallerFor(SESSION_USER, db);
 
@@ -1249,20 +1248,20 @@ describe("user.edit — losing the first-save race", () => {
 
 /**
  * `user.edit` writes four `VARCHAR(191)` columns — `user.bio`,
- * `user.preferred_name`, `user.pronouns` and `carpool_search.company_name` —
- * and every one of them arrived as an unbounded `z.string()`.
- * MySQL runs in strict mode, so an oversized value failed the whole profile
- * save inside Prisma rather than being refused at the boundary.
+ * `user.preferred_name`, `user.pronouns` and `carpool_search.company_name`.
+ * MySQL runs in strict mode, so each is capped by `PROFILE_TEXT_MAX_LENGTH` to
+ * fail at this boundary rather than inside Prisma, which would fail the whole
+ * profile save.
  */
 /**
  * Clearing a schedule time.
  *
  * `startTime`/`endTime` are nullable columns with a `NO_SCHEDULE_TIME`
- * placeholder in the display layer, and no code path could write `NULL` to
- * them. The input was `z.optional(z.string())` and the conversion was a truthy
- * ternary, so a cleared time became `undefined` - which **Prisma reads in an
- * `update` as "omit this field"**. A VIEWER emptying their schedule got a
- * success toast and kept the old values.
+ * placeholder in the display layer. **Prisma reads `undefined` in an
+ * `update` as "omit this field"**, so collapsing an explicit `null` (clear)
+ * and an absent value (leave alone) into the same `undefined` would silently
+ * keep the old values - a VIEWER emptying their schedule would get a success
+ * toast and nothing would change.
  *
  * These assertions are about the *payload handed to Prisma*, not the return
  * value, and deliberately so: the mock accepts `undefined` as readily as
@@ -1393,10 +1392,10 @@ describe("user.edit — a schedule time can be cleared", () => {
   ])(
     "refuses %s as a time rather than clearing the schedule",
     async (_label, value) => {
-      // `fromScheduleTimeInput` maps both to `null`, so they used to clear a
-      // RIDER's schedule by another route than the explicit null refused
-      // above. Refused for a VIEWER too: neither is a time, and a
-      // VIEWER who means "clear" sends `null`.
+      // `fromScheduleTimeInput` maps both to `null`, so without this check
+      // they would clear a RIDER's schedule by a route other than the
+      // explicit null refused above. Refused for a VIEWER too: neither is a
+      // time, and a VIEWER who means "clear" sends `null`.
       for (const role of [Role.RIDER, Role.VIEWER]) {
         for (const field of ["startTime", "endTime"] as const) {
           const db = withExistingSearch(role);
@@ -1418,8 +1417,9 @@ describe("user.edit — a schedule time can be cleared", () => {
 });
 
 /**
- * `daysWorking` was `z.string()`, so any string was stored and then read as
- * whatever `split(",")` made of it - the same gap as the schedule times.
+ * `daysWorking` must match the seven comma-separated flag pattern below,
+ * rather than being accepted as any string and read as whatever
+ * `split(",")` makes of it - the same shape of gap as the schedule times.
  */
 describe("user.edit — working days are validated", () => {
   it.each(["", "1,1,1,1,1", "0,1,1,1,1,1,0,1", "0,1,2,1,1,1,0", "yes"])(
@@ -1501,16 +1501,14 @@ describe("user.edit — profile text is bounded by its columns", () => {
 });
 
 /**
- * The eight address fields were the last strings here with no bound at all.
- *
- * They were left that way on the reasoning that nobody types them — they are
- * parsed out of a Mapbox feature and posted by the form — so a place name the
- * geocoder returned must already fit. Nothing checked that, and a long enough
- * `place_name` does not: these write to `location`, whose columns are
- * `VARCHAR(191)` exactly like the profile text above. The overflow surfaced as
- * `P2000` from inside Prisma, which is not a `TRPCError`, so the whole profile
- * save rolled back and the client was told "Something went wrong" with nothing
- * naming the field.
+ * The eight address fields write to `location`, whose columns are
+ * `VARCHAR(191)` exactly like the profile text above. These come back from a
+ * Mapbox feature rather than being typed, but a long enough `place_name`
+ * still overflows the column. An overflow surfaces as `P2000` from inside
+ * Prisma, which is not a `TRPCError`, so the whole profile save would roll
+ * back and the client would be told "Something went wrong" with nothing
+ * naming the field - which is why these are bounded here rather than left to
+ * the column.
  *
  * The limit is on the procedure rather than only on the form because this is
  * the boundary that writes the row, and `onboardSchema` is a second copy of
@@ -1565,7 +1563,7 @@ describe("user.edit — addresses are bounded by their columns", () => {
 
 /**
  * `user.edit` is the boundary that writes coordinates and co-op dates to the
- * database, and it range-checked neither.
+ * database, so this is where both must be range-checked.
  *
  * Nothing downstream catches either one. `coord_lat` / `coord_lng` are plain
  * `Float`, `start_date` / `end_date` are independent `Date`, so the save
@@ -1990,8 +1988,8 @@ describe("user.edit is atomic", () => {
     const db = existingProfile();
 
     // The two Location rows are rewritten in place before the search is
-    // updated, so failing the last write is what used to leave a user's pins
-    // moved to an address their profile never adopted.
+    // updated, so failing the last write would leave a user's pins moved to
+    // an address their profile never adopted.
     db.prisma.carpoolSearch.update.mockImplementationOnce(async () => {
       throw new Error("connection lost");
     });
@@ -2035,10 +2033,10 @@ describe("user.edit is atomic", () => {
 /**
  * A driver in a carpool group cannot change role out of it.
  *
- * This was once a `toast.error` in the profile page; the profile
- * redesign deleted the handler in December 2024 and nothing replaced it, so
- * this went unguarded for over a year. It was never server-side even before
- * that, so a direct call to the procedure always bypassed it.
+ * The only enforcement here is server-side: a client-side guard alone (a
+ * toast on the profile page) is removable by any future profile-page change
+ * without anyone noticing, and a direct call to the procedure would bypass
+ * it entirely regardless.
  *
  * Why it matters more than a validation nicety: dropping a group's only DRIVER
  * leaves a state nothing can recover from. `requireGroupDriver` throws
@@ -2050,10 +2048,10 @@ describe("user.edit is atomic", () => {
  * take the guard with it: the invariant is asserted against the procedure, not
  * against the form.
  *
- * The rider direction is the other half. The guard used to fire
- * only for a driver leaving the role, so a grouped rider could make themselves
- * DRIVER, pass `requireGroupDriver`, and dissolve the group or evict its real
- * driver. Any role change while grouped is refused now.
+ * The rider direction is the other half: a guard that fired only for a
+ * driver leaving the role would let a grouped rider make themselves DRIVER,
+ * pass `requireGroupDriver`, and dissolve the group or evict its real driver.
+ * Any role change while grouped is refused, in both directions.
  */
 describe("user.edit — nobody in a group can change role", () => {
   const GROUP = "group-1";

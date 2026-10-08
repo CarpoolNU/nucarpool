@@ -15,13 +15,12 @@ import {
  * Pure aggregation for the admin dashboard.
  *
  * These run on the server, inside `user.admin.getDashboardStats`
- * and `getDashboardSeries`, rather than in the browser: the dashboard used to
- * download whole tables and reduce them client-side. They stay here, free of
- * Prisma and of React, so they remain unit-testable — see `adminDataUtils.test.ts`.
+ * and `getDashboardSeries`, rather than in the browser, so they stay free of
+ * Prisma and of React and remain unit-testable — see `adminDataUtils.test.ts`.
  *
- * Week bucketing uses `startOfWeek`, which is timezone-sensitive. Running on the
- * server means the buckets follow the server's timezone rather than each admin's,
- * so the chart is now the same for every viewer instead of shifting per browser.
+ * Week bucketing uses `startOfWeek`, which is timezone-sensitive. Running on
+ * the server means the buckets follow the server's timezone rather than each
+ * admin's, so the chart is identical for every viewer regardless of browser.
  */
 
 /**
@@ -323,17 +322,17 @@ export function summariseUsers(rows: AdminUserRow[]) {
 
   return {
     userCounts,
-    // Previously `getDaysFrequency(drivers, riders)` against a `(riders, drivers)`
-    // signature, which swapped the two series in the chart.
+    // `getDaysFrequency` takes `(riders, drivers)`; swapping the argument
+    // order swaps the two series the chart draws.
     daysFrequency: getDaysFrequency(riders, drivers),
     daysByWeekday: summariseDaysByWeekday(riders, drivers),
     membership: {
       driversInGroup: drivers.filter(inGroup).length,
       ridersInGroup: riders.filter(inGroup).length,
       totalDrivers: drivers.length,
-      // Active RIDERs only, defined the same way as `totalDrivers`. This used to
-      // be every active non-driver, so VIEWERs - about a third of production -
-      // roughly halved "Riders In a Group".
+      // Active RIDERs only, defined the same way as `totalDrivers`. Counting
+      // every active non-driver instead would fold VIEWERs in here too -
+      // about a third of production - and roughly halve "Riders In a Group".
       totalRiders: riders.length,
     },
   };

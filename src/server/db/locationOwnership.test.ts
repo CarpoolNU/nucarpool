@@ -8,10 +8,10 @@ import {
 /**
  * Tests for Location ownership.
  *
- * The bug these pin: `user.edit` matched an existing Location on street, city,
- * state and streetAddress and reused it as-is, so the coordinates the client
- * submitted were discarded and whoever saved a given address string first
- * decided where everyone else's pin went.
+ * The bug these pin: matching an existing Location on street, city, state and
+ * streetAddress alone and reusing it as-is discards the coordinates the
+ * client submitted, so whoever saves a given address string first decides
+ * where everyone else's pin goes.
  *
  * The Prisma double below is not inert — `location.create` and
  * `location.update` mutate an in-memory store, so a test can assert the
@@ -213,7 +213,7 @@ describe("resolveOwnedLocations", () => {
   });
 
   it("refuses to rewrite a row another CarpoolSearch also points at", async () => {
-    // Legacy data from the find-or-create era: two users share one row.
+    // Pre-existing shared row: two users already point at the same Location.
     const sharedCoords = { coordLng: -71.2, coordLat: 42.4 };
     const db = buildDb(
       [

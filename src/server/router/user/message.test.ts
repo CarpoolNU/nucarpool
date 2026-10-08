@@ -14,15 +14,16 @@ import { cloneState, withTransaction } from "../transactionMock";
 /**
  * Correctness tests for `user.messages.sendMessage`.
  *
- * Two defects sat in ~50 lines:
+ * Two invariants worth protecting with a regression test each:
  *
- *  1. The push notification always went to `request.toUserId`, so a reply from
- *     the request's recipient was delivered to that person's own channel and
- *     the original sender was never notified. Half of every conversation got
- *     no live notification.
- *  2. The message was only written inside `if (conversation)`. When no
- *     conversation row existed the handler created and linked one, wrote no
- *     message, and resolved successfully — the user's text was lost.
+ *  1. The push notification must go to whichever party did not send the
+ *     message. Always addressing `request.toUserId` would deliver a reply
+ *     from the request's recipient to their own channel and leave the
+ *     original sender with no live notification.
+ *  2. The message must be written whether or not a conversation row already
+ *     exists. Writing it only inside `if (conversation)` would create and
+ *     link a conversation on the first message of a thread, resolve
+ *     successfully, and lose the user's text.
  *
  * `pusher` is mocked at the module boundary, so this suite cannot emit a real
  * Pusher event. That matters: `sendMessage` fires on live channels in normal
@@ -191,8 +192,9 @@ describe("sendMessage — the notification goes to the other party", () => {
   });
 
   it("notifies the request's sender when the recipient replies", async () => {
-    // The defect: this used to address `toUserId` — the replier's own channel —
-    // so the original sender never saw the badge increment.
+    // Addressing `toUserId` unconditionally would deliver this to the
+    // replier's own channel, so the original sender would never see the badge
+    // increment.
     const { caller } = callerFor(sessionFor(RECIPIENT));
 
     await caller.user.messages.sendMessage({
@@ -248,8 +250,8 @@ describe("sendMessage — the message is always persisted", () => {
   });
 
   it("writes the message when no conversation existed yet", async () => {
-    // The defect: the handler created and linked the conversation, then
-    // returned success without ever writing the message.
+    // Writing only inside `if (conversation)` would create and link the
+    // conversation, then return success without ever writing the message.
     const db = buildMessageDb({ conversation: null });
     const { caller } = callerFor(sessionFor(SENDER), db);
 
@@ -349,9 +351,9 @@ describe("sendMessage — guards", () => {
 
 describe("sendMessage — only participants may write", () => {
   it("refuses a third party with FORBIDDEN, writing nothing and broadcasting nothing", async () => {
-    // The defect: any signed-in user holding a request id could inject a
-    // message into a stranger's thread. It would be attributed to them in the
-    // UI, broadcast on the conversation channel, and emailed.
+    // Without this check, any signed-in user holding a request id could
+    // inject a message into a stranger's thread. It would be attributed to
+    // them in the UI, broadcast on the conversation channel, and emailed.
     const { caller, db } = callerFor(sessionFor(OUTSIDER));
 
     await expect(
@@ -514,9 +516,11 @@ describe("sendMessage — a blocked pair cannot write to each other", () => {
 
 describe("user.messages.getMessages — removed rather than scoped", () => {
   it("is no longer exposed by the router", async () => {
-    // It returned an entire conversation for any conversation id, having read
-    // the session user and then never used it. Its only two callers ever came
-    // in commits that were later reverted, so the surface was unreachable.
+    // It would return an entire conversation for any conversation id, after
+    // reading the session user and never using it, so any signed-in caller
+    // could read any conversation. Conversations reach the UI through
+    // `user.requests.me` and `messages.conversation`, both scoped to the
+    // caller's own requests.
     const paths = Object.keys((appRouter as any)._def.procedures);
 
     expect(paths).toContain("user.messages.sendMessage");
@@ -525,12 +529,12 @@ describe("user.messages.getMessages — removed rather than scoped", () => {
   });
 
   it("no longer has an admin counterpart either", async () => {
-    // `user.admin.getMessages` was a separate, adminRouter-gated procedure that
-    // the message authorization work deliberately left alone. It was removed
-    // later too, for a different reason: it selected `content`, so it shipped
+    // `user.admin.getMessages` was a separate, adminRouter-gated procedure
+    // that this authorization work deliberately left alone. It must stay
+    // removed for a different reason: it selected `content`, which would ship
     // the text of every private message to an admin's browser, and
-    // AdminData.tsx never read the result. No procedure in the router selects a
-    // message body now.
+    // AdminData.tsx never reads the result. No procedure in the router
+    // selects a message body.
     const paths = Object.keys((appRouter as any)._def.procedures);
 
     expect(paths).not.toContain("user.admin.getMessages");
@@ -557,9 +561,9 @@ describe("sendMessage — broadcasts only on private channels", () => {
 
 describe("sendMessage — content is bounded by its column", () => {
   // `message.content` is `VARCHAR(255)` and MySQL runs in strict mode, so an
-  // oversized value threw at the database rather than truncating. The input had
-  // neither `.max()` nor `.min(1)`, and `SendBar` had no cap at all, so the
-  // user's text was cleared from the box for a write that never landed.
+  // oversized value without `.max()` would throw at the database rather than
+  // truncate — and with `SendBar` carrying no cap of its own, the user's text
+  // would be cleared from the box for a write that never landed.
   const atLimit = "a".repeat(MESSAGE_MAX_LENGTH);
 
   it("accepts a message of exactly the column width", async () => {
@@ -636,9 +640,10 @@ describe("sendMessage — content is bounded by its column", () => {
  * Atomicity of `sendMessage`.
  *
  * Repairing a missing conversation takes two writes, because the link lives on
- * both `Conversation.requestId` and `Request.conversationId`. Untransactioned,
- * those plus the message were three independent awaits, so a failure could
- * create and link a conversation and then lose the text the user had typed.
+ * both `Conversation.requestId` and `Request.conversationId`. Without a
+ * transaction, those plus the message would be three independent awaits, so a
+ * failure could create and link a conversation and then lose the text the
+ * user had typed.
  */
 describe("sendMessage is atomic", () => {
   it("leaves no conversation behind when writing the message fails", async () => {
@@ -691,12 +696,12 @@ describe("sendMessage is atomic", () => {
  * `getUnreadMessageCount` counts the caller's own conversations, and nothing
  * about the counterpart's role.
  *
- * It used to require the counterpart's role to differ from the caller's and not
- * be VIEWER - the same predicate `user.requests.me` applied to the list - so
- * once either party changed role the two disagreed in both directions at once:
- * the thread was hidden from the Requests tab, and its unread messages were
- * dropped from the header badge, which is how replies became invisible rather
- * than merely unreachable.
+ * Requiring the counterpart's role to differ from the caller's and not be
+ * VIEWER - the same predicate `user.requests.me` applies to the list - would
+ * make the two disagree in both directions at once whenever either party
+ * changed role: the thread hidden from the Requests tab, and its unread
+ * messages dropped from the header badge, which is how a reply would become
+ * invisible rather than merely unreachable.
  *
  * The double below understands the role predicate as well as the plain one, so
  * a regression that reintroduces it changes these counts rather than being
@@ -786,7 +791,7 @@ const buildUnreadDb = (
     }).length;
   });
 
-  // Provided even though the resolver no longer reads it, so that a regression
+  // Provided even though the resolver does not read it, so that a regression
   // reintroducing the role comparison fails on the count rather than crashing
   // on an absent delegate.
   const carpoolSearchFindFirst = jest.fn(async ({ where }: any) => {
@@ -841,8 +846,8 @@ describe("getUnreadMessageCount - the badge and the Requests tab agree", () => {
   ];
 
   it("counts an unread reply from a counterpart who now shares the caller's role", async () => {
-    // Both riders, so the old predicate excluded the thread and the reply never
-    // reached the badge.
+    // Both riders, so a role predicate here would exclude the thread and the
+    // reply would never reach the badge.
     const { caller } = unreadCallerFor(
       SENDER,
       [

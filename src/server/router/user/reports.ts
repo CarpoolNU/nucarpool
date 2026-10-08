@@ -21,7 +21,7 @@ import { applyBlock } from "./blocks";
  * only, through `user.admin.getReports`.
  *
  * Filing one reaches the admins by mail — the fact of a report and its
- * reason, never a word of it — so the queue is no longer pull-only. **Which
+ * reason, never a word of it — so the queue is not pull-only. **Which
  * mail depends on the reason.** A critical one (`REPORT_URGENCY` in
  * `utils/reports.ts`, currently `SAFETY_CONCERN` alone) sends an immediate
  * alert from here; every other reason is counted in the weekly digest
@@ -34,12 +34,11 @@ import { applyBlock } from "./blocks";
 /**
  * What a second OPEN report about the same person is refused with.
  *
- * It names where the first one can be read. Before `me` existed the refusal
- * pointed at a row the reporter had no way to look at, so somebody who had
- * forgotten whether they had already reported this person - or who now had
- * more to say - was told only that they could not proceed. The wording tracks
- * the heading in `ReportsFiledSection`; the two have to stay in step, which is
- * what `reports.test.ts` asserts.
+ * It names where the first one can be read, so somebody who has forgotten
+ * whether they already reported this person - or who now has more to say -
+ * is not just told they can't proceed. The wording tracks the heading in
+ * `ReportsFiledSection`; the two have to stay in step, which is what
+ * `reports.test.ts` asserts.
  */
 export const DUPLICATE_REPORT_MESSAGE =
   "You already have an open report about this user. You can see it, and any " +
@@ -47,12 +46,12 @@ export const DUPLICATE_REPORT_MESSAGE =
 
 /**
  * How many reports one reporter may file inside `REPORT_RATE_LIMIT_WINDOW_MS`.
- * Every user id is visible in every map and recommendation
- * payload, so nothing before this stopped a script from filing an OPEN
- * report - each carrying up to the full reason text - against every user it
- * can see, with no prior interaction. `getReports` reads back only the
- * newest `REPORT_QUEUE_PAGE_SIZE` rows, so a flood like that pushes real
- * reports out of what admins can see. Matches the shape of
+ * Every user id is visible in every map and recommendation payload, so
+ * without this limit a script could file an OPEN report - each carrying up
+ * to the full reason text - against every user it can see, with no prior
+ * interaction. `getReports` reads back only the newest
+ * `REPORT_QUEUE_PAGE_SIZE` rows, so a flood like that pushes real reports out
+ * of what admins can see. Matches the shape of
  * `REQUEST_NOTIFICATIONS_PER_WINDOW` in `email.ts`: a plain `count` over a
  * rolling window, not a token bucket, because reports are rare enough that
  * the difference does not matter.
@@ -330,12 +329,12 @@ export const reportsRouter = router({
       // It is passed the reason and nothing else about the report — no id, no
       // message, no snapshot. See `AdminReportEmailSchema`.
       //
-      // **Only the critical reasons mail anybody here.** Every reason used to,
-      // which made a `NO_SHOW` report arrive at the same urgency as somebody
-      // saying they felt unsafe in a car — and since `REPORTS_PER_WINDOW`
-      // admits 20 reports per reporter per day, each mailing the whole
-      // roster, the mail was mostly not urgent and therefore at risk of not
-      // being read at all. The rest are counted in the weekly digest
+      // **Only the critical reasons mail anybody here.** Mailing every reason
+      // would put a `NO_SHOW` report at the same urgency as somebody saying
+      // they felt unsafe in a car — and since `REPORTS_PER_WINDOW` admits 20
+      // reports per reporter per day, each mailing the whole roster, that
+      // mail would be mostly not urgent and therefore at risk of not being
+      // read at all. The rest are counted in the weekly digest
       // (`reportDigestSend.ts`), which a critical report also appears in, so
       // nothing is dropped and nothing is reported twice over.
       //

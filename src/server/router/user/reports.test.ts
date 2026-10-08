@@ -241,9 +241,9 @@ const baseInput = {
  * A report that mails the admins the moment it is filed.
  *
  * `baseInput`'s `HARASSMENT` is a `DIGEST` reason (`REPORT_URGENCY` in
- * `utils/reports.ts`), so since SCRUM-625 it sends no mail at all. Every test
- * about the immediate alert has to use a reason that still fires one, or it
- * passes while asserting nothing — which is exactly what `expect(sesSend).not`
+ * `utils/reports.ts`), so it sends no mail at all. Every test about the
+ * immediate alert has to use a reason that still fires one, or it passes
+ * while asserting nothing — which is exactly what `expect(sesSend).not`
  * would have done with `baseInput`.
  */
 const criticalInput = {
@@ -826,10 +826,10 @@ describe("DUPLICATE_REPORT_MESSAGE", () => {
  * filing a report sends it at all, that no word of the report travels with it,
  * and that a send which fails leaves the report in place.
  *
- * **Every test here files a critical reason.** Since SCRUM-625 only those mail
- * anybody on filing; the other five are counted in the weekly digest instead,
- * which `reportDigestSend.test.ts` covers. The describe below this one is the
- * other half of that contract.
+ * **Every test here files a critical reason.** Only those mail anybody on
+ * filing; the other five are counted in the weekly digest instead, which
+ * `reportDigestSend.test.ts` covers. The describe below this one is the other
+ * half of that contract.
  */
 describe("user.reports.create fires the admin alert", () => {
   beforeEach(() => {
@@ -964,10 +964,10 @@ describe("user.reports.create fires the admin alert", () => {
 /**
  * The other half of the urgency contract: a routine report mails nobody.
  *
- * This is the behaviour SCRUM-625 introduced, and the one most likely to be
- * undone by accident — removing the `if` in `create` would restore the old
- * behaviour, break nothing that looks related, and quietly put every admin
- * back on an interrupt for every `NO_SHOW`.
+ * This behaviour is the one most likely to be undone by accident — removing
+ * the `if` in `create` would restore mailing on every reason, break nothing
+ * that looks related, and quietly put every admin back on an interrupt for
+ * every `NO_SHOW`.
  *
  * The positive control lives in the describe above: with a critical reason the
  * same fixture sends exactly one mail. Both halves are needed, because a test

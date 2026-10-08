@@ -1,11 +1,12 @@
 /**
- * `readBuildInfo`, the half of the fix that is testable locally.
+ * `readBuildInfo`, the part of build-identity reporting that is testable
+ * locally.
  *
  * The endpoint's whole value comes from variables that only exist inside an
  * Amplify build container, so nothing here proves the deploy works - that
- * needs one real deploy and a `curl`, and the ticket says so. What these do
- * cover is every way the value can be absent, which is the half that would
- * otherwise be discovered in production as `"commit":""`.
+ * needs one real deploy and a `curl`. What these do cover is every way the
+ * value can be absent, which is the part that would otherwise be discovered
+ * in production as `"commit":""`.
  */
 
 import {

@@ -8,13 +8,11 @@ import { appRouter } from "../index";
  * N riders accepted at once must never take more seats than a driver actually
  * has.
  *
- * `reserveSeat` guards the decrement with
- * `carpoolSearch.updateMany({ where: { seatsAvail: SEAT_AVAILABLE_FILTER } })`
- * and calls it a compare-and-swap. That claim was measured against a real
- * MySQL and found false on this Prisma version: `updateMany`'s `WHERE`
- * matched a concurrent transaction's own
+ * `reserveSeat` guards the decrement with a raw `UPDATE ... WHERE
+ * seats_avail > 0` rather than `carpoolSearch.updateMany`: verified against a
+ * real MySQL, `updateMany`'s `WHERE` matches a concurrent transaction's own
  * REPEATABLE READ snapshot rather than the row's current committed state, so
- * every racing caller could see the pre-decrement value and all report
+ * every racing caller would see the pre-decrement value and all report
  * `count: 1`. The mocked suite (`groups.test.ts`) cannot reproduce that at
  * all - a mocked Prisma has no isolation level - so this needs a real MySQL.
  *
@@ -25,7 +23,7 @@ import { appRouter } from "../index";
  * off all N accepts with a single `Promise.all` starts every transaction, and
  * so every snapshot, before any of them has had time to commit - the several
  * round trips `create` makes between the seat check and the commit are ample
- * window - which is exactly what the equivalent notification race relied on
+ * window - which is exactly what the equivalent notification race relies on
  * too.
  *
  * **Needs a real MySQL** and runs only through `yarn test:db`.

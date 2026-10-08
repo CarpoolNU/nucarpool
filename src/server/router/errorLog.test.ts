@@ -10,17 +10,16 @@ import {
 /**
  * The server-error log line.
  *
- * `[trpc].ts` handed an object to `console.error` as a second argument, which
- * Node renders with `util.inspect` — six lines for one fault, and six events
- * in a hosted log viewer. The correlation id added in part 1 exists to make a
- * masked client message findable, and an id that arrives in a different event
- * from the request that produced it is markedly harder to find.
+ * `console.error` given an object renders it with `util.inspect` across
+ * several lines, which a hosted log viewer treats as separate events — and a
+ * correlation id that arrives in a different event from the request that
+ * produced it is markedly harder to find.
  *
- * The assertions that matter here are the two the old form failed: that the
- * output is **one line**, and that it is **parseable** — those are what make a
- * metric filter or a Logs Insights query on `requestId` possible at all. The
- * rest pin the field set, because redaction is explicitly out of
- * scope and this had to be a formatting change and nothing more.
+ * The assertions that matter here are that the output is **one line**, and
+ * that it is **parseable** — those are what make a metric filter or a Logs
+ * Insights query on `requestId` possible at all. The rest pin the field set,
+ * because redaction is explicitly out of scope and this is a formatting
+ * concern and nothing more.
  */
 
 const FIELDS: ServerErrorFields = {
@@ -37,8 +36,9 @@ const payloadOf = (line: string): Record<string, unknown> =>
 
 describe("formatServerError", () => {
   it("emits exactly one line", () => {
-    // The defect. `util.inspect` broke one fault across six events, so the
-    // request id and the path it belonged to were no longer in the same record.
+    // Multi-line output (via `util.inspect`) would split one fault's
+    // requestId and path across separate log-viewer events; one line keeps
+    // them together.
     const line = formatServerError(FIELDS);
 
     expect(line.split("\n")).toHaveLength(1);
@@ -101,10 +101,10 @@ describe("formatServerError", () => {
   });
 
   it("does not begin with the message shown to users", () => {
-    // The line used to start "Something went wrong", which is
-    // `UNEXPECTED_ERROR_MESSAGE` almost verbatim — it read as a copy of the
-    // client string rather than as a server event, and made a poor search
-    // term. `[csp-report]` is the convention this now follows.
+    // Deliberately not `UNEXPECTED_ERROR_MESSAGE` ("Something went wrong") —
+    // a log line matching the client string would read as a copy of what
+    // users see rather than as a server event, and would be a poor search
+    // term. `[csp-report]`'s convention is what this follows instead.
     expect(formatServerError(FIELDS)).not.toMatch(/^Something went wrong/);
     expect(ERROR_LOG_PREFIX).toBe("[trpc-error]");
   });
@@ -124,11 +124,13 @@ describe("formatServerError", () => {
 });
 
 /**
- * The log decision itself, which used to live inline in
- * `src/pages/api/trpc/[trpc].ts` where no test file may exist — a filename
- * there is also a URL. These are the assertions that were previously
- * unreachable: which branch runs, what the production branch is allowed to
- * carry, and what happens when there is no request context.
+ * The log decision itself.
+ *
+ * This lives here, rather than inline in `src/pages/api/trpc/[trpc].ts`,
+ * because no test file may exist under `src/pages/` — a filename there is
+ * also a URL. These assertions cover which branch runs, what the production
+ * branch is allowed to carry, and what happens when there is no request
+ * context.
  */
 describe("logServerError", () => {
   const input = (overrides: Partial<ServerErrorInput> = {}): ServerErrorInput =>
@@ -244,7 +246,8 @@ describe("logServerError", () => {
   });
 
   it("records the request id the client was given", () => {
-    // The whole point of part 1: a user quotes this and it is findable here.
+    // The thing a user can quote and the thing this searches for have to be
+    // the same value.
     const { calls, logger } = capture();
 
     logServerError(input(), "production", logger);

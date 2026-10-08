@@ -9,11 +9,9 @@ import type { SignInAttempt } from "./authSignIn";
 /**
  * The staging sign-in gate.
  *
- * These cases are the reason this module exists: before it there was no
- * `signIn` callback anywhere, so every assertion below described behaviour the
- * app did not have. The two that matter most are "a Google account on an
- * unlisted domain is refused in staging" and "Azure AD is unaffected" — the
- * second because production sign-in must not be breakable by this change.
+ * The two cases that matter most are "a Google account on an unlisted domain
+ * is refused in staging" and "Azure AD is unaffected" — the second because
+ * production sign-in must not be breakable by this change.
  *
  * `DeployEnv` is imported as a type only by the module under test, so no
  * environment variable is read and `envsafe` never runs here.

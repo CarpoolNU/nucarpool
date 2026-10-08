@@ -10,13 +10,13 @@ import { appRouter } from "../index";
  *
  * `applyBlock` refuses a block between two people who already share a group,
  * and `groups.create`/`groups.edit` refuse to link a pair with a block
- * between them - but each used to check the *other* side's state with a
- * plain, non-locking read inside its own interactive transaction. Under MySQL
- * REPEATABLE READ that read answers from the transaction's starting
- * snapshot, not the current row, so a block placed at the same moment a
- * request is being accepted could have each side pass its own check against
- * the other's pre-race state and both commit. The mocked suite
- * (`groups.test.ts`, `blocks.test.ts`) cannot reproduce this at all - a
+ * between them - but checking only the *other* side's state with a plain,
+ * non-locking read inside its own interactive transaction would not be
+ * enough: under MySQL REPEATABLE READ that read answers from the
+ * transaction's starting snapshot, not the current row, so a block placed at
+ * the same moment a request is being accepted could have each side pass its
+ * own check against the other's pre-race state and both commit. The mocked
+ * suite (`groups.test.ts`, `blocks.test.ts`) cannot reproduce this at all - a
  * mocked Prisma has no isolation level - so this needs a real MySQL.
  *
  * Same barrier technique as `groupRoleRace.db.test.ts`: force each

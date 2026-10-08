@@ -118,8 +118,8 @@ describe("request notifications are one-shot", () => {
   });
 
   it("sends one email for a reopened request, quoting the new message", async () => {
-    // A pair who carpooled before. Previously the reopen left `dateCreated`
-    // alone, so the request was never "recent" and was never announced.
+    // A pair who carpooled before. If the reopen left `dateCreated` alone,
+    // the request would never read as "recent" and would never be announced.
     const { alice, bob } = await seedPair();
     const ses = newSes();
     const asAlice = callerFor(alice.id, ses);
@@ -299,8 +299,8 @@ describe("message notifications are one-shot", () => {
   });
 
   it("does not send a second email for the request's opening message", async () => {
-    // The request email announced it. Before, the requester could follow it
-    // with a message email quoting the same text.
+    // The request email already announced this text; a message email
+    // quoting it too would duplicate that announcement.
     const ses = newSes();
     const { asAlice, request } = await seedThread(ses);
 

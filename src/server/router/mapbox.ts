@@ -29,11 +29,9 @@ export const MAP_RESULT_LIMIT = 150;
 /**
  * How many ranked points a reader receives, by role.
  *
- * A VIEWER is exempt from `MAP_RESULT_LIMIT`, and the comment here used to say
- * only that this was "pre-existing behaviour" — which read as an oversight
- * nobody had chosen. Whether it was intended was asked. It is, for a
- * reason worth writing down, because the obvious tidy-up of treating every role
- * alike would quietly break VIEWER browsing.
+ * A VIEWER is exempt from `MAP_RESULT_LIMIT`. This is intentional, not an
+ * oversight: the obvious tidy-up of treating every role alike would quietly
+ * break VIEWER browsing.
  *
  * **The server cannot rank for a VIEWER, so there is no meaningful "top 150" to
  * take.** The map sorts by `sort: "distance"`, and that score is
@@ -56,10 +54,9 @@ export const MAP_RESULT_LIMIT = 150;
  * `PublicUser` records where every other role receives 150 — roughly 5x — and
  * that grows with the platform until it meets `CANDIDATE_LIMIT`.
  * Each record carries a name, pronouns, bio, "City, State" home, coarsened home
- * coordinates and the employer's street address. It no longer carries an email
- * address; that was removed. With 13 active onboarded VIEWERs the
- * exposure is small today, which is what makes this a decision to revisit
- * rather than an incident.
+ * coordinates and the employer's street address — but not an email address.
+ * With 13 active onboarded VIEWERs the exposure is small today, which is what
+ * makes this a decision to revisit rather than an incident.
  *
  * Bounding a VIEWER properly means giving them a ranking that means something —
  * sending the address they picked so the server can sort around it, or ranking
@@ -75,10 +72,9 @@ export const mapboxRouter = router({
    *
    * The input is deliberately narrow: the caller chooses the
    * search text and which of two categories to search, and nothing else.
-   * `autocomplete`, `country` and `proximity` used to be sent by the client
-   * and interpolated straight into the upstream URL, along with a
-   * pre-encoded `types` string, which meant the client controlled part of a
-   * URL our server issues. They are fixed in buildGeocodingSearchUrl now.
+   * `autocomplete`, `country`, `proximity` and `types` are fixed server-side
+   * in `buildGeocodingSearchUrl`, so the client cannot control any other part
+   * of the upstream URL our server issues.
    */
   search: protectedRouter
     .input(
@@ -107,9 +103,9 @@ export const mapboxRouter = router({
         });
       });
 
-      // A non-2xx from Mapbox used to fall through to `data.features.map`,
-      // which threw a TypeError on the error body rather than surfacing the
-      // failure.
+      // Without this check, a non-2xx response falls through to
+      // `data.features.map`, which throws a TypeError on the error body
+      // instead of surfacing the actual failure.
       if (!response.ok) {
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
@@ -210,8 +206,7 @@ export const mapboxRouter = router({
       });
 
       // Bounded candidate query plus scoring, shared with
-      // `user.recommendations.me`. The two used to hold separate
-      // copies of this, each reading every ACTIVE row.
+      // `user.recommendations.me`.
       const sortedSearches = await fetchRankedCandidates({
         prisma: ctx.prisma,
         currentUserSearch,
@@ -262,8 +257,8 @@ export const mapboxRouter = router({
         // Array of tuples containing longitude and latitude. Bounded so a
         // single call cannot ask Mapbox for an arbitrarily long route, and
         // range-checked so nonsense coordinates are rejected here rather than
-        // forwarded. The bounds moved to `utils/coordinates.ts` when
-        // `user.edit` needed the same ones.
+        // forwarded. The bounds live in `utils/coordinates.ts`, shared with
+        // `user.edit`.
         points: z
           .array(z.tuple([longitudeSchema, latitudeSchema]))
           .min(MAPBOX_DIRECTIONS_MIN_POINTS)

@@ -1,43 +1,26 @@
 /**
  * The shape of a server-error log line.
  *
- * `[trpc].ts` built this object inline and handed it to `console.error` as a
- * second argument, which Node renders with `util.inspect` — so a single fault
- * in production came out as **six lines**:
- *
- * ```
- * Something went wrong {
- *   requestId: 'a1b2c3',
- *   path: 'user.edit',
- *   ...
- * }
- * ```
- *
- * A hosted log viewer treats those as six separate events. That defeats the
- * point of the correlation id this ticket added in part 1: the id is meant to
- * make a masked client message findable, and it is hard to search for a value
- * that arrives in a different event from the request that produced it. It also
- * makes a CloudWatch metric filter or a Logs Insights query on any of these
- * fields impractical, because none of them is a queryable field — the whole
- * block is one `util.inspect` string.
+ * One line, prefixed and JSON, so a hosted log viewer treats one fault as one
+ * event: every field stays queryable (a CloudWatch metric filter or a Logs
+ * Insights query can match on any of them), and the correlation id — meant to
+ * make a masked client message findable — stays in the same event as the
+ * request that produced it. `console.error` given an object argument renders
+ * it with `util.inspect` across several lines, which would defeat both.
  *
  * **This is the pattern the CSP collector already uses**, one directory over
  * and for the stated reason: `cspReport.ts` emits
  * `` `${LOG_PREFIX} ${JSON.stringify(violation)}` `` because "one line per
- * violation is what makes these greppable in a hosted log viewer". The more
- * important sink was the one not doing it.
+ * violation is what makes these greppable in a hosted log viewer".
  *
  * **What this deliberately does not change: the fields themselves.** What may
  * be disclosed where is settled elsewhere, and changing redaction is out of
- * scope here. Production carries the *shape* of a
- * fault and never its contents, exactly as before — this is a formatting
- * change, and the tests assert the field set is unchanged.
+ * scope here. Production carries the *shape* of a fault and never its
+ * contents; the tests assert the field set.
  *
- * **`console` is the decided sink, not a placeholder.** A
- * third-party error reporter was considered and declined — the correlation id
- * and this line — without adopting one. Two reasons, both recorded on that
- * ticket: a reporter is another third-party processor of data from an
- * application holding real student addresses, and it is established that
+ * **`console` is the decided sink, not a placeholder.** A third-party error
+ * reporter was considered and declined: it would be another third-party
+ * processor of data from an application holding real student addresses, and
  * nobody has yet confirmed where the deployed server's output is read, which
  * would be the wrong problem to solve by adding a vendor.
  *
@@ -50,10 +33,10 @@
 /**
  * The greppable prefix, matching `cspReport.ts`'s `[csp-report]`.
  *
- * The line used to begin `"Something went wrong"`, which is the *client-facing*
- * message in `errorMasking.ts` almost verbatim — a poor thing to search a log
- * for, since it reads as a copy of the string shown to users rather than as a
- * server event.
+ * Deliberately not the *client-facing* message in `errorMasking.ts`
+ * ("Something went wrong") — a log line matching that string would read as a
+ * copy of what users see rather than as a server event, and would be a poor
+ * thing to search a log for.
  */
 export const ERROR_LOG_PREFIX = "[trpc-error]";
 

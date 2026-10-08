@@ -5,13 +5,12 @@ import type { TRPCError } from "@trpc/server";
  *
  * `src/pages/api/trpc/[trpc].ts` already keeps error *contents* out of
  * production logs, because "a failing Prisma query includes its parameters,
- * which here means addresses and emails". The same payload was being sent to
- * the client untouched: `initTRPC` had no `errorFormatter`, so tRPC applied its
- * default (`({ shape }) => shape`) and `shape.message` was `error.message`
- * verbatim. Several handlers render that into a toast, so a `P2025` arrived in
- * the UI as "Something went wrong: Invalid `prisma.user.update()`
- * invocation…". One half of the request was hardened and the other was open,
- * which made the protection read as complete when it was not.
+ * which here means addresses and emails". Without an `errorFormatter`, tRPC's
+ * default (`({ shape }) => shape`) sends `shape.message` — `error.message`
+ * verbatim — to the client, and several handlers render that into a toast. A
+ * `P2025` would then surface in the UI as "Something went wrong: Invalid
+ * `prisma.user.update()` invocation…", so masking the message is as
+ * load-bearing as redacting the log is.
  *
  * Deliberately says no more than the toast wrapping it already does. A
  * per-request reference is appended when one is available, so the user has

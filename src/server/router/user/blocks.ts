@@ -21,10 +21,10 @@ import type { PrismaOrTransaction } from "../../db/client";
  * why. Leaving comes first. That is a product decision, not a technical
  * limitation.
  *
- * **The reason is now in the message, which it was not.** The rule asks the
+ * **The message states the reason, not just the rule.** The rule asks the
  * user to take the irreversible, socially costly step - leaving a carpool -
- * before the protective one, and the refusal gave no account of why that
- * order. Two ways out were weighed:
+ * before the protective one, so the refusal needs to account for that order.
+ * Two ways out were weighed:
  *
  *  1. *Explain, don't automate.* Keep the rule and say why, which is this.
  *  2. *A combined "leave and block".* One control that leaves, then blocks.
@@ -72,23 +72,23 @@ const requireCallerId = (userId: string | undefined): string => {
  * thrown before the upsert, so a caller inside a transaction can catch one
  * and carry on.
  *
- * **A race an earlier audit surfaced but left open is now closed.** The
- * group-membership read a few lines down used to be a plain, non-locking
- * `findMany`, and `groups.create`/`groups.edit`'s own `assertNotBlocked`
- * call was the only check on their side - both plain reads inside their own
- * transaction. A block landing at the same moment as a request being
- * accepted could have each side check against the other's pre-race state and
- * both commit, leaving a blocked pair sharing a group. Closed the same way
- * the sibling `carpool_search` races were closed: a plain `SELECT`
- * under REPEATABLE READ answers from this transaction's starting snapshot,
- * not the current row, so the read below is now a raw `SELECT ... FOR
- * UPDATE` over both users' `carpool_search` rows - the same rows
- * `groups.create`/`groups.edit`'s raw `UPDATE` claims - which serializes this
- * transaction against theirs instead of racing it. That alone only protects
- * *this* side: `groups.create`/`groups.edit` re-check with their own locking
- * read, `assertNotBlockedForUpdate` in `../../db/blocks.ts`, immediately
- * after their `carpoolId` claim succeeds, so a block that commits in the gap
- * is still caught there. Verified against a real MySQL in
+ * **This closes a race between a block and a concurrent group join.** A
+ * plain, non-locking read of group membership here, paired with
+ * `groups.create`/`groups.edit`'s own `assertNotBlocked` call as the only
+ * check on their side - both plain reads inside their own transaction - would
+ * let a block landing at the same moment as a request being accepted have
+ * each side check against the other's pre-race state and both commit, leaving
+ * a blocked pair sharing a group. Avoided the same way the sibling
+ * `carpool_search` races are avoided: a plain `SELECT` under REPEATABLE READ
+ * answers from this transaction's starting snapshot, not the current row, so
+ * the read below is a raw `SELECT ... FOR UPDATE` over both users'
+ * `carpool_search` rows - the same rows `groups.create`/`groups.edit`'s raw
+ * `UPDATE` claims - which serializes this transaction against theirs instead
+ * of racing it. That alone only protects *this* side: `groups.create`/
+ * `groups.edit` re-check with their own locking read,
+ * `assertNotBlockedForUpdate` in `../../db/blocks.ts`, immediately after their
+ * `carpoolId` claim succeeds, so a block that commits in the gap is still
+ * caught there. Verified against a real MySQL in
  * `blockGroupJoinRace.db.test.ts`, using the same barrier-proxy technique as
  * `groupRoleRace.db.test.ts`.
  */
@@ -191,11 +191,10 @@ export const blocksRouter = router({
    * Nothing between the pair is deleted. See `blocks.ts` for why hiding is
    * the rule.
    *
-   * Runs inside an explicit transaction, unlike before: `applyBlock` now
-   * takes a `FOR UPDATE` lock on `carpool_search` rows, which only
-   * serializes against a concurrent group-join if it is held until the block
-   * itself commits, rather than released at the end of one autocommitted
-   * statement.
+   * Runs inside an explicit transaction: `applyBlock` takes a `FOR UPDATE`
+   * lock on `carpool_search` rows, which only serializes against a
+   * concurrent group-join if it is held until the block itself commits,
+   * rather than released at the end of one autocommitted statement.
    */
   block: protectedRouter.input(targetInput).mutation(async ({ ctx, input }) => {
     const userId = requireCallerId(ctx.session.user?.id);

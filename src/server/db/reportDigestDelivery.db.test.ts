@@ -10,7 +10,7 @@ import { sendReportDigest } from "../reportDigestSend";
 import { previousCompletedWeek } from "../reportDigestWindow";
 
 /**
- * The weekly digest's delivery claim, against a real MySQL. SCRUM-625.
+ * The weekly digest's delivery claim, against a real MySQL.
  *
  * **Why a mocked suite cannot establish any of this.** Every property here is
  * a property of the database rather than of the code around it:
@@ -492,8 +492,8 @@ describe("sendReportDigest against a real database", () => {
  * `updateMany` reads as the same statement and is not one under
  * `relationMode = "prisma"`: Prisma resolves the matching ids first and then
  * updates by id, so concurrent callers all match the row before any of them
- * changes it and every one reports `count: 1`. That was established for the
- * sibling writes in SCRUM-559 and SCRUM-565; this pins it for *this* table, so
+ * changes it and every one reports `count: 1`. The same holds for the sibling
+ * writes this table's claim is modelled on; this pins it for *this* table, so
  * that anyone tempted to simplify `claimDigestWindow` into a `updateMany` has
  * a failing test explaining why not.
  *

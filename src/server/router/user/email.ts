@@ -15,10 +15,10 @@ import { claimEmailBudget } from "../../db/emailBudget";
 /**
  * Notification email.
  *
- * These procedures used to take `senderName`, `senderEmail`, `receiverName`,
- * `receiverEmail` and the body straight from client input, so any signed-in
- * user could send arbitrary text to an arbitrary address from the NUCarpool SES
- * identity. Every one of those values is now derived on the server:
+ * Every value these procedures send is derived on the server, never taken
+ * from client input — accepting `senderName`, `senderEmail`, `receiverName`,
+ * `receiverEmail` or the body directly would let any signed-in user send
+ * arbitrary text to an arbitrary address from the NUCarpool SES identity:
  *
  *  - the sender is `ctx.session.user.id`, looked up for its stored name/address;
  *  - the recipient is resolved from the referenced request, never from an
@@ -35,16 +35,15 @@ import { claimEmailBudget } from "../../db/emailBudget";
  * `Request.acceptanceNotificationPendingSince`. The procedure clears that
  * marker in one conditional `UPDATE` before it sends. Only one caller's
  * update can match, so calling the procedure again, or twice at once, sends
- * nothing more. Each email costs one real write by the caller. These were
- * time windows before, and inside one the procedure sent on every call.
+ * nothing more. Each email costs one real write by the caller.
  *
  * **All three also claim from one per-sender budget**, `claimEmailBudget`.
  * A marker stops one thing being announced twice; it says nothing about how
- * many things a caller can manufacture. That used to be bounded by a count of
- * the caller's recent `Request` rows, in `sendRequestNotification` alone — and
- * `requests.delete` hard-deletes the row the count was taken over, so
- * create -> notify -> delete looped past it indefinitely. The budget counts
- * sends, in a table no procedure a caller can reach writes to. See
+ * many things a caller can manufacture. A count of the caller's recent
+ * `Request` rows would not bound that on its own: `requests.delete`
+ * hard-deletes the row the count is taken over, so a create -> notify ->
+ * delete loop could run past it indefinitely. The budget counts sends
+ * instead, in a table no procedure a caller can reach writes to. See
  * `src/server/db/emailBudget.ts` for the whole argument and for why the claim
  * is shaped the way it is.
  *
@@ -83,10 +82,9 @@ const MESSAGE_NOTIFICATION_COOLDOWN_MS = 5 * 60 * 1000;
 type Party = { id: string; name: string; email: string };
 
 /**
- * Staging may only send to gmail.com. This used to be a Zod refinement on the
- * client-supplied address; addresses now come from the database, so the same
- * rule is applied to the resolved recipient instead. The code and message are
- * unchanged so the behaviour a staging user sees is the same.
+ * Staging may only send to gmail.com. Addresses are resolved from the
+ * database rather than supplied by the client, so this rule is applied to the
+ * resolved recipient.
  *
  * The rule itself is `isDeliverableRecipient` in `emailParams.ts`, shared with
  * the admin report alert, which has to filter rather than throw. Only the
@@ -259,9 +257,8 @@ const claimAcceptanceNotification = async (
  *
  * `release` owes two things, in this order: restore the marker, then
  * `budget.refund()`. The marker first, so a failed refund write still leaves
- * the email owed. All three callers do both — the acceptance path once did
- * only the first, which left an SES failure charging a send that never went
- * out.
+ * the email owed. All three callers do both: doing only the first would leave
+ * an SES failure charging a send that never went out.
  */
 const sendOrRelease = async (
   ses: Pick<SESClient, "send">,
@@ -283,26 +280,21 @@ export const emailsRouter = router({
    * Notifies the other party that the caller has requested to carpool with
    * them.
    *
-   * Takes the request being announced, not a bare user id. It used
-   * to accept `toId` and mail whoever that named, checking only that the
-   * caller was signed in and was not mailing themselves — and every
-   * `PublicUser` the map and recommendations return carries a user id, so any
-   * signed-in student could mail any other registered user, repeatedly.
+   * Takes the request being announced, not a bare user id: a `toId` naming an
+   * arbitrary recipient would need only that the caller was signed in and not
+   * mailing themselves, and every `PublicUser` the map and recommendations
+   * return carries a user id, so any signed-in student could mail any other
+   * registered user, repeatedly. Verifying the relationship through the
+   * request row this way depends on the request already existing, which is
+   * why `requests.create` runs before this is called.
    *
-   * The reason it worked that way was real at the time: the connect flow used
-   * to send the mail *before* creating the request, so there was no request
-   * row to reference. That was reordered, and the request now exists
-   * first, so this can verify the relationship the same way the other two
-   * procedures do.
-   *
-   * The body is read from the database too. The input used to carry a
-   * `messagePreview` that went to SES unchecked. Called in a loop, that let a
-   * requester send the recipient NUCarpool-branded mail containing any text,
-   * and because the text was never stored, a report could not capture it. It
-   * is now the message `requests.create` stored when it opened the request
-   * (see `requestedAt` there). It is not `Request.message`: that column is
-   * always `""`, and `MessageContent` would render it as a second copy of the
-   * first message if it were ever filled in.
+   * The body is read from the database too: the input never carries raw text,
+   * because unchecked text sent in a loop would let a requester send the
+   * recipient NUCarpool-branded mail containing anything, with no stored copy
+   * for a report to capture. It is the message `requests.create` stored when
+   * it opened the request (see `requestedAt` there) — not `Request.message`,
+   * which is always `""`, and which `MessageContent` would render as a second
+   * copy of the first message if it were ever filled in.
    */
   sendRequestNotification: protectedRouter
     .input(z.object({ requestId: z.string() }).strict())
@@ -372,8 +364,7 @@ export const emailsRouter = router({
           })
         : null;
 
-      // Template choice follows the *recipient's* role, matching what the
-      // connect modal used to send from the client.
+      // Template choice follows the *recipient's* role.
       const emailParams = generateEmailParams(
         {
           senderName: sender.name,
@@ -403,14 +394,14 @@ export const emailsRouter = router({
    * `Message` row, so the client cannot supply text of its own.
    *
    * At most one email per message: `sendMessage` marks the message, and this
-   * clears the mark before sending. The cooldown below used to be the only
-   * control, and it counts the caller's *other* recent messages. So one message
-   * followed by N calls passed it N times, because each call saw no prior
-   * message.
+   * clears the mark before sending. The cooldown below counts the caller's
+   * *other* recent messages, so alone it would not stop repeat calls about the
+   * same message: one message followed by N calls would pass it N times,
+   * because each call sees no prior message.
    *
-   * The cooldown is per conversation, so it was also reset by opening a new
-   * one. The shared budget below is not, which is the half of SCRUM-606 this
-   * path needed.
+   * The cooldown is per conversation, so it resets whenever a new one opens.
+   * The shared budget below does not, which is the half of SCRUM-606 this
+   * path needs.
    */
   sendMessageNotification: protectedRouter
     .input(z.object({ requestId: z.string() }).strict())
@@ -479,9 +470,9 @@ export const emailsRouter = router({
       assertDeliverable(recipient.email);
 
       // The shared per-sender cap, on top of the per-conversation cooldown
-      // above. The cooldown alone was reset by the create -> notify -> delete
+      // above. The cooldown alone can be reset by a create -> notify -> delete
       // loop: deleting a request takes its `Conversation` and every `Message`
-      // with it, so the next request opened a thread with no prior message to
+      // with it, so the next request opens a thread with no prior message to
       // be within a cooldown of. This budget is not stored on anything the
       // caller can delete, so that loop spends it and stops.
       const budget = await claimEmailBudget(ctx.prisma, callerId);
@@ -531,12 +522,12 @@ export const emailsRouter = router({
    *    addressed to whichever party did *not* call, so without this a
    *    request's sender could produce a coherent-looking but entirely
    *    fabricated notice.
-   *  - the request must actually be `ACCEPTED`. This used to read
-   *    `Request.status` not at all, so a `PENDING` request satisfied the
-   *    procedure exactly as an accepted one did: the sender of a request could
-   *    make the platform email their target "<sender> accepted your request"
-   *    about something nobody had accepted, repeatedly and from our verified
-   *    SES identity.
+   *  - the request must actually be `ACCEPTED`. Without checking
+   *    `Request.status`, a `PENDING` request would satisfy the procedure
+   *    exactly as an accepted one does: the sender of a request could make the
+   *    platform email their target "<sender> accepted your request" about
+   *    something nobody had accepted, repeatedly and from our verified SES
+   *    identity.
    *
    * The refusals are worded separately on purpose, following
    * `requireAcceptableRequest`: "you did not accept this" and "this was not
@@ -550,12 +541,10 @@ export const emailsRouter = router({
    * conditional `UPDATE` before sending. Only one caller's update can match,
    * so calling this in a loop sends at most one email per acceptance.
    *
-   * **The per-user cap this comment used to say did not exist now does.**
-   * It was described here as needing shared state the deployment does not
-   * have, which was true only of an in-process counter; the shared state is
-   * the database, and `claimEmailBudget` keeps it in one small table. So a
-   * caller earning many separate accepted requests and notifying each exactly
-   * once is bounded by the same budget as the other two emails. See SCRUM-606.
+   * **A per-user cap applies here too.** `claimEmailBudget` keeps the shared
+   * state in one small database table, so a caller earning many separate
+   * accepted requests and notifying each exactly once is bounded by the same
+   * budget as the other two emails. See SCRUM-606.
    */
   sendAcceptanceNotification: protectedRouter
     .input(z.object({ requestId: z.string() }).strict())
@@ -611,13 +600,12 @@ export const emailsRouter = router({
         return { sent: false as const, reason: "already_notified" };
       }
 
-      // The *recipient's* role, same as the request flow above. This used to
-      // pass the caller's role, preserved from what the client sent. Both
-      // acceptance templates are worded for the recipient and the two roles in
-      // a pair are complementary, so supplying the sender's role always
-      // selected the opposite template: a driver accepting a rider's request
-      // told the rider "…accepted your request for them to join your group",
-      // which describes the driver's side, not the rider's.
+      // The *recipient's* role, same as the request flow above. Both
+      // acceptance templates are worded for the recipient, and the two roles
+      // in a pair are complementary, so supplying the sender's role would
+      // always select the opposite template: a driver accepting a rider's
+      // request would tell the rider "…accepted your request for them to join
+      // your group", which describes the driver's side, not the rider's.
       const emailParams = generateEmailParams(
         {
           senderName: sender.name,

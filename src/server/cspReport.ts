@@ -2,11 +2,11 @@
  * CSP violation report collection.
  *
  * The Content Security Policy ships report-only so it can be validated against
- * real traffic before being enforced. That plan needed one thing it did not
- * have: somewhere for the reports to go. Without a collector a violation is
- * written to the console of whichever user's browser hit it and is then gone,
- * so "has this policy been violated in production?" — the question enforcement
- * depends on — had no answer.
+ * real traffic before being enforced. That plan needs one thing a report-only
+ * policy alone does not provide: somewhere for the reports to go. Without a
+ * collector a violation is written to the console of whichever user's browser
+ * hit it and is then gone, so "has this policy been violated in production?"
+ * — the question enforcement depends on — has no answer.
  *
  * This module holds the parsing, sanitizing and rate limiting. The endpoint that
  * uses it is `src/pages/api/csp-report.ts`; its HTTP contract is covered in

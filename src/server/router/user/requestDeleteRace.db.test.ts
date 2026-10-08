@@ -18,12 +18,12 @@ import { appRouter } from "../index";
  * `Message` go with it - exactly the loss the guard exists to prevent,
  * reached by timing.
  *
- * The guard asks about group membership **and nothing else**. It used to ask
- * about membership *and* an ACCEPTED status, which left a second hole beside
- * the timing one: two riders in a group keep whatever request they had
- * between them, because an acceptance resolves only the driver's row, and a
- * PENDING request never reached the group lookup on either side. The cases
- * below cover both routes into that state - seeded directly, and raced.
+ * The guard asks about group membership **and nothing else**. Gating it on
+ * membership *and* an ACCEPTED status would reopen a second hole beside the
+ * timing one: two riders in a group could keep whatever request they had
+ * between them, because an acceptance resolves only the driver's row, so a
+ * PENDING request would never reach the group lookup on either side. The
+ * cases below cover both routes into that state - seeded directly, and raced.
  *
  * The same defect class as the writes made compare-and-swaps earlier, and it
  * needs the same kind of proof. `requests.test.ts` drives the new predicate
@@ -173,9 +173,9 @@ describe("requests.delete against a concurrent accept", () => {
    * The ticket's sequence, end to end. The rider withdraws; the driver
    * accepts in the window; the withdrawal must not win.
    *
-   * On the old code the delete matched on the primary key alone, so it
-   * removed the request the new group is built on and took the thread with
-   * it. The group survived with nothing behind it - which `connectAction` and
+   * A delete that matched on the primary key alone would remove the request
+   * the new group is built on and take the thread with it, leaving the group
+   * surviving with nothing behind it - which `connectAction` and
    * `requests.create`'s reopen branch both read.
    */
   it("refuses a withdrawal whose accept committed after the guard's reads", async () => {
@@ -329,14 +329,14 @@ describe("requests.delete against a concurrent accept", () => {
   /**
    * Two riders in one group, with a PENDING request between them.
    *
-   * The guard used to be gated on `status = ACCEPTED`, on both the read side
-   * and inside the `DELETE`, and this is the state that showed it to be the
-   * wrong question. `markRequestAccepted` resolves only the row between the
-   * driver and the joining rider, so a group of one driver and two riders
-   * leaves the two riders carpooling together with whatever request they
-   * already had between them - and that request carries their conversation.
-   * Status-gated, neither side of the guard ever asked whether they were
-   * grouped, and either of them could delete the thread outright.
+   * This is the state that shows status-gating to be the wrong question:
+   * `markRequestAccepted` resolves only the row between the driver and the
+   * joining rider, so a group of one driver and two riders leaves the two
+   * riders carpooling together with whatever request they already had
+   * between them - and that request carries their conversation. A guard
+   * gated on `status = ACCEPTED`, on either the read side or inside the
+   * `DELETE`, would never ask whether the two were grouped, so either of
+   * them could delete the thread outright.
    *
    * Against a real MySQL rather than the mock because the predicate being
    * widened lives in a raw `DELETE`, and a `WHERE` the mock agrees with is
@@ -398,8 +398,8 @@ describe("requests.delete against a concurrent accept", () => {
    * opens and see the other rider ungrouped, so the pre-transaction check
    * passes honestly. The join then commits in the window, and by the time the
    * `DELETE` runs the two are co-members. Only the statement's own `WHERE`
-   * can refuse at that point - and before this ticket it could not, because
-   * the row is PENDING and the predicate was gated on ACCEPTED.
+   * can refuse at that point - a predicate gated on ACCEPTED could not, since
+   * the row here is PENDING.
    *
    * `groups.edit` with `add: true` rather than `groups.create`: the second
    * rider joins a group the driver already has, which is the real path into
@@ -516,10 +516,10 @@ describe("requests.delete against a concurrent accept", () => {
   it.each(Object.values(RequestStatus))(
     "clears a self-request from a user who is in a group — %s",
     async (status) => {
-      // Every status, now that the guard is no longer gated on one. A PENDING
-      // self-request never reached the degenerate comparison before, because
-      // the branch it lives in only ran for ACCEPTED rows; `fromUserId` <>
-      // `toUserId` is the only thing holding it open today.
+      // Every status is exercised here, since the guard is not gated on one.
+      // Without `fromUserId` <> `toUserId`, a self-request in any status
+      // would reach the degenerate EXISTS comparison; that clause is the
+      // only thing holding this open.
       const group = await prisma.carpoolGroup.create({ data: {} });
       const owner = await seedUser("Owner Ola", "owner-ola@northeastern.edu", {
         role: Role.DRIVER,

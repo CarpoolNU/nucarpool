@@ -1,14 +1,13 @@
 /**
  * Which build is running.
  *
- * The deployed app published no build identifier, so "has Amplify shipped the
- * commit containing change X?" had no answer short of asking someone with
- * console access. That is not a cosmetic gap: two expand/contract tickets both
- * carry "the new code is deployed" as a blocking precondition on an
- * irreversible database change, and both stalled on it. The workaround
- * attempted in each was to infer the deploy from row data, and it failed the
- * same way both times - zero rows is equally consistent with "not deployed"
- * and with "deployed, and nobody has exercised the feature since".
+ * Without a build identifier, "has Amplify shipped the commit containing
+ * change X?" has no answer short of asking someone with console access. That
+ * is not a cosmetic gap: an expand/contract migration depends on confirming
+ * the new code is deployed before it runs an irreversible database change,
+ * and inferring the deploy from row data does not work for that - zero rows
+ * is equally consistent with "not deployed" and with "deployed, and nobody
+ * has exercised the feature since".
  *
  * Amplify's build container sets `AWS_COMMIT_ID`, `AWS_BRANCH` and
  * `AWS_JOB_ID`; `amplify.yml` now copies those three into `.env.production`

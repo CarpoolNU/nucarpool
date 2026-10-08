@@ -136,7 +136,8 @@ describe("findOrCreateConversation — no conversation yet", () => {
  * and either copy is enough to make a conversation readable. `requests.me` and
  * the unread count reach one through `Request.conversationId`, so a row whose
  * own `requestId` is dead can still be rendered. These cases pin that the
- * second link is honoured, which is what was closed.
+ * second link is honoured, since missing it would misclassify a conversation
+ * `requests.me` still renders as an orphan.
  */
 describe("findOrphanConversationIds", () => {
   const conversation = (id: string, requestId: string) => ({ id, requestId });

@@ -3,14 +3,14 @@ import { ACCOUNT_DELETION_UNSUPPORTED, createAuthAdapter } from "./authAdapter";
 /**
  * The NextAuth adapter.
  *
- * This was an object literal inside `src/pages/api/auth/[...nextauth].ts`,
- * where no test could reach it — a filename under `src/pages/` is also a
- * route, so a co-located test would be compiled and served as one. Moving it
- * beside `authSignIn.ts` is the pattern that file's own comment describes.
+ * Kept beside `authAdapter.ts` rather than co-located with the route: a
+ * filename under `src/pages/` is also a route, so a test there would be
+ * compiled and served as one — the pattern `authSignIn.ts`'s own comment
+ * describes.
  *
  * Two behaviours are pinned. `deleteUser` refusing is a product decision;
- * `createUser` discarding the provider's `image` was already load-bearing and
- * had no test at all, which is the more valuable half of doing this.
+ * `createUser` discarding the provider's `image` is load-bearing and has no
+ * other test coverage, which is the more valuable half of this suite.
  */
 
 /** Just enough client for the two overrides; `PrismaAdapter` needs the rest. */
@@ -82,7 +82,7 @@ describe("createAuthAdapter — createUser", () => {
   it("discards the identity provider's image", async () => {
     // Profile pictures come from S3 via `user.getPresignedDownloadUrl`, never from the
     // provider. Storing the provider's URL would give a user a picture they
-    // never chose and cannot change in this app. Previously untested.
+    // never chose and cannot change in this app.
     const { client, create } = clientStub();
 
     await createAuthAdapter(client).createUser!({

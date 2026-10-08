@@ -31,15 +31,15 @@ const CARPOOLING_PAIR_DELETE_MESSAGE =
 /**
  * The message columns a conversation is actually read through.
  *
- * This was `include: { User: true }`, which attached the author's whole `User`
- * row to every message - `email`, `bio`, `permission`, and `image`, a
- * `@db.MediumText`. Nothing ever read it. Five fields are all any consumer
- * touches - `id`, `content`, `userId`, `isRead` and `dateCreated`, between
- * `latestMessage.ts`, `MessageContent` and `MessagePanel` - and the author is
- * always one of the two people already present in the payload, so a 200-message
- * thread carried the same two user rows 200 times.
+ * Attaching the author's whole `User` row to every message (`email`, `bio`,
+ * `permission`, and `image`, a `@db.MediumText`) would go unread. Five fields
+ * are all any consumer touches - `id`, `content`, `userId`, `isRead` and
+ * `dateCreated`, between `latestMessage.ts`, `MessageContent` and
+ * `MessagePanel` - and the author is always one of the two people already
+ * present in the payload, so a 200-message thread would carry the same two
+ * user rows 200 times for nothing.
  *
- * The live path already proved the join redundant. `messages.sendMessage`
+ * The live path already proves the join would be redundant. `messages.sendMessage`
  * returns a bare `message.create` with no `include` and broadcasts that over
  * Pusher, and `MessageContent` pushes it into the same array this query fills -
  * so anything rendering `message.User` would already be blank for every
@@ -51,12 +51,11 @@ const CARPOOLING_PAIR_DELETE_MESSAGE =
  * message, but `Message` in `utils/types.ts` declares it required, so it is kept
  * for one string rather than letting the wire shape drift from the type.
  *
- * **Bounded to one message.** This used to return the whole history
- * of every conversation, because the open thread read it too and bounding it
- * would have been silent truncation. The thread now loads from
- * `user.messages.conversation`, which is paginated and participant-scoped, so
- * this can return what the card list actually needs: the newest message per
- * conversation, for the preview text and the unread dot.
+ * **Bounded to one message**, because the open thread loads from
+ * `user.messages.conversation` instead, which is paginated and
+ * participant-scoped. With the thread served separately, this can return what
+ * the card list actually needs: the newest message per conversation, for the
+ * preview text and the unread dot.
  *
  * `desc` + `take: 1` rather than `asc`, so the one row kept is the newest.
  * `getLatestMessageForRequest` still sorts what it is given and takes `[0]`, so
@@ -82,22 +81,18 @@ export const requestsRouter = router({
    * Every request either side of the caller, with the newest message of each
    * pair's conversation.
    *
-   * **Message history is now bounded.** It was not, and the reason
-   * is worth keeping: one query fed two consumers with different needs — the
-   * Requests tab, which wants only the newest message per card
-   * (`getLatestMessageForRequest`), and the open thread, which renders the whole
-   * history. A `take` while both read this would have silently removed
-   * scrollback from the one consumer that needed it.
+   * **Message history is bounded to one row per conversation.** The Requests
+   * tab, which renders this, only wants the newest message per card
+   * (`getLatestMessageForRequest`); the open thread, which needs the whole
+   * history, reads `user.messages.conversation` instead, which is paginated
+   * and authorizes against the request row. With the two consumers served
+   * separately, this one can return just the single row the cards use, which
+   * is what `take: 1` above does.
    *
-   * The thread now reads `user.messages.conversation` instead, which is
-   * paginated and — unlike `messages.getMessages`, removed for
-   * taking a bare conversation id — authorizes against the request row. With
-   * the two consumers separated, this one can return the single row the cards
-   * use, which is what `take: 1` above does.
-   *
-   * Narrowing the projection had already made each message cheap, dropping a whole `User` row
-   * per message. That was the larger factor by far; this removes what was left
-   * of the linear growth. `scripts/measure-requests-payload.ts` measures both.
+   * The narrow projection above (dropping a whole `User` row per message) is
+   * the larger cost saving by far; bounding to one row removes what would
+   * otherwise still be linear growth. `scripts/measure-requests-payload.ts`
+   * measures both.
    */
   me: protectedRouter.query(async ({ ctx }) => {
     const userId = ctx.session.user?.id;
@@ -205,19 +200,17 @@ export const requestsRouter = router({
     // home coordinate and their own address, which they already have; the two
     // converters exist to decide what is disclosed about *somebody else*.
     //
-    // The counterpart is the one that has to be earned, and it once
-    // was not: both projections were unconditionally the exact-home converter,
-    // so a request the caller had created themselves a moment earlier released
-    // the other person's precise home coordinate and Northeastern address.
-    // `requests.create` takes a bare `toId` and asks nobody, so that made the
-    // whole matchable user base readable by anyone willing to send one request
-    // per id out of `mapbox.geoJsonUserList`. `convertRequestCounterpart` owns
-    // the rule and says why `ACCEPTED` is the line.
+    // The counterpart's disclosure has to be earned: using the exact-home
+    // converter unconditionally for the counterpart would release the other
+    // person's precise home coordinate and Northeastern address the moment the
+    // caller created a request. `requests.create` takes a bare `toId` and asks
+    // nobody, so that would make the whole matchable user base readable by
+    // anyone willing to send one request per id out of
+    // `mapbox.geoJsonUserList`. `convertRequestCounterpart` owns the rule and
+    // says why `ACCEPTED` is the line.
     //
-    // Note what did *not* change: every request either party has is still
-    // returned. Earlier work closed dead ends caused by
-    // requests disappearing from this list, so the fix narrows disclosure
-    // rather than visibility.
+    // Every request either party has is still returned here — only the
+    // disclosure is narrowed, not the visibility of the request list itself.
     const sent = user.sentRequests.map((req) => {
       const toUserSearch = sentCarpoolSearches.find(
         (s) => s.userId === req.toUserId,
@@ -247,29 +240,29 @@ export const requestsRouter = router({
     // Role compatibility governs discovery, not a relationship that already
     // exists.
     //
-    // These two filters used to also drop any request whose counterpart's role
-    // matched the caller's, or was VIEWER - the predicate f9a5b1a introduced
-    // for recommendations, where it belongs. Applied to existing requests it
-    // disagreed with `create`'s duplicate guard below, which has no role
-    // condition: as soon as either party changed role, the request disappeared
-    // from the Requests tab while still answering every retry with
+    // A role-mismatch filter here — dropping a request whose counterpart's role
+    // matches the caller's, or is VIEWER — belongs only in recommendations, not
+    // here. Applied to existing requests it would disagree with `create`'s
+    // duplicate guard below, which has no role condition: as soon as either
+    // party changed role, the request would disappear from the Requests tab
+    // while still answering every retry with
     // `CONFLICT - Existing request between ...`. Nothing else surfaces the
-    // request id, and `delete` needs one, so there was no way to withdraw it
-    // and no way out but for the other person to switch back.
+    // request id, and `delete` needs one, so there would be no way to withdraw
+    // it and no way out but for the other person to switch back.
     //
     // Roles change legitimately between co-op cycles, so a pair who can no
     // longer carpool is an ordinary state. `roleMismatchExplanation` is what
     // the UI shows on those requests, and accepting one is refused by
     // `groups.create`/`groups.edit` rather than by hiding it here.
     //
-    // Nor is it about status any more. The two queries above also carried
-    // `status: { not: "INACTIVE" }`, which reproduced the identical dead end
-    // one filter away: pausing a search is something any user can do from
-    // their own profile at any time, and the moment either party did, the
-    // request vanished from both Requests tabs while `create`'s duplicate
-    // guard — which reads only `Request.status` — went on refusing every retry
-    // with `CONFLICT`. Neither party could withdraw it, decline it or replace
-    // it until the other reactivated.
+    // Nor is it about status. A `status: { not: "INACTIVE" }` filter on the two
+    // queries above would reproduce the identical dead end one filter away:
+    // pausing a search is something any user can do from their own profile at
+    // any time, and the moment either party did, the request would vanish from
+    // both Requests tabs while `create`'s duplicate guard — which reads only
+    // `Request.status` — goes on refusing every retry with `CONFLICT`. Neither
+    // party could withdraw it, decline it or replace it until the other
+    // reactivated.
     //
     // `requestUnavailableExplanation` is what the card shows on those
     // requests, and `validateRequestAcceptance` plus the status checks in
@@ -300,12 +293,12 @@ export const requestsRouter = router({
     .input(
       z
         .object({
-          // The sender is deliberately absent from this input. It
-          // used to be a client-supplied `fromId` that became the request's
-          // `fromUser`, so any signed-in caller could send a request that
-          // appeared to come from someone else. The sender now comes from the
-          // session and cannot be influenced by the client; `.strict()` makes a
-          // re-added `fromId` a BAD_REQUEST rather than a silently ignored field.
+          // The sender is deliberately absent from this input: a
+          // client-supplied `fromId` becoming the request's `fromUser` would
+          // let any signed-in caller send a request that appears to come from
+          // someone else. The sender comes from the session and cannot be
+          // influenced by the client; `.strict()` makes a re-added `fromId` a
+          // BAD_REQUEST rather than a silently ignored field.
           toId: z.string(),
           // This becomes the conversation's first `Message`, so it is bound by
           // `message.content`'s `VARCHAR(255)` like any other.
@@ -338,11 +331,11 @@ export const requestsRouter = router({
       }
 
       // A request is only useful if both people can be notified, and this is
-      // now the only place that is knowable: `email` has been removed from the
-      // payloads the client builds this call from, because they shipped every
-      // active user's address to every signed-in viewer. ConnectModal used to
-      // hold this check alone, which also meant a caller reaching the procedure
-      // directly skipped it entirely.
+      // the only place that can know it: `email` is deliberately absent from
+      // the payloads the client builds this call from, because including it
+      // there would ship every active user's address to every signed-in
+      // viewer. Holding this check only in ConnectModal would let a caller
+      // reaching the procedure directly skip it entirely.
       const contacts = await ctx.prisma.user.findMany({
         where: { id: { in: [userId, input.toId] } },
         select: { id: true, email: true },
@@ -379,17 +372,16 @@ export const requestsRouter = router({
         });
       }
 
-      // The lookup and whichever branch it selects commit together.
-      //
-      // The read used to sit outside any transaction, and the branch it chose
-      // then opened one — so the decision was taken against a snapshot that
-      // could already be stale by the time it was acted on. A double-clicked
-      // Send sent two calls; both found no row, both took the create branch,
-      // and the pair ended up with two Request rows, two Conversations, two
-      // first Messages and two notification emails. Withdrawing then deleted
-      // one row by id and left the other, so the next attempt was refused with
-      // CONFLICT for a request neither party could see — a dead end reachable
-      // by an ordinary double-click.
+      // The lookup and whichever branch it selects commit together: reading
+      // outside the transaction and opening one only inside the branch chosen
+      // would mean the decision is taken against a snapshot that can go stale
+      // before it is acted on. Two double-clicked Send calls could both find no
+      // row, both take the create branch, and leave the pair with two Request
+      // rows, two Conversations, two first Messages and two notification
+      // emails. Withdrawing would then delete one row by id and leave the
+      // other, so the next attempt is refused with CONFLICT for a request
+      // neither party can see — a dead end reachable by an ordinary
+      // double-click.
       //
       // **This narrows the window; it does not close it.** MySQL will not lock
       // rows a non-locking SELECT did not find, so two transactions can still
@@ -422,7 +414,7 @@ export const requestsRouter = router({
           },
         });
 
-        // Still awaiting an answer, in either direction — the original guard.
+        // Still awaiting an answer, in either direction.
         if (existingRequest?.status === RequestStatus.PENDING) {
           throw new TRPCError({
             code: "CONFLICT",
@@ -451,11 +443,13 @@ export const requestsRouter = router({
         // is not touched: it hangs off the request id, which does not change,
         // so the pair keep the thread they already had.
         //
-        // The request is owed an email again. That used to be read from
-        // `dateCreated`, which this update leaves alone, so a reopened request
-        // was never "recent" and its email was silently skipped.
-        // `dateCreated` stays the date of first contact on purpose: the admin
-        // request series and every sort by it read it that way.
+        // The request is owed an email again, tracked via
+        // `notificationPendingSince` rather than `dateCreated`. Reading recency
+        // off `dateCreated`, which this update leaves alone, would make a
+        // reopened request never read as "recent" and its email would be
+        // silently skipped. `dateCreated` stays the date of first contact on
+        // purpose: the admin request series and every sort by it read it that
+        // way.
         if (existingRequest) {
           const reopened = await tx.request.update({
             where: { id: existingRequest.id },
@@ -467,32 +461,30 @@ export const requestsRouter = router({
             },
           });
 
-          // Two decisions that used to share one `if`, for two unrelated
-          // reasons.
+          // Two separate decisions, for two unrelated reasons.
           //
           // *Whether* to write a message is the empty-message question. An
           // empty message is a real flow — ConnectModal's Send button never
           // required text — and on a reopened request an empty row would just
           // be noise in a thread that already has history. On a first request
           // it is still written, because the conversation needs a first
-          // message. That behaviour is unchanged.
+          // message.
           //
-          // *Where* to write it is a different question, and the compound
-          // guard answered it wrongly: it also required
-          // `reopened.conversationId`, so a request with no conversation had
-          // the user's text silently dropped while the mutation still
-          // resolved. The client raised its success toast and
-          // `sendRequestNotification` emailed the recipient a preview of a
-          // message that was never stored — so the recipient opened an empty
-          // thread holding an email that quoted it. That is not a defensive
-          // check against an impossible state: every request predating
-          // migration `20240910182030_conversationmodel` has a null link, 462
-          // of 477 rows on production-derived staging.
+          // *Where* to write it is a different question, and it must not also
+          // gate on `reopened.conversationId`: a request with no conversation
+          // would then have the user's text silently dropped while the
+          // mutation still resolves. The client would raise its success toast
+          // and `sendRequestNotification` would email the recipient a preview
+          // of a message that was never stored — so the recipient opens an
+          // empty thread holding an email that quoted it. This is not a
+          // defensive check against an impossible state: every request
+          // predating migration `20240910182030_conversationmodel` has a null
+          // link, 462 of 477 rows on production-derived staging.
           //
           // `findOrCreateConversation` repairs the link instead, and is shared
-          // with `sendMessage`, which had the identical bug and fixed it
-          // first. See that helper for why it keys on `Conversation.requestId`
-          // rather than on the request row's own column.
+          // with `sendMessage`. See that helper for why it keys on
+          // `Conversation.requestId` rather than on the request row's own
+          // column.
           if (input.message) {
             const conversation = await findOrCreateConversation(
               tx,
@@ -519,10 +511,10 @@ export const requestsRouter = router({
         }
 
         // A request, its conversation, the link between them and the first
-        // message are one unit. These used to be four independent awaits,
-        // which could leave a request with no conversation, or a conversation
-        // never linked back to its request — and `relationMode = "prisma"`
-        // rejects neither, so the half-built thread persisted.
+        // message are one unit: four independent awaits here could leave a
+        // request with no conversation, or a conversation never linked back to
+        // its request — and `relationMode = "prisma"` rejects neither, so a
+        // half-built thread would persist.
         //
         // The link is stored twice, in both directions:
         // `Conversation.requestId` and `Request.conversationId`. Nothing in the
@@ -546,11 +538,11 @@ export const requestsRouter = router({
           },
         });
 
-        // The conversation and its first message go in together. No lookup
-        // first: the request was created a statement ago with a fresh cuid, so
-        // nothing could reference it and the old
-        // `conversation.findUnique({ where: { requestId } })` could only ever
-        // return null — a check whose false branch was unreachable.
+        // The conversation and its first message go in together, with no
+        // lookup first: the request was created a statement ago with a fresh
+        // cuid, so nothing could reference it yet, and a
+        // `conversation.findUnique({ where: { requestId } })` here could only
+        // ever return null.
         const conversation = await tx.conversation.create({
           data: {
             requestId: created.id,
@@ -571,9 +563,8 @@ export const requestsRouter = router({
         });
       });
 
-      // Returned so the caller has an id to announce. This used to
-      // return nothing, which is why ConnectModal had to notify by `toId` and
-      // the email procedure had to accept a bare user id.
+      // Returned so the caller has an id to announce, rather than needing to
+      // notify by `toId` alone.
       return request;
     }),
 
@@ -605,8 +596,8 @@ export const requestsRouter = router({
 
       // Both parties may clear a request: the sender withdraws it, the
       // recipient declines it (`handleRejectRequest` in requestHandlers.ts).
-      // There used to be no check at all, so any signed-in user could
-      // delete strangers' pending requests out of their Requests tab.
+      // Without this check, any signed-in user could delete strangers'
+      // pending requests out of their Requests tab.
       if (invitation.fromUserId !== userId && invitation.toUserId !== userId) {
         throw new TRPCError({
           code: "FORBIDDEN",
@@ -632,52 +623,50 @@ export const requestsRouter = router({
       // request that carries their conversation.
       //
       // This is the mirror of the guard `create` holds a few hundred lines
-      // above - the same question, asked on the way out instead of the way in -
-      // and the two procedures used to disagree about it. `create` refuses a
-      // request between current group members with CONFLICT; `delete` checked
-      // participation and nothing else, so a pair in an active carpool could
-      // destroy their entire thread, and now that this deletes the
-      // conversation and its messages rather than orphaning them, destroy it
-      // permanently.
+      // above - the same question, asked on the way out instead of the way in.
+      // `create` refuses a request between current group members with
+      // CONFLICT; without this guard here, a pair in an active carpool could
+      // destroy their entire thread — and since this deletes the conversation
+      // and its messages rather than orphaning them, that destruction would be
+      // permanent.
       //
       // **The UI already fixes this, and that fix is not this
-      // one.** It answered the product question - the "Leave Conversation"
+      // one.** It answers the product question - the "Leave Conversation"
       // button was wrong, so it was removed - and `messageHeaderControls`
       // returns `{ kind: "none" }` for a pair in the same group. That guard is
-      // correct and stays. What it cannot do is stop a direct call, a stale
-      // cached bundle, or the next caller to reuse this procedure, and until
-      // now it was the only thing standing between an active carpool and
-      // irreversible loss of their messages.
+      // correct and stays, but it cannot stop a direct call, a stale cached
+      // bundle, or the next caller to reuse this procedure — this is the one
+      // thing standing between an active carpool and irreversible loss of
+      // their messages.
       //
       // The condition is **grouped, and nothing else** - not grouped and
       // ACCEPTED.
       //
-      // It used to carry `status === ACCEPTED`, and that was wrong in a way
-      // worth spelling out, because the mistake is easy to make again. Being
-      // in the same group and having an accepted request between you are not
-      // the same thing: `markRequestAccepted` resolves only the row between
-      // the driver and the joining rider, so every *other* pair of co-members
-      // keeps whatever request they already had. One driver and two riders is
-      // enough - the two riders share a group, share a route and can message
-      // each other, and a PENDING request between them from an earlier co-op
-      // cycle still carries their whole conversation. The status-gated guard
-      // never even asked whether they were grouped, so either of them could
-      // delete it and take every message with it, permanently.
+      // Gating on `status === ACCEPTED` in addition to grouped would be wrong,
+      // in a way worth spelling out because the mistake is easy to make again.
+      // Being in the same group and having an accepted request between you are
+      // not the same thing: `markRequestAccepted` resolves only the row
+      // between the driver and the joining rider, so every *other* pair of
+      // co-members keeps whatever request they already had. One driver and two
+      // riders is enough - the two riders share a group, share a route and can
+      // message each other, and a PENDING request between them from an earlier
+      // co-op cycle still carries their whole conversation. A status-gated
+      // guard would never even ask whether they were grouped, so either of
+      // them could delete it and take every message with it, permanently.
       //
-      // Dropping the status does **not** strand the pair who have parted. The
-      // test the guard applies is "are these two in the same group *now*", so
-      // an ACCEPTED row between two people who have since left is still
-      // clearable: `connectAction` reads it to decide whether Connect is
-      // offered, and `create`'s reopen branch acts on it. Refusing on status
-      // alone would have stranded every one of those; refusing on membership
-      // does not.
+      // Gating on membership alone does **not** strand the pair who have
+      // parted. The test the guard applies is "are these two in the same group
+      // *now*", so an ACCEPTED row between two people who have since left is
+      // still clearable: `connectAction` reads it to decide whether Connect is
+      // offered, and `create`'s reopen branch acts on it. Gating on status as
+      // well would strand exactly those pairs.
       //
-      // The cost is that the group lookup now runs for every delete rather
-      // than only the accepted ones, so an ordinary PENDING decline or
-      // withdrawal - the common path by a wide margin - pays for one more
-      // query. It is an indexed read of at most two rows from a table this
-      // procedure's own transaction touches moments later, and the thing it
-      // buys is the difference between losing a conversation and not.
+      // The cost is that the group lookup runs for every delete, not only the
+      // accepted ones, so an ordinary PENDING decline or withdrawal - the
+      // common path by a wide margin - pays for one more query. It is an
+      // indexed read of at most two rows from a table this procedure's own
+      // transaction touches moments later, and the thing it buys is the
+      // difference between losing a conversation and not.
       //
       // **A self-request is exempt, because the comparison degenerates for
       // one.** With `fromUserId === toUserId` the guard below compares a user's
@@ -732,12 +721,11 @@ export const requestsRouter = router({
       // The conversation goes with the request, in one transaction.
       //
       // The cascade in the schema points the other way: `Request` holds the
-      // foreign key, so `onDelete: Cascade` runs Conversation → Request. There
-      // was nothing running Request → Conversation, so every decline,
-      // withdrawal and "Leave Conversation" left a `conversation` row and all
-      // its `message` rows behind, with `Conversation.requestId` dangling at a
-      // row that no longer existed. 620 of them in production, holding 1,258
-      // real messages between them.
+      // foreign key, so `onDelete: Cascade` runs Conversation → Request.
+      // Nothing runs Request → Conversation, so without this, every decline,
+      // withdrawal and "Leave Conversation" would leave a `conversation` row
+      // and all its `message` rows behind, with `Conversation.requestId`
+      // dangling at a row that no longer exists.
       //
       // Deleting rather than preserving, deliberately: the thread is already
       // unreachable the instant the request row goes.
@@ -753,10 +741,10 @@ export const requestsRouter = router({
       // that still exists; this one has just removed the row, so there is
       // nothing left to reopen and no history a later request could inherit.
       //
-      // Fixed here rather than by correcting the relation direction in
-      // `schema.prisma`: that is a PlanetScale deploy request for an invariant
-      // two statements enforce, and `relationMode = "prisma"` means MySQL would
-      // not hold it either way.
+      // This is handled here rather than by correcting the relation direction
+      // in `schema.prisma`: that would be a PlanetScale deploy request for an
+      // invariant two statements already enforce, and `relationMode = "prisma"`
+      // means MySQL would not hold it either way.
       await ctx.prisma.$transaction(async (tx) => {
         // Request first. The other order would trip the declared
         // Conversation → Request cascade, which deletes the request as a side
@@ -765,19 +753,18 @@ export const requestsRouter = router({
         // **The delete restates the guard above as its own WHERE, because the
         // guard alone is a snapshot read.** `invitation` and the
         // `carpoolSearch` rows behind it are both read with `ctx.prisma`,
-        // outside this transaction, and the delete used to match on the
-        // primary key and nothing else. So if `groups.create` committed in
-        // the window between those reads and this statement, the request
-        // backing a live carpool was deleted anyway, taking the
-        // `Conversation` and every `Message` with it. That is precisely the
-        // state the guard exists to prevent, reached by timing instead of by
-        // a direct call.
+        // outside this transaction; matching the delete on the primary key
+        // alone would mean that if `groups.create` committed in the window
+        // between those reads and this statement, the request backing a live
+        // carpool would be deleted anyway, taking the `Conversation` and every
+        // `Message` with it — precisely the state the guard exists to prevent,
+        // reached by timing instead of by a direct call.
         //
-        // The predicate here tracks the guard above exactly, which now means
-        // membership alone: no `status` term, because two people in one group
-        // are carpooling together whatever the request between them says.
-        // Keeping a `status` condition on this side while the guard dropped
-        // it would reopen the same race one status wider.
+        // The predicate here tracks the guard above exactly: membership alone,
+        // no `status` term, because two people in one group are carpooling
+        // together whatever the request between them says. A `status`
+        // condition here while the guard above has none would reopen the same
+        // race one status wider.
         //
         // Restating the predicate in the statement makes it a real
         // compare-and-swap, the same primitive `markRequestAccepted`,
@@ -831,12 +818,11 @@ export const requestsRouter = router({
           // Withdraw twice that they are carpooling with a user they are not.
           //
           // A **locking** read, not `tx.request.findUnique`: a plain
-          // consistent read is served from this transaction's snapshot, which
-          // is the very thing that produced the defect. It would report the
-          // row still present after another transaction had deleted it, and
-          // turn an ordinary double-clear into a CONFLICT naming a carpool
-          // that does not exist. `FOR SHARE` reads the latest committed row,
-          // which is what the `DELETE` just matched against.
+          // consistent read served from this transaction's snapshot would
+          // report the row still present after another transaction had
+          // deleted it, turning an ordinary double-clear into a CONFLICT
+          // naming a carpool that does not exist. `FOR SHARE` reads the latest
+          // committed row, which is what the `DELETE` just matched against.
           //
           // It only runs on the zero-match path, so the common withdrawal
           // pays for one statement and takes no extra lock. The row is the
@@ -863,12 +849,11 @@ export const requestsRouter = router({
           // guard above, arrived at a moment later. Same code and same
           // message, because it is the same refusal.
           //
-          // That used to read "so it is `ACCEPTED` and the pair share a
-          // group". Dropping the status from the predicate widens what
-          // reaching here means, and the widening is in the safe direction:
-          // this branch now also catches the PENDING-and-grouped pair, which
-          // is the case the guard was missing. What it still cannot be is a
-          // plain double-clear - that row is gone, and the `FOR SHARE` read
+          // Dropping status from the predicate (matching the guard above)
+          // widens what reaching here means, and the widening is in the safe
+          // direction: this branch also catches the PENDING-and-grouped pair,
+          // which a status-gated guard would miss. What it still cannot be is
+          // a plain double-clear - that row is gone, and the `FOR SHARE` read
           // above returns nothing for it.
           throw new TRPCError({
             code: "CONFLICT",
@@ -898,7 +883,7 @@ export const requestsRouter = router({
         // Prisma does emulate that cascade under `relationMode = "prisma"`, so
         // this is belt and braces — but the failure mode if it ever did not is
         // `message` rows pointing at a conversation that no longer exists,
-        // which is a worse version of the orphan this whole ticket is about.
+        // which is a worse version of the orphan this guard exists to prevent.
         // No test in this repository can tell the difference: the suite runs on
         // a mock, so a test asserting the cascade only asserts that the mock
         // implements it. Two explicit statements need no such assumption.

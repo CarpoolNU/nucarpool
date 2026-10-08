@@ -22,22 +22,22 @@ import { appRouter } from "../index";
 /**
  * The per-sender email budget, against a real MySQL. SCRUM-606.
  *
- * **Why a mocked suite could not establish this.** The defect was not in the
- * budget's arithmetic, it was in *what the budget counted*: `Request` rows,
- * which `requests.delete` hard-deletes. Showing that requires the count and
- * the delete to be the same database, across three procedures in two modules
- * — `requests.create`, `emails.sendRequestNotification` and
+ * **Why a mocked suite could not establish this.** The risk isn't the
+ * budget's arithmetic, it's *what the budget counts*: counting `Request` rows
+ * would break because `requests.delete` hard-deletes them. Proving that needs
+ * the count and the delete to be the same database, across three procedures
+ * in two modules — `requests.create`, `emails.sendRequestNotification` and
  * `requests.delete`. A mocked prisma returns whatever the fake says, so the
- * loop would have "passed" against a fake that simply chose not to model the
+ * loop would "pass" against a fake that simply chooses not to model the
  * delete. `email.test.ts` covers the branch logic; this covers the claim.
  *
  * **And the claim itself is a MySQL behaviour.** `claimEmailBudget` is an
  * `UPDATE ... WHERE send_count < cap` whose affected-row count is the
  * decision. Whether a spent budget reports zero rows depends on the statement
  * matching no row rather than writing an unchanged value — the distinction
- * `CLIENT_FOUND_ROWS` switches. Only a real server settles that, which is why
- * `updateMany is not a compare-and-swap` had to be established the same way
- * for the sibling writes in `groups.ts` and `requests.ts`.
+ * `CLIENT_FOUND_ROWS` switches. Only a real server settles that, for the same
+ * reason `updateMany is not a compare-and-swap` for the sibling writes in
+ * `groups.ts` and `requests.ts`.
  *
  * SES is a `jest.fn` on the context, so nothing here sends real email.
  *
@@ -92,9 +92,10 @@ describe("the create -> notify -> delete loop no longer evades the budget", () =
    * The reported attack, run for real.
    *
    * Each pass creates a request, sends its notification and withdraws it. The
-   * withdrawal removes the `Request` row, which is what the old budget counted
-   * — so under the old code the count stayed near one and this loop never
-   * stopped. Now each pass spends a send that the withdrawal cannot give back.
+   * withdrawal removes the `Request` row, so counting `Request` rows would
+   * leave the count near one and let this loop run forever; counting sends
+   * instead means each pass spends a send that the withdrawal cannot give
+   * back.
    *
    * Runs one pass past the cap so the assertion is about the transition, not
    * just about the end state.
@@ -128,8 +129,8 @@ describe("the create -> notify -> delete loop no longer evades the budget", () =
 
   /**
    * The ticket asks for this one explicitly: deleting the request must not
-   * give the send back. It is the single assertion that separates the new
-   * budget from the old one.
+   * give the send back. It is the single assertion that would fail if the
+   * budget counted `Request` rows instead of sends.
    */
   it("does not give the send back when the request is deleted", async () => {
     const { alice, bob } = await seedPair();
@@ -182,10 +183,10 @@ describe("the create -> notify -> delete loop no longer evades the budget", () =
 
 describe("the budget is shared across user.emails.*", () => {
   /**
-   * AC 3. The message path had the same hole for a different reason: its
+   * AC 3. The message path has the same hole for a different reason: its
    * cooldown is per conversation, and deleting a request takes the
-   * conversation with it, so every new request opened a fresh bucket. The
-   * shared budget is what closes that, so a spent budget must silence a
+   * conversation with it, so every new request would open a fresh bucket.
+   * The shared budget is what closes that, so a spent budget must silence a
    * message notification even though its own cooldown has nothing to say.
    */
   /**
@@ -193,10 +194,9 @@ describe("the budget is shared across user.emails.*", () => {
    * counts the caller's *other* recent messages in the conversation, and
    * `requests.create` stores Alice's opening message — so if Alice were the
    * one notifying, the cooldown would refuse her with the same
-   * `rate_limited` and this would pass with the budget removed entirely. It
-   * did, until neutering the budget gate left it green. Bob has no earlier
-   * message in the thread, so his cooldown has nothing to say and the budget
-   * is the only thing that can refuse him.
+   * `rate_limited` and this would pass with the budget removed entirely. Bob
+   * has no earlier message in the thread, so his cooldown has nothing to say
+   * and the budget is the only thing that can refuse him.
    */
   it("refuses a message notification once the budget is spent", async () => {
     const { alice, bob } = await seedPair();

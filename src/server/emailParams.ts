@@ -32,10 +32,9 @@ export const isDeliverableRecipient = (email: string): boolean =>
  *                             -> the recipient is joining, so rides
  *
  * So the flag that picks between them is a fact about the **recipient**, and
- * `recipientIsDriver` is named to say so. It used to be called `isDriver`, and
- * the acceptance flow supplied the *sender's* role instead. The two roles in a
- * carpool pair are complementary, so the selector was always inverted and
- * every acceptance email was worded for the other party.
+ * `recipientIsDriver` is named to say so — because the two roles in a carpool
+ * pair are complementary, a generic `isDriver` could be supplied with either
+ * party's role and still type-check, with nothing to catch it being wrong.
  */
 
 /**
@@ -91,10 +90,10 @@ export function escapeHtmlText(value: string): string {
  * Escapes for anywhere in HTML, attribute values included.
  *
  * A superset of `escapeHtmlText`. Quotes are what an attribute value needs and
- * text content does not, and escaping them is free here precisely because the
- * `TextPart` no longer reads these variables — apostrophes are common enough
- * in ordinary messages ("I'm", "let's") that this would have been unacceptable
- * while one variable had to serve both parts.
+ * text content does not, and escaping them is free here because `TextPart`
+ * reads its own unescaped `Plain` variables instead — apostrophes are common
+ * enough in ordinary messages ("I'm", "let's") that escaping them in text
+ * content would be unacceptable.
  */
 export function escapeHtmlAttribute(value: string): string {
   return escapeHtmlText(value).replace(/"/g, "&quot;").replace(/'/g, "&#39;");
