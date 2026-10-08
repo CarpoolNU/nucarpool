@@ -937,6 +937,95 @@ describe("getAuditLog", () => {
       take: 500,
     });
   });
+
+  it("asks for no report at all when the page holds no resolution row", async () => {
+    const { caller, prisma } = callerFor();
+    prisma.adminAuditLog.findMany.mockResolvedValue([
+      {
+        id: "log-1",
+        actorId: "manager-1",
+        action: "user.admin.updateUserPermission",
+        targetId: "user-2",
+        metadata: null,
+        dateCreated: new Date(),
+      },
+    ]);
+
+    const log = await caller.user.admin.getAuditLog();
+
+    expect(prisma.report.findMany).not.toHaveBeenCalled();
+    // A permission row's target is a user already, so there is no second id.
+    expect(log[0].targetUserId).toBeNull();
+  });
+
+  it("resolves every report target in one read, of two columns", async () => {
+    const { caller, prisma } = callerFor();
+    prisma.adminAuditLog.findMany.mockResolvedValue([
+      {
+        id: "log-1",
+        actorId: "manager-1",
+        action: "user.admin.resolveReport",
+        targetId: "report-a",
+        metadata: null,
+        dateCreated: new Date(),
+      },
+      {
+        id: "log-2",
+        actorId: "manager-1",
+        action: "user.admin.resolveReport",
+        targetId: "report-b",
+        metadata: null,
+        dateCreated: new Date(),
+      },
+      // The same report resolved twice contributes one id, not two.
+      {
+        id: "log-3",
+        actorId: "manager-1",
+        action: "user.admin.resolveReport",
+        targetId: "report-a",
+        metadata: null,
+        dateCreated: new Date(),
+      },
+    ]);
+    prisma.report.findMany.mockResolvedValue([
+      { id: "report-a", reportedUserId: "user-a" },
+      { id: "report-b", reportedUserId: "user-b" },
+    ]);
+
+    const log = await caller.user.admin.getAuditLog();
+
+    expect(prisma.report.findMany).toHaveBeenCalledTimes(1);
+    // The select is the privacy-relevant part: no `conversationSnapshot`, no
+    // `reason`, nothing from `message`.
+    expect(prisma.report.findMany).toHaveBeenCalledWith({
+      where: { id: { in: ["report-a", "report-b"] } },
+      select: { id: true, reportedUserId: true },
+    });
+    expect(log.map((entry) => entry.targetUserId)).toEqual([
+      "user-a",
+      "user-b",
+      "user-a",
+    ]);
+  });
+
+  it("leaves targetUserId null for a report that no longer exists", async () => {
+    const { caller, prisma } = callerFor();
+    prisma.adminAuditLog.findMany.mockResolvedValue([
+      {
+        id: "log-1",
+        actorId: "manager-1",
+        action: "user.admin.resolveReport",
+        targetId: "report-gone",
+        metadata: null,
+        dateCreated: new Date(),
+      },
+    ]);
+    prisma.report.findMany.mockResolvedValue([]);
+
+    const log = await caller.user.admin.getAuditLog();
+
+    expect(log[0].targetUserId).toBeNull();
+  });
 });
 
 describe("getReports", () => {
