@@ -8,15 +8,26 @@ import {
   toQueryState,
 } from "../../utils/queryState";
 import useIsHydrated from "../../utils/useIsHydrated";
+import {
+  describeAuditAction,
+  describeAuditDetails,
+  describeAuditTarget,
+} from "../../utils/adminAuditLabels";
 
 /**
  * The audit log's list view — every `AdminAuditLog` row, most
  * recent first.
  *
  * `getAuditLog` returns raw `actorId`/`targetId` rather than denormalized
- * emails; this component resolves both through `getAllUsers`, the same query
+ * emails; this component resolves them through `getAllUsers`, the same query
  * `UserManagement` already fetches, so viewing the log costs no additional
  * privileged read beyond the one `/admin` already makes.
+ *
+ * Only `actorId` is always a user. `targetId` names whatever the action acted
+ * on — a user for `updateUserPermission`, a *report* for `resolveReport` — so
+ * the Target cell asks `adminAuditLabels` which table the id belongs to rather
+ * than resolving every row against the user map. That map-everything approach
+ * is what left every report-resolution row showing a bare cuid (SCRUM-647).
  */
 const AdminAuditLog = () => {
   /*
@@ -62,7 +73,8 @@ const AdminAuditLog = () => {
   const emailById = new Map(
     (usersQuery.data ?? []).map((user) => [user.id, user.email]),
   );
-  const nameFor = (id: string) => emailById.get(id) ?? id;
+  /** Actor is always a user, so a plain lookup is correct here. */
+  const actorFor = (id: string) => emailById.get(id) ?? id;
 
   return (
     <div className="relative h-full w-full">
@@ -95,17 +107,33 @@ const AdminAuditLog = () => {
                 </tr>
               </thead>
               <tbody>
-                {auditLogQuery.data.map((entry) => (
-                  <tr key={entry.id} className="border-b border-stone-200">
-                    <td className="py-2 pr-4 whitespace-nowrap">
-                      {format(entry.dateCreated, "MMM dd yyyy HH:mm")}
-                    </td>
-                    <td className="py-2 pr-4">{nameFor(entry.actorId)}</td>
-                    <td className="py-2 pr-4">{entry.action}</td>
-                    <td className="py-2 pr-4">{nameFor(entry.targetId)}</td>
-                    <td className="py-2 pr-4">{entry.metadata ?? ""}</td>
-                  </tr>
-                ))}
+                {auditLogQuery.data.map((entry) => {
+                  const target = describeAuditTarget(
+                    entry.action,
+                    entry.targetId,
+                    emailById.get(entry.targetId),
+                  );
+
+                  return (
+                    <tr key={entry.id} className="border-b border-stone-200">
+                      <td className="py-2 pr-4 whitespace-nowrap">
+                        {format(entry.dateCreated, "MMM dd yyyy HH:mm")}
+                      </td>
+                      <td className="py-2 pr-4">{actorFor(entry.actorId)}</td>
+                      <td className="py-2 pr-4">
+                        {describeAuditAction(entry.action)}
+                      </td>
+                      {/* `title` carries the full id back when the cell
+                          abbreviated one; undefined when it did not. */}
+                      <td className="py-2 pr-4" title={target.title}>
+                        {target.text}
+                      </td>
+                      <td className="py-2 pr-4">
+                        {describeAuditDetails(entry.action, entry.metadata)}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
