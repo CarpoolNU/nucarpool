@@ -88,10 +88,9 @@ describe("GET /api/version", () => {
 
   it("exposes build identity and nothing else", () => {
     /*
-     * that change's third acceptance criterion, asserted against the response
-     * body rather than by reading the source. The risk this guards is not
-     * today's code - it is the plausible future change that adds "just the
-     * non-secret config" to a diagnostic endpoint nobody is watching.
+     * The risk this guards is not today's code - it is the plausible future
+     * change that adds "just the non-secret config" to a diagnostic endpoint
+     * nobody is watching.
      *
      * Asserted as an exact key set, so an added field fails rather than
      * passing a subset check. `buildInfo.test.ts` pins the same thing one

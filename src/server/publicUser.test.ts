@@ -160,11 +160,10 @@ describe("convertCarpoolSearchToPublic", () => {
   });
 
   it("exposes exactly this set of keys, and no others", () => {
-    // This used to compare against `convertToPublic`, which existed only to be
-    // the other half of that comparison and was dead everywhere else. Pinning
-    // the set outright is the stronger check: two converters can drift
-    // together, a literal cannot. A new key here is a deliberate edit, and an
-    // accidental one - `email` above all - fails.
+    // Pinned as a literal list rather than compared against another
+    // converter: two converters can drift together, a literal cannot. A new
+    // key here is a deliberate edit, and an accidental one - `email` above
+    // all - fails.
     expect(
       Object.keys(convertCarpoolSearchToPublic(buildSearch())).sort(),
     ).toEqual([
@@ -196,10 +195,10 @@ describe("convertCarpoolSearchToPublic", () => {
 
 describe("home coordinate precision", () => {
   /**
-   * `startAddress` is deliberately coarsened to "City, State", but the raw home
-   * coordinate used to ride along beside it in bulk responses, where it could
-   * just be reverse-geocoded. The rule is now: neighbourhood precision by
-   * default, full precision only for a counterpart.
+   * `startAddress` is deliberately coarsened to "City, State". The raw home
+   * coordinate needs the same treatment in bulk responses, since otherwise it
+   * could simply be reverse-geocoded: neighbourhood precision by default, full
+   * precision only for a counterpart.
    */
   const preciseHome = location({
     coordLng: -71.08874812,
@@ -291,15 +290,15 @@ describe("roundCoord", () => {
 /**
  * Who gets an email address.
  *
- * `PublicUser` carried `email` unconditionally, so the bulk list endpoints -
- * the map, recommendations, favorites - shipped every active user's
- * `@northeastern.edu` address to any signed-in viewer, on screens that never
- * displayed it. One request returned up to 150 of them; a VIEWER got the whole
- * ranked set. Only two consumers ever needed the field and both have a
- * relationship with the user.
+ * Without this, `PublicUser` would carry `email` unconditionally, so the bulk
+ * list endpoints - the map, recommendations, favorites - would ship every
+ * active user's `@northeastern.edu` address to any signed-in viewer, on
+ * screens that never display it. One request returns up to 150 of them; a
+ * VIEWER gets the whole ranked set. Only two consumers need the field and
+ * both have a relationship with the user.
  *
- * This is the same split already made for home coordinates, applied to the
- * field that sat beside them in the struct and was missed at the time.
+ * This is the same split made for home coordinates, applied to the field that
+ * sits beside them in the struct.
  */
 describe("email disclosure", () => {
   it("omits the email address for a viewer with no relationship", () => {
@@ -321,7 +320,7 @@ describe("email disclosure", () => {
   });
 
   it("omits it from every record in a list, not just the first", () => {
-    // The exposure was a bulk one, so the absence has to hold per record.
+    // A leak here would be a bulk one, so the absence has to hold per record.
     const results = [
       buildSearch({ userId: "user-1" }),
       buildSearch({ userId: "user-2" }),
@@ -364,14 +363,14 @@ describe("email disclosure", () => {
 });
 
 /**
- * The disclosure rule above says "a counterpart", and `requests.me`
- * used to read that as "anyone there is a request row with" — which any user
- * can create, about any other user, in one unanswered mutation. So the viewer
- * could manufacture the relationship that authorised the disclosure.
+ * The disclosure rule above says "a counterpart". Reading that as "anyone
+ * there is a request row with" would be wrong: any user can create a request
+ * about any other user, in one unanswered mutation, so a viewer could
+ * manufacture the relationship that authorised the disclosure.
  *
- * `convertRequestCounterpart` is where the rule now lives, and these pin the
- * only thing it decides: whether the request's status is evidence that the
- * person being disclosed agreed to anything.
+ * `convertRequestCounterpart` is where the rule lives, and these pin the only
+ * thing it decides: whether the request's status is evidence that the person
+ * being disclosed agreed to anything.
  */
 describe("convertRequestCounterpart", () => {
   const preciseHome = location({

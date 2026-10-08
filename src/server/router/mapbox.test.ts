@@ -9,8 +9,8 @@ import { MAP_RESULT_LIMIT, limitMapResults } from "./mapbox";
  *
  * `mapboxUrls.test.ts` covers URL construction. What is left to get wrong here
  * is the procedure: forwarding the wrong field, accepting input the builder
- * cannot safely handle, or — as the old code did — treating a Mapbox error
- * body as a successful response.
+ * cannot safely handle, or treating a Mapbox error body as a successful
+ * response.
  *
  * `fetch` is mocked throughout. Nothing in this file reaches Mapbox or
  * consumes quota.
@@ -123,8 +123,8 @@ describe("mapbox.search — input", () => {
 
 describe("mapbox.search — upstream responses", () => {
   it("surfaces a non-2xx instead of parsing the error body as results", async () => {
-    // The old code went straight to `data.features.map`, which threw a
-    // TypeError on a Mapbox error body rather than reporting the failure.
+    // Without this check, `data.features.map` runs directly on a Mapbox
+    // error body, which throws a TypeError instead of reporting the failure.
     fetchSpy.mockResolvedValue(
       jsonResponse({ message: "Not Authorized" }, { status: 401 }),
     );
@@ -219,9 +219,9 @@ describe("geoJsonUserList — how many points each role receives", () => {
   /**
    * The VIEWER exemption, pinned.
    *
-   * Nothing covered this before, so the obvious tidy-up — treating every role
-   * alike — would have looked like a cleanup and passed CI. It is a deliberate
-   * decision: the map ranks by distance from the reader's own
+   * The obvious tidy-up here — treating every role alike — would look like a
+   * harmless cleanup and pass CI, so this is pinned explicitly. It is a
+   * deliberate decision: the map ranks by distance from the reader's own
    * stored coordinates, a VIEWER is allowed not to have any, and the address
    * they actually browse by is picked in the browser and never sent here. So
    * there is no meaningful "nearest 150" to take for them. `limitMapResults`

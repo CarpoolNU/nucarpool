@@ -1,13 +1,13 @@
 /**
  * The shared server-side SES client.
  *
- * `createContext` used to call `new SESClient(...)` inline, and it runs once
- * per tRPC HTTP request — so a client with its own connection pool was built
- * and thrown away for every `user.me`, map query and unread-count poll, none
- * of which send mail. These tests pin the two things the move has to preserve:
- * one client per process however many requests arrive, and credentials still
- * passed explicitly from `serverEnv` rather than resolved from the ambient
- * environment.
+ * Without it, `createContext` would construct `new SESClient(...)` inline,
+ * and it runs once per tRPC HTTP request — so a client with its own
+ * connection pool would be built and thrown away for every `user.me`, map
+ * query and unread-count poll, none of which send mail. These tests pin the
+ * two properties that matter: one client per process however many requests
+ * arrive, and credentials passed explicitly from `serverEnv` rather than
+ * resolved from the ambient environment.
  *
  * `@aws-sdk/client-ses` is mocked, so nothing here opens a socket to SES.
  */
@@ -51,9 +51,9 @@ describe("sesClient", () => {
   });
 
   it("takes its credentials from serverEnv, not from the ambient environment", async () => {
-    // The file this replaced also imported `fromEnv`, which it never called;
-    // the import implied AWS_* process variables were the source when the
-    // repository's names are suffixed and read through envsafe instead.
+    // Using `fromEnv` here would imply AWS_* process variables are the
+    // source, when the repository's names are suffixed and read through
+    // envsafe instead.
     await load();
 
     const config = mockSESClientConstructor.mock.calls[0]?.[0];

@@ -4,26 +4,23 @@ import type { PrismaClient } from "@prisma/client";
  * The per-sender cap on outbound mail, shared by every procedure in
  * `user.emails.*`.
  *
- * **What was wrong.** `sendRequestNotification` limited a sender by counting
- * their `Request` rows created in the last hour. Each of the three emails is
- * one-shot — the write that creates the thing being announced marks an email
- * as owed and the procedure clears that marker before sending — so the count
- * was the only thing standing between a caller and unlimited mail. It did not
- * stand: `requests.delete` hard-deletes the row the count was taken over, so
- * `create` -> notify -> `delete`, repeated, kept the count near one and
- * `rate_limited` never fired. The marker is per row, so each fresh row was
- * owed a fresh email, and the duplicate-`PENDING` guard in `requests.create`
- * never fired either because the row it would have found was gone. The same
- * loop reset the message cooldown, because deleting a request takes its
- * `Conversation` and every `Message` with it, and a new conversation has no
- * prior message to be within a cooldown of. The code's own comment conceded
- * the shape of this ("raises the cost of abuse and is not a cap").
+ * **Why this counts sends, not rows a caller can delete.** Each of the three
+ * emails is one-shot — the write that creates the thing being announced marks
+ * an email as owed, and the procedure clears that marker before sending — so a
+ * cap built by counting a caller-owned table, such as `Request` rows created
+ * in the last hour, is not actually a cap: `requests.delete` hard-deletes the
+ * row such a count would be taken over, so `create` -> notify -> `delete`,
+ * repeated, keeps the count near one however many emails go out, because the
+ * marker is per row and each fresh row is owed a fresh email. The same loop
+ * would reset a per-conversation message cooldown too, since deleting a
+ * request takes its `Conversation` and every `Message` with it, leaving no
+ * prior message to be within a cooldown of.
  *
  * **What this does instead.** It counts *sends*, in a table the caller has no
  * procedure that writes to. Nothing a caller can delete is in the count, so
- * the loop above spends the budget and then stops. This is the "per-user cap
- * across all of `user.emails.*`" that `sendAcceptanceNotification`'s doc
- * comment recorded as not existing yet. See SCRUM-606.
+ * the create/delete loop above spends the budget and then stops. This is a
+ * single per-user cap across all of `user.emails.*`, rather than one scoped to
+ * a single email kind.
  *
  * **It is a cap, not a cooldown.** A caller gets `EMAILS_PER_BUDGET_WINDOW`
  * sends per window however they spread them, across all three email kinds
@@ -40,21 +37,20 @@ import type { PrismaClient } from "@prisma/client";
  * would stop being atomic. The cost of fixed buckets is that a caller who
  * spends a full budget at the end of one window and another at the start of
  * the next sends `2 * EMAILS_PER_BUDGET_WINDOW` inside one window's length.
- * That is a bounded burst rather than the unbounded loop this replaces, and
- * the alternative trades a hard guarantee for a soft one.
+ * That is a bounded burst, not the unbounded sends a deletable-row-based count
+ * would allow, and the alternative trades a hard guarantee for a soft one.
  */
 export const EMAIL_BUDGET_WINDOW_MS = 60 * 60 * 1000;
 
 /**
  * Sends allowed per sender per window, across every kind of mail.
  *
- * Higher than the ten the old request-only budget named, because this one is
- * shared: a user who sends requests, replies in those conversations and has
- * some of them accepted draws all three from here, and the old number was
- * never actually reached anyway. It has to leave an ordinary heavy user alone
- * — a rider working through a list of drivers is the platform working — while
- * bounding what one account can emit in an hour. Assumed to be at least one;
- * at zero the claim below would still admit the first send of a window.
+ * Set high enough to cover all three email kinds sharing one budget: a user
+ * who sends requests, replies in those conversations and has some of them
+ * accepted draws all three from here. It has to leave an ordinary heavy user
+ * alone — a rider working through a list of drivers is the platform working —
+ * while bounding what one account can emit in an hour. Assumed to be at least
+ * one; at zero the claim below would still admit the first send of a window.
  */
 export const EMAILS_PER_BUDGET_WINDOW = 20;
 

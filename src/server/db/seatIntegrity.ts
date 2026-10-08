@@ -5,9 +5,8 @@
  * `[0, MAX_SEATS_AVAILABLE]`. Nothing enforced it: the column is a plain `Int`,
  * `relationMode = "prisma"` and PlanetScale's online-DDL path put `UNSIGNED`
  * and CHECK constraints out of easy reach, and `clampSeats` is applied only
- * when seats are released. The accounting bugs since fixed had already
- * pushed at least one ACTIVE driver to `-1` by then, and nothing has ever
- * looked.
+ * when seats are released. A now-fixed accounting bug already pushed at least
+ * one ACTIVE driver to `-1`, and nothing has ever looked for others like it.
  *
  * Kept as a pure function for the same reason as `findOrphanLocationIds`: the
  * selection is what is worth testing, and it can be tested without a database.

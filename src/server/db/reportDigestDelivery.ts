@@ -36,10 +36,9 @@ import type { ReportingWindow } from "../reportDigestWindow";
  * `updateMany` looks like the same statement and is not one under
  * `relationMode = "prisma"`: it reads the matching ids first and then updates
  * by id, so concurrent callers all read the row before any of them changes it
- * and every one reports `count: 1` — established against a real MySQL in
- * SCRUM-559 and SCRUM-565. Using it here would mean every concurrent run
- * believed it had won the claim, which is the one failure this table exists to
- * prevent.
+ * and every one reports `count: 1` — verified against a real MySQL. Using it
+ * here would mean every concurrent run believed it had won the claim, which is
+ * the one failure this table exists to prevent.
  *
  * For the same reason the guard is in the `WHERE` rather than in an `IF()` on
  * an assignment: an `UPDATE` that always matches and only sometimes changes

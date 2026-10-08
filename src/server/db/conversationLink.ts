@@ -14,9 +14,8 @@ import type { TransactionClient } from "./client";
  * bug in each of the two places that do it.
  *
  * **The lookup is keyed on `Conversation.requestId`, deliberately.** That is
- * the authoritative side. Reading `Request.conversationId` instead — which is
- * what `requests.create`'s reopen branch used to do — answers a subtly
- * different question: it tells you whether *this row* knows about a
+ * the authoritative side. Keying on `Request.conversationId` instead answers a
+ * subtly different question: it tells you whether *this row* knows about a
  * conversation, not whether one exists. When the two disagree, keying off the
  * request row would try to create a second `Conversation` for the same
  * `requestId` and hit the unique constraint, turning a recoverable state into a
@@ -104,15 +103,15 @@ export const conversationsToDeleteWith = (request: {
  * while `requests.me` still renders its messages. No current write path creates
  * that state — `findOrCreateConversation` and both branches of
  * `requests.create` only ever link a conversation to the request it was keyed
- * on — and production held **zero** cross-linked rows when both links were
- * measured read-only on 2026-09-03, against **620** failing both. So the
- * one-link predicate this replaced did not produce a wrong number for that
- * population; it was an upper bound that happened to be exact.
+ * on — and a read-only check across production found **zero** cross-linked
+ * rows against **620** failing both links. So a one-link predicate would not
+ * produce a wrong number for today's data; it would be an upper bound that
+ * happens to be exact, correct by luck rather than by definition.
  *
- * It is now the same definition `cleanup-orphan-conversations.ts` re-checks
- * immediately before each delete, which is the point of the change: the plan
- * and the action can no longer disagree, so a rescue at delete time means the
- * database changed under the run rather than that the two predicates differ.
+ * This is the same definition `cleanup-orphan-conversations.ts` re-checks
+ * immediately before each delete, so the plan and the action cannot disagree:
+ * a rescue at delete time means the database changed under the run, not that
+ * the two predicates differ.
  *
  * What counts orphans regardless is `admin.getDashboardStats`, whose
  * `conversation.count()` and `message.groupBy` both include them, which is why
@@ -120,12 +119,13 @@ export const conversationsToDeleteWith = (request: {
  * drift upward and cannot be reconciled afterwards. That distortion is accepted
  * for now: the 620 are retained by decision, not pending deletion.
  *
- * Nothing creates these any more — `requests.delete` removes the conversation
- * with the request — but every decline, withdrawal and "Leave Conversation"
- * before that fix left one behind, holding whatever the pair had typed. Kept
- * as a pure function for the same reason as `findOrphanLocationIds`: the set
- * arithmetic is what is worth testing, and the reads and deletes live in
- * `scripts/cleanup-orphan-conversations.ts`.
+ * `requests.delete` removes the conversation together with the request, so
+ * today's write paths create none of these. The orphans this function finds
+ * are residue from decline, withdrawal and "Leave Conversation" flows that
+ * predate that cleanup — each left a conversation behind, holding whatever the
+ * pair had typed. Kept as a pure function for the same reason as
+ * `findOrphanLocationIds`: the set arithmetic is what is worth testing, and
+ * the reads and deletes live in `scripts/cleanup-orphan-conversations.ts`.
  *
  * A null `requestId` is not possible — the column is non-nullable — so unlike
  * the Location case there is no "never linked" state to exclude. Every

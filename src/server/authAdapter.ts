@@ -11,9 +11,8 @@ type AppPrismaClient = (typeof import("./db/client"))["prisma"];
  * Under `src/pages/` a filename is also a route, so a co-located test would be
  * compiled and served as one — the same reason `authSignIn.ts` and
  * `pusherChannelAuth.ts` sit here rather than beside their endpoints, and
- * `scripts/check-page-routes.js` enforces it. This adapter had two behaviours
- * worth pinning and no test could reach either while it was an inline object
- * literal in the route.
+ * `scripts/check-page-routes.js` enforces it. Keeping this adapter as its own
+ * module is what lets its two behaviours below be reached by a test.
  */
 
 /**

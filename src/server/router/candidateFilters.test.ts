@@ -11,16 +11,14 @@ import { fakeBlockDelegate } from "../../testing/blockFake";
  * Both build their candidate query from relations pulled in through a
  * *conditional* include - `favorites: input.filters.favorites`. Prisma omits
  * such a key entirely when the value is false, so it arrives as `undefined`
- * rather than `[]`, and `favorites.map(...)` was left outside the guard
- * that protects the equivalent `sentRequests` call. Every default page load
- * (`favorites: false`) threw a TypeError and returned INTERNAL_SERVER_ERROR.
+ * rather than `[]`; a resolver that calls `favorites.map(...)` without
+ * guarding for that throws a TypeError on every default page load
+ * (`favorites: false`), which surfaces as INTERNAL_SERVER_ERROR.
  *
- * Neither endpoint had a test file, and `candidateSearch.test.ts` covers only
- * the pure helpers with mocks that hand back arrays where the real client hands
- * back `undefined` - which is precisely why all six CI checks passed on a total
- * outage of the primary screen. So the Prisma double below deliberately models
- * the omission (see `applyInclude`); a mock that returned `[]` here would pass
- * against the broken code and pin nothing.
+ * `candidateSearch.test.ts` covers only the pure helpers with mocks that hand
+ * back arrays where the real client hands back `undefined`. So the Prisma
+ * double below deliberately models the omission (see `applyInclude`); a mock
+ * that returned `[]` here would pass against a missing guard and pin nothing.
  *
  * These drive the real `appRouter` through `createCaller`, following
  * `user/favorites.test.ts` and `authorization.test.ts`. No database, no Mapbox

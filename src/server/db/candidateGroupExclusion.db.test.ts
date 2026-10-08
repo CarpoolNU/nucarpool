@@ -116,9 +116,10 @@ describe("candidate exclusion across groups", () => {
     const groupedRider = await seedSearcher("Grouped", Role.RIDER, {
       carpoolId: group.id,
     });
-    // A driver with a seat, unrelated to the rider's group. Under the old
-    // exclusion (own group only) this would have been offered and ranked at
-    // the top, for a request `groups.ts`'s accept path refuses every time.
+    // A driver with a seat, unrelated to the rider's group — present to prove
+    // the exclusion keys off the rider's own carpoolId, not group membership.
+    // Keying off the group alone would offer this driver and rank it top, for
+    // a request `groups.ts`'s accept path refuses every time.
     await seedSearcher("Driver", Role.DRIVER, { seatsAvail: 3 });
 
     expect(await candidateIdsFor(groupedRider.id)).toEqual([]);

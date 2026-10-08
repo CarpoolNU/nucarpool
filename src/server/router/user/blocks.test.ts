@@ -86,8 +86,8 @@ const buildBlocksDb = (opts?: {
     },
   };
 
-  // `user.blocks.block` now runs `applyBlock` inside an explicit transaction,
-  // so the fake has to support one. Nothing here needs
+  // `user.blocks.block` runs `applyBlock` inside an explicit transaction, so
+  // the fake has to support one. Nothing here needs
   // rollback: every refusal in `applyBlock` throws before its one write, the
   // upsert above. `enumerable: false`, the same as `reports.test.ts`'s
   // equivalent fake, so a `{ ...prisma }` spread would not carry it along.

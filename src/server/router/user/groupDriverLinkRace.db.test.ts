@@ -11,10 +11,10 @@ import { appRouter } from "../index";
  * `reserveSeat` is correctly CAS'd, so a driver with 2+ open seats lets both
  * concurrent `groups.create` calls past it - each reserves its own seat,
  * creates its own `CarpoolGroup`, and links "its" rider via the guarded raw
- * `UPDATE`. Only the driver's own link
- * (`groups.ts`, just above the rider link) used a plain `carpoolSearch.updateMany`
- * with no `carpoolId IS NULL` guard and no check on the write count, so
- * whichever transaction committed last simply overwrote the other's work,
+ * `UPDATE`. The driver's own link (`groups.ts`, just above the rider link)
+ * needs the identical guard: a plain `carpoolSearch.updateMany` with no
+ * `carpoolId IS NULL` guard and no check on the write count would let
+ * whichever transaction commits last simply overwrite the other's work,
  * leaving one `CarpoolGroup` with a real rider and no driver. The mocked
  * suite (`groups.test.ts`) cannot reproduce that at all - a mocked Prisma has
  * no isolation level - so this needs a real MySQL.

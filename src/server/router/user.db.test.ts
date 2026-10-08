@@ -328,11 +328,11 @@ describe("one CarpoolSearch per user", () => {
  * A rider cannot take a group away from its driver.
  *
  * `requireGroupDriver` reads only the caller's own role, because `CarpoolGroup`
- * stores no owner. That is sound only while a group holds one DRIVER, and
- * `user.edit` - the one procedure that writes `role` - used to let a grouped
- * rider make themselves the second. This is the whole escalation run end to
- * end: the promotion is refused, nothing it carried is written, and the
- * management actions it was the key to stay closed.
+ * stores no owner. That is sound only while a group holds one DRIVER, so
+ * `user.edit` - the one procedure that writes `role` - must refuse a grouped
+ * rider who tries to make themselves the second. This is the whole escalation
+ * run end to end: the promotion is refused, nothing it carried is written, and
+ * the management actions it was the key to stay closed.
  */
 describe("a grouped rider cannot promote themselves to driver", () => {
   const seedGroup = async () => {
@@ -479,8 +479,8 @@ describe("a grouped rider cannot promote themselves to driver", () => {
   });
 
   it("does not let the driver's own save hand the rider's seat back", async () => {
-    // The ticket's item 3, against the real column: the driver's form loaded
-    // before the rider joined, so it still says 3.
+    // Against the real column: the driver's form loaded before the rider
+    // joined, so it still says 3.
     const { driver } = await seedGroup();
 
     await callerFor(driver.id).user.edit({

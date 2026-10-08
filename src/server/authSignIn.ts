@@ -4,15 +4,15 @@ import type { DeployEnv } from "../utils/env/browser";
  * Who is allowed to sign in, decided separately from the endpoint that asks.
  *
  * Production is Azure AD only, so the tenant decides and nothing here needs to.
- * Staging additionally offers Google (`[...nextauth].ts`), and that provider had
- * no restriction of any kind: `authOptions.callbacks` held only `session`, there
- * was no `signIn` callback anywhere in the repository, and `GoogleProvider` was
- * constructed without an `hd` hint. Any Google account on the internet could
- * therefore create a staging user — in front of a database holding 1,298 real
- * people's names, addresses, home locations and message history, copied from
- * production deliberately — a one-off task turned on PlanetScale's data
- * branching and moved the rows across. Staging is not a fixture set; it is the
- * real records in a weaker place.
+ * Staging additionally offers Google (`[...nextauth].ts`), and nothing else
+ * restricts it: `authOptions.callbacks` holds only `session`, there is no other
+ * `signIn` callback anywhere in the repository, and `GoogleProvider` is
+ * constructed without an `hd` hint. Without this gate, any Google account on
+ * the internet could create a staging user — in front of a database holding
+ * 1,298 real people's names, addresses, home locations and message history,
+ * copied from production deliberately — a one-off task turned on PlanetScale's
+ * data branching and moved the rows across. Staging is not a fixture set; it
+ * is the real records in a weaker place.
  *
  * Kept out of `src/pages/api/auth/` deliberately. Under `src/pages/` a filename
  * is also a route, so a co-located test would be compiled and served as one —
@@ -89,7 +89,7 @@ export type SignInAttempt = {
 /**
  * Whether NextAuth should let this sign-in proceed.
  *
- * Only Google is gated. Azure AD is left exactly as it was, in every
+ * Only Google is gated. Azure AD is untouched, in every
  * environment, because its tenant already restricts who can authenticate and
  * because production sign-in is not a thing this change should be able to
  * break. A provider this function does not recognise is allowed for the same

@@ -23,13 +23,13 @@ export type PrismaOrTransaction = PrismaClient | TransactionClient;
  * Prisma's logging, routed through the application instead of straight to the
  * process output.
  *
- * This was `log: ["info", "warn", "error"]` — plain level strings, which is
- * Prisma's stdout mode. The client formatted its own error and printed it,
- * including an absolute build path and a source excerpt of the app's own code,
- * with nothing able to intervene; meanwhile `[trpc].ts` was carefully redacting
- * the other route out of the same request. `emit: "event"` puts both under one
- * policy. See `prismaLog.ts` for what that route was measured to disclose —
- * notably *not* argument values, contrary to the common assumption.
+ * Plain level strings (`log: ["info", "warn", "error"]`) would put Prisma in
+ * its stdout mode: the client formats its own error and prints it, including
+ * an absolute build path and a source excerpt of the app's own code, with
+ * nothing able to intervene — while `[trpc].ts` carefully redacts that same
+ * information out of its own route. `emit: "event"` puts both under one
+ * policy. See `prismaLog.ts` for what that route discloses — notably *not*
+ * argument values, contrary to the common assumption.
  *
  * **An event level with no listener is silently dropped**, so the handlers
  * below are attached here, next to the construction, rather than by whoever

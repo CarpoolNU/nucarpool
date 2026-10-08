@@ -10,15 +10,16 @@ import type { BlockRow } from "../testing/blockFake";
 /**
  * Realtime access control.
  *
- * Before this, both Pusher channels were public and named after ids other
- * users can already see — `user.requests.me` hands out request ids, every
- * `PublicUser` carries a user id — while `NEXT_PUBLIC_PUSHER_KEY` ships in the
- * browser bundle. Anyone could subscribe to a stranger's conversation or
- * notification feed and read message content live, without ever calling the
- * API.
+ * Without `canSubscribe`, both Pusher channels would be public and named
+ * after ids other users can already see — `user.requests.me` hands out
+ * request ids, every `PublicUser` carries a user id — while
+ * `NEXT_PUBLIC_PUSHER_KEY` ships in the browser bundle. Anyone could subscribe
+ * to a stranger's conversation or notification feed and read message content
+ * live, without ever calling the API.
  *
- * `canSubscribe` is the whole of the fix's decision logic, so it is tested
- * directly rather than through an HTTP harness. Nothing here touches Pusher.
+ * `canSubscribe` is the whole of the access-control decision logic, so it is
+ * tested directly rather than through an HTTP harness. Nothing here touches
+ * Pusher.
  */
 
 const ALICE = "user-alice";
@@ -51,7 +52,7 @@ describe("canSubscribe — notification channels", () => {
   });
 
   it("refuses a user another user's notification feed", async () => {
-    // The headline attack: knowing a user id was enough to read their messages.
+    // The headline attack: knowing a user id would be enough to read their messages.
     const prisma = prismaWith();
 
     await expect(
