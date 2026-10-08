@@ -1,19 +1,17 @@
 /**
- * `addMapEvents` bound the point-click handler twice: once to a generic
- * `click` listener that queried every symbol layer, and once each to the
- * `riders` and `drivers` layers.
+ * `addMapEvents` binds the point-click handler only to the `riders` and
+ * `drivers` layers, never as a generic unscoped `click` listener.
  *
- * Only the second pair ever did anything. Mapbox populates `event.features`
- * only for a listener registered against a layer - its own documentation says
- * so, and `createPointClickHandler` opens with `if (!e.features) return` - so
- * the generic listener ran `getStyle().layers.filter(...)` and a
- * `queryRenderedFeatures` across every symbol layer on *every click anywhere
- * on the map*, then handed the result to a handler that returned immediately.
+ * Mapbox populates `event.features` only for a listener registered against a
+ * layer - its own documentation says so, and `createPointClickHandler` opens
+ * with `if (!e.features) return`. A generic listener would instead run
+ * `getStyle().layers.filter(...)` and a `queryRenderedFeatures` across every
+ * symbol layer on every click anywhere on the map, then hand the result to a
+ * handler that returns immediately - work with no effect.
  *
- * So the doubled work was real but the dead half was the generic listener, not
- * the layer-scoped pair. These tests pin that down in both directions, because
- * deleting the wrong one silently stops every pin from opening its popup -
- * there is no error, the tap simply does nothing.
+ * These tests pin down both directions, because the two layer-scoped bindings
+ * are the only ones that do anything: removing them silently stops every pin
+ * from opening its popup, with no error to show for it.
  */
 
 import type { Map } from "mapbox-gl";
@@ -77,8 +75,8 @@ describe("addMapEvents", () => {
   });
 
   /**
-   * The listener this removes fired on every click on the map - including the
-   * empty ocean - and threw the result away.
+   * A click that hits no layer must trigger no point-click work at all - not
+   * even a render query whose result gets discarded.
    */
   it("does no point-click work on a click that hit no layer", () => {
     const map = fakeMap();

@@ -2,7 +2,7 @@
  * The id an error message needs so a field's `aria-describedby` can resolve
  * to it. One function so every call site derives the same id from the same
  * field id - a mismatch here is a dangling `aria-describedby`, the likeliest
- * way to get this wrong (SCRUM-593).
+ * way to get this wrong.
  */
 export const fieldErrorId = (fieldId: string): string => `${fieldId}-error`;
 

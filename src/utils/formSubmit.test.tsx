@@ -2,7 +2,7 @@ import type { KeyboardEvent } from "react";
 import { preventEnterSubmitFromReadOnlyInput } from "./formSubmit";
 
 /**
- * SCRUM-594. The handler cancels the *default action* of a keydown, so the two
+ * The handler cancels the *default action* of a keydown, so the two
  * ways to get it wrong are opposite: cancelling too little lets a picker's
  * Enter save the profile, and cancelling too much - any key, or any input -
  * takes Tab, arrows or typing away from a field. The component tests cover the

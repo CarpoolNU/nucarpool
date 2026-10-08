@@ -60,13 +60,11 @@ export const milesEastOf = (from: Coord, miles: number): Coord => ({
 /**
  * A schedule time, built as the UTC instant the scorer reads.
  *
- * This used to be a local-time constructor, chosen to match `minutesApart`'s
- * `Date#getHours`. Both sides have moved to UTC, because that is what a
- * `@db.Time(0)` column stores and what Prisma hands back - so `at(9)` now
- * *is* a nine-o'clock schedule time rather than one only after the host's
- * offset has been cancelled out. The value no longer depends on the runner's
- * zone at all, which is what lets `test.yml` run the whole suite under a second
- * zone and expect identical answers.
+ * `@db.Time(0)` stores a UTC time of day and Prisma hands it back the same
+ * way, so `at(9)` is a nine-o'clock schedule time with no host-zone offset to
+ * cancel out. The value does not depend on the runner's zone at all, which is
+ * what lets `test.yml` run the whole suite under a second zone and expect
+ * identical answers.
  *
  * The date is arbitrary and unread; only the clock component matters.
  */

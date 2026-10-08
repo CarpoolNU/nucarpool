@@ -5,9 +5,9 @@ import { RequestFunnel } from "./types";
  * both read. Pure, so the arithmetic is testable without rendering anything.
  *
  * **A stage can exceed the one before it, and this does not hide that.** A
- * request row is erased when a pair parts, and requests accepted before
- * `markRequestAccepted` existed were never flipped to ACCEPTED, so a rider can
- * sit in a group with no ACCEPTED request behind them. Clamping such a stage
+ * request row is erased when a pair parts, and `markRequestAccepted` does not
+ * retroactively flip older rows, so a rider can sit in a group with no
+ * ACCEPTED request behind them. Clamping such a stage
  * would report a rate the data does not support, and a rate above 100% would
  * read as a bug. Instead the stage carries `exceedsPrevious`, its `rate` is
  * `null`, and the UI says why.

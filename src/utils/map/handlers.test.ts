@@ -1,14 +1,13 @@
 /**
- * The point-click handler used to be a single module-scope variable, which two
- * things made wrong at once.
+ * The point-click handler is keyed to the map it belongs to, not held as a
+ * single module-scope variable.
  *
- * Every map overwrote it. That was invisible while the page built exactly one
- * map and never destroyed it, but the map is now torn down and rebuilt across
- * a client-side navigation, and a second map's handler replaced the first's
- * globally while the first map's listeners still referenced the old closure.
- *
- * And nothing ever cleared it, so the handler - which closes over a
- * `setPopupUser` bound to a specific mounted page - outlived that page.
+ * A module-scope variable would make every map overwrite it: once a map is
+ * torn down and rebuilt across a client-side navigation, a second map's
+ * handler would replace the first's globally while the first map's listeners
+ * still referenced the old closure. It would also never clear on its own, so
+ * a handler - which closes over a `setPopupUser` bound to a specific mounted
+ * page - would outlive that page.
  *
  * Keying the handler to its map fixes both: two maps cannot collide, and the
  * entry is unreachable once the map is.
@@ -43,8 +42,8 @@ describe("point click handlers", () => {
   });
 
   /**
-   * The regression the module-scope variable caused: registering the second
-   * map's handler used to leave the first map answering with it.
+   * The hazard a module-scope variable would cause: registering a second
+   * map's handler would leave the first map answering with it.
    */
   it("does not let a second map overwrite the first map's handler", () => {
     const first = fakeMap("first");

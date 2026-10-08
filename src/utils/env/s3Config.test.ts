@@ -6,15 +6,16 @@ import {
 } from "./s3Config";
 
 /**
- * The bucket configuration, and the invariant that made it worth extracting.
+ * The bucket configuration, and the invariant that makes it worth sharing
+ * from one place.
  *
- * The bucket and region were hardcoded in four places in `uploadToS3.ts` and
- * twice more in `next.config.js` — once for the CSP `img-src`, once for the
- * `images.remotePatterns` host. Those last two are the dangerous pair: the CSP
- * is `Content-Security-Policy-Report-Only` today, so a host Next was allowed to
- * optimise but the CSP did not permit would have been a console violation nobody
- * noticed until someone switched enforcement on. The second describe below pins
- * them to the same value.
+ * `next.config.js` derives both the CSP `img-src` and the
+ * `images.remotePatterns` host from this configuration. Those two are the
+ * dangerous pair to let drift apart: the CSP is
+ * `Content-Security-Policy-Report-Only` today, so a host Next is allowed to
+ * optimise but the CSP does not permit is only a console violation — until
+ * someone switches enforcement on. The second describe below pins them to the
+ * same value.
  */
 
 describe("resolveS3Config", () => {
@@ -83,7 +84,7 @@ describe("next.config.js derives both hosts from the same place", () => {
       .find((directive: string) => directive.startsWith("img-src "));
 
     // The invariant: whatever host the image optimiser may fetch, the CSP
-    // permits. These were two independent literals before.
+    // permits.
     expect(imgSrc).toContain(`https://${host}`);
   });
 });

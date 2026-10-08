@@ -1,17 +1,14 @@
 /**
  * Mapbox request URLs.
  *
- * `mapbox.search` used to build its upstream URL by string concatenation with
- * the user's raw search text spliced into the path:
- *
- *     `https://api.mapbox.com/geocoding/v5/mapbox.places/${input.value}.json?access_token=...&types=${input.types}`
- *
- * `input.value` was an unconstrained `z.string()`, so a `?`, `&` or `#` in the
- * search text changed the request rather than being searched for — a caller
- * could append or override parameters we intended to fix, and an encoded `/`
- * could walk out of `/geocoding/v5/mapbox.places/` to another endpoint on the
- * same host. It also broke legitimate searches: nobody could look up an
- * address containing an ampersand.
+ * Built with `URL`/`URLSearchParams` rather than by splicing the user's raw
+ * search text into a path string. A path built by concatenation would let an
+ * unconstrained `?`, `&` or `#` in the search text change the request instead
+ * of being searched for — a caller could append or override parameters meant
+ * to be fixed, and an encoded `/` could walk out of
+ * `/geocoding/v5/mapbox.places/` to another endpoint on the same host. It
+ * would also break legitimate searches: nobody could look up an address
+ * containing an ampersand.
  *
  * These builders are the single place a Mapbox URL is assembled. They take the
  * access token as an argument rather than reading `serverEnv`, so they carry no
@@ -21,7 +18,8 @@
 /**
  * The forward-geocoding categories the app exposes, keyed by the name the
  * client sends. The Mapbox-facing value is chosen here rather than accepted
- * from the client, which previously passed the pre-encoded string through.
+ * from the client, so the client cannot pass an arbitrary pre-encoded string
+ * through to Mapbox.
  */
 export const MAPBOX_SEARCH_TYPES = {
   address: "address,postcode",

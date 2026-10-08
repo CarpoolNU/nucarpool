@@ -65,11 +65,11 @@ const spacing: Record<string, string> = tailwindConfig.theme.extend.spacing;
 const height: Record<string, string> = tailwindConfig.theme.extend.height;
 
 /**
- * The app used to decide "is mobile" twice, at 640 in `useIsMobile`
- * and at 768 inside `Header`, so every viewport between them got the desktop
- * layout and the mobile bottom navigation at once. These tests guard the two
- * things that would bring that back: the constant drifting from the Tailwind
- * screen, and the boundary comparison being written the wrong way round.
+ * Two different breakpoints deciding "is mobile" - one at 640 and another at
+ * 768 - would put every viewport between them in the desktop layout and the
+ * mobile bottom navigation at once. These tests guard the two things that
+ * would produce exactly that: the constant drifting from the Tailwind screen,
+ * and the boundary comparison being written the wrong way round.
  */
 
 describe("the shared mobile breakpoint", () => {
@@ -283,10 +283,10 @@ describe("the shared mobile navigation height", () => {
   });
 
   /**
-   * The two offsets encode the two intents the old hard-coded numbers
-   * conflated: flush against the bar, versus clear of it. Reading `48` or `64`
-   * told you nothing about which was meant, and the difference between them was
-   * not deliberate.
+   * The two offsets encode two different intents: flush against the bar,
+   * versus clear of it. A hard-coded `48` or `64` would say nothing about
+   * which was meant, and the gap between them would not obviously be
+   * deliberate.
    */
   it("distinguishes flush-with the bar from clear-of it", () => {
     expect(spacing["above-mobile-nav"]).not.toBe(spacing["mobile-nav"]);
@@ -370,10 +370,11 @@ describe("the shared explore-sheet map strip", () => {
 /**
  * The height the onboarding wizard's desktop arrangement needs.
  *
- * The defect was that it needed one at all and nothing said so:
+ * The hazard is that it needs one at all and nothing says so:
  * `desktop:` is a `min-width`, so a phone in landscape - 667px wide, 375px tall
- * - took the desktop branch and got a 500px card centred in a 375px viewport,
- * clipped at both ends with the navigation strip across what was left.
+ * - would take the desktop branch and get a 500px card centred in a 375px
+ * viewport, clipped at both ends with the navigation strip across what is
+ * left.
  *
  * These guard the derivation rather than the number. A test that restated `844`
  * would still pass on the day someone changes the card's height, which is
@@ -477,13 +478,12 @@ describe("the header bar's share of the viewport", () => {
     /* Stated as the complement so the bar and the row cannot add up to
        anything but the viewport.
 
-       **Kept rather than deleted when a 44px floor was put under the
-       bar, and narrowed to what it still proves.** The two fractions are
-       complements of each other and always were; what changed is that the
-       bar's *rendered* height is no longer the fraction at every viewport, so
-       this pair describes the row only above the floor's band. The assertion
-       that the bar and the row still sum to the viewport at any height is the
-       one below, which goes through the lengths rather than the fractions. */
+       **Narrowed to what it still proves, now that the bar has a 44px
+       floor.** The two fractions are complements of each other, but the
+       bar's *rendered* height is the fraction only above the floor's band -
+       so this pair describes the row only in that band. The assertion that
+       the bar and the row still sum to the viewport at any height is the one
+       below, which goes through the lengths rather than the fractions. */
     expect(CONTENT_ROW_VIEWPORT_FRACTION).toBe(0.915);
     expect(HEADER_BAR_VIEWPORT_FRACTION + CONTENT_ROW_VIEWPORT_FRACTION).toBe(
       1,
@@ -1052,13 +1052,13 @@ describe("the admin console's minimum height", () => {
 /**
  * The message panel's height gate.
  *
- * The third of these, and the defect is the same shape as the other two:
- * `desktop:` is a `min-width`, so a phone in landscape is served the desktop
- * conversation panel into a 343px row. What made this one worse than a crowded
- * layout is that the chrome does not shrink - 145px of header and a 53px tab
- * strip came off the top, and `SendBar`'s min-content height took the rest, so
- * the conversation was left with its own padding and nothing else:
- * `contentHeight` 0, with a `scrollHeight` of 220 behind it.
+ * The third of these, and the hazard is the same shape as the other two:
+ * `desktop:` is a `min-width`, so a phone in landscape would be served the
+ * desktop conversation panel into a 343px row. What makes this one worse than
+ * a crowded layout is that the chrome does not shrink - 145px of header and a
+ * 53px tab strip come off the top, and `SendBar`'s min-content height takes
+ * the rest, so the conversation would be left with its own padding and
+ * nothing else: `contentHeight` 0, with a `scrollHeight` of 220 behind it.
  *
  * These guard the derivation rather than the number, for the reason the
  * wizard's docblock gives: a test restating 489 would still pass on the day one

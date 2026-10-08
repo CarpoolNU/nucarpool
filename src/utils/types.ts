@@ -7,8 +7,9 @@ type RouterOutput = inferRouterOutputs<AppRouter>;
 /**
  * Admin dashboard shapes.
  *
- * The dashboard no longer downloads tables and reduces them in the browser; the
- * router returns finished aggregates instead. These describe that contract.
+ * The dashboard renders from finished aggregates the router returns; it does
+ * not download tables and reduce them in the browser. These describe that
+ * contract.
  */
 
 /** Everything `UserManagement` needs to list users and change a permission. */
@@ -228,12 +229,12 @@ export type PublicUser = {
    * person it names, because anyone can create one unilaterally; see
    * `convertRequestCounterpart`.
    *
-   * Optional rather than nullable-and-always-set on purpose: the bulk list
-   * endpoints shipped every active user's Northeastern address to any signed-in
-   * viewer, on screens that never displayed it, so `email` is now supplied by
-   * `convertCarpoolSearchToPublicWithExactHome` alone. Making it optional is
-   * what lets the type system tell the two payloads apart, rather than leaving
-   * the distinction to whoever remembers it.
+   * Optional rather than nullable-and-always-set on purpose: `email` is
+   * supplied only by `convertCarpoolSearchToPublicWithExactHome`, never by the
+   * bulk-list endpoints that return every active user's data to any signed-in
+   * viewer. Making it optional is what lets the type system tell the two
+   * payloads apart, rather than leaving the distinction to whoever remembers
+   * it.
    */
   email?: string | null;
   image: string | null;

@@ -79,9 +79,9 @@ const pausedSearchExplanation = (name: string): string =>
  * Why a favourite cannot be carpooled with *right now*, or `null` when they
  * can.
  *
- * `favorites.me` used to drop any favourite whose role matched the caller's,
- * was VIEWER, or whose search was INACTIVE. That left no card, so no star, so
- * no way to un-favourite them — the `_Favorites` row became permanent and
+ * Hiding a favourite whose role matches the caller's, is VIEWER, or whose
+ * search is INACTIVE would leave no card, so no star, so no way to
+ * un-favourite them — the `_Favorites` row would become permanent and
  * invisible. Favourites are a list the user curated, so they survive the other
  * person changing role or pausing, exactly as requests do; this is the copy
  * that makes the entry read as explained rather than broken.
@@ -122,12 +122,11 @@ export const carpoolUnavailableExplanation = (
 /**
  * Why a request cannot be acted on *right now*, or `null` when it can.
  *
- * The request counterpart of `carpoolUnavailableExplanation`. `requests.me`
- * used to drop any request whose counterpart's search was INACTIVE, which left
- * the pair with no card, no Withdraw control, and a duplicate guard in
- * `requests.create` that still answered every retry with CONFLICT — the status
- * half of the dead end closed for roles, one filter away in the same
- * function.
+ * The request counterpart of `carpoolUnavailableExplanation`. Dropping a
+ * request whose counterpart's search is INACTIVE would leave the pair with no
+ * card, no Withdraw control, and a duplicate guard in `requests.create` that
+ * still answers every retry with CONFLICT — the status half of the same dead
+ * end role filtering closes, one filter away in the same function.
  *
  * Status is answered before role for the same reason it is in
  * `carpoolUnavailableExplanation`: someone who has paused is not looking for a

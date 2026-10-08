@@ -3,15 +3,13 @@ import { CROP_BOX_PX, minZoomToFill } from "./cropZoom";
 /**
  * The zoom arithmetic behind the profile-picture cropper.
  *
- * **Why this is a pure module with its own test.** The bug it exists to fix
- * was invisible in every way CI can see: `onMediaLoaded` computed a zoom
- * factor from the source photo's *natural* pixels, but zoom scales the
- * *displayed* media, so the number was dimensionally wrong - and the result
- * was then overwritten with `1` outright for any image larger than 300px.
- * jsdom performs no layout and implements no canvas, so neither the framing
- * nor the black bands it produced can be asserted from a rendering test. The
- * arithmetic can, and that is where this was wrong, so it is separated out and
- * stated as a table here - the same split `cropImage.ts` uses for
+ * **Why this is a pure module with its own test.** jsdom performs no layout
+ * and implements no canvas, so neither the cropper's framing nor any black
+ * bands it produces can be asserted from a rendering test. The arithmetic
+ * can: a zoom factor computed from the source photo's *natural* pixels, when
+ * zoom scales the *displayed* media, would be dimensionally wrong in a way
+ * invisible in every other way CI can see. So the arithmetic is separated out
+ * and stated as a table here - the same split `cropImage.ts` uses for
  * `croppedCanvasSize`, and `sheetDetents.ts` for the same reason.
  *
  * The numbers below are not invented. They are the layout react-easy-crop
@@ -190,7 +188,7 @@ describe("minZoomToFill", () => {
 
     it("zooms a square photo out, so the whole of it fills the box", () => {
       // 300 / 359, below 1. Nothing privileges 1: it is just the contain-fit
-      // layout's own scale. Pinning the minimum there used to crop a square
+      // layout's own scale. Pinning the minimum there would crop a square
       // photo's edges away for no reason.
       expect(
         minZoomToFill(

@@ -7,40 +7,33 @@ import { isValidCoordinates } from "./coordinates";
 import { planViewRoute } from "./viewRoutePlan";
 
 /**
- * The **View Route** click handler, lifted out of `pages/index.tsx`.
+ * The **View Route** click handler, lifted out of `pages/index.tsx` so it is
+ * testable without rendering a 1300-line page against Mapbox, NextAuth and a
+ * dozen tRPC queries.
  *
  * `onViewRouteClick` is now a `useCallback` that forwards to this. The move is
- * deliberate rather than tidying: the bug fixed there - a
- * branch that could never be true, so the route was never drawn for anyone the
- * map was not already plotting - lived for ten months because nothing could
- * execute this code without rendering a 1300-line page against Mapbox,
- * NextAuth and a dozen tRPC queries. `planViewRoute` makes the *decision*
- * testable; this makes "and then the route is actually drawn" testable, which
- * is the half that was missing.
+ * deliberate rather than tidying: a branch that can never be true here would
+ * mean the route is never drawn for anyone the map is not already plotting,
+ * and nothing short of extraction can catch that. `planViewRoute` makes the
+ * *decision* testable; this makes "and then the route is actually drawn"
+ * testable, which is the other half.
  *
- * Everything the page used to read from its closure arrives as an argument, so
+ * Everything this needs arrives as an argument rather than through closure, so
  * the only imports are the map helpers - which a test replaces with
  * `jest.mock`. It stays a plain function rather than a hook: it runs entirely
  * in response to a click and holds no state of its own.
  */
 
 /**
- * that change's `DestinationMarkerRef` and `removeDestinationMarker` **were
- * here, and have been removed.**
+ * `clearOtherUserMarkers`, called at the top of this handler, removes every
+ * pin by asking the map which layers exist rather than tracking identity by
+ * reference.
  *
- * They existed because pin removal was keyed by identity: a pin is a named
- * layer, so the only way to take one off was to have remembered whose it was.
- * One pin at a time was the model, and it worked for this handler - but
- * `onViewGroupRoute` adds a pin per group member and remembered none, so its
- * pins were never removed by anything. Extending the ref to a set would have
- * kept the bookkeeping, and a bookkeeping slip here shows up as a stray pin
- * nobody traces back.
- *
- * `clearOtherUserMarkers` asks the map which layers exist instead, which cannot
- * forget one. With it running at the top of this function there is no
- * remembered pin left to remove, so the ref, the remover, the page's
- * `destinationMarker` and `ViewRoutePlan.removesDestinationMarkerFor` all went
- * together.
+ * A single remembered ref works for one pin at a time, which is this
+ * handler's own model - but `onViewGroupRoute` adds a pin per group member,
+ * and a set of individually tracked refs is bookkeeping that a slip turns
+ * into a stray pin nobody traces back. Asking the map instead cannot forget
+ * one, for either caller.
  */
 
 export const runViewRouteClick = ({
@@ -67,10 +60,9 @@ export const runViewRouteClick = ({
   setPoints: (value: [number, number][]) => void;
 }): void => {
   // Take off every pin the previous view left - the group preview's markers for
-  // each member, and this handler's own pin from the last click:
-  // before the sweep, only the rider *start* markers were cleared here, so the
-  // group's destination pins stayed behind an individual route with nothing
-  // explaining them.
+  // each member, and this handler's own pin from the last click - before
+  // drawing anything new, so no destination pin sits behind an individual
+  // route with nothing explaining it.
   if (map) {
     clearOtherUserMarkers(map);
   }

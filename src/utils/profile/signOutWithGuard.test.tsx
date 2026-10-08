@@ -7,12 +7,10 @@
  * because `persistence: "localStorage"` those survive the tab being closed.
  *
  * It lives here rather than in a component test because this function is the
- * single choke point both sign-out buttons go through. The set of exits from
- * the profile page was famously not written down anywhere, and was discovered
- * one exit at a time, each in its own fix; putting the reset beside `signOut`
- * itself is what keeps a third button from missing it.
+ * single choke point every sign-out button goes through; putting the reset
+ * beside `signOut` itself is what keeps any future exit from missing it.
  *
- * A `.test.tsx` so it lands in the jsdom project. The module now imports
+ * A `.test.tsx` so it lands in the jsdom project. The module imports
  * `utils/mixpanel`, which calls `mixpanel.init` at module scope, and the
  * `mixpanel-browser` stub in `jest.config.js` is scoped to that project.
  */

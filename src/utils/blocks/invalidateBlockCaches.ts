@@ -5,9 +5,9 @@ import type { trpc } from "../trpc";
  *
  * The server hides a blocked pair from each other in all of these, so after
  * either mutation each one has to be read again. One function rather than a
- * list beside each mutation, because `requestHandlers.ts` records how two
- * copies of such a list drifted apart, and `utils/trpc.ts` turns off refetch
- * on mount and on focus, so nothing else would refresh them.
+ * list beside each mutation, because separate copies of such a list drift out
+ * of sync with each other, and `utils/trpc.ts` turns off refetch on mount and
+ * on focus, so nothing else would refresh them.
  *
  * `messages.conversation` is invalidated with no input, so every cached thread
  * is refetched, and the one with the blocked person comes back FORBIDDEN.

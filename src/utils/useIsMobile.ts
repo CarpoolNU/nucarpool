@@ -31,19 +31,16 @@ const getSnapshot = () => isMobileWidth(window.innerWidth);
  * What the server must render, and therefore what hydration must start from.
  *
  * `false` - the desktop layout - because `getServerSideProps` runs where there
- * is no `window` and the server has no way to know the device. This is the
- * same default the old `useState(false)` produced; the difference is that it
- * is now stated as a server snapshot rather than being an initial value that
- * happened to double as one.
+ * is no `window` and the server has no way to know the device.
  */
 const getServerSnapshot = () => false;
 
 /**
  * The single source of "is this a mobile viewport".
  *
- * `Header` used to run its own `<= 768` check that disagreed with this one,
- * producing a desktop layout wearing the mobile navigation between the two
- * values. One definition, in `utils/breakpoints.js`.
+ * One definition, in `utils/breakpoints.js`, read by both this hook and
+ * `Header` - so a layout decision and the navigation it renders can never
+ * land on opposite sides of the line.
  *
  * **Why `useSyncExternalStore` and not `useState` plus an effect.** An effect
  * runs *after* the render that scheduled it, so a `useState(false)` hook renders

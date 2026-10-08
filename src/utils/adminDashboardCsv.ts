@@ -10,7 +10,7 @@ import { AdminDashboardSeries, AdminDashboardStats } from "./types";
 /**
  * CSV formatting for the admin dashboard export.
  *
- * Privacy decision, recorded per the ticket's acceptance criteria: every
+ * Privacy decision: every
  * column below comes straight from `user.admin.getDashboardStats` /
  * `getDashboardSeries` — the exact aggregates `AdminData` already renders on
  * screen. No individual-level or PII column is included, and none of these

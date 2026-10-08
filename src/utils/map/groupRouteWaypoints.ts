@@ -3,12 +3,9 @@ import { PublicUser } from "../types";
 /**
  * The order a group route visits everybody in.
  *
- * Lifted out of `onViewGroupRoute` in `pages/index.tsx` for the reason
- * given for `viewRoutePlan.ts`: this is the only part of the group
- * route with a right and a wrong answer, and until now no test could reach it
- * without rendering a 1300-line page against Mapbox, NextAuth and a dozen tRPC
- * queries. It is unchanged in behaviour — the extraction is what is needed
- * so that `groupRouteClick.ts` can be tested at all.
+ * This is the only part of the group route with a right and a wrong answer,
+ * which is why it is a standalone, directly testable function rather than
+ * inline in `groupRouteClick.ts`.
  *
  * The algorithm is a constraint-aware nearest neighbour. Start at the driver's
  * home; repeatedly go to the closest point that is *legal* right now; end at
@@ -98,10 +95,7 @@ export const planGroupWaypoints = (
     candidatePoints.sort((a, b) => a.distance - b.distance);
 
     // The nearest candidate is always the valid one, so take it. Every
-    // candidate above is already legal by construction. This replaced a loop
-    // whose `if`/`else` branches were identical and both broke on the first
-    // element, so it selected `candidatePoints[0]` while reading as a
-    // constraint check.
+    // candidate above is already legal by construction.
     const chosenCandidate = candidatePoints[0];
 
     if (!chosenCandidate) break;

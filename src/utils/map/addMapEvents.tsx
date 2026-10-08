@@ -35,20 +35,18 @@ const addMapEvents = (
     });
   });
 
-  // A third binding of `handlePointClick` stood here: a generic `click`
-  // listener that filtered every symbol layer out of the style and ran
-  // `queryRenderedFeatures` across all of them, on every click anywhere on the
-  // map - the empty ocean included.
-  //
-  // It never once opened a popup. Mapbox populates `event.features` only for a
+  // `handlePointClick` is bound only to these two layers, never as a generic
+  // unscoped `click` listener. Mapbox populates `event.features` only for a
   // listener registered against a layer ("If no `layerId` was specified when
   // adding the event listener, `features` will be `undefined`"), and
-  // `createPointClickHandler` opens with `if (!e.features) return`. So every
-  // click paid for a full render query whose result was thrown away, and the
-  // two layer-scoped bindings below were always the path that did the work.
+  // `createPointClickHandler` opens with `if (!e.features) return` - so an
+  // unscoped listener would pay for a full render query on every click
+  // anywhere on the map, including the empty ocean, and throw the result away
+  // without ever opening a popup.
   //
-  // Which is why they stay. Deleting them instead - the symmetric-looking
-  // change - stops every pin answering a tap, with no error to show for it.
+  // These two bindings are the only path that opens a popup. Removing them -
+  // even though a generic listener looks like an equivalent catch-all - stops
+  // every pin answering a tap, with no error to show for it.
   map.on("click", "riders", handlePointClick);
   map.on("click", "drivers", handlePointClick);
 
@@ -59,11 +57,10 @@ const addMapEvents = (
     map.getCanvas().style.cursor = "";
   });
 
-  // The recentre control used to be wired here with
-  // `document.getElementById("fly").addEventListener(...)`. That reached outside
-  // React's lifecycle: the listener was never removed, and it bound only if the
-  // button happened to already be in the DOM when the map finished loading. The
-  // button now owns its own onClick.
+  // The recentre control is wired through the button's own onClick, not here.
+  // Keeping it inside React's lifecycle means it is bound once the button
+  // mounts rather than depending on `document.getElementById` finding it
+  // already in the DOM, and it is cleaned up when the button unmounts.
 };
 
 export default addMapEvents;

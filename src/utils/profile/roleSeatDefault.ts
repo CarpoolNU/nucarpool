@@ -1,7 +1,7 @@
 /**
  * The seat count a **role change** implies, and the form wiring that applies it.
  *
- * Both profile forms used to do this in an effect keyed on `role`:
+ * This is deliberately **not** an effect keyed on `role`:
  *
  * ```ts
  * useEffect(() => {
@@ -11,40 +11,40 @@
  * }, [setValue, watch, role]);
  * ```
  *
- * The intent was "give a driver a usable starting value when they *switch* to
- * DRIVER". An effect cannot express that, because it cannot tell a switch from
- * the form being **populated** — and the mount sequence guarantees the latter:
- * `profileDefaultValues.role` is `RIDER`, so `role` is `RIDER` on first render;
- * `user.me` then resolves and `reset(...)` writes the stored `role` and
- * `seatAvail`; `role` becomes `DRIVER`, the effect re-runs, reads the
- * just-restored `seatAvail`, sees `0`, and overwrites it with `1`.
+ * An effect like that cannot tell "give a driver a usable starting value when
+ * they *switch* to DRIVER" from the form simply being **populated** — and the
+ * mount sequence makes both look identical: `profileDefaultValues.role` is
+ * `RIDER`, so `role` is `RIDER` on first render; `user.me` then resolves and
+ * `reset(...)` writes the stored `role` and `seatAvail`; `role` becomes
+ * `DRIVER`, the effect re-runs, reads the just-restored `seatAvail`, sees `0`,
+ * and overwrites it with `1`.
  *
  * `0` is not a missing default. `carpoolSeats.ts` records that `seats_avail`
  * "starts as the capacity they enter during onboarding and is decremented as
  * riders join", and that capacity is never stored separately — so a driver at
- * `0` has a **full car**. Merely opening `/profile` told the platform they had
- * a seat free, and the next save persisted it, whatever field they had actually
- * come to edit. `reserveSeat` decrements under `seatsAvail: { gt: 0 }`, so the
- * invented seat was immediately spendable and the car ended up over-subscribed
- * with the over-subscription visible to nobody — least of all the driver, whose
- * profile now showed `1` as though they had typed it.
+ * `0` has a **full car**. An effect keyed only on `role` would tell the
+ * platform a seat is free merely by loading the page, and `reserveSeat`
+ * decrements under `seatsAvail: { gt: 0 }`, so that invented seat would be
+ * immediately spendable and the car would end up over-subscribed with no sign
+ * of it anywhere — least of all the driver's own profile, which would show
+ * `1` as though they had typed it.
  *
  * The fix is to run the coercion where the ambiguity does not exist: the role
  * radio's own `onChange`, which fires only when a person picks a different
  * role. That is what `registerRoleWithSeatDefault` below is for.
  *
- * Deliberately **not** a `useRef` remembering the previous role, which was the
- * other candidate. The ref has to be re-baselined by the `reset(...)` effect so
- * population is not mistaken for a transition, and the two effects race: on a
- * render where `user` is already cached, the reset effect writes the ref before
- * the coercion effect reads a `role` that is still the *previous* render's
- * value, and the coercion fires on a transition that never happened. An event
- * handler has no such ordering to get wrong.
+ * Deliberately **not** a `useRef` remembering the previous role, either. The
+ * ref would have to be re-baselined by the `reset(...)` effect so population
+ * is not mistaken for a transition, and the two effects would then race: on a
+ * render where `user` is already cached, the reset effect could write the ref
+ * before the coercion effect reads a `role` that is still the *previous*
+ * render's value, firing the coercion on a transition that never happened. An
+ * event handler has no such ordering to get wrong.
  *
  * `previousRole` is still a parameter of the decision rather than being assumed
  * from the call site. It keeps the rule ("a *transition* implies a seat count")
  * stated rather than implied, makes a same-value change event a no-op, and
- * lets `roleSeatDefault.test.ts` assert the property that actually broke —
+ * lets `roleSeatDefault.test.ts` assert the property that matters most —
  * that populating the form with a role is not a role change — without a DOM.
  */
 

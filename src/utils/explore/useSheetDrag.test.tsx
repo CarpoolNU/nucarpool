@@ -28,10 +28,10 @@ import type { SheetDetent } from "./sheetDetents";
  *  - the click that follows a drag does **not** also toggle, or releasing at
  *    `half` would be collapsed a moment later by the tap handler;
  *  - a release lands on a detent, and a cancel lands on none;
- *  - a drag begins from a *collapsed* sheet with no expanded render behind it,
- *    which is the regression this hook fixed and the one this environment can
- *    genuinely speak to, since the range is now arithmetic over a measured
- *    edge rather than a cached measurement;
+ *  - a drag begins from a *collapsed* sheet with no expanded render behind it
+ *    - the case a cached range would miss, and the one this environment can
+ *    genuinely speak to, since the range is arithmetic over a measured edge
+ *    rather than a cached measurement;
  *  - a sheet with no geometry, or a view that is not a detent, degrades to
  *    tap-only rather than dragging against a zero-height range;
  *  - keyboard activation reaches the tap path, since a `click` with no pointer
@@ -298,11 +298,10 @@ describe("a drag", () => {
   });
 
   it("drags against the viewport it is in, not the one it last saw", () => {
-    // The staleness the old cache carried: rotating with the sheet closed left
-    // the previous viewport's range in a ref, because only an expanded render
-    // refreshed it. Nothing is kept between gestures now, so a shorter
-    // viewport is simply a shorter range - here 288, whose detents are 0, 144
-    // and 288 rather than 0, 200 and 400.
+    // Nothing is kept between gestures, so rotating the viewport while the
+    // sheet is collapsed changes the range immediately rather than carrying a
+    // stale one forward: a shorter viewport is simply a shorter range - here
+    // 288, whose detents are 0, 144 and 288 rather than 0, 200 and 400.
     const { handle, onDetentChange, rerender } = setup("expanded");
 
     sheetHeightPx = 0;

@@ -2,13 +2,13 @@
  * Collapses a React Query result into the three states the UI actually renders
  * differently.
  *
- * Every page used to destructure `data` alone, usually with an empty default:
+ * Destructuring `data` alone, usually with an empty default:
  *
  *     const { data: recommendations = [] } = trpc.user.recommendations.me.useQuery();
  *
- * which makes a failed request indistinguishable from "no results", and on the
- * map page indistinguishable from "still loading" - `user.me` failing left
- * `data` undefined forever behind a spinner that never resolved. Deriving the
+ * makes a failed request indistinguishable from "no results", and on the map
+ * page indistinguishable from "still loading" - `user.me` failing leaves
+ * `data` undefined forever behind a spinner that never resolves. Deriving the
  * state in one place means the three cases cannot be conflated by accident, and
  * means the derivation itself is testable without a DOM.
  */
@@ -33,8 +33,9 @@ export type QueryLike = {
 
 /**
  * `isError` is checked first on purpose. A query that has failed is also not
- * loading, but if it ever reports both, "error" is the state worth showing - a
- * spinner that is really a failure is the exact bug this replaces.
+ * loading, but if it ever reports both, "error" is the state worth showing -
+ * showing a spinner for what is really a failure would leave the user waiting
+ * on something that is not coming.
  */
 export const toQueryState = (query: QueryLike): QueryState => ({
   status: query.isError ? "error" : query.isLoading ? "loading" : "ready",
@@ -73,9 +74,9 @@ export const combineQueryStates = (...states: QueryState[]): QueryState => ({
  * It is wrong where the gate means "not yet". `UserManagement` and `AdminData`
  * hold their queries for the one render pass that might be hydration, and the
  * data really is still coming, so `ready` would draw an empty frame for a pass
- * and then fill it. Before this existed `UserManagement` expressed that with a
- * `useState(true)` cleared only by data arriving - which is also why a failure
- * never cleared it.
+ * and then fill it. A hand-rolled boolean flag cleared only by data arriving
+ * has the same shape and the same flaw: a failure never clears it, leaving
+ * the spinner stuck forever.
  *
  * `retry` is a no-op because there is nothing to retry: the query has not run.
  */

@@ -3,17 +3,14 @@
  * handle resolves to.
  *
  * The handle is drawn as a grabber pill — 8×80px, rounded, centred on the top
- * edge of a rounded sheet — which is the standard iOS and Android "drag me"
- * affordance, reinforced by `cursor-pointer`. It was a `<button>` with nothing
- * but `onClick`, and the repository contained no touch or pointer handling at
- * all, so the first thing a user tried failed silently. The product owner
- * reported it as "I can't slide the tab up and down, instead I have to click
- * it then it goes down."
+ * edge of a rounded sheet — the standard iOS and Android "drag me" affordance,
+ * reinforced by `cursor-pointer`. Dragging the pill moves the sheet
+ * continuously between its resting positions, in addition to the tap that
+ * toggles it between two of them.
  *
  * Two detents make a drag pointless — anywhere you release, you get what a tap
  * would have given you — so `half` exists to give the gesture somewhere to
- * land. It is the only new state; `collapsed` and `expanded` are the two that
- * were always there, with the heights they always had.
+ * land. It is the only state besides `collapsed` and `expanded`.
  *
  * **Everything here is pure, and that is deliberate.** The gesture itself
  * cannot be tested in this repository: jsdom does no layout, every element
@@ -75,12 +72,11 @@ export const isTap = (deltaPx: number): boolean =>
   Math.abs(deltaPx) <= TAP_SLOP_PX;
 
 /**
- * What a tap does, unchanged from before the sheet could be dragged.
+ * What a tap does.
  *
- * Deliberately *not* a three-way cycle. Tapping used to flip between the two
- * states and the label says as much — "Show the list" / "Hide the list" — so a
- * tap from `half` collapses, because anything other than `collapsed` reads as
- * open and the control offers to close it.
+ * Deliberately *not* a three-way cycle. The label reads "Show the list" /
+ * "Hide the list", so a tap from `half` collapses: anything other than
+ * `collapsed` reads as open, and the control offers to close it.
  */
 export const toggleSheetDetent = (detent: SheetDetent): SheetDetent =>
   detent === "collapsed" ? "expanded" : "collapsed";
@@ -128,11 +124,12 @@ export const defaultSheetDetent = (role?: Role): SheetDetent =>
 /**
  * The sheet's expanded height, derived from the bottom edge it is pinned to.
  *
- * **This is what lets a drag start from any detent.** The height used to be
- * read off the sheet itself during an expanded render and cached, so the range
- * did not exist until the sheet had been expanded once — and once a VIEWER's
- * sheet started opening `collapsed` by default, that made that role's first
- * gesture on the handle fall through to the tap path.
+ * **This is what lets a drag start from any detent.** Reading the height off
+ * the sheet itself during an expanded render and caching it would leave no
+ * range at all until the sheet had been expanded once, which breaks for a
+ * VIEWER: that role's sheet opens `collapsed` by default, so its first
+ * gesture on the handle would have no range to drag within and would fall
+ * through to the tap path.
  *
  * The derivation is exact rather than approximate, and the reason is where the
  * sheet's offsets resolve against. `h-mobile-sheet` is
@@ -227,10 +224,9 @@ export const dragHeightPx = ({
  * the lift up from `collapsed`; below that, this floors at the collapsed rest
  * instead of dipping past it.
  *
- * Before this existed the drag wrote `sheetBottomInsetPx + heightPx` with no
- * lift term at all, so the pill sat exactly on the sheet's edge for the whole
- * gesture and corrected by the lift the instant the finger lifted - dropping
- * 8px at `half` and `expanded`, and jumping up 8px at `collapsed`.
+ * Without a lift term, the pill would sit exactly on the sheet's edge for the
+ * whole gesture and only reach its resting offset once the finger lifted -
+ * reading as an 8px jump at the end of every gesture.
  */
 export const handleBottomPx = ({
   sheetBottomInsetPx,

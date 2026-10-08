@@ -124,10 +124,9 @@ describe("evaluateSeedTarget", () => {
   });
 
   /**
-   * `SEED_ALLOW_REMOTE` was removed; it turned the refusal below off
-   * for any host — production included. These pin that no argument brings it
-   * back: `evaluateSeedTarget` now takes one parameter, and the only route to
-   * `allowed: true` is membership of `LOCAL_HOSTNAMES`.
+   * These pin that no argument can turn the refusal below off for any host,
+   * production included: `evaluateSeedTarget` takes one parameter, and the
+   * only route to `allowed: true` is membership of `LOCAL_HOSTNAMES`.
    */
   describe("the two hosts this exists to refuse", () => {
     it("blocks PlanetScale main", () => {
@@ -176,9 +175,8 @@ describe("describeBlockedSeed", () => {
   });
 
   it("offers no way to proceed against the refused host", () => {
-    // The message used to end with `SEED_ALLOW_REMOTE=1 yarn seed`. Advertising
-    // an escape hatch in the refusal is how one gets used; there is no longer
-    // one to advertise, and the text must not imply otherwise.
+    // Advertising an escape hatch in the refusal message is how one gets
+    // used, so the text must not imply one exists.
     const message = describeBlockedSeed(evaluateSeedTarget(REMOTE_URL));
     expect(message).not.toContain("SEED_ALLOW_REMOTE");
     expect(message).toContain("There is no override");

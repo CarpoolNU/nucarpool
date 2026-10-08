@@ -8,40 +8,17 @@ import { acquirePusherClient, releasePusherClient } from "../pusherClient";
  * arrives, and again when the transport reconnects, for the notifications that
  * fired while it was down.
  *
- * This subscription lived inside `Header`, and what it did on an incoming
- * `sendNotification` was increment a local counter that the badge then
- * displayed *instead of* the server's count. It now invalidates
- * `getUnreadMessageCount`, which is the mechanism
- * [`MessageContent`](../../components/Messages/MessageContent.tsx) already uses
- * after marking a thread read — so both directions go through one path and the
+ * Invalidates `getUnreadMessageCount`, the same mechanism
+ * [`MessageContent`](../../components/Messages/MessageContent.tsx) uses after
+ * marking a thread read — so both directions go through one path and the
  * badge cannot drift from the database.
  *
- * **Why the increment had to go, beyond the wrong number.** It was performed
- * from inside an updater handed to a *different* component's `setSidebar`,
- * using the setter as a way to read state:
- *
- * ```ts
- * setSidebarRef.current?.((prev) => {
- *   if (prev !== "requests") {
- *     setCurrentunreadMessagesCount((count) => count + 1);
- *   }
- *   return prev;
- * });
- * ```
- *
- * Updaters must be pure — React is free to call them more than once, and
- * `next.config.js` sets `reactStrictMode: true`, which double-invokes them in
- * development. So the badge counted two per message locally. Invalidation is
- * idempotent, so replaying it is harmless.
- *
- * **The `prev !== "requests"` condition is deliberately not carried over.** It
- * suppressed the bump while the user was looking at the Requests tab, but the
- * notification channel is per *user*, not per conversation: a message in some
- * other thread while that tab is open is real unread mail and should be
- * counted. Under invalidation the question answers itself — the count is
- * whatever the server says, and a thread the user actually opens is marked read
- * by `MessageContent`, which brings it back down. Nothing needs to read the
- * sidebar, so nothing does.
+ * **Not filtered by which tab is open.** The notification channel is per
+ * *user*, not per conversation, so a message in another thread is real unread
+ * mail and should be counted regardless of what the sidebar shows. The count
+ * is whatever the server says, and a thread the user actually opens is marked
+ * read by `MessageContent`, which brings it back down. Nothing needs to read
+ * the sidebar state, so nothing does.
  *
  * **Lifting it out of `Header` is what makes any of this testable.** `Header`
  * cannot be rendered without a router, a tRPC client, a portal and a
@@ -55,11 +32,10 @@ export function useUnreadNotifications(userId: string | undefined): void {
 
   /**
    * Held in a ref so the subscription effect below can depend on `userId`
-   * alone. That dependency list is load-bearing: `Header` used to depend on
-   * `props.data`, an object literal its parent rebuilds on every filter change,
-   * query settle, map event and hover, so the effect tore down and re-ran
-   * continuously and opened a fresh WebSocket each time. Pusher meters peak
-   * concurrent connections, so it cost money as well as sockets.
+   * alone. That dependency list is load-bearing: anything less stable would
+   * tear down and re-run the effect on every re-render that changes it,
+   * opening a fresh WebSocket each time — and Pusher meters peak concurrent
+   * connections, so that costs money as well as sockets.
    *
    * `trpc.useUtils()` is in fact memoized on the tRPC context, so depending on
    * `utils` directly would probably be stable too — but **the nested accessor

@@ -1,12 +1,11 @@
 /**
  * The seat-count-on-role-change decision.
  *
- * The defect this pins is not a wrong value but a wrong *occasion*: the rule
- * was correct for a role switch and ran on form population as well, so opening
- * `/profile` rewrote a full driver's `seats_avail` from `0` to `1` and the next
- * save persisted it. The assertion that matters is therefore the
- * `previousRole === nextRole` one — everything else here was already true of
- * the effect this replaced.
+ * What matters is the *occasion*, not the value: `seatAvailOnRoleChange` must
+ * tell a real role switch apart from the form simply being populated with a
+ * stored role, since opening `/profile` and saving should never rewrite a
+ * full driver's `seats_avail` from `0` to `1`. The assertion that carries that
+ * distinction is `previousRole === nextRole`.
  */
 
 import { Role } from "@prisma/client";
@@ -17,9 +16,9 @@ const ROLES = [Role.VIEWER, Role.RIDER, Role.DRIVER];
 
 describe("seatAvailOnRoleChange", () => {
   describe("populating the form is not a role change", () => {
-    // The regression itself. `reset(...)` restores the stored role, so the
-    // "previous" and "next" role are the same value; whatever seat count came
-    // out of the database has to survive it.
+    // `reset(...)` restores the stored role, so the "previous" and "next"
+    // role are the same value; whatever seat count came out of the database
+    // has to survive it.
     it.each(ROLES)("leaves %s alone at every in-range seat count", (role) => {
       for (let seats = 0; seats <= MAX_SEATS_AVAILABLE; seats++) {
         expect(seatAvailOnRoleChange(role, role, seats)).toBeNull();

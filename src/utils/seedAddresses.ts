@@ -1,12 +1,12 @@
 /**
  * Address generation for `prisma/seed.ts`.
  *
- * The seed needs a street/city/state for two locations per user. It used to call
- * Mapbox reverse geocoding for every one of them — roughly 140 requests per seed,
- * against a shared API quota, on a script whose whole purpose is throwaway local
- * data. Worse, without `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` every one of those calls
- * failed and fell back to the same hardcoded "123 Main St, Boston, MA", so all 70
- * users ended up at one address.
+ * The seed needs a street/city/state for two locations per user. Reverse
+ * geocoding every one of them against Mapbox would cost roughly 140 requests
+ * per seed, against a shared API quota, on a script whose whole purpose is
+ * throwaway local data — and without `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN`, every
+ * one of those calls fails and falls back to the same hardcoded
+ * "123 Main St, Boston, MA", collapsing every user onto one address.
  *
  * Addresses are therefore synthesised offline by default: deterministic, varied,
  * instant, and free. Real reverse geocoding is still available by setting
@@ -101,10 +101,10 @@ export function isRealGeocodingEnabled(value: string | undefined): boolean {
 /**
  * Extracts street, city and state from Mapbox geocoding features.
  *
- * Preserved from the original inline implementation, including its quirks: the
- * building number is split off the `address` feature's text when the first token
- * is numeric, and a point of interest supplies the display address when present.
- * Extracted so it can be tested without issuing a request.
+ * Its quirks are deliberate, not bugs to clean up: the building number is
+ * split off the `address` feature's text when the first token is numeric, and
+ * a point of interest supplies the display address when present. Kept as a
+ * standalone function so it can be tested without issuing a request.
  */
 export function parseMapboxFeatures(features: MapboxFeature[]): SeedAddress {
   let street = "";

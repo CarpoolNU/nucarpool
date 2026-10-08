@@ -1,11 +1,11 @@
 /**
  * The height half of the breakpoint.
  *
- * `useIsMobile` branches on width alone, which is what handed a landscape
- * phone - 667x375, above the width breakpoint - the full admin console into a
- * content row 343px tall. This hook is the opt-in alternative to that
- * constant: a caller passes its own derived threshold, and no existing
- * layout moves.
+ * `useIsMobile` branches on width alone, so a landscape phone above the width
+ * breakpoint still reads as desktop - exactly the viewport where the full
+ * admin console can land in a content row too short for it. This hook is the
+ * opt-in alternative to that constant: a caller passes its own derived
+ * threshold, and no existing layout moves.
  *
  * The structure below deliberately mirrors `useIsMobile.test.tsx`, including
  * its first-render and listener-balance cases, because the two hooks are read
@@ -244,13 +244,11 @@ describe("the threshold /admin reads", () => {
   it("is composed from the console's own numbers", () => {
     /* 500px shortest chart plus the 32px of `py-4` around the scroll port,
        over the content row's share of the viewport. That share is the
-       complement of the header bar, which now has a 44px floor -
+       complement of the header bar, which has a 44px floor -
        but this threshold is above the height where the floor binds, so the
        figure is unmoved. `breakpoints.test.ts` holds the
        composition; this records the value a reviewer can check the
-       measurements against. Both terms were a description of intent rather
-       than of the page until a later fix: the chart was shrunk below its 500
-       and the 32px was a margin that took nothing out of the row. */
+       measurements against. */
     expect(ADMIN_CONSOLE_MIN_HEIGHT_PX).toBe(582);
   });
 

@@ -7,13 +7,13 @@ import {
 } from "./roleCompatibility";
 
 /**
- * The predicate that used to be spread across `requests.me`,
- * `getUnreadMessageCount` and the recommendation scorer, now in one place.
+ * One shared predicate, rather than one written out at each caller that needs
+ * it.
  *
  * What matters here is that it agrees with discovery about which pairs are
  * possible - `recommendation.ts` drops RIDER/RIDER, DRIVER/DRIVER and any
  * VIEWER, and `candidateSearch.ts`'s `compatibleRoles` is the SQL mirror of the
- * same rule - while `requests.me` no longer uses it to decide visibility.
+ * same rule - while `requests.me` does not use it to decide visibility at all.
  */
 describe("canCarpoolTogether", () => {
   it("accepts one driver and one rider, in either order", () => {
@@ -108,9 +108,9 @@ describe("roleMismatchExplanation", () => {
 /**
  * the favourites-tab wording.
  *
- * `favorites.me` used to hide a favourite whose role matched the reader's, was
- * VIEWER, or whose search was INACTIVE — which took away the card and with it
- * the only un-favourite star, so the `_Favorites` row became permanent and
+ * Hiding a favourite whose role matches the reader's, is VIEWER, or whose
+ * search is INACTIVE would take away the card and with it the only
+ * un-favourite star, so the `_Favorites` row would become permanent and
  * invisible. They are shown explained instead, and this is the copy.
  *
  * Two things separate it from `roleMismatchExplanation`: status is not a role,
@@ -221,10 +221,10 @@ describe("requestUnavailableExplanation", () => {
   });
 
   /**
-   * The case this function exists for. A request whose
-   * counterpart had paused used to be dropped by `requests.me` entirely, so the cards
-   * never had to describe one; they called `roleMismatchExplanation`, which
-   * knows nothing about status.
+   * The case this function exists for. If `requests.me` dropped a request
+   * whose counterpart had paused, the cards would never have to describe one
+   * - calling `roleMismatchExplanation` alone would be enough, since it knows
+   * nothing about status.
    *
    * A paused DRIVER and an active RIDER is a *compatible* pair, so that
    * function returns `null` for it — a card with no notice at all, next to an
@@ -243,7 +243,8 @@ describe("requestUnavailableExplanation", () => {
   });
 
   it("is the case roleMismatchExplanation alone cannot answer", () => {
-    // Same pair, the old helper: compatible roles, so nothing to say.
+    // Same pair, through `roleMismatchExplanation` alone: compatible roles,
+    // so nothing to say.
     expect(roleMismatchExplanation(Role.RIDER, Role.DRIVER, "Alex")).toBeNull();
   });
 

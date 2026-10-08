@@ -39,10 +39,7 @@ const weights = {
  * The filter cutoffs `calculateScore` applies.
  *
  * **Each range below is the slider's range, and the top of it means "any".**
- * The comments used to disagree with both the UI and the routers — `startTime`
- * claimed a 3-hour maximum against a 0-4 slider, and the distance pair said 19
- * where the slider says 20. The tests below the comparison are
- * `inputs.startTime < TIME_FILTER_ANY` and
+ * The tests below the comparison are `inputs.startTime < TIME_FILTER_ANY` and
  * `inputs.startDistance < DISTANCE_FILTER_ANY`, so the top value is not a
  * constraint that happens to be loose: it is switched off entirely. Both
  * sentinels are defined in `./filters/filterSentinels.ts`.
@@ -84,11 +81,11 @@ export const MILES_PER_DEGREE_LATITUDE = 69.09;
 /**
  * Straight-line miles between two coordinates.
  *
- * The previous form was `sqrt(dLat^2 + dLng^2) * 88`, which treated a degree of
- * longitude as covering the same ground as a degree of latitude. At Boston's
- * latitude a degree of longitude is only about 74% as wide, so east-west
- * separation was overstated by roughly a third relative to north-south and the
- * mile-denominated filters did not mean the same thing in every direction.
+ * A naive `sqrt(dLat^2 + dLng^2) * 88` would treat a degree of longitude as
+ * covering the same ground as a degree of latitude. At Boston's latitude a
+ * degree of longitude is only about 74% as wide, so that would overstate
+ * east-west separation by roughly a third relative to north-south, and the
+ * mile-denominated filters would not mean the same thing in every direction.
  *
  * Equirectangular with a cosine correction is within a fraction of a percent of
  * haversine at commute range, for one cosine.
@@ -114,30 +111,28 @@ const MINUTES_PER_DAY = 24 * 60;
  * Minutes between two times of day.
  *
  * Both times are collapsed to a minute offset from midnight before subtracting.
- * The original form — |Δhours| * 60 + |Δminutes| — took the absolute value of
- * each component separately, so a pair whose minutes ran backwards relative to
- * its hours was overstated: 9:50 against 10:00 read as 110 minutes rather than
- * 10. That inflated difference both filtered out compatible users
- * and penalised their score.
+ * Taking the absolute value of each component separately — |Δhours| * 60 +
+ * |Δminutes| — overstates a pair whose minutes run backwards relative to its
+ * hours: 9:50 against 10:00 would read as 110 minutes rather than 10, which
+ * would filter out compatible users and penalise their score.
  *
- * Two things about *how* the reading is taken were still wrong.
+ * Two things about *how* the reading is taken matter beyond that.
  *
  * **The accessors are UTC.** `startTime`/`endTime` are `@db.Time(0)` holding a
  * UTC time of day — see "Schedule times" in `src/server/db/README.md` — and
- * Prisma returns them as `1970-01-01T<time>Z`. `getHours()` reinterpreted that
- * instant in the *host's* zone, which made the result depend on where the code
- * ran: Amplify and GitHub Actions are UTC, local development is
+ * Prisma returns them as `1970-01-01T<time>Z`. `getHours()` would reinterpret
+ * that instant in the *host's* zone, making the result depend on where the
+ * code runs: Amplify and GitHub Actions are UTC, local development is
  * `America/New_York`. `getUTCHours()` reads the value that was actually stored,
  * the same contract `formatScheduleTime` renders under.
  *
- * **The difference is circular.** A previous version of this comment claimed a
- * shared timezone offset always cancels in the subtraction. It does not: the
- * offset can carry one operand across a day boundary and not the other, and a
- * linear subtraction then reports the long way round the clock. Two students
- * finishing at 23:30 and 00:30 UTC are 60 minutes apart, but subtracting minute
- * offsets gives 1380 — past every cutoff the UI offers, so each was dropped
- * from the other's results. `min(d, 1440 - d)` takes the short way, which also
- * caps the value at 720.
+ * **The difference is circular.** A shared timezone offset does not always
+ * cancel in the subtraction: the offset can carry one operand across a day
+ * boundary and not the other, and a linear subtraction then reports the long
+ * way round the clock. Two students finishing at 23:30 and 00:30 UTC are 60
+ * minutes apart, but subtracting minute offsets gives 1380 — past every cutoff
+ * the UI offers, so each would be dropped from the other's results. `min(d,
+ * 1440 - d)` takes the short way, which also caps the value at 720.
  *
  * `jest.shared.config.js` pins `TZ` so this stays verifiable in CI.
  */
@@ -304,11 +299,10 @@ export const calculateScore = (
     }
 
     // With no days selected the day filter means nothing, so it constrains
-    // nothing — see `dayMatchApplies`. `days === 1` already behaved this way
-    // and the suite pins it; `days === 2` was the one mode left out, and it did
-    // the opposite: `bothUsersDays` of 0 is below any `flexDays`, so selecting
-    // "Flex days" before picking days rejected every candidate and produced an
-    // empty map with nothing to explain it.
+    // nothing — see `dayMatchApplies`. That holds for both `days === 1` and
+    // `days === 2`: without it, `bothUsersDays` of 0 is below any `flexDays`,
+    // so selecting "Flex days" before picking days would reject every
+    // candidate and produce an empty map with nothing to explain it.
     const dayFilterApplies = dayMatchApplies(
       inputs.days,
       daysHelper.currentUserDays,
@@ -363,21 +357,21 @@ export const calculateScore = (
     if (sort == "any") {
       const sDistanceScore = Math.min(startDistance / cutoffs.startDistance, 1);
       const eDistanceScore = Math.min(endDistance / cutoffs.endDistance, 1);
-      // `bothUsersDays / currentUserDays` divided by zero whenever the filter
+      // `bothUsersDays / currentUserDays` divides by zero whenever the filter
       // carried no working days, which the map sends on first render and for
-      // every VIEWER, and the resulting NaN made the whole sort arbitrary. With
-      // no days requested there is no overlap to measure, so days contribute
-      // nothing rather than poisoning the comparison.
+      // every VIEWER; the resulting NaN would make the whole sort arbitrary.
+      // With no days requested there is no overlap to measure, so days
+      // contribute nothing rather than poisoning the comparison.
       const daysScore =
         daysHelper.currentUserDays === 0
           ? 0
           : 1 - daysHelper.bothUsersDays / daysHelper.currentUserDays;
 
-      // Each factor is counted exactly once. Distance used to be added twice -
-      // once unclamped, so a distant pair could outweigh every other factor -
-      // and days twice whenever both schedules were known. The weights sum to
-      // 1, so counting each once is what keeps the score inside 0..1 as the
-      // doc comment claims.
+      // Each factor is counted exactly once: double-counting distance (once
+      // unclamped) would let a distant pair outweigh every other factor, and
+      // double-counting days whenever both schedules were known would do the
+      // same. The weights sum to 1, so counting each once is what keeps the
+      // score inside 0..1 as the doc comment claims.
       finalScore =
         sDistanceScore * weights.startDistance +
         eDistanceScore * weights.endDistance +
@@ -420,11 +414,9 @@ export const calculateScore = (
 /**
  * Creates a full user object from a user id.
  *
- * Only the id is needed: since the migration that moved role, schedule, seats
- * and coordinates off `User` and onto `CarpoolSearch`, everything else on the
- * user row is either derived from the id or hardcoded. The parameter used to be
- * typed with a wide `GenerateUserInput` shape, which forced every caller into a
- * cast to supply fields this function never read; that type is gone.
+ * Only the id is needed: role, schedule, seats and coordinates live on
+ * `CarpoolSearch` rather than `User`, so everything else on the user row is
+ * either derived from the id or hardcoded.
  *
  * @param userInfo an object carrying the id to build the user around
  * @returns an upsert argument for the user row

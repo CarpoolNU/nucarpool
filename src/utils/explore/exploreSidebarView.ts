@@ -1,23 +1,15 @@
 /**
  * Which of its six states the explore page's sidebar is in.
  *
- * Lifted out of `index.tsx` because visibility there had **three** owners
- * operating on the same DOM node, two of them not React-aware:
- * the `className` template literal, a `useEffect` calling
- * `sidebarRef.current.classList.add("hidden")`, and `handleUserSelect` calling
- * `.classList.remove("hidden")`. Both imperative calls tested the same
- * condition the effect did, and neither could work:
- *
- *  - the `remove` in `handleUserSelect` was dead on arrival. It ran during the
- *    same interaction that made `selectedUser` non-null, so the effect added
- *    `hidden` straight back afterwards. It read like a deliberate override and
- *    did nothing.
- *  - the `add` was silently wiped. React assigns the whole `class` attribute
- *    when its computed value changes rather than merging, so any re-render
- *    that touched the sidebar's `className` - toggling the collapse handle was
- *    the easy route - dropped `hidden`. The effect did not re-apply it, because
- *    its `[selectedUser, isMobile]` dependencies had not changed, so the card
- *    list stayed on top of the open conversation until the user changed tabs.
+ * Extracted from `index.tsx` so the sidebar's visibility has **one** owner
+ * rather than several mechanisms writing the same DOM node's class list
+ * independently - a `className` template literal alongside imperative
+ * `classList` calls, say. That split is fragile in a way that is easy to
+ * miss: React assigns the whole `class` attribute when its computed value
+ * changes rather than merging it, so any re-render that touches the
+ * className can silently undo a class an imperative call added, and an
+ * effect has no reason to re-apply it if the state it depends on has not
+ * itself changed.
  *
  * The fix is not a better effect, it is having one owner: the state goes in,
  * a view comes out, and the page maps that view to classes React alone writes.
@@ -31,11 +23,9 @@
  * It also keeps to the existing convention that Tailwind classes sit with the
  * markup - no file under `src/utils/` names one. That is a convention and not
  * a constraint: Tailwind v4 scans the whole repository minus `.gitignore`, so a
- * class named here would in fact be emitted. `tailwind.config.js` used to carry
- * a `content` array that read as though it restricted this, which is where the
- * false belief came from; it was deleted, since it never had any effect.
- * Verified by building with a probe class in this directory rather than
- * inferred from the config.
+ * class named here would in fact be emitted; nothing in `tailwind.config.js`
+ * restricts the scan to specific files or directories. Verified by building
+ * with a probe class in this directory rather than inferred from the config.
  *
  * Same shape as `nav/mobileNavPlan.ts` and `map/viewRoutePlan.ts`, and for the
  * same reason: `index.tsx` is ~918 lines behind Mapbox,
@@ -99,29 +89,29 @@ export function planExploreSidebar({
   isDetailOpen: boolean;
   detent: SheetDetent;
 }): ExploreSidebarView {
-  // Desktop first, and every branch below is therefore mobile-only. The old
-  // code gated each `classList` call on `isMobile` separately; getting that
-  // wrong in one place was all it took to reach the desktop layout.
+  // Desktop first, so every branch below is mobile-only. Checking it once
+  // here keeps every mobile-only branch under it; duplicating this check per
+  // branch would only need to go wrong in one place to leak into the desktop
+  // layout.
   if (!isMobile) {
     return "desktop";
   }
 
-  // Highest precedence, matching what `display: none` did in practice: it beat
-  // every other class in the expression regardless of the order they appeared.
+  // Highest precedence: an open conversation hides the sidebar outright,
+  // regardless of any other state below.
   if (hasOpenConversation) {
     return "hidden";
   }
 
-  // Before the detent, preserving the existing ternary's order. Opening a
-  // detail view also sets the detent to `expanded`, so the two rarely coincide
-  // - but when they do, the details are what the user just asked for.
+  // Checked before the detent: opening a detail view also sets the detent to
+  // `expanded`, so the two rarely coincide - but when they do, the details
+  // are what the user just asked for.
   if (isDetailOpen) {
     return "detail";
   }
 
   // The detents *are* views, one for one, so there is no mapping to get wrong
-  // here. This used to be `isCollapsed ? "collapsed" : "expanded"`, which is
-  // the same statement for the two detents that existed then.
+  // here.
   return detent;
 }
 
@@ -140,18 +130,17 @@ const DETENT_VIEWS: Record<SheetDetent, true> = {
  * Whether the sheet is resting at a detent, which is both when the drag handle
  * is rendered and when a drag may begin.
  *
- * **One rule rather than two.** The page used to spell the render condition out
- * as a three-way `||`, and `useSheetDrag` enforced its own separate
- * precondition — that an expanded render had already been measured. Those were
- * never the same statement, and the gap between them was a real defect: the
- * handle rendered in `collapsed` while the drag refused to start there.
+ * **One rule rather than two.** The render condition and `useSheetDrag`'s own
+ * precondition - that an expanded render has already been measured - need to
+ * be the exact same statement, or the handle can render in a state the drag
+ * refuses to start in.
  *
- * The other two views are excluded for reasons that outlive that defect.
- * `hidden` is `display: none`, so there is no sheet to drag and no geometry to
- * read. `detail` is a *different* sheet — a fixed 320px capped at `60dvh` —
- * pinned to the same bottom edge, so the expanded range derived from that edge
- * would be several times its height and a drag would resize it to something the
- * view does not have classes for.
+ * The other two views are excluded for reasons that are permanent, not
+ * incidental. `hidden` is `display: none`, so there is no sheet to drag and no
+ * geometry to read. `detail` is a *different* sheet — a fixed 320px capped at
+ * `60dvh` — pinned to the same bottom edge, so the expanded range derived from
+ * that edge would be several times its height and a drag would resize it to
+ * something the view does not have classes for.
  */
 export const isSheetDetentView = (
   view: ExploreSidebarView,
@@ -162,31 +151,25 @@ export const isSheetDetentView = (
  *
  * `index.tsx` holds one piece of state for "a single card's details are
  * showing". It is written only by the mobile activation path and cleared only
- * by the mobile Back button, so **nothing used to clear it when the viewport
- * crossed the breakpoint**: expand a card on a phone, rotate to landscape, and
- * the value is still set while the desktop layout is on screen - a layout with
- * no Back button, because that control sits inside a mobile-only branch. The
- * only ways out were switching sidebar tabs, whose effect resets it as a side
- * effect, or going back to a narrow viewport to find the Back button again.
+ * by the mobile Back button - which does not exist on the desktop layout, so
+ * nothing clears it when the viewport crosses the breakpoint. Expand a card on
+ * a phone, rotate to landscape, and the raw value is still set while the
+ * desktop layout is on screen, with no Back button to clear it and no path
+ * back to one except switching sidebar tabs or narrowing the viewport again.
  *
- * That never became a visible bug, because both consumers happened to carry a
- * defensive `isMobile` term. The cost was that the value could not be read on
- * its own without being wrong and nothing said so at the point of use:
- * it was discovered while adding a third consumer, which had to write
- * `!(isMobile && selected !== null)` plus a test to hold the workaround in
- * place. This function is that rule, stated once, so the next consumer
- * inherits it instead of rediscovering it.
+ * Reading the raw state directly is therefore wrong whenever `isMobile` is
+ * false, and nothing at the point of use says so - which is why this function
+ * exists: the rule is stated once here, so a consumer reads the resolved
+ * value instead of rediscovering the need for a guard.
  *
- * **Derived rather than an effect**, which is where this departs from the
- * ticket's proposed fix. `useEffect(() => { if (!isMobile) clear(); })` runs
- * *after* the render that flipped the viewport, so there is one committed
- * frame in which the layout is the desktop one and the value is still set.
- * With the defensive terms removed - which is the rest of this ticket - that
- * frame *is* the bug, briefly: a desktop sidebar filtered to one card. The
- * acceptance criterion is that the value is null whenever `isMobile` is false,
- * and only a derived value can actually promise that. It is also the same
- * conclusion reached about the sidebar's visibility twenty lines up,
- * for the same reason: derived state cannot lose a race.
+ * **Derived rather than an effect.** `useEffect(() => { if (!isMobile) clear(); })`
+ * runs *after* the render that flipped the viewport, so there is one committed
+ * frame in which the layout is the desktop one and the value is still set -
+ * a desktop sidebar filtered to one card, however briefly. The acceptance
+ * criterion is that the value is null whenever `isMobile` is false, and only a
+ * derived value can actually promise that - the same conclusion reached about
+ * the sidebar's own visibility above, for the same reason: derived state
+ * cannot lose a race.
  *
  * One behavioural consequence worth naming: because the raw state survives
  * underneath, rotating to landscape and back restores the expanded card rather

@@ -3,8 +3,8 @@
  *
  * `ProfilePicture` hands this to react-easy-crop as an explicit `cropSize` and
  * uses it to compute the cropper's opening zoom, so the two have to agree: a
- * box sized from one number and a zoom computed from another is exactly the
- * mismatch a prior defect was filed for. One constant, imported by both.
+ * box sized from one number and a zoom computed from another would disagree
+ * silently. One constant, imported by both.
  */
 export const CROP_BOX_PX = 300;
 
@@ -14,8 +14,8 @@ export const CROP_BOX_PX = 300;
  * edge.
  *
  * **The intent this implements is "fill", not "fit".** Those are opposite
- * choices and the code used to claim one while doing neither, so it is stated
- * here once: the crop box is always fully covered, and the photo's long edge
+ * choices, so it is stated here once: the crop box is always fully covered,
+ * and the photo's long edge
  * is cropped to achieve that. Filling is the conventional behaviour for an
  * avatar - the box is round (`cropShape="round"`) and the output is encoded as
  * JPEG, which has no transparency - and fitting would mean deciding what
@@ -26,12 +26,12 @@ export const CROP_BOX_PX = 300;
  * **Why the argument is the displayed size, not the natural one.** `zoom`
  * multiplies the size react-easy-crop lays the media out at - `mediaSize.width`
  * and `mediaSize.height`, which for `objectFit="contain"` are derived from the
- * container - not the source photo's pixel dimensions. The previous
- * implementation divided the crop box by `naturalWidth`/`naturalHeight`, which
- * is a ratio between two unrelated coordinate spaces and had no useful meaning
- * at any image size; it then discarded the result and used `1` for any image
- * larger than the box, which is every photograph. `MediaSize` carries both
- * pairs, so the mistake costs a compiler nothing to make.
+ * container - not the source photo's pixel dimensions. Dividing the crop box
+ * by `naturalWidth`/`naturalHeight` instead would be a ratio between two
+ * unrelated coordinate spaces, with no useful meaning at any image size - and
+ * for any image larger than the box, which is every photograph, it would fall
+ * through to the `1` guard below. `MediaSize` carries both pairs, so nothing
+ * stops that mistake except stating which pair is correct here.
  *
  * At the returned zoom the crop rectangle's origin is exactly 0 on the
  * constrained axis. Below it the origin goes negative - react-easy-crop
@@ -69,8 +69,8 @@ export function minZoomToFill(
   }
 
   // `max`, because the box must be covered on *both* axes: the tighter
-  // constraint wins. `min` is the fit-inside reading, and it is what used to
-  // be here.
+  // constraint wins. `min` is the fit-inside reading, and would leave one
+  // axis uncovered.
   return Math.max(
     cropSize.width / mediaSize.width,
     cropSize.height / mediaSize.height,

@@ -9,11 +9,9 @@ import type { SheetDetent } from "./sheetDetents";
 /**
  * The explore sidebar's visibility decision.
  *
- * The defect was not a wrong value, it was that three mechanisms wrote the
- * same DOM node's class list and two of them were invisible to React. That is
- * not directly testable here and does not need to be: once the imperative
- * calls are gone the property that matters is that the view is a *function of
- * state*, so no re-render can disagree with it. These tests pin that function.
+ * The property that matters is that the view is a *function of state*, so no
+ * re-render can disagree with it - a guarantee no imperative DOM write could
+ * ever give. These tests pin that function.
  *
  * `mobileNavPlan.test.ts` is the shape being followed - and like that suite,
  * as much of this is about what must not change as about what must.
@@ -52,26 +50,21 @@ const mobileStates = [false, true].flatMap((hasOpenConversation) =>
 
 describe("planExploreSidebar - an open conversation", () => {
   it("takes the sidebar out of layout", () => {
-    // The whole ticket. This is what a `useEffect` reaching for
-    // `classList.add("hidden")` was trying and failing to achieve.
+    // An open conversation always takes the sidebar out of layout entirely.
     expect(view({ hasOpenConversation: true })).toBe("hidden");
   });
 
   it("stays hidden when the collapse handle is toggled", () => {
-    // The user-facing regression, stated as directly as it can be. Toggling
-    // the handle re-rendered the sidebar with a different `className`, React
-    // reassigned the whole attribute, and the imperatively added `hidden` went
-    // with it - the effect would not re-fire, because `selectedUser` had not
-    // changed. Both values below must be "hidden"; before the fix the second
-    // state produced a visible card list over the open conversation.
+    // Both values below must be "hidden": toggling the collapse handle must
+    // not re-expose a card list over an open conversation.
     for (const detent of detents) {
       expect(view({ hasOpenConversation: true, detent })).toBe("hidden");
     }
   });
 
   it("outranks a detail view", () => {
-    // `display: none` beat every other class in the old expression whatever
-    // order they appeared in. Preserved deliberately.
+    // An open conversation outranks a detail view too: hiding the sidebar
+    // entirely always wins.
     expect(view({ hasOpenConversation: true, isDetailOpen: true })).toBe(
       "hidden",
     );

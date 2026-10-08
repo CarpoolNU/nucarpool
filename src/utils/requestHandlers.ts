@@ -61,19 +61,11 @@ export const createRequestHandlers = (
    * What an accepted request has just made stale, whichever shape the group
    * write took.
    *
-   * This used to be a list written out here, and the comment it carried said
-   * why that was already a mistake: the same body had existed twice beside the
-   * two mutations and the copies drifted, both missing `groups.me` while
-   * `useGroupMembership.ts` - calling the *same* `groups.edit` procedure -
-   * invalidated it. Collapsing the two into one local function fixed that
-   * instance and left the real shape of the problem untouched, which is that
-   * the list also exists in `useGroupMembership.ts`. It drifted again, this
-   * time in the other direction: both files were missing the two discovery
-   * queries behind Explore and the map (SCRUM-629).
-   *
-   * So the list now lives in exactly one place for all three call sites. This
-   * wrapper is kept only because both mutations name it as their `onSuccess`,
-   * and `invalidateMembershipCaches` takes `utils`.
+   * Lives in exactly one place (`invalidateMembershipCaches`) for all three
+   * call sites that need it, rather than written out separately beside each -
+   * a list repeated at each call site is a list that can disagree with
+   * itself. This wrapper exists only because both mutations below name it as
+   * their `onSuccess`, and `invalidateMembershipCaches` takes `utils`.
    */
   const invalidateAcceptedRequestCaches = () =>
     invalidateMembershipCaches(utils);
@@ -99,31 +91,31 @@ export const createRequestHandlers = (
   };
 
   /**
-   * A fast pre-check, no longer the thing that enforces these rules.
+   * A fast pre-check, not what enforces these rules.
    *
    * It reads `requests.me` data that can be stale - the worst case being a
-   * driver whose cache predates the rider joining somebody else's group - so `groups.create` and `groups.edit` now establish
-   * the same invariants inside the transaction that reserves the seat. This
-   * stays because it is instant and can name the other user, which a server
-   * message cannot.
+   * driver whose cache predates the rider joining somebody else's group - so
+   * `groups.create` and `groups.edit` establish the same invariants inside the
+   * transaction that reserves the seat. This stays because it is instant and
+   * can name the other user, which a server message cannot.
    */
   const validateRequestAcceptance = (
     user: User,
     otherUser: EnhancedPublicUser,
   ): boolean => {
-    // A request whose two parties can no longer carpool now reaches this
-    // button: `requests.me` stopped hiding those, because hiding one did not
-    // stop it blocking new requests. It cannot be accepted - the
+    // A request whose two parties cannot carpool can reach this button:
+    // `requests.me` does not hide those, because hiding one would not stop it
+    // blocking new requests. It cannot be accepted - the
     // group it would build has two drivers or no driver - and the branches
     // below would misread it, because each treats "I am not a DRIVER" as
     // "they are".
     //
-    // Status is part of that question now, not just role. `requests.me` no
-    // longer hides a request whose counterpart had *paused* their
-    // search, for the same reason it no longer hides a role change,
-    // so the Accept button reaches those too. A paused counterpart is not
-    // looking for a carpool, and their roles may well still fit — which is
-    // exactly the case a role-only check waves through.
+    // Status is part of that question, not just role. `requests.me` does not
+    // hide a request whose counterpart has *paused* their search, for the
+    // same reason it does not hide a role change, so the Accept button
+    // reaches those too. A paused counterpart is not looking for a carpool,
+    // and their roles may well still fit — which is exactly the case a
+    // role-only check waves through.
     //
     // Refused here so the message can name what changed and what would fix
     // it. `groups.create` and `groups.edit` refuse both halves too; that is
@@ -140,18 +132,12 @@ export const createRequestHandlers = (
       // `reserveSeat`, whose NO_SEATS_MESSAGE describes the driver in the
       // third person and reads oddly when the driver is the one seeing it.
       if (!hasSeatAvailable(user.seatAvail)) {
-        // Says what happens next, because the request is not dead. This used
-        // to read "You do not have any space in your car to accept X." — true,
-        // and it left the driver with a refusal and no idea whether the
-        // request had been lost, whether retrying would help, or what would
-        // change the answer. Nothing here rejects or hides the request, so it
-        // is still theirs to accept when a seat frees.
-        //
-        // This turned from wording into the fix for one of two
-        // populations: new requests to a full driver are now refused at the
-        // card, but requests already sent can only be met with an explanation.
-        // Both routes to a seat are named, since a count of 0 may mean the car
-        // is full *or* that they never entered one.
+        // Says what happens next, because the request is not dead: nothing
+        // here rejects or hides it, so it is still theirs to accept when a
+        // seat frees. New requests to a full driver are refused at the card
+        // instead; this is the explanation for one already sent before that
+        // applied. Both routes to a seat are named, since a count of 0 may
+        // mean the car is full *or* that they never entered one.
         toast.error(
           `You have no seats free right now, so you cannot accept ` +
             `${otherUser.preferredName} yet. Their request stays in your ` +
@@ -264,11 +250,9 @@ export const createRequestHandlers = (
       return;
     }
 
-    // Which way the request pointed decides the sentence. This one string was
-    // used for both, so withdrawing your *own* request reported
-    // "<name>'s request to carpool with you has been deleted" — the wrong
-    // person, the wrong direction, and a claim that they had asked you when
-    // you had asked them.
+    // Which way the request pointed decides the sentence: withdrawing your
+    // own request and having yours withdrawn are different events, and one
+    // string for both would name the wrong person and the wrong direction.
     //
     // Both buttons that reach here are in `MessageHeader`, labelled Reject and
     // Withdraw Request, and both call the same handler.

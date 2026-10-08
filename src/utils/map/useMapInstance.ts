@@ -3,19 +3,14 @@ import { debounce } from "lodash";
 import { useEffect, useRef, useState, type RefObject } from "react";
 
 /**
- * The explore map's lifecycle, lifted out of `src/pages/index.tsx`.
+ * The explore map's lifecycle.
  *
- * The effect this replaces built its `mapboxgl.Map` and returned nothing, so
- * every unmount left the GL context, the tiles, the six `map.on` listeners and
- * a `NavigationControl` alive and referenced. `index.tsx` has no test - its own
- * comments cite that as the reason decisions keep getting lifted out of it -
- * which is why the lifecycle lives here, beside `useMapInstance.test.tsx`,
- * rather than being fixed in place.
- *
- * The leak was only reachable on mobile: the Profile tab is a `router.push`,
- * so browser Back remounts the explore page client-side, and each round trip
- * built another map. iOS Safari caps live WebGL contexts at roughly 8-16 and
- * silently drops the oldest, which is the blank map users were reporting.
+ * Every unmount must tear down the GL context, the tiles, the `map.on`
+ * listeners and the `NavigationControl` - leaving any of them alive and
+ * referenced matters because this is reachable on mobile: the Profile tab is
+ * a `router.push`, so browser Back remounts the explore page client-side, and
+ * each round trip builds another map. iOS Safari caps live WebGL contexts at
+ * roughly 8-16 and silently drops the oldest, which shows up as a blank map.
  */
 
 /** Matches the delay the page's hand-rolled `setTimeout` already used. */
@@ -93,13 +88,12 @@ export function useMapInstance({
    * Construction values and the load callback are read once, when the map is
    * built, so they are held in a ref instead of in the dependency list below.
    *
-   * This is the load-bearing half of the fix, not a tidy-up. The effect this
-   * replaces depended on `[mapContainerRef, user]` and was held to one map by
-   * a `useRef` flag; hanging a `remove()` cleanup off it unchanged would
-   * destroy and rebuild the map on every `user.me` refetch, because react-query
-   * returns a new object each time - taking the viewport, the drawn route and
-   * every marker with it. The flag is gone because the dependencies are now
-   * honest: this effect really does run once per mount.
+   * This is load-bearing, not a style preference. Depending on `user` (or
+   * `onLoad`, which closes over it) would destroy and rebuild the map on
+   * every `user.me` refetch, because react-query hands back a new object each
+   * time - taking the viewport, the drawn route and every marker with it. The
+   * effect's dependencies are honest instead: it runs once per mount, with no
+   * flag needed to hold it to one map.
    */
   const latest = useRef({ center, zoom, maxZoom, minZoom, style, onLoad });
   latest.current = { center, zoom, maxZoom, minZoom, style, onLoad };
@@ -149,25 +143,22 @@ export function useMapInstance({
 /**
  * Keeps the map's canvas matched to its container.
  *
- * Every `resize` event used to queue its own `setTimeout(map.resize, 100)`,
- * with no `clearTimeout` - so N events meant N full WebGL canvas resizes and
- * tile repaints. That is a rounding error when a desktop user drags a window,
- * and dozens of times in a few seconds on iOS Safari, which fires `resize` on
- * every URL-bar collapse and expand during an ordinary scroll.
+ * `resize` events must collapse into a single debounced `map.resize()` call
+ * rather than firing one per event: a full WebGL canvas resize and tile
+ * repaint per event is a rounding error when a desktop user drags a window,
+ * but iOS Safari fires `resize` dozens of times in a few seconds on every
+ * URL-bar collapse and expand during an ordinary scroll.
  *
  * **A `ResizeObserver` on the container itself, not a `window` `resize`
- * listener plus a `layoutKey` the caller had to remember to pass.**
- * `mapbox-gl` 3.30 has no internal `ResizeObserver` - it never watches its own
- * container - so this hook was inferring the container's box from the
- * `window`'s instead, which is only a proxy for it. A `layoutKey` (the page
- * passed `isMobile`) papered over the gap for the one layout change the page
- * knew about, but any other container resize with no matching `window` event
- * - the container settling into its final box after mount, or the row's
- * height changing for a reason that never reaches `window` - left the canvas
- * at its previous size until the next `window` `resize` happened to arrive.
- * A `ResizeObserver` on the container removes the inference entirely: it
- * fires on the box `mapbox-gl` actually cares about, for any reason that box
- * changes, so there is no second parameter for a caller to remember.
+ * listener.** `mapbox-gl` 3.30 has no internal `ResizeObserver` - it never
+ * watches its own container - so inferring the container's box from the
+ * `window`'s instead is only a proxy for it: a layout change that never
+ * dispatches a `window` `resize` event - the container settling into its
+ * final box after mount, or a row's height changing for a reason the window
+ * never sees - would leave the canvas at its previous size until some later
+ * `window` `resize` happened to arrive. A `ResizeObserver` on the container
+ * removes that gap entirely: it fires on the box `mapbox-gl` actually cares
+ * about, for any reason that box changes.
  */
 export function useMapResize(
   map: mapboxgl.Map | undefined,

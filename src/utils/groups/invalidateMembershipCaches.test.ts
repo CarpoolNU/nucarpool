@@ -38,7 +38,7 @@ describe("invalidateMembershipCaches", () => {
   });
 
   /*
-   * The two caches SCRUM-629 was about, named on their own.
+   * The two discovery caches, named on their own.
    *
    * A grouped RIDER matches nobody, so the server answers both of these with
    * an empty set - correctly, while they are grouped. Nothing re-asks on their

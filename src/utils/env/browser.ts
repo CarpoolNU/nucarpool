@@ -2,8 +2,7 @@ import { envsafe, makeValidator, str } from "envsafe";
 
 /**
  * Which deployment this build is. The values are an allow-list rather than a
- * free string because this is the most consequential variable in the app and it
- * was the only one not validated at all:
+ * free string because this is the most consequential variable in the app:
  *
  *  - `staging` enables the Google provider in `[...nextauth].ts`, renders the
  *    Google button in `sign-in.tsx`, and restricts email recipients to
@@ -11,8 +10,8 @@ import { envsafe, makeValidator, str } from "envsafe";
  *    a Google account could bypass Northeastern SSO.
  *  - the value is written verbatim into every S3 profile-picture key
  *    (`profile-pictures/{env}/{userId}`), so a missing or renamed value orphans
- *    every existing upload. Unset, `uploadToS3` produced the literal key
- *    `profile-pictures/undefined/...`.
+ *    every existing upload. Left unvalidated, an unset value would produce the
+ *    literal key `profile-pictures/undefined/...`.
  *
  * Production is `production`, which is what these keys already contain — so
  * validating the variable does not move any existing object.

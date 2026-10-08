@@ -32,12 +32,12 @@ const invalidCoordFields = (
 /**
  * Clears the popup and `mapboxgl.Marker` system - and **only** that system.
  *
- * It used to also sweep every layer whose id contained `-text-layer`, which is
- * an asymmetry that has been removed. A pin drawn by `updateCompanyLocation` or
- * `updateStartLocation` is two layers over one source: the icon and its label.
- * Sweeping the label and leaving the icon left an *unlabelled* pin, which is
- * the worst of the two states - a stale overlay reads as stale, but a pin with
- * no name reads as a destination nobody can account for.
+ * It must not also sweep any `-text-layer` layer. A pin drawn by
+ * `updateCompanyLocation` or `updateStartLocation` is two layers over one
+ * source: the icon and its label. Sweeping the label and leaving the icon
+ * would leave an *unlabelled* pin, which is the worst of the two states - a
+ * stale overlay reads as stale, but a pin with no name reads as a destination
+ * nobody can account for.
  *
  * The label belongs to the pin, so it is created and destroyed with it, by
  * `clearOtherUserMarkers`. This function owns the older popup/marker list; that
@@ -45,7 +45,8 @@ const invalidCoordFields = (
  * other; merging them is tracked separately.
  *
  * The `map` parameter is kept because both callers have one to hand and a
- * signature change would ripple further than the fix; it is now unused.
+ * signature change would ripple further than is worth it here; it is
+ * currently unused.
  */
 export const clearMarkers = (_map?: mapboxgl.Map) => {
   previousMarkers.forEach((element) => {
@@ -373,9 +374,9 @@ export const viewRoute = (props: ViewRouteProps) => {
  * Draws the returned route onto the map, replacing the previous line if one is
  * already there.
  *
- * Mutates the map rather than returning anything, which is why it does not
- * belong in a data-fetching callback: it was previously the body of the
- * `onSuccess` option on a disabled query.
+ * Mutates the map rather than returning anything, which is why it is kept
+ * separate from the data-fetching call below rather than inlined into its
+ * `.then()`.
  */
 const drawRoute = (map: mapboxgl.Map, response: DirectionsResponse) => {
   const coordinates = response.routes[0].geometry;
@@ -467,9 +468,9 @@ export function useGetDirections({
     }
 
     // A response that resolves after `points` has changed, or after the hook
-    // has unmounted, would draw a route the user is no longer looking at. The
-    // query cache used to discard that for us; an imperative fetch has to say
-    // so itself.
+    // has unmounted, would draw a route the user is no longer looking at. An
+    // imperative `fetch` carries no automatic cancellation, so this flag
+    // guards against exactly that.
     let cancelled = false;
 
     utils.mapbox.getDirections

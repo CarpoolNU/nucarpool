@@ -95,8 +95,8 @@ describe("clearOtherUserMarkers", () => {
     });
 
     it("takes the icon and its label together", () => {
-      // The specific asymmetry this removes: `clearMarkers` swept
-      // `-text-layer` and left the icon, so a pin lost its name and stayed.
+      // Both layers of one pin must come off together - sweeping only the
+      // label and leaving the icon would strand an unlabelled pin on the map.
       const { map, layers } = buildMap({
         layers: [
           `other-user-${A}-company-layer`,

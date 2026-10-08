@@ -10,10 +10,10 @@ import {
 /**
  * The day-match filter's shared rules.
  *
- * These functions exist because the Explore panel and `calculateScore`
- * each carried their own version of this arithmetic and disagreed. The
- * assertions that matter are the zero-days ones: that is the case the panel
- * displayed one way, the scorer applied another way, and nothing tested.
+ * These functions exist so the Explore panel and `calculateScore` share one
+ * definition of this arithmetic instead of each keeping their own. The
+ * assertions that matter most are the zero-days ones, the case most likely to
+ * put the two out of sync.
  */
 
 const WEEKDAYS = "0,1,1,1,1,1,0";
@@ -43,10 +43,10 @@ describe("countSelectedDays", () => {
 
 describe("parseSelectedDays", () => {
   it("always returns seven flags", () => {
-    // The defect this exists for: `"".split(",")` is `[""]`, so indices 1..6
-    // came back `undefined` and the panel handed `checked={undefined}` to six
-    // of its seven day checkboxes - making them uncontrolled for exactly the
-    // state the map starts in and a VIEWER never leaves.
+    // "".split(",") is [""], so indices 1..6 would come back undefined
+    // without padding, which would hand checked={undefined} to six of the
+    // seven day checkboxes - making them uncontrolled for exactly the state
+    // the map starts in and a VIEWER never leaves.
     for (const daysWorking of ["", "0,1", NONE, WEEKDAYS, "1,1,1,1,1,1,1"]) {
       const days = parseSelectedDays(daysWorking);
 
@@ -87,10 +87,10 @@ describe("toggleSelectedDay", () => {
   });
 
   it("writes seven fields even from an empty string", () => {
-    // It used to write `"0,,,1"`. Mutating the raw `split(",")` leaves holes,
-    // and `map` preserves holes rather than visiting them, so the joined
-    // string carried empty fields. Every consumer tolerated it by accident -
-    // only `"1"` is truthy to any of them - but nothing guaranteed that.
+    // Mutating the raw split(",") would leave holes, and map preserves holes
+    // rather than visiting them, so without going through parseSelectedDays
+    // the joined string would carry empty fields like "0,,,1". Only "1" is
+    // truthy to any consumer, but that is not something to rely on silently.
     expect(toggleSelectedDay("", 3)).toBe("0,0,0,1,0,0,0");
   });
 
@@ -124,13 +124,9 @@ describe("dayMatchApplies", () => {
   });
 
   it("does not apply in either mode when no days are selected", () => {
-    // The whole ticket. `days === 2` here is what excluded every candidate:
-    // `bothUsersDays` of 0 is below any `flexDays`, so "Flex days" chosen
-    // before picking days returned an empty list and an empty map.
-    //
-    // `days === 1` already behaved this way, and `recommendation.test.ts`
-    // pinned it as "excludes nobody on the day filter when the filter records
-    // no days". This is that same rule, extended to the mode left out of it.
+    // Both modes must behave this way: with no days selected, bothUsersDays
+    // is 0, which is below any flexDays, so without this check "Flex days"
+    // chosen before picking days would return an empty list and an empty map.
     expect(dayMatchApplies(1, 0)).toBe(false);
     expect(dayMatchApplies(2, 0)).toBe(false);
   });
@@ -168,10 +164,8 @@ describe("clampFlexDays", () => {
   });
 
   it("falls back to 1 for a cleared number input", () => {
-    // `parseInt("", 10)` is NaN, and the old code's `!isNaN` guard skipped the
-    // update entirely — leaving state holding a value the emptied box no
-    // longer showed, which is the display-versus-state split this ticket is
-    // about.
+    // parseInt("", 10) is NaN; falling back to 1 keeps state in sync with
+    // what the emptied box shows, rather than leaving a stale unclamped value.
     expect(clampFlexDays(NaN, 7)).toBe(1);
   });
 

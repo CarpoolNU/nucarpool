@@ -1,9 +1,9 @@
 import { isValidCoordinates } from "./coordinates";
 
 /**
- * Pins the behaviour of a validator that was moved out of `pages/index.tsx` in
- * an earlier extraction so `viewRouteClick.ts` could share it. A move is exactly when a
- * guard's edges are worth stating: nothing else would notice if one shifted.
+ * Pins the behaviour of a validator shared between `pages/index.tsx` and
+ * `viewRouteClick.ts`. Sharing is exactly when a guard's edges are worth
+ * stating: nothing else would notice if one shifted.
  */
 describe("isValidCoordinates", () => {
   it("accepts an ordinary pair", () => {

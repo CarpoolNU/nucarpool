@@ -83,9 +83,8 @@ describe("calculateScore", () => {
         matches: false,
       },
       {
-        // The guard tested `=== 0`, so this row scored as available
-        // and was offered — while `reserveSeat` refused every acceptance,
-        // because it has always tested `> 0`.
+        // A negative seat count must be excluded here too, matching
+        // `reserveSeat`, which tests `> 0` rather than `!== 0`.
         name: "a rider is not matched with a driver whose seat count went negative",
         currentRole: Role.RIDER,
         candidateRole: Role.DRIVER,
@@ -168,9 +167,10 @@ describe("calculateScore", () => {
 
     // Every accept path requires the rider's own row to hold
     // `carpoolId: null` before it links them, so a grouped rider can never
-    // join *any* group - not only the one they are not already in. This used
-    // to score 0 (a perfect match) and rank at the top of a driver's results,
-    // for a request that would dead-end at accept with CONFLICT.
+    // join *any* group - not only the one they are not already in. Without
+    // this exclusion, such a request would score 0 (a perfect match) and
+    // rank at the top of a driver's results, only to dead-end at accept with
+    // CONFLICT.
     it("excludes every driver for a rider already in a different carpool group", () => {
       expect(
         score(
@@ -186,9 +186,9 @@ describe("calculateScore", () => {
       ).toBeCloseTo(0);
     });
 
-    // The mirror image: a rider already in a group could still be offered as
-    // a candidate to a driver, since the old exclusion only compared the two
-    // parties' own groups.
+    // The mirror image: a rider already in a group must be excluded from a
+    // driver's results too, whichever group holds them - not only when it
+    // matches the driver's own.
     it("excludes a rider already in a group from a driver's results, whichever group", () => {
       const currentDriver = buildSearch({
         id: "current",
@@ -518,19 +518,17 @@ describe("calculateScore", () => {
     });
 
     /**
-     * The empty-selection edge, which was the user-visible half of the fix.
+     * The empty-selection edge for both day modes.
      *
-     * `days === 1` with no days selected was already asserted to exclude
-     * nobody, further down in "identity and pathological inputs". `days === 2`
-     * was never tested and did the **opposite**: `bothUsersDays` is 0 with
-     * nothing selected, which is below any `flexDays`, so every candidate was
-     * rejected. Choosing "Flex days" before picking days — a natural order,
-     * and the only order available to a VIEWER, who never gets `daysWorking`
-     * seeded — returned an empty list and an empty map with nothing to
-     * explain it.
+     * With nothing selected, `days === 1` and `days === 2` both apply no day
+     * constraint: `bothUsersDays` is 0 with nothing selected, which is below
+     * any `flexDays`, so without this, choosing "Flex days" before picking
+     * days — a natural order, and the only order available to a VIEWER, who
+     * never gets `daysWorking` seeded — would reject every candidate and
+     * produce an empty list and an empty map with nothing to explain it.
      *
-     * Both modes are inert now, which is the rule the day *score* has followed
-     * since the NaN fix: with no days requested there is no overlap to measure.
+     * The day *score* follows the same rule: with no days requested there is
+     * no overlap to measure, so it contributes nothing rather than NaN.
      */
     describe("with no days selected", () => {
       it.each(["", "0,0,0,0,0,0,0"])(
@@ -735,11 +733,11 @@ describe("calculateScore", () => {
 
   describe("distance measurement", () => {
     /**
-     * Distance used to be `sqrt(dLat^2 + dLng^2) * 88`, which treats a degree of
-     * longitude as covering the same ground as a degree of latitude. At Boston's
+     * A naive `sqrt(dLat^2 + dLng^2) * 88` would treat a degree of longitude
+     * as covering the same ground as a degree of latitude. At Boston's
      * latitude a degree of longitude is only ~74% as wide, so east-west
-     * separation read about a third too far and the mile filters did not mean
-     * the same thing in every direction.
+     * separation would read about a third too far and the mile filters would
+     * not mean the same thing in every direction.
      */
     const atBoston = () => rider({ home: BOSTON, company: BOSTON });
 
@@ -813,8 +811,8 @@ describe("calculateScore", () => {
     });
 
     it("saturates the distance penalty at the 6 mile cutoff", () => {
-      // Distance used to be added twice, once without a ceiling, so the penalty
-      // kept climbing and a distant pair could outweigh every other factor.
+      // Double-counting distance, once without a ceiling, would let the
+      // penalty keep climbing and a distant pair outweigh every other factor.
       expect(score(rider(), driver({ home: milesNorth(3) }))).toBeCloseTo(0.1);
       expect(score(rider(), driver({ home: milesNorth(6) }))).toBeCloseTo(0.2);
       expect(score(rider(), driver({ home: milesNorth(12) }))).toBeCloseTo(0.2);
@@ -941,8 +939,9 @@ describe("calculateScore", () => {
 
     it("stays finite when the filter records no working days", () => {
       // `daysWorking: ""` is the initial filter state on the map page and is
-      // never replaced for VIEWER accounts. `1 - 0/0` used to leak NaN into
-      // every score, and NaN comparisons made the whole sort arbitrary.
+      // never replaced for VIEWER accounts. Without the explicit zero-check,
+      // `1 - 0/0` would leak NaN into every score, and NaN comparisons would
+      // make the whole sort arbitrary.
       const identical = score(rider(), driver(), { daysWorking: "" });
       const distant = score(rider(), driver({ home: milesNorth(3) }), {
         daysWorking: "",
@@ -991,20 +990,21 @@ describe("calculateScore", () => {
 /**
  * `minutesApart` reads the stored clock and takes the short way round it.
  *
- * Two defects, both invisible to the suite as it stood:
+ * Two things matter beyond the subtraction itself:
  *
- *  1. `getHours()`/`getMinutes()` reinterpreted a `@db.Time(0)` value - which
- *     Prisma returns as `1970-01-01T<time>Z` - in the *host's* zone. Amplify and
- *     GitHub Actions run UTC, local development runs `America/New_York`, so the
- *     matching results a developer saw were not the ones production computed.
- *  2. The difference was linear on minute offsets, so a pair straddling
- *     midnight was reported as the long way round: 23:30 and 00:30 came out as
- *     1380 minutes rather than 60, past every cutoff the UI offers.
+ *  1. `getHours()`/`getMinutes()` would reinterpret a `@db.Time(0)` value -
+ *     which Prisma returns as `1970-01-01T<time>Z` - in the *host's* zone.
+ *     Amplify and GitHub Actions run UTC, local development runs
+ *     `America/New_York`, so a result read with those accessors would depend
+ *     on where the code runs.
+ *  2. A linear difference on minute offsets reports a pair straddling
+ *     midnight the long way round: 23:30 and 00:30 would come out as 1380
+ *     minutes rather than 60, past every cutoff the UI offers.
  *
- * The old comment claimed a shared timezone offset always cancels in the
- * subtraction. It cancels only while both operands stay on the same side of a
- * day boundary under the shift, which is precisely the case (1) makes
- * host-dependent and (2) gets wrong.
+ * A shared timezone offset does not always cancel in the subtraction: it
+ * cancels only while both operands stay on the same side of a day boundary
+ * under the shift, which is precisely what (1) makes host-dependent and (2)
+ * gets wrong.
  *
  * **How the timezone half is actually covered.** Not by looping over zones
  * inside a test: assigning `process.env.TZ` once a Jest worker is running has no
@@ -1027,8 +1027,8 @@ describe("minutesApart", () => {
   const stored = (clock: string) => new Date(`1970-01-01T${clock}:00Z`);
 
   it("measures a pair straddling midnight as the short way round", () => {
-    // The ticket's failure scenario: 7:30pm and 8:30pm EDT, stored as 23:30
-    // and 00:30 UTC. Linear subtraction of minute offsets gives 1380.
+    // 7:30pm and 8:30pm EDT, stored as 23:30 and 00:30 UTC - the case a
+    // linear subtraction of minute offsets would score as 1380.
     expect(minutesApart(stored("23:30"), stored("00:30"))).toBe(60);
     expect(minutesApart(stored("00:30"), stored("23:30"))).toBe(60);
   });
@@ -1047,18 +1047,18 @@ describe("minutesApart", () => {
   });
 
   it("reads the value that was stored, whatever the host would render it as", () => {
-    // 23:30 UTC is 19:30 in New York and 08:30 the next morning in Tokyo. Under
-    // the old accessors each zone produced a different pair of minute offsets;
-    // the stored reading is the only one that is the same everywhere.
+    // 23:30 UTC is 19:30 in New York and 08:30 the next morning in Tokyo.
+    // Local accessors would produce a different pair of minute offsets per
+    // zone; the stored reading is the only one that is the same everywhere.
     expect(minutesApart(stored("23:30"), stored("00:30"))).toBe(60);
     expect(minutesApart(stored("19:30"), stored("20:30"))).toBe(60);
     expect(minutesApart(stored("08:30"), stored("09:30"))).toBe(60);
   });
 
   it("never reads a local-time accessor, so the host's zone cannot reach the result", () => {
-    // The structural guard, and the one that holds in a single run: these three
-    // methods are the only route from the host's zone into a `Date` reading, and
-    // the old implementation used two of them.
+    // The structural guard, and the one that holds in a single run: these
+    // three methods are the only route from the host's zone into a `Date`
+    // reading, and any of them being read here would be a regression.
     const localAccessors = [
       "getHours",
       "getMinutes",
@@ -1182,9 +1182,9 @@ describe("minutesApart", () => {
 
 describe("time filtering across midnight", () => {
   /**
-   * The evening pair from the ticket, expressed the way the scorer receives it.
-   * `at` builds UTC instants, so these are 23:30 and 00:30 stored - 7:30pm and
-   * 8:30pm in Boston.
+   * An evening pair expressed the way the scorer receives it. `at` builds
+   * UTC instants, so these are 23:30 and 00:30 stored - 7:30pm and 8:30pm in
+   * Boston.
    */
   const eveningRider = () =>
     rider({ startTime: at(11, 30), endTime: at(23, 30) });
@@ -1192,8 +1192,9 @@ describe("time filtering across midnight", () => {
     driver({ startTime: at(12, 30), endTime: at(0, 30) });
 
   it("keeps a pair finishing 60 minutes apart either side of midnight", () => {
-    // The `endTime` filter admits up to 4 hours. Production computed 1380
-    // minutes for this pair and dropped it from both sets of results.
+    // The `endTime` filter admits up to 4 hours. A linear subtraction would
+    // compute 1380 minutes for this pair and drop it from both sets of
+    // results.
     expect(isMatch(eveningRider(), eveningDriver(), { endTime: 1 })).toBe(true);
     expect(isMatch(eveningRider(), eveningDriver(), { endTime: 4 })).toBe(true);
   });
@@ -1207,8 +1208,8 @@ describe("time filtering across midnight", () => {
   });
 
   it("scores the midnight-straddling gap as 60 minutes, not a saturated one", () => {
-    // 60/80 of the end-time weight. Under the old arithmetic the component
-    // saturated at 1.0, so the pair was also ranked as badly as possible.
+    // 60/80 of the end-time weight. A linear subtraction would saturate the
+    // component at 1.0, ranking the pair as badly as possible.
     const current = rider({ startTime: at(9), endTime: at(23, 30) });
     const candidate = driver({ startTime: at(9), endTime: at(0, 30) });
 
@@ -1234,24 +1235,23 @@ describe("time filtering across midnight", () => {
 });
 
 /**
- * The daylight-saving defect, measured where it cost the product rather than
- * where it was written.
+ * Daylight-saving consistency, measured where it would cost the product
+ * rather than where the write path lives.
  *
- * `minutesApart` was never wrong here; the midnight wrap made it sound. What was wrong
- * were its *inputs*: the write path resolved Boston's UTC offset from the day
- * the user saved, so one wall-clock time had two stored forms. Two students with
- * identical 9-to-5 schedules came out 60 minutes apart if one onboarded in
- * winter and the other in summer.
+ * `minutesApart` itself is correct here; what matters is its *inputs*. If the
+ * write path resolved Boston's UTC offset from the day the user saved, one
+ * wall-clock time would have two stored forms, and two students with
+ * identical 9-to-5 schedules would come out 60 minutes apart if one onboarded
+ * in winter and the other in summer.
  *
  * That 60 minutes is large against the tolerances it feeds. Against
- * `cutoffs.startTime = 80` and weights of 0.1 on each end, a phantom gap on both
- * costs 0.15 of a total weight of 1.0 — more than the whole `days` weight — and
- * at the strictest Start/End Time filter setting it removes the pair from each
- * other's results outright.
+ * `cutoffs.startTime = 80` and weights of 0.1 on each end, a phantom gap on
+ * both costs 0.15 of a total weight of 1.0 — more than the whole `days`
+ * weight — and at the strictest Start/End Time filter setting it would remove
+ * the pair from each other's results outright.
  *
- * These assertions go through `toStoredScheduleTime`, so they measure the write
- * path and the comparison together. They fail against the pre-fix component,
- * which sent the picker's raw instant.
+ * These assertions go through `toStoredScheduleTime`, so they measure the
+ * write path and the comparison together, rather than the comparison alone.
  */
 describe("minutesApart across the seasons a schedule was entered in", () => {
   const WINTER = "2026-01-15";

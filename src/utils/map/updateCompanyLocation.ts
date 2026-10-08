@@ -11,10 +11,8 @@ import { getPointClickHandler } from "./handlers";
  *
  * The handler comes from `handlers.ts` rather than being wrapped in a fresh
  * closure here, because `map.off` can only name a listener it is handed the
- * identical function for - and a wrapper built at bind time is a different
- * function every call, which is why the removal path could never unbind one.
- * The wrapper this replaces only repeated the `!e.features` check that
- * `createPointClickHandler` already does on entry.
+ * identical function for - a wrapper built at bind time would be a different
+ * function every call, and the removal path could never unbind one.
  *
  * A missing handler binds nothing. `addMapEvents` registers it inside the
  * map's `load`, before anything here runs, so this is a guard rather than a
@@ -60,8 +58,9 @@ const updateCompanyLocation = (
     if (map.getLayer(layerId)) {
       // Unbind before the layer goes. Removing a layer does not remove the
       // listeners scoped to it, and this function re-binds whenever it
-      // rebuilds the layer - so without this every remove/recreate cycle left
-      // another live handler behind and one click ran it once per cycle.
+      // rebuilds the layer - so without this, every remove/recreate cycle
+      // would leave another live handler behind and one click would run it
+      // once per cycle.
       //
       // `getPointClickHandler` returns the same function for a given map (a
       // `WeakMap`, see `handlers.ts`), which is what makes `off` able to name
