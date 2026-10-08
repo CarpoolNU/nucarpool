@@ -68,6 +68,15 @@ const OLD_ROW = row("log-1", "user.admin.resolveReport");
 /** Written by the admin's own permission change while they were elsewhere. */
 const NEW_ROW = row("log-2", "user.admin.updateUserPermission");
 
+/*
+ * The Action cell shows wording, not the procedure path the row stores — see
+ * `utils/adminAuditLabels`. Spelled out rather than imported from there: this
+ * suite is about whether the refetch happened, so it wants a locator that
+ * stays fixed even if the label mapping is rewritten.
+ */
+const OLD_ROW_LABEL = "Report resolved";
+const NEW_ROW_LABEL = "Permission changed";
+
 beforeEach(() => {
   auditLogQueryFn.mockReset();
   usersQueryFn.mockReset();
@@ -94,11 +103,11 @@ describe("the admin audit log across a tab change", () => {
     const first = render(withClient);
     // Settle the first visit before counting anything, so the remount's fetch
     // cannot be confused with the initial one still in flight.
-    expect(await screen.findByText(OLD_ROW.action)).toBeVisible();
+    expect(await screen.findByText(OLD_ROW_LABEL)).toBeVisible();
     // The admin's action is genuinely absent to begin with. Without this the
     // closing assertion could pass against a component that had shown it all
     // along.
-    expect(screen.queryByText(NEW_ROW.action)).toBeNull();
+    expect(screen.queryByText(NEW_ROW_LABEL)).toBeNull();
     await waitFor(() => expect(auditLogQueryFn).toHaveBeenCalledTimes(1));
 
     const logCallsBefore = auditLogQueryFn.mock.calls.length;
@@ -131,6 +140,6 @@ describe("the admin audit log across a tab change", () => {
 
     // And the point of all of it: the row written while the admin was on
     // another tab is on screen.
-    expect(await screen.findByText(NEW_ROW.action)).toBeVisible();
+    expect(await screen.findByText(NEW_ROW_LABEL)).toBeVisible();
   });
 });

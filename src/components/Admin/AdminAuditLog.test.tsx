@@ -58,16 +58,72 @@ describe("AdminAuditLog", () => {
 
     expect(await screen.findByText("manager@northeastern.edu")).toBeVisible();
     expect(screen.getByText("target@northeastern.edu")).toBeVisible();
-    expect(screen.getByText("user.admin.updateUserPermission")).toBeVisible();
   });
 
-  it("falls back to the raw id when getAllUsers has no match", async () => {
+  it("words the action and its metadata rather than printing either raw", async () => {
     auditLogQueryFn.mockResolvedValue([
       {
         id: "log-1",
-        actorId: "deleted-actor",
+        actorId: "manager-1",
         action: "user.admin.updateUserPermission",
         targetId: "user-2",
+        metadata: JSON.stringify({ permission: "ADMIN" }),
+        dateCreated: new Date(2026, 8, 1, 10, 30),
+      },
+    ]);
+    usersQueryFn.mockResolvedValue([]);
+
+    render(withClient(<AdminAuditLog />));
+
+    expect(await screen.findByText("Permission changed")).toBeVisible();
+    expect(screen.getByText("Set to ADMIN")).toBeVisible();
+    expect(
+      screen.queryByText("user.admin.updateUserPermission"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('{"permission":"ADMIN"}'),
+    ).not.toBeInTheDocument();
+  });
+
+  it("labels a report target, which getAllUsers can never resolve", async () => {
+    // `resolveReport` writes a *report* id as `targetId`, so resolving it
+    // against the user map misses by construction — not because the user is
+    // missing. Before SCRUM-647 that printed a bare cuid.
+    auditLogQueryFn.mockResolvedValue([
+      {
+        id: "log-1",
+        actorId: "manager-1",
+        action: "user.admin.resolveReport",
+        targetId: "clx3k9a0b0000qwertyuiop12",
+        metadata: JSON.stringify({ status: "REVIEWED" }),
+        dateCreated: new Date(2026, 8, 1),
+      },
+    ]);
+    usersQueryFn.mockResolvedValue([
+      {
+        id: "manager-1",
+        email: "manager@northeastern.edu",
+        permission: "MANAGER",
+      },
+    ]);
+
+    render(withClient(<AdminAuditLog />));
+
+    expect(await screen.findByText("Report …tyuiop12")).toBeVisible();
+    expect(screen.getByText("Report resolved")).toBeVisible();
+    expect(screen.getByText("Marked REVIEWED")).toBeVisible();
+    expect(
+      screen.queryByText("clx3k9a0b0000qwertyuiop12"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the full target id reachable through the cell's title", async () => {
+    auditLogQueryFn.mockResolvedValue([
+      {
+        id: "log-1",
+        actorId: "manager-1",
+        action: "user.admin.resolveReport",
+        targetId: "clx3k9a0b0000qwertyuiop12",
         metadata: null,
         dateCreated: new Date(2026, 8, 1),
       },
@@ -76,7 +132,29 @@ describe("AdminAuditLog", () => {
 
     render(withClient(<AdminAuditLog />));
 
-    expect(await screen.findByText("deleted-actor")).toBeVisible();
+    expect(
+      await screen.findByTitle("clx3k9a0b0000qwertyuiop12"),
+    ).toHaveTextContent("Report …tyuiop12");
+  });
+
+  it("marks an unresolvable user target instead of printing a bare id", async () => {
+    auditLogQueryFn.mockResolvedValue([
+      {
+        id: "log-1",
+        actorId: "deleted-actor",
+        action: "user.admin.updateUserPermission",
+        targetId: "clx3k9a0b0000qwertyuiop12",
+        metadata: null,
+        dateCreated: new Date(2026, 8, 1),
+      },
+    ]);
+    usersQueryFn.mockResolvedValue([]);
+
+    render(withClient(<AdminAuditLog />));
+
+    expect(await screen.findByText("Unknown user (…tyuiop12)")).toBeVisible();
+    // Actor is always a user, so it keeps the plain raw-id fallback.
+    expect(screen.getByText("deleted-actor")).toBeVisible();
   });
 
   it("shows an empty-state message rather than a blank table", async () => {
