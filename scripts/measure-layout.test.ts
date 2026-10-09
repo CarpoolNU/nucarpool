@@ -67,12 +67,15 @@ describe("parseArgs", () => {
     expect(parseArgs([]).host).toBe("127.0.0.1");
   });
 
+  /* One column, holding the whole argv. A row of loose elements spread into
+     `(...argv)` leaves `%j` formatting only the first of them, so all four
+     cases reported the same name and a red run did not say which. */
   it.each([
-    ["--width", "0"],
-    ["--width", "-375"],
-    ["--width", "wide"],
-    ["--width"],
-  ])("refuses a width of %j rather than serving at NaN", (...argv) => {
+    [["--width", "0"]],
+    [["--width", "-375"]],
+    [["--width", "wide"]],
+    [["--width"]],
+  ])("refuses %j rather than serving at NaN", (argv) => {
     expect(() => parseArgs(["a", ...argv])).toThrow(
       /--width needs a positive number/,
     );
@@ -87,11 +90,11 @@ describe("parseArgs", () => {
   });
 
   it.each([
-    ["--height", "0"],
-    ["--height", "-375"],
-    ["--height", "tall"],
-    ["--height"],
-  ])("refuses a height of %j rather than serving at NaN", (...argv) => {
+    [["--height", "0"]],
+    [["--height", "-375"]],
+    [["--height", "tall"]],
+    [["--height"]],
+  ])("refuses %j rather than serving at NaN", (argv) => {
     /* The same validation as `--width`, and it is shared rather than copied -
        so this case exists to prove the sharing did not drop it for one of the
        two flags. */
@@ -241,8 +244,28 @@ describe("fixture drift", () => {
     }
   });
 
+  it("names each drift case distinctly, so a red run identifies one case", () => {
+    /* Every column of a row reaches the title, so distinct rows mean distinct
+       names. Without this, a fixture that reproduced the same string from the
+       same file twice would collide again and nothing would say so - which is
+       how the name/file pair went 82 cases deep on 22 names before anyone
+       noticed. A duplicate row is also a redundant assertion. */
+    const rows = cases.map((row) => JSON.stringify(row));
+
+    expect(new Set(rows).size).toBe(cases.length);
+  });
+
+  /* The asserted class string is in the title because it is what distinguishes
+     one case from another: a fixture reproduces several strings from the same
+     file, so the name/file pair alone covered up to nine cases at once. This
+     guard fails exactly when a component's markup has changed, which is the
+     moment the report most needs to say which string drifted.
+
+     Interpolating it adds no class-name literal to this file - the strings
+     live in the fixture registry already - which matters because Tailwind
+     scans this file too. See the control below. */
   it.each(cases)(
-    "%s still matches the markup in %s",
+    "%s still matches the markup in %s: %s",
     (_fixtureName, file, className) => {
       const source = fs.readFileSync(path.join(REPO_ROOT, file), "utf8");
 
