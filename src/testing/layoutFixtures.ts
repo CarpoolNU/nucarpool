@@ -142,7 +142,7 @@ export const describeContainerWidth = (
  * The chain is the mobile group view: `MobileGroupView`'s `px-4` page gutter,
  * the members panel's 1px border on each side, the `divide-y` list (no
  * horizontal inset of its own), and the card's own `px-2`.
- * `GroupPage.tsx:708`, `:748`, `:755` and `GroupMemberCard.tsx:227`
+ * `GroupPage.tsx:708`, `:748`, `:755` and `GroupMemberCard.tsx:244`
  * respectively.
  *
  * The card's `sm:px-4` is left in the copied class string but does not apply
@@ -163,11 +163,73 @@ const GROUP_MEMBER_ROW_CLASS = "flex items-center gap-3 px-2 py-3 sm:px-4";
 const GROUP_MEMBER_TRIGGER_CLASS =
   "rounded-lg bg-red-100 p-3 text-sm font-medium text-red-700 transition-colors hover:bg-red-200 disabled:opacity-50";
 
+/*
+ * The three branches of the row's `ProfileAvatar`, as the card passes them.
+ *
+ * The row used to draw a single grey circle holding an initial, and these
+ * fixtures copied it. SCRUM-666 replaced it with a `ProfileAvatar`, which is
+ * three different *elements* depending on state - a `div` while the presigned
+ * URL resolves, an `img` once it does, an `svg` when there is no picture -
+ * where there used to be one. Two of those are replaced elements, which do not
+ * take their size from flex layout the way the old `div` did, so "the box is
+ * still 48px" stopped being something the old fixture could show and became
+ * something worth measuring per branch. `groupMemberCardAvatar` below does
+ * that; these constants are what it and the drift guard share.
+ */
+const GROUP_MEMBER_AVATAR_PLACEHOLDER_CLASS =
+  "h-12 w-12 rounded-full bg-gray-200";
+
+const GROUP_MEMBER_AVATAR_IMAGE_CLASS = "h-12 w-12 rounded-full object-cover";
+
+const GROUP_MEMBER_AVATAR_FALLBACK_CLASS =
+  "h-12 w-12 rounded-full bg-gray-200 p-2";
+
+/*
+ * A 1x1 transparent GIF. The `img` branch needs a real replaced element for
+ * the browser to lay out - an `img` with no `src` is not one - but nothing
+ * here reads a pixel of it, because `object-cover` inside a fixed 48px box
+ * makes the intrinsic size irrelevant to the geometry being measured. Inline
+ * rather than a file so the harness still serves one page and no asset.
+ */
+const TRANSPARENT_PIXEL =
+  "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+
+/**
+ * One row's avatar slot, in the branch named.
+ *
+ * `AiOutlineUser` is reproduced as a bare `svg` carrying the same classes
+ * react-icons puts on it: `viewBox` and the 1em/1em default that the `h-12
+ * w-12` overrides. The path is a stand-in - the icon's own geometry is inside
+ * the box and cannot move it.
+ */
+const groupMemberAvatar = (
+  branch: "placeholder" | "image" | "fallback",
+  /* Omitted by the rows that are not measuring the avatar itself. */
+  probe?: string,
+) => {
+  const probeAttr = probe ? ` data-probe="${probe}"` : "";
+  const element =
+    branch === "placeholder"
+      ? `<div class="${GROUP_MEMBER_AVATAR_PLACEHOLDER_CLASS}"${probeAttr}></div>`
+      : branch === "image"
+        ? /* The alt is deliberately not the row's name. Nothing here measures
+             it, and a name-shaped one invites a copy that disagrees with the
+             row it sits on - which is drift that looks like content rather
+             than like geometry, so nothing would catch it. */
+          `<img src="${TRANSPARENT_PIXEL}" alt="Profile Image" width="48" height="48" class="${GROUP_MEMBER_AVATAR_IMAGE_CLASS}" style="color:transparent"${probeAttr}>`
+        : `<svg class="${GROUP_MEMBER_AVATAR_FALLBACK_CLASS}" stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024" aria-hidden="true"${probeAttr}><path d="M858.5 763.6a374 374 0 0 0-80.6-119.5 375.6 375.6 0 0 0-119.5-80.6c-.4-.2-.8-.3-1.2-.5C719.5 518 760 444.7 760 362c0-137-111-248-248-248S264 225 264 362c0 82.7 40.5 156 102.8 201.1-.4.2-.8.3-1.2.5-44.8 18.9-85 46-119.5 80.6a375.6 375.6 0 0 0-80.6 119.5A371 371 0 0 0 136 901.8a8 8 0 0 0 8 8.2h60c4.4 0 7.9-3.5 8-7.8 2-77.2 33-149.5 87.8-204.3 56.7-56.7 132-87.9 212.2-87.9s155.5 31.2 212.2 87.9C778.9 752.7 810 825 812 902.2c.1 4.4 3.6 7.8 8 7.8h60a8 8 0 0 0 8-8.2c-1-47.8-10.9-94.3-29.5-138.2z"/></svg>`;
+
+  return `
+            <div class="flex-shrink-0">
+              ${element}
+            </div>`;
+};
+
 const groupMemberCardTrigger: LayoutFixture = {
   name: "group-member-card-trigger",
   summary:
     "The destructive trigger on a group member card, at the mobile group view's width",
-  source: "src/components/Group/GroupMemberCard.tsx:371",
+  source: "src/components/Group/GroupMemberCard.tsx:435",
   issue: "SCRUM-480",
   viewportWidth: 375,
   insets: [
@@ -179,12 +241,7 @@ const groupMemberCardTrigger: LayoutFixture = {
     <div class="space-y-6 px-4 py-6">
       <div class="rounded-lg border border-gray-200 bg-white shadow-xs">
         <div class="divide-y divide-gray-100">
-          <div class="${GROUP_MEMBER_ROW_CLASS}" data-probe="row-divided">
-            <div class="flex-shrink-0">
-              <div class="flex h-12 w-12 items-center justify-center rounded-full bg-gray-200">
-                <span class="text-lg font-medium text-gray-600">A</span>
-              </div>
-            </div>
+          <div class="${GROUP_MEMBER_ROW_CLASS}" data-probe="row-divided">${groupMemberAvatar("fallback")}
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2">
                 <h3 class="truncate text-base font-semibold text-gray-900">Alex Rivera</h3>
@@ -196,12 +253,7 @@ const groupMemberCardTrigger: LayoutFixture = {
               <button type="button" class="${GROUP_MEMBER_TRIGGER_CLASS}" data-probe="trigger">Leave Group</button>
             </div>
           </div>
-          <div class="${GROUP_MEMBER_ROW_CLASS}" data-probe="row-last">
-            <div class="flex-shrink-0">
-              <div class="flex h-12 w-12 items-center justify-center rounded-full bg-gray-200">
-                <span class="text-lg font-medium text-gray-600">S</span>
-              </div>
-            </div>
+          <div class="${GROUP_MEMBER_ROW_CLASS}" data-probe="row-last">${groupMemberAvatar("fallback")}
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2">
                 <h3 class="truncate text-base font-semibold text-gray-900">Sam Okafor</h3>
@@ -289,7 +341,6 @@ const GROUP_MEMBER_CANCEL_CLASS =
 
 /** The confirming slot and the menu beside it, one row's worth. */
 const groupMemberConfirmingRow = (
-  initial: string,
   name: string,
   email: string,
   badge: string,
@@ -297,12 +348,7 @@ const groupMemberConfirmingRow = (
   prompt: string,
   probeSuffix: string,
 ) => `
-          <div class="${GROUP_MEMBER_ROW_CLASS}" data-probe="row${probeSuffix}">
-            <div class="flex-shrink-0">
-              <div class="flex h-12 w-12 items-center justify-center rounded-full bg-gray-200">
-                <span class="text-lg font-medium text-gray-600">${initial}</span>
-              </div>
-            </div>
+          <div class="${GROUP_MEMBER_ROW_CLASS}" data-probe="row${probeSuffix}">${groupMemberAvatar("fallback")}
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2">
                 <h3 class="truncate text-base font-semibold text-gray-900">${name}</h3>
@@ -330,7 +376,7 @@ const groupMemberCardActionsMenu: LayoutFixture = {
   name: "group-member-card-actions-menu",
   summary:
     "The new report/block trigger against the row's Confirm button, mid-confirmation",
-  source: "src/components/Group/GroupMemberCard.tsx:296",
+  source: "src/components/Group/GroupMemberCard.tsx:444",
   issue: "SCRUM-622",
   viewportWidth: 375,
   insets: [
@@ -343,7 +389,6 @@ const groupMemberCardActionsMenu: LayoutFixture = {
       <div class="rounded-lg border border-gray-200 bg-white shadow-xs">
         <div class="divide-y divide-gray-100">
 ${groupMemberConfirmingRow(
-  "A",
   "Alex Rivera",
   "alex.rivera@northeastern.edu",
   "Rider",
@@ -352,7 +397,6 @@ ${groupMemberConfirmingRow(
   "-divided",
 )}
 ${groupMemberConfirmingRow(
-  "S",
   "Sam Okafor",
   "sam.okafor@northeastern.edu",
   "Viewer",
@@ -415,6 +459,112 @@ ${groupMemberConfirmingRow(
     {
       file: "src/components/UserActions/UserActionsMenu.tsx",
       className: GROUP_MEMBER_MENU_TRIGGER_CLASS,
+    },
+  ],
+};
+
+/*
+ * The row's avatar, in each of the three states `ProfileAvatar` can be in.
+ *
+ * The criterion is that the box does not move between them. The row's content
+ * box is 48px and the `h-12` avatar is what sets it; the 44px destructive
+ * trigger SCRUM-480 measured fits *inside* that, so the trigger's clearance is
+ * downstream of this number. Before SCRUM-666 there was one element and one
+ * number to check. Now there are three elements, two of them replaced - an
+ * `img` and an `svg` - and a replaced element that sized itself intrinsically
+ * instead of from `h-12 w-12` would grow the row the moment a picture finished
+ * loading, which is a defect that would only appear on rows whose member has a
+ * photo and only after the URL resolved.
+ *
+ * The three rows carry no action column on purpose. The trigger fixtures above
+ * own the trigger's geometry against a letter-free avatar already; what is
+ * isolated here is the avatar's own contribution to the row's height, with
+ * nothing else in the row tall enough to be setting it.
+ */
+const groupMemberCardAvatar: LayoutFixture = {
+  name: "group-member-card-avatar",
+  summary:
+    "A group member row's avatar in all three ProfileAvatar states, at the mobile group view's width",
+  source: "src/components/Group/GroupMemberCard.tsx:289",
+  issue: "SCRUM-666",
+  viewportWidth: 375,
+  insets: [
+    { name: "page px-4", x: 32 },
+    { name: "panel border", x: 2 },
+    { name: "card px-2", x: 16 },
+  ],
+  markup: `
+    <div class="space-y-6 px-4 py-6">
+      <div class="rounded-lg border border-gray-200 bg-white shadow-xs">
+        <div class="divide-y divide-gray-100">
+          <div class="${GROUP_MEMBER_ROW_CLASS}" data-probe="row-placeholder">${groupMemberAvatar("placeholder", "avatar-placeholder")}
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2">
+                <h3 class="truncate text-base font-semibold text-gray-900">Alex Rivera</h3>
+                <span class="inline-flex items-center rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800">Driver</span>
+              </div>
+              <p class="truncate text-sm text-gray-600">alex.rivera@northeastern.edu</p>
+            </div>
+          </div>
+          <div class="${GROUP_MEMBER_ROW_CLASS}" data-probe="row-image">${groupMemberAvatar("image", "avatar-image")}
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2">
+                <h3 class="truncate text-base font-semibold text-gray-900">Sam Okafor</h3>
+                <span class="inline-flex items-center rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-800">Rider</span>
+              </div>
+              <p class="truncate text-sm text-gray-600">sam.okafor@northeastern.edu</p>
+            </div>
+          </div>
+          <div class="${GROUP_MEMBER_ROW_CLASS}" data-probe="row-fallback">${groupMemberAvatar("fallback", "avatar-fallback")}
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2">
+                <h3 class="truncate text-base font-semibold text-gray-900">Jordan Lee</h3>
+                <span class="inline-flex items-center rounded-full bg-gray-200 px-2 py-1 text-xs font-medium text-gray-700">Viewer</span>
+              </div>
+              <p class="truncate text-sm text-gray-600">jordan.lee@northeastern.edu</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `,
+  widthProbe: "[data-probe='row-fallback']",
+  probe: {
+    boxes: [
+      "[data-probe='row-placeholder']",
+      "[data-probe='row-image']",
+      "[data-probe='row-fallback']",
+      "[data-probe='avatar-placeholder']",
+      "[data-probe='avatar-image']",
+      "[data-probe='avatar-fallback']",
+    ],
+    footprint: "[data-probe='avatar-fallback']",
+  },
+  recorded: [
+    "avatar-placeholder, avatar-image and avatar-fallback all 48x48 by clientHeight/clientWidth and by rect — the criterion. The div, the img and the svg take the same box, so nothing moves when a URL resolves or fails.",
+    "row-placeholder and row-image clientHeight 72, rect 73; row-fallback clientHeight 72, rect 72. 48 from the avatar plus py-3, then divide-y's border on all but the last — the same split the trigger fixture records, and the same 72 the letter circle set before SCRUM-666.",
+    "row contentWidth 325, matching the predicted chain, as the trigger fixture.",
+    "THE NUMBER THAT MATTERS IS 72, unchanged. The 44px trigger SCRUM-480 measured fits inside the 48px avatar box, so every clearance figure the two fixtures above record still holds in all three states rather than only the one the old letter circle could show.",
+    "The svg's p-2 is inside the 48px box, not added to it: border-box from preflight, so the icon is drawn at 32px within a 48px circle (contentWidth/contentHeight 32, padding 8 on each side). Changing the padding moves the glyph, not the row.",
+    "avatar-fallback's footprint is reachable at all 9 probe points with nothing on top - the icon is the hit target across the whole 48px circle, not only where the glyph is painted.",
+    "THE TWO FIXTURES ABOVE WERE RE-MEASURED after their avatars were swapped from the letter circle to this svg, because a fixture's figures are only as good as the markup they were taken from. Every recorded number came back identical: trigger 44 clientHeight and 106.7 wide, rows 72/73 and 72, contentWidth 325, footprint reachable 9/9; and on the actions-menu fixture menu trigger 44x44 at top 37 bottom 81, Confirm top 125 for the 44px clearance, Cancel top 57, row contentHeight 132, rows 156/157 and 156, overlaps 0. The avatar change moved nothing they measure.",
+  ],
+  reproduces: [
+    {
+      file: "src/components/Group/GroupMemberCard.tsx",
+      className: GROUP_MEMBER_ROW_CLASS,
+    },
+    {
+      file: "src/components/Group/GroupMemberCard.tsx",
+      className: GROUP_MEMBER_AVATAR_PLACEHOLDER_CLASS,
+    },
+    {
+      file: "src/components/Group/GroupMemberCard.tsx",
+      className: GROUP_MEMBER_AVATAR_IMAGE_CLASS,
+    },
+    {
+      file: "src/components/Group/GroupMemberCard.tsx",
+      className: GROUP_MEMBER_AVATAR_FALLBACK_CLASS,
     },
   ],
 };
@@ -2338,6 +2488,7 @@ ${scheduleCard("-short-times", LONG_COMPANY_NAME, "9:00 AM", "5:00 PM")}
 export const LAYOUT_FIXTURES: readonly LayoutFixture[] = [
   groupMemberCardTrigger,
   groupMemberCardActionsMenu,
+  groupMemberCardAvatar,
   headerLogoBar,
   adminConsoleChartFold,
   profileContentColumnWidth,
