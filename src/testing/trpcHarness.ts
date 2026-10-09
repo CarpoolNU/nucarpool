@@ -47,6 +47,10 @@
  * here it resolves, which keeps an unrelated query from refetching
  * mid-assertion. A suite that needs the real thing declares `invalidate` on
  * the stub and gets the live `QueryClient` handed to it.
+ *
+ * `fetch` is the exception: it is wired straight to the live client's
+ * `fetchQuery`, because a caller using it is usually doing so *to defeat* the
+ * cache, and a stub that resolved a literal could not tell whether it had.
  */
 
 import type { QueryClient } from "@tanstack/react-query";
@@ -107,6 +111,14 @@ export type ProcedureSpies = {
   invalidate: jest.Mock;
   refetch: jest.Mock;
   cancel: jest.Mock;
+  /**
+   * `useUtils().<path>.fetch`, as the `queryClient.fetchQuery` it compiles
+   * down to - so it shares `queryFn` above with the same path's `useQuery`.
+   * Counting `queryFn` is therefore the way to tell an imperative fetch that
+   * went to the network from one served out of the cache, which is the whole
+   * question for a caller holding a short-lived credential.
+   */
+  fetch: jest.Mock;
 };
 
 /**
@@ -128,6 +140,7 @@ const newSpies = (): ProcedureSpies => ({
   invalidate: jest.fn(async () => undefined),
   refetch: jest.fn(async () => undefined),
   cancel: jest.fn(async () => undefined),
+  fetch: jest.fn(async () => undefined),
 });
 
 const spiesFor = (path: string): ProcedureSpies => {
@@ -290,10 +303,24 @@ export const buildTrpcMock = (
       spies.refetch.mockImplementation(
         refetch ? () => refetch(queryClient) : async () => undefined,
       );
+      // The real thing, unlike `invalidate` and `refetch` above: this goes to
+      // the live `QueryClient` and runs the same `queryFn` the path's
+      // `useQuery` runs, under the same key. A stub resolving a literal would
+      // answer "did the caller ask for a URL" and not "did it get a fresh
+      // one", and the second question is the only one worth asking of code
+      // that fetches a credential imperatively.
+      spies.fetch.mockImplementation((input: unknown, options?: object) =>
+        queryClient.fetchQuery({
+          queryKey: [path, input],
+          queryFn: (context: QueryFnContext) => spies.queryFn(input, context),
+          ...options,
+        }),
+      );
       assignAtPath(utils, path, {
         invalidate: spies.invalidate,
         refetch: spies.refetch,
         cancel: spies.cancel,
+        fetch: spies.fetch,
       });
     }
 

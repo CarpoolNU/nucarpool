@@ -272,7 +272,7 @@ describe("useMutation", () => {
 });
 
 describe("useUtils", () => {
-  it("mirrors the spec's paths as invalidate, refetch and cancel spies", async () => {
+  it("mirrors the spec's paths as invalidate, refetch, cancel and fetch spies", async () => {
     const { result } = renderHook(() => trpc.useUtils(), {
       wrapper: withClient,
     });
@@ -287,6 +287,46 @@ describe("useUtils", () => {
     ).toHaveBeenCalledTimes(1);
     expect(trpcSpies("user.me").refetch).toHaveBeenCalledTimes(1);
     expect(typeof result.current.user.me.cancel).toBe("function");
+    expect(typeof result.current.user.me.fetch).toBe("function");
+  });
+
+  /**
+   * `fetch` is the one util wired to the live client rather than to a
+   * recording stub, because the callers that reach for it do so *to defeat*
+   * the cache - `useUploadFile` signs a credential that way. A stub resolving
+   * a literal would report success without establishing that anything was
+   * fetched, so this asserts against the `queryFn` count instead.
+   */
+  it("runs fetch against the live client, sharing the path's queryFn", async () => {
+    const { result } = renderHook(() => trpc.useUtils(), {
+      wrapper: withClient,
+    });
+
+    await act(async () => {
+      await result.current.user.me.fetch(undefined, { staleTime: 0 });
+      await result.current.user.me.fetch(undefined, { staleTime: 0 });
+    });
+
+    expect(trpcSpies("user.me").fetch).toHaveBeenCalledTimes(2);
+    // Both went to the stub rather than the second being served from the
+    // entry the first one wrote - which is the whole reason a caller fetches
+    // imperatively instead of mounting a query.
+    expect(trpcSpies("user.me").queryFn).toHaveBeenCalledTimes(2);
+  });
+
+  it("control: fetch serves from cache while the entry is fresh", async () => {
+    const { result } = renderHook(() => trpc.useUtils(), {
+      wrapper: withClient,
+    });
+
+    await act(async () => {
+      await result.current.user.me.fetch(undefined, { staleTime: 60_000 });
+      await result.current.user.me.fetch(undefined, { staleTime: 60_000 });
+    });
+
+    // The pair above would pass vacuously if `fetch` never reached the client
+    // at all. It does: told the entry is still fresh, it reuses it.
+    expect(trpcSpies("user.me").queryFn).toHaveBeenCalledTimes(1);
   });
 
   /**
