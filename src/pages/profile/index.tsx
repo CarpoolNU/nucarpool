@@ -20,7 +20,13 @@ import { QueryError } from "../../components/QueryError";
 import { Role } from "@prisma/client";
 import { trackProfileCompletion } from "../../utils/mixpanel";
 import { useUploadFile } from "../../utils/profile/useUploadFile";
+import { useRemoveProfilePicture } from "../../utils/profile/useRemoveProfilePicture";
 import { hasProfileChanges } from "../../utils/profile/hasProfileChanges";
+import {
+  PendingPicture,
+  isPendingRemoval,
+  pendingPictureFile,
+} from "../../utils/profile/pendingPicture";
 import { planCoopRangeNotice } from "../../utils/profile/coopRangeNotice";
 import { useAddressSelection } from "../../utils/useAddressSelection";
 import {
@@ -88,8 +94,15 @@ const Index: NextPage = () => {
   const coopRangeNoticeShown = useRef(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const { uploadFile } = useUploadFile(selectedFile);
+  /**
+   * The unsaved picture change: a cropped file, a pending removal, or
+   * nothing. One slot rather than two pieces of state, because uploading and
+   * removing are mutually exclusive - see `pendingPicture.ts`.
+   */
+  const [pendingPicture, setPendingPicture] = useState<PendingPicture>(null);
+  const pendingFile = pendingPictureFile(pendingPicture);
+  const { uploadFile } = useUploadFile(pendingFile);
+  const { removeProfilePicture } = useRemoveProfilePicture();
   const { data: session } = useSession();
   const userQuery = trpc.user.me.useQuery(undefined, {
     refetchOnMount: true,
@@ -230,16 +243,16 @@ const Index: NextPage = () => {
    * Absent, the map is the destination, which is what the desktop button
    * asks for.
    *
-   * `selectedFile` is passed as well as the form values because it is the one
-   * unsaved change that is not a form field. Without it a freshly cropped
-   * picture takes the else branch below and the navigation happens at once,
-   * with no modal - the one profile edit the guard cannot see, on a page whose
-   * other fourteen it protects.
+   * `pendingPicture` is passed as well as the form values because it is the
+   * one unsaved change that is not a form field. Without it a freshly cropped
+   * picture - or a pending removal - takes the else branch below and the
+   * navigation happens at once, with no modal: the one profile edit the guard
+   * cannot see, on a page whose other fourteen it protects.
    */
   const checkForChanges = async (proceed?: () => void | Promise<void>) => {
     proceedRef.current = proceed ?? null;
 
-    if (hasProfileChanges(watch(), user, selectedFile)) {
+    if (hasProfileChanges(watch(), user, pendingPicture)) {
       setShowModal(true);
     } else {
       setIsLoading(true);
@@ -251,22 +264,23 @@ const Index: NextPage = () => {
    * Leave without saving - the modal's Continue, and also the tail of a
    * successful save.
    *
-   * Dropping `selectedFile` is what makes "Continue discards the picture" true
-   * of the state rather than only of the navigation. Leaving the page usually
-   * unmounts this component and takes the file with it, but that is a
-   * consequence of the destination rather than a decision made here: `proceed`
-   * is supplied by the caller, and a guard that declined to navigate - or a
-   * destination that re-renders this page rather than replacing it - would
-   * otherwise leave a file the user has just chosen to abandon still queued for
-   * the next save. Clearing it first costs nothing on the paths that do unmount
-   * and closes the one that does not.
+   * Dropping `pendingPicture` is what makes "Continue discards the picture"
+   * true of the state rather than only of the navigation, and it now discards
+   * a pending *removal* on the same terms: the stored picture stays. Leaving
+   * the page usually unmounts this component and takes the pending change with
+   * it, but that is a consequence of the destination rather than a decision
+   * made here: `proceed` is supplied by the caller, and a guard that declined
+   * to navigate - or a destination that re-renders this page rather than
+   * replacing it - would otherwise leave a change the user has just chosen to
+   * abandon still queued for the next save. Clearing it first costs nothing on
+   * the paths that do unmount and closes the one that does not.
    *
    * Safe on the save path too: `onSubmitWithContinue` has already awaited the
    * upload by the time it calls this.
    */
   const onContinue = async () => {
     setIsLoading(true);
-    setSelectedFile(null);
+    setPendingPicture(null);
     await proceedToDestination();
     setIsLoading(false);
     setShowModal(false);
@@ -344,12 +358,17 @@ const Index: NextPage = () => {
       coopStartDate: values.coopStartDate ?? null,
       coopEndDate: values.coopEndDate ?? null,
     };
-    // A failed upload must not stop at the console, or the save below reports
-    // success while the avatar silently stays as it was. The failure is
+    // A failed picture change must not stop at the console, or the save below
+    // reports success while the avatar silently stays as it was. The failure is
     // carried down to the save result instead of aborting here, because the
     // profile fields still save correctly when only the picture fails.
-    let pictureUploadFailed = false;
-    if (selectedFile) {
+    //
+    // The three states are exclusive by construction, which is why this is a
+    // branch rather than two independent checks: `pendingPicture` holds a file,
+    // the removal marker, or nothing, so an upload and a removal can never both
+    // be attempted in one save.
+    let pictureFailure: "upload" | "removal" | null = null;
+    if (pendingFile) {
       try {
         await uploadFile();
 
@@ -367,10 +386,23 @@ const Index: NextPage = () => {
         // stored picture has already been refetched by the time the preview
         // stops deriving from this file - the avatar swaps straight from the
         // local crop to the uploaded one with nothing in between.
-        setSelectedFile(null);
+        setPendingPicture(null);
       } catch (error) {
         console.error("File upload failed:", error);
-        pictureUploadFailed = true;
+        pictureFailure = "upload";
+      }
+    } else if (isPendingRemoval(pendingPicture)) {
+      try {
+        await removeProfilePicture();
+
+        // Cleared on success for the same reason as above, and kept on failure
+        // for the same reason too: a removal the server refused is still
+        // pending, so the modal should go on warning about it and a second
+        // press should retry it rather than silently do nothing.
+        setPendingPicture(null);
+      } catch (error) {
+        console.error("Profile picture removal failed:", error);
+        pictureFailure = "removal";
       }
     }
     const sessionName = session?.user?.name ?? "";
@@ -381,9 +413,17 @@ const Index: NextPage = () => {
         mutation: editUserMutation,
       });
       trackProfileCompletion(userInfo.role, userInfo.status);
-      if (pictureUploadFailed) {
+      // Named separately rather than sharing one message: "could not be
+      // uploaded" told a user who pressed Remove the opposite of what happened,
+      // and in both cases the reassuring half - that the stored picture is
+      // untouched - is the part they need in order to decide whether to retry.
+      if (pictureFailure === "upload") {
         toast.warning(
           "Your profile was updated, but the new picture could not be uploaded. Your previous picture is unchanged - please try again.",
+        );
+      } else if (pictureFailure === "removal") {
+        toast.warning(
+          "Your profile was updated, but your picture could not be removed. It is still there - please try again.",
         );
       } else {
         toast.success("User profile updated successfully!");
@@ -537,8 +577,8 @@ const Index: NextPage = () => {
               {option === "user" ? (
                 <UserSection
                   watch={watch}
-                  onFileSelect={setSelectedFile}
-                  selectedFile={selectedFile}
+                  onPendingPictureChange={setPendingPicture}
+                  pendingPicture={pendingPicture}
                   errors={errors}
                   register={register}
                   onSubmit={handleSubmit(onSubmit, onError)}
@@ -591,8 +631,8 @@ const Index: NextPage = () => {
               {option === "user" ? (
                 <UserSection
                   watch={watch}
-                  onFileSelect={setSelectedFile}
-                  selectedFile={selectedFile}
+                  onPendingPictureChange={setPendingPicture}
+                  pendingPicture={pendingPicture}
                   errors={errors}
                   register={register}
                   onSubmit={handleSubmit(onSubmit, onError)}

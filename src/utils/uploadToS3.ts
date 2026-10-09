@@ -1,4 +1,5 @@
 import {
+  DeleteObjectCommand,
   GetObjectCommand,
   PutObjectCommand,
   S3Client,
@@ -112,4 +113,32 @@ export async function signProfileImageUrl(fileName: string) {
     console.error("Error signing image url", error);
     return null;
   }
+}
+
+/**
+ * Deletes a user's profile picture object.
+ *
+ * **Throws rather than reporting failure in its return value**, which is the
+ * opposite of `signProfileImageUrl` above and deliberate: the caller has to be
+ * able to tell a completed delete from a refused one, because the reconciling
+ * read it does afterwards is only meaningful - and only worth a query - when
+ * bytes actually went away. A null return would collapse those two cases.
+ *
+ * `DeleteObject` is idempotent and answers 204 for a key that is not there, so
+ * a throw here means the request was refused rather than that the picture was
+ * already gone. In practice that is an IAM policy without `s3:DeleteObject`.
+ *
+ * Deleting the object is not what makes the picture disappear from the app -
+ * `User.profilePictureUpdatedAt` is the only thing `getPresignedDownloadUrl`
+ * consults, and `user.removeProfilePicture` has already nulled it by the time
+ * this runs. This is the second half: without it the bytes stay in the bucket,
+ * and any download URL signed in the previous hour goes on serving them.
+ */
+export async function deleteProfileImage(fileName: string): Promise<void> {
+  await s3Client.send(
+    new DeleteObjectCommand({
+      Bucket: serverEnv.S3_BUCKET_NAME,
+      Key: profileImageKey(fileName),
+    }),
+  );
 }

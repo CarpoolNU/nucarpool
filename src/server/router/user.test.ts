@@ -51,11 +51,13 @@ dayjs.extend(timezonePlugin);
 
 const mockGeneratePresignedUrl = jest.fn();
 const mockSignProfileImageUrl = jest.fn();
+const mockDeleteProfileImage = jest.fn();
 
 jest.mock("../../utils/uploadToS3", () => ({
   generatePresignedUrl: (...args: unknown[]) =>
     mockGeneratePresignedUrl(...args),
   signProfileImageUrl: (...args: unknown[]) => mockSignProfileImageUrl(...args),
+  deleteProfileImage: (...args: unknown[]) => mockDeleteProfileImage(...args),
 }));
 
 const SESSION_USER = "session-user";
@@ -107,6 +109,7 @@ beforeEach(() => {
   mockUserFindUnique.mockResolvedValue({ profilePictureUpdatedAt: null });
   mockUserUpdate.mockResolvedValue({});
   mockBlockFindFirst.mockResolvedValue(null);
+  mockDeleteProfileImage.mockResolvedValue(undefined);
 });
 
 const withRecordedPicture = () =>
@@ -511,6 +514,171 @@ describe("user.recordProfilePictureUpload", () => {
     expect(first).toBeInstanceOf(Date);
     expect(second).toBeInstanceOf(Date);
     expect(second.getTime()).toBeGreaterThanOrEqual(first.getTime());
+  });
+});
+
+/**
+ * `user.removeProfilePicture`.
+ *
+ * The mirror of `recordProfilePictureUpload`, and the only writer that clears
+ * `profilePictureUpdatedAt`. Three properties are pinned here, and the third
+ * is the one that is easy to get wrong.
+ *
+ * **The column is nulled first, and the object deleted after.** The database is
+ * the sole authority on whether a picture exists - `getPresignedDownloadUrl`
+ * never asks S3 - so nulling first means the picture stops being served the
+ * instant the write lands, and a failed delete leaves only orphan bytes that no
+ * signed URL will ever be issued for. The reverse order fails worse: a database
+ * error after a successful delete would leave the column set and the object
+ * gone, which is a permanently broken image rather than a recoverable "no
+ * picture".
+ *
+ * **A failed delete does not fail the mutation.** The user asked for their
+ * picture to stop being shown, and after the first write it has. Throwing here
+ * would report failure for an operation that, in the only sense the app can
+ * observe, succeeded - and would send the user back to retry a removal that has
+ * already happened.
+ *
+ * **A concurrent upload is re-checked.** A second session's
+ * `recordProfilePictureUpload` can land between the update and the delete, so
+ * the delete removes bytes the column now claims exist. That is the one
+ * interleaving that produces the broken image this ordering is chosen to avoid,
+ * so the column is read once more after a successful delete and nulled again if
+ * something set it. Skipped when the delete threw, because nothing was
+ * clobbered then - asserted below, since an unconditional re-read would be a
+ * wasted query on the most common failure path.
+ */
+describe("user.removeProfilePicture", () => {
+  /** The `data` of every `user.update` the call made, in order. */
+  const updates = () =>
+    mockUserUpdate.mock.calls.map(
+      (call) => (call[0] as { where: { id: string }; data: unknown }).data,
+    );
+
+  it("clears the column for the session user", async () => {
+    const caller = callerFor(sessionFor(SESSION_USER));
+
+    await expect(caller.user.removeProfilePicture()).resolves.toEqual({
+      success: true,
+    });
+
+    expect(mockUserUpdate).toHaveBeenCalledTimes(1);
+    const call = mockUserUpdate.mock.calls[0][0] as {
+      where: { id: string };
+      data: { profilePictureUpdatedAt: Date | null };
+    };
+    expect(call.where).toEqual({ id: SESSION_USER });
+    expect(call.data.profilePictureUpdatedAt).toBeNull();
+  });
+
+  it("deletes the object at the session user's own key", async () => {
+    await callerFor(sessionFor(SESSION_USER)).user.removeProfilePicture();
+
+    // The key is derived from the session and from nothing else. The procedure
+    // takes no input at all, so there is no parameter that could redirect it,
+    // but this pins the value actually passed.
+    expect(mockDeleteProfileImage).toHaveBeenCalledTimes(1);
+    expect(mockDeleteProfileImage).toHaveBeenCalledWith(SESSION_USER);
+  });
+
+  it("nulls the column before deleting the object", async () => {
+    // The ordering assertion, and it needs the delete to observe the database
+    // rather than to run afterwards and be compared by call count: both orders
+    // make exactly one call to each.
+    let columnNulledFirst = false;
+    mockDeleteProfileImage.mockImplementationOnce(async () => {
+      columnNulledFirst = mockUserUpdate.mock.calls.length > 0;
+    });
+
+    await callerFor(sessionFor(SESSION_USER)).user.removeProfilePicture();
+
+    expect(columnNulledFirst).toBe(true);
+  });
+
+  it("still reports success, and leaves the column null, when the delete fails", async () => {
+    // The permissions case: an IAM policy without s3:DeleteObject. The picture
+    // is already unreachable through the app at this point, so this is a
+    // success with orphan bytes, not a failure.
+    mockDeleteProfileImage.mockRejectedValueOnce(new Error("AccessDenied"));
+
+    await expect(
+      callerFor(sessionFor(SESSION_USER)).user.removeProfilePicture(),
+    ).resolves.toEqual({ success: true });
+
+    expect(updates()).toEqual([{ profilePictureUpdatedAt: null }]);
+  });
+
+  it("logs a failed delete rather than swallowing it", async () => {
+    const logged = jest.spyOn(console, "error").mockImplementation(() => {});
+    mockDeleteProfileImage.mockRejectedValueOnce(new Error("AccessDenied"));
+
+    await callerFor(sessionFor(SESSION_USER)).user.removeProfilePicture();
+
+    // Orphan bytes are the one consequence nothing else records, so the log
+    // line is the only way anyone finds out the bucket is accumulating them.
+    expect(logged).toHaveBeenCalled();
+    logged.mockRestore();
+  });
+
+  it("re-clears a column a concurrent upload set during the delete", async () => {
+    const logged = jest.spyOn(console, "error").mockImplementation(() => {});
+    // A second session's `recordProfilePictureUpload` landing in the window
+    // between the update and the delete: by the time the object is gone, the
+    // column claims a picture exists. Left alone, every avatar for this user
+    // would be a signed URL for a key that is no longer there.
+    withRecordedPicture();
+
+    await callerFor(sessionFor(SESSION_USER)).user.removeProfilePicture();
+
+    expect(mockUserFindUnique).toHaveBeenCalledTimes(1);
+    expect(updates()).toEqual([
+      { profilePictureUpdatedAt: null },
+      { profilePictureUpdatedAt: null },
+    ]);
+    logged.mockRestore();
+  });
+
+  it("writes only once when nothing touched the column", async () => {
+    // The control for the test above. `mockUserFindUnique` defaults to a null
+    // column, which is what the uncontended path reads back - so a second
+    // update here would mean the re-check fires unconditionally.
+    await callerFor(sessionFor(SESSION_USER)).user.removeProfilePicture();
+
+    expect(mockUserFindUnique).toHaveBeenCalledTimes(1);
+    expect(updates()).toEqual([{ profilePictureUpdatedAt: null }]);
+  });
+
+  it("does not re-read the column when the delete failed", async () => {
+    // Nothing was clobbered, so there is nothing to reconcile. Asserted
+    // because the obvious implementation re-reads unconditionally, which spends
+    // a query on the one path that cannot need it.
+    const logged = jest.spyOn(console, "error").mockImplementation(() => {});
+    mockDeleteProfileImage.mockRejectedValueOnce(new Error("AccessDenied"));
+
+    await callerFor(sessionFor(SESSION_USER)).user.removeProfilePicture();
+
+    expect(mockUserFindUnique).not.toHaveBeenCalled();
+    logged.mockRestore();
+  });
+
+  it("refuses a session with no user", async () => {
+    const caller = callerFor({
+      expires: "2099-01-01T00:00:00.000Z",
+    } as unknown as Session);
+
+    await expect(caller.user.removeProfilePicture()).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+    expect(mockUserUpdate).not.toHaveBeenCalled();
+    expect(mockDeleteProfileImage).not.toHaveBeenCalled();
+  });
+
+  it("is rejected without a session at all", async () => {
+    await expect(
+      callerFor(null).user.removeProfilePicture(),
+    ).rejects.toBeInstanceOf(TRPCError);
+    expect(mockUserUpdate).not.toHaveBeenCalled();
+    expect(mockDeleteProfileImage).not.toHaveBeenCalled();
   });
 });
 

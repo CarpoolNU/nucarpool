@@ -96,8 +96,8 @@ const Harness = ({
       setValue={setValue}
       errors={formState.errors}
       onSubmit={handleSubmit(() => onSubmit?.())}
-      onFileSelect={() => undefined}
-      selectedFile={null}
+      onPendingPictureChange={() => undefined}
+      pendingPicture={null}
       checkChanges={checkChanges}
     />
   );
@@ -238,8 +238,8 @@ describe("the role lock for a user in a carpool group", () => {
         setValue={setValue}
         errors={formState.errors}
         onSubmit={handleSubmit((values) => onValues?.(values))}
-        onFileSelect={() => undefined}
-        selectedFile={null}
+        onPendingPictureChange={() => undefined}
+        pendingPicture={null}
         // Only the two fields the lock reads; the rest of `User` is irrelevant.
         user={user as unknown as User}
         checkChanges={jest.fn()}
@@ -383,8 +383,8 @@ describe("UserSection accessible names", () => {
           setValue={setValue}
           errors={formState.errors}
           onSubmit={() => Promise.resolve()}
-          onFileSelect={() => undefined}
-          selectedFile={null}
+          onPendingPictureChange={() => undefined}
+          pendingPicture={null}
           checkChanges={jest.fn()}
         />
       );

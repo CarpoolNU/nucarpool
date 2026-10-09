@@ -24,6 +24,7 @@ import {
   UnsavedChangesGuard,
 } from "../../utils/profile/signOutWithGuard";
 import { fieldErrorId } from "../../utils/formA11y";
+import { PendingPicture } from "../../utils/profile/pendingPicture";
 
 interface UserSectionProps {
   register: UseFormRegister<OnboardingFormInputs>;
@@ -38,15 +39,15 @@ interface UserSectionProps {
    */
   onSubmit: ReturnType<UseFormHandleSubmit<OnboardingFormInputs>>;
 
-  onFileSelect: (file: File | null) => void;
+  onPendingPictureChange: (next: PendingPicture) => void;
 
   /**
-   * The cropped picture waiting to be saved, so `ProfilePicture` can render a
-   * preview derived from it. Held by the page rather than here because the
+   * The unsaved picture change, so `ProfilePicture` can render a preview
+   * derived from it. Held by the page rather than here because the
    * unsaved-changes guard and the save handler both read it; see the prop's
    * own note in `ProfilePicture`.
    */
-  selectedFile: File | null;
+  pendingPicture: PendingPicture;
   user?: User;
 
   /**
@@ -64,8 +65,8 @@ const UserSection = ({
   register,
   onSubmit,
   setValue,
-  onFileSelect,
-  selectedFile,
+  onPendingPictureChange,
+  pendingPicture,
   user,
   checkChanges,
 }: UserSectionProps) => {
@@ -232,8 +233,8 @@ const UserSection = ({
         className={`mb-12 ${isMobile ? "flex flex-col items-start" : "ml-10"} w-full`}
       >
         <ProfilePicture
-          selectedFile={selectedFile}
-          onFileSelected={onFileSelect}
+          pendingPicture={pendingPicture}
+          onPendingPictureChange={onPendingPictureChange}
         />
       </div>
 

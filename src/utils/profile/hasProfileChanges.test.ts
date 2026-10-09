@@ -20,6 +20,7 @@
 import { Permission, Role, Status } from "@prisma/client";
 import type { OnboardingFormInputs, User } from "../types";
 import { hasProfileChanges, profileChanges } from "./hasProfileChanges";
+import { PENDING_REMOVAL } from "./pendingPicture";
 
 /**
  * A co-op month as the profile actually stores it: the **first** of the month.
@@ -331,6 +332,26 @@ describe("profileChanges", () => {
       // picture is appended last because it is not one of the form fields.
       expect(
         profileChanges(form({ bio: "Changed bio" }), user, croppedFile()),
+      ).toEqual(["bio", "profilePicture"]);
+    });
+
+    /**
+     * A pending *removal* is an unsaved picture change too.
+     *
+     * The single-slot model is what makes this work with no new term: the
+     * third argument is `File | "remove" | null`, and the rule tests presence,
+     * so the marker arms the modal exactly as a cropped file does. Pinned
+     * rather than left implicit because the obvious alternative - a
+     * `pendingPicture instanceof File` test, which reads like a tightening -
+     * would report no change for a removal and let the user navigate away
+     * believing their picture was gone.
+     */
+    it("is reported for a pending removal, the same as for a file", () => {
+      expect(profileChanges(pristine, user, PENDING_REMOVAL)).toEqual([
+        "profilePicture",
+      ]);
+      expect(
+        profileChanges(form({ bio: "Changed bio" }), user, PENDING_REMOVAL),
       ).toEqual(["bio", "profilePicture"]);
     });
   });

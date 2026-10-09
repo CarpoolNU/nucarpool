@@ -62,6 +62,7 @@ const PROCEDURE_AUTHORIZATION: Record<string, ProcedureClass> = {
   "user.getPresignedUrl": "protected",
   "user.getPresignedDownloadUrl": "protected",
   "user.recordProfilePictureUpload": "protected",
+  "user.removeProfilePicture": "protected",
   "user.acceptTerms": "protected",
   "user.completeTutorial": "protected",
   "user.favorites.me": "protected",
