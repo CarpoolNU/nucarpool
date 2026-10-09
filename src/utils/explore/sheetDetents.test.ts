@@ -1,4 +1,4 @@
-import { Role } from "@prisma/client";
+import { Role, Status } from "@prisma/client";
 import { MOBILE_SHEET_MAP_STRIP_REM } from "../breakpoints";
 import {
   defaultSheetDetent,
@@ -153,29 +153,67 @@ describe("defaultSheetDetent", () => {
    * pass is the acceptance evidence for the rest.
    */
   it("opens collapsed for a VIEWER, whose panel an expanded sheet would cover", () => {
-    expect(defaultSheetDetent(Role.VIEWER)).toBe("collapsed");
+    expect(
+      defaultSheetDetent({ role: Role.VIEWER, status: Status.ACTIVE }),
+    ).toBe("collapsed");
   });
 
   it("keeps the long-standing expanded default for a RIDER and a DRIVER", () => {
     // What would matter most to get wrong: this default is role-specific, and
     // taking the recommendation list off the screen for the other two roles
     // would be a far larger problem than the one this default addresses.
-    expect(defaultSheetDetent(Role.RIDER)).toBe("expanded");
-    expect(defaultSheetDetent(Role.DRIVER)).toBe("expanded");
+    expect(
+      defaultSheetDetent({ role: Role.RIDER, status: Status.ACTIVE }),
+    ).toBe("expanded");
+    expect(
+      defaultSheetDetent({ role: Role.DRIVER, status: Status.ACTIVE }),
+    ).toBe("expanded");
   });
 
-  it("falls back to expanded before the role is known", () => {
+  it("opens collapsed for an inactive RIDER and an inactive DRIVER, whose blocker an expanded sheet would cover", () => {
+    // The second box inside `#map` that an expanded sheet paints over, and
+    // the reason this default takes the status as well as the role. Getting
+    // this wrong is what SCRUM-668 was: the user lands on a list of matches
+    // whose controls do nothing, with the only explanation off screen.
+    expect(
+      defaultSheetDetent({ role: Role.RIDER, status: Status.INACTIVE }),
+    ).toBe("collapsed");
+    expect(
+      defaultSheetDetent({ role: Role.DRIVER, status: Status.INACTIVE }),
+    ).toBe("collapsed");
+  });
+
+  it("still collapses for a VIEWER who is also inactive", () => {
+    // Both reasons to collapse at once. Pinned because the two conditions are
+    // combined with `||` and an `&&` would read almost identically while
+    // quietly dropping the 38 inactive VIEWER rows production holds.
+    expect(
+      defaultSheetDetent({ role: Role.VIEWER, status: Status.INACTIVE }),
+    ).toBe("collapsed");
+  });
+
+  it("falls back to expanded before the user is known", () => {
     // `user.me` is still in flight on the first render. The page shows a
     // spinner rather than the sheet at that point, so this is unobservable
     // today; it is pinned so that it stays the harmless answer if that changes.
-    expect(defaultSheetDetent(undefined)).toBe("expanded");
+    expect(defaultSheetDetent({})).toBe("expanded");
   });
 
   it("is only the opening position, not a rule a tap has to respect", () => {
     // A VIEWER who taps the handle gets the sheet, Favorites and all. The
     // default exists so the route-search panel is reachable without first
-    // discovering the handle - not to withhold the sheet from the role.
-    expect(toggleSheetDetent(defaultSheetDetent(Role.VIEWER))).toBe("expanded");
+    // discovering the handle - not to withhold the sheet from the role. The
+    // same holds for an inactive user, who can still drag the list up.
+    expect(
+      toggleSheetDetent(
+        defaultSheetDetent({ role: Role.VIEWER, status: Status.ACTIVE }),
+      ),
+    ).toBe("expanded");
+    expect(
+      toggleSheetDetent(
+        defaultSheetDetent({ role: Role.RIDER, status: Status.INACTIVE }),
+      ),
+    ).toBe("expanded");
   });
 });
 

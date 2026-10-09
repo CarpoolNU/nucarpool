@@ -21,8 +21,9 @@
  * `messageHeaderControls` already use, and for the same reason.
  */
 
-import { Role } from "@prisma/client";
+import { Role, Status } from "@prisma/client";
 import { MOBILE_SHEET_MAP_STRIP_REM } from "../breakpoints";
+import { showsInactiveBlocker } from "../map/inactiveBlocker";
 
 /**
  * The sheet's resting positions.
@@ -84,20 +85,30 @@ export const toggleSheetDetent = (detent: SheetDetent): SheetDetent =>
 /**
  * Where the sheet rests before the user has moved it.
  *
- * Role-dependent, because the roles do not have the same thing underneath the
- * sheet. A RIDER and a DRIVER keep `expanded`, the default the sheet has always
- * had: the recommendation list is their reason for being on the page, so the
- * sheet *is* the content and covering the map with it is the right opening
- * state.
+ * `expanded` is the default the sheet has always had, and it is still what an
+ * active RIDER or DRIVER gets: the recommendation list is their reason for
+ * being on the page, so the sheet *is* the content and covering the map with
+ * it is the right opening state.
  *
- * A VIEWER gets `collapsed`. That role's whole interface is the "Search my
- * route" panel, which renders inside `#map` — and `#map` is `relative z-0`, a
- * stacking context a descendant cannot escape, while the sheet is `z-20` and a
- * sibling of the map area. So on a phone the expanded sheet covered the panel
- * outright and **no z-index available to the panel could lift it**: the
- * comparison that decides paint order is sheet `z-20` against `#map` `z-0`, and
- * the panel is never a party to it. That gap is why the fix is a detent
- * rather than a restyle.
+ * **Two cases collapse instead, and they are the same bug twice.** Both put a
+ * box inside `#map` that the user needs on arrival:
+ *
+ * 1. **A VIEWER.** That role's whole interface is the "Search my route" panel.
+ * 2. **An inactive RIDER or DRIVER.** `InactiveBlocker` is the only statement
+ *    anywhere of *why* the map and the connect controls are inert, and the
+ *    only route offered back to reactivation.
+ *
+ * `#map` is `relative z-0`, a stacking context a descendant cannot escape,
+ * while the sheet is `z-20` and a sibling of the map area. So on a phone the
+ * expanded sheet covered each of those boxes outright and **no z-index
+ * available to them could lift either one**: the comparison that decides paint
+ * order is sheet `z-20` against `#map` `z-0`, and neither box is a party to
+ * it. That gap is why the fix is a detent rather than a restyle — and why the
+ * second case had to be fixed here rather than where the blocker renders.
+ *
+ * The two conditions are combined with `||`, not `&&`: a VIEWER who is also
+ * inactive still collapses, on the first reason. Production holds 38 such
+ * rows, so that is a real combination and not a theoretical one.
  *
  * **Collapsed rather than not rendering the sheet at all**, which was the other
  * candidate and looked cheaper. It is not: a VIEWER's Favorites tab renders real
@@ -105,21 +116,33 @@ export const toggleSheetDetent = (detent: SheetDetent): SheetDetent =>
  * Recommendations tab is replaced by copy (`viewerModeHidesCards`). Dropping the
  * sheet would take that tab away on mobile. `collapsed` keeps the box and the
  * drag handle — the handle clears the navigation in this detent — so Favorites
- * stays one drag up, and the panel is unobstructed until the user asks for the
- * sheet.
+ * stays one drag up, and the obscured box is unobstructed until the user asks
+ * for the sheet. The same reasoning covers an inactive user, who can still
+ * drag the list up to look at it, and it is what desktop already does: there
+ * the blocker fills the map pane beside a sidebar that stays visible.
  *
  * **Only the opening position.** Every later write still says exactly what it
  * means: a tap toggles, a drag snaps, opening a card's details expands. None of
- * them consult the role, because by then the user has expressed a preference and
- * this default has done its job.
+ * them consult the role or the status, because by then the user has expressed a
+ * preference and this default has done its job.
  *
  * @param role the signed-in user's role, `undefined` while `user.me` is still in
- *   flight. Resolves to `expanded` then, which is unobservable — the page
+ *   flight
+ * @param status the user's activity status, `undefined` likewise. With neither
+ *   known this resolves to `expanded`, which is unobservable — the page
  *   renders a spinner instead of the sheet until the user loads — and is the
  *   safe end of the range if that ever stops being true.
  */
-export const defaultSheetDetent = (role?: Role): SheetDetent =>
-  role === Role.VIEWER ? "collapsed" : "expanded";
+export const defaultSheetDetent = ({
+  role,
+  status,
+}: {
+  role?: Role;
+  status?: Status;
+}): SheetDetent =>
+  role === Role.VIEWER || showsInactiveBlocker({ role, status })
+    ? "collapsed"
+    : "expanded";
 
 /**
  * The sheet's expanded height, derived from the bottom edge it is pinned to.

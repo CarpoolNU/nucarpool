@@ -74,6 +74,7 @@ import {
   toggleSheetDetent,
   type SheetDetent,
 } from "../utils/explore/sheetDetents";
+import { showsInactiveBlocker } from "../utils/map/inactiveBlocker";
 import { useSheetDrag } from "../utils/explore/useSheetDrag";
 import { useProfileFilterSeed } from "../utils/explore/useProfileFilterSeed";
 
@@ -288,13 +289,17 @@ const Home: NextPage<any> = () => {
 
   /**
    * Where the sheet is actually resting: what the user chose, or the opening
-   * position for their role until they choose something.
+   * position their role and status imply until they choose something.
    *
-   * `defaultSheetDetent` carries why that differs by role - in short, a VIEWER's
-   * only interface is the route-search panel and an expanded sheet paints over
-   * it from a stacking context the panel cannot reach out of.
+   * `defaultSheetDetent` carries why that differs by user - in short, a
+   * VIEWER's only interface is the route-search panel, and an inactive rider
+   * or driver's is `InactiveBlocker`; both render inside `#map`, and an
+   * expanded sheet paints over them from a stacking context neither can reach
+   * out of.
    */
-  const sheetDetent = sheetDetentOverride ?? defaultSheetDetent(user?.role);
+  const sheetDetent =
+    sheetDetentOverride ??
+    defaultSheetDetent({ role: user?.role, status: user?.status });
 
   /**
    * The setter every existing call site keeps using, `useState`-shaped so that
@@ -304,16 +309,26 @@ const Home: NextPage<any> = () => {
    * relies on it because the handle's click can arrive in the same tick as a
    * drag's release - and a raw `setSheetDetentOverride` would hand the updater
    * the `null`, not the detent on screen. Resolving the default here is what
-   * keeps "toggle from where it looks like it is" true on a VIEWER's first tap.
+   * keeps "toggle from where it looks like it is" true on a VIEWER's first tap,
+   * and on an inactive user's.
+   *
+   * Both inputs to the default are dependencies. `status` is not decoration
+   * there: it changes within a session - reactivating from the profile page
+   * and returning here is the whole point of the blocker's button - and a
+   * callback that had closed over the old one would resolve the first tap
+   * after that against the detent the *previous* status opened in.
    */
   const setSheetDetent = useCallback(
     (next: SetStateAction<SheetDetent>) =>
       setSheetDetentOverride((override) =>
         typeof next === "function"
-          ? next(override ?? defaultSheetDetent(user?.role))
+          ? next(
+              override ??
+                defaultSheetDetent({ role: user?.role, status: user?.status }),
+            )
           : next,
       ),
-    [user?.role],
+    [user?.role, user?.status],
   );
 
   /**
@@ -1026,7 +1041,7 @@ const Home: NextPage<any> = () => {
               data={{
                 sidebarValue: sidebarType,
                 setSidebar: setSidebarType,
-                disabled: user.status === "INACTIVE" && user.role !== "VIEWER",
+                disabled: showsInactiveBlocker(user),
               }}
               onViewGroupRoute={onViewGroupRoute}
             />
@@ -1282,17 +1297,14 @@ const Home: NextPage<any> = () => {
                     setPopupUsers(null);
                   }}
                 />
-                {user.status === "INACTIVE" && user.role !== "VIEWER" && (
-                  <InactiveBlocker />
-                )}
+                {showsInactiveBlocker(user) && <InactiveBlocker />}
               </div>
               {isMobile && (
                 <Header
                   data={{
                     sidebarValue: sidebarType,
                     setSidebar: setSidebarType,
-                    disabled:
-                      user.status === "INACTIVE" && user.role !== "VIEWER",
+                    disabled: showsInactiveBlocker(user),
                     // Dropping the override rather than setting "expanded"
                     // directly, so a reselect resolves to the same resting
                     // position a fresh switch into My Group would - see
