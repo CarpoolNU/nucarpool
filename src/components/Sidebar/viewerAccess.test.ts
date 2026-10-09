@@ -30,13 +30,13 @@ describe("viewerModeHidesCards", () => {
   });
 
   it.each(["sent", "received", "all"])(
-    "does not hide the %s requests tab — the regression this fixes",
+    "does not hide the %s requests tab, so a VIEWER can still withdraw one",
     (subType) => {
       expect(viewerModeHidesCards(subType)).toBe(false);
     },
   );
 
-  it("does not hide favorites, which was already exempt before this change", () => {
+  it("does not hide favorites, which is not discovery", () => {
     expect(viewerModeHidesCards("favorites")).toBe(false);
   });
 
@@ -124,7 +124,7 @@ describe("roleFetchesRecommendations", () => {
   });
 
   it.each(["RIDER", "DRIVER"])(
-    "still fetches for a %s — the behaviour that must not regress",
+    "fetches for a %s, whose cards render the result",
     (role) => {
       expect(roleFetchesRecommendations(role)).toBe(true);
     },

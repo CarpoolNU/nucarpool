@@ -515,7 +515,7 @@ describe("sendMessage — a blocked pair cannot write to each other", () => {
 });
 
 describe("user.messages.getMessages — removed rather than scoped", () => {
-  it("is no longer exposed by the router", async () => {
+  it("is not exposed by the router", async () => {
     // It would return an entire conversation for any conversation id, after
     // reading the session user and never using it, so any signed-in caller
     // could read any conversation. Conversations reach the UI through
@@ -528,7 +528,7 @@ describe("user.messages.getMessages — removed rather than scoped", () => {
     expect(paths).not.toContain("user.messages.getMessages");
   });
 
-  it("no longer has an admin counterpart either", async () => {
+  it("has no admin counterpart either", async () => {
     // `user.admin.getMessages` was a separate, adminRouter-gated procedure
     // that this authorization work deliberately left alone. It must stay
     // removed for a different reason: it selected `content`, which would ship

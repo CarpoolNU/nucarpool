@@ -50,7 +50,7 @@ describe("LineChartCount", () => {
     expect([...(chartLabels ?? [])].sort()).toEqual([...csvHeaders].sort());
   });
 
-  it("no longer claims to split users into active and inactive", () => {
+  it("labels the signup series without claiming an active/inactive split", () => {
     render(<LineChartCount {...SERIES} />);
 
     const chartLabels = rendered?.datasets.map((dataset) => dataset.label);

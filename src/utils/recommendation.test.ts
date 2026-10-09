@@ -452,7 +452,7 @@ describe("calculateScore", () => {
       expect(isMatch(current, candidate, { endTime: 9 / 60 })).toBe(false);
     });
 
-    it("scores a 10 minute gap far better than the old arithmetic did", () => {
+    it("scores a 10 minute gap at 10/80 of the start-time weight", () => {
       // Scoring reads the same value as the filter, so the correction has to
       // show up in the score too: 10/80 of the start-time weight, not 80/80.
       const current = rider({ startTime: at(9, 50), endTime: at(17) });
@@ -1033,7 +1033,7 @@ describe("minutesApart", () => {
     expect(minutesApart(stored("00:30"), stored("23:30"))).toBe(60);
   });
 
-  it("measures the ordinary daytime pair the same as before", () => {
+  it("measures an ordinary daytime pair by plain subtraction", () => {
     expect(minutesApart(stored("09:00"), stored("10:00"))).toBe(60);
     expect(minutesApart(stored("09:50"), stored("10:00"))).toBe(10);
     expect(minutesApart(stored("09:00"), stored("09:00"))).toBe(0);

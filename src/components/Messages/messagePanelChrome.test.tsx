@@ -332,7 +332,7 @@ describe("the send bar's composer inset", () => {
    * applied at every desktop width, including the 667px one where it cost the
    * conversation everything it had.
    */
-  it("no longer asks for that inset on width alone", () => {
+  it("does not ask for that inset on width alone", () => {
     const { container } = render(<SendBar onSendMessage={jest.fn()} />);
 
     expect(classAttributes(container)).not.toContain(widthOnly(SIDE_INSET));
@@ -391,7 +391,7 @@ describe("the send bar's container insets", () => {
     expect(renderSendBar()).toHaveClass("px-4", tall("px-6"));
   });
 
-  it("no longer asks for that inset on width alone", () => {
+  it("does not ask for that inset on width alone", () => {
     expect(renderSendBar().className).not.toContain(widthOnly("px-6"));
   });
 
@@ -444,7 +444,7 @@ describe("the message bubble's width cap", () => {
     );
   });
 
-  it("no longer asks for the 50% cap on width alone", () => {
+  it("does not ask for the 50% cap on width alone", () => {
     renderContent();
     const bubble = screen.getByText("Sounds good, see you at 8.");
 

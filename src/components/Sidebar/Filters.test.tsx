@@ -398,7 +398,7 @@ describe("Filters — slider accessible names", () => {
  * input needs an `id` of its own, and the two date fields' inputs carry one
  * with nothing pointing at it.
  */
-describe("Filters — accessible names for the residual controls (SCRUM-592)", () => {
+describe("Filters — accessible names for the residual controls", () => {
   it("names the minimum-shared-days spin button from its visible label", () => {
     render(
       <Harness

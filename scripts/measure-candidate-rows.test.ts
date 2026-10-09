@@ -190,7 +190,7 @@ describe("headroom", () => {
     });
   });
 
-  it("reproduces the figure SCRUM-643 recorded for production", () => {
+  it("reproduces the figure recorded for production", () => {
     // Measured read-only against the PlanetScale `main` branch, 2026-10-08.
     // This is what makes the figure in candidateSearch.ts checkable rather
     // than merely quoted.
@@ -200,7 +200,7 @@ describe("headroom", () => {
     expect(measured.growthToBreach).toBe(37);
   });
 
-  it("reproduces the figure SCRUM-643 recorded for staging", () => {
+  it("reproduces the figure recorded for staging", () => {
     // The same day, the same predicate, a different database: 38% against
     // 73%. Staging is production-derived and much smaller, which is how the
     // comment this ticket corrected came to understate production by half.

@@ -447,7 +447,7 @@ describe("WelcomeTutorial mobile sheet detent", () => {
       </QueryClientProvider>,
     );
 
-  it("expands the sheet before highlighting the sidebar step - the fix for a VIEWER's collapsed opening detent leaving that element h-0 opacity-0", () => {
+  it("expands the sheet to a nonzero height before highlighting the sidebar step", () => {
     const setSheetDetent = jest.fn();
     renderMobile("collapsed", setSheetDetent);
     const tour = currentDriver();
@@ -467,7 +467,7 @@ describe("WelcomeTutorial mobile sheet detent", () => {
     ).toBeGreaterThan(0);
   });
 
-  it("collapses the sheet before highlighting the map step - the fix for a RIDER or DRIVER's expanded opening detent covering the map", () => {
+  it("collapses the sheet to zero height before highlighting the map step, so it does not cover the map", () => {
     const setSheetDetent = jest.fn();
     renderMobile("expanded", setSheetDetent);
     const tour = currentDriver();

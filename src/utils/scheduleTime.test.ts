@@ -59,7 +59,7 @@ describe("formatScheduleTime", () => {
       expect(formatScheduleTime(storedAt(7))).toBe("2:00 AM");
     });
 
-    it("displays the rest of the range the guess used to capture", () => {
+    it("displays the rest of the early-shift range as Boston local time", () => {
       expect(formatScheduleTime(storedAt(6))).toBe("1:00 AM");
       expect(formatScheduleTime(storedAt(8))).toBe("3:00 AM");
       expect(formatScheduleTime(storedAt(9, 59))).toBe("4:59 AM");

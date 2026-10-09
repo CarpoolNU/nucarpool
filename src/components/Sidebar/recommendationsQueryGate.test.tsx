@@ -200,7 +200,7 @@ describe("the recommendations query gate", () => {
     },
   );
 
-  it("a RIDER still refetches on a return navigation, as before", async () => {
+  it("a RIDER refetches on a return navigation", async () => {
     // `refetchOnMount: true` is unchanged for the roles that use the result —
     // the gate defers the query for one render while `user.me` resolves, it
     // does not cancel it.

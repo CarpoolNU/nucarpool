@@ -99,7 +99,7 @@ describe("NEXT_PUBLIC_ENV outside production", () => {
 });
 
 describe("NEXT_PUBLIC_ENV in a production build", () => {
-  it("requires an explicit value, because devDefault no longer applies", () => {
+  it("requires an explicit value, because devDefault does not apply there", () => {
     // `next build` sets NODE_ENV=production, so a deploy that forgot the
     // variable fails the build instead of writing to
     // `profile-pictures/undefined/...` at runtime.

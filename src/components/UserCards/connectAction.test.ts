@@ -104,7 +104,7 @@ describe("connectAction — an outstanding request still refuses", () => {
   });
 });
 
-describe("connectAction — a spent request no longer refuses", () => {
+describe("connectAction — a spent request does not refuse", () => {
   it("opens the modal when the incoming request has been accepted", () => {
     // A pair who carpooled and whose group has ended: the row stays ACCEPTED
     // forever, so a presence test would refuse Connect forever.

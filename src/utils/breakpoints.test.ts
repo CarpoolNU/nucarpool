@@ -223,7 +223,7 @@ describe("isMobileWidth", () => {
     expect(isMobileWidth(MOBILE_BREAKPOINT_PX - 1)).toBe(true);
   });
 
-  it("covers the band that used to render a mixed layout", () => {
+  it("resolves the whole 640-769 band to desktop", () => {
     // 640-768 was the broken range: desktop layout, mobile navigation. All of
     // it must now resolve to desktop, and one call decides that for every
     // consumer.
@@ -891,7 +891,7 @@ describe("the caps on the header bar's controls", () => {
     expect(triggerAt(375)).toBeCloseTo(barAt(375), 6);
   });
 
-  it("puts the two thresholds where the overflow used to begin", () => {
+  it("puts the two thresholds at the widths where the caps stop binding", () => {
     /* A tab needs 2 * 16 + 28 = 60px of bar, the trigger 56px. Below these
        heights the caps bind; above them nothing changes. Both figures are the
        ticket's own, arrived at from the other direction. */

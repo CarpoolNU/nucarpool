@@ -1011,7 +1011,7 @@ describe("user.groups.edit — adding a member needs an invitation", () => {
     expect(db.carpoolIdOf(OUTSIDER)).toBe(GROUP);
   });
 
-  it("refuses a self-join with no request — the hole that let anyone into any group", async () => {
+  it("refuses a self-join with no request behind it", async () => {
     const db = buildGroupsDb({ requests: [] });
     const { caller } = callerFor(sessionFor(OUTSIDER), db);
 

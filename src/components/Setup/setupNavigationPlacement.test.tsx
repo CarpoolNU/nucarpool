@@ -303,7 +303,7 @@ describe("the onboarding wizard's navigation strip", () => {
     );
   });
 
-  it("no longer clamps the card with a viewport unit", async () => {
+  it("declares no inline viewport-unit clamp on the card", async () => {
     const { container } = await renderAtStepOne();
 
     const card = cardOf(container) as HTMLElement;

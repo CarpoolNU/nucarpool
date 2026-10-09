@@ -1770,7 +1770,7 @@ describe("user.requests — authentication gate", () => {
 });
 
 describe("user.requests.edit — removed rather than authorized", () => {
-  it("is no longer exposed by the router", async () => {
+  it("is not exposed by the router", async () => {
     // It had no caller in `src/`, so unauthenticated-but-unreachable API surface
     // was deleted instead of being given an ownership check.
     const paths = Object.keys((appRouter as any)._def.procedures);
@@ -1868,7 +1868,7 @@ describe("user.requests.create is atomic", () => {
     ]);
   });
 
-  it("no longer looks for a conversation that cannot exist yet", async () => {
+  it("does not look for a conversation that cannot exist yet", async () => {
     // The request is created a statement earlier with a fresh cuid, so nothing
     // could reference it yet: a `conversation.findUnique({ requestId })` here
     // could only ever return null.

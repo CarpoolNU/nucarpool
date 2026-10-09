@@ -535,7 +535,7 @@ describe("user.emails.sendRequestNotification — participants only, addresses f
    * nothing stored where a report could capture it. The replay below pins
    * against that.
    */
-  it("no longer accepts a preview from the client", async () => {
+  it("rejects a preview supplied by the client", async () => {
     const db = buildEmailDb({ messages: [openingMessage("stored text")] });
     const { caller } = callerFor(sessionFor(ALICE), db);
 
@@ -1533,7 +1533,7 @@ describe("user.emails — authentication gate and removed surface", () => {
     expect(db.ses).not.toHaveBeenCalled();
   });
 
-  it("no longer exposes connectEmail", async () => {
+  it("exposes sendRequestNotification and not connectEmail", async () => {
     // Unused API surface that accepted a free-text body and an arbitrary
     // recipient; removed rather than authorized.
     const paths = Object.keys((appRouter as any)._def.procedures);

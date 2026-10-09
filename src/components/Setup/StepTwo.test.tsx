@@ -56,7 +56,7 @@ describe("StepTwo accessible names", () => {
     ).toBeInTheDocument();
   });
 
-  it("labels Enter as Next on the workplace name (SCRUM-594)", () => {
+  it("labels Enter as Next on the workplace name", () => {
     // Enter here is the wizard form's submit, which is Continue. The attribute
     // is only a hint to a virtual keyboard, so the attribute is all jsdom can
     // observe; whether a phone shows a Next key needs a device.

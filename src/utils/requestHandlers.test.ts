@@ -691,7 +691,7 @@ describe("handleAcceptRequest - a pair who can no longer carpool", () => {
     expect(message).not.toContain("no seats free");
   });
 
-  it("still accepts the compatible pair it was hiding these behind", async () => {
+  it("still accepts a compatible driver and rider, both ungrouped", async () => {
     const { handleAcceptRequest } = handlers();
 
     const accepted = await handleAcceptRequest(
