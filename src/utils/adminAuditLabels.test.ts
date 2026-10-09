@@ -156,7 +156,7 @@ describe("describeAuditDetails", () => {
     ).toEqual({ text: "Set to ADMIN" });
   });
 
-  it("names the report a resolution row acted on, since Target no longer does", () => {
+  it("names the report a resolution row acted on, which Target does not carry", () => {
     expect(
       describeAuditDetails(
         RESOLVE,

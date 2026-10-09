@@ -46,7 +46,7 @@ describe("croppedCanvasSize", () => {
     expect(croppedCanvasSize(IPHONE_CROP)).toEqual({ width: 512, height: 512 });
   });
 
-  it("brings that crop under the iOS canvas ceiling it used to exceed", () => {
+  it("brings a crop that exceeds the iOS canvas ceiling back under it", () => {
     // Two assertions covering the whole hazard: the raw crop is ~11.3MP, over
     // the older-device cap, where iOS hands back a blank canvas while
     // `toBlob` still succeeds - so the user would upload a blank avatar with

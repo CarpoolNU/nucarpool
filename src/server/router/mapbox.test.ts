@@ -79,7 +79,7 @@ describe("mapbox.search — input", () => {
     expect(requestedUrl().searchParams.get("types")).toBe("neighborhood,place");
   });
 
-  it("sends a token and the parameters the client can no longer influence", async () => {
+  it("sends a token and the server-fixed parameters the client cannot influence", async () => {
     await caller().mapbox.search({ value: "x", types: "address" });
 
     const url = requestedUrl();

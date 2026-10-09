@@ -102,7 +102,7 @@ describe("countRows", () => {
 });
 
 describe("narrowMessage", () => {
-  it("keeps exactly the six columns the resolver now selects", () => {
+  it("keeps exactly the six columns the resolver selects", () => {
     expect(Object.keys(narrowMessage(message("m1", "a")))).toEqual([
       "id",
       "conversationId",
@@ -195,7 +195,7 @@ describe("buildPayloads", () => {
     expect(serializedBytes(after)).toBeLessThan(serializedBytes(before));
   });
 
-  it("repeats the same author row once per message, which is the defect", () => {
+  it("repeats the same author row once per message in the before shape", () => {
     // Two messages from the same person carry that person twice. This is what
     // made a long thread expensive, and what the narrow select removes.
     const sameAuthor = [
@@ -212,7 +212,7 @@ describe("buildPayloads", () => {
 });
 
 describe("syntheticScenario", () => {
-  it("builds the shape the ticket describes", () => {
+  it("builds ten threads of sixty messages each", () => {
     const { rows } = syntheticScenario();
 
     expect(rows).toHaveLength(10);

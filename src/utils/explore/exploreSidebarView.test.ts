@@ -82,7 +82,7 @@ describe("planExploreSidebar - an open conversation", () => {
   });
 });
 
-describe("planExploreSidebar - the states that already worked", () => {
+describe("planExploreSidebar - the detent and selection states", () => {
   it("expands to the full list sheet by default", () => {
     expect(view()).toBe("expanded");
   });

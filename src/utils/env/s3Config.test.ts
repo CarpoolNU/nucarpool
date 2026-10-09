@@ -19,7 +19,7 @@ import {
  */
 
 describe("resolveS3Config", () => {
-  it("falls back to the bucket that was hardcoded", () => {
+  it("falls back to the default bucket and region when neither is set", () => {
     // The whole change is inert in a deployment that sets neither variable,
     // which is what keeps existing objects reachable.
     const { bucket, region } = resolveS3Config({});

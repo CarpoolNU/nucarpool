@@ -79,7 +79,7 @@ describe("getBaseUrl", () => {
       expect(getBaseUrl()).not.toContain("localhost");
     });
 
-    it("no longer consults VERCEL_URL", () => {
+    it("does not consult VERCEL_URL", () => {
       process.env.VERCEL_URL = "nucarpool.vercel.app";
       expect(getBaseUrl()).toBe("http://localhost:3000");
       expect(getBaseUrl()).not.toContain("vercel");

@@ -239,7 +239,7 @@ describe("runViewRouteClick", () => {
       expect(setPoints).toHaveBeenCalledTimes(1);
     });
 
-    it("gives them a destination pin, which nothing used to do", () => {
+    it("gives them a destination pin", () => {
       run({ geoJsonUsers: geoJsonWith(OTHER_ID) });
 
       expect(destinationPinCalls()).toEqual([

@@ -87,7 +87,7 @@ const spent = async (userId: string) => {
   return rows[0]?.sendCount ?? 0;
 };
 
-describe("the create -> notify -> delete loop no longer evades the budget", () => {
+describe("the create -> notify -> delete loop cannot evade the budget", () => {
   /**
    * The reported attack, run for real.
    *

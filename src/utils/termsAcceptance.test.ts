@@ -129,7 +129,7 @@ describe("needsTermsAcceptance", () => {
     });
   });
 
-  it("reduces to the old boolean check while the policy is off", () => {
+  it("reduces to the plain licenseSigned check while the policy is off", () => {
     // The behavioural promise of this change: adding a version re-prompts
     // nobody by itself. Asserted across every combination rather than by
     // example, since it is the claim the rollout depends on.

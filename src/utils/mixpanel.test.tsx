@@ -82,8 +82,8 @@ describe("resetIdentity", () => {
   });
 });
 
-describe("the tracking helpers this ticket did not change", () => {
-  it("still route through mixpanel.track, and identify nobody by themselves", () => {
+describe("the tracking helpers alongside identity", () => {
+  it("route through mixpanel.track, and identify nobody by themselves", () => {
     trackEvent("Sign In Attempt", { provider: "azure-ad" });
 
     expect(track).toHaveBeenCalledWith("Sign In Attempt", {

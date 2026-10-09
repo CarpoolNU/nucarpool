@@ -575,7 +575,7 @@ describe("user.favorites.me — returning more rows must not disclose more", () 
 });
 
 describe("user.favorites.edit — a newly-visible favourite can be removed", () => {
-  it("un-favourites someone whose role change used to hide them", async () => {
+  it("un-favourites a favourite who shares the caller's role", async () => {
     // The row would otherwise be unreachable: with no card rendered, no star
     // exists to press. `edit` itself has no role condition, so once the entry
     // is listed this works - which is what makes relaxing the read filter a

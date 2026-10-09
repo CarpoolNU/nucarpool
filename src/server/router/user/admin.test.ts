@@ -233,7 +233,7 @@ describe("getAllUsers", () => {
     });
   });
 
-  it("no longer issues the second carpoolSearch query it used to join in JS", async () => {
+  it("issues no second carpoolSearch query to join in JS", async () => {
     const { caller, prisma } = callerFor();
 
     await caller.user.admin.getAllUsers();

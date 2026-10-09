@@ -167,7 +167,7 @@ describe("profileChanges", () => {
       ).toEqual(["coopStartDate"]);
     });
 
-    it("detects a change into February, which the ticket believed already worked", () => {
+    it("detects a change from January into February", () => {
       expect(
         profileChanges(form({ coopStartDate: coopMonth(2026, 2) }), {
           ...user,
@@ -367,7 +367,7 @@ describe("hasProfileChanges", () => {
     expect(hasProfileChanges(pristine, user)).toBe(false);
   });
 
-  it("is true for the January to March change that used to slip through", () => {
+  it("is true for a January to March change", () => {
     expect(
       hasProfileChanges(form({ coopStartDate: coopMonth(2026, 3) }), user),
     ).toBe(true);

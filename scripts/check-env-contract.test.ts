@@ -535,7 +535,7 @@ describe("credentialLeaks", () => {
   // that matches too much covers everything it should and reports no gap - so
   // this is a separate check rather than a stricter coverage rule.
 
-  it("catches the unanchored fragments that caused the defect", () => {
+  it("catches unanchored fragments that sweep in Amplify's own credentials", () => {
     const leaks = credentialLeaks(["ACCESS", "SECRET"]);
 
     expect(leaks).toEqual([
