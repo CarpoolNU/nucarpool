@@ -1034,3 +1034,176 @@ describe("the two picture controls share a box", () => {
     expect(label.className).not.toMatch(/\bmt-\d/);
   });
 });
+
+/**
+ * The stored picture failing to load - a different failure from the query
+ * failing, and the one branch of this component that still drew a broken image.
+ *
+ * `useInvalidateProfileImage` reaches one React Query cache: the one in the tab
+ * that ran the mutation. A second tab, a second device, or an object that went
+ * away without this client's mutation running at all - an out-of-band bucket
+ * deletion, or the `NEXT_PUBLIC_ENV` change that orphans every existing upload -
+ * each leave a perfectly good signed URL pointing at nothing. SCRUM-660 fixed
+ * that at the four `ProfileAvatar` sites and exempted this one, on the premise
+ * that the owner's own cache is always invalidated; that premise holds only
+ * inside the tab that did the removal, which is SCRUM-663.
+ *
+ * **The error is dispatched, not provoked, and that is a proxy.** jsdom fetches
+ * no images, so nothing here can make a `src` 404 the way a removed S3 object
+ * does in a browser. `fireEvent.error` fires the same `error` event the browser
+ * would, on the same element, and `next/image` forwards `onError` to that
+ * element's handler - so what these tests pin is the component's response to the
+ * event, not the browser's decision to emit it. The other half was measured on
+ * SCRUM-660: Next's optimizer answers `400` with no image body for a missing
+ * upstream object, against a `200 image/png` control. `ProfileAvatar.test.tsx`
+ * carries the same caveat for the same reason.
+ */
+describe("when the stored picture itself fails to load", () => {
+  const STORED_URL = "https://bucket.s3.amazonaws.com/me?sig=abc";
+  /** A re-upload, or a refetch: the same user, a different signed URL. */
+  const REUPLOADED_URL = "https://bucket.s3.amazonaws.com/me?sig=def";
+
+  const storedImage = () =>
+    screen.queryByRole("img", { name: "Profile Picture" });
+
+  /**
+   * The "no picture" icon. By element rather than by role, for the reason the
+   * remove-control block above records: react-icons renders a bare `svg` with
+   * no `role` and no accessible name. The cropper is mocked to a `div` and both
+   * controls are text, so this component renders no other `svg`.
+   */
+  const fallbackIcon = () => document.querySelector("svg");
+
+  const removeButton = () =>
+    screen.queryByRole("button", { name: "Remove Profile Picture" });
+
+  /** A stored picture the server is happy to sign a URL for. */
+  const withStoredPicture = (url: string) =>
+    profileImageSpies().useProfileImage.mockReturnValue({
+      profileImageUrl: url,
+      isLoading: false,
+      imageLoadError: false,
+    });
+
+  /**
+   * A fresh element each call, which the re-render tests depend on: React bails
+   * out of re-rendering when handed the identical element reference, and a
+   * `rerender` that did nothing would pass either way.
+   */
+  const pictureElement = (onPendingPictureChange: jest.Mock) => (
+    <ProfilePicture
+      pendingPicture={null}
+      onPendingPictureChange={onPendingPictureChange}
+    />
+  );
+
+  it("replaces the broken image with the fallback icon", () => {
+    withStoredPicture(STORED_URL);
+    render(pictureElement(jest.fn()));
+
+    const image = storedImage();
+    expect(image).toBeInTheDocument();
+
+    fireEvent.error(image!);
+
+    expect(fallbackIcon()).toBeInTheDocument();
+    expect(storedImage()).not.toBeInTheDocument();
+  });
+
+  it("leaves a picture that has not errored alone", () => {
+    // The positive control for the test above. Without it that one would pass
+    // against a component that never renders the stored picture at all.
+    withStoredPicture(STORED_URL);
+    render(pictureElement(jest.fn()));
+
+    expect(storedImage()).toBeInTheDocument();
+    expect(fallbackIcon()).not.toBeInTheDocument();
+  });
+
+  it("still holds the neutral placeholder while the URL is resolving", () => {
+    // The branch immediately above the one this ticket changed, and the reason
+    // the new condition was added to that branch rather than ahead of it: the
+    // placeholder exists so the avatar does not flash the "no picture" icon on
+    // its way to a picture, and a failure flag consulted too early would spend
+    // the resolving window on the fallback instead.
+    //
+    // Asserted by elimination rather than by class name. Every other branch of
+    // this avatar renders either an `svg` or an `img`, so neither being present
+    // is what identifies the placeholder - and it keeps the test off the
+    // utilities that decide how the placeholder is drawn.
+    profileImageSpies().useProfileImage.mockReturnValue({
+      profileImageUrl: null,
+      isLoading: true,
+      imageLoadError: false,
+    });
+
+    render(pictureElement(jest.fn()));
+
+    expect(fallbackIcon()).not.toBeInTheDocument();
+    expect(storedImage()).not.toBeInTheDocument();
+  });
+
+  it("renders a new URL for the same user rather than inheriting the failure", () => {
+    // Why the failure is stored as the URL and not a boolean. The hook hands
+    // back a fresh URL after a re-upload or a refetch, and a latched boolean
+    // would hold the fallback over a picture that loads perfectly well - on the
+    // one page the user went to in order to fix exactly this.
+    withStoredPicture(STORED_URL);
+    const onChange = jest.fn();
+    const { rerender } = render(pictureElement(onChange));
+
+    fireEvent.error(storedImage()!);
+    expect(fallbackIcon()).toBeInTheDocument();
+
+    withStoredPicture(REUPLOADED_URL);
+    rerender(pictureElement(onChange));
+
+    expect(storedImage()).toBeInTheDocument();
+    expect(fallbackIcon()).not.toBeInTheDocument();
+  });
+
+  it("keeps the fallback while the failed URL is the one on offer", () => {
+    // The other side of that comparison: a re-render that changes nothing must
+    // not undo the downgrade, or the broken image returns on every render.
+    withStoredPicture(STORED_URL);
+    const onChange = jest.fn();
+    const { rerender } = render(pictureElement(onChange));
+
+    fireEvent.error(storedImage()!);
+    rerender(pictureElement(onChange));
+
+    expect(fallbackIcon()).toBeInTheDocument();
+    expect(storedImage()).not.toBeInTheDocument();
+  });
+
+  describe("still treats the picture as stored, because the server's is", () => {
+    it("goes on offering Remove", () => {
+      // Deliberate, and the opposite of what the fallback icon suggests. The
+      // row in the database is untouched by the image failing to load, and this
+      // button is the only control that clears it - so hiding it would strand a
+      // user whose picture is permanently missing with no way to fix the
+      // profile this page exists to fix.
+      withStoredPicture(STORED_URL);
+      render(pictureElement(jest.fn()));
+
+      fireEvent.error(storedImage()!);
+
+      expect(removeButton()).toBeInTheDocument();
+    });
+
+    it("marks it for removal on the server rather than discarding nothing", () => {
+      // The half that actually matters. `handleRemove` sends `PENDING_REMOVAL`
+      // only when a picture is stored, and `null` otherwise; reading the image
+      // failure as "no picture stored" would send `null` here, which saves
+      // nothing and leaves the stale column exactly as it was.
+      withStoredPicture(STORED_URL);
+      const onPendingPictureChange = jest.fn();
+      render(pictureElement(onPendingPictureChange));
+
+      fireEvent.error(storedImage()!);
+      fireEvent.click(removeButton()!);
+
+      expect(onPendingPictureChange).toHaveBeenCalledWith(PENDING_REMOVAL);
+    });
+  });
+});

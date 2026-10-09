@@ -134,7 +134,47 @@ const ProfilePicture = ({
     isLoading: isProfileImageLoading,
   } = useProfileImage();
 
-  /** Whether the server holds a picture this component could show. */
+  /**
+   * The URL whose image failed to load, rather than a boolean.
+   *
+   * `ProfileAvatar` carries the same state for the same reason, and that
+   * duplication is deliberate: this component needs the hook's result for
+   * `hasStoredPicture` as well as for rendering, which is what keeps it from
+   * simply using `ProfileAvatar` - see the note there.
+   *
+   * These are two different failures and only one of them is `imageLoadError`,
+   * which is the *query* failing. A presigned URL resolves fine and then 404s at
+   * the S3 origin when the object behind it is gone, and the owner's own page is
+   * not exempt from that: `useInvalidateProfileImage` reaches one React Query
+   * cache - the one in the tab that ran the mutation - so a second tab or a
+   * second device holds a URL for a removed picture until it goes stale, which
+   * with `refetchOnMount` and `refetchOnWindowFocus` both off is the full 15
+   * minutes. An object that goes missing without this client's mutation running
+   * at all - an out-of-band deletion, or the `NEXT_PUBLIC_ENV` change that
+   * orphans every existing upload - is unbounded.
+   *
+   * Storing the URL makes the state self-correcting: after a re-upload the hook
+   * hands back a new URL for the same user, the failure belongs to the old one,
+   * and comparing them lets the new picture render instead of inheriting the
+   * old one's fallback. A boolean would latch, on the one page the user came to
+   * in order to fix this.
+   */
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const imageFailedToLoad =
+    profileImageUrl !== null && failedUrl === profileImageUrl;
+
+  /**
+   * Whether the server holds a picture.
+   *
+   * Deliberately **not** narrowed by `imageFailedToLoad`. That flag says the
+   * browser could not draw the picture; it says nothing about the row, which is
+   * still set and still claims a picture. The two readers below both want the
+   * server's answer rather than the browser's: `canRemove` would otherwise hide
+   * the only control that clears a stale column, and `handleRemove` would send
+   * `null` - saving nothing - for exactly the user who needs the removal to
+   * reach the server. So a picture that fails to load draws the fallback icon
+   * and still offers Remove.
+   */
   const hasStoredPicture = !!profileImageUrl && !imageLoadError;
 
   /**
@@ -396,13 +436,19 @@ const ProfilePicture = ({
           fallbackAvatar
         ) : isProfileImageLoading ? (
           <div className="h-40 w-40 flex-shrink-0 rounded-full bg-gray-400" />
-        ) : profileImageUrl && !imageLoadError ? (
+        ) : profileImageUrl && !imageLoadError && !imageFailedToLoad ? (
           <div className="relative h-40 w-40 flex-shrink-0 items-center justify-center overflow-hidden rounded-full">
             <Image
               src={profileImageUrl}
               alt="Profile Picture"
               fill
               className="object-cover"
+              // `next/image` forwards this to the underlying `<img>`'s error
+              // handler, and re-assigns `src` on mount when it is set, so an
+              // error that happened before hydration is not lost. The optimizer
+              // answers 400 with no image body when the upstream object is
+              // missing, which is what fires it.
+              onError={() => setFailedUrl(profileImageUrl)}
             />
           </div>
         ) : (
