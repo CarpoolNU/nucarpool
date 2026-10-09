@@ -29,6 +29,12 @@ import {
   pendingPictureFile,
 } from "../../utils/profile/pendingPicture";
 import { planCoopRangeNotice } from "../../utils/profile/coopRangeNotice";
+import {
+  DEFAULT_PROFILE_TAB,
+  PROFILE_TAB_QUERY_KEY,
+  ProfileTab,
+  parseProfileTab,
+} from "../../utils/profile/profileTab";
 import { useAddressSelection } from "../../utils/useAddressSelection";
 import {
   updateUser,
@@ -81,7 +87,41 @@ export async function getServerSideProps(context: GetServerSidePropsContext) {
 }
 const Index: NextPage = () => {
   const router = useRouter();
-  const [option, setOption] = useState<"user" | "carpool" | "account">("user");
+  /**
+   * The visible tab, seeded from `?tab=` so the page can be linked into.
+   *
+   * **Why anything links here.** `InactiveBlocker` covers the map for a
+   * deactivated user and offers one way out, a "Go to Profile" button. It
+   * pushed a bare `/profile`, which opened here on "User Profile" and left
+   * the status toggle - the only control that lifts the blocker - two tabs
+   * away and unnamed. SCRUM-667.
+   *
+   * **Why a `useState` initialiser and not an effect.** This page exports
+   * `getServerSideProps`, so it is never statically optimised and Next has
+   * `router.query` populated before the first client render. There is
+   * nothing to wait for, and an effect would paint "User Profile" first and
+   * visibly swap it. The initialiser is lazy so the parse runs once per
+   * mount rather than once per render.
+   *
+   * **Deliberately read once, not synced.** The sidebar buttons swap this
+   * state and leave the URL alone, exactly as the desktop tab buttons on `/`
+   * do. Writing the tab back on every click would put a history entry behind
+   * each one and make Back walk the tabs instead of leaving the page.
+   *
+   * **Precedence against `planCoopRangeNotice`, which also sets this.** The
+   * notice wins, because its effect runs after mount. That is the right way
+   * round and not an accident of ordering: `CoopRangeNotice["tab"]` is the
+   * literal `"account"`, so the only case where the two disagree is a link
+   * to `?tab=user` or `?tab=carpool` arriving for a user whose stored co-op
+   * range is broken - and there the notice raises a blocking toast about a
+   * field on the Account tab, so landing anywhere else would strand them.
+   * Arriving at `?tab=account`, the case the blocker produces, they agree.
+   */
+  const [option, setOption] = useState<ProfileTab>(
+    () =>
+      parseProfileTab(router.query[PROFILE_TAB_QUERY_KEY]) ??
+      DEFAULT_PROFILE_TAB,
+  );
 
   /**
    * Whether this mount has already told the user their co-op range is

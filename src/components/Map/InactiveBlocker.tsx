@@ -1,14 +1,24 @@
 import { useState } from "react";
 import { useRouter } from "next/router";
 import Spinner from "../Spinner";
+import { profileTabRoute } from "../../utils/profile/profileTab";
 
 const InactiveBlocker = () => {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
+  /**
+   * Straight to the tab holding the status toggle, not to the profile's
+   * front door.
+   *
+   * This pushed a bare `/profile`, which opens on "User Profile" - so the
+   * one action this overlay offers landed the user two tabs away from the
+   * only control that dismisses it, with nothing naming where to go next.
+   * SCRUM-667.
+   */
   const handleProfileClick = async () => {
     setIsLoading(true);
-    await router.push("/profile");
+    await router.push(profileTabRoute("account"));
     setIsLoading(false);
   };
 
@@ -25,9 +35,17 @@ const InactiveBlocker = () => {
         aria-live="assertive"
       >
         <h1 className="mb-4 text-3xl font-bold">You are currently inactive</h1>
+        {/* Names the tab, because the button is not the only way anyone
+            arrives at the profile and "in your profile" gave a user who got
+            there by another route nothing to look for.
+
+            "Account" rather than "Account Status" on purpose: `ProfileSidebar`
+            labels this tab "Account" on mobile and "Account Status" on
+            desktop, and "Account" is the one wording that reads correctly
+            against both. */}
         <p className="text-lg font-medium">
-          To view and interact with the map, please change your activity status
-          in your profile.
+          To view and interact with the map, set your status back to active on
+          the Account tab of your profile.
         </p>
         <button
           onClick={handleProfileClick}
