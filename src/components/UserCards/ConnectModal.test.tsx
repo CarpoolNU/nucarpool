@@ -40,7 +40,13 @@
  * still reporting `close` would refresh the list out from under it.
  */
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import {
   QueryClient,
   QueryClientProvider,
@@ -49,6 +55,12 @@ import {
 import { Role, Status } from "@prisma/client";
 import ConnectModal from "./ConnectModal";
 import { EnhancedPublicUser, User } from "../../utils/types";
+import {
+  DESKTOP_WIDTH,
+  MOBILE_WIDTH,
+  restoreViewportAfterEach,
+  setViewportWidth,
+} from "../../testing/viewport";
 
 const invalidateRequests = jest.fn();
 const invalidateRecommendations = jest.fn();
@@ -147,6 +159,8 @@ const pressEscape = () => fireEvent.keyDown(document, { key: "Escape" });
 beforeEach(() => {
   jest.clearAllMocks();
 });
+
+restoreViewportAfterEach();
 
 describe("closing the connect modal after a request was sent", () => {
   it("refreshes the request lists when closed with Esc", async () => {
@@ -247,7 +261,7 @@ describe("the connect modal's panel height", () => {
    * Wrapped in the same client the block above uses, because the harness makes
    * `useMutation` the real one and a real one throws without a `QueryClient`.
    */
-  const renderPanel = (): HTMLElement => {
+  const renderPanel = async (): Promise<HTMLElement> => {
     render(
       <QueryClientProvider
         client={
@@ -262,6 +276,11 @@ describe("the connect modal's panel height", () => {
         />
       </QueryClientProvider>,
     );
+    /* The transition's post-mount update, flushed while this test still owns
+       the tree. These four cases were the last in the file when they were
+       written, so the update had no later test to be reported against; with a
+       block following them it would be. Same reason as `renderAt` below. */
+    await act(async () => {});
 
     const heading = screen.getByText("Send a message to connect!");
     const panel = heading.closest("[class*='max-w-[700px]']");
@@ -271,8 +290,8 @@ describe("the connect modal's panel height", () => {
     return panel;
   };
 
-  it("caps itself against the dynamic viewport", () => {
-    const panel = renderPanel();
+  it("caps itself against the dynamic viewport", async () => {
+    const panel = await renderPanel();
 
     expect(panel.className).toContain("max-h-[90dvh]");
     // A *bare* `vh`, which `dvh` deliberately does not match. `vh` is the
@@ -280,16 +299,16 @@ describe("the connect modal's panel height", () => {
     expect(panel.className).not.toMatch(/\d+vh\]/);
   });
 
-  it("keeps the scroller that the cap makes meaningful", () => {
-    const panel = renderPanel();
+  it("keeps the scroller that the cap makes meaningful", async () => {
+    const panel = await renderPanel();
 
     // Inert without the cap above, and the cap is inert without it. Asserted
     // together because either alone is a no-op.
     expect(panel.className).toContain("overflow-y-auto");
   });
 
-  it("aligns safely, so the overflow does not go off the unreachable end", () => {
-    const panel = renderPanel();
+  it("aligns safely, so the overflow does not go off the unreachable end", async () => {
+    const panel = await renderPanel();
 
     expect(panel.className).toContain("justify-center-safe");
     // The bare utility would re-break the top. `-safe` is a different class,
@@ -297,12 +316,238 @@ describe("the connect modal's panel height", () => {
     expect(panel.className).not.toMatch(/justify-center(?!-safe)/);
   });
 
-  it("keeps the square proportion it had, for viewports with room for it", () => {
-    const panel = renderPanel();
+  it("keeps the square proportion it had, for viewports with room for it", async () => {
+    const panel = await renderPanel();
 
     // `aspect-ratio` yields to `max-height`, so the cap does not cost the
     // desktop look - verified in Chromium at 1440x900, where the panel is
     // 700x700 both before and after this change.
     expect(panel.className).toContain("md:aspect-square");
+  });
+});
+
+/**
+ * That the connect modal shows a phone the same carpool details it shows a
+ * desktop.
+ *
+ * Two `!isMobile` gates had no mobile branch behind them, so a phone rendered
+ * strictly less than a desktop: the whole right-hand detail column - start
+ * address, destination company, days working, job times and, for a `DRIVER`,
+ * seats available - and the counterpart's pronouns. The card the modal is
+ * opened from applies no viewport gate to the same fields, so one flow on one
+ * device disagreed with itself about whether they were fit to show.
+ *
+ * **Every mobile case is paired with a desktop control**, because the risk in
+ * removing a gate is breaking the side that already worked rather than failing
+ * to fix the side that did not. Running the same assertion at `DESKTOP_WIDTH`
+ * also means no mobile case can pass vacuously against a component that simply
+ * stopped rendering the field at all.
+ *
+ * **These prove reachability, not layout.** jsdom runs no layout and evaluates
+ * no media query, so `md:w-1/2` is inert here and the stacked column's
+ * appearance is not observable - only that the content is in the tree at that
+ * width. `src/testing/viewport.ts` documents this at length. Confirming the
+ * stacked column and the wrapped name row read correctly on a phone needs a
+ * real browser against built CSS.
+ *
+ * Note that the two widths straddle `MOBILE_BREAKPOINT_PX`, which is 640 - not
+ * Tailwind's `md`, which this project sets to 834. So `DESKTOP_WIDTH` here is
+ * the narrowest viewport `useIsMobile` calls desktop, and the band between the
+ * two numbers was already rendering this column stacked before the change. The
+ * stacked layout is therefore not new; only its reach below 640 is.
+ *
+ * The width is set *before* `render`, not after: `useIsMobile` reads
+ * `window.innerWidth` through `useSyncExternalStore`'s `getSnapshot`, so a
+ * width written after mount is only seen if a `resize` event follows. These
+ * cases are about the first paint, so they set it up front.
+ */
+describe("the carpool detail the connect modal shows at each width", () => {
+  /**
+   * Epoch-dated, as every stored schedule time is - `startTime`/`endTime` are
+   * `@db.Time(0)` and Prisma hands them back as `1970-01-01T<hh:mm>Z`.
+   * `formatScheduleTime` resolves them in Boston at that anchor, which is EST,
+   * so these render as 9:00 AM and 5:00 PM under either of CI's two timezones
+   * rather than only under one.
+   */
+  const SCHEDULED_USER = {
+    ...OTHER_USER,
+    startTime: new Date("1970-01-01T14:00:00.000Z"),
+    endTime: new Date("1970-01-01T22:00:00.000Z"),
+  } as unknown as EnhancedPublicUser;
+
+  /**
+   * Async only because of the dialog's transition. Headless UI's `Transition`
+   * schedules a state update that lands *after* the synchronous render
+   * returns, so a test that asserted and finished would leave it pending -
+   * React then logs "an update was not wrapped in act(...)" against a test
+   * that had already passed. The empty `act` flushes it while the test still
+   * owns the tree. Nothing here depends on the transition's result; this is
+   * about owning the update, not waiting for it. The first block in this file
+   * never had the problem because every one of its cases awaits the send flow;
+   * the second block did, latently, and `renderPanel` now flushes for the same
+   * reason.
+   */
+  const renderAt = async (
+    width: number,
+    otherUser: EnhancedPublicUser = SCHEDULED_USER,
+  ) => {
+    setViewportWidth(width);
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <ConnectModal
+          user={VIEWER}
+          otherUser={otherUser}
+          onClose={onClose}
+          onViewRequest={jest.fn()}
+        />
+      </QueryClientProvider>,
+    );
+    await act(async () => {});
+  };
+
+  describe.each([
+    ["a mobile viewport", MOBILE_WIDTH],
+    ["a desktop viewport (control)", DESKTOP_WIDTH],
+  ])("at %s", (_label, width) => {
+    it("renders the other user's start address", async () => {
+      await renderAt(width);
+
+      expect(screen.getByText("1 Somewhere St")).toBeInTheDocument();
+    });
+
+    it("renders the destination company", async () => {
+      await renderAt(width);
+
+      expect(screen.getByText("Acme")).toBeInTheDocument();
+    });
+
+    /*
+     * Located structurally from one box rather than by class name, then
+     * checked as a whole row: all seven days present, and the five the fixture
+     * marks worked - `0,1,1,1,1,1,0`, so Monday to Friday - distinguished from
+     * the two it does not. Asserting only that the labels exist would pass
+     * against a row that rendered every day unselected.
+     */
+    it("renders the days-working row with the worked days marked", async () => {
+      await renderAt(width);
+
+      const row = screen.getByText("Tu").parentElement;
+      const boxes = Array.from(row?.children ?? []);
+      expect(boxes.map((box) => box.textContent)).toEqual([
+        "Su",
+        "M",
+        "Tu",
+        "W",
+        "Th",
+        "F",
+        "S",
+      ]);
+      expect(
+        boxes
+          .filter((box) => box.className.includes("bg-northeastern-red"))
+          .map((box) => box.textContent),
+      ).toEqual(["M", "Tu", "W", "Th", "F"]);
+    });
+
+    it("renders the job start and end times", async () => {
+      await renderAt(width);
+
+      expect(screen.getByText("Start:")).toBeInTheDocument();
+      expect(screen.getByText("9:00 AM")).toBeInTheDocument();
+      expect(screen.getByText("End:")).toBeInTheDocument();
+      expect(screen.getByText("5:00 PM")).toBeInTheDocument();
+    });
+
+    it("renders seats available when the other user is a DRIVER", async () => {
+      await renderAt(width);
+
+      expect(screen.getByText("Seats Available:")).toBeInTheDocument();
+      expect(screen.getByText("3")).toBeInTheDocument();
+    });
+
+    /*
+     * The role gate is the one condition on this column that survives the
+     * change, so it is checked at both widths too - removing the viewport gate
+     * must not have taken it along.
+     */
+    it("omits seats available when the other user is a RIDER", async () => {
+      await renderAt(width, {
+        ...SCHEDULED_USER,
+        role: Role.RIDER,
+      } as unknown as EnhancedPublicUser);
+
+      expect(screen.queryByText("Seats Available:")).not.toBeInTheDocument();
+      // The positive control for that negative query: the column itself is
+      // still rendered, so the absence above is the role gate and not a
+      // missing column.
+      expect(screen.getByText("1 Somewhere St")).toBeInTheDocument();
+    });
+
+    it("renders pronouns when the other user has them", async () => {
+      await renderAt(width, {
+        ...SCHEDULED_USER,
+        pronouns: "they/them",
+      } as unknown as EnhancedPublicUser);
+
+      expect(screen.getByText("(they/them)")).toBeInTheDocument();
+    });
+
+    /*
+     * `OTHER_USER` carries `pronouns: ""`, which is why the case above needs a
+     * variant of its own. The empty check is the other half of that gate: it
+     * is what keeps a bare "()" off the name row, and it is the part of the
+     * condition the change deliberately kept.
+     */
+    it("renders no pronouns when the other user has none", async () => {
+      await renderAt(width);
+
+      expect(screen.getByText("Riley")).toBeInTheDocument();
+      expect(screen.queryByText("()")).not.toBeInTheDocument();
+    });
+  });
+
+  /**
+   * The substitution two sections further down the same file, which is a
+   * deliberate mobile branch and not one of the gaps this change closed. It is
+   * pinned here because the change removed its two nearest neighbours, and
+   * "remove the `!isMobile` gates" applied one section too far would land
+   * exactly here.
+   */
+  describe("the post-send View Request substitution", () => {
+    const sendRequest = async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Send" }));
+      await screen.findByText("Your request has been sent!");
+    };
+
+    it("still points a mobile viewer at the Requests tab instead", async () => {
+      await renderAt(MOBILE_WIDTH);
+      await sendRequest();
+
+      expect(
+        screen.getByText("You can view this request from the Requests tab."),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "View Request" }),
+      ).not.toBeInTheDocument();
+      // The positive control for the negative query above: a button this
+      // query *can* find, so its absence above is a real absence.
+      expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
+    });
+
+    it("control: a desktop viewer still gets the View Request button", async () => {
+      await renderAt(DESKTOP_WIDTH);
+      await sendRequest();
+
+      expect(
+        screen.getByRole("button", { name: "View Request" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText("You can view this request from the Requests tab."),
+      ).not.toBeInTheDocument();
+    });
   });
 });

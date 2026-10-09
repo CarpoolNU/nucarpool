@@ -196,12 +196,12 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                       )}
                     </div>
                     <div className="flex w-full flex-col justify-center gap-2 pl-4">
-                      <div className="flex flex-row items-baseline justify-start gap-2">
+                      <div className="flex flex-row flex-wrap items-baseline justify-start gap-2">
                         <div className="text-lg font-bold lg:text-xl">
                           <p>{props.otherUser.preferredName}</p>
                         </div>
                         <p className="font-montserrat text-sm text-stone-400 italic">
-                          {props.otherUser.pronouns !== "" && !isMobile
+                          {props.otherUser.pronouns !== ""
                             ? "(" + `${props.otherUser.pronouns}` + ")"
                             : null}
                         </p>
@@ -241,72 +241,70 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                       </div>
                     </div>
                   )}
-                  {!isMobile && (
-                    <div className="flex flex-col gap-3 py-7 pl-12 md:w-1/2">
-                      {/*start location*/}
-                      <div className="flex items-center">
-                        <div className="flex w-8 items-center justify-center">
-                          <Image
-                            src={StartIcon}
-                            width={30}
-                            height={30}
-                            alt="Start icon"
-                          />
-                        </div>
-                        <p className="ml-1.5 font-semibold">
-                          {props.otherUser.startAddress}
-                        </p>
+                  <div className="flex flex-col gap-3 px-12 py-7 md:w-1/2 md:pr-0">
+                    {/*start location*/}
+                    <div className="flex items-center">
+                      <div className="flex w-8 items-center justify-center">
+                        <Image
+                          src={StartIcon}
+                          width={30}
+                          height={30}
+                          alt="Start icon"
+                        />
                       </div>
-
-                      {/*End location*/}
-                      <div className="flex items-center">
-                        <div className="flex w-8 items-center justify-center">
-                          <Image
-                            src={EndIcon}
-                            width={21}
-                            height={25}
-                            alt="End icon"
-                          />
-                        </div>
-                        <p className="ml-1.5 font-semibold">
-                          {props.otherUser.companyName}
-                        </p>
-                      </div>
-                      <div className="flex w-full items-center">
-                        {daysOfWeek.map((day, index) => (
-                          <StaticDayBox
-                            className="!m-0.5 !h-7 !w-7 !text-base"
-                            key={index + day}
-                            day={day}
-                            isSelected={daysArray[index]}
-                          />
-                        ))}
-                      </div>
-                      {/* Start and end times */}
-
-                      <div className="flex w-full justify-between align-middle">
-                        <div className="flex">
-                          <p className="pr-1">Start:</p>
-                          <p className="font-semibold">
-                            {formatScheduleTime(props.otherUser.startTime)}
-                          </p>
-                          <p className="px-2 font-semibold">|</p>
-                          <p className="pr-1">End:</p>
-                          <p className="font-semibold">
-                            {formatScheduleTime(props.otherUser.endTime)}
-                          </p>
-                        </div>
-                      </div>
-                      {props.otherUser.role === "DRIVER" && (
-                        <div className="flex flex-row">
-                          <div className="mr-1">Seats Available:</div>
-                          <div className="font-semibold">
-                            {props.otherUser.seatAvail}
-                          </div>
-                        </div>
-                      )}
+                      <p className="ml-1.5 font-semibold">
+                        {props.otherUser.startAddress}
+                      </p>
                     </div>
-                  )}
+
+                    {/*End location*/}
+                    <div className="flex items-center">
+                      <div className="flex w-8 items-center justify-center">
+                        <Image
+                          src={EndIcon}
+                          width={21}
+                          height={25}
+                          alt="End icon"
+                        />
+                      </div>
+                      <p className="ml-1.5 font-semibold">
+                        {props.otherUser.companyName}
+                      </p>
+                    </div>
+                    <div className="flex w-full items-center">
+                      {daysOfWeek.map((day, index) => (
+                        <StaticDayBox
+                          className="!m-0.5 !h-7 !w-7 !text-base"
+                          key={index + day}
+                          day={day}
+                          isSelected={daysArray[index]}
+                        />
+                      ))}
+                    </div>
+                    {/* Start and end times */}
+
+                    <div className="flex w-full justify-between align-middle">
+                      <div className="flex">
+                        <p className="pr-1">Start:</p>
+                        <p className="font-semibold">
+                          {formatScheduleTime(props.otherUser.startTime)}
+                        </p>
+                        <p className="px-2 font-semibold">|</p>
+                        <p className="pr-1">End:</p>
+                        <p className="font-semibold">
+                          {formatScheduleTime(props.otherUser.endTime)}
+                        </p>
+                      </div>
+                    </div>
+                    {props.otherUser.role === "DRIVER" && (
+                      <div className="flex flex-row">
+                        <div className="mr-1">Seats Available:</div>
+                        <div className="font-semibold">
+                          {props.otherUser.seatAvail}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="flex w-full flex-col px-14">
                   <Dialog.Title className="mb-4 pt-2 text-center text-xl font-bold">
