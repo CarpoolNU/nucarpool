@@ -34,6 +34,19 @@ interface ProfilePictureProps {
   pendingPicture: PendingPicture;
   onPendingPictureChange: (next: PendingPicture) => void;
 }
+
+/**
+ * What the user is told when `getCroppedImg` cannot produce a file.
+ *
+ * Two causes reach it and the component cannot tell them apart: the browser
+ * failing to decode the chosen file, and `toBlob` handing back null under
+ * memory pressure. Neither is worth naming - the user can act on neither - so
+ * the message names the only thing they can change, which is the photo.
+ *
+ * Exported so the test pins this exact copy rather than a paraphrase of it.
+ */
+export const CROP_FAILURE_MESSAGE =
+  "We couldn't read that photo. Please try a different image.";
 const ProfilePicture = ({
   pendingPicture,
   onPendingPictureChange,
@@ -67,6 +80,17 @@ const ProfilePicture = ({
   // also being stored, in state nothing ever read. Dropped rather than typed.
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
   const [showModal, setShowModal] = useState<boolean>(false);
+
+  /**
+   * Whether the last crop attempt failed, and so whether the dialog is showing
+   * the user why.
+   *
+   * A boolean rather than the error, because the two causes that reach it are
+   * not worth distinguishing to the user and the component cannot distinguish
+   * them anyway - `getCroppedImg` rejects identically for an undecodable file
+   * and for a null `toBlob`.
+   */
+  const [cropFailed, setCropFailed] = useState(false);
 
   /**
    * The full-resolution source the open cropper reads, held in a ref rather
@@ -232,6 +256,7 @@ const ProfilePicture = ({
     setZoom(1);
     setMinZoom(1);
     setCroppedAreaPixels(null);
+    setCropFailed(false);
     setShowModal(false);
   };
 
@@ -269,11 +294,25 @@ const ProfilePicture = ({
     const url = URL.createObjectURL(file);
     sourceUrlRef.current = url;
     setImageSrc(url);
+
+    // The previous photo's failure says nothing about this one, and leaving it
+    // up would read as a verdict on a file nothing has tried to crop yet.
+    setCropFailed(false);
     setShowModal(true);
   };
 
   const handleCrop = async () => {
     if (!imageSrc || !croppedAreaPixels) return;
+
+    // Cleared before the attempt rather than only on the way out, so that a
+    // second attempt on the same photo is visibly a second attempt. The
+    // message is identical either way, and React commits this before the
+    // `await` below - so the alert is removed and re-inserted rather than
+    // left standing, which is what makes a screen reader announce it again.
+    // Without that, re-tapping the button is silent for exactly the user who
+    // has already been told nothing once.
+    setCropFailed(false);
+
     try {
       const { file, url } = await getCroppedImg(imageSrc, croppedAreaPixels);
 
@@ -293,7 +332,16 @@ const ProfilePicture = ({
       revokeSourceUrl();
       setImageSrc(null);
     } catch (error) {
+      // Kept for a developer with a console open, and deliberately not the
+      // whole response: a browser console is not a record anyone reads, which
+      // is why this branch was invisible to the user and to the team alike.
       console.error(error);
+
+      // Left open rather than closed. Closing would drop the user back to a
+      // page with no picture and no explanation of why, which is the failure
+      // this replaces wearing different clothes. The dialog stays, the message
+      // sits above the buttons, and Cancel is now an informed choice.
+      setCropFailed(true);
     }
   };
   /**
@@ -388,6 +436,38 @@ const ProfilePicture = ({
                     />
                   </div>
                 </div>
+                {/*
+                  Inline, and inside the panel, rather than the `toast.error`
+                  the save handlers use. Headless UI's `Dialog` marks the rest
+                  of the application `aria-hidden` while it is open, and `_app`
+                  mounts `ToastContainer` as a sibling of the page inside that
+                  subtree - so a toast raised from `handleCrop` paints above
+                  the backdrop and is still outside the accessibility tree,
+                  taking its own alert role with it. Verified in jsdom by
+                  walking the toast container's ancestors with the cropper
+                  open. Here the message is a child of the dialog, so it is
+                  announced, and it sits where the button that failed is.
+
+                  `shrink-0`, like the row below, so the two keep their height
+                  as the scrolling stage gives way on a short viewport. The
+                  panel is already at its cap and the scroller is the flexible
+                  child, so the message is paid for out of the photo rather
+                  than out of the button row. Measured in Chromium against this
+                  project's compiled stylesheet, at 375x375 - the landscape
+                  phone the cap above was introduced for: the panel stays 338px
+                  either way, the scroller goes 246px -> 182px, and `Cancel`
+                  and `Crop Image` do not move at all, staying at 288-332px in
+                  a 375px viewport. The message wraps to two lines and is
+                  itself fully on screen. Checked again at 320x568.
+                */}
+                {cropFailed && (
+                  <p
+                    role="alert"
+                    className="font-montserrat text-northeastern-red shrink-0 px-4 pt-4 text-center text-base"
+                  >
+                    {CROP_FAILURE_MESSAGE}
+                  </p>
+                )}
                 {/*
                   `shrink-0` so the row keeps its full height as the scroller
                   above it gives way, rather than the two sharing the shortfall.

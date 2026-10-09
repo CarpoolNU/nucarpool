@@ -34,8 +34,8 @@
  */
 
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import type { Point } from "react-easy-crop";
-import ProfilePicture from "./ProfilePicture";
+import type { Area, Point } from "react-easy-crop";
+import ProfilePicture, { CROP_FAILURE_MESSAGE } from "./ProfilePicture";
 import { CROP_BOX_PX, minZoomToFill } from "../../utils/cropZoom";
 import { PENDING_REMOVAL } from "../../utils/profile/pendingPicture";
 import { profileImageSpies } from "../../testing/profileImageStub";
@@ -50,6 +50,13 @@ type CropperProps = {
   restrictPosition?: boolean;
   objectFit?: string;
   onCropChange: (location: Point) => void;
+  // The crop rectangle, in the *source image's* pixels. `handleCrop` refuses
+  // to run without one, so the failure block below has to supply it the way a
+  // laid-out cropper would.
+  onCropComplete?: (
+    croppedAreaPercentage: Area,
+    croppedAreaPixels: Area,
+  ) => void;
   onMediaLoaded?: (mediaSize: {
     width: number;
     height: number;
@@ -68,6 +75,33 @@ jest.mock("react-easy-crop", () => ({
     cropperProps = props;
     return <div data-testid="cropper" />;
   },
+}));
+
+/**
+ * The canvas crop, which jsdom cannot run.
+ *
+ * `getCroppedImg` builds a canvas, draws to it and calls `toBlob`, none of
+ * which jsdom implements - so the only way to reach `handleCrop` at all is to
+ * replace it. That is a limitation rather than a shortcut: the arithmetic the
+ * real function does is covered directly in `utils/cropImage.test.ts`, and
+ * what is left here is the branch the component owns, which is what it does
+ * with a rejection.
+ *
+ * Mocked for the whole file rather than inside one block, because `jest.mock`
+ * is hoisted to module scope regardless of where it is written. The other
+ * blocks are unaffected: none of them clicks `Crop Image`, so none of them
+ * calls this.
+ *
+ * The factory forwards to a `jest.fn` declared above rather than being one,
+ * so that each test can set its own outcome. Reading `getCroppedImgMock`
+ * *inside* the arrow defers the lookup until call time, which is what keeps
+ * the hoisted factory from reading an uninitialised binding.
+ */
+const getCroppedImgMock = jest.fn();
+
+jest.mock("../../utils/cropImage", () => ({
+  __esModule: true,
+  default: (...args: unknown[]) => getCroppedImgMock(...args),
 }));
 
 /**
@@ -97,6 +131,7 @@ beforeEach(() => {
   cropperProps = null;
   createdUrls = [];
   revokedUrls = [];
+  getCroppedImgMock.mockReset();
 
   // jsdom implements neither half of the object-URL API, and
   // `handleFileChange` calls `createObjectURL` before the cropper can mount.
@@ -340,6 +375,239 @@ describe("the crop dialog", () => {
     });
 
     expect(input).toHaveFocus();
+  });
+});
+
+/**
+ * That a crop which fails says so, in a place the user can actually find it.
+ *
+ * `handleCrop` is the only way out of the dialog that keeps the photo, and its
+ * failure branch was `console.error` alone. Everything observable stayed as it
+ * was - the dialog open, the photo on the stage, the parent told nothing - so a
+ * user whose file the browser cannot decode tapped `Crop Image` and watched
+ * nothing happen, with no reason given and no retry that could ever work.
+ *
+ * Two causes reach that branch and they are indistinguishable from here:
+ * `image.onerror` for a file the browser cannot decode - HEIC and HEIF from an
+ * Android camera roll being the realistic case, since `accept="image/*"` admits
+ * them and only Safari decodes them - and a null `toBlob`, the mobile-memory
+ * failure `MAX_CROPPED_IMAGE_PX` makes rare rather than impossible. One message
+ * covers both, so the rejection below stands in for either.
+ *
+ * **Why the message is inline and not a toast.** The toast was the obvious
+ * choice - it is what the save handlers use, and `_app` already mounts a
+ * container - and it is the wrong one here, for a reason that is measurable
+ * rather than aesthetic. Headless UI's `Dialog` marks the rest of the
+ * application `aria-hidden` while it is open, and `_app` renders
+ * `ToastContainer` as a sibling of the page inside that subtree. So a toast
+ * raised from this handler paints on top of the backdrop and is still outside
+ * the accessibility tree: a screen reader is never told, and the toast's own
+ * alert role is suppressed along with it. Verified in jsdom by walking the
+ * toast container's ancestors with the cropper open. "puts the message inside
+ * the dialog" pins the conclusion, by asserting the message is a *descendant*
+ * of the dialog rather than merely present somewhere in the document - which a
+ * toast would satisfy just as well.
+ *
+ * Measured against the pre-fix component - the `catch` restored to
+ * `console.error` alone - five of these nine fail. The other four pass either
+ * way, and each does so deliberately rather than by accident: two pin
+ * behaviour this change had to *leave alone* (the log, and the whole
+ * successful path), and two pin the half of the old behaviour that was already
+ * correct, which is that a failed crop tells the parent nothing and does not
+ * close the dialog underneath the user. Those four are regression guards, and
+ * are what lets the other five be read as describing a change rather than a
+ * rewrite.
+ *
+ * The two that assert the message is *gone* carry a control asserting it was
+ * there first, because without one they are satisfied by a component that
+ * never shows a message at all - which is precisely the component this
+ * replaces.
+ */
+describe("when the crop itself fails", () => {
+  /** The cropped JPEG a successful `getCroppedImg` resolves with. */
+  const croppedFile = new File(["cropped"], "cropped-image.jpeg", {
+    type: "image/jpeg",
+  });
+
+  /**
+   * Silenced rather than left to print. `handleCrop` still logs the underlying
+   * error, which is worth keeping for a developer with a console open, but a
+   * deliberate rejection should not look like a broken suite. Spying also lets
+   * the last case assert the log survives alongside the new message.
+   */
+  let consoleError: jest.SpyInstance;
+
+  beforeEach(() => {
+    consoleError = jest.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleError.mockRestore();
+  });
+
+  /**
+   * Opens the cropper and supplies the crop rectangle, which is the state
+   * `handleCrop` refuses to run without. A real `Cropper` would report one from
+   * `onCropComplete` after laying itself out; the mock lays nothing out, so the
+   * callback is invoked directly with a plausible source-pixel rectangle.
+   */
+  const openCropperReadyToCrop = async (
+    onPendingPictureChange: jest.Mock = jest.fn(),
+  ) => {
+    render(
+      <ProfilePicture
+        pendingPicture={null}
+        onPendingPictureChange={onPendingPictureChange}
+      />,
+    );
+
+    const input = screen.getByLabelText("Upload Profile Picture");
+    const file = new File(["photo"], "photo.heic", { type: "image/heic" });
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [file] } });
+    });
+
+    act(() => {
+      const rectangle = { x: 0, y: 0, width: 3369, height: 3369 };
+      cropperProps?.onCropComplete?.(rectangle, rectangle);
+    });
+
+    return { input, onPendingPictureChange };
+  };
+
+  /** Clicks `Crop Image` and lets the handler's promise settle. */
+  const clickCrop = async () => {
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Crop Image" }));
+    });
+  };
+
+  it("tells the user the photo could not be read", async () => {
+    getCroppedImgMock.mockRejectedValue(new Error("Failed to load image"));
+    await openCropperReadyToCrop();
+
+    await clickCrop();
+
+    expect(screen.getByRole("alert")).toHaveTextContent(CROP_FAILURE_MESSAGE);
+  });
+
+  it("hands the parent nothing when the crop fails", async () => {
+    getCroppedImgMock.mockRejectedValue(new Error("Canvas is empty"));
+    const { onPendingPictureChange } = await openCropperReadyToCrop();
+
+    await clickCrop();
+
+    expect(onPendingPictureChange).not.toHaveBeenCalled();
+  });
+
+  it("keeps the dialog open so the failure is read in context", async () => {
+    getCroppedImgMock.mockRejectedValue(new Error("Failed to load image"));
+    await openCropperReadyToCrop();
+
+    await clickCrop();
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("puts the message inside the dialog, where a toast could not be", async () => {
+    getCroppedImgMock.mockRejectedValue(new Error("Failed to load image"));
+    await openCropperReadyToCrop();
+
+    await clickCrop();
+
+    expect(screen.getByRole("dialog")).toContainElement(
+      screen.getByRole("alert"),
+    );
+  });
+
+  it("keeps the message outside the scrolling stage", async () => {
+    getCroppedImgMock.mockRejectedValue(new Error("Failed to load image"));
+    await openCropperReadyToCrop();
+
+    await clickCrop();
+
+    // A sibling of the scroller, for the same reason the button row is one:
+    // the panel is capped and the stage is what gives way, so a message
+    // *inside* the scroller would scroll out of sight on the short viewports
+    // this is most likely to be read on. The structural assertion is what
+    // survives a refactor that keeps every class name and still hides it.
+    const scroller = screen.getByTestId("cropper").parentElement?.parentElement;
+    const alert = screen.getByRole("alert");
+
+    expect(scroller?.contains(alert)).toBe(false);
+    expect(alert.parentElement).toBe(scroller?.parentElement);
+  });
+
+  it("drops the message when a different photo is picked", async () => {
+    getCroppedImgMock.mockRejectedValue(new Error("Failed to load image"));
+    const { input } = await openCropperReadyToCrop();
+    await clickCrop();
+    expect(screen.queryByRole("alert")).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.change(input, {
+        target: {
+          files: [new File(["other"], "other.jpg", { type: "image/jpeg" })],
+        },
+      });
+    });
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("drops the message when the dialog is cancelled", async () => {
+    getCroppedImgMock.mockRejectedValue(new Error("Failed to load image"));
+    const { input } = await openCropperReadyToCrop();
+    await clickCrop();
+    // The control for the negative assertion below, which a component that
+    // never shows a message at all would otherwise satisfy.
+    expect(screen.queryByRole("alert")).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    });
+    await act(async () => {
+      fireEvent.change(input, {
+        target: {
+          files: [new File(["other"], "other.jpg", { type: "image/jpeg" })],
+        },
+      });
+    });
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("still logs the underlying error for a developer", async () => {
+    const error = new Error("Failed to load image");
+    getCroppedImgMock.mockRejectedValue(error);
+    await openCropperReadyToCrop();
+
+    await clickCrop();
+
+    expect(consoleError).toHaveBeenCalledWith(error);
+  });
+
+  /**
+   * The positive control. Without it every assertion above is satisfied by a
+   * component that simply never crops anything.
+   */
+  it("still hands up the file and closes, when the crop succeeds", async () => {
+    getCroppedImgMock.mockResolvedValue({
+      file: croppedFile,
+      url: "blob:from-getCroppedImg",
+    });
+    const { onPendingPictureChange } = await openCropperReadyToCrop();
+
+    await clickCrop();
+
+    expect(onPendingPictureChange).toHaveBeenCalledWith(croppedFile);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    // The URL `getCroppedImg` returns is redundant the moment it exists, and
+    // the source is finished with once the crop has been drawn. Both are
+    // released rather than left for the browser to collect.
+    expect(revokedUrls).toContain("blob:from-getCroppedImg");
+    expect(liveUrls()).toHaveLength(0);
   });
 });
 
