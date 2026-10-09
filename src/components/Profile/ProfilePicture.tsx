@@ -6,9 +6,16 @@ import { AiOutlineUser } from "react-icons/ai";
 import getCroppedImg from "../../utils/cropImage";
 import { CROP_BOX_PX, minZoomToFill } from "../../utils/cropZoom";
 import useProfileImage from "../../utils/useProfileImage";
+import {
+  PENDING_REMOVAL,
+  PendingPicture,
+  isPendingRemoval,
+  pendingPictureFile,
+} from "../../utils/profile/pendingPicture";
 interface ProfilePictureProps {
   /**
-   * The cropped file waiting to be uploaded, owned by the parent.
+   * The unsaved picture change, owned by the parent: a cropped file waiting to
+   * be uploaded, the marker for a pending removal, or nothing.
    *
    * The preview below is *derived* from this rather than stored alongside it,
    * and that is the whole point of the prop. If the file lived only in the
@@ -18,14 +25,29 @@ interface ProfilePictureProps {
    * cannot see, which a later Save would upload anyway. Deriving makes the two
    * agree by construction: there is one source of truth, and remounting
    * rebuilds the preview from it.
+   *
+   * One slot rather than a file beside a removal flag, for the reason
+   * `pendingPicture.ts` records: the two are mutually exclusive, and a single
+   * value makes that true by construction instead of by every handler
+   * remembering to clear the other one.
    */
-  selectedFile: File | null;
-  onFileSelected: (file: File | null) => void;
+  pendingPicture: PendingPicture;
+  onPendingPictureChange: (next: PendingPicture) => void;
 }
 const ProfilePicture = ({
-  selectedFile,
-  onFileSelected,
+  pendingPicture,
+  onPendingPictureChange,
 }: ProfilePictureProps) => {
+  /**
+   * The two shapes the rest of this component asks `pendingPicture` about.
+   *
+   * Narrowed once here rather than at each of the five places that branch on
+   * it, so the preview effect, the avatar and the Remove button cannot end up
+   * disagreeing about which state they are in.
+   */
+  const selectedFile = pendingPictureFile(pendingPicture);
+  const removalPending = isPendingRemoval(pendingPicture);
+
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [croppedImageUrl, setCroppedImageUrl] = useState<string>("");
   const [crop, setCrop] = useState({ x: 0, y: 0 });
@@ -112,6 +134,50 @@ const ProfilePicture = ({
     isLoading: isProfileImageLoading,
   } = useProfileImage();
 
+  /** Whether the server holds a picture this component could show. */
+  const hasStoredPicture = !!profileImageUrl && !imageLoadError;
+
+  /**
+   * Whether anything the user could want removed is currently on screen.
+   *
+   * Deliberately not "does the user have a picture": a pending crop counts,
+   * because discarding one is the other thing a user reaches for this control
+   * to do, and a stored picture already marked for removal does not, because
+   * there is nothing further to take away. Against the fallback icon the button
+   * is absent rather than inert.
+   *
+   * Reads `selectedFile` rather than `croppedImageUrl`, which the effect above
+   * sets a tick later: the parent's value is the one that decides what Save
+   * will do, so this cannot show a button for a file the page has stopped
+   * holding.
+   */
+  const canRemove = !!selectedFile || (!removalPending && hasStoredPicture);
+
+  /**
+   * The fallback, shared by the "nothing to show" branch and the pending
+   * removal below it so the two cannot drift apart.
+   */
+  const fallbackAvatar = (
+    <div className="flex h-40 w-40 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-400">
+      <AiOutlineUser className="h-28 w-28 text-white" />
+    </div>
+  );
+
+  /**
+   * What Remove means depends on whether the server holds a picture, and this
+   * is the only place that knows.
+   *
+   * With a stored picture, it is a deletion to be saved. Without one the user
+   * is merely discarding a crop they have not uploaded yet, which returns them
+   * to the state they started in - so the pending change is `null`, not a
+   * removal. Marking that case for removal instead would arm the
+   * unsaved-changes modal over a change that does not exist, and spend a
+   * mutation on saving nothing.
+   */
+  const handleRemove = () => {
+    onPendingPictureChange(hasStoredPicture ? PENDING_REMOVAL : null);
+  };
+
   const onCropComplete = useCallback(
     (_croppedAreaPercentage: Area, croppedAreaPixels: Area) => {
       setCroppedAreaPixels(croppedAreaPixels);
@@ -146,7 +212,7 @@ const ProfilePicture = ({
     input.value = "";
 
     if (!file) {
-      onFileSelected(null);
+      onPendingPictureChange(null);
       return;
     }
 
@@ -178,7 +244,7 @@ const ProfilePicture = ({
       // rendering it would reintroduce the preview that outlives its file.
       URL.revokeObjectURL(url);
 
-      onFileSelected(file);
+      onPendingPictureChange(file);
       setShowModal(false);
 
       // `getCroppedImg` has already decoded and drawn by the time it resolves,
@@ -318,6 +384,16 @@ const ProfilePicture = ({
               className="object-cover"
             />
           </div>
+        ) : /*
+            Ahead of the stored picture, so a pending removal shows the user
+            what saving will leave them with rather than the photo they have
+            just asked to delete. Ahead of the loading branch too: once a
+            removal is pending the stored URL is not worth waiting for, and
+            holding the neutral placeholder until it resolved would only be a
+            flicker on the way to this same icon.
+          */
+        removalPending ? (
+          fallbackAvatar
         ) : isProfileImageLoading ? (
           <div className="h-40 w-40 flex-shrink-0 rounded-full bg-gray-400" />
         ) : profileImageUrl && !imageLoadError ? (
@@ -330,12 +406,10 @@ const ProfilePicture = ({
             />
           </div>
         ) : (
-          <div className="flex h-40 w-40 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-400">
-            <AiOutlineUser className="h-28 w-28 text-white" />
-          </div>
+          fallbackAvatar
         )}
 
-        <div className="ml-4">
+        <div className="ml-4 flex flex-col items-start">
           {/* The input comes first in the DOM so the label can style itself
               from the input's focus state: a sibling variant only reaches
               *forward*, and the input is visually hidden, so moving it costs
@@ -359,6 +433,25 @@ const ProfilePicture = ({
           >
             Upload Profile Picture
           </label>
+          {/*
+            Rendered only when there is a picture on screen to remove, so this
+            is never a control that does nothing: against the fallback icon,
+            with nothing pending, removal has no meaning.
+
+            A real `button`, and `type="button"` specifically. This sits inside
+            the profile form, where the default `type="submit"` would save the
+            whole profile on click, and would also make this the target of
+            implicit submission on Enter.
+          */}
+          {canRemove && (
+            <button
+              type="button"
+              onClick={handleRemove}
+              className="font-montserrat focus-visible:outline-northeastern-red mt-3 ml-10 inline-block cursor-pointer rounded-lg border border-black bg-gray-300 px-4 py-2 text-xl text-black hover:bg-gray-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+            >
+              Remove Profile Picture
+            </button>
+          )}
         </div>
       </div>
     </>

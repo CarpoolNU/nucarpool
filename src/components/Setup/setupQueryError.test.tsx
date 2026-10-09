@@ -57,6 +57,12 @@ jest.mock("../../utils/mixpanel", () => ({
 jest.mock("../../utils/profile/useUploadFile", () => ({
   useUploadFile: () => ({ uploadFile: jest.fn() }),
 }));
+// Stubbed beside the upload hook for the same reason: the page calls it
+// unconditionally at render, and the real one reaches for a tRPC mutation
+// this suite's `trpc` mock does not declare.
+jest.mock("../../utils/profile/useRemoveProfilePicture", () => ({
+  useRemoveProfilePicture: () => ({ removeProfilePicture: jest.fn() }),
+}));
 jest.mock("../../utils/profile/updateUser", () => ({
   updateUser: jest.fn(),
   useEditUserMutation: () => ({ mutate: jest.fn(), mutateAsync: jest.fn() }),

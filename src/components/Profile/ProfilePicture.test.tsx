@@ -37,6 +37,8 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { Point } from "react-easy-crop";
 import ProfilePicture from "./ProfilePicture";
 import { CROP_BOX_PX, minZoomToFill } from "../../utils/cropZoom";
+import { PENDING_REMOVAL } from "../../utils/profile/pendingPicture";
+import { profileImageSpies } from "../../testing/profileImageStub";
 
 /** The props the mocked `Cropper` last rendered with. */
 type CropperProps = {
@@ -84,6 +86,14 @@ let revokedUrls: string[] = [];
 const liveUrls = () => createdUrls.filter((url) => !revokedUrls.includes(url));
 
 beforeEach(() => {
+  // `mockReturnValue` persists across tests, so a block that installs a
+  // stored picture would otherwise leak it into every test after it -
+  // including the controls that assert the button is absent.
+  profileImageSpies().useProfileImage.mockReturnValue({
+    profileImageUrl: null,
+    isLoading: false,
+    imageLoadError: false,
+  });
   cropperProps = null;
   createdUrls = [];
   revokedUrls = [];
@@ -160,7 +170,12 @@ describe("ProfilePicture cropper framing", () => {
     // `selectedFile` is the parent's *pending* picture, which is null until a
     // crop is confirmed - and this block never confirms one, it only opens the
     // cropper. So null is the state every assertion below runs against.
-    render(<ProfilePicture selectedFile={null} onFileSelected={jest.fn()} />);
+    render(
+      <ProfilePicture
+        pendingPicture={null}
+        onPendingPictureChange={jest.fn()}
+      />,
+    );
 
     const input = screen.getByLabelText("Upload Profile Picture");
     const file = new File(["photo"], "photo.jpg", { type: "image/jpeg" });
@@ -271,7 +286,12 @@ describe("the crop dialog", () => {
    * an assertion runs.
    */
   const openCropper = async () => {
-    render(<ProfilePicture selectedFile={null} onFileSelected={jest.fn()} />);
+    render(
+      <ProfilePicture
+        pendingPicture={null}
+        onPendingPictureChange={jest.fn()}
+      />,
+    );
 
     const input: HTMLElement = screen.getByLabelText("Upload Profile Picture");
     input.focus();
@@ -290,7 +310,12 @@ describe("the crop dialog", () => {
   });
 
   it("renders no dialog before a file is picked", () => {
-    render(<ProfilePicture selectedFile={null} onFileSelected={jest.fn()} />);
+    render(
+      <ProfilePicture
+        pendingPicture={null}
+        onPendingPictureChange={jest.fn()}
+      />,
+    );
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
@@ -349,7 +374,12 @@ describe("the cropper modal's height", () => {
   const openCropper = (): HTMLElement => {
     // No crop has been confirmed at this point, so the parent holds no pending
     // picture. Only the cropper panel's height is under test here either way.
-    render(<ProfilePicture selectedFile={null} onFileSelected={jest.fn()} />);
+    render(
+      <ProfilePicture
+        pendingPicture={null}
+        onPendingPictureChange={jest.fn()}
+      />,
+    );
 
     const input = screen.getByLabelText("Upload Profile Picture");
     const file = new File(["photo"], "photo.jpg", { type: "image/jpeg" });
@@ -477,8 +507,8 @@ describe("the pending picture preview", () => {
   it("renders from the file the parent holds", () => {
     render(
       <ProfilePicture
-        selectedFile={croppedFile()}
-        onFileSelected={jest.fn()}
+        pendingPicture={croppedFile()}
+        onPendingPictureChange={jest.fn()}
       />,
     );
 
@@ -493,7 +523,12 @@ describe("the pending picture preview", () => {
    * to a user who has chosen no picture at all.
    */
   it("renders no preview when the parent holds no file", () => {
-    render(<ProfilePicture selectedFile={null} onFileSelected={jest.fn()} />);
+    render(
+      <ProfilePicture
+        pendingPicture={null}
+        onPendingPictureChange={jest.fn()}
+      />,
+    );
 
     expect(preview()).not.toBeInTheDocument();
     expect(createdUrls).toHaveLength(0);
@@ -511,7 +546,10 @@ describe("the pending picture preview", () => {
     const file = croppedFile();
 
     const first = render(
-      <ProfilePicture selectedFile={file} onFileSelected={jest.fn()} />,
+      <ProfilePicture
+        pendingPicture={file}
+        onPendingPictureChange={jest.fn()}
+      />,
     );
     expect(preview()).toBeInTheDocument();
     const beforeUnmount = liveUrls();
@@ -522,7 +560,12 @@ describe("the pending picture preview", () => {
     // than leaked, which the effect's own cleanup is what guarantees.
     expect(liveUrls()).toEqual([]);
 
-    render(<ProfilePicture selectedFile={file} onFileSelected={jest.fn()} />);
+    render(
+      <ProfilePicture
+        pendingPicture={file}
+        onPendingPictureChange={jest.fn()}
+      />,
+    );
 
     // The assertion that matters: the preview is back, on a URL derived fresh
     // from the file rather than the revoked one the first mount held.
@@ -536,8 +579,8 @@ describe("the pending picture preview", () => {
   it("replaces the preview, and releases the old URL, when the file changes", () => {
     const { rerender } = render(
       <ProfilePicture
-        selectedFile={croppedFile()}
-        onFileSelected={jest.fn()}
+        pendingPicture={croppedFile()}
+        onPendingPictureChange={jest.fn()}
       />,
     );
     const first = liveUrls();
@@ -545,8 +588,8 @@ describe("the pending picture preview", () => {
 
     rerender(
       <ProfilePicture
-        selectedFile={croppedFile()}
-        onFileSelected={jest.fn()}
+        pendingPicture={croppedFile()}
+        onPendingPictureChange={jest.fn()}
       />,
     );
 
@@ -565,13 +608,18 @@ describe("the pending picture preview", () => {
     // local crop that is no longer pending.
     const { rerender } = render(
       <ProfilePicture
-        selectedFile={croppedFile()}
-        onFileSelected={jest.fn()}
+        pendingPicture={croppedFile()}
+        onPendingPictureChange={jest.fn()}
       />,
     );
     expect(preview()).toBeInTheDocument();
 
-    rerender(<ProfilePicture selectedFile={null} onFileSelected={jest.fn()} />);
+    rerender(
+      <ProfilePicture
+        pendingPicture={null}
+        onPendingPictureChange={jest.fn()}
+      />,
+    );
 
     expect(preview()).not.toBeInTheDocument();
     expect(liveUrls()).toEqual([]);
@@ -611,7 +659,12 @@ describe("the upload control", () => {
     screen.getByLabelText("Upload Profile Picture") as HTMLInputElement;
 
   it("hides the file input visually rather than removing it from the page", () => {
-    render(<ProfilePicture selectedFile={null} onFileSelected={jest.fn()} />);
+    render(
+      <ProfilePicture
+        pendingPicture={null}
+        onPendingPictureChange={jest.fn()}
+      />,
+    );
 
     // The control: the input is reachable by its label at all, so the class
     // assertions below are about the element the user would actually tab to.
@@ -624,7 +677,12 @@ describe("the upload control", () => {
   });
 
   it("puts the focus ring on the label, the only box the user can see", () => {
-    render(<ProfilePicture selectedFile={null} onFileSelected={jest.fn()} />);
+    render(
+      <ProfilePicture
+        pendingPicture={null}
+        onPendingPictureChange={jest.fn()}
+      />,
+    );
 
     const input = uploadInput();
     const label = document.querySelector<HTMLElement>('label[for="fileInput"]');
@@ -639,7 +697,12 @@ describe("the upload control", () => {
   });
 
   it("clears the input's value so re-picking the same file is still a change", () => {
-    render(<ProfilePicture selectedFile={null} onFileSelected={jest.fn()} />);
+    render(
+      <ProfilePicture
+        pendingPicture={null}
+        onPendingPictureChange={jest.fn()}
+      />,
+    );
     const input = uploadInput();
 
     // What a real pick leaves behind. Seeded explicitly because
@@ -660,5 +723,232 @@ describe("the upload control", () => {
     // collide with.
     expect(screen.getByTestId("cropper")).toBeInTheDocument();
     expect(input.value).toBe("");
+  });
+});
+
+/**
+ * The remove control, and the two questions it has to answer correctly.
+ *
+ * **When it exists.** A button that is always present is a button that does
+ * nothing for the majority of users, who have no picture: against the fallback
+ * icon, with nothing pending, "remove" has no meaning. So the control appears
+ * only when there is a picture on screen to take away - a stored one, or a crop
+ * waiting to be uploaded - and disappears again once a removal is pending,
+ * because by then there is nothing further to remove.
+ *
+ * **What it means.** Removal is pending until Save, exactly as an upload is, so
+ * the click hands a value up to the parent rather than calling the server. The
+ * value is not always the removal marker: discarding a crop when the server
+ * holds no picture returns the user to the state they started in, which is no
+ * change at all. Marking *that* for removal would arm the unsaved-changes modal
+ * over nothing and spend a mutation on saving nothing, so this component - the
+ * only one that knows whether a stored picture exists - resolves it to null
+ * instead. That distinction is the reason the two click tests below differ only
+ * in whether a stored picture is present.
+ *
+ * `useProfileImage` is stubbed per test rather than through a provider, the
+ * same treatment the rest of this file gives it. jsdom loads no stylesheet, so
+ * what is assertable here is which element is rendered and what it hands back,
+ * not how any of it looks.
+ */
+describe("the remove control", () => {
+  /** The cropped JPEG `handleCrop` hands up. */
+  const croppedFile = () =>
+    new File(["cropped-bytes"], "cropped-image.jpeg", { type: "image/jpeg" });
+
+  const removeButton = () =>
+    screen.queryByRole("button", { name: "Remove Profile Picture" });
+
+  /**
+   * The "no picture" avatar.
+   *
+   * Located by element rather than by role: it is an `AiOutlineUser`, and
+   * react-icons renders a bare `svg` carrying no `role` and no accessible
+   * name, so there is nothing for `getByRole` to match. Nothing else in this
+   * component renders an `svg` - the cropper is mocked to a `div` - so this is
+   * specific enough to serve as the positive control the negative assertions
+   * beside it need.
+   */
+  const fallbackIcon = () => document.querySelector("svg");
+
+  /** Puts a stored picture behind the component, as a signed URL would. */
+  const withStoredPicture = () =>
+    profileImageSpies().useProfileImage.mockReturnValue({
+      profileImageUrl: "https://bucket.s3.amazonaws.com/me?sig=abc",
+      isLoading: false,
+      imageLoadError: false,
+    });
+
+  describe("is shown only when there is something to remove", () => {
+    it("is absent with no stored picture and nothing pending", () => {
+      // The majority case, and the control for every assertion below: without
+      // it they would all pass against a component that renders the button
+      // unconditionally.
+      render(
+        <ProfilePicture
+          pendingPicture={null}
+          onPendingPictureChange={jest.fn()}
+        />,
+      );
+
+      expect(removeButton()).not.toBeInTheDocument();
+    });
+
+    it("is present when the server holds a picture", () => {
+      withStoredPicture();
+
+      render(
+        <ProfilePicture
+          pendingPicture={null}
+          onPendingPictureChange={jest.fn()}
+        />,
+      );
+
+      expect(removeButton()).toBeInTheDocument();
+    });
+
+    it("is present when a crop is waiting to be uploaded", () => {
+      // No stored picture here, so the only thing to remove is the pending
+      // crop - which is the onboarding case, where discarding is all the
+      // control can mean.
+      render(
+        <ProfilePicture
+          pendingPicture={croppedFile()}
+          onPendingPictureChange={jest.fn()}
+        />,
+      );
+
+      expect(removeButton()).toBeInTheDocument();
+    });
+
+    it("is absent once a removal is already pending", () => {
+      withStoredPicture();
+
+      render(
+        <ProfilePicture
+          pendingPicture={PENDING_REMOVAL}
+          onPendingPictureChange={jest.fn()}
+        />,
+      );
+
+      // The stored URL is still there - the server has not been told yet - so
+      // a visibility rule written against `profileImageUrl` alone would leave
+      // the button up and let the user press it a second time to no effect.
+      expect(removeButton()).not.toBeInTheDocument();
+    });
+  });
+
+  it("is a button that cannot submit the profile form", () => {
+    withStoredPicture();
+
+    render(
+      <ProfilePicture
+        pendingPicture={null}
+        onPendingPictureChange={jest.fn()}
+      />,
+    );
+
+    // This sits inside the profile form. The default `type` for a `button` is
+    // `submit`, which would save the whole profile on click and would also make
+    // this the target of implicit submission on Enter - the defect
+    // `profileImplicitSubmission.test.tsx` exists for, reintroduced one control
+    // further along.
+    expect(removeButton()).toHaveAttribute("type", "button");
+  });
+
+  describe("hands the right pending change to the parent", () => {
+    it("marks a stored picture for removal", () => {
+      withStoredPicture();
+      const onPendingPictureChange = jest.fn();
+
+      render(
+        <ProfilePicture
+          pendingPicture={null}
+          onPendingPictureChange={onPendingPictureChange}
+        />,
+      );
+      fireEvent.click(removeButton() as HTMLElement);
+
+      expect(onPendingPictureChange).toHaveBeenCalledTimes(1);
+      expect(onPendingPictureChange).toHaveBeenCalledWith(PENDING_REMOVAL);
+    });
+
+    it("replaces a pending crop with a removal when a picture is stored", () => {
+      // Upload a new photo, then change your mind entirely. What the user is
+      // asking for is the stored picture gone, not the crop restored, so the
+      // crop is dropped and the removal takes its place - which the single
+      // slot makes automatic.
+      withStoredPicture();
+      const onPendingPictureChange = jest.fn();
+
+      render(
+        <ProfilePicture
+          pendingPicture={croppedFile()}
+          onPendingPictureChange={onPendingPictureChange}
+        />,
+      );
+      fireEvent.click(removeButton() as HTMLElement);
+
+      expect(onPendingPictureChange).toHaveBeenCalledWith(PENDING_REMOVAL);
+    });
+
+    it("discards a pending crop to nothing when no picture is stored", () => {
+      // The onboarding case. There is nothing on the server to delete, so the
+      // honest pending state is "no change" - not a removal that would arm the
+      // unsaved-changes modal and then save nothing.
+      const onPendingPictureChange = jest.fn();
+
+      render(
+        <ProfilePicture
+          pendingPicture={croppedFile()}
+          onPendingPictureChange={onPendingPictureChange}
+        />,
+      );
+      fireEvent.click(removeButton() as HTMLElement);
+
+      expect(onPendingPictureChange).toHaveBeenCalledTimes(1);
+      expect(onPendingPictureChange).toHaveBeenCalledWith(null);
+    });
+  });
+
+  describe("shows what saving will leave behind", () => {
+    it("renders the fallback icon instead of the stored picture", () => {
+      withStoredPicture();
+
+      render(
+        <ProfilePicture
+          pendingPicture={PENDING_REMOVAL}
+          onPendingPictureChange={jest.fn()}
+        />,
+      );
+
+      // The positive query first: the fallback really did render, so the two
+      // negative assertions below are about a picture that is genuinely gone
+      // rather than one that was never found by that name.
+      expect(fallbackIcon()).toBeInTheDocument();
+      expect(screen.queryByAltText("Profile Picture")).not.toBeInTheDocument();
+      expect(screen.queryByAltText("Cropped Image")).not.toBeInTheDocument();
+    });
+
+    it("does not wait for a still-loading picture before showing it", () => {
+      // The neutral placeholder exists so an avatar does not flash the fallback
+      // on the way to its image. A pending removal is heading for the fallback
+      // whatever the query resolves to, so holding the placeholder would be the
+      // flicker it was added to prevent.
+      profileImageSpies().useProfileImage.mockReturnValue({
+        profileImageUrl: null,
+        isLoading: true,
+        imageLoadError: false,
+      });
+
+      render(
+        <ProfilePicture
+          pendingPicture={PENDING_REMOVAL}
+          onPendingPictureChange={jest.fn()}
+        />,
+      );
+
+      expect(fallbackIcon()).toBeInTheDocument();
+    });
   });
 });

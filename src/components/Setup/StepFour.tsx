@@ -9,6 +9,7 @@ import { Note } from "../../styles/profile";
 import { EntryLabel } from "../EntryLabel";
 import { TextField } from "../TextField";
 import ProfilePicture from "../Profile/ProfilePicture";
+import { PendingPicture } from "../../utils/profile/pendingPicture";
 import {
   PROFILE_TEXT_MAX_LENGTH,
   PRONOUNS_INPUT_MAX_LENGTH,
@@ -19,21 +20,21 @@ interface StepFourProps {
   setValue: UseFormSetValue<OnboardingFormInputs>;
   register: UseFormRegister<OnboardingFormInputs>;
   watch: UseFormWatch<OnboardingFormInputs>;
-  onFileSelect: (file: File | null) => void;
+  onPendingPictureChange: (next: PendingPicture) => void;
 
   /**
-   * The cropped picture waiting to be saved, so `ProfilePicture` can derive its
-   * preview from it. Needed here for the same reason as on the profile page:
-   * this step unmounts when the user steps back to step 3, so a preview owned
-   * here would be revoked while `setup.tsx` went on holding the file.
+   * The unsaved picture change, so `ProfilePicture` can derive its preview
+   * from it. Needed here for the same reason as on the profile page: this
+   * step unmounts when the user steps back to step 3, so a preview owned here
+   * would be revoked while `setup.tsx` went on holding the file.
    */
-  selectedFile: File | null;
+  pendingPicture: PendingPicture;
 }
 const StepFour = ({
   errors,
   register,
-  onFileSelect,
-  selectedFile,
+  onPendingPictureChange,
+  pendingPicture,
   setValue,
   watch,
 }: StepFourProps) => {
@@ -47,8 +48,8 @@ const StepFour = ({
 
       <div className="mb-2 w-full">
         <ProfilePicture
-          selectedFile={selectedFile}
-          onFileSelected={onFileSelect}
+          pendingPicture={pendingPicture}
+          onPendingPictureChange={onPendingPictureChange}
         />
       </div>
 

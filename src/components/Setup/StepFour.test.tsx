@@ -30,8 +30,8 @@ const Harness = () => {
       register={register}
       setValue={setValue}
       watch={watch}
-      onFileSelect={() => undefined}
-      selectedFile={null}
+      onPendingPictureChange={() => undefined}
+      pendingPicture={null}
     />
   );
 };

@@ -20,6 +20,7 @@ import { emailsRouter } from "./user/email";
 import { blocksRouter } from "./user/blocks";
 import { reportsRouter } from "./user/reports";
 import {
+  deleteProfileImage,
   generatePresignedUrl,
   signProfileImageUrl,
 } from "../../utils/uploadToS3";
@@ -773,6 +774,88 @@ export const userRouter = router({
       where: { id: userId },
       data: { profilePictureUpdatedAt: new Date() },
     });
+
+    return { success: true };
+  }),
+
+  /**
+   * Removes the caller's profile picture: the only writer that clears
+   * `profilePictureUpdatedAt`, and the mirror of the procedure above.
+   *
+   * Scoped to the session user with no input at all, for the same reason
+   * `recordProfilePictureUpload` is: a `userId` parameter would let any
+   * signed-in caller delete somebody else's picture.
+   *
+   * **The column is nulled first and the object deleted second**, and the order
+   * is the decision this procedure turns on. The database is the sole authority
+   * on whether a picture exists — `getPresignedDownloadUrl` never asks S3 — so
+   * nulling first means the picture stops being served the moment the write
+   * lands, and a refused delete leaves only orphan bytes that no download URL
+   * will ever be signed for again.
+   *
+   * Deleting first and nulling second fails worse. A database error after a
+   * successful delete would leave the column set with the object gone, so every
+   * avatar for this user would be a signed URL for a missing key — a broken
+   * image that never heals, because nothing re-checks. Both failure modes here
+   * land instead on "no picture", which the user can undo by uploading again.
+   */
+  removeProfilePicture: protectedRouter.mutation(async ({ ctx }) => {
+    const userId = ctx.session.user?.id;
+
+    if (!userId) {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "User not authenticated",
+      });
+    }
+
+    await ctx.prisma.user.update({
+      where: { id: userId },
+      data: { profilePictureUpdatedAt: null },
+    });
+
+    // Best-effort, and deliberately not awaited into the mutation's result.
+    // The user asked for their picture to stop being shown and the write above
+    // has already achieved that, so throwing here would report failure for
+    // something that succeeded in the only sense the app can observe — and
+    // would send them back to retry a removal that has already happened.
+    //
+    // The log line is the only record that the bucket is accumulating orphans;
+    // in practice this fires for an IAM policy without `s3:DeleteObject`.
+    let objectDeleted = false;
+    try {
+      await deleteProfileImage(userId);
+      objectDeleted = true;
+    } catch (error) {
+      console.error("Failed to delete profile picture object", error);
+    }
+
+    // Reconciles the one interleaving the ordering above cannot prevent. A
+    // second session's `recordProfilePictureUpload` can land between the update
+    // and the delete, in which case the bytes just removed were that upload's
+    // and the column now claims a picture that is gone — exactly the broken
+    // image this procedure is arranged to avoid. Nulling it again costs that
+    // session its upload, which is honest: the object really is not there.
+    //
+    // Only when the delete succeeded. Nothing was clobbered otherwise, so an
+    // unconditional re-read would spend a query on the one path that cannot
+    // need it.
+    if (objectDeleted) {
+      const owner = await ctx.prisma.user.findUnique({
+        where: { id: userId },
+        select: { profilePictureUpdatedAt: true },
+      });
+
+      if (owner?.profilePictureUpdatedAt) {
+        console.error(
+          "A profile picture upload was recorded while it was being removed; clearing it again",
+        );
+        await ctx.prisma.user.update({
+          where: { id: userId },
+          data: { profilePictureUpdatedAt: null },
+        });
+      }
+    }
 
     return { success: true };
   }),

@@ -1,4 +1,5 @@
 import { OnboardingFormInputs, User } from "../types";
+import { PendingPicture } from "./pendingPicture";
 
 /**
  * Whether the profile form holds anything the stored row does not — the rule
@@ -122,16 +123,22 @@ const daysWorkingDiffer = (
  * `undefined`, so the form's own defaults read as changes. Preserved from the
  * original chain, which compared through `user?.`.
  *
- * `pendingPicture` is the cropped file waiting to be uploaded, and it is the
- * reason this takes a third argument at all. Every other profile edit is a
- * form field, so comparing form values against the row answered "is anything
- * unsaved?" completely - until the picture, which `ProfilePicture` hands
- * straight to page state and which only the save handler ever uploads. There
- * is no form field for it to live in: `user.edit` does not accept one, and
- * there is no such column - only `User.profilePictureUpdatedAt`, which the
- * upload path sets from the server. So the file cannot be compared against a
- * stored value the way the fourteen fields are; its mere presence *is* the
- * change, which is why this is a presence test rather than a comparison.
+ * `pendingPicture` is the unsaved picture change, and it is the reason this
+ * takes a third argument at all. Every other profile edit is a form field, so
+ * comparing form values against the row answered "is anything unsaved?"
+ * completely - until the picture, which `ProfilePicture` hands straight to page
+ * state and which only the save handler ever applies. There is no form field
+ * for it to live in: `user.edit` does not accept one, and there is no such
+ * column - only `User.profilePictureUpdatedAt`, which the upload and removal
+ * paths set from the server. So it cannot be compared against a stored value
+ * the way the fourteen fields are; its mere presence *is* the change, which is
+ * why this is a presence test rather than a comparison.
+ *
+ * A presence test is also what makes it indifferent to *which* change is
+ * pending. A cropped `File` and the `"remove"` marker are both unsaved picture
+ * changes and both have to arm the modal, so widening the parameter from
+ * `File | null` to `PendingPicture` needed nothing here but the type - the one
+ * place the single-slot model pays for itself.
  *
  * Absent, it reports no picture change - which is what every caller that has
  * no picture to lose wants, and what keeps this a drop-in for the two-argument
@@ -140,7 +147,7 @@ const daysWorkingDiffer = (
 export const profileChanges = (
   formValues: OnboardingFormInputs,
   user: User | null | undefined,
-  pendingPicture?: File | null,
+  pendingPicture?: PendingPicture,
 ): ProfileField[] => {
   const changed: ProfileField[] = [];
   const add = (field: ProfileField, differs: boolean) => {
@@ -171,8 +178,9 @@ export const profileChanges = (
     differentInstant(formValues.coopEndDate, user?.coopEndDate),
   );
   add("bio", formValues.bio !== user?.bio);
-  // Last, and outside the form. A cropped file with no field touched is a real
-  // unsaved change that none of the form comparisons above can see on their own.
+  // Last, and outside the form. A cropped file - or a pending removal - with no
+  // field touched is a real unsaved change that none of the form comparisons
+  // above can see on their own.
   add("profilePicture", !!pendingPicture);
 
   return changed;
@@ -182,5 +190,5 @@ export const profileChanges = (
 export const hasProfileChanges = (
   formValues: OnboardingFormInputs,
   user: User | null | undefined,
-  pendingPicture?: File | null,
+  pendingPicture?: PendingPicture,
 ): boolean => profileChanges(formValues, user, pendingPicture).length > 0;

@@ -29,6 +29,12 @@ import ViewerConfirmModal from "../../components/Setup/ViewerConfirmModal";
 import { Role } from "@prisma/client";
 import { trackFTUECompletion, trackFTUEStep } from "../../utils/mixpanel";
 import { useUploadFile } from "../../utils/profile/useUploadFile";
+import { useRemoveProfilePicture } from "../../utils/profile/useRemoveProfilePicture";
+import {
+  PendingPicture,
+  isPendingRemoval,
+  pendingPictureFile,
+} from "../../utils/profile/pendingPicture";
 import { useAddressSelection } from "../../utils/useAddressSelection";
 import { preventEnterSubmitFromReadOnlyInput } from "../../utils/formSubmit";
 import {
@@ -91,11 +97,24 @@ const Setup: NextPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState(0);
   const [initialLoad, setInitialLoad] = useState(true);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  /**
+   * The unsaved picture change. The same single slot the profile page uses,
+   * and for the same reason - see `pendingPicture.ts`.
+   *
+   * In practice onboarding only ever holds a file or nothing: the upload runs
+   * at the end of setup, so there is no stored picture for `ProfilePicture` to
+   * offer to remove, and Remove there resolves to discarding the pending crop.
+   * The removal branch below is handled anyway rather than assumed away,
+   * because the assumption is about which users reach this page and not about
+   * anything this file controls.
+   */
+  const [pendingPicture, setPendingPicture] = useState<PendingPicture>(null);
+  const pendingFile = pendingPictureFile(pendingPicture);
   const [showViewerConfirm, setShowViewerConfirm] = useState(false);
   const stepCardRef = useRef<HTMLDivElement>(null);
   const previousStep = useRef(step);
-  const { uploadFile } = useUploadFile(selectedFile);
+  const { uploadFile } = useUploadFile(pendingFile);
+  const { removeProfilePicture } = useRemoveProfilePicture();
   const { data: session } = useSession();
   const userQuery = trpc.user.me.useQuery(undefined, {
     refetchOnMount: true,
@@ -289,13 +308,26 @@ const Setup: NextPage = () => {
     // appear with no explanation. Onboarding continues either way - a missing
     // picture is not worth blocking setup over, and it can be added later from
     // the profile page.
-    if (selectedFile) {
+    if (pendingFile) {
       try {
         await uploadFile();
       } catch (error) {
         console.error("File upload failed:", error);
         toast.warning(
           "Your profile picture could not be uploaded. You can add it later from your profile.",
+        );
+      }
+    } else if (isPendingRemoval(pendingPicture)) {
+      // Unreachable in ordinary onboarding, where there is no stored picture
+      // to remove; present so that the branch cannot silently do nothing if
+      // that ever stops being true. Warned about rather than blocking, on the
+      // same terms as the upload above.
+      try {
+        await removeProfilePicture();
+      } catch (error) {
+        console.error("Profile picture removal failed:", error);
+        toast.warning(
+          "Your profile picture could not be removed. You can remove it later from your profile.",
         );
       }
     }
@@ -707,8 +739,8 @@ const Setup: NextPage = () => {
             <StepFour
               setValue={setValue}
               watch={watch}
-              onFileSelect={setSelectedFile}
-              selectedFile={selectedFile}
+              onPendingPictureChange={setPendingPicture}
+              pendingPicture={pendingPicture}
               errors={errors}
               register={register}
             />

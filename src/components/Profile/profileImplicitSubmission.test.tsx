@@ -97,8 +97,8 @@ describe("UserSection - Enter in a field is Save Changes", () => {
         setValue={setValue}
         errors={formState.errors}
         onSubmit={handleSubmit(() => save())}
-        onFileSelect={() => undefined}
-        selectedFile={null}
+        onPendingPictureChange={() => undefined}
+        pendingPicture={null}
         checkChanges={checkChanges}
       />
     );
