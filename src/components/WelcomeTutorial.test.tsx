@@ -61,7 +61,11 @@ import {
   detentHeightPx,
   type SheetDetent,
 } from "../utils/explore/sheetDetents";
-import WelcomeTutorial, { MOBILE_STEP_DETENTS } from "./WelcomeTutorial";
+import WelcomeTutorial, {
+  MOBILE_STEP_DETENTS,
+  SAFETY_STEP_DESCRIPTION,
+  SAFETY_STEP_TITLE,
+} from "./WelcomeTutorial";
 
 /**
  * A driver.js instance as the fake models it. `destroyed` is the live/dead
@@ -468,6 +472,22 @@ describe("WelcomeTutorial mobile sheet detent", () => {
     renderMobile("expanded", setSheetDetent);
     const tour = currentDriver();
 
+    tour.config.steps[3].onHighlightStarted();
+
+    expect(setSheetDetent).toHaveBeenCalledWith(MOBILE_STEP_DETENTS[3]);
+    expect(
+      detentHeightPx({
+        detent: MOBILE_STEP_DETENTS[3]!,
+        expandedHeightPx: 100,
+      }),
+    ).toBe(0);
+  });
+
+  it("expands the sheet before the safety step too, so arriving backwards from the map does not anchor it to a zero-height element", () => {
+    const setSheetDetent = jest.fn();
+    renderMobile("collapsed", setSheetDetent);
+    const tour = currentDriver();
+
     tour.config.steps[2].onHighlightStarted();
 
     expect(setSheetDetent).toHaveBeenCalledWith(MOBILE_STEP_DETENTS[2]);
@@ -476,7 +496,27 @@ describe("WelcomeTutorial mobile sheet detent", () => {
         detent: MOBILE_STEP_DETENTS[2]!,
         expandedHeightPx: 100,
       }),
-    ).toBe(0);
+    ).toBeGreaterThan(0);
+  });
+
+  /**
+   * The guard the detent map's docblock promises. Its keys are step indices,
+   * so inserting a step silently repoints every key after it - the exact edit
+   * SCRUM-624 made. Asserting the *set* of hooked indices rather than a count
+   * means a future insertion either updates the map or fails here.
+   */
+  it("gives a detent entry to exactly the steps that drive the sheet, and to no others", () => {
+    renderMobile("collapsed", jest.fn());
+    const steps = currentDriver().config.steps;
+
+    const hooked = steps
+      .map((step: any, index: number) => (step.onHighlightStarted ? index : -1))
+      .filter((index: number) => index >= 0);
+
+    expect(hooked).toEqual(Object.keys(MOBILE_STEP_DETENTS).map(Number));
+    expect(steps[1].element).toBe('[data-testid="explore-sidebar"]');
+    expect(steps[2].element).toBe('[data-testid="explore-sidebar"]');
+    expect(steps[3].element).toBe("#map");
   });
 
   it("restores the opening detent when the tour finishes", () => {
@@ -533,6 +573,78 @@ describe("WelcomeTutorial mobile sheet detent", () => {
     expect(tour.config.steps[1].popover.title).toBe("These are drivers");
     expect(tour.config.steps[1].onHighlightStarted).toBeUndefined();
     expect(tour.config.steps[2].onHighlightStarted).toBeUndefined();
+    expect(tour.config.steps[3].popover.title).toBe("This is the map");
+    expect(tour.config.steps[3].onHighlightStarted).toBeUndefined();
+  });
+});
+
+/**
+ * The safety step (SCRUM-624).
+ *
+ * The tour is the only place a first-time user is told that Report and Block
+ * exist at all: the menu holding them is a three-dot icon whose accessible
+ * name is "More actions for {name}", which says nothing about what is inside,
+ * and no other surface mentions either tool until somebody has already used
+ * one. So "the step is present, in both variants, naming both tools and where
+ * they live" is the acceptance criterion, asserted here rather than left to
+ * the copy being eyeballed.
+ *
+ * Both variants read the same two exported constants, so the assertions below
+ * are about the step existing and being anchored correctly; the copy itself
+ * cannot differ between a phone and a laptop by construction.
+ */
+describe.each([
+  ["desktop", false],
+  ["mobile", true],
+])("WelcomeTutorial safety step on %s", (_platform, isMobile) => {
+  beforeEach(() => {
+    configure({ reactStrictMode: false });
+    mockedUseIsMobile.mockReturnValue(isMobile);
+  });
+
+  afterEach(() => {
+    configure({ reactStrictMode: true });
+  });
+
+  const safetyStep = () => {
+    renderHarness();
+    return currentDriver().config.steps.find(
+      (step: any) => step.popover.title === SAFETY_STEP_TITLE,
+    );
+  };
+
+  it("is in the tour", () => {
+    expect(safetyStep()).toBeDefined();
+  });
+
+  it("names both tools and the menu holding them", () => {
+    const description = safetyStep().popover.description;
+
+    expect(description).toBe(SAFETY_STEP_DESCRIPTION);
+    expect(description).toContain("Report");
+    expect(description).toContain("Block");
+    expect(description).toMatch(/card and conversation/i);
+  });
+
+  it("states the two facts a user is actually deciding on", () => {
+    const description = safetyStep().popover.description;
+
+    // A report is read by admins alone - `reports.create` tells the reported
+    // user nothing - and a block is reversible from the profile.
+    expect(description).toMatch(/admins only/i);
+    expect(description).toMatch(/never told/i);
+    expect(description).toMatch(/undo it from your profile/i);
+  });
+
+  it("anchors to the sidebar, where the cards carrying that menu are", () => {
+    expect(safetyStep().element).toBe('[data-testid="explore-sidebar"]');
+  });
+
+  it("says nothing about drivers, which a VIEWER or a DRIVER is shown none of", () => {
+    expect(safetyStep().popover.title.toLowerCase()).not.toContain("driver");
+    expect(safetyStep().popover.description.toLowerCase()).not.toContain(
+      "driver",
+    );
   });
 });
 

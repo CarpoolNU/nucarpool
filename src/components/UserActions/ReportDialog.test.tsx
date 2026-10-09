@@ -270,6 +270,31 @@ describe("ReportDialog", () => {
     expect(screen.getByRole("dialog", { name: "Report Taylor" })).toBeVisible();
   });
 
+  /**
+   * SCRUM-624. Both facts are true of the server today - `reports.create`
+   * mails the admins and its docblock is explicit that the reported user is
+   * told nothing - and neither reached the person deciding whether to file.
+   */
+  it("says the report reaches the admins only, and that the person is not told", () => {
+    renderDialog();
+
+    const dialog = screen.getByRole("dialog", { name: "Report Taylor" });
+    expect(dialog).toHaveTextContent("This goes to the NUCarpool admins only.");
+    expect(dialog).toHaveTextContent(
+      "Taylor is not told that you reported them.",
+    );
+  });
+
+  it("links to the safety guidance", () => {
+    renderDialog();
+
+    expect(
+      screen.getByRole("link", {
+        name: "Reporting, blocking and staying safe",
+      }),
+    ).toHaveAttribute("href", "/safety");
+  });
+
   it("closes on Cancel without sending", async () => {
     const { onClose, user } = renderDialog();
 

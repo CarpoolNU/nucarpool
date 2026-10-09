@@ -127,6 +127,36 @@ describe("UserActionsMenu", () => {
     expect(mockBlock).not.toHaveBeenCalled();
   });
 
+  /**
+   * SCRUM-624. The dialog already said a block is mutual and undoable; what
+   * it never said is that the other person is not notified, which is
+   * `blocks.block`'s actual behaviour - it sends no mail and fires no Pusher
+   * event - and the thing a user weighing a block most wants to know.
+   */
+  it("says a block is mutual, silent and reversible", async () => {
+    const { user } = renderMenu();
+
+    const dialog = await openConfirm(user);
+
+    expect(dialog).toHaveTextContent("neither of you can contact the other");
+    expect(dialog).toHaveTextContent("They aren't told that you blocked them.");
+    expect(dialog).toHaveTextContent(
+      "You can unblock them from the Account section of your profile.",
+    );
+  });
+
+  it("links the block confirmation to the safety guidance", async () => {
+    const { user } = renderMenu();
+
+    await openConfirm(user);
+
+    expect(
+      screen.getByRole("link", {
+        name: "Reporting, blocking and staying safe",
+      }),
+    ).toHaveAttribute("href", "/safety");
+  });
+
   it("does nothing when the confirmation is cancelled", async () => {
     const { user, onBlocked } = renderMenu();
 

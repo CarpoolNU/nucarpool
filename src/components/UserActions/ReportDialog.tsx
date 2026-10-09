@@ -10,6 +10,7 @@ import {
   REPORT_REASON_LABELS,
   REPORT_SNAPSHOT_MESSAGE_LIMIT,
 } from "../../utils/reports";
+import SafetyGuidanceLink from "../SafetyGuidanceLink";
 
 type ReportDialogProps = {
   userId: string;
@@ -96,9 +97,18 @@ const ReportDialog = ({
     <Dialog open onClose={onClose} className="relative z-50">
       <div className="font-montserrat fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
         <DialogPanel className="flex w-full max-w-md flex-col rounded-lg bg-white px-6 py-8 text-left shadow-lg">
-          <DialogTitle as="h3" className="mb-4 text-xl font-semibold">
+          <DialogTitle as="h3" className="mb-2 text-xl font-semibold">
             Report {userName}
           </DialogTitle>
+          {/* What the server does with this, said where the decision is being
+              made. `reports.create` mails the admins and nothing else, and
+              its docblock is explicit that a reported user is told nothing -
+              which is the fact a reporter most needs and had no way to learn
+              before filing. */}
+          <p className="mb-4 text-sm text-gray-700">
+            This goes to the NUCarpool admins only. {userName} is not told that
+            you reported them. <SafetyGuidanceLink />
+          </p>
           <form onSubmit={submit} className="flex flex-col">
             <label htmlFor="report-reason" className="mb-1 font-medium">
               Reason

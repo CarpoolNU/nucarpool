@@ -40,6 +40,7 @@ import CarpoolSection from "../../components/Profile/CarpoolSection";
 import AccountSection from "../../components/Profile/AccountSection";
 import BlockedUsersSection from "../../components/Profile/BlockedUsersSection";
 import ReportsFiledSection from "../../components/Profile/ReportsFiledSection";
+import SafetySection from "../../components/Profile/SafetySection";
 import UnsavedModal from "../../components/Profile/UnsavedModal";
 import useIsMobile from "../../utils/useIsMobile";
 
@@ -571,6 +572,7 @@ const Index: NextPage = () => {
                       Changes even less. */}
                   <BlockedUsersSection />
                   <ReportsFiledSection />
+                  <SafetySection />
                 </>
               ) : (
                 <></>
@@ -624,6 +626,7 @@ const Index: NextPage = () => {
                       Changes even less. */}
                   <BlockedUsersSection />
                   <ReportsFiledSection />
+                  <SafetySection />
                 </>
               ) : (
                 <></>
