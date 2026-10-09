@@ -1,12 +1,10 @@
 import { Menu, Transition } from "@headlessui/react";
 import { useSession } from "next-auth/react";
-import Image from "next/image";
 import Link from "next/link";
 import Spinner from "./Spinner";
 import React, { Fragment, useState } from "react";
-import { AiOutlineUser } from "react-icons/ai";
 import { useRouter } from "next/router";
-import useProfileImage from "../utils/useProfileImage";
+import ProfileAvatar from "./ProfileAvatar";
 import { FEEDBACK_FORM_URL } from "../utils/feedbackForm";
 import {
   signOutWithGuard,
@@ -31,12 +29,6 @@ const DropDownMenu = ({ checkChanges }: DropDownMenuProps) => {
   const { data: session } = useSession();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
-
-  const {
-    profileImageUrl,
-    imageLoadError,
-    isLoading: isProfileImageLoading,
-  } = useProfileImage();
 
   const logout = () => {
     void signOutWithGuard(checkChanges);
@@ -77,19 +69,14 @@ const DropDownMenu = ({ checkChanges }: DropDownMenuProps) => {
             intrinsic hint for the raster it requests, not a layout figure, and
             the class above is what sizes the box. */}
         <Menu.Button className="h-header-control w-header-control flex items-center justify-center overflow-hidden rounded-full">
-          {isProfileImageLoading ? (
-            <div className="h-full w-full rounded-full bg-gray-400" />
-          ) : profileImageUrl && !imageLoadError ? (
-            <Image
-              src={profileImageUrl}
-              alt="Profile Image"
-              width={56}
-              height={56}
-              className="h-full w-full rounded-full object-cover"
-            />
-          ) : (
-            <AiOutlineUser className="h-full w-full rounded-full bg-gray-400" />
-          )}
+          <ProfileAvatar
+            alt="Profile Image"
+            width={56}
+            height={56}
+            placeholderClassName="h-full w-full rounded-full bg-gray-400"
+            imageClassName="h-full w-full rounded-full object-cover"
+            fallbackClassName="h-full w-full rounded-full bg-gray-400"
+          />
         </Menu.Button>
 
         <Transition

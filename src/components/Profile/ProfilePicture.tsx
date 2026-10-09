@@ -410,48 +410,75 @@ const ProfilePicture = ({
         )}
 
         <div className="ml-4 flex flex-col items-start">
-          {/* The input comes first in the DOM so the label can style itself
-              from the input's focus state: a sibling variant only reaches
-              *forward*, and the input is visually hidden, so moving it costs
-              no layout. */}
-          <input
-            id="fileInput"
-            type="file"
-            accept="image/*"
-            onChange={handleFileChange}
-            // Visually hidden, NOT `display: none`. The class this replaced
-            // compiled to `display: none`, which left the only keyboard path
-            // to a profile picture nowhere: the visible control is a `<label>`,
-            // which is not focusable, and a `display: none` input is not
-            // either - so the upload was pointer-only on `/profile` and on
-            // setup step 4.
-            className="peer sr-only"
-          />
-          <label
-            htmlFor="fileInput"
-            className="bg-northeastern-red font-montserrat peer-focus-visible:outline-northeastern-red ml-10 inline-block cursor-pointer rounded-lg border border-black px-4 py-2 text-xl text-white peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 hover:bg-red-700"
-          >
-            Upload Profile Picture
-          </label>
           {/*
-            Rendered only when there is a picture on screen to remove, so this
-            is never a control that does nothing: against the fallback icon,
-            with nothing pending, removal has no meaning.
+            The two controls share a box width rather than each shrink-wrapping
+            its own text. They are the same control in two states - the same
+            padding, border, radius and type scale - so differing only by the
+            11px between "Upload" and "Remove" in Montserrat reads as a
+            misalignment rather than a distinction.
 
-            A real `button`, and `type="button"` specifically. This sits inside
-            the profile form, where the default `type="submit"` would save the
-            whole profile on click, and would also make this the target of
-            implicit submission on Enter.
+            A stretching column is what equalises them, deliberately in place of
+            a fixed width: this nests inside the parent's `items-start`, so the
+            wrapper is sized to fit its widest child, and the default
+            `align-items: stretch` then gives both children exactly that width.
+            No measured figure is written down, so nothing here has to be
+            revisited when the copy, the type scale or the font changes.
+
+            `gap-3` carries the spacing the Remove button used to hold as its
+            own `mt-3`. With one child it contributes nothing, so the Upload
+            button is unmoved when removal is not offered. The hidden input is
+            `position: absolute` via `sr-only`, so it is out of flow and takes
+            no gap and no stretch.
           */}
-          {canRemove && (
-            <button
-              type="button"
-              onClick={handleRemove}
-              className="font-montserrat focus-visible:outline-northeastern-red mt-3 ml-10 inline-block cursor-pointer rounded-lg border border-black bg-gray-300 px-4 py-2 text-xl text-black hover:bg-gray-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+          <div className="ml-10 flex flex-col gap-3">
+            {/* The input comes first in the DOM so the label can style itself
+                from the input's focus state: a sibling variant only reaches
+                *forward*, and the input is visually hidden, so moving it costs
+                no layout. It stays inside this wrapper for that reason - the
+                variant needs the two to be siblings. */}
+            <input
+              id="fileInput"
+              type="file"
+              accept="image/*"
+              onChange={handleFileChange}
+              // Visually hidden, NOT `display: none`. The class this replaced
+              // compiled to `display: none`, which left the only keyboard path
+              // to a profile picture nowhere: the visible control is a
+              // `<label>`, which is not focusable, and a `display: none` input
+              // is not either - so the upload was pointer-only on `/profile`
+              // and on setup step 4.
+              className="peer sr-only"
+            />
+            <label
+              htmlFor="fileInput"
+              // `text-center` because the label is now wider than its text. A
+              // `<button>` centres its own content; a `<label>` does not, so
+              // without this the two would be the same size with their labels
+              // starting in different places.
+              className="bg-northeastern-red font-montserrat peer-focus-visible:outline-northeastern-red cursor-pointer rounded-lg border border-black px-4 py-2 text-center text-xl text-white peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 hover:bg-red-700"
             >
-              Remove Profile Picture
-            </button>
-          )}
+              Upload Profile Picture
+            </label>
+            {/*
+              Rendered only when there is a picture on screen to remove, so this
+              is never a control that does nothing: against the fallback icon,
+              with nothing pending, removal has no meaning.
+
+              A real `button`, and `type="button"` specifically. This sits inside
+              the profile form, where the default `type="submit"` would save the
+              whole profile on click, and would also make this the target of
+              implicit submission on Enter.
+            */}
+            {canRemove && (
+              <button
+                type="button"
+                onClick={handleRemove}
+                className="font-montserrat focus-visible:outline-northeastern-red cursor-pointer rounded-lg border border-black bg-gray-300 px-4 py-2 text-center text-xl text-black hover:bg-gray-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+              >
+                Remove Profile Picture
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </>

@@ -952,3 +952,85 @@ describe("the remove control", () => {
     });
   });
 });
+
+/**
+ * The two controls are the same control in two states, so they are drawn as one
+ * box width rather than each shrink-wrapping its own text.
+ *
+ * **jsdom resolves no layout**, so nothing here can assert the widths are
+ * equal - every rectangle in this file is zero. What these assert is the
+ * structure that makes them equal: one stretching column holding both, with
+ * neither child opting out. The equality itself was measured in Chromium
+ * against the compiled stylesheet - 238.52px each, against 227.43 and 238.52
+ * before - and is recorded on SCRUM-660.
+ */
+describe("the two picture controls share a box", () => {
+  const uploadLabel = () =>
+    document.querySelector<HTMLElement>('label[for="fileInput"]')!;
+
+  const removeButton = () =>
+    screen.queryByRole("button", { name: "Remove Profile Picture" });
+
+  /** Puts a stored picture behind the component, so Remove is offered. */
+  const renderWithRemovable = () => {
+    profileImageSpies().useProfileImage.mockReturnValue({
+      profileImageUrl: "https://bucket.s3.amazonaws.com/me?sig=abc",
+      isLoading: false,
+      imageLoadError: false,
+    });
+    render(
+      <ProfilePicture
+        pendingPicture={null}
+        onPendingPictureChange={jest.fn()}
+      />,
+    );
+  };
+
+  it("puts both controls in one column that stretches them", () => {
+    renderWithRemovable();
+
+    const label = uploadLabel();
+    const button = removeButton();
+    // The control: both are on screen, so the shared-parent assertion below is
+    // about two rendered controls rather than one and a null.
+    expect(label).toBeInTheDocument();
+    expect(button).toBeInTheDocument();
+
+    const wrapper = label.parentElement!;
+    expect(button!.parentElement).toBe(wrapper);
+
+    const classes = wrapper.className.split(" ");
+    expect(classes).toContain("flex");
+    expect(classes).toContain("flex-col");
+    // `align-items` must stay at its `stretch` default: this is the whole
+    // mechanism, and `items-start` here is exactly what made the two differ.
+    expect(wrapper.className).not.toMatch(/\bitems-(start|center|end)\b/);
+  });
+
+  it("leaves the sizing to the column rather than to either control", () => {
+    renderWithRemovable();
+
+    // A width on either child would override the stretch and put the two back
+    // out of step - which is also why no measured figure is written down.
+    for (const control of [uploadLabel(), removeButton()!]) {
+      expect(control.className).not.toMatch(/\bw-/);
+    }
+  });
+
+  it("spaces them from the column, so the upload control stands alone cleanly", () => {
+    // The gap replaces the `mt-3` the remove button used to carry. With one
+    // child a gap contributes nothing, so the upload control is unmoved when
+    // removal is not offered - which is the majority case.
+    render(
+      <ProfilePicture
+        pendingPicture={null}
+        onPendingPictureChange={jest.fn()}
+      />,
+    );
+
+    const label = uploadLabel();
+    expect(removeButton()).not.toBeInTheDocument();
+    expect(label.parentElement!.className).toMatch(/\bgap-\d/);
+    expect(label.className).not.toMatch(/\bmt-\d/);
+  });
+});
