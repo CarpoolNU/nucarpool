@@ -61,7 +61,7 @@ const RadioButton = React.forwardRef<
           // that label, and content-based naming would fold its text into
           // the accessible *name* the instant an error renders - "Driver
           // Please select a role." - which is exactly the name/description
-          // split this ticket exists to keep apart.
+          // split that has to stay apart.
           aria-label={label}
           // Not `aria-invalid`: the ARIA spec doesn't support it on `radio` -
           // a radio has no notion of "invalid" input, only unselected. The

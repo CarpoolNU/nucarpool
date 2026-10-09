@@ -1,13 +1,12 @@
 /**
  * That a failed `user.me` on `/profile` says so.
  *
- * The guard was `if (isLoading || !user)`, returning a `fixed inset-0 z-50`
- * white overlay with a spinner in it, and it returns *before* `Header` - so on
- * a failure the overlay was the entire page, with no navigation to leave by.
- * `isError` went unread, so `data` stayed undefined behind it for good. `/`
- * had already fixed exactly this, and its comment records the bug: "a failed
- * `user.me` used to leave `data` undefined behind this spinner forever". The
- * fix was never carried across to either profile route.
+ * A guard of `if (isLoading || !user)` returns a `fixed inset-0 z-50` white
+ * overlay with a spinner in it, and it returns *before* `Header` - so on a
+ * failure the overlay is the entire page, with no navigation to leave by, and
+ * an unread `isError` leaves `data` undefined behind it for good. `/` carries
+ * the same guard and the same requirement; both profile routes have to read
+ * `isError` too.
  *
  * `user.me` throws `UNAUTHORIZED` on a lapsed session and `NOT_FOUND` with no
  * `User` row; both are in `NON_RETRYABLE_CODES`, so React Query errors at once
@@ -135,7 +134,8 @@ describe("/profile when user.me fails", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("We could not load your profile.");
 
-    // The defect itself: the overlay spinner used to stay for the session.
+    // The point of the whole file: the overlay spinner must not stay for the
+    // rest of the session.
     expect(spinner()).not.toBeInTheDocument();
   });
 

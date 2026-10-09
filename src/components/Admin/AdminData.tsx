@@ -244,8 +244,8 @@ function AdminData() {
      * port exactly as tall as the content row, and a top margin then pushes it
      * down, so the port's last 16px lands outside the row's clip and is
      * unreachable at *any* scroll position rather than merely below the fold.
-     * Measured in Chromium at 16px at 1440x900 and at 667x582 alike,
-     * confirming this part of the defect was not limited to small screens.
+     * Measured in Chromium at 16px at 1440x900 and at 667x582 alike, so this
+     * is not a small-screen concern.
      *
      * Padding keeps the same 16px of visual gap - nothing here paints a
      * background, so the two are indistinguishable on screen - and

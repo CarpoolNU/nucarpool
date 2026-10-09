@@ -18,30 +18,29 @@ import * as React from "react";
  * `SelectTimeRange`.
  *
  * **Both ends of the conversion live in `utils/scheduleTime.ts`, deliberately.**
- * This component used to call `date.toDate()` on the way out and
- * `dayjs(value)` on the way in, which resolved Boston's UTC offset from two
- * different dates — the picker's own anchor going out, the browser's zone
- * coming in. The effect was that a 9:00 AM saved in July stored an hour
- * earlier than the same 9:00 AM saved in January, and every DST-era schedule
- * read back an hour early. Going through the helpers pins both directions to
- * `SCHEDULE_ANCHOR_DATE`, so the round trip is exact and neither the season nor
- * the viewer's timezone can affect it.
+ * Calling `date.toDate()` on the way out and `dayjs(value)` on the way in
+ * would resolve Boston's UTC offset from two different dates — the picker's
+ * own anchor going out, the browser's zone coming in — so a 9:00 AM saved in
+ * July would store an hour earlier than the same 9:00 AM saved in January,
+ * and every DST-era schedule would read back an hour early. Going through the
+ * helpers pins both directions to `SCHEDULE_ANCHOR_DATE`, so the round trip is
+ * exact and neither the season nor the viewer's timezone can affect it.
  */
 /**
  * The wrapper antd's `TimePicker` needs to accept a `ref`, at module scope.
  *
- * **It used to be declared inside `ControlledTimePicker`'s body**, which made
- * it a new function identity on every render. React compares `element.type` by
- * identity, so a new one is a *different component*: the old tree was unmounted
- * and a fresh `TimePicker` mounted in its place on every parent render. The
- * panel is the picker's own internal state, so it closed on the render that
- * picking an hour caused, and focus went with it - the control could not be
- * used to pick a time, which is the only thing it is for.
+ * **Module scope is load-bearing: it must not be declared inside
+ * `ControlledTimePicker`'s body.** That would make it a new function identity
+ * on every render, and React compares `element.type` by identity, so a new one
+ * is a *different component*: the tree would be unmounted and a fresh
+ * `TimePicker` mounted in its place on every parent render. The panel is the
+ * picker's own internal state, so it would close on the render that picking an
+ * hour causes, and focus would go with it - leaving the control unable to pick
+ * a time, which is the only thing it is for.
  *
- * Hoisting is the whole fix: the identity is now fixed for the life of the
- * module, so a parent render reconciles the same component and the panel
- * survives. It also ends the shadowing that made the old version hard to read,
- * where the wrapper's own `props` hid the outer component's.
+ * At module scope the identity is fixed for the life of the module, so a
+ * parent render reconciles the same component and the panel survives. It also
+ * keeps the wrapper's own `props` from shadowing the outer component's.
  *
  * `forwardRef` because this is what `Controller`'s `field.ref` attaches to.
  * antd's picker does not forward a DOM ref itself, so the ref lands on this

@@ -115,9 +115,9 @@ const renderUserCard = (
    * Compared against the card's own id rather than read for truthiness. The
    * list above is already filtered down to the selection when one exists, so
    * the two agree today - but "is this the expanded card" is the question the
-   * variant answers, and asking it of the wrong card is the mistake
-   * `ConnectCardVariant` was introduced to stop. `portal` is not reachable
-   * from here; `MapConnectPortal` sets it.
+   * variant answers, and asking it of the wrong card is exactly what
+   * `ConnectCardVariant` exists to prevent. `portal` is not reachable from
+   * here; `MapConnectPortal` sets it.
    */
   const variant: ConnectCardVariant =
     mobileSelectedUser === otherUser.id ? "detail" : "list";
@@ -230,11 +230,10 @@ export const SidebarContent = (props: SidebarContentProps) => {
   /**
    * The mobile detail state shows one card, so the list collapses to it.
    *
-   * `isMobile &&` stood in front of this once, defending against a
-   * `mobileSelectedUser` that outlived the viewport that produced it. The page
-   * derives the value through `resolveMobileSelectedUser` now, so a non-null
-   * value implies a mobile viewport and this component no longer needs to know
-   * the viewport at all - which is why `useIsMobile` is gone from it.
+   * No `isMobile &&` guard in front of it. The page derives the value through
+   * `resolveMobileSelectedUser`, so a non-null value already implies a mobile
+   * viewport and this component needs to know nothing about the viewport -
+   * which is why `useIsMobile` does not appear in it.
    */
   const filteredSortedUserCards = props.mobileSelectedUser
     ? sortedUserCards.filter(
@@ -268,10 +267,10 @@ export const SidebarContent = (props: SidebarContentProps) => {
             load result - a VIEWER has no use for a retry on a list they cannot
             act on. Then failure, then loading, and only then "nothing here".
 
-            `viewerModeHidesCards` is what this used to test inline as
-            `subType !== "favorites"`, which swept up the three Requests tabs
-            and left a VIEWER unable to reach - or withdraw - a request they had
-            already sent. Requests now fall through to the card
+            The condition goes through `viewerModeHidesCards` rather than an
+            inline `subType !== "favorites"`, which would sweep up the three
+            Requests tabs and leave a VIEWER unable to reach - or withdraw - a
+            request they had already sent. Requests fall through to the card
             list; only recommendations are replaced by copy. */}
         {props.disabled && viewerModeHidesCards(props.subType) ? (
           <div className="m-4 text-center text-lg font-light">

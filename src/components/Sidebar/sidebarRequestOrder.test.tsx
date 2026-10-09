@@ -7,22 +7,22 @@ import type { QueryState } from "../../utils/queryState";
 /**
  * `SidebarPage` does not reorder its caller's request arrays.
  *
- * **The defect.** The Requests branch rendered
- * `received={props.received.reverse()}`. `Array.prototype.reverse` reverses
- * **in place**, so every render of this component reversed one of
- * `index.tsx`'s `useMemo` results - arrays the memo only rebuilds when the
- * request data changes. Cards carrying equal timestamps therefore swapped
- * places on re-renders that had nothing to do with requests, and the same two
- * arrays are spread into `handleMobileSidebarExpand`'s lookup, which was being
- * reordered underneath it as a side effect.
+ * **The mechanism.** A Requests branch rendering
+ * `received={props.received.reverse()}` mutates its input:
+ * `Array.prototype.reverse` reverses **in place**, so every render of this
+ * component reverses one of `index.tsx`'s `useMemo` results - arrays the memo
+ * only rebuilds when the request data changes. Cards carrying equal timestamps
+ * then swap places on re-renders that have nothing to do with requests, and
+ * the same two arrays are spread into `handleMobileSidebarExpand`'s lookup,
+ * which is reordered underneath it as a side effect.
  *
  * **Why the obvious test for this is vacuous here.** "The caller's array is
  * still in its original order afterwards" passes against the *unfixed*
  * component, because `jest.setup.dom.ts` configures `reactStrictMode` and
  * StrictMode double-invokes the render function: two reversals per pass land
- * back where they started. That is not a quirk of the test, it is the defect's
- * actual history - this is why it never showed in development and only ever
- * appeared in production.
+ * back where they started. That is not a quirk of the test - it is also why a
+ * mutation like this stays invisible in development and shows only in
+ * production.
  *
  * So both cases below are built to be parity-independent:
  *

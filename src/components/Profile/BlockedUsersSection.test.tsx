@@ -131,9 +131,9 @@ describe("BlockedUsersSection", () => {
   });
 
   /*
-   * The defect this closes: `blocks.me` returns `blockedAt` for every row and
-   * the list rendered a name and a button. A reader looking at the list had no
-   * way to place any of it in time.
+   * `blocks.me` returns `blockedAt` for every row, and the list has to show
+   * it. A list of names and buttons alone gives a reader no way to place any
+   * of it in time.
    *
    * The `<time>` is asserted separately from the visible text because the two
    * carry different things - the machine-readable instant survives whatever

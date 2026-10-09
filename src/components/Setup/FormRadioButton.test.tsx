@@ -1,11 +1,10 @@
 /**
- * SCRUM-593: `FormRadioButton` rendered its error as a bare `<p>` inside the
- * `<label>` with no `id` and no `aria-describedby` on the input - one of the
- * "same treatment" call sites named alongside `TextField` in the ticket's
- * evidence. This is the ticket's required non-`TextField` unit: an error
- * forced on a component that isn't `TextField`, asserted with
- * `toHaveAccessibleDescription` rather than an attribute check, for the same
- * dangling-reference reason `TextField.test.tsx` gives.
+ * `FormRadioButton`'s error has an `id` and is referenced by the input's
+ * `aria-describedby`; a bare `<p>` inside the `<label>` reaches no assistive
+ * technology. This is the non-`TextField` case: an error forced on a component
+ * that isn't `TextField`, asserted with `toHaveAccessibleDescription` rather
+ * than an attribute check, for the same dangling-reference reason
+ * `TextField.test.tsx` gives.
  *
  * `aria-invalid` is deliberately absent from the radio itself - the ARIA spec
  * doesn't support it on `role="radio"`, which `yarn lint`'s
@@ -77,22 +76,22 @@ describe("FormRadioButton error association", () => {
 });
 
 /**
- * SCRUM-610 item 1: the input carried a class compiling to `display: none`.
+ * The radio input must not carry a class compiling to `display: none`.
  *
  * That is the one way of hiding a form control which removes it from the tab
  * order *and* from the accessibility tree at once, so the `aria-label` the
- * component is careful to set was never exposed, and step 1 of
+ * component is careful to set reaches nothing, and step 1 of
  * `/profile/setup` - choosing Viewer, Rider or Driver, the first thing every
- * new user does - could not be completed without a pointer at all.
+ * new user does - cannot be completed without a pointer at all.
  *
  * **Every test above passes either way, and that is this block's reason for
  * existing.** jsdom loads no stylesheet, so a Tailwind class name is an inert
- * string here and `getByRole("radio")` found these controls perfectly well
- * while every real browser was hiding them. No jsdom assertion can see the
- * defect itself; what is assertable is the class contract that produced it,
- * which is what the two cases below pin. That Tab reaches each radio and an
- * arrow key moves between them was verified in Chromium against the compiled
- * stylesheet - jsdom cannot answer it, and a green run here does not claim to.
+ * string here and `getByRole("radio")` finds these controls perfectly well
+ * even where a real browser hides them. No jsdom assertion can see the
+ * hiding itself; what is assertable is the class contract behind it, which is
+ * what the two cases below pin. That Tab reaches each radio and an arrow key
+ * moves between them was verified in Chromium against the compiled stylesheet
+ * - jsdom cannot answer it, and a green run here does not claim to.
  */
 describe("FormRadioButton keyboard reachability", () => {
   const renderRadio = () =>

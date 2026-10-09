@@ -174,9 +174,9 @@ describe("the destructive confirmation on a group member row", () => {
   });
 
   /*
-   * The defect, stated without geometry: press the trigger, then press
-   * whatever now sits in the slot the trigger occupied. Before the fix, that
-   * second press could be Confirm and the group was gone.
+   * The hazard, stated without geometry: press the trigger, then press
+   * whatever sits in the slot the trigger occupied. If that second press lands
+   * on Confirm, the group is gone.
    */
   it("cancels rather than acts when the second press lands on the first control", async () => {
     const onAction = jest.fn();

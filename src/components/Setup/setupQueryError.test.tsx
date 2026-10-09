@@ -1,12 +1,11 @@
 /**
  * That a failed `user.me` on `/profile/setup` says so.
  *
- * The wizard's guard was `if (isLoading || !user)`, returning a
- * `fixed inset-0 z-50` white overlay with a spinner in it. `isError` went
- * unread, so a failure left `data` undefined behind that overlay for good -
- * and this is the first screen a new account ever sees, drawn before `Header`,
- * covering the viewport, with no navigation to leave by and nothing to do but
- * reload by hand.
+ * The wizard's guard is `if (isLoading || isError || !user)`. Leaving
+ * `isError` unread means a failure sits behind a `fixed inset-0 z-50` white
+ * overlay with a spinner in it for good - and this is the first screen a new
+ * account ever sees, drawn before `Header`, covering the viewport, with no
+ * navigation to leave by and nothing to do but reload by hand.
  *
  * `user.me` reaches that state on ordinary events rather than exotic ones: it
  * throws `UNAUTHORIZED` on a lapsed session and `NOT_FOUND` with no `User`
@@ -117,7 +116,8 @@ describe("/profile/setup when user.me fails", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("We could not load your profile.");
 
-    // The defect itself: the overlay spinner used to stay for the session.
+    // The point of the whole file: the overlay spinner must not stay for the
+    // rest of the session.
     expect(spinner()).not.toBeInTheDocument();
   });
 

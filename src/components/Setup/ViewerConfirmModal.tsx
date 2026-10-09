@@ -1,9 +1,10 @@
 /**
- * The explicit confirmation required before onboarding can finish on Viewer:
- * `handleNextStep`'s step-1 VIEWER branch used to call
- * `handleSubmit(onSubmit)` directly on the first tap, which reached
- * `isOnboarded: true` with no chance to back out. This sits between that tap
- * and the actual submit, mirroring `UnsavedModal`'s two-button layout.
+ * The explicit confirmation required before onboarding can finish on Viewer.
+ *
+ * Without it, `handleNextStep`'s step-1 VIEWER branch calls
+ * `handleSubmit(onSubmit)` on the first tap and reaches `isOnboarded: true`
+ * with no chance to back out. This sits between that tap and the actual
+ * submit, mirroring `UnsavedModal`'s two-button layout.
  */
 type ViewerConfirmModalProps = {
   onCancel: () => void;

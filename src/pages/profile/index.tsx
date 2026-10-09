@@ -227,13 +227,13 @@ const Index: NextPage = () => {
    * callback rather than a destination so that the mobile path's full page
    * load stays in `Header` where its reason is written down.
    * Absent, the map is the destination, which is what the desktop button
-   * asked for before this took an argument.
+   * asks for.
    *
    * `selectedFile` is passed as well as the form values because it is the one
    * unsaved change that is not a form field. Without it a freshly cropped
-   * picture took the else branch below and the navigation happened at once,
-   * with no modal - the single profile edit the guard could not see, on a page
-   * whose other fourteen it protects.
+   * picture takes the else branch below and the navigation happens at once,
+   * with no modal - the one profile edit the guard cannot see, on a page whose
+   * other fourteen it protects.
    */
   const checkForChanges = async (proceed?: () => void | Promise<void>) => {
     proceedRef.current = proceed ?? null;
@@ -284,10 +284,10 @@ const Index: NextPage = () => {
     // The address fields hold text and `onboardSchema` checks the text; the
     // coordinates live outside the form, in the two address hooks, and the
     // combobox only writes back to the form when a suggestion is chosen. So a
-    // non-empty address can sit next to the `[0, 0]` the hook defaults to -
-    // which used to be saved, putting the pin ~4000 miles out and dropping the
-    // row from every distance-filtered search. `user.edit` refuses
-    // it now; this names the field instead of surfacing a Zod error in a toast.
+    // non-empty address can sit next to the `[0, 0]` the hook defaults to.
+    // Saving that puts the pin ~4000 miles out and drops the row from every
+    // distance-filtered search, so `user.edit` refuses it; this names the
+    // field instead of surfacing a Zod error in a toast.
     const unresolved = unresolvedAddressFields({
       role: values.role,
       home: startAddressHook.selectedAddress.center,
@@ -312,12 +312,12 @@ const Index: NextPage = () => {
       companyCoordLat: companyAddressHook.selectedAddress.center[1],
       startCoordLng: startAddressHook.selectedAddress.center[0],
       startCoordLat: startAddressHook.selectedAddress.center[1],
-      // Only a driver has seats. This used to be enforced on load, by the
-      // `role` effect that also corrupted a full driver's `0`;
+      // Only a driver has seats, normalised here rather than on load. A
+      // `role` effect doing it would also corrupt a full driver's `0`;
       // normalising at the submit boundary keeps the "non-driver stores 0"
       // outcome without the form rewriting stored data behind the user. It
-      // tests DRIVER rather than RIDER because VIEWER needs zeroing too - the
-      // old `=== "RIDER"` check let a viewer persist a stale count, and rows
+      // tests DRIVER rather than RIDER because VIEWER needs zeroing too - a
+      // `=== "RIDER"` check lets a viewer persist a stale count, and rows
       // carrying one exist.
       seatAvail: values.role === Role.DRIVER ? (values.seatAvail ?? 0) : 0,
       startStreet:
@@ -343,8 +343,8 @@ const Index: NextPage = () => {
       coopStartDate: values.coopStartDate ?? null,
       coopEndDate: values.coopEndDate ?? null,
     };
-    // A failed upload used to stop at the console, so the save below could
-    // report success while the avatar silently stayed as it was. The failure is
+    // A failed upload must not stop at the console, or the save below reports
+    // success while the avatar silently stays as it was. The failure is
     // carried down to the save result instead of aborting here, because the
     // profile fields still save correctly when only the picture fails.
     let pictureUploadFailed = false;
@@ -389,13 +389,13 @@ const Index: NextPage = () => {
       }
     } catch (error) {
       // No toast here: `useEditUserMutation`'s `onError` has already shown one
-      // carrying the server's reason, and this one used to stack a second,
-      // vaguer message on top of it.
+      // carrying the server's reason, and a second would stack a vaguer
+      // message on top of it.
       //
-      // `false`, because the save did not happen. This used to fall through to
-      // the `return true` below, so the unsaved-changes modal's Save and
-      // Continue navigated away - or signed out - on a refused save and threw
-      // away the very edits it had offered to keep.
+      // `false`, because the save did not happen. Falling through to the
+      // `return true` below would let the unsaved-changes modal's Save and
+      // Continue navigate away - or sign out - on a refused save, throwing away
+      // the very edits it offered to keep.
       return false;
     } finally {
       setIsLoading(false);
@@ -445,16 +445,16 @@ const Index: NextPage = () => {
   };
 
   /*
-   * A failed `user.me` used to leave `data` undefined behind the overlay
-   * below forever - and because this guard returns before `Header` renders,
-   * that overlay was the whole page, with no navigation to leave by and no
-   * way out but a manual reload. `/` fixed exactly this for the map page and
-   * the fix was never carried across.
+   * A failed `user.me` must say so. Left unread, `isError` leaves `data`
+   * undefined behind the overlay below forever - and because this guard
+   * returns before `Header` renders, that overlay is the whole page, with no
+   * navigation to leave by and no way out but a manual reload. `/` carries the
+   * same guard for the map page.
    *
    * Checked ahead of the spinner for the reason `toQueryState` documents: a
-   * query that has failed is also not loading, and a spinner that is really a
-   * failure is the bug being removed. `isLoading` in the guard below is this
-   * page's *save* state, not the query's, so the two are independent.
+   * query that has failed is also not loading, so a spinner would be standing
+   * in for a failure. `isLoading` in the guard below is this page's *save*
+   * state, not the query's, so the two are independent.
    */
   if (userQuery.isError) {
     return (
@@ -492,36 +492,35 @@ const Index: NextPage = () => {
 
       <Header profile={true} checkChanges={checkForChanges} />
 
-      {/* `bottom-mobile-nav` below replaces a hard-coded 64px bottom offset,
-          which was this file's own guess at the navigation's height and
-          disagreed with both the bar itself and the explore page's guess of
-          48px. The old class name is spelled out in words rather than written
-          here, because Tailwind scans this file for class-like strings and
-          would emit the retired utility again from the comment describing its
-          removal - which also puts a false hit in front of anyone grepping for
-          remaining uses.
+      {/* `bottom-mobile-nav` below stands in for a hard-coded 64px bottom
+          offset, which would be this file's own guess at the navigation's
+          height and disagrees with both the bar itself and the explore page's
+          guess of 48px. That class name is spelled out in words rather than
+          written here, because Tailwind scans this file for class-like strings
+          and would emit the utility as a real rule from the comment describing
+          it - which also puts a false hit in front of anyone grepping for live
+          uses.
 
-          The tab strip moved inside this container, and the strip and the pane
-          are now one flex column. That replaces a 6rem top offset the pane
-          used to carry - described rather than written out, for the same
-          scanning reason.
+          The tab strip sits inside this container, and the strip and the pane
+          are one flex column. That is instead of a 6rem top offset on the pane
+          - described rather than written out, for the same scanning reason.
 
-          Every quantity that offset was reserving space for lives in
+          Every quantity such an offset reserves space for lives in
           `ProfileSidebar`, not here: 12px of `py-3` either side, a 32px icon,
           4px of `mb-1`, the label's 24px `text-base` line box, the selected
           tab's 4px underline, and this wrapper's 2px bottom border. That is
-          90px against the 96 reserved, so a 6px dead band sat under the strip.
-          The 6px was the smaller half of the problem. The larger half was that
-          nothing kept the two in step - changing the icon size or the label's
-          type scale in the other file moved the strip and left the offset
-          behind, with nothing to notice it.
+          90px against the 96 reserved, so a 6px dead band would sit under the
+          strip. The 6px is the smaller half of the problem. The larger half is
+          that nothing keeps the two in step - changing the icon size or the
+          label's type scale in the other file moves the strip and leaves the
+          offset behind, with nothing to notice it.
 
           A flex column deletes the quantity rather than correcting it. The
           strip is `shrink-0` and takes its natural height, the pane takes
           whatever is left, and no number in this file measures a component in
           another one. It also holds where a derived constant would not - a
           late-loading font, or a label that wraps at a narrow width - without
-          the `ResizeObserver` that measuring at runtime would have cost.
+          the `ResizeObserver` that measuring at runtime would cost.
 
           `min-h-0` is load-bearing. A flex item defaults to `min-height: auto`
           and refuses to shrink below its content, so without it the pane grows

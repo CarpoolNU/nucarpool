@@ -23,13 +23,13 @@ import { MOBILE_NAV_SPACE } from "../../utils/breakpoints";
  * deferred to a ticket, because it should only be built if someone turns out
  * to need the dashboard on a phone. This panel is not the obstacle to it.
  *
- * **It is no longer only the narrow case.** The gate in `admin.tsx` also
- * carries a height term now, so this also stands in for the console on a
- * viewport that is wide enough and too short - a phone in landscape, which is
- * 667x375 and therefore above the width breakpoint. Two things below follow
- * from that and neither is cosmetic: the copy no longer says "wider", because
- * the screen arriving here may be plenty wide, and the navigation allowance is
- * now conditional, because the bar it clears is not always rendered.
+ * **It is not only the narrow case.** The gate in `admin.tsx` carries a height
+ * term as well, so this also stands in for the console on a viewport that is
+ * wide enough and too short - a phone in landscape, which is 667x375 and
+ * therefore above the width breakpoint. Two things below follow from that and
+ * neither is cosmetic: the copy does not say "wider", because the screen
+ * arriving here may be plenty wide, and the navigation allowance is
+ * conditional, because the bar it clears is not always rendered.
  */
 type AdminMobileNoticeProps = {
   /**

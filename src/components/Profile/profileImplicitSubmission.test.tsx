@@ -9,18 +9,18 @@ import { CarpoolFeature, OnboardingFormInputs } from "../../utils/types";
 import { useAddressSelection } from "../../utils/useAddressSelection";
 
 /**
- * SCRUM-594: the three `/profile` tabs were fields plus a `type="button"` Save
- * Changes, so Enter in a field did nothing.
+ * Enter in a field on any of the three `/profile` tabs saves that tab.
  *
- * Each tab is its own `<form>` now and `onSubmit` is a form handler:
+ * Each tab is its own `<form>` and `onSubmit` is a form handler:
  * react-hook-form's `handleSubmit(...)`, which is what the page hands down, and
- * which cancels the event itself. These render each section against a real
+ * which cancels the event itself. Fields plus a `type="button"` Save Changes
+ * would leave Enter doing nothing. These render each section against a real
  * `useForm` and a `handleSubmit` around a spy, so "the save ran" is the spy.
  *
  * **Every key press is `user.keyboard("{Enter}")` on a focused field.**
  * user-event submits on Enter only when the form has a submit button, so a tab
- * whose Save Changes went back to `type="button"` fails these, where a
- * hand-fired `submit` would pass straight through the defect.
+ * whose Save Changes is `type="button"` fails these, where a hand-fired
+ * `submit` would pass straight through and prove nothing.
  *
  * The negatives are each paired with a positive control in the same test - the
  * same Enter on a neighbouring field *does* save - because "the spy was not
@@ -333,9 +333,9 @@ describe("AccountSection - Enter in a field is Save Changes", () => {
 
   it("does not save when Enter is pressed in a month picker, but does from the status switch", async () => {
     // This tab has no free-text field. The month pickers are read-only and use
-    // Enter to open and confirm their panel - saving the profile as a side
-    // effect of opening End Date is the defect this pins. The switch is the
-    // control: an ordinary input whose Enter is the form's.
+    // Enter to open and confirm their panel, so the profile must not save as
+    // a side effect of opening End Date. The switch is the control: an
+    // ordinary input whose Enter is the form's.
     const user = userEvent.setup();
     const { container } = render(<Harness />);
     const endDate =

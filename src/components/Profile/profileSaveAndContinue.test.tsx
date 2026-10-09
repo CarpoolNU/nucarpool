@@ -186,15 +186,15 @@ describe("/profile Save and Continue", () => {
     await screen.findByLabelText("Preferred name");
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
 
-    // `useEditUserMutation`'s, which carries the server's reason. The catch in
-    // `onSubmit` used to add a second, vaguer one.
+    // One toast: `useEditUserMutation`'s, which carries the server's reason.
+    // A catch in `onSubmit` would add a second, vaguer one.
     expect(toast.error).toHaveBeenCalledTimes(1);
     expect(toast.error).toHaveBeenCalledWith("Something went wrong: Refused");
   });
 
   /**
-   * The regression the fix had to preserve, and the control for the two cases
-   * above: a page that never navigated at all would pass both and fail this.
+   * The control for the two cases above: a page that never navigated at all
+   * would pass both and fail this.
    */
   it("control: a successful save still navigates", async () => {
     renderProfile();

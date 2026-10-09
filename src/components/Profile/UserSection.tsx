@@ -72,7 +72,8 @@ const UserSection = ({
   const isMobile = useIsMobile();
   const isViewer = watch("role") === Role.VIEWER;
 
-  // Carries the seat coercion that used to sit in a `role` effect on the page.
+  // Carries the seat coercion, which belongs on the field rather than in a
+  // `role` effect on the page.
   // See `roleSeatDefault.ts`: only a user-initiated switch may rewrite
   // `seatAvail`, because populating the form is not a role change.
   const roleField = registerRoleWithSeatDefault({ register, watch, setValue });
@@ -83,17 +84,17 @@ const UserSection = ({
   // group from its real driver. The form says so up front so the answer is
   // not a failed save.
   //
-  // Every radio but the stored role is disabled, as the driver-only lock
-  // this replaces did. The current one is inert anyway, and `Radio` dims a
-  // disabled button, which would make the user's own role look unselected.
+  // Every radio but the stored role is disabled, rather than all of them:
+  // the current one is inert anyway, and `Radio` dims a disabled button,
+  // which would make the user's own role look unselected.
   const lockedRole = user?.carpoolId ? user.role : undefined;
   const roleDisabled = (role: Role) =>
     lockedRole !== undefined && role !== lockedRole;
 
   // The seat count is locked with it. Inside a group it is the number of
-  // seats *left*, which joining and leaving move, and `user.edit` no longer
-  // writes it from this form - a value loaded before a rider joined would
-  // hand their seat back.
+  // seats *left*, which joining and leaving move, and `user.edit` refuses to
+  // write it from this form - a value loaded before a rider joined would hand
+  // their seat back.
   const seatsLocked = lockedRole !== undefined;
 
   // Through the guard the header already uses, rather than straight to

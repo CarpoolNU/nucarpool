@@ -50,8 +50,8 @@ import { routerSpies } from "../testing/nextRouterStub";
 jest.mock("next/router", () =>
   require("../testing/nextRouterStub").buildRouterMock({
     // Named explicitly although the stub defaults to both: the comment above
-    // is the reason this file needs them, and a later change to those
-    // defaults must not quietly take it away.
+    // is the reason this file needs them, and a change to those defaults must
+    // not quietly take it away.
     pathname: "/",
     query: {},
   }),
@@ -735,9 +735,9 @@ describe("Header controls inside the bar they have to fit", () => {
   it("leaves no tab asking for the uncapped padding", () => {
     renderHeader();
 
-    /* `p-4` would reintroduce the defect: one shorthand setting both axes,
-       the vertical half of which a short bar cannot hold. A regression here
-       would most likely arrive as someone restoring the shorthand. */
+    /* `p-4` is one shorthand setting both axes, and a short bar cannot hold
+       its vertical half. A regression here would most likely arrive as
+       someone reaching for the shorthand. */
     for (const tab of tabs()) {
       expect(tab.className.split(" ")).not.toContain("p-4");
       expect(tab.className.split(" ")).not.toContain("py-4");

@@ -58,10 +58,10 @@ type UserCardBaseProps = {
    *
    * The Requests tab passes one because a request whose two parties can no
    * longer carpool stays in the list, so the card has to say why rather than
-   * disappear. Favourites now do the same: `favorites.me` no longer
-   * filters by role and status, since hiding those entries also hid the only
-   * un-favourite star. Recommendations still never need it - the scorer only
-   * ever offers a compatible, ACTIVE person.
+   * disappear. Favourites do the same: `favorites.me` does not filter by role
+   * and status, because hiding those entries also hides the only un-favourite
+   * star. Recommendations never need it - the scorer only ever offers a
+   * compatible, ACTIVE person.
    */
   notice?: string;
   /**
@@ -69,7 +69,7 @@ type UserCardBaseProps = {
    *
    * Separate from the caller-side conditions on the button below, which are
    * about the *reader* - Viewer mode, a paused search of their own. This one is
-   * about the pair: a favourite whose role no longer fits cannot be connected
+   * about the pair: a favourite whose role does not fit cannot be connected
    * with, and `notice` above is carrying the reason. Passing `rightButton:
    * undefined` instead would take View Route down with it, which is still
    * useful on such a card.
@@ -120,9 +120,9 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
   } = useProfileImage(props.otherUser.id);
 
   const user = useContext(UserContext);
-  // The owning user is no longer sent — the server takes it from
-  // the session. The `if (user)` guard this replaces existed only to narrow
-  // `user` for `user.id`; the component already returns early when it is absent.
+  // The owning user is not sent — the server takes it from the session. No
+  // `if (user)` guard is needed either: it would only narrow `user` for
+  // `user.id`, and the component already returns early when it is absent.
   const handleFavorite = (favoriteId: string, add: boolean) => {
     mutateFavorites({
       favoriteId,
@@ -354,10 +354,10 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
 
       {/* 8th row - Buttons*/}
       {props.onViewRouteClick && props.rightButton && !isMobile ? (
-        // Raised above the activation button for the same reason as the Rating.
-        // These two were the ticket's "same nesting problem in a second form":
-        // real buttons that used to sit inside the card's own click target, so
-        // pressing View Route or Connect also fired it.
+        // Raised above the activation button for the same reason as the
+        // Rating. These two are real buttons, so inside the card's own click
+        // target they would be the nesting problem in a second form: pressing
+        // View Route or Connect would fire the card as well.
         <div className="relative z-20 flex flex-row justify-between gap-2">
           <button
             disabled={user.status === "INACTIVE" && user.role !== "VIEWER"}
@@ -394,16 +394,15 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
        * A real <button>, stretched across the card and rendered **last** so it
        * paints over the card's text while staying below the `z-20` controls
        * above. It is a *sibling* of those controls, not an ancestor, which is
-       * what fixes both halves of the ticket at once: favouriting no longer
-       * bubbles into "open the conversation", because there is nothing to bubble
-       * into, and a <button> containing no focusable descendants is no longer
+       * what settles both halves at once: favouriting does not bubble into
+       * "open the conversation", because there is nothing to bubble into, and a
+       * <button> containing no focusable descendants is not
        * `nested-interactive`.
        *
-       * This replaces the `role="button"` + `tabIndex` + Enter/Space wrapper
-       * `SentCard` and `ReceivedCard` used to need. A real button
-       * brings keyboard activation, Space/Enter semantics and the disabled and
-       * focus behaviour of a control for free, so all of that is deleted rather
-       * than reimplemented.
+       * It also means `SentCard` and `ReceivedCard` need no `role="button"` +
+       * `tabIndex` + Enter/Space wrapper of their own. A real button brings
+       * keyboard activation, Space/Enter semantics and the disabled and focus
+       * behaviour of a control for free, so none of that is reimplemented.
        *
        * `inset-0` covers the padding box, so the focus ring traces the card just
        * inside its left border rather than around the border itself.

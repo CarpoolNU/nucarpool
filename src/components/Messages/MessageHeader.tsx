@@ -275,8 +275,8 @@ const MessageHeader = ({
   });
 
   // A pending request whose two parties can no longer carpool - either of them
-  // switched role after it was sent - is no longer hidden from the Requests tab,
-  // because hiding it never stopped it blocking new requests. It
+  // switched role after it was sent - stays visible on the Requests tab,
+  // because hiding it does not stop it blocking new requests. It
   // is still not acceptable, so Accept is replaced by the reason rather than
   // left to fail on press. Reject and Withdraw stay: clearing the request is
   // the way out, and hiding them would leave no way to reach it - a dead

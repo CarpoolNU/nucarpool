@@ -95,11 +95,11 @@ const headerIsIn = (html: string) => html.includes("DESKTOP HEADER");
  * Server-render the page, then hydrate that HTML the way a page load does.
  *
  * `height` is optional, and every caller that omits it gets jsdom's default
- * 768 - which is above `ADMIN_CONSOLE_MIN_HEIGHT_PX`, so the cases written
- * before a height term was added to the gate still describe the viewport
- * they always did. That is deliberate rather than convenient: those tests are the
- * control for the gate below, and rewriting them to state a height would make
- * it possible to change the threshold without any of them noticing.
+ * 768 - which is above `ADMIN_CONSOLE_MIN_HEIGHT_PX`, so a case that names
+ * only a width still describes a tall-enough viewport. That is deliberate
+ * rather than convenient: those tests are the control for the gate below, and
+ * giving each of them an explicit height would make it possible to change the
+ * threshold without any of them noticing.
  */
 const hydrateAdminAt = async (width: number, height?: number) => {
   setViewportWidth(width);

@@ -161,7 +161,7 @@ describe("a failed onboarding submit", () => {
     await submitAsViewer();
 
     expect(mockUpdateUser).toHaveBeenCalledTimes(1);
-    // The defect: this stayed on screen for good, with the wizard gone.
+    // Otherwise this stays on screen for good, with the wizard gone.
     expect(spinner()).not.toBeInTheDocument();
     // Nothing else had a chance to say anything, so `onSubmit` must.
     expect(mockToastError).toHaveBeenCalledTimes(1);

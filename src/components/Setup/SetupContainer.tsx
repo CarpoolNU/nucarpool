@@ -30,15 +30,15 @@ import { CSSProperties } from "styled-components";
  * would otherwise floor this at the full 500px, so in the wizard's column
  * arrangement the card shrinks to the space the navigation strip leaves.
  *
- * That it shrinks is now load-bearing above the mobile breakpoint too. The
- * desktop arrangement used to be a flex *row*, where height is the cross
- * axis and this 500px could not shrink at all - so a window shorter than the
- * card simply clipped it, 62px off the top and 63px off the bottom of a phone
- * held in landscape. The row is now conditional on the window being tall enough
- * to hold it; see `WIZARD_DESKTOP_MIN_HEIGHT_PX` in `src/utils/breakpoints.js`
- * for where that height comes from.
+ * That it shrinks is load-bearing above the mobile breakpoint too. In a flex
+ * *row* height is the cross axis and this 500px cannot shrink at all, so a
+ * window shorter than the card clips it - 62px off the top and 63px off the
+ * bottom of a phone held in landscape. The desktop row is therefore
+ * conditional on the window being tall enough to hold it; see
+ * `WIZARD_DESKTOP_MIN_HEIGHT_PX` in `src/utils/breakpoints.js` for where that
+ * height comes from.
  *
- * **It is also where focus goes when the step changes (SCRUM-597).** The wizard
+ * **It is also where focus goes when the step changes.** The wizard
  * mounts one step at a time, so whatever held focus - the field Enter was
  * pressed in, or the Get Started and Previous buttons - is removed with the
  * step it belonged to, and focus falls to `<body>`. The card is the one element

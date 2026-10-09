@@ -2,9 +2,9 @@
  * The two class requests these tests check, asserted from the source rather
  * than from a render.
  *
- * **Neither figure this ticket is about is observable in jsdom**, which
- * resolves no CSS and reports every rect as zero - `src/testing/viewport.ts`
- * says so at length, and both defects here were rects. The measurements live
+ * **Neither figure is observable in jsdom**, which resolves no CSS and
+ * reports every rect as zero - `src/testing/viewport.ts` says so at length,
+ * and both quantities here are rects. The measurements live
  * in Chromium instead, through `scripts/measure-layout.ts` and the
  * `admin-console-chart-fold` fixture, and nothing runs that automatically. So
  * what is assertable in `yarn test` is the proxy: that the components still

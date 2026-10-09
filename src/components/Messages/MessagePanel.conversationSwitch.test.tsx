@@ -230,10 +230,10 @@ describe("switching from one open conversation to another", () => {
 
 describe("a send still in flight when the conversation switches", () => {
   it("lands in the conversation it was sent from, and reports that one", async () => {
-    // Why `index.tsx`'s `handleMessageSent` no longer selects the id it is
+    // Why `index.tsx`'s `handleMessageSent` must not select the id it is
     // given. A mutation's own `onSuccess` outlives its component, so this call
     // comes from Alice's unmounted panel after Bob's is open; selecting on it
-    // switched the page back to Alice.
+    // would switch the page back to Alice.
     let land = () => {};
     sendMessageFn.mockImplementationOnce(
       () => new Promise((resolve) => (land = () => resolve({}))),

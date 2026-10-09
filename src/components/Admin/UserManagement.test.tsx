@@ -306,7 +306,7 @@ describe("UserManagement when getAllUsers fails", () => {
   /**
    * The control, and the mutation test for the case above. A component that
    * rendered `QueryError` unconditionally would pass both error assertions and
-   * fail here, which is the failure mode the ticket names.
+   * fail here.
    */
   it("control: a resolving query renders the list and no error", async () => {
     behaviour = async () => [ADMIN_USER];

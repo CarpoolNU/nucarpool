@@ -128,8 +128,8 @@ describe("the compliance gate's accessibility tree", () => {
 
     expect(backdrops).toHaveLength(1);
     expect(backdrops[0]).toHaveAttribute("aria-hidden", "true");
-    // A sibling of the panel rather than its ancestor: the defect was the
-    // containment, not the attribute.
+    // A sibling of the panel rather than its ancestor: what breaks the dialog
+    // is the containment, not the attribute.
     expect(backdrops[0]).not.toContainElement(
       screen.getByRole("button", { name: "I Agree" }),
     );

@@ -97,8 +97,9 @@ const CarpoolSection = ({
           that has no such ladder - would have overridden `md:h-14` and
           `lg:h-16` at every width and shrunk the desktop picker.
 
-          This only does anything because `DayBox` now declares `className`;
-          until it did, the prop was accepted, type-checked and dropped.
+          This only does anything because `DayBox` declares `className`.
+          Without that declaration the prop is accepted, type-checked and
+          dropped.
 
           **The cap is per-size because the row's width is not negotiable.**
           Each MUI `Checkbox` is `width: 1` and shrinks like any other flex
@@ -109,28 +110,26 @@ const CarpoolSection = ({
           follow. The hit area and the circle drawn inside it coincide at every
           width, so the boxes cannot overlap and a click cannot land on the
           neighbouring day. And a cap below 7 x (box + 8px) does not compress
-          the row, it is simply overflowed: `max-w-[360px]` was exceeded by
-          88px at `md`, and by 224px at `lg` once the 80px of left padding
-          this wrapper used to carry there had come out of it.
+          the row, it is simply overflowed: a flat `max-w-[360px]` is exceeded
+          by 88px at `md` and by 224px at `lg`.
 
-          So each size now caps at what that size's row actually occupies -
-          336px fits inside the 360px the base keeps for mobile, `md` needs
+          So each size caps at what that size's row actually occupies - 336px
+          fits inside the 360px the base keeps for mobile, `md` needs
           7 x 64 = 448px and `lg` 7 x 72 = 504px, both of which the column has
-          room for. That `lg` padding goes with it: it indented the row 88px
-          past the labels, address fields and save button below, which all sit
-          flush with the column's left edge. Nothing moves at `md`, where the
-          boxes already fell inside the column - what changes there is that the
-          declared cap stops being a number the row ignores.
+          room for. The wrapper also carries no left padding at `lg`: 80px
+          there would indent the row 88px past the labels, address fields and
+          save button below, which all sit flush with the column's left edge.
 
-          The retired padding utility is described rather than written out, for
-          the reason the explore-page offset gives: Tailwind v4 scans this file
-          for class-like strings, so naming it here would keep emitting it and
-          would put a false hit in front of anyone grepping for live uses.
+          That padding utility is described rather than written out, for the
+          reason the explore-page offset gives: Tailwind v4 scans this file for
+          class-like strings, so naming it here would emit it as a real rule
+          and would put a false hit in front of anyone grepping for live uses.
 
           **The container query is the second shrink rule, and it exists
           because a cap cannot create space that is not there.** Everything
           above reasons about the viewport, and that is what left a band of
-          widths where the row was clipped rather than capped. From 640px to
+          widths where a viewport-only rule clips the row rather than capping
+          it. From 640px to
           649px the page has already switched to the desktop grid, so the
           250px sidebar is out of the column while `md:` has not started: the
           column measures `min(672, viewport - 250) - 64`, which is 326px at
@@ -138,7 +137,7 @@ const CarpoolSection = ({
           stopped applying by then, so the row is at its 40px base in the
           narrowest desktop column that exists, and the seventh day hangs 10px
           past a scroller that is `overflow-x-hidden` - clipped, not
-          scrollable, and that strip answered no clicks.
+          scrollable, so that strip answers no clicks.
 
           `@max-[336px]:` asks the wrapper how wide it actually is instead of
           asking the viewport, so it fires exactly when the row would not fit

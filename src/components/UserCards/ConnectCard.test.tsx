@@ -31,7 +31,7 @@ import {
  * Phase 4 converts `isMobile` ternaries to `desktop:` classes, and
  * a class cannot express "pass a different handler" — so this file exists
  * partly to make sure that conversion cannot quietly swallow the distinction.
- * It is the reason this ticket is sequenced before that one.
+ * It is the reason this file is in place before that conversion runs.
  *
  * *What this does not cover:* nothing here asserts geometry. See
  * `testing/viewport.ts` for what jsdom can and cannot tell you — in short, a
@@ -253,8 +253,8 @@ describe("Discovery card activation on mobile", () => {
   });
 
   it("leaves the sheet as-is when the compose step is cancelled", async () => {
-    // Cancelling before sending is not the case this ticket is about - the
-    // reader has not connected with anyone, so there is no reason to leave
+    // Cancelling before sending is a different case - the reader has not
+    // connected with anyone, so there is no reason to leave
     // the card they were looking at.
     const handleMobileExpand = jest.fn();
     renderCard({ variant: "detail", handleMobileExpand });
@@ -319,20 +319,19 @@ describe("Discovery card activation on desktop", () => {
 
 describe("The card a map pin opens, at a mobile viewport", () => {
   /**
-   * **This block asserted the defect as correct behaviour.** It rendered
-   * `ConnectCard` with no selection prop - which was exactly how
-   * `MapConnectPortal` rendered it - and required that no `Connect!` appear.
-   * Its own comment read the surviving `Seats Available:` row as proof that
-   * "the full layout is intact", but that is an *info* row. The row carrying
-   * the actions is `UserCard`'s, and `!isMobile` had already removed it, so
-   * the presence of one said nothing about the other. A mobile pin tap opened
-   * a card with the favourite star and a close button and nothing else.
+   * **Do not assert that a portal card carries no `Connect!`.** Rendering
+   * `ConnectCard` with no selection prop and requiring the button's absence
+   * reads a surviving `Seats Available:` row as proof that "the full layout is
+   * intact" - but that is an *info* row. The row carrying the actions is
+   * `UserCard`'s, and `!isMobile` removes it regardless, so the presence of one
+   * says nothing about the other. What that passes against is a mobile pin tap
+   * opening a card with the favourite star, a close button and nothing else.
    *
-   * The concern it was written for - an unselected card claiming to *be* the
-   * selection, because `undefined !== null` - no longer has a prop to arise
-   * from: `variant` names the surface instead, and a card given none is a list
-   * card. "Stays inert when no expand handler is supplied" above still pins
-   * that, and more strictly, by allowing no controls at all.
+   * The concern behind it - an unselected card claiming to *be* the selection,
+   * because `undefined !== null` - has no prop to arise from: `variant` names
+   * the surface, and a card given none is a list card. "Stays inert when no
+   * expand handler is supplied" above pins that, and more strictly, by
+   * allowing no controls at all.
    */
   beforeEach(() => {
     setViewportWidth(MOBILE_WIDTH);
@@ -360,7 +359,7 @@ describe("The card a map pin opens, at a mobile viewport", () => {
   });
 
   it("sends the request for the user whose pin was tapped", async () => {
-    // The end of the path the ticket says is a dead end, and the `toId` is
+    // The end of the path a map pin opens, and the `toId` is
     // the part worth pinning: the portal renders one card per user at the
     // tapped location, so a control wired to the wrong one would connect the
     // reader to somebody they did not choose.
@@ -429,8 +428,8 @@ describe("The card a map pin opens, at a mobile viewport", () => {
   it("goes inert, and says why, for a reader who cannot send a request", () => {
     // Disabled rather than absent, which is the distinction worth pinning: a
     // control that vanished in Viewer mode would leave the card looking
-    // exactly like the pre-fix one this ticket is about, and the reader would
-    // have no idea why.
+    // like a card with no action at all, and the reader would have no idea
+    // why.
     //
     // Two independent conditions disable it here - `role === "VIEWER"` and a
     // non-null `unavailable`, because `carpoolUnavailableExplanation` refuses

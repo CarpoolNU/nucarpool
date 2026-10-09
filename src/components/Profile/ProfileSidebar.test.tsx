@@ -101,9 +101,9 @@ describe("the desktop sidebar", () => {
     );
 
     expect(tokens).toContain("font-bold");
-    // The class that survived the concatenation, so this half never failed.
-    // Asserted anyway: it is what made the defect look deliberate, and a fix
-    // that swapped one for the other would be no fix.
+    // Asserted alongside `font-bold` because the selected state needs both:
+    // an edit that trades one token for the other leaves the selection just
+    // as indistinguishable.
     expect(tokens).toContain("!text-northeastern-red");
   });
 
@@ -147,12 +147,12 @@ describe("the desktop sidebar", () => {
   });
 
   it("writes no token that a boolean was concatenated into", () => {
-    // The defect's signature, stated as a property rather than as the two
-    // specific strings: a `&&` whose left side is false stringifies to
-    // "false", and any token carrying it matches no rule in the stylesheet.
+    // Stated as a property rather than as two specific strings: a `&&` whose
+    // left side is false stringifies to "false", and any token carrying it
+    // matches no rule in the stylesheet.
     //
     // Swept across the whole rendered tree rather than the buttons alone,
-    // because the same mistake appears on the icon wrappers inside them -
+    // because the same mistake is available on the icon wrappers inside them -
     // there inside a template literal, so it costs a stray `false` class
     // rather than a corrupted one.
     const { container } = renderSidebar("account");
@@ -203,11 +203,10 @@ describe("the mobile sidebar", () => {
   });
 
   /*
-   * This branch was already correct - a template literal with explicit spaces
-   * and a ternary - and the ticket's requirement is that it stay untouched. It
-   * is asserted rather than trusted because the fix makes the desktop branch
-   * look like this one, and the easy mistake is to "unify" them into something
-   * that serves neither.
+   * This branch is a template literal with explicit spaces and a ternary, and
+   * it has to stay that way. It is asserted rather than trusted because the
+   * desktop branch looks like this one, and the easy mistake is to "unify"
+   * them into something that serves neither.
    */
 
   it("builds its own classes cleanly", () => {

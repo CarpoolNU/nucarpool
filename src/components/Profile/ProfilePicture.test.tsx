@@ -220,8 +220,8 @@ describe("ProfilePicture cropper framing", () => {
   });
 
   it("passes the crop box it computed the zoom from", () => {
-    // A box sized from one number and a zoom computed from another is the
-    // mismatch the ticket is about, so both come from `CROP_BOX_PX`.
+    // A box sized from one number and a zoom computed from another is a
+    // mismatch, so both come from `CROP_BOX_PX`.
     expect(openCropperWith(LANDSCAPE_MEDIA).cropSize).toEqual({
       width: CROP_BOX_PX,
       height: CROP_BOX_PX,
@@ -231,10 +231,10 @@ describe("ProfilePicture cropper framing", () => {
   it("stores the position react-easy-crop asks for, without re-bounding it", () => {
     const props = openCropperWith(LANDSCAPE_MEDIA);
 
-    // The component used to apply its own bound on top of the library's -
-    // `±(zoomIncrease * 150 + 150)`, which at the opening zoom permits moving
-    // the image halfway out of the crop box. With `restrictPosition` on, the
-    // library has already clamped this value against the real media size
+    // The component must not apply its own bound on top of the library's. A
+    // bound of `±(zoomIncrease * 150 + 150)` permits moving the image halfway
+    // out of the crop box at the opening zoom, and with `restrictPosition` on
+    // the library has already clamped this value against the real media size
     // before calling back, so a second, looser bound can only fight it.
     act(() => props.onCropChange({ x: 1000, y: -1000 }));
 
@@ -322,22 +322,22 @@ describe("the crop dialog", () => {
  * That the cropper modal caps its own height and keeps its button row outside
  * the scrolling region.
  *
- * The panel had no `max-h`, no `dvh` and no overflow, and it is centred inside
- * a `fixed inset-0` wrapper - so at its natural 476px it overflowed a 375px
- * landscape-phone viewport by 51px at
- * *each* end, slicing both `Cancel` and `Crop Image` in half. `#__next` is
- * `height: 100dvh`, so there was no page scroll to reach them with.
+ * Without a `max-h`, a `dvh` unit and an overflow rule, the panel is centred
+ * inside a `fixed inset-0` wrapper at its natural 476px, which overflows a
+ * 375px landscape-phone viewport by 51px at *each* end and slices both
+ * `Cancel` and `Crop Image` in half. `#__next` is `height: 100dvh`, so there
+ * is no page scroll to reach them with.
  *
- * **What this block cannot see is most of the defect.** A 476px box in a 375px
- * viewport is indistinguishable here from one that fits. Before the fix,
- * `Cancel` sat 27px below the fold; after it, the panel is 338px tall and both
+ * **What this block cannot see is most of the geometry.** A 476px box in a
+ * 375px viewport is indistinguishable here from one that fits. Uncapped,
+ * `Cancel` sits 27px below the fold; capped, the panel is 338px tall and both
  * buttons are fully within the viewport - both figures measured in Chromium.
  *
  * What *is* observable is the structure that produces that geometry, and it is
  * the part a later edit would break silently: which element carries the cap,
  * and whether the button row is a sibling of the scroller rather than a child
- * of it. A row inside the scroller would scroll away again while every class
- * name here still read correctly.
+ * of it. A row inside the scroller would scroll away while every class name
+ * here still read correctly.
  *
  * Run against the pre-fix component, four of the five cases below fail. The
  * fifth - that the stage keeps its `h-96` - passes either way by design: it
@@ -436,18 +436,17 @@ describe("the cropper modal's height", () => {
  * That the preview the user sees and the file that will be uploaded cannot
  * disagree.
  *
- * A second symptom of the same pending-preview defect: the cropped `File`
- * lived in the parent - the profile page, or `setup.tsx` - while the preview
- * URL lived in
- * `ProfilePicture`'s own state, and the component's unmount cleanup revoked it.
- * So switching profile tabs, or stepping back through onboarding, destroyed the
- * preview and left the parent holding a picture the user could no longer see,
- * which the next Save uploaded anyway. Two pieces of one value, kept in two
+ * The second half of the pending-preview contract. The cropped `File` lives
+ * in the parent - the profile page, or `setup.tsx` - so if the preview URL
+ * lived in `ProfilePicture`'s own state the unmount cleanup would revoke it,
+ * and switching profile tabs or stepping back through onboarding would destroy
+ * the preview and leave the parent holding a picture the user cannot see,
+ * which the next Save uploads anyway. Two pieces of one value, kept in two
  * places, with only one of them surviving a remount.
  *
- * The fix is to stop storing the preview at all: `selectedFile` is the single
- * source of truth and the preview is derived from it by an effect, so a
- * remount rebuilds it. These assertions are about that derivation, which is
+ * So the preview is not stored at all: `selectedFile` is the single source of
+ * truth and the preview is derived from it by an effect, so a remount rebuilds
+ * it. These assertions are about that derivation, which is
  * what makes the two agree by construction rather than by remembering to keep
  * them in step.
  *
@@ -501,10 +500,10 @@ describe("the pending picture preview", () => {
   });
 
   /**
-   * The regression: a profile tab switch, or an onboarding step change.
+   * A profile tab switch, or an onboarding step change.
    *
    * Both unmount this component while the parent goes on holding the file, so
-   * this is the sequence that used to leave a pending upload with no visible
+   * this is the sequence that can leave a pending upload with no visible
    * preview.
    */
   it("rebuilds the preview after an unmount and remount", () => {
@@ -520,8 +519,7 @@ describe("the pending picture preview", () => {
 
     first.unmount();
     // Nothing is left alive: the URL from the first mount is released rather
-    // than leaked - the guarantee the old unmount cleanup was there to make,
-    // now carried by the effect's own cleanup.
+    // than leaked, which the effect's own cleanup is what guarantees.
     expect(liveUrls()).toEqual([]);
 
     render(<ProfilePicture selectedFile={file} onFileSelected={jest.fn()} />);
@@ -581,29 +579,30 @@ describe("the pending picture preview", () => {
 });
 
 /**
- * SCRUM-610 item 3: the two halves of the upload control, both of which left a
- * user stuck in front of a button that did nothing.
+ * The two halves of the upload control, either of which can leave a user in
+ * front of a button that does nothing.
  *
- * **Keyboard reach.** The file input carried a class compiling to
- * `display: none`, and the only visible control is a `<label>` - which is not
- * focusable. So between them there was no focusable element anywhere in the
- * upload control, and setting a profile picture on `/profile` or on setup step
- * 4 was pointer-only. As in `Setup/FormRadioButton.test.tsx`, jsdom loads no
- * stylesheet and so cannot see that; the class contract is what is assertable
- * here, and the tab order was verified in Chromium.
+ * **Keyboard reach.** A file input carrying a class that compiles to
+ * `display: none` is unfocusable, and the only visible control is a `<label>`,
+ * which is not focusable either - so between them the upload control would
+ * hold no focusable element at all, making a profile picture pointer-only on
+ * `/profile` and on setup step 4. As in `Setup/FormRadioButton.test.tsx`,
+ * jsdom loads no stylesheet and so cannot see that; the class contract is what
+ * is assertable here, and the tab order was verified in Chromium.
  *
  * **Re-picking the same file.** A file input fires `change` when its value
- * changes, not when the dialog closes. `handleFileChange` never cleared the
- * value, so the sequence that actually happens - pick a photo, dislike the
- * crop, cancel, pick the same photo again - set the input to the value it
- * already held, fired nothing, and reopened no cropper.
+ * changes, not when the dialog closes. So `handleFileChange` must clear the
+ * value: otherwise the sequence that actually happens - pick a photo, dislike
+ * the crop, cancel, pick the same photo again - sets the input to the value it
+ * already holds, fires nothing, and reopens no cropper.
  *
- * jsdom cannot reproduce that sequence either, and the obvious test is
- * worthless *because* it cannot: `fireEvent.change` dispatches the event
+ * jsdom cannot reproduce that sequence, and the obvious test is worthless
+ * *because* it cannot: `fireEvent.change` dispatches the event
  * unconditionally, with no regard for whether the value changed, so "pick the
  * same file twice and assert the dialog reopens" passes just as happily
- * against the unfixed component. What is observable, and what the browser's
- * behaviour is downstream of, is that the handler leaves the value empty - so
+ * against a component that never clears. What is observable, and what the
+ * browser's behaviour is downstream of, is that the handler leaves the value
+ * empty - so
  * that is asserted directly, against a value seeded the way a real pick leaves
  * one.
  */

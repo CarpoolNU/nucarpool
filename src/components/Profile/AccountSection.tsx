@@ -103,10 +103,10 @@ const AccountSection = ({
                         },
                       }}
                       // State-neutral, because a switch's accessible name is
-                      // announced *with* its state. The old name was the
-                      // action its off position performs - "Mark profile
-                      // inactive" - while `checked` tracks ACTIVE, so a screen
-                      // reader read an active profile out as "Mark profile
+                      // announced *with* its state. Naming it for the action
+                      // its off position performs - "Mark profile inactive" -
+                      // fights `checked`, which tracks ACTIVE, so a screen
+                      // reader reads an active profile out as "Mark profile
                       // inactive, switch, on" and an inactive one as "...,
                       // off": in both cases the exact opposite of the truth.
                       // Naming the state instead leaves "Profile active,
@@ -138,19 +138,14 @@ const AccountSection = ({
           className={"mt-12 mb-6 !text-2xl"}
         />
 
-        {/* Date pickers stack on mobile for better fit.
-            The desktop arm used to take two thirds of the row below 1440px and
-            the whole of it at or above - which is backwards, because the
-            narrower the column the less a fraction of it leaves. Capping the
-            section above made that visible: two thirds of the capped 338px
-            gives each picker 96.66px, and at that width "Start Date" and "End
-            Date" both wrap onto a second line in Montserrat at the 18px the
-            label asks for. The full row gives each 153px and one line. The
-            fraction was only ever applied between 640px and 1440px, and the
-            full width is what the layout already resolved to above that, so
-            this makes the wide-desktop arrangement the single arrangement
-            rather than inventing one. Measured in Chromium against the
-            compiled stylesheet. */}
+        {/* Date pickers stack on mobile for better fit, and the desktop arm
+            takes the whole row at every desktop width. Giving a fraction of
+            the row to each picker is backwards, because the narrower the
+            column the less a fraction of it leaves: two thirds of the capped
+            338px section gives each picker 96.66px, and at that width "Start
+            Date" and "End Date" both wrap onto a second line in Montserrat at
+            the 18px the label asks for. The full row gives each 153px and one
+            line. Measured in Chromium against the compiled stylesheet. */}
         <div className={`flex ${isMobile ? "flex-col gap-4" : "w-full gap-8"}`}>
           <div className="flex flex-1 flex-col">
             <EntryLabel

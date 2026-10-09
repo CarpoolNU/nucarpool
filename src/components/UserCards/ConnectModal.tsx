@@ -39,13 +39,13 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
 
   /**
    * Whether a request went out decides what closing means, not which control
-   * closed the dialog. Only the explicit Close button used to pass
-   * `closeAfterSend`; Esc and a backdrop click arrive through `Dialog`'s
-   * `onClose` as `close`, so they skipped the invalidation and left the
-   * Requests tab without the sent card, the explore card still offering
-   * Connect, and a second Send heading for the server's CONFLICT.
+   * closed the dialog. Esc and a backdrop click arrive through `Dialog`'s
+   * `onClose` as `close`, so keying the invalidation to the explicit Close
+   * button alone would skip it for them and leave the Requests tab without the
+   * sent card, the explore card still offering Connect, and a second Send
+   * heading for the server's CONFLICT.
    *
-   * The action forwarded to the parent is corrected too, not only the
+   * The action forwarded to the parent is resolved the same way, not only the
    * invalidation. `ConnectCard` collapses the mobile detail sheet on
    * `closeAfterSend` because the recipient is about to drop out of
    * `recommendations.me` - invalidating while still reporting `close` would
@@ -86,12 +86,12 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
 
   // `isSending` is what disables Send while the write is in flight.
   // `requestSent` below cannot do that job: it is set in `onSuccess`, so it
-  // only flips after the round trip, and a second click inside that window
-  // used to fire a second `requests.create`. Both would find no existing
-  // request and both would create one — two rows, two conversations, two first
-  // messages and two notification emails for one pair, and withdrawing then
-  // cleared only one of them. It goes false again on error, so a genuine retry
-  // after a failure is still possible.
+  // only flips after the round trip, so a second click inside that window
+  // would fire a second `requests.create`. Both would find no existing request
+  // and both would create one — two rows, two conversations, two first
+  // messages and two notification emails for one pair, and withdrawing would
+  // clear only one of them. `isSending` goes false again on error, so a
+  // genuine retry after a failure is still possible.
   const { mutate: createRequests, isPending: isSending } =
     trpc.user.requests.create.useMutation({
       // Shown as written rather than behind "Something went wrong", because
@@ -101,11 +101,11 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
       onError: (error: any) => {
         toast.error(error.message);
       },
-      // Everything that tells either person the request exists now waits for
-      // the write to land. Previously the email was sent first and the
-      // success toast fired on click, so a CONFLICT — routine, since accepting
-      // never clears a request — produced a success toast, an error
-      // toast, and an email for a request that was never created.
+      // Everything that tells either person the request exists waits for the
+      // write to land. Sending the email first, or firing the success toast on
+      // click, means a CONFLICT — routine, since accepting never clears a
+      // request — produces a success toast, an error toast, and an email for a
+      // request that was never created.
       onSuccess: (request) => {
         setRequestSent(true);
         toast.success(
@@ -120,12 +120,12 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
     });
 
   const handleOnClick = () => {
-    // The missing-email check that used to sit here has moved into
-    // `requests.create`. It read `otherUser.email`, which the map
-    // and recommendation payloads no longer carry, and being client-only it was
-    // skipped by anything calling the procedure directly. The `onError` handler
-    // above shows the server's refusal, so the button still answers rather than
-    // doing nothing silently.
+    // The missing-email check belongs in `requests.create`, not here. A check
+    // here would read `otherUser.email`, which the map and recommendation
+    // payloads do not carry, and being client-only it would be skipped by
+    // anything calling the procedure directly. The `onError` handler above
+    // shows the server's refusal, so the button answers rather than doing
+    // nothing silently.
     createRequests({
       toId: props.otherUser.id,
       message: customMessage,

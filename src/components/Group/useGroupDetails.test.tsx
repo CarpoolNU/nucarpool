@@ -2,9 +2,9 @@
  * The group-details form hook.
  *
  * `groupDetails.test.ts` already covers the pure functions this hook calls -
- * `resolveGroupDetails`, `trimDetails`, `hasAnyDetail`. What it cannot
- * reach is the React wiring those functions were extracted *away* from, which
- * is where the interesting invariants live: a sync effect that must not
+ * `resolveGroupDetails`, `trimDetails`, `hasAnyDetail`. What it cannot reach
+ * is the React wiring around them, which is where the interesting invariants
+ * live: a sync effect that must not
  * overwrite what the driver is typing, and a save path whose correctness is
  * about ordering rather than about values.
  *
@@ -185,9 +185,8 @@ describe("useGroupDetails", () => {
         });
       });
 
-      // Server data still wins on the next sync - that is existing behaviour
-      // and this ticket does not change it. What must not happen is the two
-      // taking turns forever.
+      // Server data still wins on the next sync, by design. What must not
+      // happen is the two taking turns forever.
       expect(result.current.details.notes).toBe("Leaves from Ruggles at 7:45");
       expect(renderCount()).toBeLessThanOrEqual(RENDER_LIMIT);
     });

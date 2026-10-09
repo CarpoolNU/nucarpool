@@ -287,7 +287,7 @@ describe.each([
   });
 
   /**
-   * The point of the ticket. Reaching the mutation is what "working" means
+   * Reaching the mutation is what "working" means
    * here: a button that renders and then calls nothing would satisfy the
    * assertion above and leave the 33 members exactly as stuck.
    *

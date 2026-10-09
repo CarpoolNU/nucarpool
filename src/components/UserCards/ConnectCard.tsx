@@ -20,17 +20,17 @@ import React from "react";
 /**
  * Which surface this card is on, and therefore which controls it carries.
  *
- * **Why this exists rather than the selection id it replaces.** `ConnectCard`
- * used to infer "show the mobile action" from `mobileSelectedUser`, a prop
- * naming *which card the user expanded in the explore sheet*. One value was
- * answering two unrelated questions, and this type exists because the second
- * answer was wrong everywhere the first was not applicable: `MapConnectPortal`
- * has no selection to pass, so its card silently inherited list-card
- * behaviour and a map pin opened a sheet with nothing to press.
+ * **Why this exists rather than a selection id.** Inferring "show the mobile
+ * action" from `mobileSelectedUser` - a prop naming *which card the user
+ * expanded in the explore sheet* - makes one value answer two unrelated
+ * questions, and the second answer is wrong everywhere the first does not
+ * apply: `MapConnectPortal` has no selection to pass, so its card silently
+ * inherits list-card behaviour and a map pin opens a sheet with nothing to
+ * press.
  *
  * Passing `mobileSelectedUser={user.id}` from the portal - the smaller
- * alternative - would have fixed the missing button and taken the card's
- * schedule, dates and seats rows down with it, because
+ * alternative - would supply the missing button and take the card's schedule,
+ * dates and seats rows down with it, because
  * `isMobileCondensedLayout` reads the same value. The portal wants the action
  * *and* the full detail, which is a third combination neither existing caller
  * expresses. Stating it is what stops the next surface inheriting the wrong
@@ -72,10 +72,10 @@ export const ConnectCard = (props: ConnectCardProps): React.JSX.Element => {
       hasOutgoingRequest: otherUser.outgoingRequest,
     });
 
-    // The three refusals and their wording live in `connectAction`, which tests
-    // can reach. What used to be here tested a request's *presence*, so a
-    // resolved one blocked Connect just as a pending one did — see that module
-    // for why that made re-carpooling impossible.
+    // The three refusals and their wording live in `connectAction`, which
+    // tests can reach. Testing a request's *presence* here instead would let a
+    // resolved one block Connect just as a pending one does — see that module
+    // for why that makes re-carpooling impossible.
     const decision = connectAction({
       incomingRequest: otherUser.incomingRequest,
       outgoingRequest: otherUser.outgoingRequest,
@@ -118,9 +118,9 @@ export const ConnectCard = (props: ConnectCardProps): React.JSX.Element => {
   // Why this pair cannot carpool right now, or `null`.
   //
   // Always `null` on a recommendation card - the scorer only offers compatible,
-  // ACTIVE people - so this is in practice the favourites tab. A later change stopped
-  // `favorites.me` hiding a favourite whose role changed or whose search was
-  // paused, because hiding them removed the only un-favourite star there is.
+  // ACTIVE people - so this is in practice the favourites tab. `favorites.me`
+  // returns a favourite whose role changed or whose search was paused, because
+  // hiding them would remove the only un-favourite star there is.
   // They are shown explained instead: the notice says why, and the Connect
   // affordance goes inert so the card does not read as if they were available.
   // `connectAction` refuses the same case, which is what actually prevents a
@@ -146,15 +146,13 @@ export const ConnectCard = (props: ConnectCardProps): React.JSX.Element => {
       }))
     : null;
 
-  // Tapping the card expands it on mobile, and does nothing on desktop. That
-  // used to be an `onClick` passed unconditionally with an `isMobile` check
-  // inside it, which now matters: `UserCard` renders its stretched activation
-  // button whenever `onClick` is present, so passing a no-op would put an empty
-  // button across every desktop card and swallow clicks meant for the card's
-  // own controls. Passing `undefined` renders no button at all.
-  //
-  // Restricting it also fixes a mobile bug: tapping the favourite star used to
-  // bubble into this handler and expand the card.
+  // Tapping the card expands it on mobile, and does nothing on desktop. The
+  // handler is withheld entirely rather than passed unconditionally with an
+  // `isMobile` check inside it: `UserCard` renders its stretched activation
+  // button whenever `onClick` is present, so a no-op would put an empty button
+  // across every desktop card and swallow clicks meant for the card's own
+  // controls. Passing `undefined` renders no button at all, which also keeps a
+  // tap on the favourite star from bubbling in here and expanding the card.
   const activation =
     isMobile && props.handleMobileExpand
       ? {
@@ -182,8 +180,7 @@ export const ConnectCard = (props: ConnectCardProps): React.JSX.Element => {
    * reading it alone was safe. `variant` carries no such guarantee:
    * `MapConnectPortal` sets `portal` on both platforms, and without this term
    * a desktop pin click would draw this button *underneath* the `View Route` +
-   * `Connect` row `UserCard` already renders there, which is the one thing
-   * this ticket must not change.
+   * `Connect` row `UserCard` already renders there.
    */
   const showsOwnAction = isMobile && variant !== "list";
 

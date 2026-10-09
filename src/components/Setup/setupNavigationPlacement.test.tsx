@@ -3,25 +3,23 @@
  * card*, inside the same full-screen flex container, rather than an overlay
  * floating above it.
  *
- * This is the durable half of a two-part fix. The defect was geometric - the
- * fixed strip covered the bottom 70px of every step's scroll area at 375x667
- * - and **jsdom cannot see that**: no layout, no `getBoundingClientRect`, no
- * `dvh`, no paint order, and `env()` is actively mangled. See `src/testing/viewport.ts`
- * for the measurements behind each of those claims. So nothing here asserts
- * that the overlap is gone.
+ * What is at stake is geometric - a fixed strip covers the bottom 70px of
+ * every step's scroll area at 375x667 - and **jsdom cannot see that**: no
+ * layout, no `getBoundingClientRect`, no `dvh`, no paint order, and `env()` is
+ * actively mangled. See `src/testing/viewport.ts` for the measurements behind
+ * each of those claims. So nothing here asserts that no overlap occurs.
  *
  * What it asserts is the tree shape that *makes* the overlap impossible: the
  * strip and the card share a flex parent, so the browser sizes the two against
- * each other. A future edit that lifts the strip back out to the page root -
- * which is exactly what it used to be - restores the defect silently, and this
- * is the assertion that catches it. The geometry belongs in a Playwright
- * suite that can measure real layout.
+ * each other. An edit that lifts the strip out to the page root brings the
+ * overlap back silently, and this is the assertion that catches it. The
+ * geometry belongs in a Playwright suite that can measure real layout.
  *
- * The other half of the same two-part fix addressed *which* breakpoint each
- * of those classes hangs off. That fix moved the arrangement - the flex
- * direction, the strip's placement, the progress bar's offset - from `desktop:` to
- * `desktop-tall:`, because `desktop:` is a `min-width` and a phone in landscape
- * is 667px wide and 375px tall. Those assertions are class-request assertions
+ * A second group of assertions covers *which* breakpoint each of those classes
+ * hangs off. The arrangement - the flex direction, the strip's placement, the
+ * progress bar's offset - hangs off `desktop-tall:` rather than `desktop:`,
+ * because `desktop:` is a `min-width` and a phone in landscape is 667px wide
+ * and 375px tall. Those assertions are class-request assertions
  * for the same reason as the rest of this file: jsdom resolves no media query
  * and no layout, so it can see which variant was *asked for* and nothing about
  * what it does.
@@ -207,11 +205,11 @@ describe("the onboarding wizard's navigation strip", () => {
     const wrapper = card!.parentElement!;
     expect(wrapper.className).toContain("flex-col");
     /*
-     * Restores the original row direction, which is what keeps the 500px
-     * desktop card from shrinking: a flex item only shrinks along the main
-     * axis, and height is the cross axis in a row.
+     * The row direction is what keeps the 500px desktop card from shrinking:
+     * a flex item only shrinks along the main axis, and height is the cross
+     * axis in a row.
      *
-     * This restoration is gated on `desktop-tall:` rather than `desktop:`,
+     * The row is gated on `desktop-tall:` rather than `desktop:`,
      * because the row is the arrangement that cannot shrink, so it is only
      * safe where there is room for it - and `desktop:` is a `min-width`,
      * which a phone in landscape satisfies at 667px wide and 375px tall.
@@ -269,15 +267,14 @@ describe("the onboarding wizard's navigation strip", () => {
    * The threshold is derived from this card's height, so the two are only
    * connected while the card really does request it. Nothing else would fail if
    * the card were made taller: the arithmetic in `breakpoints.js` would simply
-   * be describing a card that no longer exists, and the strip would start
-   * overlapping again in a band just above the breakpoint.
+   * be describing a card that does not exist, and the strip would overlap again
+   * in a band just above the breakpoint.
    *
    * Spelled through the constant rather than as a literal, which is also why
-   * the paragraph above does not name a second example height. Tailwind v4
-   * scans this file, so writing an arbitrary height utility in prose emits it
-   * as real CSS - including, the first time this was written, an example height
-   * no element in the app has ever asked for. See the docblock in
-   * `tailwind.config.js`.
+   * the paragraph above names no example height. Tailwind v4 scans this file,
+   * so writing an arbitrary height utility in prose emits it as real CSS -
+   * including example heights no element in the app asks for. See the docblock
+   * in `tailwind.config.js`.
    */
   it("requests the card height the desktop threshold is derived from", async () => {
     const { container } = await renderAtStepOne();
@@ -312,9 +309,9 @@ describe("the onboarding wizard's navigation strip", () => {
     const card = cardOf(container) as HTMLElement;
 
     /*
-     * `maxHeight: "85vh"` used to sit here. `vh` resolves against the *large*
-     * viewport on iOS Safari, so it clamped against space the user could not
-     * see; the flex container now does the arithmetic instead.
+     * An inline `vh` clamp must not sit here. `vh` resolves against the
+     * *large* viewport on iOS Safari, so it clamps against space the user
+     * cannot see; the flex container does the arithmetic instead.
      *
      * An inline style is one of the few things jsdom reports faithfully - it
      * echoes the declared value back - so this reads the declaration, not a

@@ -9,29 +9,30 @@ import {
  * What pressing **Connect** on a discovery card should do.
  *
  * The rule is that an *outstanding* request is what stops you sending another
- * one. `handleConnect` used to test for a request's mere presence, which is a
- * different thing: `incomingRequest` and `outgoingRequest` are built in
- * `index.tsx` from `requests.received` / `requests.sent` with no status filter,
- * so a resolved request suppressed the modal exactly as a pending one did.
+ * one. A request's mere presence is a different thing: `incomingRequest` and
+ * `outgoingRequest` are built in `index.tsx` from `requests.received` /
+ * `requests.sent` with no status filter, so testing presence suppresses the
+ * modal for a resolved request exactly as for a pending one.
  *
- * That made the whole "carpool with them again" journey unreachable. Once a
- * pair have carpooled and the group has ended, their request sits at
+ * That would make the whole "carpool with them again" journey unreachable.
+ * Once a pair have carpooled and the group has ended, their request sits at
  * `ACCEPTED` forever — `markRequestAccepted` resolves the row rather than
  * deleting it, because `sendAcceptanceNotification` reads it and the
- * conversation hangs off its id. So Connect refused, and the two things it
- * suggested were both false: nothing was awaiting a response, and the received
+ * conversation hangs off its id. Connect would refuse, and both things it
+ * suggests would be false: nothing is awaiting a response, and the received
  * requests tab has no Accept button for a resolved request either
- * (`MessageHeader` gates Accept, Reject and Withdraw on PENDING). The user was
- * told to go somewhere that could not help them, about a request nobody had to
+ * (`MessageHeader` gates Accept, Reject and Withdraw on PENDING). The user
+ * would be sent somewhere that cannot help them, about a request nobody has to
  * answer.
  *
  * The server contract is what makes this load-bearing rather than untidy. The
- * server now requires a **pending** request before it will build a group, and
+ * server requires a **pending** request before it will build a group, and
  * `requests.create` reopens a resolved row to `PENDING` — rewriting the
- * direction so whoever asks now is the sender. That is the entire recovery
- * path, and this predicate is what lets a user reach it.
+ * direction so whoever asks is the sender. That is the entire recovery path,
+ * and this predicate is what lets a user reach it.
  *
- * The messages are unchanged. They were never wrong about a *pending* request;
+ * The messages say nothing about a resolved request. They are right about a
+ * *pending* one;
  * they were only ever raised in the wrong situation. Fixing when they fire
  * fixes what they claim.
  *
@@ -103,9 +104,9 @@ export const connectAction = ({
   // the state of a request between them, and the card is already showing this
   // very sentence as its notice — the button must not contradict it.
   //
-  // This branch exists because `favorites.me` no longer hides a
-  // favourite whose role changed or whose search was paused, so a Connect
-  // button can now sit on a card for someone the pair can never carpool with.
+  // This branch exists because `favorites.me` returns a favourite whose role
+  // changed or whose search was paused, so a Connect button can sit on a card
+  // for someone the pair can never carpool with.
   // Without this, pressing it would open the modal and `requests.create` would
   // happily write the request - there is no role guard on the server, only on
   // `groups.create`/`groups.edit` - leaving a request that can be sent but

@@ -41,9 +41,8 @@ import {
  *   - the filter button, which holds the only `setFiltersOpen(true)` call, and
  *     with it the sole route to all 617 lines of `Filters`.
  *
- * These assertions are the point of the ticket and they fail against the code
- * as it stood: each control was absent from the mobile tree entirely, so
- * `getByRole` finds nothing rather than finding something mis-styled. Every
+ * Each of these fails outright when a control is absent from the mobile tree
+ * rather than merely mis-styled, because `getByRole` then finds nothing. Every
  * test here therefore has a desktop counterpart, because "present on both" is
  * the actual requirement — a fix that moved a control from desktop-only to
  * mobile-only would satisfy half of it and pass a one-sided test.
@@ -269,31 +268,26 @@ describe("the mobile detail state", () => {
   });
 
   /*
-   * A third test stood here once, named "keeps the controls at
-   * desktop width even with a stale expanded card". It rendered this component
-   * at a desktop width with `mobileSelectedUser` set and asserted the controls
-   * survived, pinning the `isMobile` term the gate carried for exactly that
-   * reason.
+   * There is deliberately no third case here rendering this component at a
+   * desktop width with `mobileSelectedUser` set and asserting the controls
+   * survive - the behaviour still matters, but the premise is unreachable.
+   * `index.tsx` derives the prop through `resolveMobileSelectedUser`, so a
+   * desktop render cannot receive a non-null value, and such a test would
+   * fail, correctly, against the gate this component actually carries.
+   * Inverting it to expect the controls to *disappear* would only assert that
+   * this component obeys its props.
    *
-   * It is gone because the premise is gone, not because the behaviour stopped
-   * mattering. `index.tsx` derives the prop through
-   * `resolveMobileSelectedUser`, so a desktop render cannot receive a non-null
-   * value any more - the test's own setup is now unreachable, and it would
-   * fail, correctly, against the simplified gate. Replacing it with a version
-   * that expects the controls to *disappear* would only be asserting that this
-   * component obeys its props.
-   *
-   * The invariant it used to defend locally is enforced at the source and
-   * tested in `utils/explore/exploreSidebarView.test.ts`.
+   * The invariant is enforced at the source and tested in
+   * `utils/explore/exploreSidebarView.test.ts`.
    */
 });
 
 /**
- * A successfully-sent connect request did not return mobile Explore to the
- * Recommendations tab. `curOption` lived only in
- * `ExploreSidebar`, and `SidebarContent.renderUserCard` never passed an
- * `onClose` into the `ConnectCard`s it builds for the Recommendations and
- * Favorites tabs - so nothing downstream of `ConnectModal` could reach it.
+ * A successfully-sent connect request returns mobile Explore to the
+ * Recommendations tab. `curOption` is private to `ExploreSidebar`, so
+ * `SidebarContent.renderUserCard` has to pass an `onClose` into the
+ * `ConnectCard`s it builds for the Recommendations and Favorites tabs -
+ * without it nothing downstream of `ConnectModal` can reach the reset.
  *
  * The proxy used below is deliberate: `curOption` is private to
  * `ExploreSidebar`, so these tests distinguish "reset" from "not reset" by

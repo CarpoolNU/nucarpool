@@ -34,20 +34,18 @@ export function MyApp({
     <>
       <Head>
         {/* The app's one viewport declaration, and the only place it should be
-            set. `index.tsx` used to carry its own copy; every other page fell
-            back to the bare `width=device-width` that Next's `defaultHead()`
-            supplies, so no page was unviewported but no single place owned the
-            tag either - and `viewport-fit` has to be set somewhere that covers
-            all of them.
+            set. A per-page copy leaves every other page on the bare
+            `width=device-width` that Next's `defaultHead()` supplies - no page
+            is unviewported, but no single place owns the tag either, and
+            `viewport-fit` has to be set somewhere that covers all of them.
 
             `viewport-fit=cover` is what makes `env(safe-area-inset-*)` resolve
             to anything but zero. Without it the insets the mobile navigation
-            now reserves would read as `0px` on the devices that have a home
-            indicator, which is exactly where they matter.
+            reserves read as `0px` on the devices that have a home indicator,
+            which is exactly where they matter.
 
-            No `user-scalable=no` and no `maximum-scale`: an audit removed
-            disabled pinch-zoom as an accessibility defect, and either of those
-            would reintroduce it. */}
+            No `user-scalable=no` and no `maximum-scale`: either disables
+            pinch-zoom, which is an accessibility defect. */}
         <meta
           name="viewport"
           content="width=device-width, initial-scale=1, viewport-fit=cover"
@@ -62,10 +60,10 @@ export function MyApp({
       <SessionProvider session={session} refetchOnWindowFocus={false}>
         <Component {...pageProps} />
         {/* Renders nothing; mounted here because analytics identity belongs to
-            the session rather than to any one page. Every event the app emits
-            was anonymous before this, so the referrer and UTM properties
-            Mixpanel already collects could not be joined to a signup. It has
-            to sit inside `SessionProvider` to read the session at all. */}
+            the session rather than to any one page. Without it every event the
+            app emits is anonymous, so the referrer and UTM properties Mixpanel
+            already collects cannot be joined to a signup. It has to sit inside
+            `SessionProvider` to read the session at all. */}
         <MixpanelIdentity />
         {/* One gate for the whole app, so a signed-in user who has not accepted
             the terms is shown them on whichever page they land on. */}

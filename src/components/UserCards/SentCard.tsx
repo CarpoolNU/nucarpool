@@ -25,20 +25,20 @@ export const SentCard = (props: SentCardProps): React.JSX.Element => {
   // where one has paused would otherwise get `null` here — a blank card with
   // no hint of why Accept refuses.
   //
-  // `user` **can** be a VIEWER here: the Requests tab used to
-  // render Viewer-mode copy in place of every card, which left a VIEWER unable
-  // to withdraw a request they had sent. The name shows either way now -
-  // Viewer-mode name withholding was removed entirely, so the notice
-  // below and the card's heading name the same person.
+  // `user` **can** be a VIEWER here: the Requests tab renders real cards for
+  // one, because Viewer-mode copy in their place leaves a VIEWER unable to
+  // withdraw a request they have sent. The name shows either way - Viewer mode
+  // withholds no name at all - so the notice below and the card's heading name
+  // the same person.
   const unavailable = user
     ? requestUnavailableExplanation(user.role, props.otherUser)
     : null;
 
-  // The activation target is now `UserCard`'s own stretched <button>.
-  // This used to be a `role="button"` div wrapped *around*
-  // `UserCard`, which made the favourite star a focusable descendant of a
-  // widget role — `nested-interactive` — and meant a click on the star bubbled
-  // up here and opened the conversation as a side effect.
+  // The activation target is `UserCard`'s own stretched <button>. A
+  // `role="button"` div wrapped *around* `UserCard` would make the favourite
+  // star a focusable descendant of a widget role — `nested-interactive` — and
+  // a click on the star would bubble up here and open the conversation as a
+  // side effect.
 
   return (
     <UserCard

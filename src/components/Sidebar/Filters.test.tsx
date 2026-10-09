@@ -7,13 +7,13 @@ import { FiltersState } from "../../utils/types";
 /**
  * The Explore filter panel.
  *
- * The defect these exist for is a **display-versus-state split**: the
- * flex-days input's `value` was
- * `flexDays > selectedDaysCount ? selectedDaysCount : flexDays`, a clamp that
- * never reached state. With no days selected the box showed `0` — which would
- * match everyone — while `1` was what got sent and scored, and `1` against
- * zero shared days rejected every candidate. So the control displayed the
- * reason it was returning nothing and displayed it wrongly.
+ * What these exist for is a **display-versus-state split**. Giving the
+ * flex-days input a `value` of
+ * `flexDays > selectedDaysCount ? selectedDaysCount : flexDays` is a clamp
+ * that never reaches state: with no days selected the box shows `0` — which
+ * would match everyone — while `1` is what gets sent and scored, and `1`
+ * against zero shared days rejects every candidate. The control would be
+ * displaying the reason it returns nothing, and displaying it wrongly.
  *
  * `Filters` is renderable here because it takes its state as props and touches
  * no router, no tRPC client and no map. The harness below holds that state for
@@ -71,17 +71,15 @@ const Harness = ({
 };
 
 /**
- * SCRUM-610 item 4: the seven day checkboxes in this panel had no accessible
- * name, so a screen reader announced seven identical, indistinguishable
+ * The seven day checkboxes in this panel each carry an accessible name.
+ * Without one a screen reader announces seven identical, indistinguishable
  * "checkbox" controls under one "Carpool Days Match" heading.
  *
- * **The conflict the ticket raised, resolved.** SCRUM-513 is recorded as having
- * named "seven unnamed day checkboxes" and this panel's seven were still
- * unnamed afterwards, which read as a regression. It is not one: that commit
- * (`6c821f2`) named the seven in `Schedule/SelectDays.tsx` - the onboarding and
- * profile schedule picker - and in *this* file touched only the four range
- * sliders and the three day-mode buttons. They are two different sets of seven
- * checkboxes on the same seven labels, and these were never covered.
+ * **These are not the seven in `Schedule/SelectDays.tsx`.** That is the
+ * onboarding and profile schedule picker; this file's own named controls are
+ * the four range sliders and the three day-mode buttons. Two different sets of
+ * seven checkboxes on the same seven labels, so naming one set says nothing
+ * about the other.
  */
 describe("Filters — the day checkboxes' accessible names", () => {
   const DAYS = ["Su", "M", "Tu", "W", "Th", "F", "S"];
@@ -122,7 +120,7 @@ const storedFlexDays = () => screen.getByTestId("state-flex-days").textContent;
 
 describe("Filters — the flex-days control", () => {
   it("shows the value in state when no days are selected", () => {
-    // The defect, exactly: `0` was displayed while `1` was enforced.
+    // Exactly the split to avoid: displaying `0` while `1` is enforced.
     render(<Harness initial={{ days: 2, flexDays: 1, daysWorking: "" }} />);
 
     expect(shownFlexDays()).toBe("1");
@@ -141,9 +139,9 @@ describe("Filters — the flex-days control", () => {
   });
 
   it("shows the value in state when it exceeds the days selected", () => {
-    // Reachable through a `resetFilters` or a seeded `daysWorking`, and the
-    // case the old clamp was written for — it hid the mismatch instead of
-    // resolving it.
+    // Reachable through a `resetFilters` or a seeded `daysWorking`. This is
+    // the case a render-time clamp is reaching for, and it hides the mismatch
+    // instead of resolving it.
     render(
       <Harness
         initial={{ days: 2, flexDays: 5, daysWorking: "0,1,1,0,0,0,0" }}
@@ -214,9 +212,9 @@ describe("Filters — the flex-days control", () => {
   });
 
   it("snaps to the minimum when the box is cleared, rather than stranding state", async () => {
-    // The old `!isNaN` guard skipped the update entirely, leaving state
-    // holding a value the emptied box no longer showed — the same
-    // display-versus-state split, reached a different way.
+    // An `!isNaN` guard would skip the update entirely, leaving state holding
+    // a value the emptied box no longer shows — the same display-versus-state
+    // split, reached a different way.
     //
     // Snapping to `min` is the deliberate choice over letting the field sit
     // empty: an empty intermediate value would need a second piece of string
@@ -243,7 +241,7 @@ describe("Filters — the inert day filter", () => {
     { days: 1, mode: "Exact" },
     { days: 2, mode: "Flex" },
   ])("says the $mode filter is not narrowing anything yet", ({ days }) => {
-    // Both halves of the ticket's items (1) and (3). The mode buttons cannot
+    // The mode buttons cannot
     // be disabled until a day is checked - the day checkboxes only render
     // *after* a mode is chosen, so that would deadlock the panel - so the
     // panel explains the state instead.
@@ -284,10 +282,10 @@ describe("Filters — the inert day filter", () => {
 
 describe("Filters — the day checkboxes", () => {
   it("keeps every checkbox controlled when no days are selected", async () => {
-    // Not in the ticket; found by this suite. `checked` was
-    // `daysWorking.split(",").map(...)[index]`, and `"".split(",")` is `[""]` —
-    // so six of the seven boxes got `checked={undefined}` and were
-    // uncontrolled, in the state the map starts in and a VIEWER never leaves.
+    // A `checked` of `daysWorking.split(",").map(...)[index]` breaks here:
+    // `"".split(",")` is `[""]`, so six of the seven boxes get
+    // `checked={undefined}` and go uncontrolled - in the state the map starts
+    // in and a VIEWER never leaves.
     // React and MUI each logged a switch-to-controlled error on the first
     // toggle. Asserting on `console.error` is the only way that surfaces,
     // since `lint --max-warnings=0` cannot see a runtime warning.
@@ -308,7 +306,7 @@ describe("Filters — the day checkboxes", () => {
   });
 
   it("writes a well-formed seven-field string from an empty one", async () => {
-    // It used to write `"0,,,1"`.
+    // A naive splice writes `"0,,,1"` here.
     const user = userEvent.setup();
     render(<Harness initial={{ days: 1, daysWorking: "" }} />);
 
@@ -391,14 +389,14 @@ describe("Filters — slider accessible names", () => {
 });
 
 /**
- * The Any/Exact/Flex buttons signalled the active mode by colour alone - no
- * `aria-pressed`, so every option announced identically.
+ * The Any/Exact/Flex buttons carry `aria-pressed`. Signalling the active mode
+ * by colour alone makes every option announce identically.
  */
 /**
- * SCRUM-592: three controls that fell outside SCRUM-513's `htmlFor`/`EntryLabel`
- * sweep because each is labelled by a bare `<label>` with no `htmlFor` — the
- * flex-days number input had no `id` at all, and the two date fields' inputs
- * already carried one with nothing pointing at it.
+ * Three controls an `htmlFor`/`EntryLabel` sweep does not reach, because each
+ * is labelled by a bare `<label>` with no `htmlFor` — the flex-days number
+ * input needs an `id` of its own, and the two date fields' inputs carry one
+ * with nothing pointing at it.
  */
 describe("Filters — accessible names for the residual controls (SCRUM-592)", () => {
   it("names the minimum-shared-days spin button from its visible label", () => {

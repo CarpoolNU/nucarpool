@@ -41,7 +41,7 @@ import {
  * A path rather than an absolute URL: `next/image` validates a remote `src`
  * against `images.remotePatterns` and throws for a host it does not know, so
  * an invented S3 hostname would fail the desktop render for a reason that has
- * nothing to do with this ticket.
+ * nothing to do with what this file is testing.
  */
 const AVATAR_URL = "/avatar.png";
 

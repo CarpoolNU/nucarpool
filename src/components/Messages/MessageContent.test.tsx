@@ -217,7 +217,7 @@ describe("an open conversation, in each of its three states", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("We could not load this conversation.");
     expect(spinner()).not.toBeInTheDocument();
-    // The distinction the ticket is about: a failure must not read as empty.
+    // The distinction that matters: a failure must not read as empty.
     expect(emptyCopy()).not.toBeInTheDocument();
   });
 
@@ -340,7 +340,7 @@ describe("message bubble whitespace", () => {
 
     // `break-words` is what wraps a long unbroken token; the width caps are
     // the narrow and wide halves of the bubble's geometry. None of the three is
-    // this ticket's business, so all three are pinned against it.
+    // this file's business, so all three are pinned against drift.
     //
     // The 50% cap is gated on the message panel's own height, not the
     // width-only `desktop:` screen: at a 267px panel the cap does

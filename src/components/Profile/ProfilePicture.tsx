@@ -11,13 +11,13 @@ interface ProfilePictureProps {
    * The cropped file waiting to be uploaded, owned by the parent.
    *
    * The preview below is *derived* from this rather than stored alongside it,
-   * and that is the whole point of the prop. The file used to live only in the
-   * parent while the preview URL lived only here, so unmounting this component
+   * and that is the whole point of the prop. If the file lived only in the
+   * parent while the preview URL lived only here, unmounting this component
    * - switching profile tabs, or stepping back and forward through onboarding -
-   * revoked the preview and left the parent holding a file the user could no
-   * longer see, which a later Save would upload anyway. Deriving makes the
-   * two agree by construction: there is one source of truth, and
-   * remounting rebuilds the preview from it.
+   * would revoke the preview and leave the parent holding a file the user
+   * cannot see, which a later Save would upload anyway. Deriving makes the two
+   * agree by construction: there is one source of truth, and remounting
+   * rebuilds the preview from it.
    */
   selectedFile: File | null;
   onFileSelected: (file: File | null) => void;
@@ -53,17 +53,16 @@ const ProfilePicture = ({
    * `URL.createObjectURL` hands out a reference the browser keeps alive - along
    * with the whole underlying blob - until it is revoked or the document is
    * discarded. On mobile, where the source is a 4MB camera-roll photo, letting
-   * those accumulate across a few selections is exactly the memory the ticket
-   * is about.
+   * those accumulate across a few selections is a real memory cost.
    *
    * A ref because the unmount cleanup below has to see the *current* URL: a
    * cleanup closing over state would revoke whatever was set when the effect
    * was created, which for an empty dependency list is `null` forever.
    *
-   * The preview URL used to be a second ref beside this one. It is now derived
-   * from `selectedFile` instead - see the effect below - so its lifetime is the
-   * effect's rather than the component's, and nothing here has to remember to
-   * revoke it.
+   * The preview URL is deliberately not a second ref beside this one. It is
+   * derived from `selectedFile` - see the effect below - so its lifetime is
+   * the effect's rather than the component's, and nothing here has to
+   * remember to revoke it.
    */
   const sourceUrlRef = useRef<string | null>(null);
 
@@ -198,10 +197,9 @@ const ProfilePicture = ({
    * The intent - fill the box and crop the long edge, rather than fit the
    * whole photo inside it and letterbox the rest - is recorded in
    * `minZoomToFill`, along with why `mediaSize`'s *displayed* pair is the
-   * right one to measure. This used to divide the crop box by the source
-   * photo's natural pixels and then discard the answer for a flat `1`, which
-   * left a 4:3 photo shorter than the 300px box and burned black bands into
-   * the saved JPEG.
+   * right one to measure. Measuring the source photo's natural pixels, or
+   * falling back to a flat `1`, leaves a 4:3 photo shorter than the 300px box
+   * and burns black bands into the saved JPEG.
    *
    * Setting `minZoom` as well as `zoom` is what makes it stick: react-easy-crop
    * clamps every subsequent zoom change to `[minZoom, maxZoom]`, so the user

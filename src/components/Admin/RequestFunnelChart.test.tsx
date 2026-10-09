@@ -5,7 +5,7 @@ import RequestFunnelChart from "./RequestFunnelChart";
  * The request funnel as an admin reads it. The chart is markup, not canvas, so
  * unlike its siblings it can be rendered here and asserted on directly.
  *
- * What these guard is the ticket's misreading risk: the counts are a snapshot
+ * What these guard against is a misreading: the counts are a snapshot
  * of today, and an unlabelled bar reads as a lifetime conversion rate. So the
  * caption is asserted in every state, the empty one included, and no state may
  * print `NaN`.

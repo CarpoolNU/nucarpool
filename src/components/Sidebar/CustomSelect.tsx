@@ -38,31 +38,30 @@ const CustomSelect = <T extends string>({
               <FaChevronDown className="h-4 w-4" aria-hidden="true" />
             </span>
           </Listbox.Button>
-          {/* A box shadow, and no fade wrapper. Both halves fix the same defect:
-              on a phone, choosing an option left a white rectangle painted
-              under this control until a pinch-zoom forced a repaint.
+          {/* A box shadow, and no fade wrapper. Both halves keep a phone from
+              painting a white rectangle under this control after an option is
+              chosen, until a pinch-zoom forces a repaint.
 
-              The shadow is the fix. It used to be the filter-based shadow
-              utility, and a `filter` promotes the panel to its own compositing
-              layer - a layer that was then destroyed the instant the panel
-              unmounted, which is a well-known way to strand pixels on a mobile
+              The shadow must be a box shadow, not the filter-based shadow
+              utility: a `filter` promotes the panel to its own compositing
+              layer, and that layer is destroyed the instant the panel
+              unmounts, which is a well-known way to strand pixels on a mobile
               compositor. A box shadow needs no layer, and is the right tool
               regardless: the filter form exists for alpha silhouettes, and
-              this panel is an opaque rounded rectangle. The retired utility is
+              this panel is an opaque rounded rectangle. That utility is
               deliberately not named here - Tailwind v4 scans this file, so
-              writing it in a comment would go on emitting it.
+              writing it in a comment would emit it as a real rule.
 
-              The fade is gone rather than ported. A `<Transition>` wrapper
-              stood here with `leave`/`leaveFrom`/`leaveTo`, which is Headless
-              UI v1's API; this project moved to v2 and left it behind. It
-              never animated: v2 applies `leaveFrom` and
+              There is no fade because none is achievable here. A
+              `<Transition>` wrapper with `leave`/`leaveFrom`/`leaveTo` is
+              Headless UI v1's API, and this project is on v2, where it does
+              not animate at all: v2 applies `leaveFrom` and
               `data-leave` and then unmounts the node in the same frame,
               measured as a computed `transition-duration` of `0s` while open
-              and the panel gone within 50ms. Rather than swap in v2's
-              `transition` prop, which could not be made to animate in the
-              layout harness either - it still unmounted inside 42ms against a
-              deliberate 1000ms transition - the dead markup is simply removed.
-              Restoring a real fade needs a device check, not another guess. */}
+              and the panel gone within 50ms. v2's `transition` prop does no
+              better in the layout harness - it unmounts inside 42ms against a
+              deliberate 1000ms transition - so there is no markup here for it.
+              Adding a real fade needs a device check, not another guess. */}
           <Listbox.Options className="absolute mt-1 max-h-60 w-full overflow-auto rounded-md border border-black bg-white shadow-xl focus:outline-hidden">
             {options.map((option) => (
               <Listbox.Option

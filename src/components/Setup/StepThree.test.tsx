@@ -76,9 +76,9 @@ describe("StepThree co-op date pickers", () => {
   });
 
   /**
-   * The defect. Pressing Previous from step 4 and then Next again unmounts
-   * and remounts step 3 without touching the form, so both pickers have to
-   * keep showing the dates the form still holds - not their placeholder.
+   * Pressing Previous from step 4 and then Next again unmounts and remounts
+   * step 3 without touching the form, so both pickers have to keep showing the
+   * dates the form still holds - not their placeholder.
    */
   it("still shows the held dates after an unmount and remount", () => {
     const formOut: { current: UseFormReturn<OnboardingFormInputs> | null } = {
@@ -159,10 +159,10 @@ describe("StepThree accessible names", () => {
 });
 
 /**
- * SCRUM-593: neither date picker carried `aria-invalid`/`aria-describedby`,
- * and the merged range message they share had no `id` a description could
- * resolve to. Both pickers point at the one message (`COOP_DATE_RANGE_ERROR_ID`
- * in `formA11y.ts`) since the range problem can land on either field - the
+ * Both date pickers carry `aria-invalid`/`aria-describedby`, and the merged
+ * range message they share carries the `id` those descriptions resolve to.
+ * Both pickers point at the one message (`COOP_DATE_RANGE_ERROR_ID` in
+ * `formA11y.ts`) since the range problem can land on either field - the
  * comment above the rendered `ErrorDisplay` explains why `coopEndDate`'s
  * message is the one shown when both are set.
  *

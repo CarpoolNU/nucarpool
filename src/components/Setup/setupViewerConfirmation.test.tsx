@@ -1,11 +1,12 @@
 /**
- * `handleNextStep`'s step-1 VIEWER branch used to call
- * `handleSubmit(onSubmit)` directly on the first tap of the primary button -
- * which is what `updateUser` writes `isOnboarded: true` from - with no
- * confirmation and no way back into the wizard. This pins the fix: selecting
- * Viewer and tapping the primary button opens `ViewerConfirmModal` instead of
- * submitting, and the submit only happens once that modal is explicitly
- * confirmed. Going back from the modal must leave onboarding un-submitted.
+ * Finishing onboarding on Viewer takes an explicit confirmation. Calling
+ * `handleSubmit(onSubmit)` straight from `handleNextStep`'s step-1 VIEWER
+ * branch on the first tap of the primary button - which is what `updateUser`
+ * writes `isOnboarded: true` from - would commit with no confirmation and no
+ * way back into the wizard. So selecting Viewer and tapping the primary button
+ * opens `ViewerConfirmModal` instead of submitting, and the submit only
+ * happens once that modal is explicitly confirmed. Going back from the modal
+ * must leave onboarding un-submitted.
  *
  * Deliberately not co-located under `src/pages/`, for the reason
  * `setupNavigationPlacement.test.tsx` gives: a test file there is also a
