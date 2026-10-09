@@ -229,10 +229,19 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({
       },
       {
         popover: {
+          // `showButtons` is the whole allow-list of buttons the popover
+          // renders, not an addition to a default one, so `next` has to be
+          // named here for the footer to hold a button at all. On the last
+          // step that button is the tour's finish: driver.js labels it "Done"
+          // and clicking it runs the same guarded teardown the ✕ and Escape
+          // do. `nextBtnText` is deliberately unset, because the raw popover
+          // is spread over the computed defaults and would overwrite that
+          // label. Listing `close` and not `previous` keeps the ✕ and leaves
+          // the footer a single action.
           title: "You're all set!",
           description:
             "Enjoy using NU Carpool to find or offer rides with your fellow students.",
-          showButtons: ["close"],
+          showButtons: ["next", "close"],
         },
       },
     ];
@@ -304,10 +313,14 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({
       },
       {
         popover: {
+          // Carries `next` for the reason the desktop terminal step does: it
+          // is what renders the Done button. The two must stay in step - a
+          // tour that can be finished on a laptop and not on a phone is the
+          // same defect twice.
           title: "You're all set!",
           description:
             "Enjoy using NU Carpool to find or offer rides with your fellow students.",
-          showButtons: ["close"],
+          showButtons: ["next", "close"],
         },
       },
     ];
