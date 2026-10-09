@@ -25,11 +25,18 @@
  *
  * ---
  *
- * **`events` is pinned although nothing reads it today.** No runtime module
- * under `src/` touches `router.events` any more. It stays because the real
- * router has it, and a component that starts subscribing to route changes
- * would otherwise fail inside an effect rather than at the mock. The same
- * reasoning as `mixpanelBrowserStub.js`.
+ * **`events` is a working emitter, not three inert spies.** It was pinned as
+ * bare `jest.fn()`s for a long time, against the day something subscribed to
+ * route changes - which `useUnsavedChangesGuard` now does. Spies alone record
+ * the subscription and can never deliver to it, so a test could assert that
+ * the page listened and never that listening did anything. `on` and `off`
+ * maintain a real registry and `emit` calls it, while all three stay
+ * `jest.Mock`s so existing call assertions are unaffected.
+ *
+ * The registry is an **array per event name rather than a Set**: a handler
+ * registered twice has to show up twice, because the leak an effect with the
+ * wrong dependencies produces is exactly a second live subscription, and a Set
+ * would silently absorb it.
  */
 
 export type RouterOverrides = {
@@ -55,6 +62,22 @@ export type RouterSpies = {
 /** Populated by `buildRouterMock`; see `trpcHarness.ts` on why this is safe. */
 let spies: RouterSpies | null = null;
 let router: Record<string, unknown> | null = null;
+
+/** The live subscriptions `events.on` has added and `events.off` not removed. */
+type EventHandler = (...args: unknown[]) => void;
+let handlers: Map<string, EventHandler[]> = new Map();
+
+/**
+ * The handlers currently registered for an event, for a test that needs to
+ * assert a subscription was torn down.
+ *
+ * `routeHandlers("routeChangeStart")` returning an empty array after unmount
+ * is the check; a length of two is the duplicate-subscription leak the array
+ * registry exists to expose.
+ */
+export const routeHandlers = (event: string): EventHandler[] => [
+  ...(handlers.get(event) ?? []),
+];
 
 /** The spies this module owns. Throws when `buildRouterMock` has not run. */
 export const routerSpies = (): RouterSpies => {
@@ -89,8 +112,18 @@ export const routerState = (): Record<string, unknown> => {
   return router;
 };
 
-/** Clears call records on every spy, `events` included. For `beforeEach`. */
+/**
+ * Clears call records on every spy, `events` included. For `beforeEach`.
+ *
+ * The event registry is emptied as well. `mockClear` keeps an implementation
+ * and only drops recorded calls, so without this the handlers a previous test
+ * subscribed would stay live and receive the next test's `emit` - the same
+ * cross-test bleed `headlessui-transition` act warnings come from, and just as
+ * hard to read, because the failure names whichever test emitted rather than
+ * the one that leaked.
+ */
 export const resetRouterSpies = (): void => {
+  handlers = new Map();
   if (!spies) return;
   const { events, ...rest } = spies;
   for (const spy of Object.values(rest)) spy.mockClear();
@@ -104,6 +137,7 @@ export const resetRouterSpies = (): void => {
  * router does - a component awaiting a navigation would hang on `undefined`.
  */
 export const buildRouterMock = (overrides: RouterOverrides = {}) => {
+  handlers = new Map();
   spies = {
     push: jest.fn(async () => true),
     replace: jest.fn(async () => true),
@@ -112,7 +146,30 @@ export const buildRouterMock = (overrides: RouterOverrides = {}) => {
     forward: jest.fn(),
     reload: jest.fn(),
     beforePopState: jest.fn(),
-    events: { on: jest.fn(), off: jest.fn(), emit: jest.fn() },
+    events: {
+      on: jest.fn((event: string, handler: EventHandler) => {
+        handlers.set(event, [...(handlers.get(event) ?? []), handler]);
+      }),
+      off: jest.fn((event: string, handler: EventHandler) => {
+        const remaining = (handlers.get(event) ?? []).filter(
+          (candidate) => candidate !== handler,
+        );
+        handlers.set(event, remaining);
+      }),
+      // Iterates a copy, because the real emitter tolerates a handler that
+      // unsubscribes itself and a live array would skip the next one.
+      //
+      // Deliberately **not** try/catch: `routeChangeStart` is emitted outside
+      // Next's own try block (`router.js:844`), so a listener that throws
+      // rejects `router.push`. That is the whole mechanism
+      // `useUnsavedChangesGuard` aborts a navigation with, and swallowing it
+      // here would make the abort untestable.
+      emit: jest.fn((event: string, ...args: unknown[]) => {
+        for (const handler of [...(handlers.get(event) ?? [])]) {
+          handler(...args);
+        }
+      }),
+    },
   };
 
   router = {

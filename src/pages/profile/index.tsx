@@ -22,6 +22,7 @@ import { trackProfileCompletion } from "../../utils/mixpanel";
 import { useUploadFile } from "../../utils/profile/useUploadFile";
 import { useRemoveProfilePicture } from "../../utils/profile/useRemoveProfilePicture";
 import { hasProfileChanges } from "../../utils/profile/hasProfileChanges";
+import { useUnsavedChangesGuard } from "../../utils/profile/useUnsavedChangesGuard";
 import {
   PendingPicture,
   isPendingRemoval,
@@ -216,17 +217,47 @@ const Index: NextPage = () => {
    */
   const proceedRef = useRef<(() => void | Promise<void>) | null>(null);
 
-  /** Runs the header's navigation, or the map fallback if it supplied none. */
+  /**
+   * Catches the exits no control can be made to ask about first - an ordinary
+   * `next/link` on this page, the header's admin button, browser back,
+   * refresh.
+   *
+   * It reuses everything below rather than deciding anything itself:
+   * `hasProfileChanges` for dirtiness, `checkForChanges` for the modal, and
+   * `proceedRef` for the destination. The alternative - a `checkChanges` prop
+   * on every new link - is what left those exits unguarded in the first place.
+   *
+   * `checkForChanges` is declared further down and read here only when a
+   * navigation is actually intercepted, which is long after this render.
+   */
+  const { allowNavigation } = useUnsavedChangesGuard({
+    router,
+    hasUnsavedChanges: () => hasProfileChanges(watch(), user, pendingPicture),
+    isSaving: () => isLoading,
+    onIntercept: (proceed) => void checkForChanges(proceed),
+  });
+
+  /**
+   * Runs the header's navigation, or the map fallback if it supplied none.
+   *
+   * Wrapped in `allowNavigation` because this is the single point every
+   * decided-upon departure passes through - the modal's Continue, the tail of
+   * a successful save, and the no-change path below. Answering the modal does
+   * not clean the form, so without the wrapper the router guard would catch
+   * this navigation and reopen the modal that caused it.
+   */
   const proceedToDestination = async () => {
     const proceed = proceedRef.current;
     proceedRef.current = null;
 
-    if (proceed) {
-      await proceed();
-      return;
-    }
+    await allowNavigation(async () => {
+      if (proceed) {
+        await proceed();
+        return;
+      }
 
-    await router.push("/");
+      await router.push("/");
+    });
   };
 
   /**

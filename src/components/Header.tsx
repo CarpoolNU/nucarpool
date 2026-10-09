@@ -402,13 +402,26 @@ const Header = (props: HeaderProps) => {
     }
   };
 
+  /**
+   * Deliberately does **not** call `props.checkChanges`, although it leaves
+   * the profile page - `useUnsavedChangesGuard` intercepts this at the router
+   * instead. Adding a fifth hand-wired guard call here is what the hook exists
+   * to stop: the next control added would need one too, and the cost of
+   * forgetting is a user's edits.
+   *
+   * The `finally` is because of that interception. Aborting a route change
+   * means throwing from a `routeChangeStart` listener, which rejects the
+   * `push` below, and without it the rejection would skip `setIsLoading(false)`
+   * and strand this header in its loading state. Invisible today - `isLoading`
+   * is read only by `renderSidebarOptions`, which renders only when `data` is
+   * supplied and the profile page supplies none - so this keeps a true
+   * invariant true rather than fixing an observable bug.
+   */
   const handleAdminClick = async () => {
     setIsLoading(true);
-    if (!props.admin) {
-      await router.push("/admin");
-      setIsLoading(false);
-    } else {
-      await router.push("/");
+    try {
+      await router.push(props.admin ? "/" : "/admin");
+    } finally {
       setIsLoading(false);
     }
   };
