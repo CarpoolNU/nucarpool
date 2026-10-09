@@ -648,6 +648,78 @@ describe.each([
   });
 });
 
+/**
+ * The terminal step's buttons (SCRUM-657).
+ *
+ * `showButtons` is an allow-list of the *whole* set of buttons driver.js
+ * v1.8.0 renders, not an addition to a default one. Its popover renderer ends
+ * in `nextButton.style.display = showButtons.includes("next") ? "block" :
+ * "none"`, so a list naming only `close` hides the footer's next button.
+ *
+ * On the last step that button *is* the finish: driver.js computes
+ * `nextBtnText: hasNextStep ? undefined : doneBtnText` and tags the element
+ * `driver-popover-done-btn`, so it renders as **Done**, and clicking it runs
+ * the same `h(true)` that Escape and the default ✕ do - reaching
+ * `onDestroyStarted`, which declines to confirm because `hasNextStep()` is
+ * false, and destroys. Omitting `next` there therefore removed the tour's one
+ * obvious way to finish and left the corner ✕ as the way out.
+ *
+ * jsdom cannot see the defect itself - driver.js writes that `display` inline
+ * at runtime and jsdom lays nothing out - so the configuration is the whole of
+ * what a unit test can hold. These assertions hold it.
+ */
+describe.each([
+  ["desktop", false],
+  ["mobile", true],
+])("WelcomeTutorial terminal step on %s", (_platform, isMobile) => {
+  beforeEach(() => {
+    configure({ reactStrictMode: false });
+    mockedUseIsMobile.mockReturnValue(isMobile);
+  });
+
+  afterEach(() => {
+    configure({ reactStrictMode: true });
+  });
+
+  const terminalStep = () => {
+    renderHarness();
+    const steps = currentDriver().config.steps;
+    return steps[steps.length - 1];
+  };
+
+  it("is the step that says the tour is over", () => {
+    const step = terminalStep();
+
+    expect(step.popover.title).toBe("You're all set!");
+    // Unanchored, like the opening step - it describes nothing on the page.
+    expect(step.element).toBeUndefined();
+  });
+
+  it("shows the next button, which driver.js renders here as Done", () => {
+    expect(terminalStep().popover.showButtons).toContain("next");
+  });
+
+  it("keeps the ✕ alongside it", () => {
+    expect(terminalStep().popover.showButtons).toContain("close");
+  });
+
+  it("leaves driver.js's own Done label in place", () => {
+    // The raw step popover is spread *after* the computed defaults, so a
+    // `nextBtnText` here would overwrite the "Done" driver.js derived from
+    // the step being last.
+    expect(terminalStep().popover.nextBtnText).toBeUndefined();
+  });
+
+  it("still hides Previous on the opening step, which has no previous", () => {
+    renderHarness();
+
+    expect(currentDriver().config.steps[0].popover.showButtons).toEqual([
+      "next",
+      "close",
+    ]);
+  });
+});
+
 describe("WelcomeTutorial without a signed-in name", () => {
   beforeEach(() => {
     mockedUseSession.mockReturnValue({
