@@ -7,8 +7,8 @@ import { resetIdentity } from "../mixpanel";
  * The reset runs *before* `signOut`, which navigates: anything queued behind
  * that call may never run. It is also deliberately here rather than beside
  * either button - `DropDownMenu` and `UserSection` both reach sign-out through
- * this module, and the set of exits from the profile page is precisely the
- * thing that was discovered one exit at a time, each in its own fix.
+ * this one module, so every exit from the profile page goes through the same
+ * reset.
  *
  * Only reached once the guard below has let the sign-out through, so cancelling
  * `UnsavedModal` leaves the identity intact along with the unsaved edits.
@@ -31,10 +31,9 @@ const signOutAndForget = async (): Promise<void> => {
  * consumer.
  *
  * Named here rather than written inline in `HeaderProps` so the set of things
- * that accept the guard is one identifier away from a grep. That the set was
- * not writable down anywhere is how three separate exits from the page came to
- * be discovered one at a time: the desktop Map button, then the mobile bottom
- * navigation, then Sign Out.
+ * that accept the guard is one identifier away from a grep: every exit from
+ * the profile page - the desktop Map button, the mobile bottom navigation, and
+ * Sign Out - can be found by searching for this type.
  */
 export type UnsavedChangesGuard = (
   proceed: () => void | Promise<void>,
@@ -44,19 +43,18 @@ export type UnsavedChangesGuard = (
  * Sign out, offering to save first when the caller sits somewhere with unsaved
  * work to lose.
  *
- * Signing out leaves the profile page like any other navigation, and it was
- * the exit nobody enumerated. `UserSection` renders it as a full-width button
- * `gap-5` - 20px - directly under Save Changes, and on a phone it is the
- * *only* route to signing out at all, because `Header` returns the bottom
- * navigation before it ever reaches `DropDownMenu`. So the likeliest press of
- * the most destructive control on the page was a thumb aimed 20px higher, and
- * it discarded every pending edit with no prompt and no undo.
+ * Signing out leaves the profile page like any other navigation.
+ * `UserSection` renders it as a full-width button `gap-5` - 20px - directly
+ * under Save Changes, and on a phone it is the *only* route to signing out at
+ * all, because `Header` returns the bottom navigation before it ever reaches
+ * `DropDownMenu`. So the likeliest press of the most destructive control on
+ * the page is a thumb aimed 20px higher - which is why it has to go through
+ * this guard rather than signing out unconditionally.
  *
  * `checkChanges` is optional because most of the app has nothing to lose:
  * `DropDownMenu` is mounted on every signed-in page and only the profile page
- * supplies a guard. Without one this is the bare sign-out both call sites used
- * to make, which is why adding the guard to one of them could not change
- * behaviour anywhere else.
+ * supplies a guard. Without one this is a bare sign-out, so every other call
+ * site keeps behaving exactly as a plain sign-out would.
  */
 export const signOutWithGuard = async (
   checkChanges?: UnsavedChangesGuard,

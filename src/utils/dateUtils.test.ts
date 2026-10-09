@@ -111,9 +111,9 @@ describe("handleMonthPickerChange", () => {
   it.each(["2026-01", "2026-02", "2026-06", "2026-09", "2026-12", "2024-02"])(
     "keeps the month the user picked, for %s",
     (month) => {
-      // The property the defect broke. `date.toDate()` stored local midnight on
-      // the first, and Prisma keeps the UTC day - which east of UTC is the day
-      // before, and the day before the first of a month is the previous month.
+      // `date.toDate()` is local midnight on the first, and Prisma keeps the
+      // UTC day - which east of UTC is the day before, and the day before the
+      // first of a month is the previous month.
       const { stored, setValue } = capture();
 
       handleMonthPickerChange("coopStartDate", setValue)(picked(month));
@@ -135,8 +135,8 @@ describe("handleMonthPickerChange", () => {
     // Not only the offset. `dateOverlapFilter` compares a candidate's stored
     // dates against filter values that `handleMonthChange` builds as the last
     // of the month, so a first-of-month profile value fails `endDate >= yours`
-    // under full overlap for a co-op that is an exact match. Both halves of
-    // the defect come from the same missing call.
+    // under full overlap for a co-op that is an exact match. Both halves come
+    // from the same call to `lastDayOfMonthUTC`.
     const { stored, setValue } = capture();
 
     handleMonthPickerChange("coopEndDate", setValue)(picked("2026-06"));

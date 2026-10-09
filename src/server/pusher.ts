@@ -2,10 +2,10 @@ import Pusher from "pusher";
 import { serverEnv } from "../utils/env/server";
 
 /**
- * The one server-side Pusher client. Previously constructed inline in the
- * message router; the private-channel auth endpoint needs the same
- * credentials to sign subscriptions, and two separately configured clients
- * would be a silent way for the two to drift apart.
+ * The one server-side Pusher client, shared by the message router and the
+ * private-channel auth endpoint — both need the same credentials to sign
+ * subscriptions, and two separately configured clients would be a silent way
+ * for the two to drift apart.
  */
 export const pusherServer = new Pusher({
   appId: serverEnv.PUSHER_APP_ID,

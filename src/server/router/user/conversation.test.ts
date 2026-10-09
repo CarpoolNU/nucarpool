@@ -9,13 +9,10 @@ import type { BlockRow } from "../../../testing/blockFake";
 /**
  * `user.messages.conversation` — the paginated thread source.
  *
- * This procedure replaces `messages.getMessages`, which was **removed** rather
- * than scoped: it took a bare conversation id, returned every
- * message in it, and read the session user without ever using it, so any
- * signed-in caller could read any conversation. The whole point of the rewrite
- * is that authorization is derived from the request row, so the authorization
- * tests here are the ones that matter most — the pagination tests only protect
- * correctness.
+ * Authorization is derived from the request row rather than the conversation
+ * id itself - a bare conversation id does not say who may read it - so the
+ * authorization tests here are the ones that matter most; the pagination
+ * tests only protect correctness.
  */
 
 const OWNER = "user-owner";
@@ -194,8 +191,8 @@ describe("only participants may read a conversation", () => {
   });
 
   it("authorizes against the stored row, not the caller's input", async () => {
-    // The distinction that made the old procedure unsafe. A request id is no
-    // more secret than a conversation id — knowing one must not be enough.
+    // A request id is no more secret than a conversation id — knowing one
+    // must not be enough to read the thread.
     const { caller, db } = callerFor(sessionFor(STRANGER));
 
     await expect(

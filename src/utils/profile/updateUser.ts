@@ -43,9 +43,10 @@ export const updateUser = async ({
     preferredName: userInfo.preferredName || sessionName,
     pronouns: userInfo.pronouns,
     daysWorking: daysWorkingParsed,
-    // `?.toISOString()` here collapsed a cleared time into `undefined`, which
-    // the server then read as "leave it alone" - so clearing a schedule never
-    // left the browser. `toScheduleTimeInput` keeps `null` distinct.
+    // `toScheduleTimeInput` keeps a cleared time (`null`) distinct from an
+    // absent one (`undefined`). The server reads `undefined` as "leave it
+    // alone", so collapsing `null` into `undefined` here (e.g. via
+    // `?.toISOString()`) would make a cleared schedule impossible to save.
     startTime: toScheduleTimeInput(userInfo.startTime),
     endTime: toScheduleTimeInput(userInfo.endTime),
     bio: userInfo.bio,

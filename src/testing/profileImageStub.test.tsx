@@ -2,16 +2,13 @@
  * The one behaviour in `profileImageStub` that is not a constant: a partial
  * override is merged over a *complete* default.
  *
- * This is the whole reason the stub is worth sharing rather than merely
- * shorter. Six of the fourteen files it replaces returned
- * `{ profileImageUrl, isLoading }` and omitted `imageLoadError`, so a
- * component branching on it read `undefined` - falsy, and therefore silently
- * the "no error" path - in every one of those suites. The test below is what
+ * A mock that returns `{ profileImageUrl, isLoading }` and omits
+ * `imageLoadError` leaves a component branching on it reading `undefined` -
+ * falsy, and therefore silently the "no error" path. The test below is what
  * makes that gap unreachable rather than merely fixed once.
  *
- * The rest of the module is a literal surface, and per this ticket's testing
- * requirements a test asserting a one-line stub returns its own constant is
- * noise.
+ * The rest of the module is a literal surface, and a test asserting a
+ * one-line stub returns its own constant is noise.
  */
 
 import { renderHook } from "@testing-library/react";
@@ -52,9 +49,9 @@ describe("buildProfileImageMock", () => {
   });
 
   it("exposes useInvalidateProfileImage, which every hand-rolled mock dropped", () => {
-    // `useUploadFile` calls it. A mock replacing the module with `default`
-    // alone left it `undefined`, which would throw from inside a hook the
-    // first time a suite reached an upload.
+    // `useUploadFile` calls it. A mock that replaces the module with `default`
+    // alone leaves it `undefined`, which throws from inside a hook the first
+    // time a suite reaches an upload.
     const mock = buildProfileImageMock();
 
     expect(mock.useInvalidateProfileImage()).toBe(

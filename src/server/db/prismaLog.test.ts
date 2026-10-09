@@ -12,8 +12,8 @@ import {
  * matters: the whole function is a string filter, so a test built on an
  * invented message shape would prove nothing about production.
  *
- * The probe that produced them also settled the question the ticket was filed
- * on — a `where: { id: "SENTINEL_VALUE" }` appears nowhere in either mode, so
+ * The probe that produced them also settled the original question — a
+ * `where: { id: "SENTINEL_VALUE" }` appears nowhere in either mode, so
  * argument values are not logged. The sentinel is asserted below so that a
  * future Prisma version which *does* start quoting arguments is caught here.
  */
@@ -44,9 +44,9 @@ const REQUEST_ERROR: PrismaLogEvent = {
  *
  * This is the variant a deployed build produces, because Prisma cannot read
  * original sources out of bundled `next build` output. Captured by running the
- * real client; the first version of `PREAMBLE` matched only the other spelling
- * and would have left the invocation line in production while passing every
- * test written from the frame-bearing payload.
+ * real client: a `PREAMBLE` that matches only the other spelling would leave
+ * the invocation line in production while still passing every test written
+ * from the frame-bearing payload alone.
  */
 const REQUEST_ERROR_NO_FRAME: PrismaLogEvent = {
   timestamp: new Date("2026-09-09T12:00:00Z"),
@@ -96,8 +96,9 @@ describe("stripSourceContext", () => {
   });
 
   it("strips the frameless invocation line a deployed build produces", () => {
-    // The regression the first implementation had: this spelling ends in ":"
-    // rather than " in", and it is the one production actually emits.
+    // This spelling ends in ":" rather than " in", and it is the one
+    // production actually emits — a PREAMBLE matching only the other ending
+    // would miss it.
     const stripped = stripSourceContext(REQUEST_ERROR_NO_FRAME.message);
 
     expect(stripped).not.toContain("invocation");
@@ -135,9 +136,9 @@ describe("stripSourceContext", () => {
   });
 
   it("never reveals an argument value, because Prisma does not log one", () => {
-    // The premise this was investigated on, pinned. If a future Prisma starts
-    // quoting arguments, the captured payload above stops matching reality and
-    // this is the test that should be revisited.
+    // The premise behind this test, pinned: if a future Prisma starts quoting
+    // arguments, the captured payload above stops matching reality and this
+    // is the test that should be revisited.
     expect(REQUEST_ERROR.message).not.toContain("SENTINEL_VALUE");
     expect(stripSourceContext(REQUEST_ERROR.message)).not.toContain(
       "SENTINEL_VALUE",

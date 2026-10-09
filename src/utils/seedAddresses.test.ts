@@ -24,8 +24,8 @@ describe("synthesizeAddress", () => {
     expect(address.address).toBe(`${address.street}, ${address.city}, MA`);
   });
 
-  // The old code fell back to one hardcoded address for every user whenever
-  // geocoding failed, which it always did without a Mapbox token.
+  // A fallback that always produced the same address for every user would
+  // make seeded data unrepresentative of the real geometry it stands in for.
   it("varies across nearby coordinates instead of collapsing onto one address", () => {
     const addresses = new Set<string>();
     for (let i = 0; i < 60; i++) {
@@ -207,8 +207,8 @@ describe("createAddressResolver", () => {
       expect(fetchImpl).toHaveBeenCalledTimes(2);
     });
 
-    // Previously an HTTP error produced `data.features === undefined`, threw,
-    // and returned the same hardcoded address for every caller.
+    // A non-ok response must not throw and fall back to one hardcoded
+    // address for every caller: each coordinate synthesises its own.
     it("synthesises on a non-ok response rather than reusing one address", async () => {
       const consoleError = jest
         .spyOn(console, "error")

@@ -312,10 +312,10 @@ describe("buildCandidateWhere — role compatibility", () => {
 
     expect(result.role).toEqual({ in: [Role.DRIVER] });
     // The shared constant rather than a literal: `reserveSeat` decrements
-    // under this same object, and spelling the predicate out at each site is
-    // what let the two drift apart once already — the read path kept `not: 0`
-    // while the write path required `gt: 0`, so the one ACTIVE driver sitting
-    // at -1 was offered to riders and then refused every one of them.
+    // under this same object, and spelling the predicate out at each site
+    // risks the read and write paths drifting apart — a `not: 0` read paired
+    // with a `gt: 0` write would offer an ACTIVE driver sitting at -1 to
+    // riders and then refuse every one of them.
     expect(result.seatsAvail).toBe(SEAT_AVAILABLE_FILTER);
   });
 
@@ -373,7 +373,7 @@ describe("buildCandidateWhere — group, favorites, bounds", () => {
   // Every accept path requires the rider's own row to hold
   // `carpoolId: null`, whichever group they would be joining, so a grouped
   // rider has no reachable candidate at all - not merely the driver in their
-  // own group, which is what this used to test for.
+  // own group.
   it("returns no candidates for a grouped rider, since no driver could ever accept them", () => {
     const result = build({ ...base, carpoolId: "group-1" });
 
@@ -640,11 +640,10 @@ describe("CANDIDATE_LIMIT", () => {
 
 describe("candidateLimitWarning", () => {
   /**
-   * The ceiling used to be reachable in silence, which is the part that
-   * mattered: `take` drops rows in cuid order, so the ones lost at the
-   * boundary are arbitrary rather than the worst matches, and a user would
-   * simply stop seeing matches that exist. These pin the signal that replaces
-   * the silence.
+   * Without this signal, the ceiling is reachable in silence: `take` drops
+   * rows in cuid order, so the ones lost at the boundary are arbitrary rather
+   * than the worst matches, and a user would simply stop seeing matches that
+   * exist. These pin the warning that surfaces it instead.
    */
   const args = { role: Role.RIDER, sort: "distance" };
 
@@ -832,13 +831,13 @@ describe("seat filter agrees with calculateScore", () => {
  * three columns `candidateReachability.ts` reads, evaluating the SQL `where` in
  * JavaScript gives the same verdict as asking `calculateScore` directly.
  *
- * These rules used to be encoded twice — a Prisma `where` in
- * `buildCandidateWhere` and a guard clause in `calculateScore` — tied
- * together only by matching comments. The three suites that covered them each
- * exercised one side, so editing either alone left all of them green and
- * shipped a discovery regression that only production would show. This is the
- * test that fails instead, and it drives the two callers rather than the shared
- * predicate, so it catches drift whether or not the next change goes through
+ * These rules are encoded in two places — a Prisma `where` in
+ * `buildCandidateWhere` and a guard clause in `calculateScore` — kept in sync
+ * only by matching comments, not by sharing code. A suite that exercises just
+ * one side leaves both green while the two drift apart, shipping a discovery
+ * regression that only production would show. This is the test that fails
+ * instead, and it drives the two callers rather than the shared predicate, so
+ * it catches drift whether or not the next change goes through
  * `candidateReachability.ts`.
  *
  * Agreement is asserted as *equality*, not as the superset property the date
@@ -854,9 +853,10 @@ describe("group exclusion agrees with calculateScore", () => {
   };
 
   /**
-   * Every combination of the three columns the rules read. `-1` is here
-   * because a negative count is the value the pre-`hasSeatAvailable` pair
-   * disagreed on, and production held one.
+   * Every combination of the three columns the rules read. `-1` is included
+   * because a negative seat count is where a `not: 0` test and a `gt: 0` test
+   * disagree while agreeing everywhere else, and production held exactly such
+   * a row.
    */
   const STATES: GroupState[] = [Role.RIDER, Role.DRIVER, Role.VIEWER].flatMap(
     (role) =>

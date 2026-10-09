@@ -5,10 +5,9 @@ import { getBaseUrl } from "./getBaseUrl";
  *
  * The server-side branches are unreachable while `ssr: false` is set, so
  * nothing in the running app would notice if they regressed. That is exactly
- * why they are pinned here: the defect this replaced was a dead `VERCEL_URL`
- * check whose fallback pointed a deployed server-side call at
- * `http://localhost:3000`, and it survived because no test and no code path
- * ever looked.
+ * why they are pinned here: an incorrect fallback would point a deployed
+ * server-side call at `http://localhost:3000`, with no test and no code path
+ * left to notice.
  */
 describe("getBaseUrl", () => {
   const originalEnv = process.env;
@@ -73,7 +72,8 @@ describe("getBaseUrl", () => {
       expect(getBaseUrl()).toBe("http://localhost:3000");
     });
 
-    // The regression this ticket exists for.
+    // Guards against a fallback that would point a deployed environment at
+    // localhost.
     it("does not point a deployed environment at localhost", () => {
       process.env.NEXTAUTH_URL = "https://nucarpool.example.com";
       expect(getBaseUrl()).not.toContain("localhost");

@@ -1,17 +1,12 @@
 /**
- * The first *effect* test in this repository.
+ * An effect test, exercising the hook rather than just the constant it reads.
  *
- * `isMobileWidth` has been unit tested since the breakpoint was unified, but
- * the hook around it never has - and its own source says why: "the hook needs
- * a DOM and this repo has no jsdom environment configured". That is what this
- * ticket removes, so the untested half is tested here.
- *
- * The half that was untested is also the half that broke. `useIsMobile` and
- * `Header` used to disagree about where mobile ended (640 vs 768), leaving
- * every viewport between them with a desktop layout and a mobile bottom bar at
- * once. `breakpoints.test.ts` guards the constant; nothing guarded that the
- * hook reads the viewport at all, reacts when it changes, or stops listening
- * when it unmounts.
+ * `isMobileWidth` is unit tested on its own in `breakpoints.test.ts`, which
+ * guards the constant; this file guards the hook around it - that it reads
+ * the viewport at all, reacts when it changes, and stops listening when it
+ * unmounts. `useIsMobile` and `Header` read that constant from one place, so
+ * they cannot disagree about where mobile ends the way two independent
+ * checks could.
  *
  * On that last one, the balance of add/remove calls is the assertion and the
  * obvious alternative is not. Dispatching a resize *after* unmount and
@@ -37,10 +32,9 @@ import {
 } from "../testing/viewport";
 
 /**
- * The viewport technique this file used to carry inline now lives in
- * `testing/viewport.ts`, which also documents what jsdom can and cannot tell
- * you about a mobile layout. It was copied into two other files
- * before it was shared.
+ * The viewport technique lives in `testing/viewport.ts`, shared across the
+ * hooks that need it, which also documents what jsdom can and cannot tell you
+ * about a mobile layout.
  */
 restoreViewportAfterEach();
 
@@ -120,14 +114,12 @@ describe("useIsMobile", () => {
  * effects have flushed.
  *
  * Every test above reads `result.current`, which Testing Library exposes only
- * once rendering has settled. That is exactly why the defect this describes
- * went unseen for as long as it did: the hook's *settled* value was always
- * right, and its first-pass value was always `false`. The suite's opening test
- * is even named "not its initial false", so the initial value was known - what
- * nothing checked was what got rendered while it held.
+ * once rendering has settled - so none of them can see that the hook's
+ * *settled* value is always right while its first-pass value is always
+ * `false`.
  *
  * These record the value from inside the render function instead, which is the
- * only place the difference is observable.
+ * only place that difference is observable.
  */
 describe("useIsMobile during the first render", () => {
   /**
@@ -154,37 +146,35 @@ describe("useIsMobile during the first render", () => {
   };
 
   it("reports mobile on the first pass, with no corrective re-render", () => {
-    // The whole ticket. Against `useState(false)` plus a mount effect this
-    // observes `[false, …, true]` - the desktop branch rendered once on a
-    // phone, which is what mounted `DropDownMenu` and fired a presigned-URL
-    // request for an avatar no mobile visitor sees.
+    // Against `useState(false)` plus a mount effect this would observe
+    // `[false, …, true]` - the desktop branch rendered once on a phone, which
+    // mounts `DropDownMenu` and fires a presigned-URL request for an avatar no
+    // mobile visitor sees.
     expect([...new Set(renderProbe(MOBILE_WIDTH))]).toEqual([true]);
   });
 
   it("reports desktop on the first pass too", () => {
-    // The other side, so a hook hard-coded to `true` fails. Desktop was never
-    // broken here - `false` was already right on the first pass - so this
-    // pins that the fix did not buy mobile correctness with a desktop
-    // regression.
+    // The other side, so a hook hard-coded to `true` fails. This pins that
+    // desktop is already correct on the first pass, so mobile correctness
+    // does not come at the cost of a desktop regression.
     expect([...new Set(renderProbe(DESKTOP_WIDTH))]).toEqual([false]);
   });
 });
 
 /**
- * The limit of the fix, pinned rather than described.
+ * A known limit, pinned rather than merely described.
  *
  * React uses `getServerSnapshot` during **hydration** as well as during server
  * rendering, so a component that is already in the server HTML still renders
  * its desktop branch once on a phone before correcting. That is a property of
- * React rather than of this hook, and the ticket's own proposed fix assumed
- * the opposite - it claimed the client's first render would be correct, full
- * stop.
+ * React rather than of this hook, and it is easy to assume the client's first
+ * render is always correct.
  *
- * This test exists so that assumption cannot be made again from reading the
- * hook, and so that a React release which *changed* the behaviour would say so
- * out loud rather than silently making the comments in `useIsMobile.ts` wrong.
- * If it starts failing, the fix got better: check whether `/admin` still needs
- * its own treatment.
+ * This test exists so that assumption cannot be made from reading the hook
+ * alone, and so that a React release which *changed* the behaviour would say
+ * so out loud rather than silently making the comments in `useIsMobile.ts`
+ * wrong. If it starts failing, check whether `/admin` still needs its own
+ * treatment.
  *
  * Deliberately not using Testing Library's `render`, which mounts fresh -
  * mounting fresh is the case that already works and is covered above.
@@ -235,8 +225,8 @@ describe("useIsMobile under hydration", () => {
         hydrateRoot(container, <Probe />);
       });
 
-      // Desktop first, then corrected - the discarded render this ticket is
-      // about, still present on a subtree that hydrates rather than mounts.
+      // Desktop first, then corrected - the discarded render that still
+      // happens on a subtree that hydrates rather than mounts.
       expect(seen[0]).toBe(false);
       expect(seen[seen.length - 1]).toBe(true);
 
@@ -247,12 +237,13 @@ describe("useIsMobile under hydration", () => {
       /*
        * That *this* hydration is clean - no more than that.
        *
-       * It is not the ticket's "no hydration warning" criterion, and cannot
-       * be: as noted above, jsdom cannot produce a windowless server render,
-       * so the SSR-versus-client divergence that generates a real mismatch is
-       * unreachable from here. What this rules out is React complaining about
-       * the hydration performed in this test. The criterion itself needs a
-       * browser console on a page served by `getServerSideProps`.
+       * This does not establish "no hydration warning" in production, and
+       * cannot: as noted above, jsdom cannot produce a windowless server
+       * render, so the SSR-versus-client divergence that generates a real
+       * mismatch is unreachable from here. What this rules out is React
+       * complaining about the hydration performed in this test. Confirming
+       * the stronger claim needs a browser console on a page served by
+       * `getServerSideProps`.
        */
       const hydrationComplaints = consoleError.mock.calls.filter((call) =>
         JSON.stringify(call).toLowerCase().includes("hydrat"),

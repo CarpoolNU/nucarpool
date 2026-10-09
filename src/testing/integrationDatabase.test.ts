@@ -169,9 +169,9 @@ describe("claimIntegrationDatabase", () => {
     // Left by a run that claimed the database and then failed before
     // migrating. It is ours, so it is claimable - but its schema is not empty
     // and carries no `_prisma_migrations`, which is exactly what makes
-    // `prisma migrate deploy` raise P3005. Before `markerOnly` existed, that
-    // state was permanent: every later run took the already-claimed path
-    // straight back into the same failure.
+    // `prisma migrate deploy` raise P3005. Without `markerOnly` to distinguish
+    // this case, every later run would take the already-claimed path straight
+    // back into the same failure.
     const { client, statements } = buildRawClient([MARKER_TABLE]);
 
     expect(await claimIntegrationDatabase(client)).toEqual({

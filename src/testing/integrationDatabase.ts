@@ -279,16 +279,15 @@ export const claimIntegrationDatabase = async (
  * **Runs after `prisma migrate deploy`, not before.** `migrate deploy` raises
  * P3005 on a database whose schema is not empty and which carries no
  * `_prisma_migrations` — it cannot tell "one table a test harness just made"
- * from "an existing production database somebody wants baselined". Creating the
- * marker first therefore broke the one case that matters, a genuinely fresh
- * database, and broke it permanently: the marker made the schema non-empty, the
- * deploy failed, and every later run then took the already-claimed path into
- * the same P3005. Nothing caught it because the suite had never completed a run
- * anywhere.
+ * from "an existing production database somebody wants baselined". Creating
+ * the marker before `migrate deploy` would make the schema non-empty on a
+ * genuinely fresh database, so the deploy would fail there, and every later
+ * run would then take the already-claimed path into the same P3005.
  *
- * Safety is unaffected by the move. The *decision* still happens before the
- * first write — {@link claimIntegrationDatabase} only reads — so a database
- * that is not ours is refused exactly as before, before `migrate deploy`.
+ * Safety does not depend on this ordering. The *decision* still happens before
+ * the first write — {@link claimIntegrationDatabase} only reads — so a
+ * database that is not ours is refused before `migrate deploy` runs, exactly
+ * as it would be either way.
  */
 export const markIntegrationDatabase = async (
   prisma: Pick<PrismaClient, "$queryRawUnsafe" | "$executeRawUnsafe">,

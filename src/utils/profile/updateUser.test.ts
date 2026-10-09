@@ -5,14 +5,14 @@ import { updateUser } from "./updateUser";
  * The payload `updateUser` sends to `user.edit`.
  *
  * Only the schedule times are asserted here, because they are the fields whose
- * *absence* and *nullness* mean different things and the ones this file used to
- * conflate: `userInfo.startTime?.toISOString()` yields `undefined` for `null`
- * as readily as for `undefined`, so a cleared schedule never left the browser.
+ * *absence* and *nullness* mean different things: `userInfo.startTime
+ * ?.toISOString()` would yield `undefined` for `null` as readily as for
+ * `undefined`, so a cleared schedule could never reach the server.
  *
  * Worth having as a test rather than a comment. Reverting the call site to
  * optional chaining still **type-checks** — `string | undefined` is assignable
  * to `string | null | undefined` — so the compiler cannot catch a regression
- * here and nothing else did either.
+ * here and nothing else does either.
  *
  * `updateUser` takes its mutation as an argument rather than calling a hook, so
  * a stub is all this needs.

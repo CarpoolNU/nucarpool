@@ -1,14 +1,9 @@
 /**
  * The three group figures the admin dashboard derives from `stats.groups`,
- * defined once because they used to be written out four times: in
- * `AdminData.tsx`, and restated verbatim in `AdminData.test.tsx` and
- * `admin.db.test.ts`.
- *
- * The duplication is why the zero case was never covered. Both test files
- * recomputed the formula they were checking, so a divide-by-zero in the
- * component was reproduced exactly by the expectation and the assertion
- * passed on `NaN === NaN`-shaped strings. They import from here now, so a
- * change to a derivation can only be made in one place.
+ * defined once here rather than in `AdminData.tsx`, `AdminData.test.tsx`, and
+ * `admin.db.test.ts` separately: a change to a derivation can only be made in
+ * one place, and no test can recompute the same formula it is meant to be
+ * checking.
  */
 
 /**
@@ -46,10 +41,10 @@ export const percentOf = (part: number, whole: number): string =>
 /**
  * Mean riders per group, to one decimal place.
  *
- * `number | string` rather than `number` because of {@link UNDEFINED_STAT}.
- * Widening this is what the dash cost: `QuickStats` and `QuickStatsCSVInput`
- * both had it as `number`. `DisplayBox` already accepted `number | string`,
- * so nothing below the dashboard needed changing.
+ * `number | string` rather than `number`, because of {@link UNDEFINED_STAT}.
+ * `QuickStats` and `QuickStatsCSVInput` carry the same widened type for the
+ * same reason; `DisplayBox` already accepts `number | string`, so nothing
+ * below the dashboard needs to change.
  */
 export const averagePerGroup = (
   part: number,

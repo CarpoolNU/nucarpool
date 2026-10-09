@@ -15,8 +15,8 @@ import { MAX_DASHBOARD_WEEKS } from "../../adminDataUtils";
  * These assertions are about the *shape of the query*, not about business logic:
  * which columns are selected, that the requested date window reaches the `where`
  * clause, and that messages are only ever counted. That is the part of this
- * router that regressed before, and it is the part a mocked Prisma can verify
- * honestly. Real query behaviour belongs to the database tests.
+ * router most likely to regress silently, and it is the part a mocked Prisma
+ * can verify honestly. Real query behaviour belongs to the database tests.
  */
 
 /** What a `MIN`/`MAX` aggregate answers for an empty table. */
@@ -278,7 +278,8 @@ describe("getDashboardSeries", () => {
 
   it("counts every signup as one series, whatever its status today", async () => {
     // A user's status history is not recorded, so splitting past signups by
-    // today's status drew every lapsed user as inactive all along.
+    // today's status would draw every lapsed user as inactive, regardless of
+    // when they actually lapsed.
     const { caller, prisma } = callerFor();
     prisma.user.findMany.mockResolvedValue([
       { dateCreated: start },
@@ -325,12 +326,12 @@ describe("getDashboardSeries", () => {
   });
 
   /**
-   * The window used to be `z.object({ start: z.date(), end: z.date() })` and
-   * nothing else, so the number of week buckets the handler allocates came
-   * straight from client input. The widest representable window is ~2.84e7
-   * weeks; allocating it exhausts a 2 GB heap in about eleven seconds, which
-   * kills the Node process and every co-located request with it rather than
-   * just returning slowly.
+   * A bare `z.object({ start: z.date(), end: z.date() })`, with nothing else,
+   * would let the number of week buckets the handler allocates come straight
+   * from client input. The widest representable window is ~2.84e7 weeks;
+   * allocating it exhausts a 2 GB heap in about eleven seconds, which kills
+   * the Node process and every co-located request with it rather than just
+   * returning slowly.
    *
    * `expect(everyCallArgument(prisma)).toEqual([])` is the assertion that
    * matters in each rejection: validation has to refuse *before* the handler
@@ -353,10 +354,11 @@ describe("getDashboardSeries", () => {
   const issuesOf = (error: any) => error?.cause?.issues ?? [];
 
   it("refuses a window whose end precedes its start, without querying", async () => {
-    // Accepted silently before: `generateWeekLabels` takes Math.min/Math.max so
-    // it charted the axis anyway, while the order-sensitive `where` clause
-    // became `gte: <later>, lt: <earlier>` and matched nothing. The admin saw
-    // labels over flat zeroes — indistinguishable from a genuinely quiet week.
+    // Without this check: `generateWeekLabels` takes Math.min/Math.max so it
+    // would chart the axis anyway, while the order-sensitive `where` clause
+    // becomes `gte: <later>, lt: <earlier>` and matches nothing. An admin
+    // would see labels over flat zeroes — indistinguishable from a genuinely
+    // quiet week.
     const { error, prisma } = await rejectedWindow({ start: end, end: start });
 
     expect(error.code).toBe("BAD_REQUEST");
@@ -878,9 +880,10 @@ describe("updateUserPermission", () => {
 
   it("answers NOT_FOUND for a userId naming nobody, instead of an opaque 500", async () => {
     // Prisma throws P2025 for an update whose `where` matches no row. That is
-    // not a TRPCError, so it reached the manager as INTERNAL_SERVER_ERROR with
-    // the message replaced — the very masking the FORBIDDEN checks above were
-    // added to remove, left in place on the one branch nobody checked.
+    // not a TRPCError, so without this check it would reach the manager as
+    // INTERNAL_SERVER_ERROR with the message replaced — the very masking the
+    // FORBIDDEN checks above exist to avoid, on the one branch they don't
+    // cover.
     const { caller, prisma } = callerFor(adminSession(Permission.MANAGER));
     prisma.user.findUnique.mockResolvedValue(null);
 
@@ -936,6 +939,95 @@ describe("getAuditLog", () => {
       orderBy: { dateCreated: "desc" },
       take: 500,
     });
+  });
+
+  it("asks for no report at all when the page holds no resolution row", async () => {
+    const { caller, prisma } = callerFor();
+    prisma.adminAuditLog.findMany.mockResolvedValue([
+      {
+        id: "log-1",
+        actorId: "manager-1",
+        action: "user.admin.updateUserPermission",
+        targetId: "user-2",
+        metadata: null,
+        dateCreated: new Date(),
+      },
+    ]);
+
+    const log = await caller.user.admin.getAuditLog();
+
+    expect(prisma.report.findMany).not.toHaveBeenCalled();
+    // A permission row's target is a user already, so there is no second id.
+    expect(log[0].targetUserId).toBeNull();
+  });
+
+  it("resolves every report target in one read, of two columns", async () => {
+    const { caller, prisma } = callerFor();
+    prisma.adminAuditLog.findMany.mockResolvedValue([
+      {
+        id: "log-1",
+        actorId: "manager-1",
+        action: "user.admin.resolveReport",
+        targetId: "report-a",
+        metadata: null,
+        dateCreated: new Date(),
+      },
+      {
+        id: "log-2",
+        actorId: "manager-1",
+        action: "user.admin.resolveReport",
+        targetId: "report-b",
+        metadata: null,
+        dateCreated: new Date(),
+      },
+      // The same report resolved twice contributes one id, not two.
+      {
+        id: "log-3",
+        actorId: "manager-1",
+        action: "user.admin.resolveReport",
+        targetId: "report-a",
+        metadata: null,
+        dateCreated: new Date(),
+      },
+    ]);
+    prisma.report.findMany.mockResolvedValue([
+      { id: "report-a", reportedUserId: "user-a" },
+      { id: "report-b", reportedUserId: "user-b" },
+    ]);
+
+    const log = await caller.user.admin.getAuditLog();
+
+    expect(prisma.report.findMany).toHaveBeenCalledTimes(1);
+    // The select is the privacy-relevant part: no `conversationSnapshot`, no
+    // `reason`, nothing from `message`.
+    expect(prisma.report.findMany).toHaveBeenCalledWith({
+      where: { id: { in: ["report-a", "report-b"] } },
+      select: { id: true, reportedUserId: true },
+    });
+    expect(log.map((entry) => entry.targetUserId)).toEqual([
+      "user-a",
+      "user-b",
+      "user-a",
+    ]);
+  });
+
+  it("leaves targetUserId null for a report that no longer exists", async () => {
+    const { caller, prisma } = callerFor();
+    prisma.adminAuditLog.findMany.mockResolvedValue([
+      {
+        id: "log-1",
+        actorId: "manager-1",
+        action: "user.admin.resolveReport",
+        targetId: "report-gone",
+        metadata: null,
+        dateCreated: new Date(),
+      },
+    ]);
+    prisma.report.findMany.mockResolvedValue([]);
+
+    const log = await caller.user.admin.getAuditLog();
+
+    expect(log[0].targetUserId).toBeNull();
   });
 });
 
@@ -1019,10 +1111,11 @@ describe("getReports", () => {
    * schema is what has to accept it.
    *
    * Every other test in this block calls the caller with a hand-written
-   * input, which is why a `.strict()` schema passed all of them while the
-   * queue failed to load in a browser for every admin. The literal below is
-   * the wire input, cast because the procedure's own types describe what the
-   * component passes rather than what the client sends.
+   * input, so a `.strict()` schema would pass all of them even though the
+   * queue cannot load for any admin without this case: real traffic always
+   * carries `direction`. The literal below is the wire input, cast because
+   * the procedure's own types describe what the component passes rather than
+   * what the client sends.
    */
   it("accepts the input tRPC's useInfiniteQuery actually sends", async () => {
     const { caller, prisma } = callerFor();

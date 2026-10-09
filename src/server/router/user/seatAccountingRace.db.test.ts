@@ -10,26 +10,26 @@ import { appRouter } from "../index";
  * group actually holds, and an accept whose request is gone must leave
  * nothing behind.
  *
- * `reserveSeat` became a raw compare-and-swap in SCRUM-565, but the writes
- * around it went on trusting a value or a row read earlier in the same
- * transaction:
+ * `reserveSeat` is a raw compare-and-swap, but the writes around it must not
+ * trust a value or a row read earlier in the same transaction:
  *
- *   - `releaseSeats` wrote `clampSeats(currentSeats + n)` from a read its
- *     caller had already taken, so a `reserveSeat` that committed in between
- *     was overwritten;
- *   - the remove path's unlink matched on `userId` alone, so a second removal
- *     of the same member still "changed a row" and still credited a seat;
- *   - `user.edit` decided whether to write `seatsAvail` at all from a
- *     `carpoolId` a concurrent accept can have invalidated;
- *   - `markRequestAccepted` discarded its match count, so a request withdrawn
- *     after `requireAcceptableRequest` read it - that check runs *outside*
- *     the transaction - still produced a group and a spent seat.
+ *   - `releaseSeats` writing `clampSeats(currentSeats + n)` from a read its
+ *     caller already took would let a `reserveSeat` that committed in between
+ *     be overwritten;
+ *   - the remove path's unlink matching on `userId` alone would let a second
+ *     removal of the same member still "change a row" and still credit a
+ *     seat;
+ *   - `user.edit` deciding whether to write `seatsAvail` from a `carpoolId`
+ *     read earlier would act on a value a concurrent accept can have
+ *     invalidated;
+ *   - `markRequestAccepted` discarding its match count would let a request
+ *     withdrawn after `requireAcceptableRequest` read it - that check runs
+ *     *outside* the transaction - still produce a group and a spent seat.
  *
  * None of that is reproducible under the mocked suite. `groups.test.ts` can
  * drive each guard directly, and does, but a mocked Prisma has no isolation
  * level, so it cannot produce the stale read that is the whole defect. Only a
- * real MySQL at REPEATABLE READ can - which is how the `updateMany` finding
- * behind SCRUM-565 was established in the first place.
+ * real MySQL at REPEATABLE READ can.
  *
  * **Needs a real MySQL** and runs only through `yarn test:db`.
  */
@@ -168,10 +168,10 @@ const riderCountOf = (groupId: string) =>
 describe("seat accounting under concurrent writers", () => {
   /**
    * Scenario B on the ticket. A rider leaves while another is accepted into
-   * the same car. The leave snapshots `seats_avail = 1` and, on the old code,
-   * writes `clamp(1 + 1) = 2` straight over the accept's decrement: the car
-   * advertises two free seats while holding the same riders it started with,
-   * and is overbooked by one on the next accept.
+   * the same car. The leave snapshots `seats_avail = 1`; writing that back as
+   * an absolute `clamp(1 + 1) = 2` would land straight over the accept's
+   * decrement, advertising two free seats while the car holds the same
+   * riders it started with, and overbooking it by one on the next accept.
    */
   it("a leave does not overwrite an accept that committed after its snapshot", async () => {
     const driver = await seedGroupedDriver(
@@ -224,8 +224,8 @@ describe("seat accounting under concurrent writers", () => {
   /**
    * The duplicate-leave case: an ordinary double submit, or a driver evicting
    * while the rider presses Leave. Both pass the `targetMembership` check,
-   * because it is taken before the transaction. The unlink used to match on
-   * `userId` alone and so "changed a row" for both, and the credit ran twice
+   * because it is taken before the transaction. An unlink matching on
+   * `userId` alone would "change a row" for both and credit the seat twice
    * for one departure.
    */
   it("a duplicate leave credits the seat exactly once", async () => {
@@ -268,14 +268,14 @@ describe("seat accounting under concurrent writers", () => {
 
     // One departure, one seat.
     //
-    // Worth being exact about what this pins. The old absolute write happens
-    // to land on the right number here - `clamp(staleSeats + 1)` with a
-    // snapshot taken before the evict is 2, which is also the truth - so this
-    // ordering did not expose the duplicate credit while the release was an
-    // absolute write. It does now: an increment against the current value
-    // would give 3 without the count check, so making the release atomic is
-    // what makes the check load-bearing. The two changes have to ship
-    // together, which is why they are one ticket.
+    // Worth being exact about what this pins. An absolute write happens to
+    // land on the same number here as the atomic one - `clamp(staleSeats + 1)`
+    // with a snapshot taken before the evict is 2, matching the truth - so
+    // this ordering alone would not expose a duplicate credit under an
+    // absolute release. It is the count check in the unlink, together with
+    // making the release atomic, that makes the duplicate observable: without
+    // the count check, an increment against the current value would give 3.
+    // The two have to ship together, which is why they are one change.
     expect(await riderCountOf(driver.group.id)).toBe(1);
     expect(await seatsOf(driver.user.id)).toBe(2);
   });
@@ -356,8 +356,8 @@ describe("seat accounting under concurrent writers", () => {
    * Scenario D on the ticket. `requireAcceptableRequest` reads the request as
    * PENDING *outside* the transaction, so a withdrawal that commits before
    * the accept does still satisfies every check the accept made.
-   * `markRequestAccepted` matched nothing and said nothing, and a group
-   * existed with no request behind it, its driver a seat short.
+   * `markRequestAccepted` matching nothing and saying nothing would leave a
+   * group existing with no request behind it, its driver a seat short.
    */
   it("a request withdrawn during the accept leaves no group and no spent seat", async () => {
     const driver = await seedUser("Driver Dax", "driver-dax@northeastern.edu", {
@@ -464,7 +464,7 @@ describe("seat accounting under concurrent writers", () => {
 
   it("a release cannot push the count past the maximum", async () => {
     // `GREATEST(0, LEAST(seats_avail + n, MAX))` is `clampSeats` in SQL, and
-    // the upper bound is the one the old clamp enforced on this path.
+    // the upper bound here is the same one `clampSeats` enforces elsewhere.
     const driver = await seedGroupedDriver(
       "Driver Dev",
       "driver-dev@northeastern.edu",

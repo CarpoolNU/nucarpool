@@ -13,17 +13,29 @@ import type { AdminAuditAction } from "../server/adminAuditLog";
  * client bundle. The action strings below are written out literally for the
  * same reason; `DISPLAY`'s type is what keeps them honest.
  */
+
+/** A rendered cell: `title` carries the full id when `text` abbreviated one. */
+export type AuditCell = { text: string; title?: string };
+
 type AuditDisplay = {
   /** The Action cell. */
   label: string;
-  /** Which table `targetId` points at, which decides how Target renders. */
+  /**
+   * Which table `targetId` points at, which decides whose email the Target
+   * cell names: the target itself for `"user"`, the user the target *refers
+   * to* for `"report"`.
+   */
   targetKind: "user" | "report";
   /**
-   * The Details cell, from the row's parsed metadata. Returns `null` when the
-   * object does not carry what this action expects, which the caller turns
-   * back into the raw stored string rather than a blank cell.
+   * The Details cell, from the row's parsed metadata and its `targetId`.
+   * Returns `null` when the object does not carry what this action expects,
+   * which the caller turns back into the raw stored string rather than a
+   * blank cell.
    */
-  describe: (metadata: Record<string, unknown>) => string | null;
+  describe: (
+    metadata: Record<string, unknown>,
+    targetId: string,
+  ) => AuditCell | null;
 };
 
 /** Reads `key` only when it holds a string, so a malformed row falls back. */
@@ -32,35 +44,6 @@ const stringField = (
   key: string,
 ): string | null =>
   typeof metadata[key] === "string" ? (metadata[key] as string) : null;
-
-/**
- * Keyed by `AdminAuditAction` rather than `string`, which is the point: adding
- * a member to that union fails `yarn tsc` here until it is given wording, so
- * the log cannot quietly start printing procedure paths again. SCRUM-619's
- * account-suspension action is the next one expected to trip it.
- */
-const DISPLAY: Record<AdminAuditAction, AuditDisplay> = {
-  "user.admin.updateUserPermission": {
-    label: "Permission changed",
-    targetKind: "user",
-    describe: (metadata) => {
-      const permission = stringField(metadata, "permission");
-      return permission && `Set to ${permission}`;
-    },
-  },
-  "user.admin.resolveReport": {
-    label: "Report resolved",
-    targetKind: "report",
-    describe: (metadata) => {
-      const status = stringField(metadata, "status");
-      return status && `Marked ${status}`;
-    },
-  },
-};
-
-/** `undefined` for an action this build has no wording for. */
-const displayFor = (action: string): AuditDisplay | undefined =>
-  DISPLAY[action as AdminAuditAction];
 
 /** How much of a cuid is kept when one has to be shown to a person. */
 const SHORT_ID_LENGTH = 8;
@@ -74,9 +57,6 @@ const SHORT_ID_LENGTH = 8;
 export const shortenAuditId = (id: string): string =>
   id.length <= SHORT_ID_LENGTH ? id : `…${id.slice(-SHORT_ID_LENGTH)}`;
 
-/** A rendered cell: `title` carries the full id when `text` abbreviated one. */
-export type AuditCell = { text: string; title?: string };
-
 const cellForId = (
   id: string,
   format: (short: string) => string,
@@ -87,43 +67,100 @@ const cellForId = (
     : { text: format(short), title: id };
 };
 
+/**
+ * Keyed by `AdminAuditAction` rather than `string`, which is the point: adding
+ * a member to that union fails `yarn tsc` here until it is given wording, so
+ * the log cannot quietly start printing procedure paths again.
+ */
+const DISPLAY: Record<AdminAuditAction, AuditDisplay> = {
+  "user.admin.updateUserPermission": {
+    label: "Permission changed",
+    targetKind: "user",
+    describe: (metadata) => {
+      const permission = stringField(metadata, "permission");
+      return permission ? { text: `Set to ${permission}` } : null;
+    },
+  },
+  "user.admin.resolveReport": {
+    label: "Report resolved",
+    targetKind: "report",
+    /*
+     * Names the report as well as the status. Target spends this row's cell on
+     * the reported user, so Details is the only place left that says which of
+     * several reports about that person was resolved.
+     */
+    describe: (metadata, targetId) => {
+      const status = stringField(metadata, "status");
+      return status
+        ? cellForId(targetId, (short) => `Marked ${status} · report ${short}`)
+        : null;
+    },
+  },
+};
+
+/** `undefined` for an action this build has no wording for. */
+const displayFor = (action: string): AuditDisplay | undefined =>
+  DISPLAY[action as AdminAuditAction];
+
 /** The Action cell. An unmapped action prints verbatim rather than blank. */
 export const describeAuditAction = (action: string): string =>
   displayFor(action)?.label ?? action;
 
+/** The identity columns of one `getAuditLog` row. */
+export type AuditTargetRow = {
+  action: string;
+  /** Whatever the action acted on: a user for a permission change, a report
+   *  for a resolution. */
+  targetId: string;
+  /**
+   * The user `targetId` names or refers to, resolved server-side — the
+   * report's `reportedUserId` for a resolution row. `null` when the action's
+   * target is a user already, and when no report survives under `targetId`.
+   */
+  targetUserId: string | null;
+};
+
 /**
- * The Target cell.
+ * The Target cell: the person an admin's decision was about.
  *
- * `targetId` does not always name a user: `resolveReport` writes a report id
- * (`router/user/admin.ts`), so resolving every row against the user-email map
- * left those rows printing a bare cuid. The action says which table the id
- * belongs to, so `resolvedEmail` is consulted only where it can mean anything.
+ * `targetId` does not always name one. `resolveReport` writes a report id
+ * (`router/user/admin.ts`), so for those rows the person is the report's
+ * reported user, which `getAuditLog` resolves into `targetUserId`. The action
+ * says which of the two ids to put a name to.
  *
- * @param resolvedEmail what the caller's user-email map returned for
- *   `targetId`. Absent for a deleted user, or for a target that is not a user
- *   at all. `null` as well as `undefined`, because `getAllUsers` selects a
+ * @param resolveEmail the caller's `getAllUsers` map. Returns `null` or
+ *   `undefined` for an id it does not hold — a deleted user, or one whose
+ *   `email` is null, which that query filters out. Both, because it selects a
  *   column Prisma types as nullable even though its `where` excludes nulls.
  */
 export const describeAuditTarget = (
-  action: string,
-  targetId: string,
-  resolvedEmail: string | null | undefined,
+  row: AuditTargetRow,
+  resolveEmail: (id: string) => string | null | undefined,
 ): AuditCell => {
-  const display = displayFor(action);
+  const display = displayFor(row.action);
 
   // Unknown action: its target kind is unknowable, so claiming either one
   // would be a guess. The raw id is the honest answer.
   if (!display) {
-    return { text: targetId };
+    return { text: row.targetId };
   }
 
-  if (display.targetKind === "report") {
-    return cellForId(targetId, (short) => `Report ${short}`);
+  const personId =
+    display.targetKind === "report" ? row.targetUserId : row.targetId;
+
+  // Only reachable for a report whose row has gone: a `"user"` target is its
+  // own person. Nothing names a user here, so the report id is what is left.
+  if (!personId) {
+    return cellForId(row.targetId, (short) => `Report ${short}`);
   }
 
-  return resolvedEmail
-    ? { text: resolvedEmail }
-    : cellForId(targetId, (short) => `Unknown user (${short})`);
+  const email = resolveEmail(personId);
+
+  // Falls back on the *person's* id rather than the row's, so a report whose
+  // user cannot be named stays distinguishable from one that is gone entirely.
+  return email
+    ? { text: email }
+    : cellForId(personId, (short) => `Unknown user (${short})`);
 };
 
 /**
@@ -138,26 +175,30 @@ export const describeAuditTarget = (
 export const describeAuditDetails = (
   action: string,
   metadata: string | null,
-): string => {
+  targetId: string,
+): AuditCell => {
   if (!metadata) {
-    return "";
+    return { text: "" };
   }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(metadata);
   } catch {
-    return metadata;
+    return { text: metadata };
   }
 
   // `JSON.parse` happily yields null, a string, a number or an array. Indexing
   // any of those for a field would not throw — it would silently read
   // undefined — so they are rejected here rather than inside `describe`.
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    return metadata;
+    return { text: metadata };
   }
 
   return (
-    displayFor(action)?.describe(parsed as Record<string, unknown>) ?? metadata
+    displayFor(action)?.describe(
+      parsed as Record<string, unknown>,
+      targetId,
+    ) ?? { text: metadata }
   );
 };

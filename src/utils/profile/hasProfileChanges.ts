@@ -4,10 +4,12 @@ import { OnboardingFormInputs, User } from "../types";
  * Whether the profile form holds anything the stored row does not — the rule
  * behind `UnsavedModal`.
  *
- * Lifted out of `checkForChanges` in `pages/profile/index.tsx`, where it was
- * fourteen comparisons chained into one boolean expression inside a component.
- * That shape is why the defect went unnoticed: two of the fourteen compared
- * **the day of the month** rather than the instant.
+ * Extracted from `checkForChanges` in `pages/profile/index.tsx`, where it was
+ * fourteen comparisons chained into one boolean expression inside a component
+ * — a shape that cannot be unit tested on its own, so a single wrong term is
+ * easy to miss. Comparing the co-op dates by **the day of the month** rather
+ * than by instant is exactly that kind of wrong term, and it is nearly
+ * invisible:
  *
  * ```ts
  * formValues.startTime?.getTime()     !== user?.startTime?.getTime()     ||  // right
@@ -19,29 +21,23 @@ import { OnboardingFormInputs, User } from "../types";
  * `DatePicker picker="month"`, and `AccountSection.tsx` stores
  * `date.toDate()` — which for a month selection is **the first of that month**,
  * every time. So the form's day-of-month is always `1`, whatever the user
- * picks, and `getDate()` cannot tell January from March from December.
+ * picks, and `getDate()` cannot tell January from March from December: every
+ * month-to-month change would compare equal, in every timezone, since a
+ * month picker's `toDate()` lands on local midnight of the first regardless
+ * of which zone reads it back.
  *
- * **Every month-to-month change was invisible, in every timezone.** Measured
- * against `dayjs("YYYY-MM").toDate()`:
- *
- * | timezone | pick Jan | pick Mar | same `getDate()`? |
- * | --- | --- | --- | --- |
- * | UTC | 2026-01-01T00:00Z | 2026-03-01T00:00Z | yes, both 1 |
- * | America/New_York | 2026-01-01T05:00Z | 2026-03-01T05:00Z | yes, both 1 |
- * | Europe/Berlin | 2025-12-31T23:00Z | 2026-02-28T23:00Z | yes, both 1 |
- *
- * The ticket predicted something narrower — that only months *sharing a last
- * day* would collide, sparing February — on the premise that
- * `lastDayOfMonthUTC` writes these fields. It does not. That function backs
+ * `lastDayOfMonthUTC` is not involved here, which matters because it is the
+ * function that would otherwise seem like the fix: it backs
  * `handleMonthChange`, whose only caller is the map filter panel in
- * `Sidebar/Filters.tsx`; `AccountSection.tsx` imports `handleMonthChange` and
- * never calls it. The profile's co-op dates have always come from the antd
- * picker, so the defect was total rather than partial.
+ * `Sidebar/Filters.tsx`. `AccountSection.tsx` imports `handleMonthChange` and
+ * never calls it, so the profile's co-op dates come from the antd picker
+ * alone, and the comparison below has to hold for every month pair, not just
+ * ones that happen to share a last day.
  *
- * That dead import is filed separately, and the reason it matters is that the
- * profile never adopted the UTC fix `lastDayOfMonthUTC` carries, so east of UTC
- * its picker stores the month *before* the one chosen. Both are about the
- * write; this file is only about detecting a change to it.
+ * The profile has also never adopted the UTC fix `lastDayOfMonthUTC` carries,
+ * so east of UTC its picker can store the month *before* the one chosen. That
+ * is a write-path concern; this file is only about detecting a change to
+ * whatever gets written.
  *
  * The cost is not only the lost edit. `dateOverlapFilter` and `calculateScore`
  * both read these dates, so the term the user thought they had corrected goes
@@ -86,8 +82,8 @@ export type ProfileField =
  * what a profile with no co-op dates yet needs.
  *
  * An invalid `Date` yields `NaN`, and `NaN !== NaN`, so it always reports a
- * change. Unchanged from the original on both counts: `startTime` and `endTime`
- * already compared this way, and `getDate()` returned `NaN` for the same input.
+ * change. `startTime` and `endTime` are compared the same way, so this helper
+ * unifies all four date fields under one comparison.
  */
 const differentInstant = (
   a: Date | null | undefined,
@@ -117,9 +113,10 @@ const daysWorkingDiffer = (
  * The fields in which the form differs from the stored row.
  *
  * Returned as names rather than folded straight into a boolean so a test can
- * assert *which* term fired. That matters here specifically: the defect was one
- * wrong comparison among fourteen, and a boolean cannot tell "detected because
- * the date changed" from "detected because some unrelated term is always true".
+ * assert *which* term fired. That matters here specifically: a boolean cannot
+ * tell "detected because the date changed" from "detected because some
+ * unrelated term is always true", and one wrong comparison among fourteen is
+ * easy to miss without that distinction.
  *
  * A `user` of `null` - the query has not resolved - leaves every stored value
  * `undefined`, so the form's own defaults read as changes. Preserved from the
@@ -175,7 +172,7 @@ export const profileChanges = (
   );
   add("bio", formValues.bio !== user?.bio);
   // Last, and outside the form. A cropped file with no field touched is a real
-  // unsaved change and used to be the only one that navigated away silently.
+  // unsaved change that none of the form comparisons above can see on their own.
   add("profilePicture", !!pendingPicture);
 
   return changed;

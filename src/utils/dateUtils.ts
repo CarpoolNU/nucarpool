@@ -46,33 +46,23 @@ const handleMonthChange =
  * The same thing for the profile's antd month picker, which hands back a
  * `Dayjs` rather than a change event.
  *
- * **This is the fix for that defect.** Commit 6930f6f (2025-02-23) swapped the
- * profile's `<input type="month">` for `DatePicker picker="month"` and wrote
- * the new value straight through:
- *
- * ```ts
- * onChange={(date) => setValue("coopStartDate", date ? date.toDate() : null)}
- * ```
- *
  * `date.toDate()` is **local** midnight on the first of the month, and
  * `startDate`/`endDate` are `@db.Date`, so Prisma keeps the UTC day. East of
  * UTC that day is the one before — and the day before the first of a month is
- * in the *previous month*. A Berlin user choosing a January–June co-op had
- * December–May stored, and the profile then showed them December.
+ * in the *previous month*. Writing `date.toDate()` straight through would
+ * store the month before the one a Berlin user chose, and the profile would
+ * then show them the wrong month - which is why this goes through
+ * `lastDayOfMonthUTC` the same as the plain `<input>` does.
  *
- * That is precisely the defect `lastDayOfMonthUTC` was written to fix, quoted
- * in its own docstring above. The swap dropped the call and left the import
- * behind, which is why `AccountSection.tsx` reads as though it were still
- * handled.
- *
- * Two things it restores, not one. The offset bug is the visible half; the
+ * Two things that restores, not one. The offset is the visible half; the
  * other is the **convention**. `src/server/db/README.md` records these columns
  * as holding the *last* day of the month chosen, and `dateOverlapFilter`
  * compares a candidate's stored dates against filter values that
  * `handleMonthChange` still builds that way. Storing the first instead skews
  * every comparison by up to a month: under full overlap, a candidate whose
  * co-op is exactly the range you asked for fails `endDate >= yours` and drops
- * out of the results. Both halves come from the same missing call.
+ * out of the results. Both halves come from the same call to
+ * `lastDayOfMonthUTC`.
  *
  * The month is read off the `Dayjs` in **local** time, deliberately: the user
  * picked it from a local calendar, so those are the year and month they meant.
@@ -116,21 +106,20 @@ const formatDateToMonth = (date: Date | null): string | undefined => {
  * A stored co-op date as an antd month picker's own value, or `null` when the
  * field is empty.
  *
- * **Controlled deliberately.** `AccountSection`'s two month pickers used to
- * take `defaultValue`, which antd reads once at mount and ignores afterwards.
- * `src/pages/profile/index.tsx` calls `reset(...)` on every `user` change -
- * which every save triggers, via a refetch - and `AccountSection` stays
- * mounted across it, since it is gated on `option === "account"` at a fixed
- * position in the tree with no `key`. So the form moved to the saved months
- * and the controls kept displaying the ones they had started with: a user who
- * had just saved was told their change had not taken, which is the opposite
- * of what the database held. `UnsavedModal`'s discard is the same
- * `reset(...)` and had the same outcome.
+ * **Controlled deliberately, not left to `defaultValue`.** antd reads
+ * `defaultValue` once at mount and ignores it afterwards. `src/pages/profile/
+ * index.tsx` calls `reset(...)` on every `user` change - which every save
+ * triggers, via a refetch - and `AccountSection` stays mounted across it,
+ * since it is gated on `option === "account"` at a fixed position in the tree
+ * with no `key`. A `defaultValue` picker would then keep displaying the month
+ * it mounted with while the form itself holds the saved one - the opposite of
+ * what the database holds. `UnsavedModal`'s discard goes through the same
+ * `reset(...)` and needs the same guarantee.
  *
- * `StepThree`'s identical pickers had the opposite problem for the same
- * reason: no `value` at all, so a Previous/Next remount - which unmounts and
- * remounts the step rather than hiding it - restarted antd's internal state at
- * `null` while the form went on holding the dates.
+ * `StepThree`'s identical pickers need the opposite guarantee for the same
+ * reason: a Previous/Next remount - which unmounts and remounts the step
+ * rather than hiding it - would restart antd's internal state at `null` with
+ * no `value` to recover it, while the form goes on holding the dates.
  *
  * **`null` rather than `undefined`, and the empty case never reaches
  * `dayjs`.** `formatDateToMonth(null)` is `undefined`, and `dayjs(undefined,

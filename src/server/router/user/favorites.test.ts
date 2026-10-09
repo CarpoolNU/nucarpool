@@ -9,10 +9,10 @@ import { fakeBlockDelegate } from "../../../testing/blockFake";
 /**
  * Authorization tests for `user.favorites.edit`.
  *
- * The mutation used to take the owning `userId` from client input and pass it
- * straight to `prisma.user.update({ where: { id: input.userId } })`, so any
- * signed-in caller could edit anyone else's favorites. These tests pin the
- * fixed behaviour: the owner comes from `ctx.session.user.id` and nothing the
+ * A client-supplied `userId` passed straight to
+ * `prisma.user.update({ where: { id: input.userId } })` would let any
+ * signed-in caller edit anyone else's favorites. These tests pin the actual
+ * behaviour: the owner comes from `ctx.session.user.id` and nothing the
  * client sends can redirect the write.
  *
  * Following `src/server/router/authorization.test.ts`, these drive the real
@@ -39,8 +39,8 @@ const TARGET = "target-user";
 const buildFavoritesDb = (
   seed: Record<string, string[]> = { [USER_A]: [], [USER_B]: [] },
   /**
-   * Which user rows exist, for the `findUnique` the add path now makes before
-   * it connects. Separate from `seed`, whose keys are only the users who *own*
+   * Which user rows exist, for the `findUnique` the add path makes before it
+   * connects. Separate from `seed`, whose keys are only the users who *own*
    * a list — `TARGET` is favourited by both and owns nothing.
    */
   knownUsers: string[] = [USER_A, USER_B, TARGET],
@@ -112,7 +112,7 @@ const callerFor = (session: Session | null, db = buildFavoritesDb()) => {
 };
 
 /**
- * The input type no longer has `userId`, so an attacker-shaped payload cannot
+ * The input type has no `userId` field, so an attacker-shaped payload cannot
  * be expressed in TypeScript. Casting through `unknown` is how these tests
  * reach past the compiler to exercise what an untrusted HTTP client can
  * actually send — the same trick `authorization.test.ts` uses for an
@@ -310,15 +310,15 @@ describe("user.favorites.edit — authentication gate", () => {
 });
 
 /**
- * `favorites.me` no longer hides a favourite it cannot match.
+ * `favorites.me` does not hide a favourite it cannot match.
  *
- * The procedure used to drop any favourite whose role equalled the caller's,
- * whose role was VIEWER, or whose search was INACTIVE — the predicate that
- * belongs in discovery. Applied to a curated list it created a state with no
- * way out: this query is the only source of the favourites list, the
+ * Dropping any favourite whose role equals the caller's, whose role is
+ * VIEWER, or whose search is INACTIVE — the predicate that belongs in
+ * discovery — would, applied to a curated list, create a state with no way
+ * out: this query is the only source of the favourites list, the
  * un-favourite star lives on the card it renders, and `buildCandidateWhere`
- * narrows the explore map to compatible roles as well. The person disappeared
- * from every surface while their `_Favorites` row persisted.
+ * narrows the explore map to compatible roles as well. The person would
+ * disappear from every surface while their `_Favorites` row persists.
  *
  * These drive the real `appRouter` with a mocked Prisma, in the style of the
  * `edit` tests above. Nothing here renders a card — see the limitations note at
@@ -429,7 +429,7 @@ const idsFrom = async (db: ReturnType<typeof buildMeDb>) =>
 describe("user.favorites.me — a favourite survives becoming unmatchable", () => {
   it("returns a favourite whose role now matches the caller's", async () => {
     // The headline case: a RIDER favourited a DRIVER who has since become a
-    // RIDER. Before the fix this returned an empty list.
+    // RIDER. Filtering by role here would return an empty list.
     const db = buildMeDb({
       callerRole: Role.RIDER,
       favorites: [favoriteSearch("same-role", { role: Role.RIDER })],
@@ -457,8 +457,8 @@ describe("user.favorites.me — a favourite survives becoming unmatchable", () =
   });
 
   it("returns every category at once, keeping the compatible one", async () => {
-    // The failure scenario from the ticket: three favourites, two of which
-    // drifted. All three have to come back, or the list is still lying.
+    // Three favourites, two of which have drifted. All three have to come
+    // back, or the list is still lying.
     const db = buildMeDb({
       callerRole: Role.RIDER,
       favorites: [
@@ -487,9 +487,9 @@ describe("user.favorites.me — a favourite survives becoming unmatchable", () =
   });
 
   it("does not narrow the query by role or status either", async () => {
-    // The filter was in JavaScript, so a "fix" that pushed it into SQL would
-    // pass every assertion above while reintroducing the bug. The query must
-    // select favourites by user id and nothing else.
+    // A "fix" that filtered by pushing a role or status condition into SQL
+    // would pass every assertion above while still hiding entries from the
+    // list. The query must select favourites by user id and nothing else.
     const db = buildMeDb({ favorites: [favoriteSearch("rider")] });
 
     await meCallerFor(db).user.favorites.me();
@@ -505,8 +505,9 @@ describe("user.favorites.me — a favourite survives becoming unmatchable", () =
   });
 
   it("still refuses a caller with no CarpoolSearch of their own", async () => {
-    // The guard the removed filter's `role` used to be selected for. It is not
-    // part of this fix and must not have been dropped with it.
+    // The existence guard - refusing a caller with no CarpoolSearch at all -
+    // is independent of role filtering, and must still hold even though role
+    // no longer gates which favourites come back.
     const db = buildMeDb({ callerSearch: false, favorites: [] });
 
     await expect(meCallerFor(db).user.favorites.me()).rejects.toMatchObject({
@@ -517,8 +518,8 @@ describe("user.favorites.me — a favourite survives becoming unmatchable", () =
 
 describe("user.favorites.me — returning more rows must not disclose more", () => {
   it("omits the email address from every entry", async () => {
-    // Email was removed from the bulk payloads, favourites among them.
-    // Relaxing the row filter must not quietly widen the per-row shape.
+    // Email is excluded from the bulk payloads generally, favourites among
+    // them. Relaxing the row filter must not quietly widen the per-row shape.
     const db = buildMeDb({
       callerRole: Role.RIDER,
       favorites: [
@@ -575,10 +576,10 @@ describe("user.favorites.me — returning more rows must not disclose more", () 
 
 describe("user.favorites.edit — a newly-visible favourite can be removed", () => {
   it("un-favourites someone whose role change used to hide them", async () => {
-    // The point of the whole ticket: the row was unreachable because no card
-    // rendered, so no star existed to press. `edit` itself never had a role
-    // condition, so once the entry is listed this works - which is what makes
-    // relaxing the read filter a complete fix rather than half of one.
+    // The row would otherwise be unreachable: with no card rendered, no star
+    // exists to press. `edit` itself has no role condition, so once the entry
+    // is listed this works - which is what makes relaxing the read filter a
+    // complete fix rather than half of one.
     const db = buildFavoritesDb({ [CALLER]: ["same-role"] });
     const { caller } = callerFor(sessionFor(CALLER), db);
 

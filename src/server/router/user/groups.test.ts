@@ -25,15 +25,15 @@ import { BLOCKED_PAIR_MESSAGE } from "../../db/blocks";
 /**
  * Authorization tests for the carpool groups router.
  *
- * Every mutation was `protectedRouter` and nothing more, so group and user ids
- * arrived straight from client input: any signed-in student could dissolve
- * someone else's group, evict its riders, insert users, or rewrite the driver's
- * message. These tests pin the rule set the UI already implied — driver-only
- * delete/evict, riders may leave, joining needs a request.
+ * Every mutation is `protectedRouter`, which only proves a session exists, so
+ * group and user ids arriving straight from client input would otherwise let
+ * any signed-in student dissolve someone else's group, evict its riders,
+ * insert users, or rewrite the driver's message. These tests pin the rule set
+ * the UI already implied — driver-only delete/evict, riders may leave,
+ * joining needs a request.
  *
- * The driver's message is no longer among them: the two message
- * mutations were replaced by `updatePreferences`, which writes only the caller's own
- * search, so there is no shared row left for a rider to hijack.
+ * The driver's message is not among them: `updatePreferences` writes only
+ * the caller's own search, so there is no shared row for a rider to hijack.
  *
  * Same `createCaller` + mocked-Prisma approach as `favorites.test.ts`,
  * `requests.test.ts` and `email.test.ts`. The mock applies writes to in-memory
@@ -143,14 +143,14 @@ const buildGroupsDb = (opts?: {
   /**
    * The joined `user` row, honouring whatever the query asked for.
    *
-   * This exists so a projection assertion cannot pass vacuously. The fake used
-   * to answer `{ id }` no matter what was requested, which meant a test
-   * asserting "no email came back" held even against an unrestricted
-   * `include: { user: true }` — the fixture simply had no email to leak.
+   * This exists so a projection assertion cannot pass vacuously. A fake that
+   * answered `{ id }` no matter what was requested would let a test asserting
+   * "no email came back" hold even against an unrestricted
+   * `include: { user: true }` — the fixture would simply have no email to leak.
    *
    * So: a bare `true` hands back the whole row, sensitive columns and all,
    * exactly as Prisma would; a `select` hands back only what it names. A test
-   * that asserts an absence now fails the moment the resolver over-fetches.
+   * that asserts an absence fails the moment the resolver over-fetches.
    */
   const projectUser = (userId: string, ask: any) => {
     const full = {
@@ -321,13 +321,13 @@ const buildGroupsDb = (opts?: {
   // version - so it did not actually close any of these races. There are six
   // of them now, and they are dispatched below **on the statement text**.
   //
-  // Dispatching on `values.length`, which this mock used to do, is no longer
-  // possible: the seat release and the rider link both carry three values,
-  // and the seat reservation and the group-wide unlink both carry one. It was
-  // never safe in the first place - it silently routed the driver link's two
-  // values into the three-value branch and relied on `matches` ignoring the
-  // `undefined` that produced. Matching the statement means one this mock
-  // does not recognise throws instead of quietly behaving like another.
+  // Dispatching on `values.length` would not work: the seat release and the
+  // rider link both carry three values, and the seat reservation and the
+  // group-wide unlink both carry one, so length alone cannot tell them apart
+  // - it would silently route the driver link's two values into the
+  // three-value branch and rely on `matches` ignoring the `undefined` that
+  // produced. Matching the statement means one this mock does not recognise
+  // throws instead of quietly behaving like another.
   const sqlOf = (strings: unknown) =>
     (strings as unknown as string[]).join("?").replace(/\s+/g, " ").trim();
 
@@ -503,13 +503,11 @@ const buildGroupsDb = (opts?: {
  * Replaces the behaviour of whichever raw statement's SQL contains `marker`,
  * leaving every other statement on the mock's real implementation.
  *
- * These tests used to target a statement by how many values it interpolated.
- * That never identified one uniquely - it only happened to, while there were
- * two shapes - and it silently picked the wrong call more than once: the two
- * "linking the rider fails" tests below faulted `reserveSeat`, the *first*
- * raw statement, and then asserted about a rider link that had never run.
- * `releaseSeats` and the rider link now both carry three values, so counting
- * cannot tell them apart at all.
+ * Targeting a statement by how many values it interpolates would not
+ * identify one uniquely: `releaseSeats` and the rider link both carry three
+ * values, and the seat reservation and the group-wide unlink both carry one,
+ * so counting cannot tell them apart. Matching on the statement text instead
+ * is what lets each override land on the call it names.
  */
 const overrideRawStatement = (
   db: { executeRaw: jest.Mock },
@@ -555,12 +553,12 @@ const callerFor = (session: Session | null, db = buildGroupsDb()) => {
 /**
  * `groups.me` and the states that are not failures.
  *
- * This query used to throw for two perfectly ordinary situations - NOT_FOUND
- * with no CarpoolSearch row, BAD_REQUEST with no group - so the client could not
- * tell "you are not in a group" from "the server is broken", and React Query
- * retried each on the way to an error state. It also spread the result of a
- * `findUnique` straight into its return value, so a membership pointing at a
- * deleted group produced an object with members but no id.
+ * Throwing for either of these situations - NOT_FOUND with no CarpoolSearch
+ * row, BAD_REQUEST with no group - would mean the client could not tell "you
+ * are not in a group" from "the server is broken", and React Query would
+ * retry each on the way to an error state. Spreading the result of a
+ * `findUnique` straight into the return value would also mean a membership
+ * pointing at a deleted group produces an object with members but no id.
  */
 describe("user.groups.me — no group is not an error", () => {
   it("returns the group for a member", async () => {
@@ -605,9 +603,9 @@ describe("user.groups.me — no group is not an error", () => {
     const group = await caller.user.groups.me();
 
     expect(group).toBeNull();
-    // The bug this replaces: `{ ...null, users: [...] }` is a truthy object with
-    // members and no id, so every `group?.id` check downstream passed and then
-    // read undefined.
+    // What spreading a null group would produce: `{ ...null, users: [...] }`
+    // is a truthy object with members and no id, so every `group?.id` check
+    // downstream would pass and then read undefined.
     expect(group).not.toEqual(
       expect.objectContaining({ users: expect.anything() }),
     );
@@ -650,7 +648,8 @@ describe("user.groups.delete — the driver dissolves the group", () => {
 
     expect(db.groupIds()).toEqual([GROUP]);
     expect(db.carpoolGroup.delete).not.toHaveBeenCalled();
-    // The pre-fix resolver cleared every member's carpoolId before deleting.
+    // Detaching members before checking authorization would leave this
+    // cleared even when the delete itself is refused.
     expect(db.carpoolIdOf(RIDER_2)).toBe(GROUP);
   });
 
@@ -670,8 +669,9 @@ describe("user.groups.delete — the driver dissolves the group", () => {
     // `carpool_group`, so the driver passes the membership check and the
     // delete then finds nothing. Two routes get here: a concurrent delete, or
     // an `edit` whose dissolution path landed in between. Prisma answers both
-    // with P2025, which is not a TRPCError — so it reached the client as a
-    // masked 500 that the query layer then retried into the same answer.
+    // with P2025, which is not a TRPCError - left uncaught it would reach the
+    // client as a masked 500 that the query layer retries into the same
+    // answer.
     //
     // This cannot be a read beforehand, which is why it is a catch: the
     // condition arises between any such read and the delete itself.
@@ -736,9 +736,9 @@ describe("user.groups.updatePreferences — self-scoped, replacing the double wr
   });
 
   /**
-   * The reason a blank field is stored as "" rather than left null:
-   * `resolveGroupDetails` reads all-null as "never saved" and falls back to the
-   * legacy blob, so a partial write would resurrect data the driver cleared.
+   * Blank fields are stored as "" rather than left null: a partial write
+   * would leave stale values in the fields it skipped, so clearing a field
+   * requires writing all three.
    */
   it("stores blanks as empty strings, not nulls", async () => {
     const { caller, db } = callerFor(sessionFor(DRIVER));
@@ -757,11 +757,9 @@ describe("user.groups.updatePreferences — self-scoped, replacing the double wr
   });
 
   /**
-   * `updateMessage` wrote `group.message`, a row shared with riders, and needed
-   * `requireGroupDriver` to stop a rider rewriting it. This writes only the
-   * caller's own search, so there is no cross-user write left to police - a
-   * rider setting their own preferences simply has no effect on the group,
-   * because the group reads the driver's.
+   * This writes only the caller's own search, so there is no cross-user write
+   * to police - a rider setting their own preferences simply has no effect on
+   * the group, because the group reads the driver's.
    */
   it("never touches the group row", async () => {
     const { caller, db } = callerFor(sessionFor(DRIVER));
@@ -911,8 +909,8 @@ describe("user.groups.edit — the response carries no member rows", () => {
     // The control for this whole describe. `buildGroupsDb`'s joined user row
     // answers a bare `include: { user: true }` with the full row — email,
     // permission, the licence timestamps — exactly as Prisma does. Without
-    // this check a "no email came back" assertion would hold against the
-    // unfixed resolver too, because the fake simply had nothing to give.
+    // this check a "no email came back" assertion would hold even if the
+    // resolver over-fetched, because the fake simply had nothing to give.
     const db = buildGroupsDb();
 
     const rows = await db.carpoolSearch.findMany({
@@ -930,8 +928,8 @@ describe("user.groups.edit — the response carries no member rows", () => {
 
   it("returns the group row alone, with no users array at all", async () => {
     // A rider removing themselves from a group of three: the group survives,
-    // and the response goes to someone who is no longer in it. It used to
-    // list every remaining member's whole User row.
+    // and the response goes to someone who is no longer in it. Listing every
+    // remaining member's whole User row would leak their data to that reader.
     const { caller } = callerFor(sessionFor(RIDER_1));
 
     const result = await caller.user.groups.edit(leave(RIDER_1));
@@ -1064,8 +1062,7 @@ describe("user.groups.create — only the two people involved", () => {
    * `invitation` is `[asker, asked]`. It defaults to the rider asking the
    * driver, because `requireAcceptableRequest` only lets the person a request
    * was *sent to* accept it — so which way the request points decides which of
-   * the two may create the group. The direction used to be
-   * irrelevant, and every test here seeded the same one.
+   * the two may create the group.
    */
   const freshPair = (invitation: RequestPair = [RIDER_1, DRIVER]) =>
     buildGroupsDb({
@@ -1162,11 +1159,11 @@ describe("user.groups.create — only the two people involved", () => {
 /**
  * Accepting a request resolves it.
  *
- * Building the group used to leave the `Request` untouched, so it stayed pending
- * in both users' Requests tab forever and the duplicate guard in
- * `requests.create` blocked the pair from ever requesting each other again. The
- * resolution happens inside the same transaction as the membership write, which
- * is the only way group state and request state cannot disagree.
+ * Leaving the `Request` untouched while building the group would strand it
+ * pending in both users' Requests tab forever, and the duplicate guard in
+ * `requests.create` would then block the pair from ever requesting each other
+ * again. The resolution happens inside the same transaction as the membership
+ * write, which is the only way group state and request state cannot disagree.
  */
 describe("accepting a request resolves it", () => {
   it("marks the request accepted when a group is created", async () => {
@@ -1217,11 +1214,11 @@ describe("accepting a request resolves it", () => {
     // The other direction: the driver did the asking, so the rider is the one
     // who may accept, and the row still resolves.
     //
-    // This case used to be written with the *sender* accepting — an OUTSIDER
-    // who had asked the driver, calling `edit` themselves — and asserted that
-    // it succeeded. That assertion was itself the defect: it pinned the
-    // self-accept as correct behaviour, which is how the hole survived three
-    // rounds of group authorization hardening. The refusal is now pinned below.
+    // Only the rider accepting is exercised here. An OUTSIDER who sent the
+    // request calling `edit` to accept their own request must be refused —
+    // asserting that it succeeds here is exactly the defect that let a
+    // self-accept hole survive three rounds of group authorization hardening.
+    // The refusal is pinned separately, below.
     const db = buildGroupsDb({ requests: [[DRIVER, OUTSIDER]] });
     const { caller } = callerFor(sessionFor(OUTSIDER), db);
 
@@ -1495,7 +1492,7 @@ describe("user.groups — a used invitation cannot be replayed", () => {
     const seatsAfterLeaving = db.seatsOf(DRIVER)!;
     expect(seatsAfterLeaving).toBe(seatsWhileRiding + 1);
 
-    // The driver tries to put them back. This used to succeed.
+    // The driver tries to put them back, on the same already-used invitation.
     await expect(
       caller.user.groups.edit({ ...join, add: true }),
     ).rejects.toMatchObject({
@@ -1936,10 +1933,11 @@ describe("seat accounting — normal joins and leaves", () => {
 /**
  * Atomicity of the group mutations.
  *
- * Each of these writes to two or three tables. They used to be independent
- * awaits, so a failure part-way through committed the earlier writes and
- * abandoned the rest — and because `relationMode = "prisma"` enforces no
- * foreign keys, nothing rejected the result and no job ever reconciled it.
+ * Each of these writes to two or three tables. Independent awaits instead of a
+ * single transaction would let a failure part-way through commit the earlier
+ * writes and abandon the rest — and because `relationMode = "prisma"` enforces
+ * no foreign keys, nothing would reject the result and no job would reconcile
+ * it.
  *
  * Every test here forces one write in the middle of a sequence to fail and then
  * asserts the database looks exactly as it did beforehand. The mock's
@@ -1973,12 +1971,12 @@ describe("group mutations are atomic", () => {
     const { caller } = callerFor(sessionFor(DRIVER), db);
 
     // By the time the rider link runs, the seat is already spent, the group
-    // already exists and the driver is already linked. That is the state
-    // that used to survive a failure here. The rider link is the raw
-    // `$executeRaw` claim, not a `carpoolSearch.updateMany` - and it is
-    // targeted by its SQL, because `reserveSeat` is the *first* raw statement
-    // and a bare `mockImplementationOnce` faulted that one instead, leaving
-    // the assertions below about a link that had never run.
+    // already exists and the driver is already linked — all of which a
+    // failure here must roll back together, not leave standing. The rider
+    // link is the raw `$executeRaw` claim, not a `carpoolSearch.updateMany` -
+    // and it is targeted by its SQL, because `reserveSeat` is the *first* raw
+    // statement and a bare `mockImplementationOnce` faulted that one instead,
+    // leaving the assertions below about a link that had never run.
     overrideRawStatement(db, RIDER_LINK, async () => {
       throw new Error("connection lost");
     });
@@ -1998,9 +1996,9 @@ describe("group mutations are atomic", () => {
     const { caller } = callerFor(sessionFor(DRIVER), db);
 
     // Members are detached before the group row is removed. Failing on the
-    // removal is what used to leave a group nobody pointed at — and one the
-    // driver could no longer delete, because the membership check would no
-    // longer find them in it.
+    // removal without rolling that back would leave a group nobody points
+    // at — and one the driver could never delete, because the membership
+    // check would no longer find them in it.
     db.carpoolGroup.delete.mockImplementationOnce(async () => {
       throw new Error("connection lost");
     });
@@ -2084,11 +2082,11 @@ describe("group mutations are atomic", () => {
 /**
  * Dissolving a group is a success, not an error.
  *
- * `edit` removes the group once a single member would be left, and then used to
- * fall through to a read of that same group — finding nothing, because it had
- * just deleted it, and throwing BAD_REQUEST "Group does not exist". Every caller
- * turns a rejection into "Something went wrong", so leaving a two-person carpool
- * reported failure after succeeding, and the `onSuccess` handlers never ran.
+ * `edit` removes the group once a single member would be left. Falling
+ * through to a read of that same group afterward would find nothing — it was
+ * just deleted — and throw BAD_REQUEST "Group does not exist". Every caller
+ * turns a rejection into "Something went wrong", so that would report failure
+ * after succeeding, with the `onSuccess` handlers never running.
  */
 describe("edit — dissolving the group when one member is left", () => {
   const twoPersonGroup = () =>
@@ -2778,26 +2776,26 @@ describe("user.groups.create — legal states only", () => {
 /**
  * The double-click, replayed against the server.
  *
- * The Accept button had no in-flight guard, so two clicks fired two independent
- * mutations. The second one used to succeed: it built a second group,
- * took a second seat for the same rider, and left the first group as an orphan
- * nothing could reach.
+ * Without a guard against two in-flight accepts on the same request, two
+ * clicks would fire two independent mutations: the second would build a
+ * second group, take a second seat for the same rider, and leave the first
+ * group as an orphan nothing could reach.
  *
  * The button is disabled while the first call is running, which cannot be
  * asserted here - this is a `.test.ts` in the `node` project, with no DOM. A
  * `.test.tsx` could assert it, and none does. What *can* be
  * asserted here, and is the half that matters if a click still slips through, is that
- * the second call is now a clean rejection: no second group, no second seat, no
+ * the second call is a clean rejection: no second group, no second seat, no
  * membership moved. These replay the exact sequence rather than setting the
  * states up directly.
  *
- * **Which guard refuses has moved, and the code with it.** The first
- * accept resolves the request to ACCEPTED, so the second call is now stopped by
- * `requireAcceptableRequest` — the invitation is spent — before it ever reaches
- * the membership checks that used to answer CONFLICT. The state asserted below
- * is unchanged, which is the property these tests exist for; the message is
- * asserted too, so a future change that moves the refusal again is visible
- * here rather than silently passing for a different reason.
+ * **The second call is refused by `requireAcceptableRequest`, not by a
+ * membership check.** The first accept resolves the request to ACCEPTED, so
+ * the invitation is spent before the second call ever reaches a membership
+ * check. The state asserted below is unchanged, which is the property these
+ * tests exist for; the message is asserted too, so a future change that moves
+ * the refusal again is visible here rather than silently passing for a
+ * different reason.
  *
  * The membership guards those CONFLICTs came from are still covered, by
  * "refuses a second add of the same rider" and "refuses a rider who is already
@@ -3316,17 +3314,16 @@ describe("a driver at a negative seat count", () => {
 /**
  * A paused search stops a group being built, on both slots.
  *
- * The status half of the two role checks above, and it arrived the same way.
- * `user.requests.me` no longer hides a request whose counterpart has
- * paused their search — the dead end being that the request was invisible in
- * both Requests tabs while `requests.create`'s duplicate guard went on refusing
- * every retry with CONFLICT, so neither party could withdraw it — which put an
- * Accept button in front of those pairs for the first time.
+ * `user.requests.me` does not hide a request whose counterpart has paused
+ * their search, so a pair like this can reach an Accept button: if it did
+ * hide them, the request would stay invisible in both Requests tabs while
+ * `requests.create`'s duplicate guard went on refusing every retry with
+ * CONFLICT, leaving neither party able to withdraw it.
  *
- * Nothing here read `CarpoolSearch.status` before. That matters because such a
+ * `CarpoolSearch.status` has to be checked here specifically because such a
  * pair is usually *role*-compatible: a paused RIDER and an active DRIVER pass
- * every check this file already had, so a role-only guard waves through exactly
- * the case the visibility change introduced.
+ * every role check this file already had, so a role-only guard would wave
+ * through exactly this case.
  *
  * `validateRequestAcceptance` refuses it first, with a message that can name
  * the person; these pin the half a stale cache or a direct call cannot get
@@ -3675,17 +3672,18 @@ describe("a blocked pair cannot share a group", () => {
  * Seat accounting never writes a count it read earlier in the same
  * transaction, and never credits a seat for a departure that did not happen.
  *
- * Three writes used to trust a snapshot. `releaseSeats` was
- * `clampSeats(currentSeats + n)` against a `currentSeats` its caller had read
- * earlier in the transaction, so a `reserveSeat` that committed in between
- * was overwritten. The remove path's unlink matched on `userId` alone, so it
- * "changed a row" whether or not the member was still in the group and the
- * credit ran twice for one departure. And `markRequestAccepted` discarded its
- * match count, so an accept whose request had been withdrawn committed a
- * group and a spent seat with nothing behind them.
+ * Three writes are compare-and-swaps for exactly this reason. A write that
+ * trusted a snapshot instead would fail in its own way: `releaseSeats` as
+ * `clampSeats(currentSeats + n)` against a `currentSeats` read earlier in the
+ * transaction would overwrite a `reserveSeat` that committed in between; the
+ * remove path's unlink matching on `userId` alone would "change a row"
+ * whether or not the member was still in the group, crediting a seat twice
+ * for one departure; and `markRequestAccepted` discarding its match count
+ * would let an accept whose request had been withdrawn commit a group and a
+ * spent seat with nothing behind them.
  *
- * All three are compare-and-swaps now, and what this file can prove about
- * them is limited in a specific way: **a mocked Prisma has no isolation
+ * What this file can prove about the three CAS guards is limited in a
+ * specific way: **a mocked Prisma has no isolation
  * level**, so it cannot produce the stale read that makes any of these fail.
  * These tests therefore drive each guard directly - the statement matches
  * nothing, which is exactly what the real one does when it loses - and assert
@@ -3860,7 +3858,7 @@ describe("seat accounting is not a read-modify-write", () => {
         caller.user.groups.create({ driverId: DRIVER, riderId: RIDER_1 }),
       ).rejects.toMatchObject({ code: "CONFLICT" });
 
-      // What the discarded match count used to leave behind: a group with no
+      // A discarded match count would otherwise leave behind a group with no
       // request behind it, and a seat spent on an invitation taken back.
       expect(db.groupIds()).toEqual([]);
       expect(db.seatsOf(DRIVER)).toBe(3);

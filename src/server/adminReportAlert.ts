@@ -10,12 +10,12 @@ import { REPORT_REASON_LABELS } from "../utils/reports";
 /**
  * Telling admins a report was filed.
  *
- * The report queue is pull-only: before this, a `SAFETY_CONCERN` report sat
- * in `OPEN` until an admin happened to open `/admin` and happened to look at
- * the Reports tab. There was no email, no digest and no badge anywhere else,
- * so the delay between a student reporting a safety problem and any human
- * seeing it was bounded only by how often someone visited the dashboard —
- * which for a volunteer-staffed project could be days.
+ * The report queue is pull-only: without this alert, a `SAFETY_CONCERN`
+ * report would sit in `OPEN` until an admin happened to open `/admin` and
+ * happened to look at the Reports tab, with no email, no digest and no badge
+ * anywhere else — so the delay between a student reporting a safety problem
+ * and any human seeing it would be bounded only by how often someone visits
+ * the dashboard, which for a volunteer-staffed project can be days.
  *
  * Three properties are the whole point of this module, and each is a test in
  * `adminReportAlert.test.ts`:

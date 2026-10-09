@@ -33,12 +33,11 @@ const AUDIT_LOG_PAGE_SIZE = 500;
  * The worst case is 500 reports each carrying a full 50-message snapshot, a
  * few megabytes.
  *
- * Used to be the whole of the queue - unpaginated, so a script filing OPEN
- * reports against every user it could see pushed genuinely
- * unresolved reports past the newest 500 and out of what an admin could ever
- * see. `getReports` now pages with a cursor, so a flood makes the queue
- * longer rather than making the rest of it invisible; the per-reporter rate
- * limit in `reports.ts` is what keeps the flood itself from being free.
+ * `getReports` pages with a cursor rather than returning the whole queue, so
+ * a script filing OPEN reports against every user it can see makes the queue
+ * longer instead of pushing genuinely unresolved reports past the newest 500
+ * and out of what an admin could ever see; the per-reporter rate limit in
+ * `reports.ts` is what keeps the flood itself from being free.
  */
 const REPORT_QUEUE_PAGE_SIZE = 500;
 
@@ -53,8 +52,8 @@ const REPORT_QUEUE_PAGE_SIZE = 500;
  * it. It is declared because tRPC's `useInfiniteQuery` client adds it to the
  * input of every infinite query it sends - `getClientArgs` merges
  * `direction: "forward"` in on the very first page, before a cursor exists -
- * and nothing between there and here strips it. Under `.strict()` that made
- * the report queue fail to load for every admin with a BAD_REQUEST
+ * and nothing between there and here strips it. Under `.strict()`, omitting it
+ * would make the report queue fail to load for every admin with a BAD_REQUEST
  * (`Unrecognized key: "direction"`), which the UI can only show as "we could
  * not load the reports".
  *
@@ -79,11 +78,11 @@ const getReportsInput = z
  * MANAGER; `updateUserPermission` additionally requires MANAGER.
  *
  * This router is shaped around one rule: the browser gets aggregates, not
- * tables. The dashboard used to download every user, group, request,
- * conversation and message — `getMessages` selected `content`, so the full text
- * of every private message on the platform was transferred to an admin's browser
- * in order to draw a line chart — and then filtered it with a client-side date
- * slider, so narrowing the window never reduced the data fetched.
+ * tables. Selecting `content` anywhere here would transfer the full text of
+ * every private message on the platform to an admin's browser just to draw a
+ * line chart, and a client-side date slider over that data would filter what
+ * is already fetched without reducing it — narrowing the window would not cut
+ * the read.
  *
  * What that means for the read profile:
  *
@@ -93,8 +92,8 @@ const getReportsInput = z
  * - The line-chart series are bounded by the requested date range, pushed into
  *   the `where` clause, and select `dateCreated` plus at most one enum.
  * - The user table is read once per query with a handful of narrow columns,
- *   through a nested `select` instead of the second `findMany` plus O(n^2)
- *   `.find()` join this router used to do.
+ *   through a nested `select`, rather than a second `findMany` plus an O(n^2)
+ *   `.find()` join.
  *
  * Two aggregations still finish in Node rather than in SQL, deliberately: the
  * weekly bucketing (a Sunday-start week boundary needs a raw query, and the
@@ -146,8 +145,8 @@ const resolveReportInput = z
 /**
  * The window `getDashboardSeries` accepts.
  *
- * `z.object({ start: z.date(), end: z.date() })` was the whole of it, which
- * left two holes.
+ * A bare `z.object({ start: z.date(), end: z.date() })` leaves two holes,
+ * both closed below.
  *
  * The serious one is the span. The handler turns the window into one array
  * element per week *before* any database work — `generateWeekLabels` computes
@@ -163,7 +162,7 @@ const resolveReportInput = z
  * The quieter one is ordering. `generateWeekLabels` takes `Math.min`/`Math.max`
  * internally so it accepts a reversed pair, but the `where` clause below is
  * built from the same two dates and is *not* order-insensitive: reversed, it
- * asks for `gte: <later>, lt: <earlier>` and matches nothing. The result was a
+ * asks for `gte: <later>, lt: <earlier>` and matches nothing. The result is a
  * chart with axis labels and flat zero series — indistinguishable from a
  * genuinely quiet window, and reported as success.
  *
@@ -209,8 +208,9 @@ const dashboardWindow = z
 export const adminDataRouter = router({
   /**
    * The user list behind `UserManagement`. Deliberately only what that screen
-   * needs — the dashboard's charts no longer read this endpoint, so it no longer
-   * carries role, status, schedule or group membership.
+   * needs: `UserManagement` is the only consumer, so this carries just id,
+   * email and permission — role, status, schedule and group membership live
+   * in the dashboard's own aggregate queries instead.
    */
   getAllUsers: adminRouter.query(async ({ ctx }) => {
     return ctx.prisma.user.findMany({
@@ -271,9 +271,9 @@ export const adminDataRouter = router({
    * Cumulative weekly counts for the growth chart, over the requested window.
    *
    * The window is widened to whole weeks so the buckets line up with the labels,
-   * then applied in the database. Unlike the client-side slider this replaced,
-   * the x-axis now follows the selection rather than always spanning every user's
-   * lifetime, and a narrower selection reads fewer rows.
+   * then applied in the database: the x-axis follows the requested window
+   * rather than always spanning every user's lifetime, so a narrower
+   * selection reads fewer rows.
    */
   getDashboardSeries: adminRouter
     .input(dashboardWindow)
@@ -473,8 +473,8 @@ export const adminDataRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      // These were bare `Error`s, which reached the client as an opaque 500
-      // rather than as a refusal the UI could report.
+      // A bare `Error` here would reach the client as an opaque 500 rather
+      // than a refusal the UI can report, so these throw `TRPCError`.
       const permission = ctx.session.user?.permission;
       if (permission !== "MANAGER") {
         throw new TRPCError({
@@ -500,11 +500,11 @@ export const adminDataRouter = router({
       }
 
       // A `userId` naming nobody is a manager's typo or a stale row in the
-      // table they clicked from, not a fault. It used to run straight into
-      // `tx.user.update`, where Prisma throws `P2025` for a record it cannot
-      // find — not a `TRPCError`, so it left the same masked 500 the FORBIDDEN
-      // checks above were written to remove, and the manager was told nothing
-      // about which part went wrong.
+      // table they clicked from, not a fault. Without this check it would run
+      // straight into `tx.user.update`, where Prisma throws `P2025` for a
+      // record it cannot find — not a `TRPCError` — leaving the same masked
+      // 500 the FORBIDDEN checks above exist to avoid, with the manager told
+      // nothing about which part went wrong.
       //
       // Outside the transaction deliberately: it is a read, it commits
       // nothing, and failing before the transaction opens keeps the atomic
@@ -552,15 +552,60 @@ export const adminDataRouter = router({
    * paginated — a simple list view is all that's needed here, and admin
    * mutations are rare enough that a static ceiling is sufficient for now.
    *
-   * Returns raw `actorId`/`targetId`; the client resolves those to emails
-   * through `getAllUsers`, which it already fetches for `UserManagement`,
-   * rather than this procedure joining and denormalizing that itself.
+   * Returns raw ids; the client resolves them to emails through
+   * `getAllUsers`, which it already fetches for `UserManagement`, rather than
+   * this procedure denormalizing an email onto every row.
+   *
+   * **`targetId` is not always a user**, which is why each row also carries
+   * `targetUserId`. `resolveReport` writes a report id, and the person an
+   * admin's decision concerned is that report's reported user — an id the
+   * client cannot reach, since the only other query it holds is
+   * `getAllUsers`. Resolving it here is what lets the Target column name a
+   * person on every row instead of printing a cuid.
+   *
+   * The reported user is read as two columns, deliberately not by reusing
+   * `getReports`: that query carries a full conversation snapshot per report,
+   * and nothing about naming a user needs message text. One `findMany` over
+   * the page's report ids, so the query count does not grow with the number
+   * of resolution rows.
    */
   getAuditLog: adminRouter.query(async ({ ctx }) => {
-    return ctx.prisma.adminAuditLog.findMany({
+    const entries = await ctx.prisma.adminAuditLog.findMany({
       orderBy: { dateCreated: "desc" },
       take: AUDIT_LOG_PAGE_SIZE,
     });
+
+    const reportIds = [
+      ...new Set(
+        entries
+          .filter((entry) => entry.action === AdminAuditAction.RESOLVE_REPORT)
+          .map((entry) => entry.targetId),
+      ),
+    ];
+
+    // `in: []` is a statement with no possible match, so a page with no
+    // resolution rows asks nothing.
+    const reportedUserByReport = new Map<string, string>(
+      reportIds.length === 0
+        ? []
+        : (
+            await ctx.prisma.report.findMany({
+              where: { id: { in: reportIds } },
+              select: { id: true, reportedUserId: true },
+            })
+          ).map((report) => [report.id, report.reportedUserId]),
+    );
+
+    return entries.map((entry) => ({
+      ...entry,
+      /*
+       * `null` for a row whose target is a user already — the client reads
+       * `targetId` for those — and for a report id with no surviving row,
+       * which the Target column renders differently from a user it cannot
+       * name.
+       */
+      targetUserId: reportedUserByReport.get(entry.targetId) ?? null,
+    }));
   }),
 
   /**
@@ -685,10 +730,10 @@ export const adminDataRouter = router({
     }),
 
   /**
-   * Transitions a `Report` out of `OPEN`. Before this procedure existed,
-   * nothing ever moved a report to `REVIEWED` or `DISMISSED`, so the
-   * duplicate-report guard in `reports.ts` — keyed on `OPEN` — made a user's
-   * first report against someone also their last.
+   * Transitions a `Report` out of `OPEN`. This matters beyond the admin view:
+   * the duplicate-report guard in `reports.ts` is keyed on `OPEN`, so until a
+   * report resolves, a user's first report against someone is also their
+   * last.
    *
    * The `WHERE … AND status = 'OPEN'` check and the write are one
    * `$executeRaw` statement rather than a `findFirst` followed by `update`,

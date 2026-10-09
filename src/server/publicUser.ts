@@ -84,24 +84,21 @@ const buildPublicUser = (search: CarpoolSearchWithRelations): PublicUser => ({
  * the same carpool group, or a request between them that was *accepted*.
  * Everything else must use `convertCarpoolSearchToPublic`.
  *
- * **Mutual is the load-bearing word, and it used to be missing.** The rule was
- * written as "an existing request between them", which sounds like a
- * relationship and is not one: `requests.create` lets any signed-in user create
- * a request to any other user unilaterally, with no consent and no
- * acknowledgement from the person it names. So the viewer could manufacture
- * their own authorisation - send a request, then read the exact home coordinate
- * and email address of whoever they had just named - and doing that once per id
- * returned by `mapbox.geoJsonUserList` walked the whole user base. That stepped
- * around both the coarsening and the `email` removal, which is what
- * `convertRequestCounterpart` below now prevents by asking *which* request
- * status is evidence of anything.
+ * **Mutual is the load-bearing word.** A rule written as "an existing request
+ * between them" sounds like a relationship and is not one: `requests.create`
+ * lets any signed-in user create a request to any other user unilaterally,
+ * with no consent and no acknowledgement from the person it names. So a
+ * viewer could manufacture their own authorisation - send a request, then
+ * read the exact home coordinate and email address of whoever they named -
+ * and doing that once per id returned by `mapbox.geoJsonUserList` would walk
+ * the whole user base. `convertRequestCounterpart` below prevents that by
+ * asking *which* request status is evidence of anything.
  *
- * Group membership was always mutual and is unchanged: `groups.me` reaches this
- * through people who have already agreed to carpool together.
+ * Group membership is always mutual: `groups.me` reaches this through people
+ * who have already agreed to carpool together.
  *
- * Both disclosures travel together because the same rule governs them. It was
- * established for coordinates first; `email` sat in the same struct and was not
- * revisited until later.
+ * Both disclosures travel together because the same rule governs them:
+ * coordinates and `email` sit in the same struct and share one gate.
  *
  * @param search an active CarpoolSearch record with user and location relations
  * @returns a user's details, home coordinate exact and email included
@@ -125,11 +122,12 @@ export const convertCarpoolSearchToPublicWithExactHome = (
  * address coarsening the product deliberately applies, because they can simply
  * be reverse-geocoded.
  *
- * The email address is omitted for the same reason. These payloads
- * carried every active user's Northeastern address to any signed-in viewer -
- * up to 150 per map request, unbounded for favorites, and the whole ranked set
- * for a VIEWER - on screens that never displayed it. Two consumers needed it and
- * both have a relationship with the user, so both use the converter above.
+ * The email address is omitted for the same reason: without it, these
+ * payloads would carry every active user's Northeastern address to any
+ * signed-in viewer - up to 150 per map request, unbounded for favorites, and
+ * the whole ranked set for a VIEWER - on screens that never display it. Two
+ * consumers need it and both have a relationship with the user, so both use
+ * the converter above.
  *
  * **This is the default on purpose.** Use
  * `convertCarpoolSearchToPublicWithExactHome` only where the viewer already has
@@ -178,8 +176,8 @@ export const convertCarpoolSearchToPublic = (
  * recommendation card already offers before a request exists at all.
  *
  * The counterpart stays *visible* either way. This narrows what each request
- * discloses and never which requests are returned - hiding them is what
- * earlier work was filed to undo.
+ * discloses and never which requests are returned - hiding the counterpart
+ * again would undo a deliberate fix, not add safety.
  *
  * @param search the counterpart's CarpoolSearch, with user and location relations
  * @param status the status of the request between the viewer and that user

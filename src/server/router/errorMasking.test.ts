@@ -9,15 +9,15 @@ import { newRequestId } from "./requestId";
 /**
  * Masking unexpected server errors on the way to the browser.
  *
- * `[trpc].ts` keeps error contents out of production logs; the same payload was
- * going to the client untouched, because `initTRPC` had no `errorFormatter` and
- * tRPC's default passes `error.message` straight through. A `P2025` therefore
- * reached a toast as "Invalid `prisma.user.update()` invocation…".
+ * `[trpc].ts` keeps error contents out of production logs. Without an
+ * `errorFormatter`, tRPC's default passes `error.message` straight through to
+ * the client, so a `P2025` would reach a toast as "Invalid
+ * `prisma.user.update()` invocation…".
  *
  * The property that has to survive is the *opposite* one: every deliberate
  * refusal in this codebase is shown to the user as written, and several fixes
- * depended on that. So the tests below are as
- * much about what is *not* masked as what is.
+ * depend on that. So the tests below are as much about what is *not* masked as
+ * what is.
  */
 
 /** The shape tRPC builds, reduced to the fields that matter here. */
@@ -144,8 +144,8 @@ describe("maskUnexpectedError", () => {
  * The unit tests above prove the function; they cannot prove `initTRPC` is
  * actually using it. **`appRouter.createCaller` cannot prove it either** —
  * verified against tRPC 11.18.0, `createCaller` rethrows the original
- * `TRPCError` and never runs `errorFormatter`, which is also why every existing
- * router test still asserts real messages and none of them had to change.
+ * `TRPCError` and never runs `errorFormatter`, which is why every router test
+ * elsewhere in this directory asserts real messages rather than masked ones.
  *
  * So this goes through `fetchRequestHandler` and reads the response body, which
  * is the same path `src/pages/api/trpc/[trpc].ts` serves.
@@ -218,11 +218,11 @@ describe("the error formatter is wired into appRouter", () => {
 
     expect(status).toBe(500);
     expect(body.error.json.message).toBe(UNEXPECTED_ERROR_MESSAGE);
-    // The point of the ticket: nothing of the query's internals anywhere on
-    // the wire, not just in `message`. This caught a second route the ticket
-    // did not name - tRPC attaches `error.stack` as `data.stack` whenever
-    // `isDev`, and a stack's first line is the message. `createRouter.ts` now
-    // pins `isDev` to the same definition of development this mask uses.
+    // Nothing of the query's internals should appear anywhere on the wire,
+    // not just in `message`: tRPC attaches `error.stack` as `data.stack`
+    // whenever `isDev`, and a stack's first line is the message, so
+    // `createRouter.ts` pins `isDev` to the same definition of development
+    // this mask uses.
     expect(JSON.stringify(body)).not.toContain("prisma.user.update");
     expect(body.error.json.data.stack).toBeUndefined();
     // And the code the retry policy reads is still the real one.

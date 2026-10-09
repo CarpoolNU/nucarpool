@@ -3,11 +3,12 @@
  *
  * Both channels carry private message content, so both are Pusher *private*
  * channels. The `private-` prefix is not decoration: it is what makes Pusher
- * refuse a subscription until our auth endpoint signs it. Before this, the
- * channels were plain and named after ids that other users can already see
- * (`user.requests.me` hands out request ids; every `PublicUser` carries a user
- * id), and `NEXT_PUBLIC_PUSHER_KEY` is in the browser bundle — so anyone could
- * subscribe to a stranger's channel and read their messages in real time.
+ * refuse a subscription until our auth endpoint signs it. Without it, the
+ * channel names alone would be no protection — they are built from ids other
+ * users can already see (`user.requests.me` hands out request ids; every
+ * `PublicUser` carries a user id) — and `NEXT_PUBLIC_PUSHER_KEY` is in the
+ * browser bundle, so anyone could subscribe to a stranger's channel and read
+ * their messages in real time.
  *
  * These builders are the single source of the names, shared by the triggers in
  * the message router, the subscriptions in the components, and the authorizer.

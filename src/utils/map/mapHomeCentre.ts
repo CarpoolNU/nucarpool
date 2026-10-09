@@ -2,24 +2,22 @@
  * Where the map belongs for a given user — the point it opens on, and the point
  * the Recentre button flies back to.
  *
- * **These were two expressions of one fact and they disagreed.** `index.tsx`
- * derived the initial centre with a VIEWER case (`role === "VIEWER" ? NEU :
- * workplace`) and the recentre handler took the workplace unconditionally. A
- * VIEWER has no `Location` row, `user.me` reports `?? 0` for both components,
- * and so pressing a control labelled "Recentre the map on your workplace" flew
- * a third of production to `(0, 0)` in the Gulf of Guinea — the same sentinel
- * `isUnresolvedCoordinate` exists to recognise. Deriving it once is the fix;
- * the duplication was the defect.
+ * **Derived in one place so the initial centre and the Recentre destination
+ * cannot disagree.** A VIEWER has no `Location` row, and `user.me` reports
+ * `?? 0` for both coordinate components - so a path that took the workplace
+ * unconditionally would send a VIEWER to `(0, 0)` in the Gulf of Guinea, the
+ * same sentinel `isUnresolvedCoordinate` exists to recognise. Deriving the
+ * centre once, here, is what keeps both call sites honest.
  *
  * **The check is on the coordinate, not only on the role.** A VIEWER is the
  * common case — `unresolvedAddressFields` exempts them precisely because
  * `(0, 0)` is what a row with no `Location` reports — but it is not the only
- * one. A profile saved before its address resolved carries the same sentinel at
- * any role, and the old role-only test sent those users to the Gulf too. The
- * role case is kept as well rather than replaced: a user who was a DRIVER and
- * switched to VIEWER still has their old company coordinates on the row, and
- * opening a browsing user's map on a workplace they no longer commute to is the
- * behaviour `SCRUM-508` settled. Role first, then resolution.
+ * one. A profile saved before its address resolved carries the same sentinel
+ * at any role, so a role-only check would miss it. The role check is kept as
+ * well rather than replaced by the coordinate check alone: a user who was a
+ * DRIVER and switched to VIEWER still has their old company coordinates on the
+ * row, and a browsing user should not be centred on a workplace they no
+ * longer commute to. Role first, then resolution.
  */
 
 import { Role } from "@prisma/client";

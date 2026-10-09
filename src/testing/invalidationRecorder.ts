@@ -12,9 +12,8 @@
  * one cache too few still passes, because nothing asserts the set; and a
  * handler that invalidates one more throws `Cannot read properties of
  * undefined` from inside `onSuccess` rather than failing an assertion that
- * names the missing cache. `useGroupMembership.test.tsx` was exactly that, and
- * it is why the missing discovery-query invalidations (SCRUM-629) went
- * unnoticed by a suite that covered the very handlers carrying them.
+ * names the missing cache. A missing invalidation can therefore go unnoticed
+ * by a suite that otherwise covers the very handler carrying it.
  *
  * Here the tree is a `Proxy` that materialises any path on access, so the
  * fixture states nothing and the assertion states everything:

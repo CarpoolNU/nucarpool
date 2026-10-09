@@ -17,9 +17,9 @@ export const favoritesRouter = router({
     }
 
     // Kept purely as an existence guard: a caller with no CarpoolSearch has
-    // not finished onboarding, and this procedure has always answered them with
-    // NOT_FOUND rather than an empty list. The `role` it selects used to feed
-    // the compatibility filter below, which is gone.
+    // not finished onboarding, and this procedure answers them with NOT_FOUND
+    // rather than an empty list. The `role` field is selected but unused here;
+    // nothing below filters on it.
     const currentUserSearch = await ctx.prisma.carpoolSearch.findFirst({
       where: { userId },
       select: { role: true },
@@ -78,37 +78,36 @@ export const favoritesRouter = router({
 
     // Role compatibility governs discovery, not a list the user curated.
     //
-    // This used to drop any favourite whose role matched the caller's, whose
-    // role was VIEWER, or whose search was INACTIVE - the predicate that
-    // belongs in recommendations, where the scorer applies it. Applied to
-    // favourites it created a state with no way out: this query is the only
-    // source of the favourites list, the un-favourite star lives on the card
-    // it renders, and `buildCandidateWhere` narrows the explore map to
-    // compatible roles too. So the person vanished from every surface while
-    // their `_Favorites` row persisted, unreachable and unremovable.
+    // Dropping any favourite whose role matches the caller's, whose role is
+    // VIEWER, or whose search is INACTIVE - the predicate that belongs in
+    // recommendations, where the scorer applies it - would create a state with
+    // no way out here: this query is the only source of the favourites list,
+    // the un-favourite star lives on the card it renders, and
+    // `buildCandidateWhere` narrows the explore map to compatible roles too.
+    // Applying that filter would make the person vanish from every surface
+    // while their `_Favorites` row persists, unreachable and unremovable.
     //
     // Roles change between co-op cycles and searches get paused, so a
     // favourite who cannot be carpooled with today is an ordinary state rather
     // than one to hide. `carpoolUnavailableExplanation` is what the card shows
     // on those entries, and `connectAction` is what refuses to open the
-    // Connect modal for them - the same division settled on for
-    // requests.
+    // Connect modal for them - the same division as for requests.
     //
-    // The converter is unchanged and must stay `convertCarpoolSearchToPublic`:
-    // returning more rows must not also widen what each row discloses. A
-    // favourite is not a counterpart, so no exact home coordinate and no email.
+    // The converter must stay `convertCarpoolSearchToPublic`: returning more
+    // rows must not also widen what each row discloses. A favourite is not a
+    // counterpart, so no exact home coordinate and no email.
     return favoriteCarpoolSearches.map(convertCarpoolSearchToPublic);
   }),
   edit: protectedRouter
     .input(
       z
         .object({
-          // The owning user is deliberately absent from this input.
-          // It used to be a client-supplied `userId` that was passed straight to
-          // `where`, which let any signed-in caller edit anyone else's favorites.
-          // The owner now comes from the session and cannot be influenced by the
-          // client; `.strict()` makes a re-added `userId` a BAD_REQUEST rather
-          // than a silently ignored field.
+          // The owning user is deliberately absent from this input. A
+          // client-supplied `userId` passed straight to `where` would let any
+          // signed-in caller edit anyone else's favorites, so the owner comes
+          // from the session and cannot be influenced by the client;
+          // `.strict()` makes a re-added `userId` a BAD_REQUEST rather than a
+          // silently ignored field.
           favoriteId: z.string(),
           add: z.boolean(),
         })
@@ -125,8 +124,8 @@ export const favoritesRouter = router({
       }
 
       // Favouriting yourself is not something the UI can ask for - `UserCard`
-      // only ever sends another user's id - but nothing stopped a hand-rolled
-      // call, and the row it wrote then showed up in `favorites.me` as the
+      // only ever sends another user's id - but a hand-rolled call could still
+      // do it, and the row it writes would show up in `favorites.me` as the
       // caller favouriting themselves.
       //
       // `assertNotBlocked` below does not catch it: a self pair has no `Block`
@@ -144,11 +143,11 @@ export const favoritesRouter = router({
       // refuses it. Removing one is not, and stays open: a user can always
       // take someone off their own list.
       if (input.add) {
-        // A `favoriteId` that names nobody used to reach Prisma, where
+        // A `favoriteId` that names nobody would otherwise reach Prisma, where
         // `connect` cannot resolve the row and throws `P2025` - not a
-        // `TRPCError`, so the client got a masked 500 for what is an ordinary
-        // bad id. Checked here rather than caught below so the answer does not
-        // depend on which half of the write failed.
+        // `TRPCError`, so the client would get a masked 500 for what is an
+        // ordinary bad id. Checked here rather than caught below so the answer
+        // does not depend on which half of the write failed.
         //
         // Only on the add path: `disconnect` of an id that was never
         // favourited is a no-op under an implicit many-to-many, so a remove

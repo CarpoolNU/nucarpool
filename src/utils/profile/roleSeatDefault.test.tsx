@@ -1,22 +1,22 @@
 /**
  * The role field's seat coercion, against a real `useForm`.
  *
- * `roleSeatDefault.test.ts` pins the decision. This pins the *wiring*, which is
- * where the bug actually lived: the rule was always right, and an effect ran it
- * on an occasion it was never meant for. A test of the pure function alone
- * would have passed against the broken code.
+ * `roleSeatDefault.test.ts` pins the decision. This pins the *wiring*: a test
+ * of the pure function alone cannot see whether the form actually invokes it
+ * at the right moment and not at others.
  *
  * So the subject here is the sequence both profile pages perform on load —
  * mount with `profileDefaultValues` (role `RIDER`), then `reset(...)` with the
  * stored row — and the assertion is that a driver's stored `0` is still `0`
- * afterwards. The old effect turned it into `1` at exactly this point.
+ * afterwards, since that transition (RIDER/0 to DRIVER/0 on reset) is exactly
+ * the one a population-vs-switch rule has to get right.
  *
  * A harness rather than `profile/index.tsx` or `setup.tsx` themselves: those
  * pages are behind NextAuth, Mapbox and a dozen tRPC queries, and neither can
  * be imported into a test without mocking all of it. What the pages contribute
  * to this behaviour is `register("role")` on three radios plus a `reset` from
- * `user.me`, and that is reproduced exactly below. The pages are held to using
- * this helper by their own diff — the effect is gone from both.
+ * `user.me`, and that is reproduced exactly below. Both pages reach this
+ * behaviour only through `registerRoleWithSeatDefault`.
  */
 
 import { render, screen } from "@testing-library/react";
@@ -71,9 +71,9 @@ const role = () => screen.getByTestId("role").textContent;
 
 describe("registerRoleWithSeatDefault", () => {
   describe("populating the form from the stored row", () => {
-    // The regression. Mount is RIDER/0 by default, `reset` then makes it
-    // DRIVER/0 - the transition the old effect could not distinguish from a
-    // user switching to DRIVER.
+    // Mount is RIDER/0 by default, and `reset` then makes it DRIVER/0 - the
+    // transition that has to be told apart from a user actually switching to
+    // DRIVER.
     it("leaves a full driver's stored 0 at 0", async () => {
       render(<RoleForm stored={{ role: Role.DRIVER, seatAvail: 0 }} />);
 

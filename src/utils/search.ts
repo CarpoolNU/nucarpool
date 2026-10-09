@@ -22,12 +22,12 @@ export const SEARCH_CACHE_TIME_MS = 10 * 60 * 1000;
  * return values.
  *
  * Mapbox is metered, so this deliberately uses an ordinary cached query keyed
- * on the search text. It used to declare the query `enabled: false`
- * and call `refetch()` from an effect on every debounced change — `refetch` is
- * imperative and ignores the cache, so retyping text that had already been
- * searched always went back out to Mapbox. Keying on `value` means a repeat is
- * free, and the two hooks mounted on the map page share a cache entry whenever
- * they are looking for the same thing.
+ * on the search text rather than an `enabled: false` query driven by calling
+ * `refetch()` from an effect on every debounced change — `refetch` is
+ * imperative and ignores the cache, so that shape would send retyped text
+ * that had already been searched back out to Mapbox every time. Keying on
+ * `value` means a repeat is free, and the two hooks mounted on the map page
+ * share a cache entry whenever they are looking for the same thing.
  *
  * @param value the search value to "listen" to
  * @param type which category of place to search for

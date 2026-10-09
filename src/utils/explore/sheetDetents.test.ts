@@ -19,12 +19,11 @@ import {
  * **This is the only part of the gesture a test in this repository can reach.**
  * jsdom does no layout and dispatches no real pointer sequences, so whether
  * the sheet follows a thumb is a question for a device — see
- * `src/testing/viewport.ts` for the measured list of what jsdom cannot tell
- * you, and the PR for the manual pass. What *is* testable is where a release
- * lands, and that is the half of the feature that can be silently wrong: a
- * snap that rounds the wrong way, or a tap that registers as a one-pixel drag
- * and snaps back to where it started, reproducing the original bug in a new
- * place.
+ * `src/testing/viewport.ts` for the list of what jsdom cannot tell you. What
+ * *is* testable is where a release lands, and that is the half of the feature
+ * that can be silently wrong: a snap that rounds the wrong way, or a tap that
+ * registers as a one-pixel drag and snaps back to where it started, leaving
+ * the handle no more responsive than it would be with no drag handling at all.
  *
  * Heights are expressed against an expanded sheet of 400px throughout, so the
  * detents are 0, 200 and 400 and the boundaries between them are 100 and 300.
@@ -54,20 +53,19 @@ describe("expandedSheetHeightPx", () => {
   });
 
   it("gives a collapsed sheet a full range, which is the whole bug", () => {
-    // A VIEWER's sheet opens `collapsed` and measures no height at all, and
-    // before this fix their first gesture had no range to drag within.
-    // The sheet's own height is not an input here - only the bottom edge its
+    // A VIEWER's sheet opens `collapsed` and measures no height at all. The
+    // sheet's own height is not an input here - only the bottom edge its
     // classes pin it to, which is the same in every detent - so "collapsed"
-    // is not a state this arithmetic can distinguish, let alone refuse.
+    // is not a state this arithmetic can distinguish, let alone refuse, and a
+    // VIEWER's first gesture on the handle gets the same range as any other.
     expect(range(718)).toBe(EXPANDED_FROM_718);
     expect(EXPANDED_FROM_718).toBeGreaterThan(0);
   });
 
   it("tracks the viewport rather than whatever it last saw", () => {
-    // The pre-existing staleness the hook's docblock named: a rotation with
-    // the sheet closed used to leave the cached range from the taller
-    // viewport. Derived per gesture, a shorter viewport is simply a shorter
-    // range.
+    // Without a per-gesture measurement, a rotation with the sheet closed
+    // would leave the cached range from the taller viewport. Derived per
+    // gesture instead, a shorter viewport is simply a shorter range.
     expect(range(330)).toBeLessThan(range(718));
   });
 
@@ -148,21 +146,20 @@ describe("toggleSheetDetent", () => {
 
 describe("defaultSheetDetent", () => {
   /**
-   * The defect itself is unobservable from here — whether one box paints
-   * over another is layout, and jsdom does none (`src/testing/
-   * viewport.ts`). This is the one part of the fix that is a rule rather than a
-   * position, so it is the one part a test can hold: *which* detent the sheet
-   * opens in, per role. The manual mobile pass is still the acceptance
-   * evidence for the rest.
+   * Whether one box visually paints over another is layout, and jsdom does
+   * none (`src/testing/viewport.ts`), so that cannot be observed here. What
+   * can: *which* detent the sheet opens in, per role — the one part of this
+   * behavior that is a rule rather than a measured position. A manual mobile
+   * pass is the acceptance evidence for the rest.
    */
   it("opens collapsed for a VIEWER, whose panel an expanded sheet would cover", () => {
     expect(defaultSheetDetent(Role.VIEWER)).toBe("collapsed");
   });
 
   it("keeps the long-standing expanded default for a RIDER and a DRIVER", () => {
-    // The regression that would matter most: this fix is for one role, and
-    // taking the recommendation list off the screen for the other two would be
-    // a far larger bug than the one being fixed.
+    // What would matter most to get wrong: this default is role-specific, and
+    // taking the recommendation list off the screen for the other two roles
+    // would be a far larger problem than the one this default addresses.
     expect(defaultSheetDetent(Role.RIDER)).toBe("expanded");
     expect(defaultSheetDetent(Role.DRIVER)).toBe("expanded");
   });
@@ -189,7 +186,7 @@ describe("isTap", () => {
 
   it("allows slop in both directions", () => {
     // A finger never holds still. Without this the tap path would be
-    // unreachable on a touchscreen, which is the original defect relocated.
+    // unreachable on a touchscreen.
     expect(isTap(TAP_SLOP_PX)).toBe(true);
     expect(isTap(-TAP_SLOP_PX)).toBe(true);
   });
@@ -259,12 +256,10 @@ describe("dragHeightPx", () => {
 
 describe("handleBottomPx", () => {
   /**
-   * A regression this table pins down. It mirrors the resting classes in
-   * `HANDLE_POSITION_CLASSES` (`src/pages/index.tsx`) at the same NAV,
-   * expanded height and lift used elsewhere in this file - a NAV of 60, an
-   * expanded height of 400 and, at a 16px root, an 8px lift. Before the fix
-   * every row here was off by exactly that 8px: `collapsed` low, `half` and
-   * `expanded` high.
+   * Mirrors the resting classes in `HANDLE_POSITION_CLASSES`
+   * (`src/pages/index.tsx`) at the same NAV, expanded height and lift used
+   * elsewhere in this file - a NAV of 60, an expanded height of 400 and, at a
+   * 16px root, an 8px lift.
    */
   const NAV = 60;
   const LIFT = 8;

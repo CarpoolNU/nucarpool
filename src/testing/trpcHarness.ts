@@ -1,10 +1,8 @@
 /**
  * The shared fake of `src/utils/trpc`, built on a **real** React Query client.
  *
- * Forty test files hand-roll a mock of `utils/trpc`. Fifteen of them already
- * delegate to `jest.requireActual("@tanstack/react-query")` rather than
- * returning a literal result object, because a literal cannot reproduce React
- * Query's state machine and so cannot distinguish the cases that matter:
+ * A literal result object cannot reproduce React Query's state machine, and so
+ * cannot distinguish the cases that matter:
  *
  *  - A **disabled** query reports `isLoading: false`, which a hand-written
  *    `{ isLoading: false, data }` makes indistinguishable from *ready*. That
@@ -13,10 +11,11 @@
  *    input rejects page one in production while a literal-returning mock of
  *    the same call passes.
  *
- * Those fifteen each rebuilt the same wiring, so the pattern was copied rather
- * than shared and had begun to drift between copies. This is that wiring,
- * extracted once. `src/components/Admin/UserManagement.test.tsx` documents the
- * reasoning in place and is the file the shape was taken from.
+ * Delegating to `jest.requireActual("@tanstack/react-query")` avoids both
+ * traps by running the real state machine against a stubbed `queryFn`, so a
+ * suite reaches for this module rather than rebuilding that wiring inline.
+ * `src/components/Admin/UserManagement.test.tsx` documents the same reasoning
+ * in place.
  *
  * ---
  *
@@ -45,10 +44,9 @@
  *
  * **What is deliberately *not* faithful.** `useUtils()` hands back spies that
  * record and do nothing. Real `invalidate` reaches the cache and refetches;
- * here it resolves. That is what the fifteen files did before this module and
- * is what keeps an unrelated query from refetching mid-assertion. A suite that
- * needs the real thing declares `invalidate` on the stub and gets the live
- * `QueryClient` handed to it.
+ * here it resolves, which keeps an unrelated query from refetching
+ * mid-assertion. A suite that needs the real thing declares `invalidate` on
+ * the stub and gets the live `QueryClient` handed to it.
  */
 
 import type { QueryClient } from "@tanstack/react-query";

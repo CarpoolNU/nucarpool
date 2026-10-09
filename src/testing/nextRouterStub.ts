@@ -1,16 +1,12 @@
 /**
  * The shared fake of `next/router`.
  *
- * Ten test files mock this module. Four hand back `{ push }` alone, two add
- * `replace`, `pathname` and `query`, two add an `events` pair, and two close
- * over a locally declared router object.
- *
  * As with the other stubs in this directory the win is the surface rather
  * than the line count. `useRouter()` returns a `NextRouter`, and a component
- * reading `router.query` in a suite that pinned `{ push }` alone gets
- * `undefined` and crashes on the first property access - so the four suites
- * that mock the least are the ones most likely to fail for a reason that has
- * nothing to do with what they test.
+ * reading `router.query` in a mock that pins only `{ push }` gets `undefined`
+ * and crashes on the first property access - so a suite that mocks the least
+ * is the one most likely to fail for a reason that has nothing to do with
+ * what it tests.
  *
  * ---
  *
@@ -29,12 +25,11 @@
  *
  * ---
  *
- * **`events` is pinned although nothing reads it today.** Two suites mock
- * `events.on`/`events.off`, which is vestigial - no runtime module under
- * `src/` touches `router.events` any more. It stays because the real router
- * has it and a component that starts subscribing to route changes would
- * otherwise fail inside an effect rather than at the mock. The same reasoning
- * as `mixpanelBrowserStub.js`.
+ * **`events` is pinned although nothing reads it today.** No runtime module
+ * under `src/` touches `router.events` any more. It stays because the real
+ * router has it, and a component that starts subscribing to route changes
+ * would otherwise fail inside an effect rather than at the mock. The same
+ * reasoning as `mixpanelBrowserStub.js`.
  */
 
 export type RouterOverrides = {

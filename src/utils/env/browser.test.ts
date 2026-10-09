@@ -1,11 +1,11 @@
 /**
  * Validation of `NEXT_PUBLIC_ENV`.
  *
- * This was the only environment variable the app did not validate, and the most
- * consequential one: it selects the auth providers, and it is written verbatim
- * into every S3 profile-picture key. An unrecognised value used to sail through
- * and quietly mean "not staging" — or, unset, produce the literal object key
- * `profile-pictures/undefined/...`.
+ * This is the most consequential environment variable: it selects the auth
+ * providers, and it is written verbatim into every S3 profile-picture key. An
+ * unrecognised value is rejected rather than silently treated as "not
+ * staging", and an unset value falls back explicitly rather than producing
+ * the literal object key `profile-pictures/undefined/...`.
  *
  * envsafe reads the environment when the module is first imported, so each case
  * here resets the module registry and re-requires it. `jest.setup.env.js`
@@ -69,8 +69,8 @@ describe("NEXT_PUBLIC_ENV is validated against an allow-list", () => {
   });
 
   it("rejects a value that is not a deployment", () => {
-    // The failure this closes: any unrecognised string used to be accepted and
-    // silently treated as "not staging".
+    // Any unrecognised string throws rather than being silently treated as
+    // "not staging".
     expect(() => loadWith("prod")).toThrow();
   });
 

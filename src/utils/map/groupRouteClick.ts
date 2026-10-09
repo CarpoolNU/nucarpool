@@ -8,18 +8,12 @@ import updateUserLocation from "./updateUserLocation";
 import { planGroupWaypoints } from "./groupRouteWaypoints";
 
 /**
- * **Preview Group Route**, lifted out of `pages/index.tsx`.
+ * **Preview Group Route**.
  *
- * The extraction follows the reason given for
- * `viewRouteClick.ts`: the defect fixed here — every group member's destination
- * pin staying on the map for the rest of the session — was unreachable by any
- * test while the handler was a closure inside a 1300-line page. A pin that is
- * never removed is invisible to review and invisible to a suite that cannot run
- * the code.
- *
- * The fix itself is one line: `clearOtherUserMarkers` at the top, before this
- * handler draws anything. See that module for why a sweep replaced the
- * remembered-pin bookkeeping rather than extending it.
+ * `clearOtherUserMarkers` runs at the top, before this handler draws anything
+ * - every group member gets a destination pin, and without a sweep first, a
+ * pin nothing ever removes stays on the map for the rest of the session. See
+ * that module for why a sweep is used instead of remembered-pin bookkeeping.
  *
  * **Order matters and is the acceptance criterion most easily broken.** The
  * sweep has to run before the pins this handler adds, never after — clearing
@@ -46,8 +40,8 @@ export const runViewGroupRoute = ({
   }
 
   // Clear the previous preview before drawing this one. `clearOtherUserMarkers`
-  // is the fix: it takes off every group member's pin from the last
-  // preview, and the individual View Route pin, both of which used to survive.
+  // takes off every group member's pin from the last preview, and the
+  // individual View Route pin, so neither survives under the new one.
   clearDirections(map);
   clearMarkers(map);
   clearOtherUserMarkers(map);

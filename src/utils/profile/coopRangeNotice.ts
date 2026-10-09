@@ -2,13 +2,12 @@
  * Whether the profile page should tell this user their stored co-op range runs
  * backwards, the moment it loads.
  *
- * **Why anything is needed.** `user.edit` and `onboardSchema` now
- * reject a range whose end precedes its start, and that was not retroactive:
- * production carries **47** searches that already store one, 40 of them
- * `ACTIVE` (measured 2026-09-09). Every one of those users is
- * invisible in matching and sees an empty map, because `dateOverlapFilter` asks
- * for `startDate <= theirs AND endDate >= theirs` and an inverted range
- * satisfies that for nobody.
+ * **Why anything is needed.** `user.edit` and `onboardSchema` reject a range
+ * whose end precedes its start, but that validation is not retroactive, so a
+ * row can already store an inverted range from before it existed. Every user
+ * in that state is invisible in matching and sees an empty map, because
+ * `dateOverlapFilter` asks for `startDate <= theirs AND endDate >= theirs` and
+ * an inverted range satisfies that for nobody.
  *
  * **What they see today, and why it is not enough.** The dates are editable on
  * the profile page's Account tab, `AccountSection` renders
@@ -28,11 +27,12 @@
  * student knows what they meant. So they get the same treatment: told on load,
  * gated on the stored year actually falling outside `coopYearBounds`.
  *
- * **Deliberately not "validate the whole form on mount".** That would have been
- * one `trigger()` call, and it would show red errors on open to every user
- * carrying any other incomplete state — a change to everyone's experience in
- * order to reach 47 rows. This is gated on the stored range actually being
- * inverted, so a user without the defect sees no difference whatsoever.
+ * **Deliberately not "validate the whole form on mount".** That would be one
+ * `trigger()` call, and it would show red errors on open to every user
+ * carrying any other incomplete state — a change to everyone's experience to
+ * reach a narrow, already-affected population. This is gated on the stored
+ * range actually being inverted, so a user without the defect sees no
+ * difference whatsoever.
  *
  * **Deliberately not a server log either.** The other candidate read path was
  * `user.me`, which already flattens both columns. Nobody

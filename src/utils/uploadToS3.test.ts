@@ -5,9 +5,9 @@
  * The acceptance criterion this turns on is "zero S3 API calls", and this
  * is where it is assertable: the S3 client's `send` is the only way this module
  * could reach AWS, so an avatar signed without calling it made no request.
- * Signing a URL is a local HMAC. It used to be preceded by a `HeadObject`
- * asking S3 whether the object existed; `User.profilePictureUpdatedAt` answers
- * that now, and `getPresignedDownloadUrl` calls this only when it is set.
+ * Signing a URL is a local HMAC: `User.profilePictureUpdatedAt` is what lets
+ * `getPresignedDownloadUrl` know a picture exists without asking S3, and it
+ * calls this only when that column is set.
  *
  * The AWS SDK is mocked; nothing here touches S3 or consumes quota.
  */

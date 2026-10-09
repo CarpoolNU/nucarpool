@@ -7,13 +7,13 @@
  * `candidateSearch` relies on the same reading to decide whether SQL may
  * narrow by a bounding box.
  *
- * They lived as bare literals in four places - the slider's `max`, its
- * gradient arithmetic and its `20+` label in `Filters.tsx`, the initial filter
- * state in `pages/index.tsx`, `DISTANCE_FILTER_MAX` in `candidateSearch.ts`,
- * and the two comparisons in `recommendation.ts`. Raising the ceiling in one
- * of them would have left the others disagreeing silently: a slider that goes
- * to 30 against a scorer that stops filtering at 20 shows unfiltered results
- * for the top third of the track.
+ * Shared across the slider's `max`, its gradient arithmetic and its `20+`
+ * label in `Filters.tsx`, the initial filter state in `pages/index.tsx`,
+ * `DISTANCE_FILTER_MAX` in `candidateSearch.ts`, and the two comparisons in
+ * `recommendation.ts`. Raising the ceiling in only one of them would leave the
+ * others disagreeing silently: a slider that goes to 30 against a scorer that
+ * stops filtering at 20 shows unfiltered results for the top third of the
+ * track.
  *
  * Defined here, with no imports, so the client components, the shared scorer
  * and the server's candidate query can all read them without pulling anything

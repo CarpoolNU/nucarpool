@@ -1,17 +1,13 @@
 /**
  * The shared fake of `src/utils/useProfileImage`.
  *
- * Fourteen test files mock this module, and they had already drifted into two
- * shapes: eight return all three fields the hook really returns, and six
- * return only `profileImageUrl` and `isLoading`.
- *
- * That second shape is the reason this is worth sharing rather than merely
- * shorter. The hook returns exactly `{ profileImageUrl, isLoading,
- * imageLoadError }`, so a component branching on `imageLoadError` reads
- * `undefined` in those six suites - falsy, so it silently takes the "no
- * error" path and the test passes whatever the component does with a real
- * error. Building the result from a complete default and merging the caller's
- * overrides over it makes that class of gap unreachable by construction.
+ * The hook returns exactly `{ profileImageUrl, isLoading, imageLoadError }`. A
+ * mock that names only `profileImageUrl` and `isLoading` leaves a component
+ * branching on `imageLoadError` reading `undefined` - falsy, so it silently
+ * takes the "no error" path and the test passes whatever the component does
+ * with a real error. Building the result from a complete default and merging
+ * the caller's overrides over it makes that class of gap unreachable by
+ * construction.
  *
  * ---
  *
@@ -30,14 +26,14 @@
  *
  * ---
  *
- * **Why the surface is wider than the cohort needs.** The real module also
- * exports `useInvalidateProfileImage` and the two presigned-URL timing
- * constants. Every hand-rolled mock replaced the module with `default` alone,
- * so anything reaching `useInvalidateProfileImage` - `useUploadFile` does -
- * would have found `undefined` and thrown from inside a hook. No test in the
- * cohort reaches it today, which is exactly the condition under which the
- * omission goes unnoticed until someone adds one. `mixpanelBrowserStub.js`
- * records the same reasoning.
+ * **Why the surface is wider than any one suite needs.** The real module also
+ * exports `useInvalidateProfileImage` and two presigned-URL timing constants,
+ * both exposed here too. A mock that replaces the module with `default` alone
+ * leaves anything reaching `useInvalidateProfileImage` - `useUploadFile` does
+ * - finding `undefined` and throwing from inside a hook. No test reaches it
+ * today, which is exactly the condition under which the omission would go
+ * unnoticed until someone adds one. `mixpanelBrowserStub.js` follows the same
+ * reasoning.
  *
  * The constants are taken from the real module rather than restated, because
  * a fake value for a timing bound would be a second source of truth for
@@ -62,8 +58,7 @@ export type ProfileImageResult = {
 };
 
 /**
- * The state all fourteen files wanted: no picture, settled, no error. Six of
- * them expressed it with two of the three keys.
+ * The default result: no picture, settled, no error.
  */
 const DEFAULT_RESULT: ProfileImageResult = {
   profileImageUrl: null,

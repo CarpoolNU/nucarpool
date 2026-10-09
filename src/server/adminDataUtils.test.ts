@@ -140,10 +140,10 @@ describe("generateWeekLabels", () => {
 
   /**
    * Order-insensitive by construction — the function takes `Math.min` and
-   * `Math.max` of its argument. Worth pinning, but note that
-   * `getDashboardSeries` no longer leans on it: the `where` clause it builds
-   * from the same two dates *is* order-sensitive, so its schema rejects a
-   * reversed window before reaching here rather than quietly charting one.
+   * `Math.max` of its argument. Worth pinning even though `getDashboardSeries`
+   * does not rely on this: the `where` clause it builds from the same two
+   * dates *is* order-sensitive, so its schema rejects a reversed window
+   * before reaching here rather than quietly charting one.
    */
   it("does not depend on the input order", () => {
     expect(generateWeekLabels([on(2024, 1, 22), on(2024, 1, 8)])).toEqual([
@@ -294,7 +294,6 @@ describe("summariseDaysByWeekday", () => {
   });
 
   it("counts drivers and riders per weekday, under the role that works them", () => {
-    // The ticket this chart sits beside, SCRUM-284, swapped the two series.
     const result = summariseDaysByWeekday(
       [
         user({ daysWorking: "0,1,1,0,0,0,0" }),
@@ -493,8 +492,8 @@ describe("summariseUsers", () => {
   });
 
   it("tallies the days-working frequency under the role that worked them", () => {
-    // The call site used to pass (drivers, riders) to a (riders, drivers)
-    // signature, so the two series were swapped in the chart.
+    // Passing (drivers, riders) to this (riders, drivers) signature would
+    // swap the two series in the chart.
     const { daysFrequency } = summariseUsers([
       user({ role: Role.RIDER, daysWorking: "1,0,0,0,0,0,0" }),
       user({ role: Role.DRIVER, daysWorking: "0,0,0,0,0,0,1" }),
@@ -589,8 +588,9 @@ describe("summariseUsers", () => {
   });
 
   it("counts only RIDERs towards totalRiders, leaving viewers out", () => {
-    // This used to be "every active user who is not a driver", so
-    // VIEWERs - a third of production - roughly halved "Riders In a Group".
+    // Counting every active non-driver instead of only RIDER would include
+    // VIEWERs — a third of production — and roughly halve the accuracy of
+    // "Riders In a Group".
     const { membership } = summariseUsers([
       user({ role: Role.DRIVER }),
       user({ role: Role.RIDER, carpoolId: "group-1" }),

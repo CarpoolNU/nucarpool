@@ -23,18 +23,17 @@ export const SCHEDULE_TIMEZONE = "America/New_York";
  * offset, and Boston has two. `America/New_York` is UTC-5 in winter and UTC-4
  * under daylight saving, so the offset can only be chosen by naming a date.
  *
- * Reading always named one: Prisma hands the column back as
- * `1970-01-01T<hh:mm>Z`, so `dayjs.tz` resolved the zone on 1 January 1970 —
- * always EST. Writing named a different one: the picker returned an instant on
- * *the day the user saved*, so a July save resolved at EDT and stored 9:00 AM
- * as `13:00` where January stored it as `14:00`. The two halves therefore
- * disagreed for the roughly two-thirds of the year DST covers, and one
- * wall-clock time had two stored forms depending on nothing the user could see.
+ * Both the write and the read side must resolve the UTC offset at the *same*
+ * date, or they disagree: reading named 1 January (Prisma hands the column
+ * back as `1970-01-01T<hh:mm>Z`) while writing named the day the user saved
+ * would mean a July save resolves at EDT and stores 9:00 AM as `13:00` where
+ * a January save stores it as `14:00` - disagreeing for the roughly
+ * two-thirds of the year DST covers, with one wall-clock time having two
+ * possible stored forms depending on nothing the user can see.
  *
- * Pinning both sides here is what makes the round trip exact. The value is the
- * epoch deliberately, because that is the anchor the read side already had:
- * every correctly-stored row predating the fix stays correct, and the repair is
- * confined to rows written under DST rather than to every row in the table.
+ * Pinning both sides to this one anchor date is what makes the round trip
+ * exact. The anchor is the epoch because that is what the read side already
+ * resolves against.
  */
 export const SCHEDULE_ANCHOR_DATE = "1970-01-01";
 
@@ -62,23 +61,13 @@ const toScheduleZone = (time: Date | null | undefined): Dayjs | null => {
 /**
  * Renders a stored `startTime`/`endTime` for display.
  *
- * `UserCard` and `ConnectModal` each carried their own copy of this, and both
- * copies reinterpreted the value as UTC whenever the Boston hour landed between
- * 01:00 and 04:59:
+ * Shared by `UserCard` and `ConnectModal`, so neither can diverge from the
+ * other on how a stored time is interpreted. Both write paths in the tree
+ * store a UTC time of day, so the stored value is converted directly, with no
+ * guessing about which zone an individual row was written in.
  *
- * ```
- * if (hour >= 1 && hour < 5) timeInEST = dayjs.tz(time, "UTC");
- * ```
- *
- * That was a guess about rows written before times were standardised on UTC,
- * and it silently mislabelled genuine early shifts: a 02:00 start was stored
- * correctly as 07:00 UTC and then displayed as 7:00 AM. Both write paths in the
- * tree store a UTC time of day, so the guess is gone and the value is simply
- * converted.
- *
- * Also returns a placeholder rather than throwing on a missing time. The old
- * copies passed `null` straight to `dayjs.tz`, which raises
- * `RangeError: Invalid time value`, and `startTime`/`endTime` are both nullable.
+ * Returns a placeholder rather than throwing on a missing time, since
+ * `startTime`/`endTime` are both nullable.
  */
 export const formatScheduleTime = (time: Date | null | undefined): string => {
   const boston = toScheduleZone(time);
@@ -178,7 +167,7 @@ export const SCHEDULE_TIME_INVALID_MESSAGE = "Not a valid time";
  *
  * `""` and anything `Date.parse` rejects are not times, and they are refused
  * rather than stored. `fromScheduleTimeInput` below maps both to `null`, which
- * is "clear the schedule" - so before this check a hand-built request could
+ * is "clear the schedule" - so without this check, a hand-built request could
  * clear a RIDER's or DRIVER's schedule by sending `""`, walking straight past
  * the explicit-null refusal that exists to stop exactly that. A search with no
  * times then passes every time filter.
@@ -193,11 +182,11 @@ export const isScheduleTimeString = (value: string): boolean =>
  * A schedule time on its way to `user.edit`, preserving the difference between
  * "not supplied" and "clear it".
  *
- * `startTime: userInfo.startTime?.toISOString()` collapsed the two, because
- * optional chaining on `null` yields `undefined`. The form models a cleared
- * pick as `null` - `toStoredScheduleTime` returns it - so the user's intent to
- * clear was discarded before the request left the browser, and Prisma then
- * read the `undefined` on the server as "leave this column alone".
+ * `time?.toISOString()` alone would collapse the two, because optional
+ * chaining on `null` yields `undefined` - and Prisma treats `undefined` in an
+ * `update` as "leave this column alone". The form models a cleared pick as
+ * `null` (`toStoredScheduleTime` returns it), so that collapse would discard
+ * the user's intent to clear before the request even leaves the browser.
  *
  * Three states, all meaningful:
  *

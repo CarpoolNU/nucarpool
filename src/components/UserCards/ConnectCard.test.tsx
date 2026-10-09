@@ -388,6 +388,44 @@ describe("The card a map pin opens, at a mobile viewport", () => {
     expect(screen.getByText("Job Start:")).toBeInTheDocument();
   });
 
+  it("keeps the three utilities that hold the schedule row on one line", () => {
+    // A proxy, and it says so. jsdom resolves no CSS and reports every rect
+    // as zero, so it cannot check the thing these utilities exist for - that
+    // the row fits the 284px the desktop sidebar leaves it. That criterion is
+    // measured by `user-card-schedule-row` in `layoutFixtures.ts`, and
+    // nothing runs the harness in CI.
+    //
+    // What this does guard is the realistic regression. All three read as
+    // tidy-up candidates in isolation, and dropping any one of them puts
+    // `Job Start:` back to rendering as `Job` / `Start:` for the widest time
+    // pairs, with no test and no type error to say so.
+    renderCard({ variant: "portal" });
+
+    const startLabel = screen.getByText("Job Start:");
+    const endLabel = screen.getByText("Job End:");
+    const pair = startLabel.parentElement;
+
+    expect(pair).toHaveClass("flex-wrap");
+
+    for (const unbreakable of [
+      startLabel,
+      startLabel.nextElementSibling,
+      endLabel,
+      endLabel.nextElementSibling,
+    ]) {
+      expect(unbreakable).toHaveClass("whitespace-nowrap");
+    }
+
+    // The separator carries the row's whole headroom: `px-2` here is 8px more
+    // than the container has at the widest pair `h:mm A` can produce. Reached
+    // positionally rather than by text, because the co-op dates row below
+    // renders a second `|` - and that one keeps its `px-2`, having 33px of
+    // headroom of its own.
+    expect(startLabel.nextElementSibling?.nextElementSibling).toHaveClass(
+      "px-1",
+    );
+  });
+
   it("goes inert, and says why, for a reader who cannot send a request", () => {
     // Disabled rather than absent, which is the distinction worth pinning: a
     // control that vanished in Viewer mode would leave the card looking

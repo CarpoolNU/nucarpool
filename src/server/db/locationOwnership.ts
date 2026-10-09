@@ -7,17 +7,17 @@ import type { PrismaOrTransaction } from "./client";
  * It is never shared between users, and never shared between a user's own home
  * and company slots.
  *
- * `user.edit` used to "find or create" a Location by matching street, city,
- * state and streetAddress. Whoever saved a given address string first set the
- * coordinates for everyone who saved the same strings afterwards, because the
- * match ignored coordinates and there was no branch that updated them. Two
- * people on the same long street, the same campus or the same apartment block
- * collapsed onto one point — and since distance dominates `calculateScore`,
- * that is a matching bug, not a cosmetic one. It also made a user's own
- * coordinates uncorrectable: re-picking a nearby suggestion that parsed to the
- * same strings appeared to save and moved nothing.
+ * Matching an existing Location by street, city, state and streetAddress
+ * alone — ignoring coordinates — is unsafe: whoever saves a given address
+ * string first would set the coordinates for everyone who saves the same
+ * strings afterwards. Two people on the same long street, the same campus or
+ * the same apartment block would collapse onto one point — and since distance
+ * dominates `calculateScore`, that is a matching bug, not a cosmetic one. It
+ * would also make a user's own coordinates uncorrectable: re-picking a nearby
+ * suggestion that parses to the same strings would appear to save and move
+ * nothing.
  *
- * The rule below replaces that. Rewriting a row the caller exclusively owns is
+ * The rule below avoids that. Rewriting a row the caller exclusively owns is
  * safe precisely because nobody else can be looking at it.
  *
  * See src/server/db/README.md for the model.
@@ -134,10 +134,11 @@ export const resolveOwnedLocations = async (
 /**
  * Location ids that no `CarpoolSearch` points at.
  *
- * Nothing creates these any more — `resolveOwnedLocations` never abandons a
- * row — but the find-or-create era left one behind on every address change,
- * and nothing has ever deleted them. Kept as a pure function so the set
- * arithmetic is tested without a database; the reads and the deletes live in
+ * `resolveOwnedLocations` never abandons a row, so no current write path
+ * creates one of these. The orphans this function finds are residue from
+ * address changes made before that guarantee existed, and nothing has ever
+ * deleted them. Kept as a pure function so the set arithmetic is tested
+ * without a database; the reads and the deletes live in
  * scripts/cleanup-orphan-locations.ts.
  *
  * `relationMode = "prisma"` means the database cannot answer this with a join

@@ -1,11 +1,10 @@
 /**
  * **Preview Group Route**.
  *
- * The defect: this handler added a destination pin for every group member and
- * nothing ever took them off, so they outlived the route they belonged to, the
- * tab they were drawn on, and the session. It was unreachable by any test while
- * the handler was a closure inside `pages/index.tsx`, which is why extracting
- * it is part of the fix rather than tidying beside it.
+ * This handler adds a destination pin for every group member, so each preview
+ * must sweep every pin the previous one left before drawing its own - without
+ * a sweep, pins would outlive the route they belonged to, the tab they were
+ * drawn on, and the session.
  *
  * The assertions that matter are the two halves of "sweep, then draw": that the
  * sweep happens at all, and that it happens *first*. A sweep after the pins
@@ -139,9 +138,8 @@ beforeEach(() => {
 describe("runViewGroupRoute", () => {
   describe("clearing the previous preview", () => {
     it("sweeps every other user's pin", () => {
-      // The fix. Before it, the only cleanup here was `clearMarkers`, which
-      // swept `-text-layer` and nothing else - so the previous preview's
-      // destination pins stayed, unlabelled, under the new one.
+      // `clearOtherUserMarkers` is the only cleanup here - without it, the
+      // previous preview's destination pins would stay under the new one.
       run();
 
       expect(clearOtherUserMarkers).toHaveBeenCalledWith(map);

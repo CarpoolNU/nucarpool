@@ -1,13 +1,11 @@
 /**
- * `updateCompanyLocation` leaked one click listener per rebuild of the layer.
- *
- * It binds `click` scoped to the pin's layer id whenever it creates that
- * layer, and removing a layer does **not** remove the listeners scoped to it.
- * The removal branch called `removeLayer` and nothing else - `map.off` did not
- * appear in the file at all - so every remove/recreate cycle left another live
- * handler behind and a single click ran the handler once per cycle. The cycle
- * is not hypothetical: `viewRouteClick` and `groupRouteClick` sweep and redraw
- * other users' pins on every card click.
+ * `updateCompanyLocation` must unbind its click listener before removing the
+ * layer it is scoped to - removing a layer does **not** remove the listeners
+ * scoped to it, so a remove/redraw cycle with no explicit `map.off` would
+ * leave another live handler behind each time, and a single click would run
+ * the handler once per cycle. The cycle is not hypothetical: `viewRouteClick`
+ * and `groupRouteClick` sweep and redraw other users' pins on every card
+ * click.
  *
  * **Live listeners are counted, not calls.** A call count cannot tell one
  * surviving listener from four, which is the whole question here; the fake map
@@ -41,9 +39,9 @@ const buildMap = () => {
    *
    * An **array**, not a set, because that is what Mapbox keeps: `on` appends
    * unconditionally and does not deduplicate, so binding the same function
-   * twice really does run it twice. A set would have modelled the leak away -
-   * with the handler now stable, four redundant binds would collapse to one
-   * entry and the cycle assertion below would pass against the bug.
+   * twice really does run it twice. A set would hide a leak: with the handler
+   * stable, redundant binds would collapse to one entry and the cycle
+   * assertion below would pass regardless of how many listeners are bound.
    */
   const listeners = new Map<string, ((...args: unknown[]) => void)[]>();
 
@@ -117,9 +115,9 @@ describe("the pin's click listener across rebuilds", () => {
     draw(harness.map);
     expect(harness.liveListeners("click", LAYER_ID)).toBe(1);
 
-    // Four sweeps and four redraws - what four card clicks amount to. The
-    // defect made this five live listeners, so one click fired the handler
-    // five times.
+    // Four sweeps and four redraws - what four card clicks amount to. A
+    // leaking bind would make this five live listeners, so one click would
+    // fire the handler five times.
     for (let i = 0; i < 4; i += 1) {
       remove(harness.map);
       draw(harness.map);
@@ -146,9 +144,10 @@ describe("the pin's click listener across rebuilds", () => {
 
     draw(harness.map);
 
-    // The wrapper closure this replaced was a new function every bind, so
-    // `off` could never have been handed the listener `on` added. If this
-    // regresses to a wrapper, the count assertion above goes back to failing.
+    // A wrapper closure built fresh at bind time would be a new function
+    // every call, so `off` could never be handed the listener `on` added. If
+    // this regresses to a wrapper, the count assertion above goes back to
+    // failing.
     expect(harness.boundHandlers("click", LAYER_ID)).toEqual([handler]);
   });
 

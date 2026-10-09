@@ -2,8 +2,7 @@
  * Rendering a component test at a mobile viewport.
  *
  * jsdom reports a fixed `innerWidth` and never changes it, so the viewport has
- * to be written with `Object.defineProperty`. Three suites had each re-derived
- * that before this existed, with cleanup in only one.
+ * to be written with `Object.defineProperty`.
  *
  * ---
  *
@@ -133,8 +132,7 @@ export const resizeViewportTo = (width: number, height?: number) => {
  * Each test *file* gets its own jsdom, so a width set in one file cannot leak
  * into another — but within a file it persists across tests, and that is a
  * real trap: a `describe` block that assumes the default 1024 passes or fails
- * depending on which block ran before it. Two of the three call sites this
- * helper replaced had no cleanup at all.
+ * depending on which block ran before it.
  *
  * Call at the top level of a test file, outside any `describe`.
  */

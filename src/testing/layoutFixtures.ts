@@ -248,15 +248,14 @@ const groupMemberCardTrigger: LayoutFixture = {
 
 /*
  * The overflow menu added to a group member row, against the confirmation the
- * row already had. SCRUM-622.
+ * row already had.
  *
- * `GroupMemberCard` had one control. This puts a second 44px target in the
- * same shrink-wrapped slot, beside a Confirm button that an earlier fix
- * (SCRUM-480, the fixture above) went to some trouble to keep out of the
- * *first* trigger's footprint. The question this answers is whether the new
- * trigger reintroduces what that fix removed - not against Remove, which is
- * replaced when the confirmation opens, but against Confirm, which is drawn
- * beside the menu trigger and stays there.
+ * `GroupMemberCard` has two 44px targets in the same shrink-wrapped slot: the
+ * menu trigger here, beside a Confirm button that the fixture above checks
+ * stays clear of the *first* trigger's footprint. The question this answers
+ * is whether the menu trigger keeps the same clearance - not against Remove,
+ * which is replaced when the confirmation opens, but against Confirm, which
+ * is drawn beside the menu trigger and stays there.
  *
  * **The row is in its confirming state**, which is the only state where the
  * question exists. Outside it the slot holds a 44px button and the row is
@@ -703,11 +702,10 @@ const adminConsoleChartFold: LayoutFixture = {
     { name: "sidebar border-r-4", x: 4 },
     { name: "AdminData px-8", x: 64 },
     /*
-     * Not a CSS length, and the only inset here that is not. Before this
-     * chart-scroll fix the scroll port never scrolled - the column's one shrinkable child
-     * absorbed the whole overflow, so `scrollHeight` equalled `clientHeight`
-     * and no scrollbar was laid out. Stopping that shrink is what gives the
-     * port real scroll range, and a classic scrollbar takes width from the
+     * Not a CSS length, and the only inset here that is not. The scroll port
+     * has real scroll range: its one shrinkable child does not absorb the
+     * whole overflow, so `scrollHeight` exceeds `clientHeight` and a
+     * scrollbar is laid out, and a classic scrollbar takes width from the
      * content when it appears.
      *
      * 11px is Chromium's, measured here at both 667 and 1440. It is the one
@@ -915,11 +913,9 @@ const profileContentColumnWidth: LayoutFixture = {
   summary:
     "The profile page's two 700px desktop rows, now capped, inside the content column an overflow-x-hidden grid gives them",
   source: "src/components/Profile/AccountSection.tsx:89",
-  /* This fixture was originally built to record the defect; a later fix
-     corrected it and re-measured against the same chain. The live criterion
-     is that fix's, so that is what the banner should name - the original
-     figures are kept below as the before, labelled, because a fixture that
-     only carries the after cannot show that anything moved. */
+  /* This fixture carries both the current figures and the ones they
+     replaced, labelled as such, because a fixture that only carries the
+     after cannot show that anything moved. */
   issue: "SCRUM-490",
   viewportWidth: 667,
   viewportHeight: 375,
@@ -1244,10 +1240,10 @@ const SEND_BAR_ROW_CLASS =
  * The composer is a `contentEditable` div, not a `textarea`, and its height
  * comes from the inline `minHeight: 20px` rather than from any utility - so a
  * fixture that stands it in with a line of `text-lg` text measures 72px where
- * the real control measures 36. The first draft of this fixture did exactly
- * that and reported the send bar overflowing the viewport by 34px, which is an
- * artefact of the stand-in and not a fact about the app. The inline style is
- * reproduced on the element below for that reason.
+ * the real control measures 36, which would make the send bar appear to
+ * overflow the viewport by 34px - an artefact of the stand-in, not a fact
+ * about the app. The inline style is reproduced on the element below so this
+ * fixture does not fall into that trap.
  */
 const SEND_BAR_COMPOSER_CLASS =
   "placeholder w-full flex-1 resize-none border-0 bg-gray-100 p-2 text-lg focus:outline-hidden";
@@ -1618,16 +1614,14 @@ const centredDialogPanels: LayoutFixture = {
 };
 
 /**
- * The explore page's mobile content row, after this fix removed the
- * "use desktop instead" banner it used to be pushed down by.
+ * The explore page's mobile content row. Nothing sits above it: the row
+ * starts at the top of the viewport and carries no top margin.
  *
- * `h-mobile-row` used to be `calc(100% - 1.5rem - MOBILE_NAV_SPACE)`, and the
- * row carried a matching `mt-6`. Both are gone: the token is now
- * `calc(100% - MOBILE_NAV_SPACE)` and the row has no top margin. This fixture
- * is what this fix's acceptance criterion asks for directly - the row starts
- * at y=0 and its height is the viewport less `MOBILE_NAV_SPACE` - measured
- * rather than read off the class names, per an earlier lesson that a
- * class no longer appearing in the output is not a valid check.
+ * `h-mobile-row` resolves to `calc(100% - MOBILE_NAV_SPACE)`. This fixture
+ * checks that directly - the row starts at y=0 and its height is the
+ * viewport less `MOBILE_NAV_SPACE` - measured rather than read off the class
+ * names, because a class name appearing in the compiled output is not itself
+ * proof of the value it resolves to.
  *
  * The wrapper (`m-0 h-full w-full`) is included because the row's `100%` in
  * `h-mobile-row` resolves against *its* height, not `#__next`'s directly - so
@@ -1757,18 +1751,16 @@ const mobileTourMapStepSheetOverlap: LayoutFixture = {
  * compiled class string.
  *
  * **One fixture covers both insets the criteria ask for, because the inset is
- * not something the fixture's CSS can vary at all.** The first draft here
- * tried to fake a 34px inset by giving `env(safe-area-inset-bottom)` a 34px
- * fallback, reasoning that a browser with no notch leaves the variable
- * undefined. Measured and wrong: Chromium defines it as an actual `0px`,
- * fallback or no, so `env(x, 34px)` resolved to `0px` there exactly as it does
- * with the real `0px` fallback `MobileNav` declares - the two fixtures were
- * reporting the same number under different names. The only way to make
- * Chromium report a nonzero inset is to tell it to, with the CDP call this
- * measures: `session.send("Emulation.setSafeAreaInsetsOverride", { insets: {
- * bottom: 34, bottomMax: 34 } })`, which `scripts/measure-layout.ts` does not
- * issue - it is a manual step, taken once per inset, against the one fixture
- * below. `recorded` carries both results.
+ * not something the fixture's CSS can vary at all.** A fallback value cannot
+ * stand in for a real inset: Chromium defines `env(safe-area-inset-bottom)`
+ * as an actual `0px` when no override is set, fallback or no, so giving it a
+ * 34px fallback resolves to `0px` there regardless - indistinguishable from
+ * the real `0px` fallback `MobileNav` declares. The only way to make Chromium
+ * report a nonzero inset is to tell it to, with the CDP call this measures:
+ * `session.send("Emulation.setSafeAreaInsetsOverride", { insets: { bottom:
+ * 34, bottomMax: 34 } })`, which `scripts/measure-layout.ts` does not issue -
+ * it is a manual step, taken once per inset, against the one fixture below.
+ * `recorded` carries both results.
  */
 const MOBILE_NAV_CSS = `
   position: fixed;
@@ -1914,12 +1906,12 @@ const mobileNavActiveUnderline: LayoutFixture = {
  * safe-area-inset applied.
  *
  * `viewport-fit=cover` opts every page into drawing under a notched or
- * Dynamic Island iPhone's sensor housing, and `env(safe-area-inset-bottom)`
- * was the only one of the four insets this repository read - `-left` and
- * `-right` appeared nowhere. In portrait the horizontal insets are 0, so that
- * was very nearly correct; in landscape a notched iPhone reports roughly 44px
- * on whichever side the housing rotated to, and before this fix nothing here
- * moved the four `space-around` tabs out from under it.
+ * Dynamic Island iPhone's sensor housing, so `MobileNav` reads all three of
+ * `env(safe-area-inset-bottom)`, `-left` and `-right`. In portrait the
+ * horizontal insets are 0, so only the bottom one is observable there; in
+ * landscape a notched iPhone reports roughly 44px on whichever side the
+ * housing rotated to, and the four `space-around` tabs need that inset to
+ * stay clear of it.
  *
  * Same reasoning as `mobileNavActiveUnderline` above for why one fixture
  * covers every inset the criteria ask for: Chromium only reports a nonzero
@@ -1928,8 +1920,8 @@ const mobileNavActiveUnderline: LayoutFixture = {
  * measured by hand against that CDP call rather than derived from a chain of
  * classes. BEFORE was measured by removing the three lines
  * `padding-right`/`padding-bottom`/`padding-left` from this markup and
- * restoring the single `padding: 0px 0;` shorthand `MobileNav` used to
- * declare instead.
+ * reverting to a single unconditional padding declaration with no horizontal
+ * allowance.
  */
 const mobileNavHorizontalSafeArea: LayoutFixture = {
   name: "mobile-nav-horizontal-safe-area",
@@ -2019,14 +2011,14 @@ const mobileNavHorizontalSafeArea: LayoutFixture = {
  * The profile dropdown, open, at the desktop widths this fix's Impact section
  * names - 1280x800 and 1440x900.
  *
- * `[data-probe='dropdown-wrapper']` is `relative z-30` - the fix - and is the
- * only positioned element between `[data-probe='panel']` and the viewport.
- * Before the fix it was a plain `z-30`, `right-0` resolved against the
- * viewport instead of the trigger, and the two right edges disagreed by
- * however far the trigger sat from the window's own right edge. Reproduced
- * with the fix in place, because a fixture holds the current source
- * (`layoutFixtures.ts`'s own header says so); the BEFORE figures below were
- * measured by removing `relative` from this same markup.
+ * `[data-probe='dropdown-wrapper']` is `relative z-30` - the only positioned
+ * element between `[data-probe='panel']` and the viewport, which is what
+ * anchors `right-0` to the trigger rather than the browser window. Without
+ * `relative` here, `right-0` resolves against the viewport instead, and the
+ * two right edges disagree by however far the trigger sits from the window's
+ * own right edge. Reproduced with the current source (`layoutFixtures.ts`'s
+ * own header says so); the BEFORE figures below were measured by removing
+ * `relative` from this same markup.
  *
  * `[data-probe="bar"]` and its inset are carried over from `header-control-row`
  * unchanged, so the same measurement that proves the panel's own alignment
@@ -2105,6 +2097,244 @@ const profileDropdownPanel: LayoutFixture = {
   ],
 };
 
+/*
+ * The schedule row on a discovery card, in the desktop sidebar column that is
+ * the narrowest box the app gives it.
+ *
+ * **This fixture loads a webfont, and it is the only one that does.** Every
+ * other fixture here measures a box whose size comes from the stylesheet, so
+ * the system fallback the harness otherwise serves costs nothing. This one's
+ * criterion is whether a row of *text* fits a 284px line, and Montserrat is
+ * wider than that fallback at the same `text-sm`: measured against the
+ * fallback the row fits with room to spare, so the harness would answer a
+ * question nobody asked. The `<link>` is the one `_document.tsx` ships,
+ * weights included - which is also why `font-semibold` renders here exactly
+ * as it does in the app, matched up to the loaded 700 because 600 is not
+ * among the weights requested.
+ *
+ * Four cards, each isolating one variable, because the row's width is the
+ * only thing this fixture is about:
+ *
+ *  - `card-worst` carries `10:44 AM` twice, the widest of all 1,440 strings
+ *    `formatScheduleTime`'s `h:mm A` can produce. It is the card the budget
+ *    is sized against.
+ *  - `card-reported` carries `10:00 AM` and `12:00 AM`, which needs 284.50px
+ *    of 284 - half a pixel over.
+ *  - `card-short-company` holds that same pair beside a one-word company
+ *    name. **It is the control for the width chain**, and the claim the
+ *    chain encodes: the card is a block-level `flex-col` in a fixed `w-[25rem]`
+ *    column, so nothing inside it can widen it and a long destination cannot
+ *    be the cause. This card measures identically to `card-reported`.
+ *  - `card-short-times` carries `9:00 AM` and `5:00 PM`, which fits either
+ *    way and is the row's ordinary appearance.
+ */
+const MONTSERRAT_LINK =
+  '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap" />';
+
+const SIDEBAR_DESKTOP_COLUMN_CLASS = "relative w-[25rem]";
+
+const SIDEBAR_CONTENT_GUTTER_CLASS = "relative h-full px-3.5";
+
+/** The static tail of `SidebarContent`'s scroll port; the head is a ternary. */
+const SIDEBAR_SCROLL_PORT_CLASS =
+  "scrollbar scrollbar-thumb-busy-red scrollbar-track-rounded-full scrollbar-thumb-rounded-full scrollbar-track-stone-100 pb-32";
+
+const USER_CARD_ROOT_CLASS =
+  "relative flex flex-col rounded-xl bg-stone-100 text-left shadow-md";
+
+const USER_CARD_FRAME_CLASS =
+  "border-l-busy-red font-montserrat border-l-[13px]";
+
+const USER_CARD_DESKTOP_SPACING_CLASS = "m-3.5 gap-2 px-4 py-4";
+
+const USER_CARD_LOCATION_TEXT_CLASS = "ml-2 text-sm font-semibold";
+
+const USER_CARD_SCHEDULE_ROW_CLASS =
+  "m-0 flex w-full justify-between align-middle";
+
+/** The three utilities carrying the width budget; `UserCard.tsx` says why. */
+const USER_CARD_SCHEDULE_PAIR_CLASS = "flex flex-wrap text-sm";
+
+const USER_CARD_SCHEDULE_LABEL_CLASS = "pr-1 whitespace-nowrap";
+
+const USER_CARD_SCHEDULE_VALUE_CLASS = "font-semibold whitespace-nowrap";
+
+const USER_CARD_SCHEDULE_SEPARATOR_CLASS = "px-1 font-semibold";
+
+/**
+ * One card, trimmed to the rows that carry horizontal text.
+ *
+ * The profile image, rating, actions menu and button row are left out: they
+ * sit above the schedule row in a `flex-col`, contribute nothing to its width,
+ * and each would be more markup this fixture then has to keep honest. The two
+ * location rows stay because the control card's whole point is that one of
+ * them cannot change the row below it.
+ */
+const scheduleCard = (
+  suffix: string,
+  companyName: string,
+  startTime: string,
+  endTime: string,
+) => `
+        <div class="${USER_CARD_ROOT_CLASS} ${USER_CARD_FRAME_CLASS} ${USER_CARD_DESKTOP_SPACING_CLASS}" data-probe="card${suffix}">
+          <div class="flex items-center">
+            <div class="flex w-7 items-center justify-center">
+              <span class="block bg-gray-300" style="${standIn(25, 25)}"></span>
+            </div>
+            <p class="${USER_CARD_LOCATION_TEXT_CLASS}">360 Huntington Avenue, Boston</p>
+          </div>
+          <div class="flex items-center">
+            <div class="flex w-7 items-center justify-center">
+              <span class="block bg-gray-300" style="${standIn(21, 25)}"></span>
+            </div>
+            <p class="${USER_CARD_LOCATION_TEXT_CLASS}" data-probe="company${suffix}">${companyName}</p>
+          </div>
+          <div class="${USER_CARD_SCHEDULE_ROW_CLASS}" data-probe="schedule-row${suffix}">
+            <div class="${USER_CARD_SCHEDULE_PAIR_CLASS}" data-probe="schedule-pair${suffix}">
+              <p class="${USER_CARD_SCHEDULE_LABEL_CLASS}" data-probe="start-label${suffix}">Job Start:</p>
+              <p class="${USER_CARD_SCHEDULE_VALUE_CLASS}" data-probe="start-value${suffix}">${startTime}</p>
+              <p class="${USER_CARD_SCHEDULE_SEPARATOR_CLASS}">|</p>
+              <p class="${USER_CARD_SCHEDULE_LABEL_CLASS}" data-probe="end-label${suffix}">Job End:</p>
+              <p class="${USER_CARD_SCHEDULE_VALUE_CLASS}" data-probe="end-value${suffix}">${endTime}</p>
+            </div>
+          </div>
+          <div class="${USER_CARD_SCHEDULE_ROW_CLASS}" data-probe="dates-row${suffix}">
+            <div class="flex text-sm" data-probe="dates-pair${suffix}">
+              <p class="pr-1">From:</p>
+              <p class="font-semibold">September</p>
+              <p class="px-2 font-semibold">|</p>
+              <p class="pr-1">To:</p>
+              <p class="font-semibold">December</p>
+            </div>
+          </div>
+        </div>`;
+
+const LONG_COMPANY_NAME = "Massachusetts General Hospital";
+
+const userCardScheduleRow: LayoutFixture = {
+  name: "user-card-schedule-row",
+  summary:
+    "The `Job Start: … | Job End: …` row on a discovery card in the 25rem desktop sidebar, and whether it fits one line",
+  source: "src/components/UserCards/UserCard.tsx:278",
+  issue: "SCRUM-654",
+  viewportWidth: 1280,
+  /*
+   * The first inset is the map column, and it is the one term here specific to
+   * this viewport rather than to the stylesheet. The content row is `flex`;
+   * the sidebar declares `w-[25rem]` and the map's wrapper is `relative
+   * flex-auto` whose children are all absolutely positioned, so its flex basis
+   * resolves to 0 and it *grows* into the remainder instead of competing for
+   * it. That is what holds the sidebar at a hard 400px rather than shrinking
+   * it, and `map-overlay-anchors` measures the same split from the other side
+   * (map 267 at a 667px viewport). Change the viewport and this term moves;
+   * every term below it does not.
+   *
+   * The scrollbar is 15px here, and like `admin-console-chart-fold`'s 11 it is
+   * the environment's figure rather than the stylesheet's - this port asks for
+   * a classic scrollbar through `tailwind-scrollbar`, and Chromium on macOS
+   * gives it 15. A platform with overlay scrollbars takes 0 and hands the row
+   * 299px, which is why the budget below is sized against the narrowest case
+   * rather than the one a given machine happens to show.
+   */
+  insets: [
+    { name: "map column (1280 − sidebar w-[25rem] 400)", x: 880 },
+    { name: "SidebarContent px-3.5", x: 28 },
+    { name: "scroll port's scrollbar (Chromium's, not CSS)", x: 15 },
+    { name: "card m-3.5", x: 28 },
+    { name: "card border-l-[13px]", x: 13 },
+    { name: "card px-4", x: 32 },
+  ],
+  markup: `
+    ${MONTSERRAT_LINK}
+    <div class="flex overflow-hidden" style="height: 600px;">
+      <div class="${SIDEBAR_DESKTOP_COLUMN_CLASS}" data-probe="sidebar-column">
+        <div class="${SIDEBAR_CONTENT_GUTTER_CLASS}">
+          <div class="relative h-full overflow-y-scroll ${SIDEBAR_SCROLL_PORT_CLASS}" data-probe="scroll-port">
+${scheduleCard("-worst", LONG_COMPANY_NAME, "10:44 AM", "10:44 AM")}
+${scheduleCard("-reported", LONG_COMPANY_NAME, "10:00 AM", "12:00 AM")}
+${scheduleCard("-short-company", "Wayfair", "10:00 AM", "12:00 AM")}
+${scheduleCard("-short-times", LONG_COMPANY_NAME, "9:00 AM", "5:00 PM")}
+          </div>
+        </div>
+      </div>
+      <div class="relative flex-auto" data-probe="map-column"></div>
+    </div>
+  `,
+  widthProbe: "[data-probe='card-reported']",
+  probe: {
+    boxes: [
+      "[data-probe='sidebar-column']",
+      "[data-probe='card-reported']",
+      "[data-probe='schedule-pair-worst']",
+      "[data-probe='schedule-pair-reported']",
+      "[data-probe='schedule-pair-short-company']",
+      "[data-probe='schedule-pair-short-times']",
+      "[data-probe='start-label-reported']",
+      "[data-probe='start-value-reported']",
+      "[data-probe='end-label-reported']",
+      "[data-probe='end-value-reported']",
+      "[data-probe='dates-pair-reported']",
+    ],
+  },
+  recorded: [
+    "The chain, confirmed before anything else is read: sidebar-column rect 400x600, and card-reported contentWidth 284 matching the predicted chain. **284px is the row's whole budget**, and every figure below is against it.",
+    "AFTER the fix, at 1280x600, all four schedule pairs are one 20px line: schedule-pair-worst 278.33x20, schedule-pair-reported 276.51x20, schedule-pair-short-company 276.51x20, schedule-pair-short-times 264.39x20. The widest case clears the budget by 5.67px.",
+    "AFTER, the four text elements in card-reported are each 20px tall - start-label 69.70 wide, start-value 65.73, end-label 64.27, end-value 64.48. No label is split.",
+    "BEFORE (the defect, reproduced by restoring `flex text-sm` on the pair, dropping `whitespace-nowrap` from the four text elements and `px-1` back to `px-2`, and otherwise measuring identically): schedule-pair-worst, schedule-pair-reported and schedule-pair-short-company were all 284x**40** - two lines, each filling the budget exactly rather than overflowing it, because flexbox resolves the shortfall by shrinking the items. Every one of card-reported's four text elements measured 40px tall: start-label 69.57 wide, start-value 65.59, end-label 64.16, end-value 64.48, with `Job Start:` rendered as `Job`/`Start:` and `10:00 AM` as `10:00`/`AM`. schedule-pair-short-times was 272.40x20, one line, unchanged by the fix either way.",
+    "**BEFORE, schedule-pair-short-company also measured 284x40**, identical to card-reported with a one-word company name in place of a 30-character one. That is the control: the reported cause was a long destination name, and it is not the mechanism. The card cannot be widened from inside.",
+    "The widths the row actually needs, measured with `white-space: nowrap` against the same stylesheet and font, which is what the budget is sized from: `10:44 AM` twice (the widest of all 1,440 `h:mm A` strings) 286.33 with a `px-2` separator and 278.33 with `px-1`; `10:00 AM`/`12:00 AM` 284.50 and 276.50; `9:00 AM`/`5:00 PM` 272.39 and 264.39; `1:11 PM` twice, the narrowest pair, 249.40 and 241.40. The `px-2` column is what overflows 284 and the `px-1` column is what fits it.",
+    "Dropping the `|` entirely and giving the outer row's `justify-between` two children instead of one would need 266.01 and leave 17.99px, against `px-1`'s 5.67. It was measured and not taken, because it changes how the row reads; the figure is here so a future rewording of either label has it.",
+    "dates-pair-reported is 246.11x20 before and after, and is deliberately untouched by the fix. Its own worst case is `September` twice - the widest month name, in both slots - which needs 250.81 against the same 284, so the sixth row has 33.19px of headroom and needs none of the budget. It is in this fixture as the evidence that the defect is the schedule row's alone, not as a second criterion.",
+  ],
+  reproduces: [
+    { file: "src/pages/index.tsx", className: SIDEBAR_DESKTOP_COLUMN_CLASS },
+    {
+      file: "src/components/Sidebar/SidebarContent.tsx",
+      className: SIDEBAR_CONTENT_GUTTER_CLASS,
+    },
+    {
+      file: "src/components/Sidebar/SidebarContent.tsx",
+      className: SIDEBAR_SCROLL_PORT_CLASS,
+    },
+    {
+      file: "src/components/UserCards/UserCard.tsx",
+      className: USER_CARD_ROOT_CLASS,
+    },
+    {
+      file: "src/components/UserCards/UserCard.tsx",
+      className: USER_CARD_FRAME_CLASS,
+    },
+    {
+      file: "src/components/UserCards/UserCard.tsx",
+      className: USER_CARD_DESKTOP_SPACING_CLASS,
+    },
+    {
+      file: "src/components/UserCards/UserCard.tsx",
+      className: USER_CARD_LOCATION_TEXT_CLASS,
+    },
+    {
+      file: "src/components/UserCards/UserCard.tsx",
+      className: USER_CARD_SCHEDULE_ROW_CLASS,
+    },
+    {
+      file: "src/components/UserCards/UserCard.tsx",
+      className: USER_CARD_SCHEDULE_PAIR_CLASS,
+    },
+    {
+      file: "src/components/UserCards/UserCard.tsx",
+      className: USER_CARD_SCHEDULE_LABEL_CLASS,
+    },
+    {
+      file: "src/components/UserCards/UserCard.tsx",
+      className: USER_CARD_SCHEDULE_VALUE_CLASS,
+    },
+    {
+      file: "src/components/UserCards/UserCard.tsx",
+      className: USER_CARD_SCHEDULE_SEPARATOR_CLASS,
+    },
+  ],
+};
+
 export const LAYOUT_FIXTURES: readonly LayoutFixture[] = [
   groupMemberCardTrigger,
   groupMemberCardActionsMenu,
@@ -2120,6 +2350,7 @@ export const LAYOUT_FIXTURES: readonly LayoutFixture[] = [
   mobileContentRowHeight,
   mobileTourMapStepSheetOverlap,
   profileDropdownPanel,
+  userCardScheduleRow,
 ];
 
 export const findFixture = (name: string): LayoutFixture | undefined =>

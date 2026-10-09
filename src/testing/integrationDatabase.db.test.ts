@@ -144,14 +144,10 @@ describe("truncateAll", () => {
 
 describe("migration history", () => {
   /*
-   * The assertion the harness most needed and did not have.
-   *
-   * `globalSetup` runs `prisma migrate deploy` before any of this, and for the
-   * whole of the harness's life that step failed with P3005 on a fresh
-   * database - the claim marker was created first, which left a non-empty
-   * schema carrying no `_prisma_migrations`. Nothing noticed, because the suite
-   * had never completed a run anywhere: the stub-based tests mock the deploy
-   * out, and this file could not run without a server.
+   * `globalSetup` runs `prisma migrate deploy` before any of this, and the
+   * stub-based tests mock the deploy out entirely - this file is the only one
+   * that runs against a server and so the only one that can prove the schema
+   * actually arrived that way.
    *
    * Replaying migration history on every run is half the point of the
    * integration job, so "the schema arrived, and it arrived from the committed

@@ -13,7 +13,7 @@ import updateUserLocation from "./updateUserLocation";
  * live `mapboxgl.Map`, and none of the behaviour under test is about what
  * Mapbox draws. What is under test is *which* of them get called, in what
  * order, and whether `viewRoute` is reached at all - which for anyone absent
- * from the map it was not, for ten months, silently.
+ * from the map, nothing else here would catch if it silently were not.
  *
  * `./viewRoute` is mocked as a partial module because this file is the only
  * consumer of its `viewRoute` export here; `clearDirections` and
@@ -183,17 +183,9 @@ afterEach(() => {
 
 describe("runViewRouteClick", () => {
   /**
-   * The assertion that was missing for ten months.
-   *
-   * The old inline condition answered "draw the route?" with the negation of
-   * `!isOtherUserInGeoList && selectedUserId !== clickedUser.id`, and returned
-   * before `viewRoute` whenever that held - which was every click on a user the
-   * map was not plotting, outside a conversation. Nothing was logged and no
-   * toast was raised, so the only symptom was a button that did nothing.
-   *
-   * Stated over all four combinations rather than only the broken one: a
-   * contradictory branch is invisible in review, and the fourth case is exactly
-   * where this one hid.
+   * Stated over all four combinations rather than only one: a contradictory
+   * boolean condition is invisible in review, and exhaustive combinations are
+   * what catches it.
    */
   describe("draws the route for every combination of inputs", () => {
     it.each([
@@ -322,14 +314,9 @@ describe("runViewRouteClick", () => {
   });
 
   /**
-   * This block used to drive the remembered-pin ref
-   * through its cases - a different user clicked, the same user re-clicked, the
-   * remembered user appearing on the map - because removal was keyed by
-   * identity and each case named a different pin.
-   *
-   * There is nothing to remember now. Every `other-user-*` layer goes at the
-   * top of the handler, so the only question left is the one below: that the
-   * sweep runs, and that it runs *before* this handler draws, not after.
+   * Every `other-user-*` layer is swept by asking the map what exists, not by
+   * tracking identity, so the only question here is that the sweep runs, and
+   * that it runs *before* this handler draws, not after.
    */
   describe("clearing what the previous view left behind", () => {
     it("sweeps every other user's pin first", () => {

@@ -1,21 +1,18 @@
 /**
  * What Prisma is allowed to write to the process output.
  *
- * `client.ts` used to pass `log: ["info", "warn", "error"]` — plain level
- * strings, which is Prisma's *stdout* mode: the client formats its own error
- * and prints it, with nothing in the application able to intervene.
- * `src/pages/api/trpc/[trpc].ts` redacts the tRPC error payload in production
- * for a stated reason, and this route ran alongside it under no policy at all.
+ * Plain level strings (`log: ["info", "warn", "error"]`) would put Prisma in
+ * its *stdout* mode: the client formats its own error and prints it, with
+ * nothing in the application able to intervene. `src/pages/api/trpc/[trpc].ts`
+ * redacts the tRPC error payload in production for a stated reason, so this
+ * route needs its own policy rather than running alongside it with none.
  *
- * **What that route actually discloses, measured rather than assumed.** The
- * ticket was filed suspecting query parameters — "addresses and emails" — on
- * the basis that a Prisma error message quotes the values that caused it.
+ * **What this route actually discloses, measured rather than assumed.**
  * Probed against the installed Prisma 4.16.2, in both stdout and event mode,
  * with a `where: { id: "SENTINEL_VALUE" }` that never appeared in any output:
  *
  *  - **Argument values are not logged.** Not in stdout mode, not in the event
- *    payload. The suspicion in the ticket was wrong, and the severity is lower
- *    than it was filed at.
+ *    payload.
  *  - `log: []` produces no output at all, so the config is genuinely the route
  *    rather than something Prisma does unconditionally.
  *  - What *is* written is the rendered invocation (`Invalid
@@ -23,16 +20,16 @@
  *    the original source — an **absolute filesystem path** and a **source
  *    excerpt of the application's own code**, followed by the actual reason.
  *  - A deployed build gets the frameless spelling, because Prisma cannot read
- *    original sources out of bundled `next build` output. So production was
- *    leaking the model and method, not the path or the source. Local
- *    development is where the path and excerpt actually appear, and there they
- *    are wanted.
+ *    original sources out of bundled `next build` output. So production leaks
+ *    the model and method, not the path or the source. Local development is
+ *    where the path and excerpt actually appear, and there they are wanted.
  *
- * So the reason to fix this is not a data leak. It is that two routes out of
- * one request had two different policies, that a multi-line preamble per
- * failure is noise in CloudWatch, and that the control in `[trpc].ts` read as
- * complete while this one had no policy at all. The reason — the part with
- * operational value — is kept in every environment.
+ * So the reason to fix this is not a data leak — argument values are never in
+ * the log. It is that two routes out of one request had two different
+ * policies, that a multi-line preamble per failure is noise in CloudWatch, and
+ * that the control in `[trpc].ts` read as complete while this one had no
+ * policy at all. The reason — the part with operational value — is kept in
+ * every environment.
  */
 
 /** One Prisma log event, structurally. Matches `Prisma.LogEvent`. */
@@ -55,9 +52,9 @@ export type PrismaLogEvent = {
  * production hits. Prisma writes `invocation in` followed by a path and a
  * source excerpt when it can resolve the original source, and
  * `invocation:` with no frame at all when it cannot — which is the case in a
- * bundled `next build` output. Matching only the first spelling was the bug
- * this comment exists to prevent a repeat of; it was caught by running the
- * real client rather than by the unit test's captured payload.
+ * bundled `next build` output. Matching only the first spelling would leave
+ * the second one in production; a unit test built on a captured payload would
+ * still pass, so this needs verifying against the real client.
  */
 const PREAMBLE = [
   /^Invalid `[^`]*` invocation(?: in)?:?\s*$/,

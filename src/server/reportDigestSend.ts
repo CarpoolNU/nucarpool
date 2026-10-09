@@ -33,14 +33,14 @@ import {
  *   `adminReportAlert.ts`        who staff are, resolved from `Permission`
  *   `emailParams.ts`             the `TemplateData`
  *
- * ## Why most reports no longer mail anybody on filing
+ * ## Why only critical reports mail anybody on filing
  *
- * SCRUM-621 mailed every admin the moment any report was filed. That is right
- * for a report that cannot wait and wrong for the other five reasons: 20
- * reports per reporter per day are allowed, each one mailed the whole roster,
- * and mail that is mostly not urgent stops being read — which costs the
- * alerts that are. `reports.create` now consults
- * `isCriticalReportReason`, and everything else arrives here.
+ * Mailing every admin the moment any report is filed is right for a report
+ * that cannot wait and wrong for the other five reasons: 20 reports per
+ * reporter per day are allowed, each one would mail the whole roster, and
+ * mail that is mostly not urgent stops being read — which costs the alerts
+ * that are. `reports.create` consults `isCriticalReportReason`, and
+ * everything else arrives here.
  *
  * **A critical report is in both.** It mails immediately *and* is counted in
  * the week's digest, because the digest is the complete picture of a week

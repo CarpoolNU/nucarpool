@@ -18,15 +18,6 @@ import type { BlockReader } from "./blocks";
 /**
  * The candidate query behind both matching endpoints.
  *
- * `mapbox.geoJsonUserList` and `user.recommendations.me` used to hold two
- * near-identical copies of this: fetch *every* ACTIVE carpool search with its
- * user and both location rows, score the whole table in JavaScript, sort, then
- * slice to 150 or 50. Nothing beyond `status` and an exclusion list reached
- * SQL, there was no `take`, and both endpoints run on the same explore page
- * load with the same filters — so every filter interaction read the entire
- * table twice. On PlanetScale, where billing is per row read, that is a direct
- * cost.
- *
  * The rule here is that SQL narrows and `calculateScore` decides. Every
  * predicate below must be a **superset** of what the scorer would keep: it may
  * only remove rows the scorer is guaranteed to reject anyway. That is what
@@ -64,7 +55,7 @@ import type { BlockReader } from "./blocks";
  * **Changing this number is not the response to approaching it**, in either
  * direction, and SCRUM-643 deliberately left it alone.
  *
- * Reaching it is no longer silent — see `candidateLimitWarning`.
+ * Reaching it emits a warning — see `candidateLimitWarning`.
  */
 export const CANDIDATE_LIMIT = 2000;
 
@@ -316,10 +307,7 @@ export type CurrentSearch = {
   companyLocation: { coordLat: number; coordLng: number } | null;
 };
 
-/**
- * The `where` for the candidate query — previously `carpoolSearchQuery: any` in
- * both routers, so nothing about it type-checked.
- */
+/** The `where` for the candidate query. */
 export const buildCandidateWhere = ({
   currentSearch,
   filters,
@@ -354,10 +342,9 @@ export const buildCandidateWhere = ({
   // predicate `reserveSeat` decrements under and `calculateScore` scores by,
   // so the superset rule below holds by identity rather than by argument.
   //
-  // This was `not: 0`, to match a scorer that tested `=== 0` — the pair agreed
-  // with each other and both admitted a negative count, so the one ACTIVE
-  // driver at -1 was offered to riders and then refused every one of them.
-  // See `hasSeatAvailable`.
+  // `not: 0` would admit a negative seat count exactly as a scorer test of
+  // `=== 0` does, so an ACTIVE driver sitting at -1 would be offered to every
+  // rider and then refused by each one. See `hasSeatAvailable`.
   if (currentSearch.role === Role.RIDER) {
     where.seatsAvail = SEAT_AVAILABLE_FILTER;
   }
@@ -426,9 +413,8 @@ export type CandidateSearch = Prisma.CarpoolSearchGetPayload<{
 /**
  * Scores candidates, orders them best-first and maps back to the full rows.
  *
- * The remap used to be `scores.map(s => candidates.find(c => c.user.id === s.id))`
- * in both routers — a linear scan per score, so O(n²) over the whole table. A
- * single index by user id makes it O(n).
+ * The index by user id keeps this O(n); a linear scan per score instead would
+ * be O(n²) over the whole candidate table.
  */
 export const rankCandidates = <T extends Parameters<typeof calculateScore>[0]>(
   candidates: T[],
@@ -452,10 +438,8 @@ export const rankCandidates = <T extends Parameters<typeof calculateScore>[0]>(
 /**
  * The users the candidate query must never return to `userId`.
  *
- * `user.recommendations.me` and `mapbox.geoJsonUserList` used to build this
- * list inline, as two copies of the same few lines. It moved here when blocks
- * joined it, because a third concern added to two copies is how one of them
- * ends up missing it.
+ * Centralized rather than inlined per caller: a third exclusion concern added
+ * to two separate copies is how one of them ends up missing it.
  *
  *   - **The reader.** Always.
  *   - **Anyone with a block against the reader, in either direction.** Always,

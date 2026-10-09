@@ -85,17 +85,18 @@ export const messageRouter = router({
     // The badge counts unread messages in every conversation the caller is a
     // party to, and nothing else.
     //
-    // It used to require the counterpart's role to differ from the caller's and
-    // not be VIEWER, mirroring the filter `user.requests.me` applied to the
-    // list itself. Both are gone: the badge and the list have to agree, and a
-    // role change on either side is not a reason to stop delivering messages
-    // the two people are still exchanging. Counting them while the thread was
-    // hidden was the worse half of that - the header claimed unread mail the
-    // user could not reach - but suppressing them silently dropped replies.
+    // There is deliberately no filter here on the counterpart's role, or on it
+    // being VIEWER, matching `user.requests.me`'s filter on the list itself:
+    // the badge and the list have to agree, and a role change on either side
+    // is not a reason to stop delivering messages the two people are still
+    // exchanging. Hiding the thread while still counting its unread messages
+    // would claim unread mail the user cannot reach; hiding the count too
+    // would silently drop replies. Neither is acceptable, so this query
+    // applies no role filter at all.
     //
-    // The caller's own `CarpoolSearch` was read only for that comparison, and
-    // its absence threw NOT_FOUND, which surfaced in the header as a failed
-    // query rather than a count. Neither is needed to answer "how many unread
+    // Nor does it read the caller's own `CarpoolSearch`: a missing one would
+    // throw NOT_FOUND, surfacing in the header as a failed query rather than a
+    // count, and nothing about it is needed to answer "how many unread
     // messages are mine".
     //
     // **The nesting below is measured, not merely tolerated.** It
@@ -114,18 +115,19 @@ export const messageRouter = router({
     // this ever does need an index the shape is
     // `message(conversationId, isRead, userId)`.
     //
-    // Removing the counterpart-role predicate is what actually mattered: it
-    // deleted two `DEPENDENT SUBQUERY` blocks from the plan, which are
-    // re-evaluated per outer row rather than once. Before changing this query,
-    // re-run `scripts/measure-unread-count.ts` and read
-    // `src/server/db/README.md` — the numbers and the thresholds are recorded
-    // there rather than restated here.
+    // Not filtering on the counterpart's role is what matters for this
+    // query's plan: adding that predicate back would reintroduce two
+    // `DEPENDENT SUBQUERY` blocks, re-evaluated per outer row rather than
+    // once. Before changing this query, re-run
+    // `scripts/measure-unread-count.ts` and read `src/server/db/README.md` —
+    // the numbers and the thresholds are recorded there rather than restated
+    // here.
     //
     // Messages written by anyone with a block against the caller, in either
     // direction, are not counted, because `requests.me` hides the
     // thread they sit in. A conversation has exactly two parties, so leaving
     // out the counterpart's messages leaves out the conversation. `notIn` is
-    // a negation like the `not` it replaces, so the plan described above holds.
+    // a negation like `not`, so the plan described above still holds.
     const blockedIds = await blockedCounterpartIds(ctx.prisma, userId);
 
     return ctx.prisma.message.count({
@@ -145,38 +147,22 @@ export const messageRouter = router({
     });
   }),
 
-  // `getMessages` used to sit here. It took a bare conversation id
-  // and returned every message in it — including each author's name and profile
-  // image — after reading the session user and then never using it, so any
-  // signed-in caller could read any conversation. It is removed rather than
-  // scoped: its only two callers ever, in `Header.tsx` and `MessagePanel.tsx`,
-  // both arrived in commits that were reverted (7d423fa and 4c69fb0, reverted
-  // by c8a92c9 and 7280573), leaving unreachable surface that carried only
-  // risk. Conversations reach the UI through `user.requests.me`, which is
-  // already scoped to the caller's own requests.
-  //
-  // `conversation` below is its deliberate replacement, and differs
-  // in the way that mattered: it is keyed on a **request id**, not a
-  // conversation id, so authorization is derived from the row rather than
-  // trusted from the input. It is the same shape as `sendMessage`'s check.
-
   /**
    * One conversation's messages, newest page first, for the open thread.
    *
-   * **Why this exists.** `user.requests.me` used to return the complete history
-   * of every conversation the caller was party to, on every mount, because one
-   * query fed two consumers: the Requests tab, which wants only the newest
-   * message per card, and the open thread, which wants everything. A `take` on
-   * the shared payload would have silently removed scrollback from the only
-   * consumer needing it. This procedure gives the thread its own source so that
-   * payload can be bounded — see the note on `me` in `requests.ts`.
+   * **Why this exists.** A single query cannot serve both consumers:
+   * `user.requests.me` wants only the newest message per card for the
+   * Requests tab, while the open thread wants everything. A `take` on that
+   * shared payload would silently remove scrollback from the only consumer
+   * needing it, so this procedure gives the thread its own source and keeps
+   * that payload bounded — see the note on `me` in `requests.ts`.
    *
-   * **Why it is keyed on `requestId`.** The procedure this replaces took a bare
-   * `conversationId` and returned whatever it named, which let any signed-in
-   * caller read any thread. A request id is no more secret, so the
-   * id is not the protection — the lookup is. The request row carries
-   * `fromUserId` and `toUserId`, so participation is checked against stored
-   * data before a single message is read. Nothing here trusts the caller.
+   * **Why it is keyed on `requestId`.** A bare `conversationId` would let a
+   * caller name any thread directly, with nothing to check it against. A
+   * request id is no more secret, so the id is not the protection — the
+   * lookup is. The request row carries `fromUserId` and `toUserId`, so
+   * participation is checked against stored data before a single message is
+   * read. Nothing here trusts the caller.
    *
    * Messages are scoped through `conversation.requestId`, which is `@unique`,
    * rather than through `Request.conversationId`. Both links exist and both are
@@ -228,9 +214,9 @@ export const messageRouter = router({
         });
       }
 
-      // The whole point of the rewrite. Checked before any message is read, so
-      // a refused caller receives no content at all — not a filtered list, and
-      // not a count they could probe with.
+      // The key check: before any message is read, so a refused caller
+      // receives no content at all — not a filtered list, and not a count
+      // they could probe with.
       if (request.fromUserId !== userId && request.toUserId !== userId) {
         throw new TRPCError({
           code: "FORBIDDEN",
@@ -270,9 +256,9 @@ export const messageRouter = router({
     .input(
       z.object({
         requestId: z.string(),
-        // Bounded because `message.content` is `VARCHAR(255)`. An
-        // unbounded input reached the database and threw there, after the send
-        // bar had already cleared the user's text. Trimmed before the length
+        // Bounded because `message.content` is `VARCHAR(255)`. An unbounded
+        // input would reach the database and throw there, after the send bar
+        // has already cleared the user's text. Trimmed before the length
         // checks so whitespace neither passes `.min(1)` nor consumes the cap,
         // and so the stored value matches what `SendBar` sends.
         content: z.string().trim().min(1).max(MESSAGE_MAX_LENGTH),
@@ -314,17 +300,15 @@ export const messageRouter = router({
       // message is neither stored nor delivered.
       await assertNotBlocked(ctx.prisma, request.fromUserId, request.toUserId);
 
-      // Find or create the conversation. This used to be two exclusive
-      // branches where only the "already exists" one wrote the message, so a
-      // first message on a request with no conversation row was created,
-      // linked, and then silently discarded with a success response.
-      // The message is now written on both paths.
+      // Find or create the conversation, then write the message on both
+      // paths — a conversation with no prior row still gets the message, not
+      // just a created-and-linked conversation with nothing in it.
       //
-      // The find-or-create itself now lives in `findOrCreateConversation`,
-      // shared with `requests.create`'s reopen branch — which had the same bug
-      // in the same shape and was fixed alongside it. Two hand-written copies
-      // of a two-statement link repair that has already been got wrong twice
-      // is the thing worth not having.
+      // The find-or-create itself lives in `findOrCreateConversation`, shared
+      // with `requests.create`'s reopen branch, which needs the same
+      // two-statement link repair. One shared implementation of that repair
+      // is worth having instead of two hand-written copies that could drift
+      // apart.
       //
       // All three writes commit together. Repairing the missing conversation
       // takes two statements — the link is stored on both `Conversation` and
@@ -353,12 +337,11 @@ export const messageRouter = router({
         });
       });
 
-      // Notify whichever party did not send this message. The old code always
-      // addressed `request.toUserId`, so a reply from the request's recipient
-      // was delivered to their own notification channel and the original
-      // sender was never told. The participant check above makes
-      // this total: the caller is one of the two, so the other one is the
-      // recipient.
+      // Notify whichever party did not send this message. Always addressing
+      // `request.toUserId` would deliver a reply from the request's recipient
+      // to their own notification channel and never tell the original sender.
+      // The participant check above makes this total: the caller is one of
+      // the two, so the other one is the recipient.
       const recipientId =
         request.fromUserId === userId ? request.toUserId : request.fromUserId;
 
@@ -393,22 +376,21 @@ export const messageRouter = router({
    * Marks the caller's unread messages read, scoped to conversations they are
    * a party to.
    *
-   * The input was `z.array(z.string())` with no ceiling of any kind, which made
-   * it the one list-shaped input in this router that a caller could size
-   * freely — the array goes straight into `id: { in: ... }`, so how large an
-   * `IN` list MySQL parses and plans was the caller's choice. The ownership
-   * predicate below eliminates the rows either way, so nothing could be marked
-   * read that the caller does not own; the cost was in planning a statement
-   * that could not match, and in the packet size PlanetScale would have to
-   * accept.
+   * Without a ceiling, this would be the one list-shaped input in this router
+   * that a caller could size freely — the array goes straight into
+   * `id: { in: ... }`, so how large an `IN` list MySQL parses and plans would
+   * be the caller's choice. The ownership predicate below eliminates the rows
+   * either way, so nothing could be marked read that the caller does not own;
+   * the cost would be in planning a statement that could not match, and in
+   * the packet size PlanetScale would have to accept.
    *
    * `.strict()` for the same reason the other hardened inputs have it: a
    * mistyped or re-added key should be a `BAD_REQUEST`, not silently dropped.
    *
    * "Unread" means unread by the recipient, so the caller's own messages are
-   * excluded here. Only `MessageContent` used to filter them out, so a direct
-   * call could mark a sender's own messages read before the other person
-   * had seen them.
+   * excluded here rather than left to `MessageContent` alone to filter out;
+   * otherwise a direct call could mark a sender's own messages read before
+   * the other person had seen them.
    */
   markMessagesAsRead: protectedRouter
     .input(

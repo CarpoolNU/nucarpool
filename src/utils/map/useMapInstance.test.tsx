@@ -1,19 +1,13 @@
 /**
- * The regression guard for the map's lifecycle.
- *
- * `index.tsx` built its `mapboxgl.Map` in a `useEffect` that returned no
- * cleanup, so every unmount left a live WebGL context, six `map.on` listeners
- * and a `NavigationControl` behind. The page has no test - its own comments
- * cite that as the reason decisions keep getting lifted out of it - so the
- * lifecycle was lifted here, where it can be asserted.
+ * The map's lifecycle: this hook must leave no live WebGL context, `map.on`
+ * listener or `NavigationControl` behind after unmount.
  *
  * What jsdom can and cannot prove matters here. There is no WebGL and no real
  * context, so "ten navigations leave one live context" is not assertable in
  * this file; that check needs a device and is recorded on the PR. What *is*
- * assertable is the half that actually regressed: that `remove()` is called,
- * that it is called exactly once per map, and - the failure mode the naive fix
- * introduces - that a `user.me` refetch does not tear a live map down and
- * build another one.
+ * assertable is that `remove()` is called, that it is called exactly once per
+ * map, and - the failure mode a naive cleanup would introduce - that a
+ * `user.me` refetch does not tear a live map down and build another one.
  */
 
 import { act, renderHook } from "@testing-library/react";
@@ -209,9 +203,9 @@ describe("useMapInstance", () => {
   });
 
   /**
-   * The white-box-below-the-map bug: with no floor, a user could zoom out
-   * past the point where Mapbox's rendered world still fills the container,
-   * exposing blank canvas past the latitude clamp.
+   * Without a floor, a user could zoom out past the point where Mapbox's
+   * rendered world still fills the container, exposing blank canvas past the
+   * latitude clamp.
    */
   it("caps how far the map can be zoomed out, by default", () => {
     renderHook(() =>
@@ -263,13 +257,12 @@ describe("useMapInstance", () => {
   });
 
   /**
-   * The failure mode of the obvious fix.
+   * The failure mode a naive cleanup would introduce.
    *
-   * The effect this replaces depended on `[mapContainerRef, user]` and was
-   * kept to one map by a `useRef` flag. Hanging a `remove()` cleanup off that
-   * effect unchanged would destroy and rebuild the map on every `user.me`
-   * refetch, because react-query hands back a new object each time - losing
-   * the viewport, the drawn route and every marker on it.
+   * A `remove()` cleanup on an effect that depends on `user` would destroy
+   * and rebuild the map on every `user.me` refetch, because react-query hands
+   * back a new object each time - losing the viewport, the drawn route and
+   * every marker on it.
    */
   it("keeps one map across re-renders that change nothing it was built from", () => {
     const { rerender } = renderHook(
@@ -347,9 +340,9 @@ describe("useMapResize", () => {
 
   /**
    * iOS Safari fires this on every URL-bar collapse and expand during an
-   * ordinary scroll - dozens of times in a few seconds. Each one used to queue
-   * its own `setTimeout`, and each of those a full WebGL canvas resize and
-   * tile repaint.
+   * ordinary scroll - dozens of times in a few seconds. Each one must
+   * collapse into a single debounced resize rather than queueing its own,
+   * which would mean a full WebGL canvas resize and tile repaint per event.
    */
   it("collapses a burst of container-resize reports into one map resize", () => {
     const map = new FakeMap({});

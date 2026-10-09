@@ -190,9 +190,10 @@ describe("POST /api/pusher/auth", () => {
  * A malformed `socket_id` on a channel the caller genuinely owns.
  *
  * The two checks above it both pass — it is a string, and `canSubscribe` says
- * the channel is theirs — so the value reached `authorizeChannel`, which threw
- * on the shape. Nothing caught it, so Next turned an ordinary bad request into
- * an unhandled rejection and a 500, which the client then retried.
+ * the channel is theirs — so the value reaches `authorizeChannel`, which
+ * throws on the shape. Without a catch there, Next turns an ordinary bad
+ * request into an unhandled rejection and a 500, which the client then
+ * retries.
  */
 describe("POST /api/pusher/auth — a malformed socket_id is a 400, not a 500", () => {
   let errorSpy: jest.SpyInstance;

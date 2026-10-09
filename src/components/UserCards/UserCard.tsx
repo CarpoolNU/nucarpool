@@ -276,14 +276,43 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
       {/* Fifth row - Start and end times */}
       {!(isMobile && props.isMobileCondensedLayout) && (
         <div className="m-0 flex w-full justify-between align-middle">
-          <div className="flex text-sm">
-            <p className="pr-1">Job Start:</p>
-            <p className="font-semibold">
+          {/* Three utilities in this row are a width budget rather than
+              styling, and the budget is tight enough that changing any of
+              them decides whether the row fits one line.
+
+              The desktop sidebar is a hard `w-[25rem]`, and this row's share
+              of it - after the sidebar gutter, the scroll port's scrollbar,
+              the card's margin, its 13px left border and its `px-4` - is
+              284px. The widest pair of `h:mm A` strings needs 286.33 of that.
+
+              `whitespace-nowrap` keeps each item unbreakable. A flex row with
+              no `flex-wrap` resolves a shortfall by shrinking its items, and
+              an item holding text shrinks towards its longest word - so
+              without this the row does not break between its two halves, it
+              splits all four labels into `Job`/`Start:` and `10:00`/`AM`.
+
+              `flex-wrap` is the consequence of that: with unbreakable items a
+              row that does not fit has to go somewhere, and a second line
+              carrying `Job End: …` intact beats horizontal overflow.
+              `overflow-y-scroll` on the sidebar's scroll port computes
+              `overflow-x` to `auto`, so overflow here puts a horizontal
+              scrollbar under the whole card list.
+
+              `px-1` on the separator rather than `px-2` is the 8px that
+              brings the worst case to 278.33 and leaves the budget 5.67px.
+              That is the whole margin available without changing how the row
+              reads, and rewording either label spends it. Every figure here
+              is measured by `user-card-schedule-row` in `layoutFixtures.ts`;
+              the sixth row below shares this shape and has 33px of headroom,
+              which is why it carries none of this. */}
+          <div className="flex flex-wrap text-sm">
+            <p className="pr-1 whitespace-nowrap">Job Start:</p>
+            <p className="font-semibold whitespace-nowrap">
               {formatScheduleTime(props.otherUser.startTime)}
             </p>
-            <p className="px-2 font-semibold">|</p>
-            <p className="pr-1">Job End:</p>
-            <p className="font-semibold">
+            <p className="px-1 font-semibold">|</p>
+            <p className="pr-1 whitespace-nowrap">Job End:</p>
+            <p className="font-semibold whitespace-nowrap">
               {formatScheduleTime(props.otherUser.endTime)}
             </p>
           </div>
