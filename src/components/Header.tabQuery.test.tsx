@@ -2,18 +2,15 @@
  * On desktop, a `?tab=` in the URL must not override the Explore and
  * Requests buttons.
  *
- * The effect applying `router.query.tab` listed `props.data` among its
- * dependencies, and `pages/index.tsx` passes `data` as an object literal - a
- * new object every render. So the effect re-ran on every render, and the
- * render that a desktop tab click caused put the URL's tab straight back. The
- * mobile nav navigates to `/?tab=requests`, so a tablet rotated across `md` or
- * a window resized past it arrived on desktop with the param set, and Explore
- * then did nothing.
+ * `pages/index.tsx` passes `data` as an object literal, a new object every
+ * render, and the mobile nav navigates to `/?tab=requests` - so a tablet
+ * rotated across `md` or a window resized past it can arrive on desktop with
+ * the param still set. This guards that a desktop click still wins.
  *
  * `Harness` reproduces the caller's shape exactly: it owns the sidebar state
- * and passes `data` as a fresh literal on each render, which is the whole
- * precondition of the defect. The router mock is one stable object, as Next's
- * is between route changes, so a re-run can only come from `data`.
+ * and passes `data` as a fresh literal on each render, which is exactly the
+ * shape this test needs to exercise. The router mock is one stable object, as
+ * Next's is between route changes, so a re-run can only come from `data`.
  */
 
 import { useState } from "react";
@@ -35,8 +32,7 @@ jest.mock("next/router", () =>
 
 /*
  * Set per test before render. `useRouter()` hands back one object for the
- * whole suite, so assigning to `query` on it is visible to the next render -
- * which is what the getter over a local `let` used to arrange.
+ * whole suite, so assigning to `query` on it is visible to the next render.
  */
 const setTabQuery = (query: Record<string, string>) => {
   routerState().query = query;
@@ -49,8 +45,8 @@ const setTabQuery = (query: Record<string, string>) => {
  * That is the right fidelity here and not a shortcut. What this file measures
  * is how many times an effect re-ran, so any query that resolved would be
  * adding renders to the thing being counted. `inertQuery` is stable by
- * construction, which leaves `data` as the only moving part - and `data` is
- * what the defect depended on.
+ * construction, which leaves `data` as the only moving part - exactly the
+ * variable this test exercises.
  *
  * `realTimeQueryOptions` is exported because `Header` imports it by name
  * alongside `trpc` and spreads it into the unread-count query.

@@ -3,10 +3,11 @@
  *
  * `MessageHeader` calls `useProfileImage(selectedUser.id)` above its
  * `if (ismobile)` branch, and that branch renders a back arrow and a name and
- * no avatar at all. So every mobile conversation opened fired an authenticated
- * presigned-URL request whose result was thrown away — and each one performs
- * an S3 `HeadObject` on the server. `staleTime` means reopening the *same*
- * conversation is free, so the cost is one wasted round trip per distinct
+ * no avatar at all. Calling the hook ungated would fire an authenticated
+ * presigned-URL request on every mobile conversation opened, whose result
+ * is thrown away by that branch — and each one performs an S3 `HeadObject`
+ * on the server. `staleTime` means reopening the *same* conversation is
+ * free, so the cost would be one wasted round trip per distinct
  * conversation per window.
  *
  * **Why this file mocks `trpc` onto real React Query rather than onto a spy,
@@ -40,7 +41,7 @@ import {
  * A path rather than an absolute URL: `next/image` validates a remote `src`
  * against `images.remotePatterns` and throws for a host it does not know, so
  * an invented S3 hostname would fail the desktop render for a reason that has
- * nothing to do with this ticket.
+ * nothing to do with what this file is testing.
  */
 const AVATAR_URL = "/avatar.png";
 

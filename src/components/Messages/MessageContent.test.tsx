@@ -2,41 +2,41 @@
  * `MessageContent`: which of three answers an open conversation gives, and how
  * a bubble treats the newlines it stores.
  *
- * Two tickets, one per `describe` block, which were two sibling files. The
- * split was not one of the mandatory kinds in `CLAUDE.md`; it was an idiom
- * difference. The whitespace block stubbed `trpc` as a plain object returning a
- * hand-built `useInfiniteQuery` result, and that stub had to be hoisted to
- * module scope so every render saw the *same* object - a fresh literal gave
- * `data.pages` a new identity each render, the `fetchedMessages` memo
- * recomputed, the merge effect called `setConversationMessages`, and the
- * component rendered again without bound. The first version of that file spun
- * for 28 minutes before it was killed, looking for all the world like a slow
- * suite rather than a broken fixture.
+ * Both `describe` blocks share this file because the mandatory split
+ * reasons in `CLAUDE.md` do not apply; only an idiom difference separates
+ * them. The whitespace block stubs `trpc` as a plain object returning a
+ * hand-built `useInfiniteQuery` result, and that stub must be hoisted to
+ * module scope so every render sees the *same* object - a fresh literal
+ * would give `data.pages` a new identity each render, the `fetchedMessages`
+ * memo would recompute, the merge effect would call
+ * `setConversationMessages`, and the component would render again without
+ * bound, spinning the suite forever while looking like a slow test rather
+ * than a broken fixture.
  *
- * Both blocks now go through `buildTrpcMock` and the real client, which removes
+ * Both blocks go through `buildTrpcMock` and the real client, which removes
  * that hazard rather than working around it: React Query keeps `data`
  * referentially equal between renders unless it actually refetched, which is
- * the invariant the component was written against in the first place. The cost
- * is that the whitespace assertions now await a resolving fetch instead of
- * reading a synchronous stub.
+ * the invariant the component is written against. The cost is that the
+ * whitespace assertions await a resolving fetch instead of reading a
+ * synchronous stub.
  *
  * ---
  *
- * That a conversation gives three different answers, where it used
- * to give one.
+ * That a conversation gives three different answers, not one.
  *
- * The message list rendered unconditionally, so "nobody has written anything",
- * "still loading" and "the request failed" were one pixel-identical empty white
- * panel - with `SendBar` live above it, offering to add to a conversation that
- * might not have loaded. The `QueryError` docstring names this as the worst
- * failure mode a matching product has: "silent empty lists made a real outage
- * look like nobody was using the app".
+ * Rendering the message list unconditionally would make "nobody has
+ * written anything", "still loading" and "the request failed" one
+ * pixel-identical empty white panel - with `SendBar` live above it,
+ * offering to add to a conversation that might not have loaded. The
+ * `QueryError` docstring names this as the worst failure mode a matching
+ * product has: "silent empty lists made a real outage look like nobody was
+ * using the app".
  *
  * **All three states are asserted in this one file deliberately.** The
  * distinction is the deliverable, and a file that only pinned the failure case
- * would let it collapse back to two - which is how it got here. Each test
- * additionally asserts the *absence* of the other two outputs, so no pair of
- * states can quietly become the same again.
+ * would let it collapse back to two. Each test additionally asserts the
+ * *absence* of the other two outputs, so no pair of states can quietly
+ * become the same again.
  *
  * The empty case is not an edge case but the normal first paint:
  * `requests.create` stores the opening text as a `Message` rather than in
@@ -114,12 +114,11 @@ const PRE = "whitespace-" + "pre";
 /**
  * The id is `viewer`, and that is not a style choice.
  *
- * It was first written as the obvious abbreviation for "me" followed by a
- * digit - which is also the name of a real Tailwind utility, the
- * margin-inline-end scale. Tailwind v4 scans this file, so that fixture id
- * compiled into the production stylesheet as a live rule nobody wrote or
- * wanted; a selector-set diff of two builds caught it sitting next to the
- * intended `.whitespace-pre-line`.
+ * The obvious abbreviation for "me" followed by a digit is also the name
+ * of a real Tailwind utility, the margin-inline-end scale - and Tailwind
+ * v4 scans this file, so that id would compile into the production
+ * stylesheet as a live rule nobody wrote or wanted, sitting next to the
+ * intended `.whitespace-pre-line` in a selector-set diff.
  *
  * Note that this docblock cannot name the token either, for the same reason:
  * spelling it here would emit the rule just as effectively as using it. That
@@ -202,7 +201,7 @@ describe("an open conversation, in each of its three states", () => {
 
     renderThread();
 
-    // The state the panel previously could not express at all.
+    // The state an unconditional message list could not express at all.
     await waitFor(() => expect(emptyCopy()).toBeInTheDocument());
     expect(spinner()).not.toBeInTheDocument();
     expect(failure()).not.toBeInTheDocument();
@@ -218,7 +217,7 @@ describe("an open conversation, in each of its three states", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("We could not load this conversation.");
     expect(spinner()).not.toBeInTheDocument();
-    // The distinction the ticket is about: a failure must not read as empty.
+    // The distinction that matters: a failure must not read as empty.
     expect(emptyCopy()).not.toBeInTheDocument();
   });
 
@@ -341,13 +340,13 @@ describe("message bubble whitespace", () => {
 
     // `break-words` is what wraps a long unbroken token; the width caps are
     // the narrow and wide halves of the bubble's geometry. None of the three is
-    // this ticket's business, so all three are pinned against it.
+    // this file's business, so all three are pinned against drift.
     //
-    // The 50% cap moved from the width-only `desktop:` screen to the message
-    // panel's own height-gated one: at a 267px panel the cap does
+    // The 50% cap is gated on the message panel's own height, not the
+    // width-only `desktop:` screen: at a 267px panel the cap does
     // not narrow the bubble, it wraps it to four lines, inside a conversation
-    // box that had nothing to show them in. This assertion is why that change
-    // had to be deliberate, which is the job it was written for.
+    // box with nothing to show them in. This assertion pins that gating as
+    // deliberate.
     expect(bubble).toHaveClass("break-words");
     expect(bubble).toHaveClass("max-w-[85%]");
     expect(bubble).toHaveClass("message-panel-tall:max-w-[50%]");

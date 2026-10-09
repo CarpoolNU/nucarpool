@@ -2,43 +2,35 @@
  * `GroupPage`: a group with no driver, and how My Group is dismissed and
  * announced.
  *
- * Two tickets, which were two sibling files. The split was not one of the
- * mandatory kinds in `CLAUDE.md`; it was an idiom difference in how the same
- * two modules were mocked. The dismissal file configured `trpc` and
- * `useGroupDetails` with literals inside the `jest.mock` factories, which is
- * all a fixed `{ data: undefined }` needs; this file's `jest.fn()`s configured
- * in `beforeEach` are the wider form, because the driverless cases vary
- * `groups.me` per test. The wider form subsumes the narrower, so the whole file
- * now uses it and each render helper states the `groups.me` result it wants -
- * which is also what makes that result visible at the point of use rather than
- * buried in a factory.
+ * `trpc` and `useGroupDetails` are mocked with `jest.fn()`s configured in
+ * `beforeEach`, because the driverless cases vary `groups.me` per test; each
+ * render helper states the `groups.me` result it wants, which makes that
+ * result visible at the point of use.
  *
- * `useGroupDetails` now returns `DEFAULT_GROUP_DETAILS` for every block. The
- * dismissal file returned a hand-written literal whose keys had been wrong -
- * `musicPreference`, `snackPreference`, `conversationStyle` and `groupNotes`,
- * of which the last three are not fields - and nothing noticed, because the
- * only body it rendered was a RIDER's prose. The real default cannot drift from
- * the shape that way.
+ * `useGroupDetails` returns `DEFAULT_GROUP_DETAILS` for every block - the
+ * real constant rather than a hand-written literal - so a block's mock
+ * cannot drift from the real shape of `GroupDetails`.
  *
  * ---
  *
  * "My Group" for a carpool group that has no driver.
  *
- * `GroupMembers` resolved the driver before deciding whether to render at all
- * and shared one early return with the genuine loading state:
+ * A component must not resolve the driver before deciding whether to render
+ * at all, sharing one early return with the genuine loading state:
  *
  *     if (!driver || !curUser) return <Spinner />;
  *
- * For a group whose members include no `DRIVER` that branch never ends. The
- * query has already succeeded, there is no driver, and no amount of waiting
- * produces one - so both the mobile screen and the desktop modal showed a
- * spinner where the member list belongs, with no message and no way out. 15
- * groups holding 33 members were in that state on production.
+ * For a group whose members include no `DRIVER` that branch would never end.
+ * The query has already succeeded, there is no driver, and no amount of
+ * waiting produces one - so both the mobile screen and the desktop modal
+ * would show a spinner where the member list belongs, with no message and
+ * no way out. 15 groups holding 33 members were found in that state on
+ * production.
  *
- * The exit itself was never missing. `groups.edit` skips the seat credit rather
+ * The exit itself is not missing: `groups.edit` skips the seat credit rather
  * than failing it for exactly this case, commented "leaving one at a time is
- * the only way its riders can get out", and `groups.test.ts` pins it. The
- * button that reaches it was what did not exist, until this fix added it.
+ * the only way its riders can get out", and `groups.test.ts` pins it. What
+ * this file pins is that a button reaching it actually exists.
  *
  * ---
  *
@@ -207,25 +199,23 @@ beforeEach(() => {
 });
 
 /**
- * These carried `hidden: true` when this file was written, and no longer do.
+ * These do not carry `hidden: true`.
  *
- * The desktop branch used to wrap its whole `Dialog.Panel` in a `div` marked
- * `aria-hidden="true"`, so every control inside it - including the one this
- * file's ticket added - was absent from the accessibility tree that `getByRole`
- * resolves against. `hidden: true` made a role query ignore that exclusion, so
- * these addressed the button that existed rather than the one the modal
- * announced. The wrapper was the defect, filed separately and deliberately
- * not fixed by that ticket; the later fix - pinned by the
- * accessibility-tree block at the end of this file - split the backdrop out
- * into a sibling, and the flag came off with it.
+ * If the desktop branch wrapped its whole `Dialog.Panel` in a `div` marked
+ * `aria-hidden="true"`, every control inside it would be absent from the
+ * accessibility tree that `getByRole` resolves against, and `hidden: true`
+ * would be needed to make a role query ignore that exclusion - addressing
+ * the button that exists rather than the one the modal announces. See the
+ * accessibility-tree block at the end of this file for why the backdrop is a
+ * sibling of the panel rather than its wrapper.
  *
- * It mattered just as much on the **negative** assertions, which is the part
- * worth not losing. While everything in that panel was hidden,
- * `queryByRole("button", { name: "Remove" })` on desktop returned null whether
- * or not a Remove button was drawn - so "Remove is not offered" held for the
- * wrong reason and would have kept holding through a regression. Now that the
- * panel is in the tree, the query means what it says on both branches, without
- * the flag papering over the difference.
+ * That would matter just as much on the **negative** assertions, which is
+ * the part worth not losing. With everything in that panel hidden,
+ * `queryByRole("button", { name: "Remove" })` on desktop would return null
+ * whether or not a Remove button was drawn - so "Remove is not offered"
+ * would hold for the wrong reason and would keep holding through a
+ * regression. With the panel in the tree, the query means what it says on
+ * both branches, without a flag papering over the difference.
  */
 const button = (name: string) => screen.getByRole("button", { name });
 
@@ -297,13 +287,13 @@ describe.each([
   });
 
   /**
-   * The point of the ticket. Reaching the mutation is what "working" means
+   * Reaching the mutation is what "working" means
    * here: a button that renders and then calls nothing would satisfy the
    * assertion above and leave the 33 members exactly as stuck.
    *
-   * `groupId` is the caller's own `carpoolId`, which is the change that let the
-   * hook run at all - it used to read the group off `driver.carpoolId`, and
-   * there is no driver row to read. `driverId` is the caller's own id because
+   * `groupId` is the caller's own `carpoolId`, which is what lets the hook
+   * run at all for a driverless group: there is no driver row to read a
+   * group off `driver.carpoolId`. `driverId` is the caller's own id because
    * `groups.edit` requires the field and ignores it on the remove path,
    * resolving the driver from the group's membership itself.
    */
@@ -324,9 +314,10 @@ describe.each([
 
   /**
    * Report and Block, on the screen where the counterpart is somebody the
-   * reader is actually sharing a car with. `UserActionsMenu` reached the user
-   * cards and the conversation header and stopped there, so this was the one
-   * relationship in the app whose moderation controls were a navigation away.
+   * reader is actually sharing a car with. `UserActionsMenu` reaches the user
+   * cards and the conversation header; without it here too, this would be
+   * the one relationship in the app whose moderation controls are a
+   * navigation away.
    *
    * Through `GroupPage` rather than the card, deliberately: `GroupMemberCard`
    * takes `showUserActions` as a prop and defaults it off, so the card's own
@@ -381,9 +372,9 @@ describe.each([
 
   /**
    * A group member's role lives on `CarpoolSearch` beside `carpoolId` and
-   * nothing ties the two together, so `VIEWER` members are real. The badge was
-   * a two-way conditional on `=== DRIVER`, which put every one of them in the
-   * "Rider" half.
+   * nothing ties the two together, so `VIEWER` members are real. A two-way
+   * conditional on `=== DRIVER` would put every one of them in the "Rider"
+   * half.
    */
   it("labels a viewer as a viewer", () => {
     renderDriverlessGroup();
@@ -419,22 +410,21 @@ describe("the member list before the current user has loaded", () => {
 /**
  * Dismissing "My Group" on mobile.
  *
- * The desktop branch renders inside Headless UI's `Dialog`, so it has dismissed
- * on backdrop click and on Escape since it was written. The mobile branch is a
- * bare `fixed inset-0` div whose header held the title and nothing else, and it
- * dropped `onClose` at the top level entirely - so the only way out of My Group
- * on a phone was tapping a different navigation tab. There was no Escape
- * handling either.
+ * The desktop branch renders inside Headless UI's `Dialog`, so it dismisses
+ * on backdrop click and on Escape. The mobile branch is a bare `fixed
+ * inset-0` div with neither built in: without a Close button in its header
+ * and the Escape handling wired below, the only way out of My Group on a
+ * phone would be tapping a different navigation tab.
  *
  * Why the mobile branch does not simply adopt `Dialog`, since that would supply
  * both behaviours for free: `Dialog` also installs a focus trap, and the bottom
  * navigation is `z-index: 100` against this screen's `z-50`. The tab bar stays
  * visible and tappable on top of this view, so a trap would let a pointer reach
  * navigation the keyboard could not - worse than no trap. This is a full-screen
- * view with live navigation over it rather than a modal, so it gets the one
- * dismissal behaviour it lacked, not the whole modal contract. These tests pin
- * that decision: they assert the control and the key, and deliberately do not
- * assert a focus trap.
+ * view with live navigation over it rather than a modal, so it gets only the
+ * one dismissal behaviour that matters here (Escape), not the whole modal
+ * contract. These tests pin that decision: they assert the control and the
+ * key, and deliberately do not assert a focus trap.
  *
  * `trpc` and `useGroupDetails` are mocked as shapes rather than driven through
  * a real client and provider, following `useGroupDetails.test.tsx` - the
@@ -496,10 +486,9 @@ describe("My Group on mobile", () => {
    * records the call whether or not React is still mounted. Delete the cleanup
    * and this fails.
    *
-   * Counting `addEventListener` calls was tried first and rejected: other
-   * things in the tree register `keydown` on `window`, so `added > 0` holds
-   * even with this feature absent, and the test passed against the unfixed
-   * component.
+   * Counting `addEventListener` calls would not work: other things in the
+   * tree register `keydown` on `window`, so `added > 0` would hold even with
+   * this feature absent, passing regardless of whether it exists.
    */
   it("stops listening once unmounted", async () => {
     const onClose = jest.fn();
@@ -573,24 +562,25 @@ describe("My Group on desktop", () => {
 /**
  * Whether the desktop modal exists for assistive technology at all.
  *
- * The backdrop used to wrap the `Dialog.Panel` rather than sit beside it, and
- * it carries `aria-hidden="true"`. That attribute applies to the entire subtree
- * and no descendant can opt back in, so every control the modal offers - the
- * group-details form and its Submit, "Preview Group Route", "Leave Group",
- * "Remove", "Delete Group" - was absent from the accessibility tree while
- * rendering, staying visible, and staying clickable with a mouse.
+ * The backdrop sits beside the `Dialog.Panel` rather than wrapping it. If it
+ * wrapped the panel instead, its `aria-hidden="true"` would apply to the
+ * entire subtree with no way for a descendant to opt back in, so every
+ * control the modal offers - the group-details form and its Submit,
+ * "Preview Group Route", "Leave Group", "Remove", "Delete Group" - would be
+ * absent from the accessibility tree while still rendering, staying visible,
+ * and staying clickable with a mouse.
  *
- * `getByRole` resolves against that tree and `getByText` does not, which is the
- * only reason these assertions can tell the difference. It is also why the
- * queries below deliberately carry no `{ hidden: true }` - the flag
- * the driverless block above needed to work around this, and has now
- * dropped.
+ * `getByRole` resolves against that tree and `getByText` does not, which is
+ * the only reason these assertions can tell the difference. It is also why
+ * the queries below deliberately carry no `{ hidden: true }` - the flag the
+ * driverless block above would need to work around a wrapping backdrop.
  *
- * Note what the `does not render the mobile close control` case above could not
- * prove while the defect stood: with the whole panel hidden, *every*
- * `queryByRole` in this branch returned null, so that negative held whether or
- * not the button was drawn. It passed for the wrong reason. It only becomes an
- * assertion about the close control once the panel is in the tree.
+ * Note what the `does not render the mobile close control` case above could
+ * not prove if the backdrop wrapped the panel: with the whole panel hidden,
+ * *every* `queryByRole` in this branch would return null, so that negative
+ * would hold whether or not the button was drawn - passing for the wrong
+ * reason. It only becomes an assertion about the close control with the
+ * panel in the tree.
  */
 describe("My Group's desktop modal in the accessibility tree", () => {
   /**

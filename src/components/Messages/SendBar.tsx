@@ -21,9 +21,9 @@ const SendBar = ({ onSendMessage }: SendBarProps) => {
   const isMobile = useIsMobile();
 
   // Measured on the raw text rather than the trimmed text so the counter and
-  // the block agree with each other. `message.content` is `VARCHAR(255)` and
-  // this box used to have no cap at all, so anything longer was accepted here,
-  // accepted by the server, and then rejected by MySQL.
+  // the block agree with each other. `message.content` is `VARCHAR(255)`,
+  // so this box needs a cap: without one, anything longer would be accepted
+  // here, accepted by the server, and then rejected by MySQL.
   const isTooLong = messageContent.length > MESSAGE_MAX_LENGTH;
 
   const handleSend = async () => {
@@ -40,9 +40,9 @@ const SendBar = ({ onSendMessage }: SendBarProps) => {
         messageInputRef.current.textContent = "";
       }
     } catch {
-      // Deliberately left in the box. The mutation raises the error toast; the
-      // old code cleared unconditionally, so a rejected send took the user's
-      // text with it and there was nothing to retry.
+      // Deliberately left in the box. The mutation raises the error toast;
+      // clearing unconditionally would take the user's text with a rejected
+      // send and leave nothing to retry.
     } finally {
       setIsSending(false);
     }
@@ -52,10 +52,11 @@ const SendBar = ({ onSendMessage }: SendBarProps) => {
    * Enter sends on desktop only.
    *
    * The `!e.shiftKey` escape hatch is what makes a newline reachable, and a
-   * phone keyboard has no Shift+Enter - so on mobile this handler was the
-   * whole story: Enter sent, unconditionally, and a multi-line message was
-   * impossible to type. Worse, the key that did it is drawn by the operating
-   * system, so nothing on screen said it would send.
+   * phone keyboard has no Shift+Enter - so on mobile this handler alone
+   * would be the whole story: Enter would send, unconditionally, and a
+   * multi-line message would be impossible to type. Worse, the key that
+   * does it is drawn by the operating system, so nothing on screen would
+   * say it sends.
    *
    * Mobile therefore falls through to the browser's own default, which inserts
    * a newline. That the newline survives is a property of the box's
@@ -77,31 +78,31 @@ const SendBar = ({ onSendMessage }: SendBarProps) => {
 
   return (
     /*
-      Both insets are responsive now, and they are gated on different things:
+      Both insets are responsive, and they are gated on different things:
       the horizontal one on the panel's width, the vertical one on the
       viewport's height.
 
-      This bar used to nest two unconditional insets - 24px of container
-      padding and a further 40px of margin on the row inside it - which is
-      64px a side at every viewport. On a 375px phone that left the row 247px
-      and the text itself about 170px, under half the screen, to compose a
+      Nesting two unconditional insets - 24px of container padding and a
+      further 40px of margin on the row inside it - would be 64px a side at
+      every viewport. On a 375px phone that would leave the row 247px and
+      the text itself about 170px, under half the screen, to compose a
       message that may run to 255 characters. The desktop inset is
-      deliberate and is unchanged; mobile was simply paying for it.
+      deliberate and stays at every width that needs it; only mobile avoids
+      paying for it.
 
-      **`message-panel-tall:` and not `desktop:` on the horizontal inset,
-      which is half of the same fix.** `desktop:` is a width alone, and a
-      landscape phone is 667px wide - so it was handed the 24px desktop inset,
-      out of a panel that is the viewport less a 400px sidebar. The 8px a side
-      that buys back is not a cosmetic gain: it widens the composer from 158px
-      to 174, and `globals.css`'s `.placeholder:empty:before` hint measures
-      144.77px in this font, needing a 160.77px composer for one line - so at
-      158 it wrapped to two. Removing the wrap takes 13px off the bar, because
+      **`message-panel-tall:` and not `desktop:` on the horizontal inset.**
+      `desktop:` is a width alone, and a landscape phone is 667px wide - so
+      it would get handed the 24px desktop inset, out of a panel that is the
+      viewport less a 400px sidebar. The 8px a side that buys back is not a
+      cosmetic gain: it widens the composer from 158px to 174, and
+      `globals.css`'s `.placeholder:empty:before` hint measures 144.77px in
+      this font, needing a 160.77px composer for one line - so at 158 it
+      would wrap to two. Removing the wrap takes 13px off the bar, because
       the composer row is the send button's 46px plus 2px of border wherever
-      the composer fits inside it. The row's own margins moved to this screen
-      for the same reason, in the height-gated message cap fix, and the two
-      now agree.
+      the composer fits inside it. The row's own margins are gated on this
+      same screen, for the same reason, and the two agree.
 
-      The `sm` prefix remains the trap it always was: this repository overrides
+      The `sm` prefix is a trap here too: this repository overrides
       Tailwind's screens, so `sm` is 576px, and using it would leave every
       viewport from 576px to 639px on the desktop inset while `useIsMobile`
       still called it mobile. Both screens used here take their width term from
@@ -112,13 +113,12 @@ const SendBar = ({ onSendMessage }: SendBarProps) => {
       the padding would visibly change after mount.
 
       **`message-panel-short:` on the vertical inset, and it is the first
-      screen in this repository that narrows as a viewport grows.** This is the
-      question the docblock here used to defer by name: 48px of a landscape
-      phone's 375px viewport was vertical padding. It could not move to the
-      base the way every other value in this chrome did, because unlike the
-      header this tree is shared with the mobile branch - so a smaller base
-      would shrink the bar on a phone in portrait too, where the budget is not
-      tight and where most of the traffic is.
+      screen in this repository that narrows as a viewport grows.** 48px of
+      a landscape phone's 375px viewport is vertical padding. It cannot move
+      to the base the way every other value in this chrome does, because
+      unlike the header this tree is shared with the mobile branch - so a
+      smaller base would shrink the bar on a phone in portrait too, where the
+      budget is not tight and where most of the traffic is.
       `MESSAGE_PANEL_SHORT_MEDIA_QUERY` carries the precedent, and why the
       boundary is a negated `min-height` rather than a `max-height`.
 
@@ -142,27 +142,24 @@ const SendBar = ({ onSendMessage }: SendBarProps) => {
         **`message-panel-tall:` rather than `desktop:`, and the reason is a
         height even though the utility is a width.** This inset is 80px off a
         row that is only as wide as the panel, and the panel is the viewport
-        less a 400px sidebar - so at 667px wide it left the composer 78px.
-        `globals.css`'s `.placeholder:empty:before` hint then wrapped to three
-        lines and the bar measured 131.5px instead of 97, which on a landscape
-        phone was 131.5 of the 145px the conversation and the bar had to share.
-        A flex item will not shrink below its min-content height, so the
-        conversation lost and the bar's last 18.38px went off the bottom of the
-        screen.
+        less a 400px sidebar - so at 667px wide `desktop:` would leave the
+        composer 78px. `globals.css`'s `.placeholder:empty:before` hint would
+        then wrap to three lines and the bar would measure 131.5px instead
+        of 97, which on a landscape phone is 131.5 of the 145px the
+        conversation and the bar have to share. A flex item will not shrink
+        below its min-content height, so the conversation would lose and the
+        bar's last 18.38px would go off the bottom of the screen.
 
-        Dropping it below the threshold returned the composer to 158px and the
-        bar to 110, which was still two lines of hint. **That earlier fix read
-        that as a cost it could only relieve, on an estimate that the hint
-        needed about 200px and that no inset could find it in a 267px panel.
-        The estimate was wrong, and measuring it is what finished this off.**
-        The hint is 144.77px of text and wants a 160.77px composer; at 158 it
-        was 2.77px short of one line. So the container's own inset above - 8px
-        a side once it stopped taking the desktop figure - is enough to clear
-        it, and the wrap is gone rather than merely reduced.
+        Dropping the margin below the threshold returns the composer to
+        158px and the bar to 110 - still two lines of hint, since the hint
+        is 144.77px of text and wants a 160.77px composer; at 158 it is
+        2.77px short of one line. So the container's own inset above - 8px
+        a side rather than the desktop figure - is enough to clear it, and
+        the wrap is gone rather than merely reduced.
 
-        Nothing changes on either side of the band it was written for: a phone
-        in portrait is below the width term and keeps `mx-0`, and a desktop
-        window tall enough for the panel keeps the 80px it was designed with.
+        Nothing changes on either side of this band: a phone in portrait is
+        below the width term and keeps `mx-0`, and a desktop window tall
+        enough for the panel keeps the 80px it needs.
       */}
       <div className="message-panel-tall:mx-10 mx-0 flex items-center overflow-hidden rounded-lg border border-gray-200 bg-gray-100">
         <div
@@ -171,10 +168,9 @@ const SendBar = ({ onSendMessage }: SendBarProps) => {
           // pseudo-element, which assistive tech is not required to announce, so
           // the name has to be stated explicitly.
           role="textbox"
-          // True on both platforms, and only now. A newline was reachable on
-          // desktop through Shift+Enter and not reachable on mobile at all, so
-          // this attribute was announcing a capability half the users did not
-          // have; the Enter handling above is what makes it honest.
+          // True on both platforms: a newline is reachable on desktop
+          // through Shift+Enter, and on mobile through the Enter handling
+          // above falling through to the browser's own default.
           aria-multiline="true"
           aria-label="Message"
           // Labels the action key on a virtual keyboard, which is otherwise
@@ -184,13 +180,12 @@ const SendBar = ({ onSendMessage }: SendBarProps) => {
           // no virtual keyboard, so it is set unconditionally rather than
           // through the hook, which keeps it out of the hydration snapshot.
           enterKeyHint="enter"
-          // `text-lg` is kept at every width, which was the other half of the
-          // decision the inset raised. It resolves to 1.125rem - 18px, read
-          // from the compiled stylesheet rather than assumed - and anything
-          // under 16px makes iOS Safari zoom the whole page when the box takes
-          // focus, then leaves it zoomed. The box being too narrow was the
-          // defect; shrinking the type to fit more characters into a narrow box
-          // trades legibility for a problem that is now fixed.
+          // `text-lg` is kept at every width. It resolves to 1.125rem - 18px,
+          // read from the compiled stylesheet rather than assumed - and
+          // anything under 16px makes iOS Safari zoom the whole page when
+          // the box takes focus, then leaves it zoomed. Shrinking the type
+          // to fit more characters into a narrow box would trade legibility
+          // for a width problem the inset above already solves.
           className="placeholder w-full flex-1 resize-none border-0 bg-gray-100 p-2 text-lg focus:outline-hidden"
           ref={messageInputRef}
           style={{
@@ -209,8 +204,8 @@ const SendBar = ({ onSendMessage }: SendBarProps) => {
         <button
           type="button"
           onClick={handleSend}
-          // Only ever disabled for the two states that are new here. An empty
-          // box leaves the button live and the click a no-op, exactly as before.
+          // Only ever disabled for `isTooLong` or `isSending`. An empty box
+          // leaves the button live and the click a no-op.
           disabled={isTooLong || isSending}
           className={`p-2 px-4 pt-3 ${isTooLong || isSending ? "opacity-40" : ""}`}
           aria-label="Send message"
@@ -224,8 +219,8 @@ const SendBar = ({ onSendMessage }: SendBarProps) => {
         <div
           // The same inset as the row, at every viewport: this counts the
           // characters in that box, so it has to sit under its right edge
-          // rather than under the container's. It therefore moves to the same
-          // screen the row above did - left on `desktop:` it would hang 40px
+          // rather than under the container's. It therefore uses the same
+          // screen the row above does - left on `desktop:` it would hang 40px
           // inboard of the box it belongs to on a landscape phone.
           className={`message-panel-tall:mx-10 mx-0 mt-1 text-end text-sm ${
             // text-stone-400 read at 2.52:1 against this panel's

@@ -2,22 +2,24 @@
  * A sent message has to reach the thread it was sent to
  * even when the Pusher echo never arrives.
  *
- * `sendMessage`'s `onSuccess` invalidated `user.requests.me` and nothing else,
- * so the only thing that put the sender's *own* message into the open
- * conversation was the real-time echo. The server treats that delivery as
- * best-effort - `message.ts` catches a trigger failure, logs it, and returns
- * success because the row was saved - so a Pusher outage or a refused
- * private-channel subscription produced a send that reported success, cleared
- * the box, updated the sidebar card's preview (that query *was* invalidated)
- * and left the conversation unchanged. The user saw their message quoted in
- * the list and missing from the thread, and sent it again.
+ * `sendMessage`'s `onSuccess` must invalidate the open conversation's own
+ * query, not only `user.requests.me`: relying on the real-time echo alone
+ * to put the sender's *own* message into the open conversation is not
+ * enough, because the server treats that delivery as best-effort -
+ * `message.ts` catches a trigger failure, logs it, and returns success
+ * because the row was saved regardless. So a Pusher outage or a refused
+ * private-channel subscription would produce a send that reports success,
+ * clears the box, updates the sidebar card's preview, and leaves the
+ * conversation unchanged - a user would see their message quoted in the
+ * list and missing from the thread, and send it again.
  *
  * **The echo is suppressed entirely here, and that is the point.** The happy
- * path passes either way, because the echo puts the message on screen whether
- * or not anything was invalidated - a test that let it through would go green
- * against the unfixed code. `acquirePusherClient` below returns a channel whose
- * `bind` records nothing and never fires, which is the shape of the failure the
- * fix is for.
+ * path would pass either way if the echo were live, because it puts the
+ * message on screen whether or not anything was invalidated - a test that
+ * let it through would go green regardless of whether the invalidation
+ * exists. `acquirePusherClient` below returns a channel whose `bind`
+ * records nothing and never fires, which isolates exactly the failure mode
+ * this guards against.
  *
  * **Real React Query with a stubbed `queryFn`**, per
  * `MessageContent.threadStates.test.tsx` and `recommendationsQueryGate.test.tsx`:
@@ -230,13 +232,13 @@ describe("a message sent while the real-time echo is down", () => {
     expect(await screen.findByText("Yes, 8am as usual.")).toBeInTheDocument();
 
     // And the sidebar's half of the same success, so the card preview and the
-    // thread cannot disagree about whether the message exists. Both now hang
-    // off one `onSuccess`; the defect was that only this one did.
+    // thread cannot disagree about whether the message exists. Both hang
+    // off one `onSuccess`.
     expect(onMessageSent).toHaveBeenCalledWith("other-1");
   });
 
   it("is stored by the server either way, so the control is the cache", async () => {
-    // The pre-fix shape, measured in the same harness: everything happens
+    // The control, measured in the same harness: everything happens
     // except the invalidation reaching React Query. The row is written, the
     // sidebar's own query is invalidated, the box clears - and the thread the
     // user is looking at never changes. Without this, the test above could

@@ -44,10 +44,8 @@ describe("resolveGroupDetails — the single read path", () => {
   });
 
   it("reads an unselected column as empty", () => {
-    // `undefined` rather than `null`, from a caller that did not select them.
-    // Before the legacy JSON-blob fallback was dropped, this was the case
-    // that chose it, so it had to be told apart from a blank row; now both
-    // are simply empty.
+    // `undefined` rather than `null`, from a caller that did not select
+    // them; both are simply empty.
     expect(resolveGroupDetails({})).toEqual(DEFAULT_GROUP_DETAILS);
   });
 
@@ -78,13 +76,11 @@ describe("resolveGroupDetails — the single read path", () => {
   });
 
   /**
-   * The read path used to clamp to the column width, because a corrupt
-   * `GROUP_DETAILS_V1:` blob could surface as note text far longer than
-   * `group_notes` accepts. With the legacy column dropped there is no such
-   * source, and clamping was worse than redundant: `textLimits.ts` counts UTF-16
+   * Every value reaching a read comes out of a `VARCHAR(90)` or `VARCHAR(40)`
+   * column, so there is no need to clamp here: `textLimits.ts` counts UTF-16
    * code units while MySQL counts characters, so a column-legal note of emoji
-   * has a JS `length` above the limit and a `slice` on read would have truncated
-   * a value the database stored happily.
+   * has a JS `length` above the limit, and a `slice` on read would truncate a
+   * value the database stores happily.
    */
   it("does not clamp a stored value to the column width", () => {
     const long = "z".repeat(NOTES_MAX_LENGTH + 110);
@@ -110,9 +106,8 @@ describe("trimDetails", () => {
   });
 
   /**
-   * Deliberate, and now the only behaviour: an over-length value reaches the
-   * server and comes back as a visible error rather than being silently
-   * shortened the way the old serialise path did.
+   * Deliberate: an over-length value reaches the server and comes back as a
+   * visible error rather than being silently shortened.
    */
   it("does not shorten an over-length note", () => {
     const long = "x".repeat(NOTES_MAX_LENGTH + 25);

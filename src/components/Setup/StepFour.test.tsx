@@ -56,7 +56,7 @@ describe("the pronouns field's character cap", () => {
     }) as HTMLInputElement;
 
     expect(pronouns.maxLength).toBe(PRONOUNS_INPUT_MAX_LENGTH);
-    // The arithmetic the defect got wrong, stated as the property that
+    // The arithmetic that is easy to get wrong, stated as the property that
     // matters: the cap is what the user can type, after the two characters
     // the display wrapper spends.
     expect(pronouns.maxLength - 2).toBe(PRONOUNS_MAX_LENGTH);
@@ -64,8 +64,8 @@ describe("the pronouns field's character cap", () => {
   });
 
   it("stays well inside the column, so the UI is the only constraint", () => {
-    // `pronouns` is `VARCHAR(191)`. If this ever inverted, the input would
-    // accept text the write then rejects.
+    // `pronouns` is `VARCHAR(191)`. Inverted, the input would accept text the
+    // write then rejects.
     expect(PRONOUNS_INPUT_MAX_LENGTH).toBeLessThan(PROFILE_TEXT_MAX_LENGTH);
   });
 });

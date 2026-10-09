@@ -6,14 +6,14 @@ import {
 } from "./viewerAccess";
 
 /**
- * The Requests tab used to be gated on the caller's own role, so a VIEWER could
- * not reach requests they had already sent and had no way to withdraw one.
- * These pin both halves of the rule: requests stay visible, and
- * recommendations stay hidden.
+ * Viewer mode hides the recommendations tab and nothing else. Gating the
+ * Requests tab on the caller's own role instead would leave a VIEWER unable to
+ * reach requests they had already sent, with no way to withdraw one. These pin
+ * both halves of the rule: requests stay visible, and recommendations stay
+ * hidden.
  *
  * The sidebar itself has no suite, so this is the only place the gate is
- * checked. It is a predicate rather than inline JSX for exactly that reason —
- * which was once the only way to check it at all.
+ * checked. It is a predicate rather than inline JSX for exactly that reason.
  */
 
 const ALL_SUB_TYPES: SidebarSubType[] = [
@@ -95,17 +95,16 @@ describe("the predicates together", () => {
   });
 
   it("leaves favorites as the only non-request tab a VIEWER can see", () => {
-    // Worth pinning because it is the fact that decided the name-withholding
-    // rule was not worth keeping. Viewer mode used to print a counterpart's
-    // role in place of their name on "discovery" cards, and this is the whole
-    // of the surface that reached: recommendations are replaced by copy,
-    // requests are relationships, so the rule only ever applied to the
-    // reader's own favourites. A former Driver who saved three people and
-    // switched to Viewer read "Driver", "Driver", "Rider".
+    // Worth pinning because it is the fact that settles the name-withholding
+    // question. A rule printing a counterpart's role in place of their name on
+    // "discovery" cards would reach exactly this surface: recommendations are
+    // replaced by copy and requests are relationships, so it would apply only
+    // to the reader's own favourites, where a former Driver who saved three
+    // people and switched to Viewer would read "Driver", "Driver", "Rider".
     //
-    // Nothing withholds a name now, and there is no predicate left to test for
-    // it - see the note at the top of `viewerAccess.ts` for why, and for what a
-    // real control would have to do instead.
+    // Nothing withholds a name, and there is no predicate to test for it - see
+    // the note at the top of `viewerAccess.ts` for why, and for what a real
+    // control would have to do instead.
     const visibleNonRequestTabs = ALL_SUB_TYPES.filter(
       (subType) => !viewerModeHidesCards(subType) && !isRequestSubType(subType),
     );
@@ -139,9 +138,9 @@ describe("roleFetchesRecommendations", () => {
   });
 
   it("releases the query once a real role arrives, rather than staying off", () => {
-    // The other half of the case above, and the mistake the ticket names: a
-    // term that tolerates the initial `undefined` by disabling the query must
-    // not leave it disabled for a RIDER or a DRIVER once the role lands.
+    // The other half of the case above: a term that tolerates the initial
+    // `undefined` by disabling the query must not leave it disabled for a
+    // RIDER or a DRIVER once the role lands.
     const beforeUserMe = roleFetchesRecommendations(undefined);
     const afterUserMe = roleFetchesRecommendations("RIDER");
 

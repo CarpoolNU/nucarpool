@@ -45,11 +45,11 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({
 }) => {
   const { data: session, update } = useSession();
   // A ref rather than state: this component renders `null`, so the flag has no
-  // bearing on any output, and as state it was both a dependency of the tour
-  // effect and something the effect's own teardown set - which made a single
-  // completion re-run the effect and build another tour. A ref is also the
-  // stricter guard, since `setState` would not have been visible to a second
-  // call in the same tick.
+  // bearing on any output, and as state it would be both a dependency of the
+  // tour effect and something the effect's own teardown sets - which would
+  // make a single completion re-run the effect and build another tour. A ref
+  // is also the stricter guard, since `setState` would not be visible to a
+  // second call in the same tick.
   const isCompletingRef = useRef(false);
   // Use the exact same mobile detection as the main page
   const isMobile = useIsMobile();
@@ -262,9 +262,9 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({
       },
     ];
 
-    // One `driver()` call for both platforms. The two configurations only ever
-    // differed in their steps, and holding the hooks in one place is what stops
-    // the mobile and desktop teardowns from drifting apart again.
+    // One `driver()` call for both platforms. The two configurations only
+    // ever differ in their steps, and holding the hooks in one place is what
+    // stops the mobile and desktop teardowns from drifting apart.
     const driverInstance: Driver = driver({
       popoverClass: "welcome-tutorial-popover",
       showProgress: true,

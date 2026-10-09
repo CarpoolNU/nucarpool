@@ -21,11 +21,10 @@ import { QueryError } from "../QueryError";
 /**
  * The "My Group" screen.
  *
- * This file used to hold two parallel implementations of the feature,
- * mobile and desktop, each with its own data fetching, mutation wiring and
- * handlers. What remains is one container per state - `NoGroupSection` and
- * `GroupSection` - which own the query and delegate every mutation to
- * `useGroupDetails`, plus per-variant view components that are pure markup.
+ * One container per state - `NoGroupSection` and `GroupSection` - owns the
+ * query and delegates every mutation to `useGroupDetails`, rather than
+ * mobile and desktop each carrying their own data fetching, mutation wiring
+ * and handlers. Per-variant view components are pure markup.
  *
  * The two layouts are genuinely different (a full-screen card stack on mobile, a
  * centred modal on desktop) so they stay as separate views. The rule is that a
@@ -255,8 +254,8 @@ export const GroupPage = (props: GroupPageProps) => {
    * this screen's `z-50`, so it stays visible *and* tappable on top of it.
    * Trapping focus would let a pointer reach the navigation while the keyboard
    * could not, which is a worse state than no trap at all. This is a
-   * full-screen view with live navigation over it, not a modal, so it gets the
-   * one dismissal behaviour it was missing rather than the whole modal
+   * full-screen view with live navigation over it, not a modal, so it gets
+   * only the one dismissal behaviour (Escape) rather than the whole modal
    * contract.
    *
    * Declared above the `!curUser` early return - hooks cannot sit after a
@@ -293,28 +292,26 @@ export const GroupPage = (props: GroupPageProps) => {
 
   if (isMobile) {
     return (
-      /* `bottom-mobile-nav` rather than the `inset-0` this used to carry.
-       * `inset-0` put the overlay's bottom edge at the viewport's, and the
-       * bottom navigation is `position: fixed` at `z-index: 100` against this
-       * screen's `z-50` - so the nav won both the paint and the hit test over
-       * whatever the overlay put down there. That was the sticky action bar
-       * holding "Preview Group Route", the group screen's primary action:
-       * 44 of its 56px was measured behind the nav on a 375x667 phone,
-       * leaving a 12px strip to tap. The last member card's Leave/Remove
-       * button is the same exposure whenever it is the bottom-most thing in
-       * the scroll port, which is the `hasDriver` false case, where no action
-       * bar renders below it.
+      /* `bottom-mobile-nav`, not `inset-0`: the bottom navigation is
+       * `position: fixed` at `z-index: 100` against this screen's `z-50`, so
+       * an `inset-0` overlay whose bottom edge sits at the viewport's would
+       * lose both the paint and the hit test to the nav over whatever it put
+       * down there - the sticky action bar holding "Preview Group Route", the
+       * group screen's primary action, would have 44 of its 56px behind the
+       * nav on a 375x667 phone, leaving a 12px strip to tap. The last member
+       * card's Leave/Remove button has the same exposure whenever it is the
+       * bottom-most thing in the scroll port, which is the `hasDriver` false
+       * case, where no action bar renders below it.
        *
        * Reserving the nav's height once here rather than padding the action
-       * bar: the scroll port fills this box, so its bottom edge is now the
-       * nav's top edge and *nothing* it contains can sit behind the nav, at
-       * any scroll position and for any amount of content. The sticky bar
+       * bar: the scroll port fills this box, so its bottom edge is the nav's
+       * top edge and *nothing* it contains can sit behind the nav, at any
+       * scroll position and for any amount of content. The sticky bar
        * inherits that, and so does anything else ever pinned to the bottom of
        * this screen - which is why this is one class here rather than padding
-       * on each of them. `MapConnectPortal` solved the same overlap the same
-       * way, and `bottom-mobile-nav` is the token created for it -
-       * it carries `env(safe-area-inset-bottom)`, which a hand-written offset
-       * would not.
+       * on each of them. `MapConnectPortal` solves the same overlap the same
+       * way, and `bottom-mobile-nav` is the token for it - it carries
+       * `env(safe-area-inset-bottom)`, which a hand-written offset would not.
        *
        * The nav stays visible and tappable over this view by design; see this
        * file's test for why it is a full-screen view with live navigation
@@ -322,10 +319,10 @@ export const GroupPage = (props: GroupPageProps) => {
       <div className="bottom-mobile-nav fixed inset-x-0 top-0 z-50 bg-white">
         <div className="flex h-full flex-col bg-gray-50">
           <div className="flex items-center border-b border-gray-200 bg-white px-4 py-3 shadow-xs">
-            {/* The way out. This header held the title alone, so the only exit
-             * from My Group on a phone was tapping a different navigation tab -
-             * the desktop branch has dismissed on backdrop click and Escape all
-             * along, from `Dialog`.
+            {/* The way out. Without it, this header would hold the title
+             * alone, and the only exit from My Group on a phone would be
+             * tapping a different navigation tab - the desktop branch
+             * dismisses on backdrop click and Escape, from `Dialog`.
              *
              * `FaTimes` and "Close" rather than a back chevron, matching the
              * filter panel: this dismisses an overlay sitting on the map, it
@@ -399,10 +396,10 @@ const NoGroupSection = ({
     // Same resolver as the has-group branch below, so a driver sees identical
     // preferences before and after forming a group.
     stored: user,
-    // Gated on the query having resolved, not just on the role: the old code
-    // guarded with `if (user?.id && role === "DRIVER")`, and without it a click
-    // landing before the fetch would serialise the still-empty form and save
-    // an empty message over the stored one.
+    // Gated on the query having resolved, not just on the role: guarding
+    // only on `role === Role.DRIVER` would let a click landing before the
+    // fetch serialise the still-empty form and save an empty message over
+    // the stored one.
     canEdit: Boolean(user?.id) && role === Role.DRIVER,
   });
 
@@ -449,7 +446,7 @@ const GroupSection = ({
    * cannot cover the other one: when a rider leaves, the invalidation runs in
    * the rider's client, and the driver's cache is untouched. `GroupSection`
    * unmounts whenever the modal closes or the sidebar tab changes, so the
-   * driver's next visit remounted it inside the 5-minute `gcTime` and was
+   * driver's next visit would remount it inside the 5-minute `gcTime` and be
    * served the departed rider - with a "Remove" button beside them, and
    * included in "Preview Group Route".
    *
@@ -475,10 +472,11 @@ const GroupSection = ({
   const isDriver = curUser.role === Role.DRIVER;
 
   const { details, setDetails, save, isSaving } = useGroupDetails({
-    // The driver's own values, read through the group. This used to
-    // read `group.message`, a second copy that could disagree with the driver's.
+    // The driver's own values, read through the group rather than a
+    // separate copy that could disagree with the driver's.
     stored: group?.preferences,
-    // As above, mirroring the old `if (group?.id && role === "DRIVER")` guard.
+    // Driver-only: a rider must not be able to edit a driver's own
+    // preferences.
     canEdit: Boolean(group?.id) && isDriver,
   });
 
@@ -536,9 +534,9 @@ const GroupSection = ({
     /*
      * The server's flag, not a second local derivation of it. `groups.me`
      * computes `hasDriver` from the same membership rows it maps into `users`,
-     * and it was added expressly so this page could explain itself - but no
-     * client read it, and this line recomputed `Boolean(driver)` beside it. Two
-     * spellings of one fact, either of which could be changed alone.
+     * so deriving it again here as `Boolean(driver)` would be two spellings
+     * of one fact, either of which could be changed alone and drift from the
+     * other.
      */
     hasDriver: group.hasDriver,
     details,

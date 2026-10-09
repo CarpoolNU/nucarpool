@@ -5,11 +5,11 @@ import { MOBILE_NAV_SPACE } from "../../utils/breakpoints";
  * What `/admin` shows instead of the dashboard below the mobile breakpoint.
  *
  * The dashboard is two columns - a `min-w-[175px]` sidebar beside four chart
- * components - so at 375px the charts were left about 200px to draw in. This
- * says so rather than rendering them into that space.
+ * components - so at 375px the charts would be left about 200px to draw in.
+ * This says so rather than rendering them into that space.
  *
- * **It is a deliberate removal of a capability, not a layout adaptation**, and
- * that was the choice made on the ticket over stacking the columns. Two
+ * **It is a deliberate removal of a capability, not a layout adaptation**,
+ * and that is the choice here over stacking the columns. Two
  * reasons. `adminRouter` requires `permission !== "USER"`, so the audience is
  * staff and managers and the work - reading charts, changing permissions - is
  * desk work in practice. And the dashboard's one privileged control is
@@ -23,13 +23,13 @@ import { MOBILE_NAV_SPACE } from "../../utils/breakpoints";
  * deferred to a ticket, because it should only be built if someone turns out
  * to need the dashboard on a phone. This panel is not the obstacle to it.
  *
- * **It is no longer only the narrow case.** The gate in `admin.tsx` also
- * carries a height term now, so this also stands in for the console on a
- * viewport that is wide enough and too short - a phone in landscape, which is
- * 667x375 and therefore above the width breakpoint. Two things below follow
- * from that and neither is cosmetic: the copy no longer says "wider", because
- * the screen arriving here may be plenty wide, and the navigation allowance is
- * now conditional, because the bar it clears is not always rendered.
+ * **It is not only the narrow case.** The gate in `admin.tsx` carries a height
+ * term as well, so this also stands in for the console on a viewport that is
+ * wide enough and too short - a phone in landscape, which is 667x375 and
+ * therefore above the width breakpoint. Two things below follow from that and
+ * neither is cosmetic: the copy does not say "wider", because the screen
+ * arriving here may be plenty wide, and the navigation allowance is
+ * conditional, because the bar it clears is not always rendered.
  */
 type AdminMobileNoticeProps = {
   /**
@@ -54,8 +54,7 @@ const AdminMobileNotice = ({ reservesMobileNav }: AdminMobileNoticeProps) => {
      * `paddingBottom` clears the fixed bottom navigation, which `Header`
      * renders on mobile in place of the desktop bar. `MOBILE_NAV_SPACE` is the
      * same module `tailwind.config.js` and `MobileNav` itself read, so this
-     * cannot drift from the bar's real height the way three hand-written
-     * offsets did before that token existed.
+     * cannot drift from the bar's real height.
      *
      * Inline rather than the matching padding utility because the value
      * carries an `env()` safe-area term: this is one declaration either way,
@@ -105,9 +104,9 @@ const AdminMobileNotice = ({ reservesMobileNav }: AdminMobileNoticeProps) => {
        * bottom navigation, so the desktop admin header - whose sole control is
        * a "Home" button - is not on screen to return from.
        *
-       * Tapping Explore in that bottom bar does also reach the map, and did
-       * before this panel existed. That is an unlabelled escape route rather
-       * than a way back, which is the gap this closes.
+       * Tapping Explore in that bottom bar also reaches the map, but as an
+       * unlabelled escape route rather than a labelled way back, which is the
+       * gap this closes.
        *
        * `min-h-11` is 44px, the target size Apple's HIG and WCAG 2.5.5 ask
        * for and the figure `RecentreButton` and `MapLegend` already use.

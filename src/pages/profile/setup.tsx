@@ -173,12 +173,12 @@ const Setup: NextPage = () => {
   const role = watch("role");
 
   /**
-   * Moves focus into the new step once the wizard has actually changed step
-   * (SCRUM-597). Each step is a conditional render, so the control that had
-   * focus - the field Enter was pressed in, Get Started, Previous - is removed
-   * with the step it belonged to and focus falls to `<body>`. A click on
-   * Continue did not show it, because that button survives every step change;
-   * Enter from a field, which SCRUM-594 made advance the wizard, does.
+   * Moves focus into the new step once the wizard has actually changed step.
+   * Each step is a conditional render, so the control that had focus - the
+   * field Enter was pressed in, Get Started, Previous - is removed with the
+   * step it belonged to and focus falls to `<body>`. A click on Continue never
+   * shows this, because that button survives every step change; Enter from a
+   * field, which advances the wizard, does.
    *
    * **Compared against the previous step rather than run on every render or
    * mount**, so the first render does not take focus and a re-render that
@@ -450,35 +450,35 @@ const Setup: NextPage = () => {
     On mobile this element is *in flow*, the last child of the same full-screen
     column the card sits in, so the card's height and the strip's height are
     sized against each other by the flex container instead of by two numbers
-    that have to agree. It used to be `fixed ... bottom-6 ... z-50` outside that
-    container, which the card's own height knew nothing about, so the strip
-    covered the bottom 70px of every step's scroll area at 375x667 - measured,
-    not estimated. `z-50` on `SetupContainer` did not save it: `position: fixed`
-    on the wrapper creates a stacking context, so the card's z-index only ever
-    competed with its own siblings while the strip competed in the root.
+    that have to agree. A `fixed ... bottom-6 ... z-50` strip outside that
+    container is something the card's own height knows nothing about, and it
+    covers the bottom 70px of every step's scroll area at 375x667 - measured,
+    not estimated. `z-50` on `SetupContainer` does not save it: `position:
+    fixed` on the wrapper creates a stacking context, so the card's z-index
+    competes only with its own siblings while the strip competes in the root.
 
     No `shrink-0` here, though a column layout invites one. The strip keeps its
     height for free: its `overflow` is `visible`, so its automatic minimum size
     is its own content, and the browser shrinks the card instead. Measured down
     to a 260px-tall container - the strip held 96px at every step of that, with
-    and without the class - so `shrink-0` would have been a no-op asserting
-    something load-bearing.
+    and without the class - so `shrink-0` would be a no-op asserting something
+    load-bearing.
 
     `z-50` is kept for the desktop arrangement, where the strip is taken out of
     flow again and *can* meet the card on a short window. It is a no-op on
-    mobile, where the two no longer occupy the same space at all.
+    mobile, where the two do not occupy the same space at all.
 
     **The placement is `desktop-tall:`, not `desktop:`, because of a height constraint.**
     Taking the strip out of flow is only safe while the window is tall enough
     for a centred 500px card to clear it, which is `WIZARD_DESKTOP_MIN_HEIGHT_PX`
     - see the derivation there. Below it the strip stays in flow and the column
-    above sizes the two against each other, which is the arrangement that was
-    already correct on a phone. `desktop:` alone is a `min-width`, so a phone
-    held in landscape is 667px wide, reports desktop, and got this branch in a
-    375px-tall viewport: the card was clipped 62px off the top and 63px off the
-    bottom with the strip across the middle of what was left, and the last field
-    could not be reached at all. Measured, not estimated, and not only a phone
-    problem - at 1280x800 the strip covered the card's last 22px.
+    above sizes the two against each other, which is the arrangement a phone
+    needs. `desktop:` alone is a `min-width`, so a phone held in landscape is
+    667px wide, reports desktop, and would take this branch in a 375px-tall
+    viewport: the card clipped 62px off the top and 63px off the bottom with the
+    strip across the middle of what is left, and the last field unreachable.
+    Measured, not estimated, and not only a phone problem - at 1280x800 the
+    strip covers the card's last 22px.
 
     `desktop:gap-6` deliberately keeps the plain width breakpoint. The space
     between the two buttons is type-scale styling, which tracks the same thing
@@ -486,11 +486,11 @@ const Setup: NextPage = () => {
     there being vertical room.
 
     Styling-only differences go through `desktop:` overrides on mobile-first
-    base classes rather than an `isMobile` ternary, following the established convention. That also
-    removes a first-render wrinkle this element used to have: `useIsMobile`
-    returns the desktop snapshot during hydration, so the ternary positioned the
-    strip twice on a phone, and - because the two branches lived at different
-    points in the tree - React remounted the buttons to do it.
+    base classes rather than an `isMobile` ternary, following the established
+    convention. That also avoids a first-render wrinkle: `useIsMobile` returns
+    the desktop snapshot during hydration, so a ternary positions the strip
+    twice on a phone, and - because the two branches sit at different points in
+    the tree - React remounts the buttons to do it.
   */
   const buttonContainerClass =
     "desktop-tall:absolute desktop-tall:bottom-10 desktop-tall:left-1/2 desktop-tall:-translate-x-1/2 desktop:gap-6 z-50 flex flex-col items-center gap-3";
@@ -599,17 +599,17 @@ const Setup: NextPage = () => {
         A *column* on mobile, holding the card and the navigation strip as two
         in-flow items, which is what makes the card's height account for the
         buttons rather than ignore them. `pt-12` keeps the card's top edge where
-        it has always been, clear of the "CarpoolNU" title; the bottom padding
-        restates the `bottom-6` the strip used to position itself with and adds
+        it belongs, clear of the "CarpoolNU" title; the bottom padding restates
+        the `bottom-6` the strip positions itself with on desktop and adds
         `env(safe-area-inset-bottom)`, so `Continue` clears a home indicator.
         The `0px` fallback is load-bearing for the same reason it is in
         `breakpoints.js`: `env()` with no fallback invalidates the whole
         `calc()` on a browser that does not know the variable, which would drop
         the padding entirely rather than drop the inset.
 
-        `desktop-tall:flex-row` restores the original direction rather than
-        leaving the column in place, so the card keeps the desktop behaviour it
-        has today. Height is the main axis in a column and the cross axis in a
+        `desktop-tall:flex-row` puts the row back rather than leaving the
+        column in place, so the card keeps its desktop behaviour. Height is the
+        main axis in a column and the cross axis in a
         row, and a flex item only shrinks along the main axis - which is exactly
         why the direction is the thing that has to be conditional. In a row the
         500px card refuses to shrink however short the window is, so it was

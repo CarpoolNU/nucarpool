@@ -97,9 +97,9 @@ describe("AdminAuditLog", () => {
   });
 
   it("names the reported user on a report-resolution row", async () => {
-    // SCRUM-653: `resolveReport` writes a *report* id as `targetId`, so the
-    // person the row is about reaches the client as `targetUserId`. Target
-    // names them; the report id moves to Details.
+    // `resolveReport` writes a *report* id as `targetId`, so the person the
+    // row is about reaches the client as `targetUserId`. Target names them;
+    // the report id belongs in Details.
     auditLogQueryFn.mockResolvedValue([
       {
         id: "log-1",

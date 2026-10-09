@@ -160,9 +160,9 @@ describe("the recommendations query gate", () => {
   });
 
   it("never fires before the role is known", async () => {
-    // The trap the ticket names from the other side. The first pass renders
-    // with `user?.role` undefined; a gate that answered `true` there would
-    // fire the request for everyone, every time, before the answer existed.
+    // The same trap from the other side. The first pass renders with
+    // `user?.role` undefined; a gate that answers `true` there fires the
+    // request for everyone, every time, before the answer exists.
     currentRole = "VIEWER";
 
     renderExplore(newClient());
@@ -172,9 +172,9 @@ describe("the recommendations query gate", () => {
   });
 
   it("a VIEWER pays nothing on a return navigation either", async () => {
-    // The half `refetchOnMount: true` would otherwise own. This is the
-    // repeated cost in the ticket: `/` → `/profile` → `/` is a client-side
-    // navigation, so before the gate it re-ran the whole scoring pass.
+    // The half `refetchOnMount: true` would otherwise own, and where the cost
+    // repeats: `/` → `/profile` → `/` is a client-side navigation, so without
+    // the gate it re-runs the whole scoring pass.
     currentRole = "VIEWER";
     const client = newClient();
 

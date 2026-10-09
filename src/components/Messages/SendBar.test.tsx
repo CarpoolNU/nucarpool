@@ -10,12 +10,12 @@ import {
 /**
  * What this suite can and cannot say about the composer's Enter key.
  *
- * The defect was that Enter sent the message at every viewport. On a desktop
- * that is the convention and Shift+Enter still reaches a newline; on a phone
- * keyboard there is no Shift+Enter, so Enter sending was the only thing Enter
- * could do and a multi-line message was impossible to type. The key itself is
- * drawn by the operating system, so nothing on screen warned that it would
- * send.
+ * Enter must not send the message at every viewport. On a desktop that is
+ * the convention and Shift+Enter still reaches a newline; on a phone
+ * keyboard there is no Shift+Enter, so sending on every Enter would be the
+ * only thing Enter could do, making a multi-line message impossible to
+ * type. The key itself is drawn by the operating system, so nothing on
+ * screen would warn that it sends.
  *
  * **`enterKeyHint` is asserted as an attribute and nothing more.** Whether a
  * virtual keyboard actually relabels its action key is a property of iOS and

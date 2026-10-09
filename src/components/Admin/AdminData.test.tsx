@@ -21,14 +21,16 @@
  *
  * `AdminData` fans out to `getDateRange`, `getDashboardStats` and
  * `getDashboardSeries`, destructured for `data` alone, behind a single
- * `return <Spinner />`. `isError` went unread on all three, so any one of them
- * failing was a dashboard that never appeared - and since `adminRouter` throws
- * `UNAUTHORIZED` for `permission === "USER"`, a MANAGER demoting someone out
- * from under their own session got exactly that.
+ * `return <Spinner />`. Reading only `data` and not `isError` on any of the
+ * three would make a failure on any one of them a dashboard that never
+ * appears - and since `adminRouter` throws `UNAUTHORIZED` for
+ * `permission === "USER"`, a MANAGER demoting someone out from under their
+ * own session would get exactly that.
  *
- * The three cases below are the three that used to be one: a failure, a load
- * still in flight, and the settled dashboard. Asserting all three in one file
- * is what keeps the distinction from collapsing back to two.
+ * The three cases below - a failure, a load still in flight, and the settled
+ * dashboard - are asserted individually. Covering all three in one file is
+ * what keeps the distinction between them from collapsing back to a single
+ * on/off dashboard state.
  *
  * **Real React Query with rejecting `queryFn`s**, per
  * `UserManagement.queryError.test.tsx` - the point is that a rejected fetch
@@ -276,8 +278,8 @@ beforeEach(() => {
 
 describe("AdminData when a dashboard query fails", () => {
   /**
-   * One case per query, because the old guard read `data` from all three and
-   * any one of them could hang the page. A fix that only checked the first
+   * One case per query, because a guard that reads `data` from all three can
+   * be hung by any one of them. A check that only looked at the first query
    * would pass the `dateRange` row and fail the other two.
    */
   it.each(["dateRange", "stats", "series"] as const)(
@@ -389,15 +391,11 @@ describe("AdminData when a dashboard query fails", () => {
 });
 
 /**
- * The "Download Data" button, after `buildLineChartCSV` /
- * `buildUserCountsCSV` / `buildDaysFrequencyCSV` / `buildQuickStatsCSV` moved
- * out of `AdminData` into `../../utils/adminDashboardCsv`, so they are
- * unit-testable on their own (see `adminDashboardCsv.test.ts`).
- *
- * That move is a behaviour-preserving refactor only if the button still zips
- * the same four CSVs from the same rendered `stats`/`series` (three more,
- * `buildSupplyByCityCSV`, `buildRequestFunnelCSV` and `buildDaysByWeekdayCSV`,
- * joined them in SCRUM-599, SCRUM-600 and SCRUM-602). This renders
+ * The "Download Data" button zips seven CSVs - `buildLineChartCSV`,
+ * `buildUserCountsCSV`, `buildDaysFrequencyCSV`, `buildQuickStatsCSV`,
+ * `buildSupplyByCityCSV`, `buildRequestFunnelCSV` and `buildDaysByWeekdayCSV`
+ * - all built in `../../utils/adminDashboardCsv`, which keeps them
+ * unit-testable on their own (see `adminDashboardCsv.test.ts`). This renders
  * the real component against mocked queries (same harness as
  * `AdminData.queryError.test.tsx`), clicks the button, and checks each
  * `zip.file(...)` call against the same builder functions called directly on

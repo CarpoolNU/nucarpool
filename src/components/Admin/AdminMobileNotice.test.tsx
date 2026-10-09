@@ -3,9 +3,9 @@
  *
  * The subject is the labelled way back. `Header`'s mobile branch renders only
  * the bottom navigation, so the desktop admin header - whose sole control is a
- * "Home" button - never reaches the screen, and before this panel existed the
- * only route back to the map was tapping Explore in a bar that was
- * simultaneously claiming Explore was the current page.
+ * "Home" button - never reaches the screen, and without this panel the only
+ * route back to the map would be tapping Explore in a bar that is
+ * simultaneously claiming Explore is the current page.
  *
  * **What this cannot check.** jsdom does no layout, so "the panel fits at
  * 375px" and "the button clears the fixed navigation" are both unobservable
@@ -145,11 +145,11 @@ describe("AdminMobileNotice", () => {
 
     it("says nothing about width, because the screen reaching it may be wide", () => {
       /*
-       * The copy regression this ticket fixed. A landscape phone is 667px
-       * wide and lands here on the height term alone, so "wider" was telling
-       * a user to do the one thing that would not help. Asserted as the
-       * absence of the old wording rather than only the presence of the new,
-       * because the heading could gain a second sentence and still be wrong.
+       * A landscape phone is 667px wide and lands here on the height term
+       * alone, so "wider" would tell a user to do the one thing that would
+       * not help. Asserted as the absence of that wording rather than only
+       * the presence of the current heading, because the heading could gain
+       * a second sentence and still be wrong.
        */
       panel(false);
 

@@ -24,12 +24,11 @@ const ComplianceModal = dynamic(
  * Shows the terms to any signed-in user who has not accepted them, wherever they
  * enter the app.
  *
- * Mounted once in `_app`, because the previous arrangement put the modal on the
- * onboarding page alone. An already-onboarded user with no consent
- * recorded is redirected past `/profile/setup` by `index.tsx`'s
- * `getServerSideProps`, so they never saw the terms - and their next profile save
- * set the flag anyway. Mounting per-page would leave the same gap open for any
- * page somebody forgot.
+ * Mounted once in `_app` rather than on the onboarding page. An
+ * already-onboarded user with no consent recorded is redirected past
+ * `/profile/setup` by `index.tsx`'s `getServerSideProps`, so a modal there
+ * never reaches them - and their next profile save sets the flag anyway.
+ * Mounting per-page leaves the same gap open for any page somebody forgets.
  *
  * Deliberately renders nothing until `user.me` has answered. Guessing "not
  * consented" while the query is in flight would flash a blocking dialog at users

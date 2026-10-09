@@ -13,13 +13,12 @@
  * what the toast *contains*, not that `ToastContainer` draws it - the
  * container is mocked out with the rest of `react-toastify`.
  *
- * **`useUtils` records rather than enumerates.** It used to be a literal
- * `{ user: { me, groups: { me } } }`, which is to say the fixture encoded the
- * set the hook happened to invalidate. Two consequences, both of which hid
- * SCRUM-629: a missing invalidation could not fail, because nothing asserted
- * the set; and adding one threw `Cannot read properties of undefined` from
- * inside `onSuccess` rather than failing an assertion that named it. See
- * `src/testing/invalidationRecorder.ts`.
+ * **`useUtils` records rather than enumerates.** A literal
+ * `{ user: { me, groups: { me } } }` fixture would encode the set the hook
+ * happens to invalidate rather than testing it: a missing invalidation could
+ * not fail, because nothing would assert the set, and adding one would throw
+ * `Cannot read properties of undefined` from inside `onSuccess` rather than
+ * failing an assertion that named it. See `src/testing/invalidationRecorder.ts`.
  */
 
 import { render, renderHook, screen } from "@testing-library/react";
@@ -168,7 +167,7 @@ describe("the feedback prompt after a pairing ends", () => {
 });
 
 /**
- * SCRUM-629.
+ * Why leaving a group must invalidate discovery, not only membership caches.
  *
  * A grouped RIDER is a searcher no driver could accept, so
  * `buildCandidateWhere` answers `recommendations.me` and `geoJsonUserList`
@@ -177,15 +176,15 @@ describe("the feedback prompt after a pairing ends", () => {
  * `refetchOnMount` and `refetchOnWindowFocus` off globally, both queries are
  * owned by `pages/index.tsx`, and `GroupPage` renders *inside* it - so leaving
  * never unmounts the page that owns them, and the query key does not change.
- * The rider was left on an Explore sidebar with no cards and a map with no
- * pins, indistinguishable from "no drivers match you".
+ * Without invalidating them here, a rider would be left on an Explore
+ * sidebar with no cards and a map with no pins, indistinguishable from "no
+ * drivers match you".
  *
- * The exact set is asserted, not a count: `groups.me` was the cache missing
- * from `requestHandlers.ts` and two discovery queries were missing here, and a
- * counter cannot say which. `requests.me` belongs on this path too, not only
- * on accept - every row it returns carries the caller's *own* `carpoolId` and
- * `seatAvail` through `convertCarpoolSearchToPublicWithExactHome`, and leaving
- * changes both.
+ * The exact set is asserted, not a count: a counter cannot say which cache is
+ * missing. `requests.me` belongs on this path too, not only on accept - every
+ * row it returns carries the caller's *own* `carpoolId` and `seatAvail`
+ * through `convertCarpoolSearchToPublicWithExactHome`, and leaving changes
+ * both.
  */
 describe("the caches a membership change invalidates", () => {
   it("refreshes discovery when the driver dissolves the group", () => {

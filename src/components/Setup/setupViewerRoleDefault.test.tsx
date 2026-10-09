@@ -1,11 +1,10 @@
 /**
  * A brand-new user has no `CarpoolSearch` row, so `user.me` can
  * only report `role: VIEWER` as the `?? Role.VIEWER` fallback in
- * `src/server/router/user.ts`, not as a stored choice. The wizard's
- * `initialLoad` effect used to `reset({ role: user.role, ... })`
- * unconditionally, which overwrote its own `RIDER` default with that
- * fallback and left a new user on step 1 with Viewer selected and the
- * one-tap "View Map" submit button - the defect this pins.
+ * `src/server/router/user.ts`, not as a stored choice. An unconditional
+ * `reset({ role: user.role, ... })` in the wizard's `initialLoad` effect
+ * overwrites its own `RIDER` default with that fallback, leaving a new user on
+ * step 1 with Viewer selected and the one-tap "View Map" submit button.
  *
  * `hasCarpoolSearch` is what lets the effect tell the two situations apart:
  * skip restoring `role` when it is `false`, restore it when a returning user

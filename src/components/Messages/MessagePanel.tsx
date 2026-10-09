@@ -27,14 +27,15 @@ interface ConversationPanelProps extends MessagePanelProps {
  * One conversation's state lives and dies with that conversation.
  *
  * On desktop the Requests sidebar stays beside the open panel, so clicking a
- * second card swaps `selectedUser` under a panel that stays mounted. Nothing
- * keyed it, so everything below survived the switch: `MessageContent`'s
- * merge-by-id kept the first thread's messages - they are not in the second
- * thread's fetch, which is exactly what the merge preserves - and drew them as
- * the new person's; `SendBar` kept the half-typed draft in its state and its
- * contentEditable, and `handleSendMessage` reads the *current* `selectedUser`,
- * so the next Enter sent A's draft to B; and `hasCalculatedRoute` stayed true,
- * so on the Map tab B's route was never drawn.
+ * second card swaps `selectedUser` under a panel that stays mounted. Without
+ * a key, nothing below would notice the switch: `MessageContent`'s
+ * merge-by-id would keep the first thread's messages - they are not in the
+ * second thread's fetch, which is exactly what the merge preserves - and
+ * draw them as the new person's; `SendBar` would keep the half-typed draft
+ * in its state and its contentEditable, and `handleSendMessage` reads the
+ * *current* `selectedUser`, so the next Enter would send A's draft to B;
+ * and `hasCalculatedRoute` would stay true, so on the Map tab B's route
+ * would never be drawn.
  *
  * Keyed here rather than at the call site so that no caller can forget it, and
  * so that `MessagePanel.conversationSwitch.test.tsx` can exercise the real key
@@ -81,23 +82,24 @@ const ConversationPanel = ({
     createRequestHandlers(utils);
 
   const sendMessage = trpc.user.messages.sendMessage.useMutation({
-    // Without this a failed send was completely invisible: the
-    // composed text disappeared from the box and nothing was ever delivered.
+    // Without this a failed send would be completely invisible: the
+    // composed text disappears from the box and nothing is ever delivered.
     onError: (error: any) => {
       toast.error(`Your message could not be sent: ${error.message}`);
     },
     onSuccess: () => {
-      // The thread's own source, and the reason this line exists: the only
-      // other way the sender's message reached the open conversation was the
-      // Pusher echo, and the server treats that delivery as best-effort -
-      // `message.ts` catches a trigger failure, logs that the row was saved,
-      // and returns success. So a Pusher outage or a refused private-channel
-      // subscription produced a send that cleared the box, raised no toast,
-      // updated the sidebar card's preview (that is `onMessageSent` below) and
-      // left the conversation the user was looking at unchanged. Nothing came
-      // along to correct it either: the global policy sets `refetchOnMount`
-      // and `refetchOnWindowFocus` to false, and the thread's own
-      // `refetchOnMount: "always"` only helps once it is closed and reopened.
+      // The reason this line exists: the only other way the sender's
+      // message would reach the open conversation is the Pusher echo, and
+      // the server treats that delivery as best-effort - `message.ts`
+      // catches a trigger failure, logs that the row was saved, and returns
+      // success. So a Pusher outage or a refused private-channel
+      // subscription would produce a send that clears the box, raises no
+      // toast, updates the sidebar card's preview (that is `onMessageSent`
+      // below) and leaves the conversation the user is looking at
+      // unchanged. Nothing would come along to correct it either: the
+      // global policy sets `refetchOnMount` and `refetchOnWindowFocus` to
+      // false, and the thread's own `refetchOnMount: "always"` only helps
+      // once it is closed and reopened.
       //
       // The echo stays as the path for the *recipient*, who has no mutation to
       // hang an invalidation off. `MessageContent` merges by id, so the two
@@ -122,8 +124,8 @@ const ConversationPanel = ({
       selectedUser.incomingRequest || selectedUser.outgoingRequest;
     const requestId = request?.id;
     if (!requestId) {
-      // Used to be a bare `return`, which let `SendBar` clear the box for a
-      // message that was never sent anywhere.
+      // A bare `return` here would let `SendBar` clear the box for a
+      // message that is never sent anywhere.
       toast.error("This conversation is no longer available.");
       throw new Error("No request for the selected conversation");
     }
@@ -200,12 +202,13 @@ const ConversationPanel = ({
 
     const accepted = await handleAcceptRequest(user, selectedUser, request);
 
-    // Both of these used to run whatever happened, so a refused accept still
-    // emailed the other person to say they had been accepted and still closed
-    // the conversation. That matters most on a double-click: the second call is
-    // now a clean rejection server-side, but the notification
-    // endpoint is deliberately not rate limited, so without this the duplicate
-    // email would be sent anyway.
+    // Both of these must run only when `accepted` is true: running them
+    // unconditionally would email the other person to say they had been
+    // accepted, and close the conversation, even on a refused accept. That
+    // matters most on a double-click: the second call is a clean rejection
+    // server-side, but the notification endpoint is deliberately not rate
+    // limited, so without this guard the duplicate email would be sent
+    // anyway.
     if (!accepted) {
       return;
     }

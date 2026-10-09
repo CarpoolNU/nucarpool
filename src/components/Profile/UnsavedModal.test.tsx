@@ -92,8 +92,8 @@ describe("UnsavedModal", () => {
   });
 
   /**
-   * The modal used to be a plain `div` with no `role`, so a screen-reader
-   * user got no indication one had opened at all.
+   * A plain `div` with no `role` gives a screen-reader user no indication a
+   * modal has opened at all.
    */
   it("exposes itself as a modal dialog", () => {
     renderModal();
@@ -160,7 +160,7 @@ describe("UnsavedModal", () => {
    *
    * What this does catch is the one regression a reader is most likely to
    * cause: deleting the floor as redundant next to `w-1/3`, or "simplifying"
-   * it to an unconditional 22rem, either of which restores a symmetric
+   * it to an unconditional 22rem, either of which produces a symmetric
    * unreachable overflow that no test in `yarn test` can see. The fixture's
    * drift guard catches the same edit from the other direction - it fails when
    * the class string here no longer matches the one the fixture reproduces -

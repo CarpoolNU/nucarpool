@@ -164,11 +164,11 @@ const ExploreSidebar = (props: ExploreSidebarProps) => {
           </div>
         )}
 
-        {/* Sort and the filter button, likewise no longer `!isMobile`. This
-         * block holds the only `setFiltersOpen(true)` call site, which is what
-         * made all 617 lines of `Filters` unreachable on mobile rather than
-         * merely cramped - the panel itself sets no width and flows into a
-         * narrow column unchanged.
+        {/* Sort and the filter button, with no `!isMobile` guard. This block
+         * holds the only `setFiltersOpen(true)` call site, so guarding it on
+         * viewport makes all 617 lines of `Filters` unreachable on mobile
+         * rather than merely cramped - the panel itself sets no width and
+         * flows into a narrow column unchanged.
          *
          * The three remaining conditions are deliberate and unrelated to
          * viewport: `!filtersOpen` swaps this row out for the panel,

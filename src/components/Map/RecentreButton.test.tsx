@@ -11,12 +11,9 @@ import {
 /**
  * The recentre control's reachability.
  *
- * It was `!isMobile`-gated inside `index.tsx`, so a mobile user who panned
- * away from their workplace had no way back. This file exists because that
- * page has no test of its own, which is the whole reason the control was
- * lifted out of it: the defect class this ticket addresses is controls that
- * exist on one platform and not the other, and that is only checkable if the
- * control can be rendered on its own.
+ * This file exists because `index.tsx` has no test of its own: whether a
+ * control renders on one platform and not the other is only checkable if
+ * the control can be rendered on its own, outside that page.
  *
  * *Not covered:* where it actually lands. The mobile placement avoids the
  * bottom navigation, the explore sheet and Mapbox's own controls by
@@ -26,12 +23,12 @@ import {
  * *Also not covered, and not coverable here:* **that the caller renders this
  * inside a positioned ancestor.** Every offset below is `absolute`, so where
  * the button lands is decided by whichever ancestor establishes its containing
- * block - and that is `index.tsx`'s business, not this component's. That gap
- * let the classes asserted below stay correct while the button sat under
- * `MobileBanner`, because it was rendered as a sibling of `#map` rather than
- * inside it and `top-2` was measuring from the viewport. `index.tsx` has no
- * test, so nothing in this suite fails if that regresses. The assertion that
- * would catch it lives in the Playwright suite that covers this component's
+ * block - and that is `index.tsx`'s business, not this component's. The
+ * classes asserted below would stay correct even if the button sat under
+ * `MobileBanner` as a sibling of `#map` rather than inside it, with `top-2`
+ * measuring from the viewport instead. `index.tsx` has no test, so nothing
+ * in this suite would fail if that regressed. The assertion that would
+ * catch it lives in the Playwright suite that covers this component's
  * layout directly: `elementFromPoint` at the button's top edge returns the
  * button.
  */
@@ -50,17 +47,17 @@ describe.each([
 
   it("is present and named for what it does", () => {
     // The mobile half fails against any version that gates itself on the
-    // viewport, which is what this replaced.
+    // viewport.
     render(<RecentreButton onRecentre={() => undefined} />);
 
     expect(screen.getByRole("button", { name: LABEL })).toBeInTheDocument();
   });
 
   it("recentres when pressed", () => {
-    // Present is not enough on its own: the control this replaced was once
-    // wired through `document.getElementById("fly").addEventListener` outside
-    // React's lifecycle, so a button that rendered and did nothing is the
-    // failure this file has historical reason to check for.
+    // Present is not enough on its own: a button that renders and does
+    // nothing on click is a real failure mode for a component whose only
+    // job is to call a prop, so this checks the click actually reaches
+    // `onRecentre`.
     const onRecentre = jest.fn();
     render(<RecentreButton onRecentre={onRecentre} />);
 
@@ -97,14 +94,13 @@ describe.each([
 
 describe("RecentreButton's label", () => {
   /**
-   * The half of the `(0, 0)` defect that a corrected `flyTo` would not have
-   * fixed. The destination and the promise are one decision, made in
-   * `mapHomeCentre` and spelled out in `mapHomeCentre.test.ts`; what this
-   * covers is that the component actually honours the answer it is handed.
+   * What a corrected `flyTo` alone would not cover. The destination and the
+   * promise are one decision, made in `mapHomeCentre` and spelled out in
+   * `mapHomeCentre.test.ts`; what this covers is that the component actually
+   * honours the answer it is handed.
    *
-   * A VIEWER has no workplace, so naming one was a false statement to about a
-   * third of production - and the control's own docblock used to make the same
-   * claim, which is how the caller came to fly there unconditionally.
+   * A VIEWER has no workplace, so naming one would be a false statement to
+   * about a third of production.
    */
   it("names the campus when that is where it is going", () => {
     render(<RecentreButton subject="campus" onRecentre={() => undefined} />);

@@ -232,8 +232,8 @@ describe("closing the connect modal after a request was sent", () => {
  * having.
  *
  * jsdom performs no layout and resolves no media query, so none of those
- * rectangles is observable here; they are recorded on the ticket. What this
- * file pins is which classes the panel requests.
+ * rectangles is observable here. What this file pins is which classes the
+ * panel requests.
  *
  * Run against the pre-fix component, the two cases naming this change's
  * classes fail. The other two pass either way on purpose: they guard
@@ -283,7 +283,7 @@ describe("the connect modal's panel height", () => {
   it("keeps the scroller that the cap makes meaningful", () => {
     const panel = renderPanel();
 
-    // Present before this ticket, and inert without the cap above. Asserted
+    // Inert without the cap above, and the cap is inert without it. Asserted
     // together because either alone is a no-op.
     expect(panel.className).toContain("overflow-y-auto");
   });

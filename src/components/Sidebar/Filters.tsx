@@ -129,14 +129,14 @@ const Filters = ({
         // Re-clamped here, which is the only place the selected count can
         // change while the panel is open. Doing it in state rather than at
         // render is what keeps the number shown and the number sent identical:
-        // unchecking days down to two used to leave `flexDays` at five in
-        // state, displaying `2` and scoring `5`.
+        // clamping at render instead leaves `flexDays` at five in state when
+        // the days are unchecked down to two, displaying `2` and scoring `5`.
         flexDays: clampFlexDays(prev.flexDays, countSelectedDays(daysWorking)),
       };
     });
   };
-  // Always seven booleans, so every checkbox stays controlled. The raw
-  // `split(",")` gave `undefined` for six of them whenever no days were
+  // Always seven booleans, so every checkbox stays controlled. A raw
+  // `split(",")` yields `undefined` for six of them whenever no days are
   // selected, which is the initial state here and permanent for a VIEWER.
   const selectedDays = parseSelectedDays(filters.daysWorking);
   const selectedDaysCount = countSelectedDays(filters.daysWorking);
@@ -353,9 +353,9 @@ const Filters = ({
                       // so without this all seven announced as an unnamed
                       // "checkbox" under one heading, indistinguishable from
                       // each other. Following `Schedule/SelectDays`, which is
-                      // the same pattern on the same seven labels and is a
-                      // *different* set of checkboxes: SCRUM-513 named those
-                      // and never reached these.
+                      // the same pattern on the same seven labels but a
+                      // *different* set of checkboxes - naming those does
+                      // nothing for these.
                       slotProps={{ input: { "aria-label": day } }}
                       checkedIcon={<StaticDayBox day={day} isSelected={true} />}
                       icon={<StaticDayBox day={day} isSelected={false} />}
@@ -387,13 +387,14 @@ const Filters = ({
                     id="flexDays"
                     type="number"
                     min="1"
-                    // Never below the `min`: with no days selected this was
-                    // `max=0` against `min=1`, a range no value satisfies.
+                    // Never below the `min`: with no days selected a raw
+                    // count gives `max=0` against `min=1`, a range no value
+                    // satisfies.
                     max={Math.max(1, selectedDaysCount)}
                     // The value in state, not a clamp applied on the way to
-                    // the screen. The old expression showed `0` with no days
-                    // selected while `1` was what got sent and scored, which
-                    // made the empty result set impossible to diagnose.
+                    // the screen. A clamp here shows `0` with no days selected
+                    // while `1` is what gets sent and scored, which makes the
+                    // empty result set impossible to diagnose.
                     value={filters.flexDays}
                     onChange={(e) => {
                       setFilters((prevFilters) => ({

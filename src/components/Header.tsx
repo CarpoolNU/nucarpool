@@ -19,10 +19,8 @@ import { PublicUser } from "../utils/types";
 import useIsMobile from "../utils/useIsMobile";
 // The same module `useIsMobile` and `tailwind.config.js` read, so the bar's own
 // height, the space every caller reserves for it, and the width at which this
-// file stops being mobile all have one definition. The templates below each
-// wrote their own wider threshold until this import replaced it; the module's
-// docblock carries the rest of that story, including why the three queries
-// below are `min-width` and not their inverse.
+// file stops being mobile all have one definition. The module's docblock
+// carries why the three queries below are `min-width` and not their inverse.
 import {
   DESKTOP_MEDIA_QUERY,
   MOBILE_NAV_SPACE,
@@ -46,30 +44,25 @@ import {
 /**
  * The header bar.
  *
- * **`height` and `min-height` are a pair, and the second one was added
- * later.** The bar is a percentage of the viewport, which on a landscape phone
- * - 667x375, which `useIsMobile` treats as desktop because the breakpoint is
- * width-only - came to 31.875px. Every control in this bar is a child of it,
- * so that was a ceiling on all of them: capping the tabs and the profile
- * trigger to *fit* the bar is what stopped them taking clicks meant for the
- * content row, but nothing inside a 31.875px box can be the 44px Apple's HIG
- * and WCAG 2.5.5 ask of a touch control. Raising the ceiling is this
- * declaration.
+ * **`height` and `min-height` are both required, not `height` alone.** The
+ * bar is a percentage of the viewport, which on a short enough window falls
+ * below the 44px Apple's HIG and WCAG 2.5.5 ask of a touch control. Every
+ * control in this bar is a child of it, so `min-height` is the floor that
+ * keeps the tabs and the profile trigger from being capped smaller than a
+ * usable touch target.
  *
  * **Two declarations rather than `height: max(8.5%, 44px)`, and the two are
  * equivalent** - including on `/sign-in`, which renders this same bar inside an
  * auto-height flex column where the percentage has no definite containing
- * block. The expected hazard there was that a `max()` would resolve the
- * percentage against zero and collapse to the floor; measured in Chromium it
- * does not, because an unresolvable percentage makes the whole math function
- * behave as `auto`. That page's bar is 111px before this change and 111px
- * after it under either spelling. `breakpoints.js` has the measurement and the
- * reasons this spelling was kept regardless, none of which is that the other
- * one breaks.
+ * block. An unresolvable percentage inside a `max()` makes the whole math
+ * function behave as `auto`, not as if the percentage had resolved to zero,
+ * so that page's bar computes to `111px` under either spelling. `breakpoints.js`
+ * has the measurement and the reasons this spelling was kept regardless, none
+ * of which is that the other one breaks.
  *
  * `breakpoints.js` also carries the band this binds in - below 517.65px of
  * viewport height, so every desktop window renders the percentage unchanged -
- * and why the bar's children each needed the same floor repeated rather than
+ * and why the bar's children each need the same floor repeated rather than
  * inheriting this one.
  */
 const HeaderDiv = styled.div`
@@ -94,11 +87,9 @@ const HeaderDiv = styled.div`
  * The mobile bottom navigation.
  *
  * `height` and `padding-bottom` are the load-bearing pair, and they are the
- * point of this block. This used to declare no height, so the bar was whatever
- * its children summed to and three other files each guessed at that number -
- * disagreeing with it and with each other. The height now comes from
- * `MOBILE_NAV_SPACE`, which every one of those callers also reads, so the value
- * cannot drift from what they reserve for it.
+ * point of this block. The height comes from `MOBILE_NAV_SPACE`, which every
+ * caller that reserves space for this bar also reads, so the value cannot
+ * drift from what they expect.
  *
  * Both properties are needed, not either one. `MOBILE_NAV_SPACE` is
  * `60px + safe-area-inset-bottom`, and Tailwind's preflight makes this
@@ -113,20 +104,15 @@ const HeaderDiv = styled.div`
  * component's comment.
  *
  * **`padding-left`/`padding-right` are the horizontal counterpart to the pair
- * above.** In portrait the horizontal insets are 0, so
- * this bar was very nearly correct with none at all - the gap only shows in
+ * above.** In portrait the horizontal insets are 0; the gap only shows in
  * landscape, where a notched or Dynamic Island iPhone reports a nonzero inset
- * on whichever side the sensor housing has rotated to. Before this, `padding:
- * 0px 0` zeroed both, so the four `space-around` items divided the full
- * viewport width and the outermost one's tap target sat partly under the
- * housing - measured at 667x375 with a 44px override, `item0` spanned
- * `[0, 166.75]` regardless of the inset, unmoved by it because nothing here
- * read it. `width: 100%` is unchanged, so the bar's own box - and therefore
- * its background - still spans the full viewport and covers the housing area;
- * only the *items*, which live in the padded content box, move clear of it.
- * The previous `padding: 0px 0` shorthand is replaced with four explicit
- * longhand properties rather than layered on top of it, because a shorthand
- * after these would reset them back to `0`.
+ * on whichever side the sensor housing has rotated to. `width: 100%` means the
+ * bar's own box - and therefore its background - still spans the full
+ * viewport and covers the housing area; only the *items*, which live in the
+ * padded content box, move clear of it. These are four explicit longhand
+ * properties rather than one shorthand, because a shorthand here would reset
+ * all four sides back to `0` and each side needs to read its own inset
+ * independently.
  */
 const MobileNav = styled.div`
   position: fixed;
@@ -147,8 +133,8 @@ const MobileNav = styled.div`
   border-top: 1px solid #d1d1d1;
 `;
 
-// A real <button>, not a div: this is the entire mobile navigation, and as a
-// div it was unreachable by keyboard. Tailwind's preflight already
+// A real <button>, not a div: this is the entire mobile navigation, and a div
+// would not be reachable by keyboard. Tailwind's preflight already
 // makes buttons inherit font and drop their border, but this is styled-
 // components, so the resets are stated here.
 //
@@ -160,29 +146,18 @@ const MobileNav = styled.div`
 // warning: React caches it per attribute name at module scope, so it appears
 // **once per page load** and never again - not once per element and not once
 // per render, which is why `Header.console.test.tsx` has to be its own file.
-// `height: 100%` plus `justify-content: center` is the fix, and the point is
-// that it is structural rather than arithmetic. Before this, the
-// item had no declared height at all, so its box was whatever its children
-// summed to: 8px padding + 24px icon span + 24px label span (the label's
-// wrapper sets no font-size, so it inherits `globals.css`'s 24px line-height
-// on a 12px label - an accidental term, not a chosen one) + 8px padding + 4px
-// border-bottom = 68px, against a 59px content box `MobileNav` actually
-// leaves (see that component's comment). `align-items: center` split the 9px
-// excess, so the item overhung the bar 3.5px on top and 4.5px on the bottom -
-// and the border-bottom, the *only* visual difference between the active and
-// inactive states, was the last 4px of that overhang. On a device with no
-// safe-area inset the underline landed entirely below the viewport, which
-// left the active tab with no visible marker at all.
 //
-// `height: 100%` resolves against `MobileNav`'s content box, whatever it
-// measures, so the item's own border-box - and therefore its border-bottom -
-// is pinned to that edge by construction rather than by keeping every child's
-// height summing to a number nobody re-checks when one of them changes. The
-// icon and label still want more room than the content box has once padding
-// and the border are taken out (48px against roughly 39px), but flexbox lets
-// that overflow bleed into the padding rather than past the box itself - so
-// nothing here depends on the label wrapper's inherited line-height either,
-// unlike the arithmetic this replaced.
+// `height: 100%` plus `justify-content: center` is structural rather than
+// arithmetic: it resolves against `MobileNav`'s content box, whatever that
+// box measures, so the item's own border-box - and therefore its
+// border-bottom, the only visual difference between the active and inactive
+// states - is pinned to that edge by construction.
+//
+// The icon and label still want more room than the content box has once
+// padding and the border are taken out (48px against roughly 39px), but
+// flexbox lets that overflow bleed into the padding rather than past the box
+// itself - so nothing here depends on the label wrapper's inherited
+// line-height either.
 const MobileNavItem = styled.button<{ $active: boolean }>`
   display: flex;
   flex-direction: column;
@@ -209,24 +184,21 @@ const MobileNavItem = styled.button<{ $active: boolean }>`
  * The in-page logo, which is the bar's only child on the pages that give the
  * bar a definite height.
  *
- * **`height: 100%`, not a pixel figure, is the fix.**
- * `HeaderDiv` above is a percentage of the viewport; this declared `70px` and
- * `111px`, so the child's height had no relationship to the parent's and lost
- * whenever the parent was smaller. Measured at 667x375 the bar is 31.88px and
- * the 111px box overhung it by 39.56px each way - clipped off the top of the
- * screen, painted over the content row below. `100%` cannot do that at any
- * viewport, because it *is* the bar.
+ * **`height: 100%`, not a pixel figure.**
+ * `HeaderDiv` above is a percentage of the viewport, so a fixed pixel height
+ * has no relationship to the parent's and overhangs whenever the parent is
+ * smaller than it. `100%` cannot do that at any viewport, because it *is* the
+ * bar.
  *
- * `line-height: 77px` went with the fixed height, and for the same reason: a
- * third independent number that a 31.88px bar could not hold either. The base
- * `normal` now applies at every width, which makes the line box follow the
- * font rather than contradict it.
+ * `line-height: normal` follows from the same constraint: a fixed line-height
+ * would be a second independent number a short bar could not hold either.
+ * `normal` makes the line box follow the font rather than contradict it.
  *
  * **The font size is capped and not replaced.** `min()` picks the design size
- * wherever it fits, so an ordinary desktop window renders exactly what it
- * rendered before - 48px, measured identical at 1440x900 - and only a bar too
- * short to hold that line scales it down. `HEADER_LOGO_MAX_FONT_SIZE` carries
- * the derivation and the measured `1.15` behind it.
+ * wherever it fits, so an ordinary desktop window renders the full 48px
+ * design size - measured identical at 1440x900 - and only a bar too short to
+ * hold that line scales it down. `HEADER_LOGO_MAX_FONT_SIZE` carries the
+ * derivation and the measured `1.15` behind it.
  *
  * Both `min()` calls name their own design size rather than sharing one: 32px
  * and 48px are different decisions about two different widths, and the cap is
@@ -245,12 +217,12 @@ export const Logo = styled.button`
   color: #f4f4f4;
 
   /* It routes to "/", so it is a control and not a heading - a styled h1
-     with an onClick is reachable by pointer only. These undo what the element
-     change brings with it rather than adding anything: the background, border
-     and padding a button carries by default, and the cursor the inline style
-     used to supply. The font and colour above already override the
-     font: inherit that Tailwind's preflight puts on buttons, which is why
-     they are unchanged. */
+     with an onClick is reachable by pointer only. These undo what a button
+     brings by default rather than add anything new: the background, border,
+     padding and cursor a <button> carries that a heading does not need
+     declared. The font and colour above already override the font: inherit
+     that Tailwind's preflight puts on buttons, which is why they are
+     unchanged. */
   appearance: none;
   background: none;
   border: none;
@@ -317,16 +289,14 @@ export const SigninLogo = styled.h1`
 /**
  * One desktop navigation tab's classes.
  *
- * **`py-header-nav-y` is the fix and is the only part of this string
- * that changed**; `px-4` is the horizontal half of the `p-4` that was here
- * before, at the same 16px. The token caps the vertical padding against the
- * bar's own height, so a tab is 60px wherever 60px fits and exactly the bar
- * everywhere else. `breakpoints.js` carries the derivation and the measured
- * 28px line box it turns on.
+ * `py-header-nav-y` caps the vertical padding against the bar's own height,
+ * so a tab is 60px wherever 60px fits and exactly the bar's height everywhere
+ * else. `px-4` is the horizontal padding, at 16px. `breakpoints.js` carries
+ * the derivation and the measured 28px line box it turns on.
  *
- * Hoisted into a constant because the six branches below returned two distinct
- * strings between them, so the padding lived in the file six times and a fix
- * had to find all six. The branches are otherwise untouched.
+ * Hoisted into a constant because the six branches below return two distinct
+ * strings between them, so the padding would otherwise live in the file six
+ * times.
  */
 export const HEADER_NAV_BUTTON_CLASS =
   "rounded-xl px-4 py-header-nav-y font-medium text-xl text-white";
@@ -340,15 +310,15 @@ interface HeaderProps {
     setSidebar: Dispatch<SetStateAction<HeaderOptions>>;
     disabled: boolean;
     /**
-     * Called when the mobile bottom nav's My Group tab is tapped while it was
-     * already the active tab. That case used to do nothing: `setSidebar`
-     * receives the same value it already held, React bails out of the
-     * same-value `setState` without re-rendering, and the page's own
+     * Called when the mobile bottom nav's My Group tab is tapped while it is
+     * already the active tab. Without this hook that case does nothing:
+     * `setSidebar` receives the same value it already held, React bails out
+     * of the same-value `setState` without re-rendering, and the page's own
      * tab-change effect - the one that resets the sheet to its resting
-     * position - never runs. This is the page's hook to run that reset
-     * anyway, which is what lets tapping My Group again reopen a sheet the
-     * header's Close button collapsed. Optional because only `pages/index.tsx`
-     * has a sheet detent to reset; nothing else supplying `data` needs it.
+     * position - never runs. This hook runs that reset directly, which is
+     * what lets tapping My Group again reopen a sheet the header's Close
+     * button collapsed. Optional because only `pages/index.tsx` has a sheet
+     * detent to reset; nothing else supplying `data` needs it.
      */
     onMyGroupReselected?: () => void;
   };
@@ -361,11 +331,11 @@ interface HeaderProps {
    * and runs it after the user decides.
    *
    * Taking the navigation as a callback rather than a destination string keeps
-   * that change's full page load here, where the reason for it is documented,
-   * instead of teaching the profile page when to bypass the router.
+   * the full page load here, where the reason for it is documented, instead
+   * of teaching the profile page when to bypass the router.
    *
-   * The type moved to `signOutWithGuard` alongside the third consumer, so the
-   * set of things that take the guard is one grep rather than three inline
+   * The type lives in `signOutWithGuard` alongside its other consumers, so the
+   * set of things that take the guard is one grep rather than inline
    * declarations that could drift apart.
    */
   checkChanges?: UnsavedChangesGuard;
@@ -373,9 +343,8 @@ interface HeaderProps {
 }
 
 /**
- * Unchanged for every importer; the union itself now lives beside
- * `planMobileNav`, so the plan and the header cannot disagree about what a tab
- * is.
+ * The union lives beside `planMobileNav`, so the plan and the header cannot
+ * disagree about what a tab is.
  */
 export type HeaderOptions = NavTab;
 
@@ -400,31 +369,17 @@ const Header = (props: HeaderProps) => {
   const [displayGroup, setDisplayGroup] = useState<boolean>(false);
 
   /**
-   * The badge, from the server count alone.
-   *
-   * There used to be a second local count beside it, incremented on each Pusher
-   * notification, which the badge *preferred* — so five unread messages plus
-   * one notification displayed `1`, and reading a thread from the map panel
-   * could not clear it because only a Requests-tab click reset the local
-   * counter. `useUnreadNotifications` invalidates the query
-   * instead, so there is one number and it is the true one.
+   * The badge, from the server count alone: `useUnreadNotifications`
+   * invalidates the query whenever a Pusher notification arrives, so there is
+   * one number and it is the true one.
    */
   const badge = unreadBadge(unreadMessagesCount);
 
-  // One shared definition, rather than a private `<= 768` check plus an optional
-  // prop that let a caller disagree with it. `index.tsx` passed `isMobile={true}`
-  // for its mobile instance and nothing for its desktop instance, so the desktop
-  // header measured 768 while the page around it measured 640 - and every
-  // viewport in between rendered the desktop layout with the mobile bottom
-  // navigation and no usable header.
+  // One shared definition, rather than a private `<= 768` check plus an
+  // optional prop that would let a caller disagree with it.
   const isMobile = useIsMobile();
 
-  // The Pusher subscription that keeps the count above honest. It lived here
-  // as an inline effect, along with a `setSidebarRef` whose only remaining
-  // purpose was to let its notification handler read the sidebar out of a state
-  // setter; the handler no longer reads the sidebar at all, so both are gone.
-  // The reason that ref existed is preserved in the hook, which still depends
-  // on the user id alone.
+  // The Pusher subscription that keeps the count above honest.
   useUnreadNotifications(user?.id);
 
   const renderClassName = (sidebarValue: string, sidebarText: string) => {
@@ -486,8 +441,8 @@ const Header = (props: HeaderProps) => {
       currentTab: props.data?.sidebarValue,
     });
 
-    // The full page load the profile page needs. Kept identical, and deliberately not
-    // run until the guard below has had its say.
+    // The full page load the profile page needs, deliberately not run until
+    // the guard below has had its say.
     const leaveProfile = (href: string) => {
       setIsLoading(true);
       // Don't use timeout - let the browser handle the navigation naturally
@@ -520,10 +475,6 @@ const Header = (props: HeaderProps) => {
             props.data?.onMyGroupReselected?.();
           }
         });
-        // Opening the Requests tab used to zero the local counter, which was
-        // the only way to stop it overriding the server count. Nothing to zero
-        // now: the badge already shows what the server says, and a thread the
-        // user actually reads is marked read by `MessageContent`.
         return;
 
       case "openProfile":
@@ -560,18 +511,15 @@ const Header = (props: HeaderProps) => {
    * Handle the tab parameter (explore/requests/mygroup navigation) - once per
    * value the URL carries, not once per render.
    *
-   * This used to share the effect above and list `props.data` among its
-   * dependencies. `pages/index.tsx` passes `data` as an object literal, so it
-   * is a new object on every render and the effect re-ran on every one,
-   * re-applying `?tab=` each time. The desktop tab buttons only swap the
-   * sidebar and leave the URL alone, so with the param set - which the mobile
-   * nav's `/?tab=requests` leaves behind for a tablet rotated or a window
-   * resized across `md` - clicking Explore re-rendered, the effect put
-   * Requests back, and the click did nothing.
+   * The desktop tab buttons only swap the sidebar and leave the URL alone, so
+   * the `tab` param can stay set after a desktop navigation - which the
+   * mobile nav's `/?tab=requests` leaves behind for a tablet rotated or a
+   * window resized across `md`.
    *
-   * Keyed on the tab string and the setter instead. `data.setSidebar` is a
-   * `useState` setter and stable; `tab` is a string, so a re-render that
-   * carries the same value is not a change.
+   * Keyed on the tab string and the setter rather than on `props.data`:
+   * `data.setSidebar` is a `useState` setter and stable; `tab` is a string, so
+   * a re-render that carries the same value is not a change, unlike a
+   * dependency on the whole `data` object literal would be.
    */
   const { tab } = router.query;
   const setSidebarFromUrl = props.data?.setSidebar;
@@ -605,27 +553,19 @@ const Header = (props: HeaderProps) => {
     /**
      * The desktop tab buttons. A sidebar swap, nothing more.
      *
-     * This used to begin by asking whether it was leaving the profile page and,
-     * if so, do a full page load - **a branch that could not execute**.
-     * `handleSidebarChange` only exists inside
-     * `renderSidebarOptions`, which renders only when `props.data` is supplied,
-     * and the sole caller that supplies it is `pages/index.tsx` at route `/`.
-     * So `props.profile` was always undefined and `router.pathname` always `/`.
+     * `renderSidebarOptions` renders only when `props.data` is supplied, and
+     * the sole caller that supplies it is `pages/index.tsx` at route `/`. So
+     * `props.profile` is always undefined here and `router.pathname` is
+     * always `/`.
      *
-     * It read like a third way off the profile page, and the unsaved-changes
-     * work had to enumerate every `<Header>` usage to prove it was not one. Its comment
-     * also said "don't force reload" directly above a full page load.
+     * **If a page ever passes both `data` and `profile`, this needs the
+     * guard** - leaving the profile page without consulting `checkChanges`
+     * would be a real defect. Route it through `planMobileNav`'s equivalent
+     * rather than a hard navigation.
      *
-     * **If a page ever passes both `data` and `profile`, this needs the guard,
-     * not the old branch** - leaving the profile page without consulting
-     * `checkChanges` is exactly the defect that was fixed. Route it through
-     * `planMobileNav`'s equivalent rather than restoring a hard navigation.
-     *
-     * It is now a plain forward to `setSidebar`: the badge no longer needs the
-     * `setCurrentunreadMessagesCount(0)` that fired on the Requests tab, since
-     * there is no longer a local counter for a tab click to reset. Kept as a
-     * named function rather than inlined because it is the one place a future
-     * guard would be added, which is what the warning above is about.
+     * This is a plain forward to `setSidebar`. Kept as a named function
+     * rather than inlined because it is the one place a future guard would be
+     * added, which is what the warning above is about.
      */
     const handleSidebarChange = (option: HeaderOptions) => {
       setSidebar(option);
@@ -681,9 +621,7 @@ const Header = (props: HeaderProps) => {
   const renderMobileNav = () => {
     // Decided beside `planMobileNav` rather than here, because `Header` cannot
     // be executed without a router, a tRPC client and a portal - so a rule
-    // living in this function is a rule nothing checks. `/admin` is why it
-    // matters: the version inline here fell through to `activeNav` and lit
-    // Explore while the user was on the admin dashboard.
+    // living in this function is a rule nothing checks.
     const currentActiveTab = activeMobileNavItem({
       pathname: router.pathname,
       isAdmin: props.admin ?? false,

@@ -4,19 +4,16 @@ import { messageHeaderControls } from "./messageHeaderControls";
 /**
  * The conversation header's request controls.
  *
- * `MessageHeader` renders these, and the rule was extracted here so it could
- * be stated as a table — the way `connectAction` was extracted from
- * `ConnectCard`. When that happened the component was not reachable from a
- * test at all; it is now, and `MessageHeader.test.tsx` asserts what each
- * viewport actually renders from this table. That file exists because for a
- * while mobile rendered nothing from it, which every case below passed
- * against.
+ * `MessageHeader` renders these, and the rule is extracted here so it can
+ * be stated as a table - the way `connectAction` is extracted from
+ * `ConnectCard`. `MessageHeader.test.tsx` asserts what each viewport
+ * actually renders from this table, since a rule stated here says nothing
+ * about whether a given viewport reaches it at all.
  *
  * The case this exists for is the last block: a pair already carpooling
- * together get **no** control. That slot used to hold a "Leave Conversation"
- * button wired to the same `onReject` handler as Reject and Withdraw, so
- * pressing it deleted their accepted request and destroyed a thread they could
- * not recreate.
+ * together get **no** control. A "Leave Conversation" button wired to the
+ * same `onReject` handler as Reject and Withdraw would delete their
+ * accepted request and destroy a thread they could not recreate.
  */
 
 const GROUP = "group-1";
@@ -44,10 +41,9 @@ describe("messageHeaderControls", () => {
   });
 
   it("prefers responding when both directions are somehow pending", () => {
-    // The duplicate-request state now closed. Answering the request sent
-    // *to* you is the more useful of the two, and the header must pick one:
-    // the two blocks used to be guarded by `!hasIncomingRequest` in the JSX,
-    // and now the type makes it impossible to render both.
+    // Answering the request sent *to* you is the more useful of the two,
+    // and the header must pick one: the return type makes it impossible to
+    // express both at once, rather than relying on a JSX guard to hide one.
     expect(
       controls({
         incomingStatus: RequestStatus.PENDING,

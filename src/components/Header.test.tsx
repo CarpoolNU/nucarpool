@@ -24,18 +24,14 @@ import { routerSpies } from "../testing/nextRouterStub";
 /**
  * Which navigation the header renders, at each viewport.
  *
- * This is the gate the 640-vs-768 defect lived in. `useIsMobile` used 640 and
- * `Header` used a private 768, so every viewport between them got the desktop
- * layout *and* the mobile bottom bar at once, leaving no usable header at all.
- * That was fixed by giving both one definition in `utils/breakpoints.js`, and
- * `breakpoints.test.ts` guards the constant — but nothing has ever checked
- * that `Header` renders one navigation rather than two, or that it switches at
- * the boundary. It is the single most consequential `isMobile` branch in the
- * app and it was completely uncovered.
+ * `useIsMobile` and `Header` share one breakpoint definition in
+ * `utils/breakpoints.js`, which `breakpoints.test.ts` guards. This test
+ * guards a different thing: that `Header` renders exactly one navigation
+ * rather than both at once, and that it switches at the boundary.
  *
  * The two assertions that matter are mutually exclusive: exactly one of the
  * navigations exists at any width. A one-sided test would pass against a
- * header that rendered both, which is precisely what the original defect did.
+ * header that rendered both navigations at once.
  *
  * *What this does not cover:* the bottom bar's height, its safe-area padding,
  * and whether it overlaps anything are all layout, and jsdom has none. See
@@ -54,8 +50,8 @@ import { routerSpies } from "../testing/nextRouterStub";
 jest.mock("next/router", () =>
   require("../testing/nextRouterStub").buildRouterMock({
     // Named explicitly although the stub defaults to both: the comment above
-    // is the reason this file needs them, and a later change to those
-    // defaults must not quietly take it away.
+    // is the reason this file needs them, and a change to those defaults must
+    // not quietly take it away.
     pathname: "/",
     query: {},
   }),
@@ -67,12 +63,10 @@ const mockPush = routerSpies().push;
  * `trpc` onto a real React Query, through `testing/trpcHarness.ts`.
  *
  * The presigned-URL query behind `DropDownMenu`'s avatar is this file's one
- * side-effect assertion, and it replaces a `useProfileImage` mock that used to
- * sit lower down. That mock was needed by the *mobile* tests, which was the
- * tell: `useIsMobile` started at `useState(false)` and corrected itself in an
- * effect, so the first render pass on a phone was the *desktop* tree -
- * `DropDownMenu` mounted and fired this query once per mobile page load before
- * being thrown away.
+ * side-effect assertion. `useIsMobile` starts at `useState(false)` and
+ * corrects itself in an effect, so the first render pass on a phone is the
+ * *desktop* tree - `DropDownMenu` mounts and fires this query once per mobile
+ * page load before being thrown away.
  *
  * **Why this is fetched rather than spied at render time.** A `jest.fn()`
  * standing in for `useQuery` is called on the discarded pass whether or not the
@@ -100,8 +94,7 @@ jest.mock("../utils/trpc", () =>
       "user.messages.getUnreadMessageCount": { inertQuery: true },
       // `{ url: null }` rather than `undefined`: React Query rejects an
       // `undefined` resolution as an error, and null is what the hook's
-      // `data?.url ?? null` produced before, so the avatar still renders its
-      // fallback exactly as it did.
+      // `data?.url ?? null` produces, so the avatar renders its fallback.
       "user.getPresignedDownloadUrl": { query: async () => ({ url: null }) },
     },
     { realTimeQueryOptions: {} },
@@ -200,8 +193,7 @@ describe("Header navigation at a mobile viewport", () => {
     renderHeader();
 
     // All four, by the testids the component assigns. A tab silently dropped
-    // from the mobile bar is unreachable on a phone with no other route to it,
-    // which is phase 3's defect class exactly.
+    // from the mobile bar is unreachable on a phone with no other route to it.
     for (const testId of [
       "explore-sidebar",
       "requests-sidebar",
@@ -254,15 +246,11 @@ describe("Header navigation at a mobile viewport", () => {
   });
 
   it("sizes each nav item to the bar rather than to its children", () => {
-    // Not a re-assertion of the border-bottom test above - that one passed
-    // while this was broken, which is the whole reason finding the defect
-    // needed a real browser rather than jsdom. Before the fix,
-    // `MobileNavItem` declared no height at all, so its box was an emergent
-    // sum of its children (8px padding + 24px icon + 24px label + 8px padding
-    // + 4px border = 68px) against a 59px bar, and the border-bottom - the
-    // underline - landed off-screen. jsdom cannot measure that sum; it lays
-    // nothing out. What it *can* assert is the structural property the fix
-    // introduces: the item's own declared height is `100%` of its container,
+    // Not a re-assertion of the border-bottom test above: that one reads the
+    // declared value, but a declared height does not by itself prove the box
+    // it produces actually lands on-screen. jsdom cannot measure that; it
+    // lays nothing out. What it *can* assert is the structural property that
+    // matters: the item's own declared height is `100%` of its container,
     // not an omitted declaration that leaves the box to whatever its children
     // add up to. `layoutFixtures.ts`'s `mobile-nav-active-underline` fixture,
     // driven through `scripts/measure-layout.ts`, is what proves that
@@ -275,9 +263,9 @@ describe("Header navigation at a mobile viewport", () => {
   });
 
   it("does not also render the desktop header", () => {
-    // The other half of the original defect. Rendering both is what left the
-    // 640-768 band with no usable header, and it is invisible to a test that
-    // only asserts the mobile bar is present.
+    // Rendering both navigations at once would leave a band of viewports
+    // with no usable header, and that is invisible to a test that only
+    // asserts the mobile bar is present.
     renderHeader();
 
     expect(desktopBrand()).not.toBeInTheDocument();
@@ -285,9 +273,8 @@ describe("Header navigation at a mobile viewport", () => {
 
   it("never fires the desktop-only avatar query", async () => {
     // Not "the desktop header is absent from the final tree", which the test
-    // above already covers and which passed while the bug was live. This
-    // asserts nothing desktop-only ever *fetched*, by watching the one side
-    // effect such a mount produces.
+    // above already covers. This asserts nothing desktop-only ever
+    // *fetched*, by watching the one side effect such a mount produces.
     //
     // Measured: against `useIsMobile` rewritten as `useState(false)` plus a
     // mount effect, the fetch really does go out on the discarded first pass -
@@ -309,21 +296,17 @@ describe("Header navigation at a mobile viewport", () => {
 });
 
 /**
- * The pill button that used to sit over the map (`< Group Details`) was the
- * only way back into a My Group sheet the header's own Close button had
- * collapsed. Removing it means the bottom nav's My Group tab has to be able
- * to do that job itself - see `onMyGroupReselected`'s docblock on `Header`
- * and `reselected`'s on `planMobileNav`.
+ * Reopening a My Group sheet the header's own Close button collapsed needs
+ * another way in - see `onMyGroupReselected`'s docblock on `Header` and
+ * `reselected`'s on `planMobileNav`.
  */
 describe("Header navigation at a mobile viewport — reselecting My Group", () => {
   beforeEach(() => {
     setViewportWidth(MOBILE_WIDTH);
     // `handleMobileNavClick`'s switchTab branch awaits `router.push(...)`
-    // before forwarding the tab. The shared stub already resolves, which the
-    // hand-rolled `jest.fn()` this replaced did not - it returned `undefined`,
-    // which has no `.finally`, so this line had to supply the promise. It is
-    // kept because the awaited value is what the branch turns on, and pinning
-    // it here says so at the point it matters.
+    // before forwarding the tab, so the mock needs to resolve rather than
+    // return `undefined`, which has no `.finally`. Pinning it here says so at
+    // the point it matters.
     mockPush.mockResolvedValue(undefined);
   });
 
@@ -449,11 +432,11 @@ describe("Header navigation across the boundary", () => {
 /**
  * Which width the header's own styling changes at.
  *
- * The navigation suites above cover the JavaScript half of the 640-vs-768
- * defect. This is the CSS half, which outlived it: `HeaderDiv`, `Logo` and
- * `SigninLogo` each kept a hand-written `@media (max-width: 768px)` after the
- * constant moved to 640, so between the two widths the desktop header rendered
- * with a phone's 20px padding and a 32px logo.
+ * `HeaderDiv`, `Logo` and `SigninLogo` must share the header's one
+ * breakpoint constant rather than a separately hand-written `@media`
+ * threshold: if the JavaScript and CSS halves of the responsive switch ever
+ * disagree, every viewport between their two thresholds renders the desktop
+ * header with a phone's padding and logo size.
  *
  * This is an unusual thing to be able to assert. jsdom does no layout and
  * **does not evaluate media queries** - `matchMedia` is absent entirely - so
@@ -544,8 +527,7 @@ describe("Header styling across the breakpoint", () => {
 
   /**
    * The inversion, as the declarations record it: mobile values unconditional,
-   * desktop values inside the query. The old templates had these the other way
-   * round, which is what put the boundary at the wrong width.
+   * desktop values inside the query.
    */
   it("states the mobile logo as the base and the desktop logo in the query", () => {
     renderHeader();
@@ -564,12 +546,10 @@ describe("Header styling across the breakpoint", () => {
    * A regression guard, and the one assertion in this file whose subject is
    * an *absence*.
    *
-   * The defect was a fixed pixel height inside a percentage-height bar:
-   * `HeaderDiv` is 8.5% of the viewport and `Logo` declared `111px`, so the
-   * child overflowed its parent at every viewport below about 1500px tall -
-   * measured at 31.88px of bar around a 111px logo at 667x375, and still
-   * 76.5px around 111px at 1440x900. The fix is that the logo's height is now
-   * the bar's, whatever that turns out to be.
+   * A fixed pixel height inside a percentage-height bar would overflow the
+   * parent at any viewport short enough to make the percentage smaller than
+   * the fixed figure. The logo's height is the bar's `100%`, whatever that
+   * turns out to be, rather than a number of its own.
    *
    * **A positive control comes first.** `desktopOf` returning the empty string
    * would satisfy every `not.toContain` below it and read as a pass - the same
@@ -579,10 +559,10 @@ describe("Header styling across the breakpoint", () => {
    * anything is asserted missing.
    *
    * This says nothing about the resulting geometry. jsdom computes no layout
-   * and resolves no `dvh`, so whether 100% of the bar is 31.88px is a browser
-   * question - measured through `scripts/measure-layout.ts`, recorded on the
-   * `header-logo-bar` fixture, and regression-testable only in the
-   * layout-fixture Playwright suite.
+   * and resolves no `dvh`, so whether the bar is ever short enough to matter
+   * is a browser question - measured through `scripts/measure-layout.ts`,
+   * recorded on the `header-logo-bar` fixture, and regression-testable only
+   * in the layout-fixture Playwright suite.
    */
   it("gives the logo a height it can occupy rather than a fixed one", () => {
     renderHeader();
@@ -595,8 +575,8 @@ describe("Header styling across the breakpoint", () => {
     expect(baseOf(logo)).toContain("height: 100%");
     expect(baseOf(logo)).toContain("line-height: normal");
 
-    /* The three declarations that went with the fixed box. `line-height: 77px`
-       was the third independent number a 31.88px bar could not hold either. */
+    /* The three declarations that went with a fixed-height box. `line-height:
+       77px` was a third independent number a short bar could not hold either. */
     expect(baseOf(logo)).not.toContain("height: 70px");
     expect(desktopOf(logo)).not.toContain("height: 111px");
     expect(desktopOf(logo)).not.toContain("line-height: 77px");
@@ -641,11 +621,10 @@ describe("Header styling across the breakpoint", () => {
 /**
  * `MobileNav`'s horizontal safe-area padding.
  *
- * The bar read `env(safe-area-inset-bottom)` and nothing else, so on a
- * notched or Dynamic Island iPhone rotated to landscape the outermost tab sat
- * partly under the sensor housing - the housing's inset lands on a horizontal
- * edge in that orientation, and this bar had no horizontal padding at all to
- * clear it with.
+ * The bar needs horizontal safe-area padding, not only the vertical inset: a
+ * notched or Dynamic Island iPhone rotated to landscape reports its
+ * sensor-housing inset on a horizontal edge, and the outermost tab's tap
+ * target would sit partly under it without padding to clear it.
  *
  * **This can only prove the declaration exists, not that it does anything.**
  * jsdom resolves no `env()` and does no layout (`testing/viewport.ts`), so
@@ -692,7 +671,7 @@ describe("Header — MobileNav horizontal safe-area padding", () => {
     expect(css).toContain("padding-left: env(safe-area-inset-left, 0px)");
     expect(css).toContain("padding-right: env(safe-area-inset-right, 0px)");
 
-    // The vertical inset this bar already handled, unchanged by this fix.
+    // The vertical inset this bar already handles.
     expect(css).toContain("padding-bottom: env(safe-area-inset-bottom, 0px)");
   });
 
@@ -710,25 +689,23 @@ describe("Header — MobileNav horizontal safe-area padding", () => {
 });
 
 /**
- * The bar's *other* children, which the fix above did not reach.
+ * The bar's *other* children need the same cap `Logo` above does.
  *
- * `Logo` above is a percentage-height bar's child that declared a fixed pixel
- * height, and the tests above are the record of that fix. The four desktop
- * tabs and the profile trigger had the same relationship to the same bar -
- * `p-4 text-xl` is 60px and `h-14 w-14` is 56px, inside a bar that is 31.875px
- * at 667x375 - and one of them lost part of its tap target rather than merely
- * painting in the wrong place: the tab group's wrapper has no stacking
- * context, so the content row below hit-tested above the tabs' lower band and
- * a tap on the visible bottom third of `Explore` reached the page instead.
+ * The four desktop tabs and the profile trigger have the same relationship
+ * to the same bar: each can be taller than a short enough bar, and the tab
+ * group's wrapper has no stacking context - so an uncapped tab can lose part
+ * of its tap target to the content row below rather than merely paint in the
+ * wrong place, with a tap on its visible bottom third reaching the page
+ * instead of the tab.
  *
  * **Everything here is a class request, and that is all jsdom can offer.** It
  * resolves no CSS, computes no percentage and reports every rect as zero (see
  * `testing/viewport.ts`), so not one of the figures above is assertable in
- * this file. They were measured in Chromium against the compiled stylesheet
- * through the `header-control-row` fixture, whose `recorded` lines carry the
- * before and after; `scripts/measure-layout.test.ts` fails if either class
- * string here stops matching the one that fixture copied. The geometry itself
- * belongs to the layout-fixture Playwright suite.
+ * this file. They are measured in Chromium against the compiled stylesheet
+ * through the `header-control-row` fixture, whose `recorded` lines carry a
+ * before and after pair; `scripts/measure-layout.test.ts` fails if either
+ * class string here stops matching the one that fixture copied. The geometry
+ * itself belongs to the layout-fixture Playwright suite.
  */
 describe("Header controls inside the bar they have to fit", () => {
   beforeEach(() => {
@@ -748,9 +725,9 @@ describe("Header controls inside the bar they have to fit", () => {
     for (const tab of tabs()) {
       expect(tab.className).toContain("py-header-nav-y");
 
-      /* The horizontal half of the old `p-4` is unchanged at 16px - the tabs
-         were never too wide, and narrowing them would be a change this ticket
-         has no measurement for. */
+      /* `px-4` is the horizontal padding, at 16px - the tabs are never too
+         wide, and narrowing them would be a change this ticket has no
+         measurement for. */
       expect(tab.className).toContain("px-4");
     }
   });
@@ -758,9 +735,9 @@ describe("Header controls inside the bar they have to fit", () => {
   it("leaves no tab asking for the uncapped padding", () => {
     renderHeader();
 
-    /* `p-4` is the defect itself: one shorthand setting both axes, the
-       vertical half of which a 31.875px bar cannot hold. A regression here
-       would most likely arrive as someone restoring the shorthand. */
+    /* `p-4` is one shorthand setting both axes, and a short bar cannot hold
+       its vertical half. A regression here would most likely arrive as
+       someone reaching for the shorthand. */
     for (const tab of tabs()) {
       expect(tab.className.split(" ")).not.toContain("p-4");
       expect(tab.className.split(" ")).not.toContain("py-4");
@@ -769,11 +746,11 @@ describe("Header controls inside the bar they have to fit", () => {
 
   /**
    * The active tab is the state one of the four is always in, and it is a
-   * separate string in `Header.tsx` - so the cap can be dropped from it alone.
-   * Measured, the underline does not move at all: the label's line box is
-   * centred in the bar either way, at a content-box top of 1.9375px before and
-   * after, which is why this fix is invisible at every viewport except in what
-   * responds to a tap.
+   * separate string in `Header.tsx` - so the cap can be dropped from it
+   * independently of the other three. Measured, the underline does not move
+   * at all: the label's line box is centred in the bar either way, at a
+   * content-box top of 1.9375px, so the cap is invisible at every viewport
+   * except in what responds to a tap.
    */
   it("keeps the cap on the active tab, which is a second class string", () => {
     renderHeader();
@@ -813,15 +790,15 @@ describe("Header controls inside the bar they have to fit", () => {
     const classes = inner!.getAttribute("class");
 
     /* `h-full w-full`, not a second `h-14 w-14`: the avatar is a raster in a
-       circle, and a child that keeps the old fixed size would overflow the
-       capped box it sits in. */
+       circle, and a child with its own fixed size would overflow the capped
+       box it sits in. */
     expect(classes).toContain("h-full");
     expect(classes).toContain("w-full");
     expect(classes!.split(" ")).not.toContain("h-14");
   });
 
   /**
-   * Why `/sign-in` is outside this fix's blast radius, pinned rather than
+   * Why `/sign-in` is outside the blast radius here, pinned rather than
    * assumed - a closeout note on `SigninLogo` is the reason to check.
    *
    * Both caps are derived from `100dvh * 0.085`, which reconstructs the bar's
@@ -844,12 +821,11 @@ describe("Header controls inside the bar they have to fit", () => {
 });
 
 /**
- * SCRUM-610 item 6: the in-page logo routes to `/` and was a styled `<h1>`
- * with an `onClick`, so it was a control reachable by pointer only - not in
- * the tab order, and announced as a heading rather than as something that
- * does anything.
+ * The in-page logo routes to `/`, so it needs to be a control reachable by
+ * keyboard, not only by pointer - in the tab order, and announced as
+ * something that does something rather than as a heading.
  *
- * **Why the element changed rather than `tabIndex` being added.** A native
+ * **Why a native button rather than `tabIndex` on a heading.** A native
  * button brings the tab stop, the role, and Enter/Space activation together;
  * the alternative needs all three re-implemented and still leaves a heading
  * claiming to be a button. The `<h1>` is no loss here: `Logo` is not a
@@ -859,8 +835,7 @@ describe("Header controls inside the bar they have to fit", () => {
  * `SigninLogo` is deliberately untouched, and the test below says so: it has
  * no `onClick`, so it is the one place the brand mark really is just a
  * heading. The styling tests above - which read declarations off the generated
- * class - still apply unchanged, because the styled component kept its class;
- * that the two didn't have to move together is why this is a small change.
+ * class - still apply unchanged, because the styled component kept its class.
  */
 describe("the header's brand mark", () => {
   beforeEach(() => {
@@ -871,7 +846,7 @@ describe("the header's brand mark", () => {
     renderHeader();
 
     // Found by role rather than by text: that it *is* a button is the subject,
-    // and `getByText` would pass against the unfixed heading.
+    // and `getByText` would pass even if this were a heading instead.
     const brand = screen.getByRole("button", { name: "CarpoolNU" });
     expect(brand.tagName).toBe("BUTTON");
 
@@ -886,8 +861,8 @@ describe("the header's brand mark", () => {
 
     const brand = screen.getByRole("button", { name: "CarpoolNU" });
 
-    // Keyboard activation specifically, which is what the pre-fix element
-    // could not do at all: a click handler on an `<h1>` never sees Enter.
+    // Keyboard activation specifically: a click handler on an `<h1>` never
+    // sees Enter, so a heading could not do this at all.
     brand.focus();
     expect(brand).toHaveFocus();
     await act(async () => {

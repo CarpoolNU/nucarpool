@@ -13,16 +13,16 @@ interface MapLegendProps {
 /**
  * What the pin colours mean.
  *
- * **Previously desktop-only**, which left the colour encoding
- * unexplained on the platform where the map is most of the screen.
+ * Renders on both platforms, so the colour encoding is explained on mobile
+ * too, where the map is most of the screen.
  *
- * Un-gating it as-is would not have worked: the panel is anchored to the
- * bottom left, and on mobile the explore sheet occupies the bottom of the
- * viewport at `z-20` against this panel's `z-10`, so it would have been
- * covered whenever the sheet was open - which is its default state. So on
+ * Rendering the desktop panel as-is on mobile would not work: the panel is
+ * anchored to the bottom left, and the explore sheet occupies the bottom of
+ * the viewport at `z-20` against this panel's `z-10`, so it would be
+ * covered whenever the sheet is open - which is its default state. So on
  * mobile it moves to the top of the map and starts **collapsed**, behind a
- * toggle, which is what the ticket suggested: a three-row panel permanently
- * over a phone-sized map costs more than it explains.
+ * toggle: a three-row panel permanently over a phone-sized map costs more
+ * than it explains.
  *
  * Desktop keeps the always-open panel in the same place, with the same
  * classes. The collapse state is only consulted on mobile.

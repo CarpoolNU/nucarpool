@@ -53,10 +53,10 @@ import {
  *
  * **The variant prefixes below are composed from the screen constants rather
  * than written out.** Two reasons, and the first is the one that bites: these
- * are negative assertions against utilities that no longer exist anywhere in
- * the repository, and Tailwind v4 scans this file like any other - so spelling
- * `desktop` and the margin utility as one literal would ship the rule this test
- * exists to prove is gone. The second is that composing them makes a rename of
+ * are negative assertions against utilities that must appear nowhere in the
+ * repository, and Tailwind v4 scans this file like any other - so spelling
+ * `desktop` and the margin utility as one literal would ship the very rule
+ * this test exists to prove absent. The second is that composing them makes a rename of
  * the screen fail here instead of silently orphaning every utility that names
  * it.
  */
@@ -340,9 +340,9 @@ describe("the send bar's composer inset", () => {
 
   /**
    * The counter sits under the box it counts, so it has to carry the row's
-   * inset exactly. Left behind on the old screen it would hang 40px inboard of
-   * that box on a landscape phone - a cosmetic tell that the two had been
-   * changed independently.
+   * inset exactly. On a different screen constant it hangs 40px inboard of
+   * that box on a landscape phone - a cosmetic tell that the two have drifted
+   * apart.
    */
   it("keeps the character counter on the same inset as the row it belongs to", () => {
     const { container } = render(<SendBar onSendMessage={jest.fn()} />);

@@ -50,8 +50,8 @@ describe("BarChartDaysByWeekday", () => {
   it("draws drivers and then riders, in that order, and not the other way round", () => {
     render(<BarChartDaysByWeekday daysByWeekday={daysByWeekday()} />);
 
-    // The days-per-week chart once had these two series swapped (SCRUM-284),
-    // so the assertion names the numbers and not only the labels.
+    // A swapped series order here would be easy to miss if the assertion
+    // named only the labels, so this names the numbers too.
     expect(rendered?.data.datasets.map((set) => set.label)).toEqual([
       "Drivers",
       "Riders",

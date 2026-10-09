@@ -1,12 +1,12 @@
 /**
- * SCRUM-593: `handleNextStep` returned early on a failed step without moving
- * focus anywhere. Sighted users saw red text appear; a screen-reader user (or
- * a sighted keyboard user on a long step) got a button press that produced no
- * observable result at all - indistinguishable from a broken button.
+ * A failed step moves focus to the field that failed. Returning early without
+ * moving focus shows sighted users red text appearing, but gives a
+ * screen-reader user - or a sighted keyboard user on a long step - a button
+ * press with no observable result at all, indistinguishable from a broken
+ * button.
  *
- * This pins the fix for step 1's driver branch: pressing Continue with no
- * seat count set focuses the Seat Availability input rather than silently
- * staying put. That branch is `setError` + an early return, not `trigger()`,
+ * This pins step 1's driver branch: pressing Continue with no seat count set
+ * focuses the Seat Availability input rather than silently staying put. That branch is `setError` + an early return, not `trigger()`,
  * so it exercises the deterministic half of `focusFirstInvalidField` in
  * `setup.tsx` rather than the `getFieldState`-after-`trigger` half.
  *

@@ -18,19 +18,18 @@ import {
  * no control here at all, because a report is evidence and a reporter cannot
  * withdraw or edit one.
  *
- * **Why this exists.** Filing a report used to be write-only: a toast, and
- * then silence forever. A reporter could not confirm the report existed, see
- * what they had written, or learn that an admin had acted - and the refusal
- * of a second report about the same person named a row they could not read.
+ * **Why this exists.** Without it, filing a report is write-only: a toast,
+ * and then silence. A reporter cannot confirm the report exists, see what
+ * they wrote, or learn that an admin has acted - and the refusal of a second
+ * report about the same person names a row they cannot read.
  *
  * **Resolution is shown here and nowhere else.** No email is sent when an
  * admin resolves a report; the status below is the whole of the feedback
- * loop. That was a deliberate choice, recorded on SCRUM-620: an email would
- * put a decision about a named student into someone's inbox, which needs a
- * policy decision this phase does not have, and it would need a template and
- * a rate-limit story besides.
+ * loop. That is deliberate: an email would put a decision about a named
+ * student into someone's inbox, which needs a policy decision nobody has
+ * made, and it would need a template and a rate-limit story besides.
  *
- * **Everything on this screen was written by the reader**, their own message
+ * **Everything on this screen is the reader's own writing**, their message
  * and nothing else - `reports.me` returns no part of the conversation
  * snapshot and nothing about the reported user beyond the display name. It is
  * rendered as React text children, never as HTML.

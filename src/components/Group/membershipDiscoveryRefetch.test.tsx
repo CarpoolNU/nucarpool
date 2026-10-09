@@ -1,19 +1,21 @@
 /**
- * Leaving a carpool re-asks the two questions being in one had made
+ * Leaving a carpool re-asks the two questions being in one makes
  * unanswerable: Explore repopulates and the map gets its pins back, without a
  * reload.
  *
- * **The defect (SCRUM-629).** The candidate query deliberately returns nothing
- * to a searcher no driver could accept - `searcherCanMatchNobody` is true for a
- * grouped RIDER, and `buildCandidateWhere` narrows to `id IN ()`. So while the
- * rider is grouped, `recommendations.me` and `mapbox.geoJsonUserList` are
- * correctly empty. `useGroupMembership` then invalidated `user.me` and
- * `groups.me` and nothing else, and nothing else re-asked either: `utils/trpc.ts`
+ * **Why leaving must re-fetch, not just invalidate.** The candidate query
+ * deliberately returns nothing to a searcher no driver could accept -
+ * `searcherCanMatchNobody` is true for a grouped RIDER, and
+ * `buildCandidateWhere` narrows to `id IN ()`. So while the rider is grouped,
+ * `recommendations.me` and `mapbox.geoJsonUserList` are correctly empty.
+ * `useGroupMembership` invalidates `user.me` and `groups.me`, but neither of
+ * those re-asks `recommendations.me` or `geoJsonUserList`: `utils/trpc.ts`
  * turns `refetchOnMount` and `refetchOnWindowFocus` off globally,
  * `pages/index.tsx` owns both queries and renders `GroupPage` *inside* itself
  * so leaving never unmounts the owner, and the query key does not depend on
- * membership. The rider was returned to an empty Explore and an empty map for
- * the rest of the session, which reads exactly like "no drivers match you".
+ * membership. Without an explicit re-fetch, a rider would be returned to an
+ * empty Explore and an empty map for the rest of the session, which reads
+ * exactly like "no drivers match you".
  *
  * **Why this file exists next to the unit tests.** Those assert that
  * `invalidate` was called on the right five caches. That is not the claim that
@@ -21,9 +23,9 @@
  * sufficient on its own: React Query's `shouldFetchOn` short-circuits on
  * `refetchOnMount === false` before consulting staleness, so an
  * invalidated-but-inactive query still serves cache - `groupMembershipRemount.test.tsx`
- * is the suite that discovered that. What saves this case is that both queries
- * are *active*, because their owner never unmounts; so the test has to hold
- * them mounted and watch the fetch happen.
+ * is the suite that covers that case. What saves this case is that both
+ * queries are *active*, because their owner never unmounts; so the test has
+ * to hold them mounted and watch the fetch happen.
  *
  * **The client is built from the app's real `defaultQueryOptions`**, reached by
  * `requireActual` past this file's own mock of that module, exactly as
@@ -165,10 +167,10 @@ const Membership = () => {
  * Stands in for `pages/index.tsx`: owns both discovery queries and renders the
  * group view inside itself, so nothing here ever unmounts.
  *
- * The options are the app's. `recommendations.me` carries the
- * `refetchOnMount: true` opt-in added by SCRUM-609 - which is exactly the
- * option that looks like it should have covered this and cannot, because the
- * owner does not unmount - and `geoJsonUserList` passes none at all.
+ * The options are the app's. `recommendations.me` carries a
+ * `refetchOnMount: true` opt-in - which is exactly the option that looks
+ * like it should cover this and cannot, because the owner does not unmount -
+ * and `geoJsonUserList` passes none at all.
  */
 const Explore = () => {
   const recommendations = trpc.user.recommendations.me.useQuery(
@@ -242,11 +244,11 @@ describe("a rider who leaves a carpool", () => {
     expect(trpcSpies("user.recommendations.me").invalidate).toHaveBeenCalled();
     expect(trpcSpies("mapbox.geoJsonUserList").invalidate).toHaveBeenCalled();
 
-    // Once each, which is the cost this change accepts and the whole of it:
+    // Once each, which is the cost this design accepts and the whole of it:
     // one scoring pass and one Mapbox-metered request per membership change.
     // `utils/trpc.ts` turns the refetch flags off globally because these two
-    // are expensive, so a fix that re-asked twice would be trading one defect
-    // for the cost the policy exists to avoid.
+    // are expensive, so an implementation that re-asked twice would be
+    // trading one defect for the cost the policy exists to avoid.
     expect(recommendationsFn).toHaveBeenCalledTimes(2);
     expect(mapUsersFn).toHaveBeenCalledTimes(2);
   });

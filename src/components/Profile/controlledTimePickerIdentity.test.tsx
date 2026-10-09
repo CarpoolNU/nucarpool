@@ -7,14 +7,14 @@ import type { OnboardingFormInputs } from "../../utils/types";
 /**
  * The time picker survives a parent render.
  *
- * **The defect.** `TimePickerWrapper` was declared inside
- * `ControlledTimePicker`'s body, so it was a new function identity on every
- * render. React compares `element.type` by identity, and a new identity is a
- * *different component* - so the existing tree was unmounted and a fresh antd
- * `TimePicker` mounted in its place on each parent render. The open panel is
- * that picker's own internal state, so it was destroyed by the very render
- * picking an hour caused: the panel closed, focus went with it, and the control
- * could not be used to pick a time.
+ * **The mechanism.** `TimePickerWrapper` is declared at module scope. Inside
+ * `ControlledTimePicker`'s body it would be a new function identity on every
+ * render, and React compares `element.type` by identity, so a new identity is
+ * a *different component* - the existing tree would be unmounted and a fresh
+ * antd `TimePicker` mounted in its place on each parent render. The open panel
+ * is that picker's own internal state, so it would be destroyed by the very
+ * render picking an hour causes: the panel closes, focus goes with it, and the
+ * control cannot be used to pick a time.
  *
  * **What is asserted, and why it is the DOM node.** A remount is not observable
  * from the outside as a prop or a class - the markup is identical either way.
@@ -26,9 +26,8 @@ import type { OnboardingFormInputs } from "../../utils/types";
  * **This is a structural claim, not a behavioural one.** It does not open the
  * panel, pick an hour or assert on focus: antd's picker renders its panel into
  * a portal driven by real pointer and transition behaviour, and jsdom computes
- * no layout. The ticket's own evidence was structural for the same reason. What
- * this does guarantee is that the cause is gone and cannot come back, which is
- * the part a test can own.
+ * no layout. What this does guarantee is that the cause cannot reappear,
+ * which is the part a test can own.
  *
  * Note that StrictMode - on for every component test, per `jest.setup.dom.ts` -
  * does not mask this one the way it masks the sidebar's in-place reversal.
@@ -82,8 +81,8 @@ describe("ControlledTimePicker across an unrelated parent render", () => {
 
     const after = screen.getByPlaceholderText("Start time");
 
-    // The assertion. Under the old inline declaration these are two different
-    // nodes, because the subtree was torn down and rebuilt.
+    // The assertion. With the wrapper declared inline these would be two
+    // different nodes, because the subtree is torn down and rebuilt.
     expect(after).toBe(before);
     expect(before.isConnected).toBe(true);
   });

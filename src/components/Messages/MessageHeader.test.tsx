@@ -14,24 +14,20 @@ import {
 /**
  * Which request controls the conversation header renders, at each viewport.
  *
- * **This file is the ticket.** Accept, Reject and Withdraw Request existed
- * exactly once each in the whole of `src/`, all four occurrences below an
- * `if (ismobile)` early return that rendered a back arrow and a name and
- * nothing else. So on a phone a received request could be read and replied to
- * but not answered, and a sent one could not be taken back — and because a
- * `PENDING` request makes `requests.create` refuse with `CONFLICT`, a
- * mobile-only user could not clear it and start again either. The rule module
- * that decides which controls apply was computed on mobile and then discarded.
+ * Accept, Reject and Withdraw Request must each be reachable on both mobile
+ * and desktop: a received request needs to be answerable, a sent one needs
+ * to be withdrawable, and a `PENDING` request makes `requests.create`
+ * refuse with `CONFLICT`, so a user stuck without these controls could not
+ * clear it and start again either.
  *
- * `messageHeaderControls` was already tested as a table, and it was right the
- * whole time: the defect was that one of its two readers never rendered
- * anything from it. That is the shape of bug a table test cannot see, which is
- * why the assertions here are about the rendered tree and are made at both
- * widths.
+ * `messageHeaderControls` is tested separately as a table of which controls
+ * apply to which state. A table test alone cannot see whether a given
+ * viewport actually renders what the table returns, which is why the
+ * assertions here are about the rendered tree and are made at both widths.
  *
- * The desktop cases are not redundant. The fix shares one control component
- * between the two branches, so the failure mode it introduces is a control
- * rendered *twice* on desktop, or the outlined button silently swapping label
+ * The desktop cases are not redundant. Both branches share one control
+ * component, so the failure mode to guard against is a control rendered
+ * *twice* on desktop, or the outlined button silently swapping label
  * between Reject and Withdraw. Both are asserted as exact sets of accessible
  * names, because a presence check passes against either.
  *
@@ -47,9 +43,9 @@ import {
  * request at all, which is only answerable with the *real* `useProfileImage`
  * running behind a real React Query. This file stubs that hook as a shape,
  * which is right for its own question and fatal to the other one: a stubbed
- * hook makes no request either way, so it cannot tell a fix from a no-op. A
- * `jest.mock` is per module per file, so no single file can have the hook both
- * stubbed and real. The two are not a candidate for merging.
+ * hook makes no request either way, so it cannot tell a real fetch from a
+ * no-op. A `jest.mock` is per module per file, so no single file can have
+ * the hook both stubbed and real. The two are not a candidate for merging.
  */
 
 /**
@@ -205,9 +201,9 @@ describe("Conversation header controls on mobile", () => {
   });
 
   it("offers no request control to a pair already carpooling together", () => {
-    // The state `messageHeaderControls` exists for. This slot used to hold a
-    // "Leave Conversation" button wired to `onReject`, which deleted their
-    // accepted request and destroyed a thread they could not recreate.
+    // The state `messageHeaderControls` exists for. A "Leave Conversation"
+    // button wired to `onReject` in this slot would delete their accepted
+    // request and destroy a thread they could not recreate.
     renderHeader({
       selectedUser: otherUser({
         carpoolId: "group-1",
@@ -236,9 +232,8 @@ describe("Conversation header controls on mobile", () => {
   });
 
   it("wires the controls to the panel's handlers", async () => {
-    // The handlers were reaching the component the whole time; only the render
-    // was missing. This is what makes the new row a control rather than
-    // decoration.
+    // The row renders real handlers, not decoration: a control wired to
+    // nothing would be indistinguishable from one that is merely drawn.
     //
     // Reject now takes two presses - see the confirmation suite below. Accept
     // still takes one, deliberately.
@@ -262,10 +257,10 @@ describe("Conversation header controls on mobile", () => {
     // **This is a proxy, and only a proxy.** jsdom performs no layout and
     // resolves no Tailwind, so every element here measures zero whatever its
     // classes say - `testing/viewport.ts` has the measured list. What is
-    // observable is the class that carries the separation, and the defect was
-    // exactly a class: `gap-3` on a row of two `flex-1` buttons put a
-    // destructive action 12px from a constructive one, where the desktop pair
-    // carry `mr-10`. The 24px itself is a device check.
+    // observable is the class that carries the separation: `gap-3` on a row
+    // of two `flex-1` buttons would put a destructive action 12px from a
+    // constructive one, where the desktop pair carry `mr-10`. The 24px
+    // itself is a device check.
     renderHeader({ selectedUser: otherUser({ incomingRequest: PENDING }) });
 
     const row = screen.getByRole("button", { name: "Reject" }).parentElement;
@@ -283,8 +278,8 @@ describe("Conversation header controls on desktop", () => {
   it("offers each control exactly once for a pending incoming request", () => {
     renderHeader({ selectedUser: otherUser({ incomingRequest: PENDING }) });
 
-    // The exact list, so a control rendered by both the shared component and
-    // a leftover copy of the old JSX fails here rather than looking fine.
+    // The exact list, so a control rendered twice - by this component and a
+    // duplicate inline copy - fails here rather than looking fine.
     expect(buttonNames()).toEqual(["Reject", "Accept", MENU, CLOSE]);
   });
 
@@ -325,12 +320,12 @@ describe("Conversation header controls on desktop", () => {
  * The confirmation step in front of the button that clears a request.
  *
  * `onReject` runs `requests.delete`, which removes the `Request` row and takes
- * the conversation with it - and there is no undo. It was a single press, and
- * on mobile that press was 12px from Accept as one of two half-width thumb
- * targets, against a finger's roughly 8px of positional slop. This file
- * already records what the same slot cost once before: a "Leave Conversation"
- * button wired to the same handler destroyed accepted requests and their
- * threads until it was removed.
+ * the conversation with it - and there is no undo. Without a confirmation,
+ * this would be a single press, and on mobile that press would be 12px from
+ * Accept as one of two half-width thumb targets, against a finger's roughly
+ * 8px of positional slop. The same slot would also be a dangerous place for
+ * a "Leave Conversation" button wired to the same handler, since that would
+ * destroy accepted requests and their threads too.
  *
  * Both states of that one button are confirmed, Reject and Withdraw Request.
  * They are the same element on the same handler with a different label, and
@@ -563,12 +558,13 @@ describe("Clearing a request asks first", () => {
 /**
  * The mobile back control.
  *
- * It was a bare 24px SVG in a button with no padding, so the icon was the
+ * A bare 24px SVG in a button with no padding would make the icon the
  * whole tap target — a third of the 44px Apple's HIG and WCAG 2.5.5 ask for,
  * on the *only* control that leaves a conversation on a phone. The padding
- * that fixes it is a class, and **jsdom cannot see it**: no layout is
- * performed, so every element measures zero whatever its declared size, and
- * `getComputedStyle` resolves no Tailwind class. See `testing/viewport.ts`.
+ * that gives it a 44px target is a class, and **jsdom cannot see it**: no
+ * layout is performed, so every element measures zero whatever its declared
+ * size, and `getComputedStyle` resolves no Tailwind class. See
+ * `testing/viewport.ts`.
  *
  * So nothing here measures anything. What these hold instead is everything
  * about the control that a class change could break by accident: that it is

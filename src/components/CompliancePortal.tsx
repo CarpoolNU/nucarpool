@@ -6,10 +6,8 @@ import { trpc } from "../utils/trpc";
 /**
  * The terms a user has to accept before using the app.
  *
- * "I Agree" now records the acceptance and this dialog stays up until that write
- * succeeds. It previously fired a Mixpanel event, closed itself, and
- * persisted nothing - the flag that gates this dialog was set instead by any
- * profile save, so it was not evidence that anybody had read this text.
+ * "I Agree" records the acceptance and this dialog stays up until that write
+ * succeeds.
  *
  * There is no local open state on purpose. `ComplianceGate` mounts this only
  * while the server says consent is missing, so the dialog can only disappear
@@ -42,16 +40,15 @@ export const ComplianceModal = () => {
 
   return (
     <Dialog open={true} onClose={() => {}}>
-      {/* The backdrop is a sibling of the panel rather than its ancestor.
-       * It used to wrap both, and `aria-hidden` is inherited by the entire
-       * subtree and cannot be undone by a descendant - so every control in
-       * this dialog was absent from the accessibility tree, including the "I
-       * Agree" that is the only way past this gate. Only the decorative blur
-       * layer is hidden now. */}
+      {/* The backdrop is a sibling of the panel rather than its ancestor:
+       * `aria-hidden` is inherited by the entire subtree and cannot be undone
+       * by a descendant, so wrapping both would take every control in this
+       * dialog out of the accessibility tree, including the "I Agree" button
+       * that is the only way past this gate. Only the decorative blur layer
+       * is hidden. */}
       <div className="fixed inset-0 z-50 backdrop-blur-xs" aria-hidden="true" />
-      {/* Carries `z-50` in its own right now that it is no longer inside the
-       * element that had it, and sits after the backdrop so it paints above
-       * it at the same level. */}
+      {/* Carries `z-50` in its own right, and sits after the backdrop so it
+       * paints above it at the same level. */}
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <Dialog.Panel className="flex h-4/6 w-5/6 flex-col content-center justify-center gap-4 rounded-md bg-white p-9 shadow-md sm:h-4/6 sm:w-4/6 md:h-3/6 md:w-3/6">
           <Dialog.Title className="text-center text-2xl font-bold">

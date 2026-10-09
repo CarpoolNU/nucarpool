@@ -1,12 +1,12 @@
 /**
  * That rendering the mobile header logs nothing.
  *
- * `MobileNavItem` was `styled.button<{ active: boolean }>`. Under
- * styled-components v6 a prop without a `$` prefix is treated as a DOM prop and
- * forwarded to the element, so React received `active={true}` on a `<button>`,
- * declined to write it, and logged `Received `true` for a non-boolean attribute
- * `active``. Prefixing it marks the prop transient - consumed for the template,
- * never forwarded.
+ * A styled-components prop that only feeds the template needs a `$` prefix.
+ * Without one, styled-components v6 treats it as a DOM prop and forwards it
+ * to the element, so React receives `active={true}` on a `<button>`,
+ * declines to write it, and logs `Received `true` for a non-boolean attribute
+ * `active``. Prefixing it marks the prop transient - consumed for the
+ * template, never forwarded.
  *
  * ---
  *
@@ -23,15 +23,14 @@
  * available exactly once per file - to whichever mobile render happens first.
  * `Header.test.tsx` spends that render on its own first assertion, so a spy
  * added anywhere in it would observe an already-suppressed warning and pass
- * against the unfixed component. This file exists so the assertion is the first
- * mobile render in its registry, and so that nothing added to it later can
- * silently consume the one warning it depends on.
+ * even if the `$` prefix regressed away. This file exists so the assertion
+ * is the first mobile render in its registry, and so that nothing added to
+ * it later can silently consume the one warning it depends on.
  *
- * That also corrects the ticket's stated impact. The bottom bar renders four
- * items, but `active={false}` does not warn at all - only the one active tab
- * passed a `true` - and the dedup means even that is once per page load rather
- * than once per render. One warning, not four per render, and not doubled by
- * StrictMode.
+ * The bottom bar renders four items, but `active={false}` does not warn at
+ * all - only the one active tab passes `true` - and the dedup means even
+ * that is once per page load rather than once per render. One warning, not
+ * four per render, and not doubled by StrictMode.
  *
  * **Keep this file to one rendering test.** A second one here would be
  * asserting against a suppressed warning and would pass regardless.

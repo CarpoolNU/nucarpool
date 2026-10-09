@@ -271,10 +271,10 @@ const Home: NextPage<any> = () => {
    * Held as the whole query object for the reason the comment below gives about
    * `user.me`: this one feeds the map's pins, and `data` alone cannot tell a
    * neighbourhood with nobody in it from a Mapbox or server failure. Every
-   * other list on this page already went through `toQueryState` after
-   * SCRUM-509; this query was missed, so an outage rendered an empty map with
-   * no message and nothing to retry - the single worst failure mode a matching
-   * product has, because it looks like an answer.
+   * other list on this page goes through `toQueryState` for the same reason.
+   * Without it an outage renders an empty map with no message and nothing to
+   * retry - the single worst failure mode a matching product has, because it
+   * looks like an answer.
    */
   const geoJsonUsersQuery =
     trpc.mapbox.geoJsonUserList.useQuery(debouncedFilters);
@@ -424,26 +424,26 @@ const Home: NextPage<any> = () => {
   /**
    * **The map's whole lifecycle.** Body in `utils/map/useMapInstance.ts`.
    *
-   * Two effects further down this file used to own this. The first built the
-   * map and returned no cleanup, so every unmount left a live WebGL context,
-   * its tiles, six `map.on` listeners and a `NavigationControl` behind; the
-   * second queued an unthrottled `map.resize()` per `resize` event, with no
-   * `clearTimeout`. Both are lifted out for the reason this file keeps lifting
-   * things out - a route cannot carry a test - and are covered by
-   * `useMapInstance.test.tsx`.
+   * Owned by one hook rather than by effects in this file, for the reason this
+   * file keeps lifting things out - a route cannot carry a test - and covered
+   * by `useMapInstance.test.tsx`. Inline, it is two effects: one that builds
+   * the map and returns no cleanup, leaving a live WebGL context, its tiles,
+   * six `map.on` listeners and a `NavigationControl` behind on every unmount,
+   * and one that queues an unthrottled `map.resize()` per `resize` event with
+   * no `clearTimeout`.
    *
-   * The leak was mobile-only in reach. The Profile tab is a `router.push`, so
-   * browser Back remounts this page client-side and built another map each
-   * time. iOS Safari caps live WebGL contexts at roughly 8-16 and silently
-   * drops the oldest, which is the blank map that was being reported.
+   * That leak is mobile-only in reach. The Profile tab is a `router.push`, so
+   * browser Back remounts this page client-side and would build another map
+   * each time. iOS Safari caps live WebGL contexts at roughly 8-16 and
+   * silently drops the oldest, which shows up as a blank map.
    *
-   * It sits here, rather than beside the effects it replaces, because
+   * It sits here, rather than beside the callbacks that read it, because
    * `mapState` is read by callbacks declared further down and `const` has no
    * hoisting to lean on.
    */
   // One derivation, shared with the Recentre button below - see
-  // `mapHomeCentre.ts` for why these were two expressions of one fact and what
-  // their disagreement cost a VIEWER.
+  // `mapHomeCentre.ts` for why two expressions of this one fact cost a VIEWER
+  // when they disagree.
   const mapCenter: MapCentre | null = user ? mapHomeCentre(user) : null;
 
   const { map: mapState, isLoaded: mapStateLoaded } = useMapInstance({
@@ -630,7 +630,7 @@ const Home: NextPage<any> = () => {
   /**
    * **View Route.** The body lives in `utils/map/viewRouteClick.ts` - see the
    * header there for why, and `viewRoutePlan.ts` for the branch decision it
-   * used to get wrong.
+   * makes.
    */
   const onViewRouteClick = useCallback(
     (user: User, clickedUser: PublicUser) => {
@@ -660,13 +660,12 @@ const Home: NextPage<any> = () => {
   /**
    * **Preview Group Route.** The body lives in `utils/map/groupRouteClick.ts` -
    * see the header there for why, and `groupRouteWaypoints.ts` for the pickup
-   * and dropoff ordering it used to hold inline.
+   * and dropoff ordering.
    */
   const onViewGroupRoute = useCallback(
     (driver: PublicUser, riders: PublicUser[]) => {
       // Narrows `user` for the call below; `runViewGroupRoute` makes the same
-      // check against the map. Logged rather than returned silently, which is
-      // what the handler did before it was extracted.
+      // check against the map. Logged rather than returned silently.
       if (!user) {
         console.error("Map or user not available for group route viewing");
         return;
@@ -740,16 +739,15 @@ const Home: NextPage<any> = () => {
       mapStateLoaded,
       onViewRouteClick,
       setExpandedUserId,
-      // Newly a real dependency. `setSheetDetent` used to be the `useState`
-      // setter, which React guarantees is stable; it is now a `useCallback`
-      // that closes over the role, so omitting it would pin this callback to
-      // the setter from before `user.me` resolved.
+      // A real dependency, not a stable `useState` setter: `setSheetDetent` is
+      // a `useCallback` that closes over the role, so omitting it would pin
+      // this callback to the one built before `user.me` resolved.
       setSheetDetent,
     ],
   );
 
   // Once per change to the profile's values, not per `user.me` refetch - see
-  // the hook for what re-seeding on every refetch used to overwrite.
+  // the hook for what re-seeding on every refetch would overwrite.
   useProfileFilterSeed(user, setFilters);
 
   useEffect(() => {
@@ -872,9 +870,9 @@ const Home: NextPage<any> = () => {
   });
   useGetDirections({ points: points, map: mapState! });
 
-  // A failed `user.me` used to leave `data` undefined behind this spinner
-  // forever, which was indistinguishable from the app being down and offered
-  // nothing to do about it.
+  // Read ahead of the spinner below: an unread `isError` leaves `data`
+  // undefined behind that spinner forever, which is indistinguishable from the
+  // app being down and offers nothing to do about it.
   if (userQuery.isError) {
     return (
       <QueryError
@@ -991,8 +989,8 @@ const Home: NextPage<any> = () => {
   return (
     <>
       <UserContext.Provider value={user}>
-        {/* The viewport meta this used to carry now lives in `_app.tsx`, which
-            covers every page and is where `viewport-fit=cover` has to go. */}
+        {/* No viewport meta here: it lives in `_app.tsx`, which covers every
+            page and is where `viewport-fit=cover` has to go. */}
         <PageTitle />
 
         {/* Tutorial overlay for first-time users */}
@@ -1004,25 +1002,22 @@ const Home: NextPage<any> = () => {
           />
         )}
 
-        {/* A max-height utility named for the viewport used to sit on this div
-            and has been removed rather than converted, because it never
-            constrained anything. It compiled to a `100vh` ceiling, and this
-            element is a direct child of `#__next`, which `globals.css` gives a
-            `100dvh` height - and the dynamic viewport is by definition never
-            larger than the large one, so that ceiling cannot clip this height
-            at any viewport. A later measurement in Chromium found it inert,
-            and the removal itself waited for a further change.
+        {/* No max-height utility on this div, and in particular none named
+            for the viewport. Such a utility compiles to a `100vh` ceiling, and
+            this element is a direct child of `#__next`, which `globals.css`
+            gives a `100dvh` height - the dynamic viewport is by definition
+            never larger than the large one, so that ceiling cannot clip this
+            height at any viewport. Measured inert in Chromium.
 
-            It was the last `vh` length in the shipped bundle, and the only one
-            `viewportUnits.test.ts` could not see: that guard reads source
-            spellings, and the source named the viewport instead of the unit.
-            Removing it closes the exemption that file's docblock used to
-            record, and the guard now rejects those aliases outright, so the
-            gap cannot reopen.
+            A viewport-named alias is also the one `vh` length
+            `viewportUnits.test.ts` cannot see by inspection: that guard reads
+            source spellings, and such a name states the viewport instead of
+            the unit. The guard rejects those aliases outright, so the gap
+            cannot open.
 
             The utility is described here rather than spelled, and that is not
             squeamishness: Tailwind v4 scans this file, comments included, so
-            writing the name would emit the very declaration being removed.
+            writing the name would emit the very declaration being excluded.
             `layoutFixtures.ts` and `breakpoints.js` keep the same discipline
             for the same reason. */}
         <div className="m-0 h-full w-full">
@@ -1037,18 +1032,17 @@ const Home: NextPage<any> = () => {
             />
           )}
           {/* `h-mobile-row` is the viewport less the navigation - see
-              `tailwind.config.js`. It no longer reserves a banner allowance:
-              A later change removed the "use desktop instead" bar this row used to
-              be pushed down by.
+              `tailwind.config.js`. It reserves no banner allowance, because
+              there is no "use desktop instead" bar pushing this row down.
 
               The desktop arm is `h-content-row`, which is its own token and not
               this one: it reserves the *top* header, a different quantity from
               the bottom navigation and outside the bottom bar's own height. On
               mobile that reservation means nothing at all, because the header
-              renders as the bottom bar instead - the header's share happened to
-              equal the bar at exactly one viewport height (~694px) and drifted
-              either side of it, which is why the two arms are separate tokens
-              rather than one with a term switched.
+              renders as the bottom bar instead - the header's share equals the
+              bar at exactly one viewport height (~694px) and drifts either side
+              of it, which is why the two arms are separate tokens rather than
+              one with a term switched.
 
               Both arms were bracketed percentages once. The desktop one moved
               into `tailwind.config.js` when the bar gained a 44px
@@ -1060,16 +1054,15 @@ const Home: NextPage<any> = () => {
             }`}
           >
             {/* Shown exactly when the sheet is in a state this handle can
-                toggle. That is the same condition as before for `isMobile` and
-                the detail view, and newly excludes an open conversation: the
-                handle used to sit there over the message panel toggling a
-                sheet the user could not see.
+                toggle - which covers `isMobile` and the detail view, and
+                excludes an open conversation, where the handle would sit over
+                the message panel toggling a sheet the user cannot see.
 
-                The three-way `||` this used to spell out is now
-                `isSheetDetentView`, which `useSheetDrag` checks before starting
-                a gesture. Sharing the predicate is the point: the handle
-                rendering somewhere the drag refuses to run is precisely what
-                the defect this guards against. */}
+                Spelled as `isSheetDetentView` rather than a three-way `||`,
+                because that is what `useSheetDrag` checks before starting a
+                gesture. Sharing the predicate is the point: the handle
+                rendering somewhere the drag refuses to run is exactly what
+                this guards against. */}
             {isSheetDetentView(sidebarView) &&
               (sidebarType === "explore" || sidebarType === "requests") && (
                 <button
@@ -1085,7 +1078,8 @@ const Home: NextPage<any> = () => {
                      WCAG 2.5.5 ask of a touch control. It was 12px of inline
                      padding, giving 32px: enough for WCAG 2.5.8 at AA, short
                      of the guideline this control should meet as the primary
-                     way to show and hide the list on a phone.
+                     way to show and hide the list on a phone. 12px of inline
+                     padding gives 32px, which is not enough.
 
                      Kept on the spacing scale rather than an arbitrary
                      pixel value so the whole control stays proportional if
@@ -1238,22 +1232,23 @@ const Home: NextPage<any> = () => {
                     its docblock for why the mobile placement is not from the
                     phase 1 tokens.
 
-                    Inside `#map` rather than beside it. It is `absolute`, and
-                    it used to render as a sibling of this container with
-                    nothing positioned between it and `#__next` - so `top-2
-                    right-2` resolved against the initial containing block,
-                    which is the viewport, not the map. That put its 44px box
-                    16px under `MobileBanner`; the banner is `fixed` at a
-                    z-index of 9999, so `elementFromPoint` at the button's top
-                    edge returned the banner and the overlap cost the hit test,
-                    not just the paint. `MapLegend` above was placed inside
-                    from the start and has always been clear of the banner,
-                    because this container starts below it.
+                    Inside `#map` rather than beside it. It is `absolute`, so
+                    as a sibling of this container - with nothing positioned
+                    between it and `#__next` - `top-2 right-2` would resolve
+                    against the initial containing block, which is the
+                    viewport, not the map. That puts its 44px box 16px under
+                    `MobileBanner`; the banner is `fixed` at a z-index of 9999,
+                    so `elementFromPoint` at the button's top edge returns the
+                    banner and the overlap costs the hit test, not just the
+                    paint. `MapLegend` above sits inside for the same reason,
+                    and is clear of the banner because this container starts
+                    below it.
 
                     The banner's z-index is spelled out in words above rather
                     than as its Tailwind class, deliberately: v4 scans this
                     whole repository for class names, comments included, so
-                    naming that utility here would ship a rule nothing uses.
+                    naming that utility here would ship a rule nothing else
+                    asks for.
                     Confirmed by selector-set diff on the compiled stylesheet.
 
                     Moved rather than making the row `relative`, which would
@@ -1301,17 +1296,15 @@ const Home: NextPage<any> = () => {
                     // Dropping the override rather than setting "expanded"
                     // directly, so a reselect resolves to the same resting
                     // position a fresh switch into My Group would - see
-                    // `defaultSheetDetent`. There used to be a floating pill
-                    // for this; it is gone, and reselecting the already-active
-                    // tab is now the only way back in once the header's Close
-                    // button has collapsed the sheet.
+                    // `defaultSheetDetent`. Reselecting the already-active tab
+                    // is the only way back in once the header's Close button
+                    // has collapsed the sheet; there is no floating pill.
                     onMyGroupReselected: () => {
                       setSheetDetentOverride(null);
-                      // The removed pill cleared this defensively too, and
-                      // there is no evidence it was ever actually reachable
-                      // here - kept rather than dropped, since it costs
-                      // nothing and a future path in is easier to reason
-                      // about if this invariant already holds.
+                      // Defensive: there is no known path that reaches here
+                      // with an expanded card. Kept because it costs nothing
+                      // and a future path in is easier to reason about if this
+                      // invariant already holds.
                       setExpandedUserId(null);
                     },
                   }}

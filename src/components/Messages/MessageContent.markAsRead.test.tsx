@@ -6,18 +6,18 @@
  * suite declares `markMessagesAsRead` as `inertMutation` - a literal result
  * with spies inside it and no state machine. These tests need the real
  * mutation, so that `onSuccess` and `onError` fire on React Query's own
- * timeline, which is the thing the fix hangs off.
+ * timeline, which is what the retry depends on.
  *
  * **The discriminating case is a thread that changes while the unread set does
- * not.** The old code advanced one ref holding the last unread id list
- * immediately after `mutate`, whether the call succeeded or not, and guarded
- * on `isEqual` against that list. So a *new unread message* arriving after a
- * failure did resend the failed id, purely because the list had changed - a
- * test built on that would pass against the bug. What never recovered was the
- * case below: a message the viewer sent themselves, which changes
- * `allMessages` and leaves the unread set byte-identical. The old guard saw an
- * equal list and did nothing, and those messages stayed unread until the
- * component remounted while the unread badge kept counting them.
+ * not.** A single ref holding the last unread id list, advanced immediately
+ * after `mutate` regardless of outcome and guarded on `isEqual` against
+ * that list, would retry a failed id only by accident - whenever a *new
+ * unread message* happens to arrive after the failure and changes the
+ * list. It would never recover the case below: a message the viewer sent
+ * themselves, which changes `allMessages` and leaves the unread set
+ * byte-identical. Such a guard would see an equal list and do nothing, and
+ * those messages would stay unread until the component remounts, with the
+ * unread badge still counting them.
  */
 
 import { render, screen, waitFor, act } from "@testing-library/react";
@@ -200,8 +200,8 @@ describe("marking a thread's messages as read", () => {
     await sendOverPusher(OWN_REPLY);
     expect(await screen.findByText("Yes, 8am works.")).toBeInTheDocument();
 
-    // The failure was released rather than recorded as done, so the same id
-    // goes out again. This is the assertion the old ref made impossible.
+    // The failure is released rather than recorded as done, so the same id
+    // goes out again.
     await waitFor(() => expect(markSpy()).toHaveBeenCalledTimes(2));
     expect(markSpy()).toHaveBeenNthCalledWith(2, { messageIds: ["unread-1"] });
   });

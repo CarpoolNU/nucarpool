@@ -18,11 +18,11 @@ interface DropDownMenuProps {
    * The unsaved-changes guard, when the page this is mounted on has one.
    *
    * Only the profile page does, and `Header` forwards it from the same prop it
-   * already passes the Map button and the bottom navigation. Signing out from
-   * here on `/profile` discarded pending edits exactly as `UserSection`'s
-   * button did - the same defect on the other viewport - so it is routed
-   * through the same guard rather than left as the one remaining unguarded
-   * exit. Everywhere else this is `undefined` and the behaviour is unchanged.
+   * already passes the Map button and the bottom navigation. Without it,
+   * signing out from here on `/profile` would discard pending edits, the same
+   * way `UserSection`'s own button would on the other viewport - so it is
+   * routed through the same guard rather than left as an unguarded exit.
+   * Everywhere else this is `undefined` and the behaviour is unaffected.
    */
   checkChanges?: UnsavedChangesGuard;
 }
@@ -49,9 +49,9 @@ const DropDownMenu = ({ checkChanges }: DropDownMenuProps) => {
   };
 
   return (
-    // `relative`: Menu.Items below is `absolute right-0`, and neither this
-    // wrapper nor any ancestor up to the viewport used to be positioned, so
-    // it resolved against the window instead of this trigger.
+    // `relative`: Menu.Items below is `absolute right-0`, so this wrapper (or
+    // an ancestor) must be positioned, or it resolves against the window
+    // instead of this trigger.
     <div className="relative z-30">
       {isLoading && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-white">
@@ -59,14 +59,13 @@ const DropDownMenu = ({ checkChanges }: DropDownMenuProps) => {
         </div>
       )}
       <Menu>
-        {/* `h-header-control w-header-control`, not the `h-14 w-14` this
-            declared, and that pair is the fix. The trigger is a child
-            of a bar whose height is 8.5% of the viewport, so a fixed 56px was
-            unrelated to the space it had: at 667x375 the bar is 31.875px and
-            this box was 56px, centred, hanging 12.06px above the screen and
-            12.06px into the content row below - and hit-testing there, because
-            the `z-30` wrapper above makes this a flex item with a stacking
-            context. A tap aimed at the top of the page opened this menu.
+        {/* `h-header-control w-header-control`, not a fixed `h-14 w-14`: the
+            trigger is a child of a bar whose height is 8.5% of the viewport,
+            so a fixed 56px would be unrelated to the space the bar actually
+            has on a short enough window, overhanging into the content row
+            below - and hit-testing there, because the `z-30` wrapper above
+            makes this a flex item with a stacking context, so a tap aimed at
+            the content row could open this menu instead.
 
             The token is `min(56px, ...)`, so it binds only where 56px does not
             fit and an ordinary desktop window is unchanged. The three children

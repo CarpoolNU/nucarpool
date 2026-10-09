@@ -23,36 +23,37 @@ const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
     : "font-bold !text-northeastern-red";
 
   /*
-    Both branches compose these with a template literal and a ternary, and the
-    desktop one has to be read as a fix rather than a style preference. It used
-    to build each button as `baseButton + (option === "user" && selectedButton)`
-    - concatenation with no separator, and a boolean on the right - so whichever
-    class sat last in `baseButton` was glued to whatever followed it:
+    Both branches compose these with a template literal and a ternary, which
+    matters because the alternative is a risk rather than a style preference:
+    `baseButton + (option === "user" && selectedButton)` - concatenation with
+    no separator, and a boolean on the right - would glue whichever class sits
+    last in `baseButton` to whatever follows it:
 
       unselected -> `… text-xl lg:text-2xlfalse`
       selected   -> `… text-xl lg:text-2xlfont-bold !text-northeastern-red`
 
-    `lg:text-2xl` therefore never applied to any of the three, and the selected
-    button was red but never bold; only `!text-northeastern-red` survived,
-    because it follows a space inside `selectedButton`.
+    `lg:text-2xl` would then apply to none of the three, and the selected
+    button would be red but never bold; only `!text-northeastern-red` would
+    survive, because it follows a space inside `selectedButton`.
 
-    Neither glued token is in the compiled stylesheet - Tailwind scans source
-    text, and those strings only ever existed at runtime - so the browser
-    matched no rule and the output looked deliberate: `text-xl` was intact, and
-    selection was still visible in red. The `class` attribute is the only place
-    it showed, which is what `ProfileSidebar.test.tsx` asserts on.
+    Neither glued token would be in the compiled stylesheet - Tailwind scans
+    source text, and a string built this way only ever exists at runtime - so
+    the browser would match no rule, and the output would look deliberate:
+    `text-xl` intact, selection still visible in red. The `class` attribute is
+    the only place it would show, which is what `ProfileSidebar.test.tsx`
+    asserts on.
   */
 
   /*
     The three icons in each branch are decorative, and their `alt` is empty for
     that reason. An image's alt text contributes to the accessible name of the
     control containing it, and every button here already carries its own
-    visible text. They used to read `alt="user"`, `alt="car"` and
-    `alt="checkbox"`, so each button announced itself as "user User Profile",
-    "car Carpool Details" or "checkbox Account Status" - the last of which
-    names a widget role these controls do not have. An empty `alt` is what
-    marks an image presentational, which leaves the button's name as its label
-    and nothing else. `SendBar` is the same decision on its send icon.
+    visible text. A non-empty `alt` here - `alt="user"`, `alt="car"`,
+    `alt="checkbox"` - would make each button announce itself as "user User
+    Profile", "car Carpool Details" or "checkbox Account Status" - the last of
+    which names a widget role these controls do not have. An empty `alt` is
+    what marks an image presentational, which leaves the button's name as its
+    label and nothing else. `SendBar` makes the same decision on its send icon.
   */
 
   if (isMobile) {

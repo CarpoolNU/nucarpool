@@ -35,11 +35,9 @@ import { averagePerGroup, percentOf } from "../../utils/adminQuickStats";
 /**
  * The admin dashboard.
  *
- * Every number here is aggregated by `user.admin` on the server.
- * This component used to download the user, group, request, conversation and
- * message tables and reduce them in the browser; it now receives finished
- * counts, so moving the slider narrows the query rather than re-filtering a
- * dataset that was already transferred in full.
+ * Every number here is aggregated by `user.admin` on the server, so moving
+ * the slider narrows the query rather than re-filtering an already-transferred
+ * dataset.
  */
 function AdminData() {
   // What the slider currently shows, updated continuously while dragging.
@@ -246,8 +244,8 @@ function AdminData() {
      * port exactly as tall as the content row, and a top margin then pushes it
      * down, so the port's last 16px lands outside the row's clip and is
      * unreachable at *any* scroll position rather than merely below the fold.
-     * Measured in Chromium at 16px at 1440x900 and at 667x582 alike,
-     * confirming this part of the defect was not limited to small screens.
+     * Measured in Chromium at 16px at 1440x900 and at 667x582 alike, so this
+     * is not a small-screen concern.
      *
      * Padding keeps the same 16px of visual gap - nothing here paints a
      * background, so the two are indistinguishable on screen - and

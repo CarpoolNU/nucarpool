@@ -36,8 +36,7 @@ import {
  * apart is a class on their container, and jsdom neither lays out nor resolves
  * Tailwind - see `testing/viewport.ts` for the measured list of what it cannot
  * tell you. The adjacency is the reason this matters and is not the thing
- * under test. What is testable, and what the defect actually was, is which
- * function the button calls.
+ * under test. What is testable is which function the button calls.
  */
 
 jest.mock("next-auth/react", () =>
@@ -182,11 +181,10 @@ describe("Sign Out and the unsaved-changes guard", () => {
 });
 
 describe("the role radios", () => {
-  // `Radio` already destructured `role` out of its props before spreading
-  // the rest onto the native input, so this call site was never affected by
-  // the sibling bug in `FormRadioButton` - the dead `role={Role.X}` prop
-  // passed here has been removed as the same cleanup, and this guards
-  // against either component starting to forward it.
+  // `Radio` destructures `role` out of its props before spreading the rest
+  // onto the native input, so this call site is not exposed to the hazard
+  // `FormRadioButton` carries. No `role={Role.X}` prop is passed here, and
+  // this guards against either component starting to forward one.
   it("are reachable as radios, not as their Role enum value", () => {
     render(<Harness checkChanges={jest.fn()} />);
 
@@ -206,10 +204,11 @@ describe("the role radios", () => {
 });
 
 /**
- * The role lock used to cover a grouped *driver* only, so the Driver radio
- * stayed live for a grouped rider - one click from taking the group away from
- * its real driver. `user.edit` refuses any role change while grouped now,
- * and the form has to say so before the save rather than after it.
+ * The role lock covers every grouped user, not a grouped *driver* only. A lock
+ * on drivers alone leaves the Driver radio live for a grouped rider - one
+ * click from taking the group away from its real driver. `user.edit` refuses
+ * any role change while grouped, and the form has to say so before the save
+ * rather than after it.
  */
 describe("the role lock for a user in a carpool group", () => {
   /** A form populated for `user`, the way the profile page resets it. */

@@ -15,20 +15,21 @@ interface ConnectPortalProps {
 /**
  * What a tap or click on a map pin opens.
  *
- * **This rendered on desktop only, and the mobile
- * failure was worse than "nothing happens".** The click handlers in
- * `utils/map/addMapEvents.tsx` are registered unconditionally and call
- * `setPopupUsers`, but this component was the sole reader of that state *and*
- * the sole caller of its `onClose`, behind a `!isMobile` gate in `index.tsx`.
- * So a mobile tap updated state, rendered nothing, and left `popupUsers`
- * non-null for the rest of the session with no code path able to clear it.
+ * This renders on both platforms, through one component with no viewport
+ * gate. Gating it to desktop only would leave a mobile tap with no way to
+ * close: `utils/map/addMapEvents.tsx` registers its click handlers
+ * unconditionally and calls `setPopupUsers` regardless of platform, and this
+ * component is the sole reader of that state *and* the sole caller of its
+ * `onClose`. A tap that updates state but renders nothing would leave
+ * `popupUsers` non-null for the rest of the session with no code path able
+ * to clear it.
  *
- * The gate is gone. The wiring - `extendUser`, `onViewRouteClick`,
- * `onViewRequest`, `onClose` - is identical on both platforms by construction,
- * because there is one component; only the presentation differs, which is what
- * the ticket asked for. Un-gating alone would not have worked: the desktop
- * panel is a fixed-width column anchored to the top right, beside where a
- * cursor would be.
+ * The wiring - `extendUser`, `onViewRouteClick`, `onViewRequest`, `onClose` -
+ * is identical on both platforms by construction, because there is one
+ * component; only the presentation differs. A gate alone would not be
+ * enough either way: the desktop panel is a fixed-width column anchored to
+ * the top right, beside where a cursor would be, which is wrong for mobile
+ * regardless of whether it renders at all.
  *
  * **Why `useIsMobile` rather than responsive utilities.** Presentation is
  * normally better expressed in CSS, and it would be correct at first paint
@@ -37,9 +38,9 @@ interface ConnectPortalProps {
  * that can clear `popupUsers` on a touch device - and a capability that exists
  * or does not needs to be assertable, which media queries are not: jsdom
  * evaluates none, so a control hidden by a breakpoint utility looks present to
- * every test. Second, keeping the branch in JavaScript leaves the desktop
- * class strings exactly as they were rather than restating them as overrides,
- * which is what "no desktop behaviour changes" actually requires. See
+ * every test. Second, keeping the branch in JavaScript lets the desktop
+ * class strings stay plain declarations rather than overrides, which is
+ * what "no desktop behaviour changes" actually requires. See
  * `src/testing/viewport.ts` for what that division of labour rests on.
  */
 export const MapConnectPortal = (props: ConnectPortalProps) => {
@@ -64,12 +65,9 @@ export const MapConnectPortal = (props: ConnectPortalProps) => {
     : "fixed inset-0 mt-20 flex items-start justify-end pt-4";
 
   /**
-   * The panel itself. Full width with a sheet edge on mobile; on desktop the
-   * same fixed-width column as before.
-   *
-   * A max-height class that does not exist in Tailwind or in this project's
-   * theme sat on the desktop string, doing nothing. Removed rather than
-   * repaired - the element below it carries the cap that actually applies.
+   * The panel itself. Full width with a sheet edge on mobile; a fixed-width
+   * column on desktop. The cap that actually applies lives on the element
+   * below this one, not on a max-height class here.
    */
   const panelClasses = isMobile
     ? "relative w-full rounded-t-3xl border-2 border-black bg-white shadow-lg"
@@ -94,12 +92,13 @@ export const MapConnectPortal = (props: ConnectPortalProps) => {
    *
    * It is a token rather than a `calc()` here because the two cannot be made
    * to agree any other way. The pull-up is a percentage of the panel's width,
-   * so the budget is not something a reader can verify from this line, and the
-   * literal that used to sit here reserved 128px for chrome that measures
-   * 106.73px - capping the list 21px shorter than its own container at every
-   * window height. The two branches stay separate expressions: this one is
-   * top-anchored under desktop chrome and the mobile sheet is bottom-anchored
-   * against the navigation, so they share no term.
+   * so the budget is not something a reader can verify from this line, and a
+   * literal reserving a fixed figure for chrome here would drift from the
+   * chrome's actual measured height, capping the list shorter than its own
+   * container at every window height. The two branches stay separate
+   * expressions: this one is top-anchored under desktop chrome and the
+   * mobile sheet is bottom-anchored against the navigation, so they share no
+   * term.
    */
   const listClasses = isMobile
     ? "max-h-[45dvh] overflow-y-auto"
@@ -129,12 +128,13 @@ export const MapConnectPortal = (props: ConnectPortalProps) => {
           <Dialog.Panel className={isMobile ? "w-full" : undefined}>
             <div className={panelClasses}>
               {/*
-               * Mobile only, and the reason this item was filed rather than a
-               * nicety. `Dialog` supplies backdrop-click and Escape, which is
-               * all a desktop user needs, but this dialog paints no dimmed
-               * overlay - so on a phone the only way out is tapping a patch of
-               * map that does not look like a control. Desktop keeps exactly
-               * the affordances it had, so its tab order is unchanged.
+               * Mobile only, and not a nicety: `Dialog` supplies
+               * backdrop-click and Escape, which is all a desktop user
+               * needs, but this dialog paints no dimmed overlay - so on a
+               * phone the only way out would otherwise be tapping a patch of
+               * map that does not look like a control. Desktop's
+               * affordances are unchanged, so its tab order is unchanged
+               * too.
                */}
               {isMobile && (
                 <div className="flex justify-end">
@@ -154,13 +154,13 @@ export const MapConnectPortal = (props: ConnectPortalProps) => {
                     <div key={user.id}>
                       {/*
                        * `portal` is what puts a Connect control on this card
-                       * at a phone width. `UserCard`'s `View Route` +
-                       * `Connect` row is desktop-only, and until this prop
-                       * existed nothing replaced it here: a mobile pin tap
-                       * opened a sheet describing someone with the favourite
-                       * star and `x` as its only controls. See
+                       * at a phone width, since `UserCard`'s `View Route` +
+                       * `Connect` row is desktop-only and without this prop
+                       * nothing replaces it here: a mobile pin tap would
+                       * open a sheet describing someone with only the
+                       * favourite star and `x` as controls. See
                        * `ConnectCardVariant` for why the explore sheet's
-                       * selection id was not reused for this.
+                       * selection id is not reused for this.
                        */}
                       <ConnectCard
                         variant="portal"

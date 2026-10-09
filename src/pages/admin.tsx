@@ -101,7 +101,7 @@ const Admin: NextPage<AdminProps> = ({ userPermission }) => {
    * above it already does, and keeps the dashboard in the server HTML for
    * desktop, which is what `AdminPage.test.tsx` asserts deliberately.
    *
-   * That pass still mounts `UserManagement`, but it no longer costs anything:
+   * That pass still mounts `UserManagement`, but it costs nothing:
    * the component gates its own `getAllUsers` on `useIsHydrated`, so the
    * request waits for the render that is known not to be hydration. The gate
    * lives there rather than as a prop from here because it carries no

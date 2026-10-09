@@ -13,10 +13,10 @@ import { useGroupMembership } from "./useGroupMembership";
  * `MobileGroupMembers` / `MobileMemberCard` in `GroupPage.tsx`. All the mutation
  * wiring moved to `useGroupMembership`; what is left is presentation.
  *
- * The destructive-action confirmation comes from the mobile card. The desktop
- * list had none - "Delete Group" dissolved an entire carpool on a single click
- * with no undo - so this is a deliberate behaviour change on desktop rather than
- * a port of what was there.
+ * The destructive-action confirmation comes from the mobile card. Without it,
+ * "Delete Group" would dissolve an entire carpool on a single click with no
+ * undo - so this is a deliberate addition on desktop rather than a port of
+ * what was there.
  */
 
 interface GroupMembersProps {
@@ -36,12 +36,12 @@ export const GroupMembers = ({ users, onLeftGroup }: GroupMembersProps) => {
    * null until `user.me` resolves, and no row below can be drawn - not even
    * the caller's own - without the caller.
    *
-   * A missing *driver* used to share this branch, and that was the bug. The
-   * group query has already succeeded by then; the group simply has no DRIVER
-   * member, and nothing about that will change on its own - so the spinner was
-   * permanent, and the member list, the explanation and the one exit the server
-   * still accepts were all unreachable behind it. 15 groups holding 33 members
-   * were in that state on production before this was fixed.
+   * A missing *driver* must not share this branch. The group query has
+   * already succeeded by then; the group simply has no DRIVER member, and
+   * nothing about that will change on its own - so sharing this branch would
+   * make the spinner permanent, with the member list, the explanation and
+   * the one exit the server still accepts all unreachable behind it. 15
+   * groups holding 33 members were found in that state on production.
    */
   if (!curUser) {
     return <Spinner />;
@@ -195,11 +195,11 @@ const DriverlessGroupNotice = ({ memberCount }: { memberCount: number }) => (
 /**
  * Role badges, one per role.
  *
- * VIEWER used to fall into the `: "Rider"` half of a two-way conditional and be
- * labelled as something it is not - and a group member can genuinely be one,
- * since `carpoolId` lives on `CarpoolSearch` alongside `role` and nothing ties
- * the two together. 8 of the 33 members of the driverless groups on production
- * are VIEWER rows, every one of them previously shown as "Rider".
+ * A two-way conditional falling back to `"Rider"` would label a VIEWER as
+ * something it is not - and a group member can genuinely be one, since
+ * `carpoolId` lives on `CarpoolSearch` alongside `role` and nothing ties the
+ * two together. 8 of the 33 members of the driverless groups on production
+ * are VIEWER rows, which a two-way conditional would show as "Rider".
  */
 const ROLE_BADGES: Record<Role, { label: string; className: string }> = {
   [Role.DRIVER]: { label: "Driver", className: "bg-blue-100 text-blue-800" },
@@ -280,8 +280,8 @@ export const GroupMemberCard = ({
                 A column, Cancel on top, and both of those are measurements
                 rather than taste.
 
-                The pair used to be a row 8px apart, 36px tall, with Confirm
-                leftmost. Two things were wrong with that and only one of them
+                The alternative is a row 8px apart, 36px tall, with Confirm
+                leftmost. Two things are wrong with that and only one of them
                 is the one you would guess.
 
                 `p-3` is the 44px: 12 + 20 (the `text-sm` line box) + 12 = 44,
@@ -310,11 +310,11 @@ export const GroupMemberCard = ({
                   a row, Cancel first      42.2%        44.2%      60.7%
                   a column, Cancel first      0%           0%         0%
 
-                So the row it had was already safer at the centre than the
-                reordered row would be - a press at the trigger's midpoint
-                lands on Cancel in the first case and on Confirm in the
-                second. What the old row really exposed was its left third,
-                43px of which sat outside the trigger's footprint entirely.
+                So a row with Confirm first is already safer at the centre
+                than a row with Cancel first - a press at the trigger's
+                midpoint lands on Cancel in the first case and on Confirm in
+                the second. What a row really exposes is its left third, 43px
+                of which sits outside the trigger's footprint entirely.
 
                 A column removes the question instead of trading one edge for
                 another: Confirm ends up below the trigger's bottom edge, with
@@ -435,13 +435,13 @@ export const GroupMemberCard = ({
 
         **Read the clearance, not the share.** The share is 0% either way,
         because the column and the trigger are horizontally disjoint across the
-        row's 12px gap - so the metric the previous fix turned on is exactly
-        the one that cannot see this, and a press drifting off the trigger's
-        bottom edge meets Confirm's top edge with nothing in between.
+        row's 12px gap - so the share metric used above cannot see this, and a
+        press drifting off the trigger's bottom edge meets Confirm's top edge
+        with nothing in between.
 
-        The row does not grow: 72px by `clientHeight` resting, the same figure
-        before this menu existed, because 44px fits inside the `h-12` avatar's
-        box. What the menu does cost is width - the identity column goes from
+        The row does not grow when the menu is added: 72px by `clientHeight`
+        resting, because 44px fits inside the `h-12` avatar's box. What the
+        menu does cost is width - the identity column goes from
         176.4px to 120.4px, which is the trigger's 44 plus the 12px gap. Both
         the name and the email are already `truncate`, so that degrades rather
         than overflows.

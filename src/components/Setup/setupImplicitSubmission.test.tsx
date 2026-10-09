@@ -1,9 +1,8 @@
 /**
- * SCRUM-594: the wizard was a pile of inputs and a `type="button"` Continue, so
- * Enter in a field did nothing at all.
- *
- * It is one `<form>` now, and Enter in a field is the same event as a press of
- * Continue: both reach `handleNextStep`, so the per-step gate applies to both.
+ * The wizard is one `<form>`, and Enter in a field is the same event as a press
+ * of Continue: both reach `handleNextStep`, so the per-step gate applies to
+ * both. A pile of inputs behind a `type="button"` Continue would leave Enter
+ * doing nothing at all.
  * What is worth pinning is how easily that goes wrong in the other direction -
  * inside a form, an untyped `<button>` submits, so each of these is a way to
  * advance a step (or write a profile) the user did not ask for:
@@ -17,8 +16,8 @@
  *
  * **Every key press here is `user.keyboard("{Enter}")` on a focused field**, not
  * `fireEvent.submit(form)`. user-event only submits on Enter when the form has
- * a submit button, so a wizard without a real form, or with Continue reverted
- * to `type="button"`, fails these instead of passing through a hand-fired event.
+ * a submit button, so a wizard without a real form, or with Continue as a
+ * `type="button"`, fails these instead of passing through a hand-fired event.
  *
  * Deliberately not co-located under `src/pages/`, for the reason
  * `setupNavigationPlacement.test.tsx` gives: a test file there is also a route.

@@ -1,13 +1,12 @@
 /**
  * Who the blocking terms dialog is put in front of.
  *
- * The gate now asks `needsTermsAcceptance` rather than reading
+ * The gate asks `needsTermsAcceptance` rather than reading
  * `user.licenseSigned` directly, and the risk that introduces is a regression
  * nobody would notice in review: a version comparison that accidentally
  * ignores the policy flag would re-prompt every user who accepted before the
  * version column existed - ~3,341 production rows - on their next page load.
- * These tests pin the shipped behaviour as *identical* to the old boolean
- * check.
+ * These tests pin that those rows stay unprompted.
  *
  * `ComplianceModal` is stubbed rather than rendered. What is under test is the
  * decision, not the dialog, and the real modal is a `next/dynamic` import that
@@ -17,21 +16,20 @@
  *
  * ---
  *
- * **`user.me` is a real React Query, through `testing/trpcHarness.ts`.** It
- * used to be a `jest.fn()` returning `{ data }`, and the cost of that was
- * concentrated in one assertion: the signed-out case checked that `useQuery`
- * had been *called with* `{ enabled: false }`, because a literal-returning fake
- * cannot distinguish a query that is held back from one that answered with no
- * data. That is an assertion about the argument list, not about the request -
- * it passes against a gate that computes the flag correctly and then fails to
- * pass it on, and it would have to be rewritten by hand for any call site that
- * reached the same decision differently. Fetched through the harness, the same
- * case is stated as the thing that actually matters: no request left for
- * `/sign-in`. The fetch counts below are measurements taken from inside the
- * client.
+ * **`user.me` is a real React Query, through `testing/trpcHarness.ts`.** A
+ * hand-written `jest.fn()` returning `{ data }` cannot distinguish a query
+ * that is held back from one that answered with no data, so the signed-out
+ * case would have to fall back to asserting that `useQuery` was *called with*
+ * `{ enabled: false }` - an assertion about the argument list, not about the
+ * request. That passes against a gate that computes the flag correctly and
+ * then fails to pass it on, and it would have to be rewritten by hand for any
+ * call site that reached the same decision differently. Fetched through the
+ * harness, the same case is stated as the thing that actually matters: no
+ * request left for `/sign-in`. The fetch counts below are measurements taken
+ * from inside the client.
  *
- * Making the query real also makes "still in flight" real. It is now a `queryFn`
- * that never settles, rather than a hand-written `{ data: undefined }` that is
+ * Making the query real also makes "still in flight" real: a `queryFn` that
+ * never settles, rather than a hand-written `{ data: undefined }` that is
  * indistinguishable from a query which resolved with nothing.
  */
 

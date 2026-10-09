@@ -2,18 +2,18 @@ import { RequestStatus, Role, Status } from "@prisma/client";
 import { connectAction } from "./connectAction";
 
 /**
- * a spent request is not a pending one.
+ * A spent request is not a pending one.
  *
- * `handleConnect` tested a request's *presence*, so a resolved request
- * suppressed the Connect modal exactly as an outstanding one did — and told the
- * user either to wait for a response nobody owed them, or to visit a tab whose
- * Accept button does not render for a resolved request. The journey it blocked
- * is a real one: carpooling again with someone after the group has ended, which
- * now depends on sending a fresh request.
+ * Testing a request's *presence* would suppress the Connect modal for a
+ * resolved request exactly as for an outstanding one — telling the user either
+ * to wait for a response nobody owes them, or to visit a tab whose Accept
+ * button does not render for a resolved request. The journey that blocks is a
+ * real one: carpooling again with someone after the group has ended, which
+ * depends on sending a fresh request.
  *
- * The four cases that matter most are the two `ACCEPTED` ones — which used to
- * be refused and now fall through — and the two `PENDING` ones, which must keep
- * being refused, or this fix would let a user pile up duplicate requests.
+ * The four cases that matter most are the two `ACCEPTED` ones, which fall
+ * through, and the two `PENDING` ones, which must be refused, or a user could
+ * pile up duplicate requests.
  */
 
 const pending = { status: RequestStatus.PENDING };
@@ -106,8 +106,8 @@ describe("connectAction — an outstanding request still refuses", () => {
 
 describe("connectAction — a spent request no longer refuses", () => {
   it("opens the modal when the incoming request has been accepted", () => {
-    // The defect. This is a pair who carpooled and whose group has ended: the
-    // row stays ACCEPTED forever, so Connect refused forever.
+    // A pair who carpooled and whose group has ended: the row stays ACCEPTED
+    // forever, so a presence test would refuse Connect forever.
     expect(action({ incomingRequest: accepted })).toEqual({ kind: "open" });
   });
 
@@ -116,9 +116,9 @@ describe("connectAction — a spent request no longer refuses", () => {
   });
 
   it("says nothing at all rather than something untrue", () => {
-    // The old copy claimed a response was awaited, or sent the user to a tab
-    // with no Accept button on it. Neither was true of a resolved request, and
-    // the fix is that no message is raised for one.
+    // A message here would have to claim a response is awaited, or send the
+    // user to a tab with no Accept button on it. Neither is true of a resolved
+    // request, so no message is raised for one.
     const incoming = action({ incomingRequest: accepted });
     const outgoing = action({ outgoingRequest: accepted });
 
@@ -178,10 +178,10 @@ describe("connectAction — seat availability", () => {
   });
 
   it("refuses a driver whose seat count went negative", () => {
-    // The call this test used to defer: non-positive is
-    // unavailable. A driver at -1 is a real state in production data, and
-    // `reserveSeat` would refuse the acceptance anyway — so opening the modal
-    // only led to a server error naming the driver as having no space.
+    // Non-positive is unavailable. A driver at -1 is a real state in
+    // production data, and `reserveSeat` refuses the acceptance anyway — so
+    // opening the modal would only lead to a server error naming the driver as
+    // having no space.
     expect(action({ viewerRole: Role.DRIVER, seatAvail: -1 })).toEqual({
       kind: "blocked",
       message:
@@ -191,20 +191,18 @@ describe("connectAction — seat availability", () => {
 });
 
 /**
- * a favourite the reader cannot carpool with.
+ * A favourite the reader cannot carpool with.
  *
- * `favorites.me` used to drop any favourite whose role matched the reader's,
- * was VIEWER, or whose search was INACTIVE — which removed the card, and with
- * it the only star that can un-favourite them. They are returned now, so a
- * Connect button can sit on a card for a pair who can never carpool. Nothing on
- * the server stops that request being written: `requests.create` has no role
- * guard, only `groups.create`/`groups.edit` do. So this refusal is what keeps a
- * request that can be sent but never accepted from being created at all.
+ * `favorites.me` returns a favourite whose role matches the reader's, is
+ * VIEWER, or whose search is INACTIVE — dropping them would remove the card,
+ * and with it the only star that can un-favourite them. So a Connect button can
+ * sit on a card for a pair who can never carpool, and nothing on the server
+ * stops that request being written: `requests.create` has no role guard, only
+ * `groups.create`/`groups.edit` do. This refusal is what keeps a request that
+ * can be sent but never accepted from being created at all.
  *
  * `ConnectCard` also disables the button and shows the same sentence as the
- * card's notice. Neither is asserted anywhere: rendering it has been possible
- * added the jsdom project, but no `ConnectCard.test.tsx`
- * exists yet. This is the layer that is pinned.
+ * card's notice; this file pins the decision layer those both read from.
  */
 describe("connectAction — a favourite who cannot be carpooled with", () => {
   it("refuses two riders, and says which way out there is", () => {

@@ -1,19 +1,18 @@
 /**
- * SCRUM-597: each wizard step is a conditional render, so the control that had
- * focus when the step changed - the field Enter was pressed in, Get Started,
- * Previous - was unmounted with the step it belonged to, and focus fell to
- * `<body>`. SCRUM-594 made Enter in a field advance the wizard, which is what
- * exposed it: the next Enter did nothing, and the user had to Tab back in from
- * the top of the page.
+ * Each wizard step is a conditional render, so the control that held focus when
+ * the step changed - the field Enter was pressed in, Get Started, Previous - is
+ * unmounted with the step it belonged to, and focus falls to `<body>`. Since
+ * Enter in a field advances the wizard, the next Enter would then do nothing
+ * and the user would have to Tab back in from the top of the page.
  *
- * The card (`SetupContainer`) takes focus when the step changes. It is a named
- * group, so every assertion below finds it by role and name - which pins the
- * announcement as well as the focus.
+ * So the card (`SetupContainer`) takes focus when the step changes. It is a
+ * named group, so every assertion below finds it by role and name - which pins
+ * the announcement as well as the focus.
  *
  * **Every advance here is `user.keyboard("{Enter}")` on a focused field**, for
  * the reason `setupImplicitSubmission.test.tsx` gives. A click on Continue is
  * covered too, but only as the control: that button survives a step change, so
- * it never showed the defect.
+ * it cannot lose focus this way.
  *
  * Deliberately not co-located under `src/pages/`, for the reason
  * `setupNavigationPlacement.test.tsx` gives: a test file there is also a route.
@@ -189,7 +188,7 @@ describe("onboarding wizard - focus after a successful advance", () => {
   });
 
   it("makes the next Tab reach the new step's first field", async () => {
-    // The user-visible point of the ticket: after an Enter-driven advance the
+    // The user-visible point: after an Enter-driven advance the
     // very next Tab reaches the new step's first field, rather than starting
     // again from the top of the document.
     const user = await startWizard();
@@ -213,7 +212,7 @@ describe("onboarding wizard - focus after a successful advance", () => {
 
   it("lands inside step 1 after Get Started", async () => {
     // Get Started is removed when step 0 becomes step 1, so it has the same
-    // shape as the field: focus was on a control that no longer exists.
+    // shape as the field: focus is on a control that no longer exists.
     const user = userEvent.setup();
     render(<Setup />);
     const getStarted = screen.getByRole("button", { name: "Get Started" });
@@ -291,8 +290,8 @@ describe("onboarding wizard - focus is left alone when the step does not change"
   });
 
   it("still focuses the invalid field, not the card, when the gate fails", async () => {
-    // SCRUM-593's behaviour, unchanged: a failed gate returns before `setStep`,
-    // so the step does not change and the card has no reason to take focus.
+    // A failed gate returns before `setStep`, so the step does not change and
+    // the card has no reason to take focus.
     const user = await startWizard();
 
     await user.clear(seatInput());

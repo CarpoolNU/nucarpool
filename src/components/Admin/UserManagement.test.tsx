@@ -209,7 +209,7 @@ describe("UserManagement on a hydration pass that is discarded", () => {
     // ...and the client corrected to the notice, discarding it.
     expect(text).toContain("mobile notice");
 
-    // The whole ticket: that discarded mount used to cost one privileged
+    // Without the deferral, that discarded mount would cost one privileged
     // request for the entire user table, on every mobile load of `/admin`.
     expect(queryFn()).not.toHaveBeenCalled();
   });
@@ -246,12 +246,12 @@ describe("UserManagement on a fresh client mount", () => {
 /**
  * Covers that a failed `getAllUsers` says so, and offers a way out.
  *
- * The Permissions tab is `/admin`'s default, and it used to hold its loading
- * state in a `useState<boolean>(true)` cleared only by an effect watching
- * `users`. Nothing else could clear it, so a failure was a spinner that spun
+ * The Permissions tab is `/admin`'s default. If its loading state lived in a
+ * `useState<boolean>(true)` cleared only by an effect watching `users`,
+ * nothing else could clear it, so a failure would be a spinner that spins
  * for the rest of the session - and `adminRouter` throws `UNAUTHORIZED` for
  * `permission === "USER"`, which a MANAGER can cause by demoting someone out
- * from under their own live session. Any 500 landed the same way.
+ * from under their own live session. Any 500 would land the same way.
  *
  * **`trpc` is mocked onto a real React Query with a rejecting `queryFn`, not
  * onto a stub reporting `isError: true`.** A stub would assert that the
@@ -277,7 +277,7 @@ describe("UserManagement when getAllUsers fails", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("We could not load the user list.");
 
-    // The whole defect: before this the spinner was still there, forever.
+    // Without this, a failure would leave the spinner there, forever.
     expect(spinner()).not.toBeInTheDocument();
   });
 
@@ -306,7 +306,7 @@ describe("UserManagement when getAllUsers fails", () => {
   /**
    * The control, and the mutation test for the case above. A component that
    * rendered `QueryError` unconditionally would pass both error assertions and
-   * fail here, which is the failure mode the ticket names.
+   * fail here.
    */
   it("control: a resolving query renders the list and no error", async () => {
     behaviour = async () => [ADMIN_USER];
@@ -321,9 +321,9 @@ describe("UserManagement when getAllUsers fails", () => {
   });
 
   /**
-   * The third state, which is the one the old boolean could express. Kept here
-   * so "spinner while loading" and "error once failed" are pinned against the
-   * same component rather than only the second being asserted.
+   * The third state, loading. Kept here so "spinner while loading" and
+   * "error once failed" are pinned against the same component rather than
+   * only the second being asserted.
    */
   it("control: shows the spinner while the fetch is still in flight", () => {
     behaviour = () => new Promise(() => undefined);

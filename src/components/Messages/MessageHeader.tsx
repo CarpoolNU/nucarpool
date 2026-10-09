@@ -20,8 +20,8 @@ const DISABLED_CLASS = "cursor-not-allowed opacity-40 hover:bg-inherit";
  *
  * The controls themselves — which ones apply, what they are called, when
  * Accept is withheld — are one component shared by both branches, because
- * having them in only one branch is exactly how mobile ended up with no way to
- * accept, reject or withdraw a request at all. Only the class names differ,
+ * splitting them per branch is exactly how a platform can end up with no way
+ * to accept, reject or withdraw a request at all. Only the class names differ,
  * and they differ enough to be worth naming: the desktop buttons are sized for
  * a header bar with room to spare, and at 375px `text-lg` with `lg:px-20`
  * would not fit two of them on a line.
@@ -36,12 +36,11 @@ type ControlClasses = {
 };
 
 /**
- * Unchanged from what the desktop header already rendered, with one
- * deliberate exception: the outlined button keeps `sm:px-8` in both states.
- * Reject carried it and Withdraw Request did not, so a withdrawal between
- * 640px and 834px — the band where `sm` applies and `md` does not — drew with
- * no horizontal padding at all. One button in one slot cannot have two
- * paddings, and the padded one is the intended look.
+ * The outlined button keeps `sm:px-8` in both states, deliberately: without
+ * it on both, a withdrawal between 640px and 834px — the band where `sm`
+ * applies and `md` does not — would draw with no horizontal padding at all.
+ * One button in one slot cannot have two paddings, and the padded one is
+ * the intended look.
  */
 const DESKTOP_CONTROL_CLASSES: ControlClasses = {
   explanation: "font-montserrat mr-10 max-w-sm text-sm text-gray-700",
@@ -59,7 +58,7 @@ const DESKTOP_CONTROL_CLASSES: ControlClasses = {
  * number of buttons on the row: Reject and Accept share it, and Withdraw
  * Request has it to itself. The explanation takes `w-full` so it wraps above
  * them instead of competing for the same line — on desktop the container is a
- * single row and it sits alongside, which is the layout that branch had.
+ * single row and it sits alongside instead.
  *
  * Nothing here asserts this fits. jsdom does no layout, so the test file's
  * assertions are about reachability; the vertical cost of a second row in a
@@ -80,14 +79,15 @@ const MOBILE_CONTROL_CLASSES: ControlClasses = {
  *
  * Both states delete the `Request` row and take the conversation with it -
  * they are one button on one `onReject`, and the label is the only difference
- * - so both are confirmed. The fix originally asked for the Reject half,
- * where the hazard is proximity to Accept; Withdraw Request gets it too
- * because gating one state of one button out of a confirmation is a
- * conditional with nothing behind it, and a full-width single-press control
- * that destroys a thread is the same defect with a different label.
+ * - so both are confirmed. The hazard - proximity to Accept - applies to
+ * Reject; Withdraw Request gets the same confirmation because gating only
+ * one state of one button out of it is a conditional with nothing behind
+ * it, and a full-width single-press control that destroys a thread is the
+ * same risk with a different label.
  *
  * Accept is deliberately not confirmed: it already refuses a second press
- * through `isMutating`, and the fix requires it left alone.
+ * through `isMutating`, and a confirmation here would add nothing but
+ * friction.
  */
 const CONFIRM_PROMPTS: Record<"respond" | "withdraw", string> = {
   respond: "Reject this request? This also deletes the conversation.",
@@ -112,11 +112,10 @@ interface RequestControlsProps {
  * `×`, and the mobile header gives them a row of their own.
  *
  * `none` renders nothing, and that is load-bearing: a pair already carpooling
- * together get no control here. The slot used to hold a "Leave Conversation"
- * button wired to the same `onReject` handler as Reject and Withdraw, so
- * pressing it deleted their accepted request and destroyed a thread they could
- * not get back. See `messageHeaderControls` for why it was removed rather than
- * repaired.
+ * together get no control here. A "Leave Conversation" button wired to the
+ * same `onReject` handler as Reject and Withdraw would delete their accepted
+ * request and destroy a thread they could not get back. See
+ * `messageHeaderControls` for why that control does not exist here.
  */
 const RequestControls = ({
   controls,
@@ -210,13 +209,13 @@ const RequestControls = ({
         One button for two states, because clearing the request is the same
         act from either end and the label is the only difference. It stays
         available under a role mismatch: clearing is the way out of that state,
-        and having no route to it was its own dead end.
+        and removing the route to it would be its own dead end.
 
         It asks before it acts. `onReject` runs `requests.delete`, which
-        removes the row and the conversation with it, and on mobile this button
-        sat a `gap-3` - 12px - from Accept, as two half-width thumb targets
-        against a finger's roughly 8px of slop. The gap is 24px now and this is
-        two presses; neither alone was enough.
+        removes the row and the conversation with it, and a `gap-3` - 12px -
+        from Accept would put two half-width thumb targets against a
+        finger's roughly 8px of slop. The gap is 24px, and this is two
+        presses; neither alone would be enough.
       */}
       <button
         onClick={() => setIsConfirming(true)}
@@ -259,15 +258,15 @@ const MessageHeader = ({
   // Which controls this pair's state offers. The rule lives in
   // `messageHeaderControls` so a test can state it as a table rather than
   // infer it from a render, and this value is computed once for both layouts:
-  // it was already computed above the mobile branch when that branch rendered
-  // none of it, which is how the table stayed right while a whole viewport had
-  // no way to answer a request. `MessageHeader.test.tsx` is the render-level
-  // half of that, and asserts both branches.
+  // computing it above the mobile branch means a table-level rule check is
+  // not enough on its own, since a branch could still render none of what
+  // it returns. `MessageHeader.test.tsx` is the render-level half of that,
+  // and asserts both branches.
   //
-  // `none` for a pair already in the same group is deliberate: that state used
-  // to offer a "Leave Conversation" button wired to `onReject`, so pressing it
-  // deleted their accepted request and destroyed a thread they could not get
-  // back. See that module for why it was removed rather than repaired.
+  // `none` for a pair already in the same group is deliberate: a "Leave
+  // Conversation" button wired to `onReject` would delete their accepted
+  // request and destroy a thread they could not get back. See that module
+  // for why that control does not exist here.
   const controls = messageHeaderControls({
     incomingStatus: selectedUser.incomingRequest?.status,
     outgoingStatus: selectedUser.outgoingRequest?.status,
@@ -276,12 +275,12 @@ const MessageHeader = ({
   });
 
   // A pending request whose two parties can no longer carpool - either of them
-  // switched role after it was sent - is no longer hidden from the Requests tab,
-  // because hiding it never stopped it blocking new requests. It
+  // switched role after it was sent - stays visible on the Requests tab,
+  // because hiding it does not stop it blocking new requests. It
   // is still not acceptable, so Accept is replaced by the reason rather than
   // left to fail on press. Reject and Withdraw stay: clearing the request is
-  // the way out, and it was the absence of any way to reach them that made this
-  // a dead end.
+  // the way out, and hiding them would leave no way to reach it - a dead
+  // end.
   const user = useContext(UserContext);
   const roleMismatch =
     user && controls.kind !== "none"
@@ -304,12 +303,12 @@ const MessageHeader = ({
     selectedUser.incomingRequest || selectedUser.outgoingRequest
   )?.id;
   /*
-    Only the desktop branch below draws an avatar, so only it pays for one.
-    Ungated, this fired an authenticated presigned-URL request - and an S3
-    `HeadObject` behind it - on every mobile conversation opened, for a picture
-    the mobile branch renders nowhere. `staleTime` made reopening the same
-    conversation free, so the waste was one round trip per distinct
-    conversation rather than per open.
+    Only the desktop branch below draws an avatar, so only it should pay for
+    one. Ungated, this would fire an authenticated presigned-URL request -
+    and an S3 `HeadObject` behind it - on every mobile conversation opened,
+    for a picture the mobile branch renders nowhere. `staleTime` makes
+    reopening the same conversation free, so the waste would be one round
+    trip per distinct conversation rather than per open.
 
     The call cannot simply move inside the branch: rules of hooks forbid a
     conditional call, and the two branches are one component because they do
@@ -335,21 +334,21 @@ const MessageHeader = ({
                The arrow stays `h-6`, so 2.5 + 6 + 2.5 = 11 spacing units =
                44px - the size Apple's HIG and WCAG 2.5.5 ask of a touch
                control, and the figure the explore sheet's handle, the map
-               recentre control and the map legend already use. It was a bare
-               24px icon in a button with no padding, which made the icon the
+               recentre control and the map legend already use. Without the
+               padding, a bare 24px icon in a button would make the icon the
                whole target. This is the only way out of a conversation on a
                phone: the desktop header's close control is in the branch
                below, which mobile returns before reaching.
 
-               `left-1.5` rather than the four units it sat at before, so the
-               arrow does not move: 1.5 + 2.5 = 4, the offset it had when the
-               button was only the icon. The target grows outwards from where
+               `left-1.5`, not a round unit, so the arrow does not move: 1.5
+               + 2.5 = 4, the offset the icon alone would need to sit at the
+               same visual position. The target grows outwards from where
                the user already aims instead of pushing the arrow 10px
                inboard, and the 44px box ends up nearer the screen edge, where
-               the thumb is. The old offset is deliberately not spelled out as
-               a class here - Tailwind scans this file for class-like strings
-               and would emit whichever one a comment names, and nothing uses
-               that one any more.
+               the thumb is. That arithmetic is deliberately not spelled out
+               as a class name here - Tailwind scans this file for
+               class-like strings and would emit whichever one a comment
+               names, whether or not anything applies it.
 
                `flex` keeps that arithmetic exact: an inline SVG contributes a
                line box, so without it the height is the icon plus whatever
@@ -405,13 +404,13 @@ const MessageHeader = ({
         */}
         {controls.kind !== "none" && (
           /*
-            `gap-6` - 24px - and not the `gap-3` this had. Reject and Accept
-            are both `flex-1`, so they were two half-width thumb targets 12px
-            apart where the desktop pair carry `mr-10`; a destructive and a
-            constructive action that close, at that size, is a mis-tap away
-            from deleting a request and its conversation. 24px is the figure
-            that fix settled on, and it still leaves each button ~160px wide at
-            375px.
+            `gap-6` - 24px - not `gap-3`. Reject and Accept are both
+            `flex-1`, so a 12px gap would put two half-width thumb targets
+            that close together, where the desktop pair carry `mr-10`; a
+            destructive and a constructive action that close, at that size,
+            is a mis-tap away from deleting a request and its conversation.
+            24px is the figure settled on, and it still leaves each button
+            ~160px wide at 375px.
 
             The row gap moves with it, which is the intended effect where the
             role-mismatch explanation or the confirmation prompt wraps above
@@ -442,13 +441,13 @@ const MessageHeader = ({
       pay for it.
 
       `p-8` around an 80px avatar is 145px of header, and the panel fills the
-      content row beside the header bar - so on a phone in landscape it took
-      145 of the 343px that row then was, the tab strip below took 53 more, and
-      the conversation was left
-      with nothing: `message-content` measured 32px tall, all of it its own
-      padding, with `contentHeight` 0 and a `scrollHeight` of 220 behind it.
-      Not cramped - a user who opened a thread in landscape saw no messages at
-      all, including the one they had just sent.
+      content row beside the header bar - so on a phone in landscape, with
+      that row at 343px and the tab strip below taking 53 more, the
+      conversation would be left with nothing: `message-content` would
+      measure 32px tall, all of it its own padding, with `contentHeight` 0
+      and a `scrollHeight` of 220 behind it. Not cramped - a user who opens
+      a thread in landscape would see no messages at all, including the one
+      they just sent.
 
       **The compact values are the base and the full-size ones the override**,
       which is the inversion `DESKTOP_MEDIA_QUERY`'s docblock argues for: a
@@ -518,11 +517,10 @@ const MessageHeader = ({
 
         {/*
           A pair already carpooling together get no button here, only the
-          close control below. There used to be a "Leave Conversation" button
-          in this slot on `onReject`, which deleted their accepted request and
-          with it a thread they could not recreate. It was removed: `×`
-          already closes the panel, and the Group page already leaves the
-          carpool.
+          close control below. A "Leave Conversation" button wired to
+          `onReject` in this slot would delete their accepted request and
+          with it a thread they could not recreate: `×` already closes the
+          panel, and the Group page already leaves the carpool.
         */}
         <button
           onClick={handleClose}

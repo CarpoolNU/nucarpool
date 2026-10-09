@@ -50,7 +50,7 @@ import {
  * `onForm` hands the form back so a test can drive `reset(...)` the way the
  * profile page does. The harness itself never remounts `AccountSection` across
  * that call, which is the whole point - a remount would reread `defaultValue`
- * and hide the defect.
+ * and make the assertion vacuous.
  */
 const Harness = ({
   initial,
@@ -121,11 +121,10 @@ describe("AccountSection co-op date pickers", () => {
   });
 
   /**
-   * The defect. A save refetches `user.me`, the page's effect calls
-   * `reset(...)` with what was stored, and both pickers have to follow. With
-   * `defaultValue` they kept displaying the months they mounted with, telling
-   * the user their change had not taken - the opposite of the truth, since the
-   * write itself was correct.
+   * A save refetches `user.me`, the page's effect calls `reset(...)` with what
+   * was stored, and both pickers have to follow. A `defaultValue` picker keeps
+   * displaying the month it mounted with, telling the user their change has
+   * not taken - the opposite of the truth, since the write itself succeeded.
    */
   it("follows reset() after a save, on both pickers", () => {
     let form: UseFormReturn<OnboardingFormInputs> | null = null;
@@ -199,8 +198,8 @@ describe("AccountSection co-op date pickers", () => {
    *   extended - which antd's own picker does to the shared dayjs singleton -
    *   and **today** when it is not. Neither reads as "no month chosen", so the
    *   empty case never reaches `dayjs` at all.
-   * - gaining a date later has to reach the display. Under the old conditional
-   *   spread the prop was absent at mount, so it stayed blank for good.
+   * - gaining a date later has to reach the display. A conditional spread
+   *   leaves the prop absent at mount, so the picker stays blank for good.
    */
   it("starts empty with no co-op dates and follows a date set later", () => {
     let form: UseFormReturn<OnboardingFormInputs> | null = null;
@@ -230,20 +229,20 @@ describe("AccountSection co-op date pickers", () => {
  * The widths this section asks for, either side of the mobile breakpoint.
  *
  * **Class-request assertions, and that is the ceiling in this file.**
- * The underlying defect is geometric - a declared 700px box hanging 315px off
+ * What they stand in for is geometric - a declared 700px box hanging 315px off
  * a 667px screen, inside a column that hides the overflow rather than
  * scrolling it - and jsdom resolves no CSS and reports every rect as zero, so
  * none of that is observable here. See `src/testing/viewport.ts`. What *is*
- * observable is which utilities the component asks for, and the defect was
- * precisely the absence of a cap beside the declared width. So these fail if
- * the cap is dropped again, and they would still pass if a cap were present
- * and ineffective - which is the honest limit of the assertion. The pixels are
+ * observable is which utilities the component asks for, and what keeps that
+ * box on screen is precisely a cap beside the declared width. So these fail if
+ * the cap is dropped, and they would still pass if a cap were present and
+ * ineffective - which is the honest limit of the assertion. The pixels are
  * in `src/testing/layoutFixtures.ts`'s `profile-content-column-width`,
  * measured in Chromium; the geometry itself belongs in a Playwright suite that
  * can measure real layout.
  */
 /**
- * `EntryLabel` had no `htmlFor`, so these two pickers announced as unlabelled
+ * Without `htmlFor` on `EntryLabel`, these two pickers announce as unlabelled
  * despite the visible "Start Date"/"End Date" text beside them.
  */
 describe("AccountSection accessible names", () => {
@@ -312,10 +311,10 @@ describe("AccountSection widths", () => {
 
     const { container } = render(<Harness />);
 
-    /* The fraction is the regression to catch. Two thirds of the capped
-       column left each picker 96.66px in Chromium, at which both labels wrap
-       onto a second line - so a fraction here is not a cosmetic preference,
-       it is what made the row worse once the cap was added. */
+    /* A fractional width is the thing to catch. Two thirds of the capped
+       column leaves each picker 96.66px in Chromium, at which both labels wrap
+       onto a second line - so the full width here is not a cosmetic
+       preference, it is what keeps the row on one line inside the cap. */
     expect(dateRow(container)).toHaveClass("w-full");
     expect(dateRow(container).className).not.toMatch(/\bw-\d+\/\d+/);
   });
@@ -330,18 +329,17 @@ describe("AccountSection widths", () => {
 });
 
 /**
- * SCRUM-610 item 5: the status switch's accessible name said the opposite of
- * its state.
+ * The status switch's accessible name has to agree with its state.
  *
- * A switch's name is announced together with its position, and these two were
- * pulling in opposite directions: `checked` tracks ACTIVE, while the name was
- * the action the *off* position performs. So an active profile was read out as
- * "Mark profile inactive, switch, on" and an inactive one as "Mark profile
+ * A switch's name is announced together with its position, so the two can pull
+ * in opposite directions: `checked` tracks ACTIVE, and a name giving the
+ * action the *off* position performs reads an active profile out as "Mark
+ * profile inactive, switch, on" and an inactive one as "Mark profile
  * inactive, switch, off" - in both cases the exact inverse of the truth, and
  * worse than an unnamed control, because it is confidently wrong.
  *
- * Naming the state instead makes the two agree at both positions, and matches
- * the visible ACTIVE/INACTIVE text the component already renders above it.
+ * Naming the state makes the two agree at both positions, and matches the
+ * visible ACTIVE/INACTIVE text the component renders above it.
  *
  * Fully observable in jsdom: an accessible name and a checked state are both
  * DOM, not geometry. Every case below fails against the pre-fix component.
@@ -378,7 +376,8 @@ describe("the account status switch's accessible name", () => {
     // switch that failed to render.
     expect(screen.getByRole("switch")).toBeInTheDocument();
 
-    // The old name, which an active profile announced as "on".
+    // The state-inverted name, which an active profile would announce as
+    // "on".
     expect(
       screen.queryByRole("switch", { name: /inactive/i }),
     ).not.toBeInTheDocument();

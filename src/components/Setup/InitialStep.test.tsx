@@ -1,19 +1,17 @@
 /**
- * The Viewer radio used to be wrapped in `!isMobile`, so on a phone step 1
- * rendered only Rider and Driver - both drawing unselected whenever
- * `watch("role")` was VIEWER, with nothing on screen indicating what the
- * primary button was about to commit the user to. This pins that all three
- * roles render on mobile, and that the selected one always has a visible,
- * checked control there - never all three unselected.
+ * All three roles render on mobile, and the selected one always has a visible,
+ * checked control there - never all three unselected. Wrapping the Viewer
+ * radio in `!isMobile` leaves a phone's step 1 showing only Rider and Driver,
+ * both drawing unselected whenever `watch("role")` is VIEWER, with nothing on
+ * screen indicating what the primary button is about to commit the user to.
  *
- * A second, separate defect: those same radios reported the wrong
- * accessible role. `FormRadioButton` spread its caller's props onto the native
- * `<input type="radio">`, and `InitialStep` passed `role={Role.X}` alongside
- * the `value` that actually drives selection - `role` is a real ARIA
- * attribute, not a naming collision with Prisma's `Role` enum, so it
- * overwrote the input's implicit `"radio"` role with the literal string
- * `"VIEWER"` / `"RIDER"` / `"DRIVER"`. `getByRole("radio", { name })` could
- * not find any of the three controls.
+ * The radios also have to report the right accessible role. `FormRadioButton`
+ * spreads its caller's props onto the native `<input type="radio">`, so
+ * passing `role={Role.X}` alongside the `value` that drives selection would
+ * overwrite the input's implicit `"radio"` role with the literal string
+ * `"VIEWER"` / `"RIDER"` / `"DRIVER"` - `role` is a real ARIA attribute, not a
+ * naming collision with Prisma's `Role` enum - and `getByRole("radio",
+ * { name })` would find none of the three controls.
  */
 
 import { render, screen } from "@testing-library/react";
@@ -75,19 +73,18 @@ describe("InitialStep on a mobile viewport", () => {
 });
 
 /**
- * SCRUM-592: the driver-only Seat Availability field was labelled by a plain
- * `<span>` with no association to the input, so it announced as an unnamed
- * spin button. `TextField`'s `label` prop looked like the fix but is never
- * rendered — SCRUM-513's own sweep threaded `htmlFor` through every
- * `EntryLabel` and had nothing to catch here.
+ * The driver-only Seat Availability field is named by a label associated with
+ * the input. A plain `<span>` beside it announces as an unnamed spin button,
+ * and `TextField`'s `label` prop looks like the answer but is never rendered —
+ * so a sweep threading `htmlFor` through every `EntryLabel` has nothing to
+ * catch here.
  */
 describe("InitialStep — Seat Availability accessible name", () => {
   it("names the spin button for a driver", () => {
     render(<Harness role={Role.DRIVER} />);
 
     // Positive control first: the control must be reachable before a name
-    // query can mean anything — the exact trap SCRUM-475 and SCRUM-513 both
-    // recorded.
+    // query can mean anything.
     const spinbutton = screen.getByRole("spinbutton");
     expect(spinbutton).toBeInTheDocument();
     expect(screen.getByRole("spinbutton", { name: /seat availability/i })).toBe(

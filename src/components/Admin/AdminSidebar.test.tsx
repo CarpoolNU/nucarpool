@@ -4,36 +4,31 @@ import AdminSidebar from "./AdminSidebar";
 /**
  * The classes the admin sidebar puts on its two buttons.
  *
- * This is the sibling of `ProfileSidebar.test.tsx`, and the defect it covers
- * is the same *shape* as the one that file describes at length: a
- * `&&` expression concatenated into a `className`, whose false branch
- * stringifies to `"false"` and ships as a class token.
- *
- * It was the milder of the two, and the difference is worth recording, because
- * it is the whole reason this component looked fine. Here `baseButton` ended
- * in a space and `selectedButton` began with one, so every real utility stayed
- * separated and did apply - only a meaningless `false` was appended. In
- * `ProfileSidebar` the separators were missing, so `lg:text-2xl` was glued to
- * its neighbour and silently stopped working. Same construct, one visual bug
- * and one invisible one.
+ * This is the sibling of `ProfileSidebar.test.tsx`, and the risk it guards
+ * against is the same *shape*: a `&&` expression concatenated into a
+ * `className`, whose false branch stringifies to `"false"` and ships as a
+ * class token. In `AdminSidebar`'s template literal, `baseButton` and the
+ * ternary are joined by an explicit space, so every real utility stays
+ * separated regardless of what either string carries - unlike a bare `+`
+ * concatenation, where a missing separator would glue a utility to its
+ * neighbour and silently stop it applying, which is the shape of defect
+ * `ProfileSidebar.test.tsx` covers at length.
  *
  * So these tests are not defending an appearance; they are defending the
- * *construct*. The fix replaces the concatenation with a template literal
- * carrying explicit separators, which is what `ProfileSidebar` settled on, and which
- * removes the invisible load-bearing spaces that made the sibling defect
- * possible in the first place.
+ * *construct*: a template literal with explicit separators, which is what
+ * `ProfileSidebar` also settled on.
  *
  * jsdom does no layout, so it can never tell you these buttons *look* right -
  * see `testing/viewport.ts`. What it can tell you is which tokens React wrote
- * into the `class` attribute, and that is exactly where this defect lives.
+ * into the `class` attribute, and that is exactly what this construct risks.
  * `AdminSidebar` takes two props and has no router, tRPC client or portal, so
  * it renders standalone; the desktop sidebar is its only appearance, since
  * `/admin` below 640px renders `AdminMobileNotice` instead.
  *
  * Asserted as **discrete tokens**, never as substrings of the whole class
- * string, for the reason the sibling file gives: `includes("text-xl")` is true
- * of a corrupted `text-xlfalse`, so the substring form passes against the very
- * bug it is meant to catch.
+ * string, for the reason the sibling file gives: `includes("text-xl")` would
+ * be true of a corrupted `text-xlfalse`, so the substring form would pass
+ * against the very risk it is meant to catch.
  */
 
 /** The class attribute as the browser reads it: a list of tokens. */
