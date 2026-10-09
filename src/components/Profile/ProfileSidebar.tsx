@@ -4,11 +4,10 @@ import user from "../../../public/user.png";
 import car from "../../../public/car.png";
 import checkbox from "../../../public/checkbox.png";
 import useIsMobile from "../../utils/useIsMobile";
+import { ProfileTab } from "../../utils/profile/profileTab";
 type ProfileSidebarProps = {
-  option: "user" | "carpool" | "account";
-  setOption: React.Dispatch<
-    React.SetStateAction<"user" | "carpool" | "account">
-  >;
+  option: ProfileTab;
+  setOption: React.Dispatch<React.SetStateAction<ProfileTab>>;
 };
 
 const ProfileSidebar = ({ option, setOption }: ProfileSidebarProps) => {
