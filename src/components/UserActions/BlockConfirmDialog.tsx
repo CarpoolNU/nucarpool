@@ -2,6 +2,7 @@ import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import { toast } from "react-toastify/unstyled";
 import { trpc } from "../../utils/trpc";
 import { invalidateBlockCaches } from "../../utils/blocks/invalidateBlockCaches";
+import SafetyGuidanceLink from "../SafetyGuidanceLink";
 
 type BlockConfirmDialogProps = {
   open: boolean;
@@ -54,9 +55,19 @@ const BlockConfirmDialog = ({
             favorites, in requests or in messages, and neither of you can
             contact the other.
           </p>
-          <p className="mb-6 text-gray-700">
+          {/* The half of a block nothing stated before: `blocks.block` sends
+              no mail and fires no Pusher event, so the other person learns
+              nothing at all. Worth saying outright, because a user weighing a
+              block is usually weighing exactly that. */}
+          <p className="mb-2 text-gray-700">
+            They aren&apos;t told that you blocked them.
+          </p>
+          <p className="mb-2 text-gray-700">
             Nothing is deleted. You can unblock them from the Account section of
             your profile.
+          </p>
+          <p className="mb-6 text-sm text-gray-700">
+            <SafetyGuidanceLink />
           </p>
           <div className="flex justify-end gap-4">
             <button

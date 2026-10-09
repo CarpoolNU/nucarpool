@@ -10,21 +10,48 @@ import useIsMobile from "../utils/useIsMobile";
 import type { SheetDetent } from "../utils/explore/sheetDetents";
 
 /**
- * What the mobile tour forces the explore sheet to while highlighting two of
+ * What the mobile tour forces the explore sheet to while highlighting three of
  * its steps, keyed by the step's index in `mobileSteps` below.
  *
  * The sidebar step (`[data-testid="explore-sidebar"]`) needs the sheet's
  * height nonzero: a VIEWER's opening detent is `collapsed`, which
  * `MOBILE_SIDEBAR_CLASSES.collapsed` in `pages/index.tsx` renders as `h-0
  * opacity-0 pointer-events-none`, so without this the tour anchors a popover
- * to an element that is there but invisible. The map step (`#map`) needs the
- * opposite: a RIDER or DRIVER's own opening detent is `expanded`, which pins
- * the sheet over roughly 85% of the map, so this collapses it first.
+ * to an element that is there but invisible. The safety step sits on that
+ * same element and carries its own entry rather than inheriting the one
+ * before it: driver.js calls `onHighlightStarted` per step, and a user
+ * stepping backwards into it from the map step arrives with the sheet
+ * collapsed. The map step (`#map`) needs the opposite: a RIDER or DRIVER's
+ * own opening detent is `expanded`, which pins the sheet over roughly 85% of
+ * the map, so this collapses it first.
+ *
+ * **These keys are step indices, so inserting a step shifts them.** The map
+ * step moved from 2 to 3 when the safety step went in at 2.
+ * `WelcomeTutorial.test.tsx` asserts every key still lands on the element its
+ * entry was written for, so a later insertion cannot silently desync them.
  */
 export const MOBILE_STEP_DETENTS: Partial<Record<number, SheetDetent>> = {
   1: "expanded",
-  2: "collapsed",
+  2: "expanded",
+  3: "collapsed",
 };
+
+/**
+ * The safety step's copy, shared by both variants.
+ *
+ * Held here rather than written out twice because the two step arrays below
+ * are the one place in this component where the same user-facing sentence has
+ * to appear in two literals, and an edit to one of them would otherwise leave
+ * a phone and a laptop telling a user different things about what reporting
+ * does.
+ *
+ * Every claim it makes is one the server actually keeps: `user.reports.create`
+ * notifies admins and nobody else, `user.blocks.block` notifies nobody at all
+ * and hides both directions, and `user.blocks.unblock` reverses it.
+ */
+export const SAFETY_STEP_TITLE = "If someone makes you uncomfortable";
+export const SAFETY_STEP_DESCRIPTION =
+  "Every card and conversation has a menu holding Report and Block. A report goes to the admins only, and the other person is never told. A block hides the two of you from each other, and you can undo it from your profile.";
 
 interface WelcomeTutorialProps {
   onComplete?: () => void;
@@ -172,6 +199,15 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({
         },
       },
       {
+        element: '[data-testid="explore-sidebar"]',
+        popover: {
+          title: SAFETY_STEP_TITLE,
+          description: SAFETY_STEP_DESCRIPTION,
+          side: "right",
+          align: "start",
+        },
+      },
+      {
         element: "#map",
         popover: {
           title: "This is the map",
@@ -228,12 +264,26 @@ const WelcomeTutorial: React.FC<WelcomeTutorialProps> = ({
         },
       },
       {
+        element: '[data-testid="explore-sidebar"]',
+        // Its own entry in `MOBILE_STEP_DETENTS`, for the reason given there:
+        // arriving here backwards from the map step means arriving with the
+        // sheet collapsed.
+        onHighlightStarted: () =>
+          setSheetDetentRef.current?.(MOBILE_STEP_DETENTS[2]!),
+        popover: {
+          title: SAFETY_STEP_TITLE,
+          description: SAFETY_STEP_DESCRIPTION,
+          side: "top",
+          align: "center",
+        },
+      },
+      {
         element: "#map",
         // Collapses the sheet before this step is measured or shown - a
         // RIDER or DRIVER's opening `expanded` detent otherwise pins the
         // sheet over roughly 85% of the map this step claims to show.
         onHighlightStarted: () =>
-          setSheetDetentRef.current?.(MOBILE_STEP_DETENTS[2]!),
+          setSheetDetentRef.current?.(MOBILE_STEP_DETENTS[3]!),
         popover: {
           title: "This is the map",
           description:

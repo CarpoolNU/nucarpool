@@ -64,6 +64,7 @@ describe("route titles", () => {
       "index.tsx",
       "profile/index.tsx",
       "profile/setup.tsx",
+      "safety.tsx",
       "sign-in.tsx",
     ]);
   });
