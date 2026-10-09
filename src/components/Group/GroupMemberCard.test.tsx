@@ -48,6 +48,7 @@ import userEvent from "@testing-library/user-event";
 import { Role } from "@prisma/client";
 import { GroupMemberCard } from "./GroupMemberCard";
 import { PublicUser } from "../../utils/types";
+import { profileImageSpies } from "../../testing/profileImageStub";
 
 /**
  * `trpc` for `UserActionsMenu` only.
@@ -92,6 +93,19 @@ jest.mock("../../utils/trpc", () => ({
 
 jest.mock("react-toastify/unstyled", () =>
   require("../../testing/toastStub").buildToastMock(),
+);
+
+/**
+ * The avatar resolves through a presigned-URL query.
+ *
+ * Required by every test in this file, not only the avatar ones: the row draws
+ * a `ProfileAvatar`, so `useProfileImage` runs on each render and reaches
+ * `trpc.user.getPresignedDownloadUrl`, which the client stub above does not
+ * carry. The default result - no picture, settled - is what the rows outside
+ * the avatar block want anyway.
+ */
+jest.mock("../../utils/useProfileImage", () =>
+  require("../../testing/profileImageStub").buildProfileImageMock(),
 );
 
 const mockBlock = jest.fn();
@@ -467,4 +481,142 @@ describe("the report and block menu on a group member row", () => {
     expect(trigger.parentElement).toHaveClass("self-start");
     expect(screen.getByRole("button", { name: "Confirm" })).toBeInTheDocument();
   });
+});
+
+/**
+ * The member's profile picture on their row.
+ *
+ * This row used to draw a grey circle holding the first letter of the member's
+ * preferred name - the only avatar surface in the app that ignored the
+ * uploaded picture, and the only one whose "no picture" state was a letter
+ * rather than the `AiOutlineUser` icon every other surface shows. SCRUM-666
+ * settled that explicitly in favour of the icon: the same person now looks the
+ * same on every screen, at the cost of a picture-less group reading as a
+ * column of identical icons rather than distinct letters.
+ *
+ * `ProfileAvatar` owns the three branches and `ProfileAvatar.test.tsx` owns
+ * proving they are right. What is left for this file is the wiring the card is
+ * responsible for: that the hook is asked for *this* member, and that all
+ * three branches keep the 48px box the row's measured geometry is built on.
+ *
+ * The class assertions are the same proxy the blocks above use, and carry the
+ * same limit - jsdom resolves no Tailwind and lays nothing out, so `h-12 w-12`
+ * on an element is a claim about the source, not about pixels. The pixels were
+ * re-measured in Chromium against the compiled stylesheet; the figures are in
+ * the component's own comment.
+ */
+describe("the member's avatar", () => {
+  /** What the hook reports; merged over a settled, picture-less default. */
+  const hookReturns = (result: {
+    profileImageUrl?: string | null;
+    isLoading?: boolean;
+    imageLoadError?: boolean;
+  }) =>
+    profileImageSpies().useProfileImage.mockReturnValue({
+      profileImageUrl: null,
+      isLoading: false,
+      imageLoadError: false,
+      ...result,
+    });
+
+  /*
+   * `resetProfileImageSpies` clears calls but leaves implementations, so a
+   * `mockReturnValue` set by one test would otherwise outlive it.
+   */
+  beforeEach(() => {
+    hookReturns({});
+  });
+
+  /**
+   * The "no picture" icon, by element rather than by role: it is an
+   * `AiOutlineUser`, and react-icons renders a bare `svg` with no `role` and
+   * no accessible name, so `getByRole` has nothing to match.
+   *
+   * The row renders no other `svg` while `showUserActions` is off, which is
+   * how every test below renders it. `UserActionsMenu`'s trigger is the one
+   * other `svg` the card can produce, and it is absent here.
+   */
+  const fallbackIcon = () => document.querySelector("svg");
+
+  const renderMemberRow = () =>
+    render(
+      <GroupMemberCard
+        user={MEMBER}
+        isCurrentUser={false}
+        actionLabel="Remove"
+        onAction={jest.fn()}
+        confirmPrompt="Remove Alex from the group?"
+      />,
+    );
+
+  it("draws the member's picture when they have one", () => {
+    hookReturns({ profileImageUrl: "https://s3.example/alex.jpg" });
+    renderMemberRow();
+
+    expect(screen.getByAltText("Alex's Profile Image")).toBeInTheDocument();
+    expect(fallbackIcon()).not.toBeInTheDocument();
+  });
+
+  it("draws the fallback icon when the member has no picture", () => {
+    renderMemberRow();
+
+    expect(fallbackIcon()).toBeInTheDocument();
+    expect(
+      screen.queryByAltText("Alex's Profile Image"),
+    ).not.toBeInTheDocument();
+  });
+
+  /*
+   * The acceptance criterion this pins: a row must not flash the fallback on
+   * its way to a picture. A member who has one should go placeholder ->
+   * picture, never placeholder -> icon -> picture, and the icon being absent
+   * here is what rules the middle state out.
+   */
+  it("covers the window with the neutral placeholder while the URL resolves", () => {
+    hookReturns({ isLoading: true });
+    renderMemberRow();
+
+    expect(document.querySelector("div.h-12.w-12")).toBeInTheDocument();
+    expect(fallbackIcon()).not.toBeInTheDocument();
+    expect(
+      screen.queryByAltText("Alex's Profile Image"),
+    ).not.toBeInTheDocument();
+  });
+
+  /*
+   * The mistake a list component makes with this hook: passing the signed-in
+   * user - or nothing, which the hook reads as the signed-in user - so every
+   * row in the group draws the reader's own face.
+   */
+  it("asks for this member's picture rather than the reader's own", () => {
+    renderMemberRow();
+
+    expect(profileImageSpies().useProfileImage).toHaveBeenCalledWith("alex", {
+      enabled: undefined,
+    });
+  });
+
+  /*
+   * The row's content box is 48px, set by this avatar, and the 44px
+   * destructive trigger measured in SCRUM-480 fits inside it. All three
+   * branches have to hold that box, or the row's height becomes a function of
+   * whether a picture has loaded yet.
+   */
+  it.each([
+    ["the placeholder", { isLoading: true }, "div.h-12.w-12"],
+    ["the fallback icon", {}, "svg.h-12.w-12"],
+    [
+      "the picture",
+      { profileImageUrl: "https://s3.example/alex.jpg" },
+      "img.h-12.w-12",
+    ],
+  ])(
+    "keeps %s inside the 48px box the row is measured on",
+    (_label, result, selector) => {
+      hookReturns(result);
+      renderMemberRow();
+
+      expect(document.querySelector(selector as string)).toBeInTheDocument();
+    },
+  );
 });

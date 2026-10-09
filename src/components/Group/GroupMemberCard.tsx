@@ -3,6 +3,7 @@ import { PublicUser } from "../../utils/types";
 import { useContext, useState } from "react";
 import { UserContext } from "../../utils/userContext";
 import Spinner from "../Spinner";
+import ProfileAvatar from "../ProfileAvatar";
 import UserActionsMenu from "../UserActions/UserActionsMenu";
 import { useGroupMembership } from "./useGroupMembership";
 
@@ -241,13 +242,59 @@ export const GroupMemberCard = ({
 
   return (
     <div className="flex items-center gap-3 px-2 py-3 sm:px-4">
-      {/* Avatar */}
+      {/*
+        Avatar.
+
+        This was a grey circle holding the first letter of `preferredName`,
+        and it was the only avatar in the app that was not a `ProfileAvatar` -
+        so the group page, where the picture matters most because these are
+        the people the reader is about to share a car with, was the one place
+        an uploaded picture did not appear. Not a deliberate exemption: it
+        predates the feature's current shape and survived SCRUM-252's
+        consolidation of the four group components with no decision recorded
+        either way.
+
+        **The fallback is the icon, not the letter, and that was a choice.**
+        The letter carries information the icon does not, and five distinct
+        letters scan better than five identical grey icons. Consistency won:
+        "no picture" now looks the same here as on the user cards, the connect
+        modal, the conversation header and the account dropdown, so the same
+        person no longer looks different depending on the screen. Recorded
+        here because the ticket asked for a decision rather than a default.
+
+        **The box does not move**, which is the constraint this had to meet.
+        `h-12 w-12` on all three of `ProfileAvatar`'s branches - placeholder,
+        picture and icon - keeps the row's content box at the 48px the
+        measured geometry below is built on, so the 44px destructive trigger
+        still fits inside it and the row stays 72px.
+
+        That is measured rather than assumed, and it had to be: two of the
+        three branches are *replaced* elements - an `img` and an `svg` - where
+        the letter circle was a plain `div`, and a replaced element that sized
+        itself intrinsically would grow the row the moment a picture finished
+        loading. In Chromium at 375px against this project's compiled
+        stylesheet, all three branches measure 48x48 and all three rows 72px
+        by `clientHeight`; the `group-member-card-avatar` fixture in
+        `src/testing/layoutFixtures.ts` carries the full figures. The two
+        fixtures behind the geometry below were re-measured with this avatar
+        in place and every one of their recorded numbers came back identical.
+
+        The cost is one `useProfileImage` per row, so a group of five makes up
+        to five presigned-URL requests when it opens. That is the per-user,
+        per-15-minutes price every other surface already pays, and the cache
+        is keyed by `userId` across surfaces, so a member whose card was just
+        on screen elsewhere costs nothing.
+      */}
       <div className="flex-shrink-0">
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-200">
-          <span className="text-lg font-medium text-gray-600">
-            {user.preferredName.charAt(0).toUpperCase()}
-          </span>
-        </div>
+        <ProfileAvatar
+          userId={user.id}
+          alt={`${user.preferredName}'s Profile Image`}
+          width={48}
+          height={48}
+          placeholderClassName="h-12 w-12 rounded-full bg-gray-200"
+          imageClassName="h-12 w-12 rounded-full object-cover"
+          fallbackClassName="h-12 w-12 rounded-full bg-gray-200 p-2"
+        />
       </div>
 
       {/* Identity */}

@@ -83,6 +83,17 @@ jest.mock("react-toastify/unstyled", () =>
   require("../../testing/toastStub").buildToastMock(),
 );
 
+/*
+ * The member rows draw a `ProfileAvatar`, which resolves a presigned URL
+ * through `trpc.user.getPresignedDownloadUrl` - a procedure this file's trpc
+ * stub does not carry and has no reason to. The default result is no picture,
+ * settled, so every row takes the fallback branch and nothing here waits on a
+ * query it does not care about.
+ */
+jest.mock("../../utils/useProfileImage", () =>
+  require("../../testing/profileImageStub").buildProfileImageMock(),
+);
+
 /** The real policy object, past this file's own mock of the module. */
 const { defaultQueryOptions } = jest.requireActual("../../utils/trpc");
 
