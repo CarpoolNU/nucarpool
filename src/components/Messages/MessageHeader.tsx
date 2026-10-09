@@ -2,9 +2,7 @@ import React, { useContext, useState } from "react";
 import { EnhancedPublicUser } from "../../utils/types";
 import { UserContext } from "../../utils/userContext";
 import { roleMismatchExplanation } from "../../utils/roleCompatibility";
-import { AiOutlineUser } from "react-icons/ai";
-import Image from "next/image";
-import useProfileImage from "../../utils/useProfileImage";
+import ProfileAvatar from "../ProfileAvatar";
 import useIsMobile from "../../utils/useIsMobile";
 import { HeaderControls, messageHeaderControls } from "./messageHeaderControls";
 import UserActionsMenu from "../UserActions/UserActionsMenu";
@@ -302,27 +300,6 @@ const MessageHeader = ({
   const requestId = (
     selectedUser.incomingRequest || selectedUser.outgoingRequest
   )?.id;
-  /*
-    Only the desktop branch below draws an avatar, so only it should pay for
-    one. Ungated, this would fire an authenticated presigned-URL request -
-    and an S3 `HeadObject` behind it - on every mobile conversation opened,
-    for a picture the mobile branch renders nowhere. `staleTime` makes
-    reopening the same conversation free, so the waste would be one round
-    trip per distinct conversation rather than per open.
-
-    The call cannot simply move inside the branch: rules of hooks forbid a
-    conditional call, and the two branches are one component because they do
-    share things - the request controls, the role-mismatch copy and the
-    mutation state. So the caller states what it will render instead, and
-    `MessageHeader.avatarRequest.test.tsx` watches the network layer to keep
-    that honest: a render-time spy cannot tell this fix from a no-op, because
-    it fires whether or not the query is enabled.
-  */
-  const {
-    profileImageUrl,
-    imageLoadError,
-    isLoading: isProfileImageLoading,
-  } = useProfileImage(selectedUser.id, { enabled: !ismobile });
 
   if (ismobile) {
     return (
@@ -468,23 +445,36 @@ const MessageHeader = ({
     */
     <div className="message-panel-tall:p-8 flex items-center justify-between border-b border-gray-200 bg-white px-2 py-1">
       <div className="flex items-center">
-        {isProfileImageLoading ? (
-          <div className="message-panel-tall:h-20 message-panel-tall:w-20 h-14 w-14 rounded-full bg-gray-200" />
-        ) : profileImageUrl && !imageLoadError ? (
-          <Image
-            src={profileImageUrl}
-            alt={`${selectedUser.preferredName}'s Profile Image`}
-            // Unchanged at 80: this is the size the source is *requested* at,
-            // not the size it is drawn at, so leaving it alone means the
-            // compact avatar is a downscaled 80px image rather than an
-            // upscaled 56px one. The classes below decide the box.
-            width={80}
-            height={80}
-            className="message-panel-tall:h-20 message-panel-tall:w-20 h-14 w-14 rounded-full object-contain"
-          />
-        ) : (
-          <AiOutlineUser className="message-panel-tall:h-20 message-panel-tall:w-20 h-14 w-14 rounded-full bg-gray-200" />
-        )}
+        <ProfileAvatar
+          userId={selectedUser.id}
+          /*
+            Only this desktop branch draws an avatar, so only it should pay for
+            one. Ungated, this would fire an authenticated presigned-URL
+            request - and an S3 `HeadObject` behind it - on every mobile
+            conversation opened, for a picture the mobile branch renders
+            nowhere. `staleTime` makes reopening the same conversation free, so
+            the waste would be one round trip per distinct conversation rather
+            than per open.
+
+            `ProfileAvatar` owns the hook call, so the mobile branch returns
+            before the query is ever reached and this is now the second line of
+            defence rather than the only one. It stays because the guarantee is
+            worth stating where the avatar is, and because it is what
+            `MessageHeader.avatarRequest.test.tsx` watches the network layer to
+            confirm - a render-time spy cannot tell this from a no-op, since it
+            fires whether or not the query is enabled.
+          */
+          enabled={!ismobile}
+          alt={`${selectedUser.preferredName}'s Profile Image`}
+          // 80, not 56: this is the size the source is *requested* at, not the
+          // size it is drawn at, so the compact avatar is a downscaled 80px
+          // image rather than an upscaled 56px one. The classes decide the box.
+          width={80}
+          height={80}
+          placeholderClassName="message-panel-tall:h-20 message-panel-tall:w-20 h-14 w-14 rounded-full bg-gray-200"
+          imageClassName="message-panel-tall:h-20 message-panel-tall:w-20 h-14 w-14 rounded-full object-contain"
+          fallbackClassName="message-panel-tall:h-20 message-panel-tall:w-20 h-14 w-14 rounded-full bg-gray-200"
+        />
 
         <span className="font-montserrat pr-10 pl-10 font-semibold sm:text-lg md:text-xl lg:text-2xl">
           {selectedUser.preferredName}

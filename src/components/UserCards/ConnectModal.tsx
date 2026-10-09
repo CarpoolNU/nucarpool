@@ -9,8 +9,7 @@ import EndIcon from "../../../public/end.png";
 import StaticDayBox from "../Sidebar/StaticDayBox";
 import dayjs from "dayjs";
 import { formatScheduleTime } from "../../utils/scheduleTime";
-import useProfileImage from "../../utils/useProfileImage";
-import { AiOutlineUser } from "react-icons/ai";
+import ProfileAvatar from "../ProfileAvatar";
 import useIsMobile from "../../utils/useIsMobile";
 // 250 was hardcoded here and nowhere else, five short of the column it is
 // written to. The limit now comes from one place.
@@ -30,11 +29,6 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
   const [isOpen, setIsOpen] = useState(true);
   const [requestSent, setRequestSent] = useState(false);
   const [customMessage, setCustomMessage] = useState("");
-  const {
-    profileImageUrl,
-    imageLoadError,
-    isLoading: isProfileImageLoading,
-  } = useProfileImage(props.otherUser.id);
   const isMobile = useIsMobile();
 
   /**
@@ -181,19 +175,15 @@ const ConnectModal = (props: ConnectModalProps): React.JSX.Element => {
                 <div className="relative flex w-full">
                   <div className="flex w-full flex-row gap-4 px-6 md:px-12">
                     <div className="relative inline-block h-28 w-28">
-                      {isProfileImageLoading ? (
-                        <div className="h-28 w-28 rounded-full bg-gray-200" />
-                      ) : profileImageUrl && !imageLoadError ? (
-                        <Image
-                          src={profileImageUrl}
-                          alt={`${props.otherUser.preferredName}'s Profile Image`}
-                          width={112}
-                          height={112}
-                          className="rounded-full"
-                        />
-                      ) : (
-                        <AiOutlineUser className="h-28 w-28 rounded-full bg-gray-200 p-2" />
-                      )}
+                      <ProfileAvatar
+                        userId={props.otherUser.id}
+                        alt={`${props.otherUser.preferredName}'s Profile Image`}
+                        width={112}
+                        height={112}
+                        placeholderClassName="h-28 w-28 rounded-full bg-gray-200"
+                        imageClassName="rounded-full"
+                        fallbackClassName="h-28 w-28 rounded-full bg-gray-200 p-2"
+                      />
                     </div>
                     <div className="flex w-full flex-col justify-center gap-2 pl-4">
                       <div className="flex flex-row flex-wrap items-baseline justify-start gap-2">

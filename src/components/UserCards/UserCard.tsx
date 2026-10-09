@@ -17,8 +17,7 @@ import StartIcon from "../../../public/start.png";
 import EndIcon from "../../../public/end.png";
 import Image from "next/image";
 import { trackViewRoute } from "../../utils/mixpanel";
-import useProfileImage from "../../utils/useProfileImage";
-import { AiOutlineUser } from "react-icons/ai";
+import ProfileAvatar from "../ProfileAvatar";
 import useIsMobile from "../../utils/useIsMobile";
 import UserActionsMenu from "../UserActions/UserActionsMenu";
 
@@ -113,11 +112,6 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
       trpcUtils.user.favorites.me.invalidate();
     },
   });
-  const {
-    profileImageUrl,
-    imageLoadError,
-    isLoading: isProfileImageLoading,
-  } = useProfileImage(props.otherUser.id);
 
   const user = useContext(UserContext);
   // The owning user is not sent — the server takes it from the session. No
@@ -178,23 +172,19 @@ export const UserCard = (props: UserCardProps): React.JSX.Element => {
     >
       <div className={"mb-1 -ml-2 flex flex-row items-center"}>
         {/* Profile Image */}
-        {isProfileImageLoading ? (
-          <div className="h-14 w-14 rounded-full bg-gray-200" />
-        ) : profileImageUrl && !imageLoadError ? (
-          <Image
-            src={profileImageUrl}
-            // The same value as the heading below and the activation button's
-            // `aria-label`. An audit found this announcing a name Viewer mode
-            // was hiding on screen; the hiding is gone, so all three
-            // read `preferredName` and there is nothing left to diverge.
-            alt={`${props.otherUser.preferredName}'s Profile Image`}
-            width={56}
-            height={56}
-            className="h-14 w-14 rounded-full object-cover"
-          />
-        ) : (
-          <AiOutlineUser className="h-14 w-14 rounded-full bg-gray-200" />
-        )}
+        <ProfileAvatar
+          userId={props.otherUser.id}
+          // The same value as the heading below and the activation button's
+          // `aria-label`. An audit found this announcing a name Viewer mode
+          // was hiding on screen; the hiding is gone, so all three
+          // read `preferredName` and there is nothing left to diverge.
+          alt={`${props.otherUser.preferredName}'s Profile Image`}
+          width={56}
+          height={56}
+          placeholderClassName="h-14 w-14 rounded-full bg-gray-200"
+          imageClassName="h-14 w-14 rounded-full object-cover"
+          fallbackClassName="h-14 w-14 rounded-full bg-gray-200"
+        />
 
         {/* Name and Pronouns */}
         <div className="flex flex-col items-start pl-3.5">
