@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import { Role, Status } from "@prisma/client";
 import { signOut } from "next-auth/react";
 import UserSection from "./UserSection";
+import Radio from "../Radio";
 import { OnboardingFormInputs, User } from "../../utils/types";
 import { UnsavedChangesGuard } from "../../utils/profile/signOutWithGuard";
 import {
@@ -200,6 +201,83 @@ describe("the role radios", () => {
       const input = screen.getByLabelText(name, { selector: "input" });
       expect(input).not.toHaveAttribute("role");
     }
+  });
+
+  /*
+   * SCRUM-670. The defect was geometric - at 24px the word "Viewer" was wider
+   * than the quarter-of-the-row box it was painted in, so its first and last
+   * glyph crossed the button's border on every phone width.
+   *
+   * **These three assert class names, which are a proxy and not the
+   * criterion.** jsdom resolves no CSS and lays nothing out, so it reports
+   * every rect as zero and cannot tell a label that fits from one that does
+   * not; `testing/viewport.ts` has the measured list of what it cannot answer.
+   * What is actually checkable here is that the component still asks for the
+   * arrangement the browser measurement was taken against - the real figures
+   * live in the `profile-role-row` fixture, reproducible through
+   * `scripts/measure-layout.ts`, which nothing in CI runs.
+   *
+   * The buttons dividing the row is the half that matters. A fixed fraction is
+   * what made them too narrow *and* left the row ending short of its own
+   * right-hand edge, so a regression to one would be a regression to both.
+   */
+  it("lets the three buttons divide the row rather than fixing each at a fraction of it", () => {
+    render(<Harness checkChanges={jest.fn()} />);
+
+    for (const name of ["Viewer", "Rider", "Driver"]) {
+      const label = screen
+        .getByLabelText(name, { selector: "input" })
+        .closest("label");
+
+      /* Grow from a zero basis, so the three shares are equal whatever the
+         labels measure - and the flex default back at desktop width, where the
+         row is content-sized and this must not apply. */
+      expect(label).toHaveClass("flex-1");
+      expect(label).toHaveClass("desktop:flex-initial");
+    }
+  });
+
+  it("gives the row a phone-sized gap and the desktop one above the breakpoint", () => {
+    render(<Harness checkChanges={jest.fn()} />);
+
+    const row = screen
+      .getByLabelText("Viewer", { selector: "input" })
+      .closest("label")?.parentElement;
+
+    // Every pixel of gap is three pixels off the buttons' combined width.
+    expect(row).toHaveClass("gap-2");
+    expect(row).toHaveClass("desktop:gap-8");
+  });
+
+  it("applies a className passed from the call site instead of dropping it", () => {
+    /*
+     * Not styling, and not this defect - but the prop was destructured and
+     * never used, so the obvious way to adjust one of these buttons from the
+     * call site compiled, rendered, and did nothing. A silent no-op is how the
+     * next person tries to fix a layout from the wrong file.
+     *
+     * `Radio` is driven directly here rather than through `UserSection`, which
+     * passes no `className` of its own.
+     *
+     * The asserted class is deliberately not a Tailwind utility. Tailwind v4
+     * scans this file like any other, so a real utility named here would be
+     * emitted into the production stylesheet for the sake of a test; a string
+     * the scanner does not recognise as one costs nothing and proves the same
+     * pass-through.
+     */
+    render(
+      <Radio
+        label="Viewer"
+        id="viewer-classname"
+        value={Role.VIEWER}
+        currentlySelected={Role.RIDER}
+        className="call-site-class"
+      />,
+    );
+
+    expect(
+      screen.getByLabelText("Viewer", { selector: "input" }).closest("label"),
+    ).toHaveClass("call-site-class");
   });
 });
 

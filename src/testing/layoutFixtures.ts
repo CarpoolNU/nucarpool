@@ -2485,6 +2485,172 @@ ${scheduleCard("-short-times", LONG_COMPANY_NAME, "9:00 AM", "5:00 PM")}
   ],
 };
 
+/**
+ * The profile page's role row on a phone: three buttons that have to hold
+ * three words.
+ *
+ * This one reproduces `styled-components` declarations as well as Tailwind
+ * classes, so - as the two header fixtures above explain - the markup carries
+ * its own `<style>` and the drift guard anchors on the declaration text.
+ *
+ * **The `<style>` block is unlayered on purpose, and that is the fixture's one
+ * subtle copy.** `styled-components` injects plain rules, while the
+ * `form-input` the label also carries compiles into `@layer utilities` - and an
+ * unlayered rule beats a layered one whatever order they arrive in. That is how
+ * `Radio.tsx` overrides that class's padding and its `border-radius: 0`, so a
+ * fixture that put these declarations inside a layer would measure a box the
+ * app does not draw.
+ *
+ * Two labels are here as controls rather than as criteria. "Rider" and
+ * "Driver" never overflowed at any width, so if a change made *them* bleed the
+ * cause would be the box and not the word - the opposite diagnosis from the
+ * one this fixture was built for.
+ */
+const ROLE_RADIO_STYLED_CSS = `
+  background-color: white;
+  color: black;
+  border: 1px solid black;
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 500;
+  border-radius: 10px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  padding-left: 4px;
+  padding-right: 4px;
+`;
+
+const ROLE_RADIO_STYLED_DESKTOP_CSS = `
+    font-size: 24px;
+    padding-left: 12px;
+    padding-right: 12px;
+`;
+
+/** `profile/index.tsx`'s mobile pane. The `pb-24` clears the bottom bar. */
+const PROFILE_MOBILE_PANE_CLASS = "px-8 pt-6 pb-24";
+
+/** `UserSection`'s wrapper, mobile arm. `flex-col` with no `flex` is a block. */
+const ROLE_SECTION_MOBILE_CLASS = "flex-col";
+
+const ROLE_SECTION_SHARED_CLASS = "max-w-full items-end";
+
+/**
+ * The row, in the order Prettier's Tailwind plugin sorted it into.
+ *
+ * The order matters because the drift guard is a substring match against
+ * `UserSection.tsx`, and the plugin sorts **JSX class attributes only** - a
+ * plain `const` like this one is left exactly as written. So a copy written in
+ * the order a human would choose silently stops matching the moment the
+ * component is formatted.
+ */
+const ROLE_ROW_CLASS = "desktop:gap-8 flex gap-2";
+
+/**
+ * `Radio`'s own two class fragments. They are separate here because they are
+ * separate in the component - the label's class is assembled from a template,
+ * so no single literal in `Radio.tsx` spells out the whole string and a
+ * one-string anchor would not be found.
+ */
+const ROLE_RADIO_SIZE_CLASS = "h-14 flex-1 desktop:flex-initial";
+
+const ROLE_RADIO_ENABLED_CLASS = "cursor-pointer";
+
+const roleRadio = (name: string, label: string, selected: boolean): string =>
+  `<label class="form-input ${ROLE_RADIO_SIZE_CLASS} ${ROLE_RADIO_ENABLED_CLASS}" data-arm="${
+    selected ? "active" : "inactive"
+  }" data-probe="${name}">${label}</label>`;
+
+const profileRoleRow: LayoutFixture = {
+  name: "profile-role-row",
+  summary:
+    "The Viewer / Rider / Driver buttons on the mobile profile page, and whether the longest label fits the box it is painted in",
+  source: "src/components/Profile/UserSection.tsx:146",
+  issue: "SCRUM-670",
+  viewportWidth: 375,
+  /* One step, because on a phone there is only one. `UserSection`'s wrapper is
+     `flex-col` with no `flex`, so it is an ordinary block and adds nothing;
+     the row inside it is a block-level flex container filling the pane. The
+     desktop arm's `w-[700px]` is on the other side of the ternary and is not
+     in this chain at all. */
+  insets: [{ name: "profile mobile pane px-8", x: 64 }],
+  markup: `
+    ${MONTSERRAT_LINK}
+    <style>
+      [data-arm] {${ROLE_RADIO_STYLED_CSS}      }
+
+      [data-arm="active"] {
+        background-color: #c8102e;
+        color: white;
+      }
+
+      @media (min-width: 640px) {
+        [data-arm] {${ROLE_RADIO_STYLED_DESKTOP_CSS}        }
+      }
+    </style>
+    <div class="${PROFILE_MOBILE_PANE_CLASS}" data-probe="profile-pane">
+      <div class="${ROLE_SECTION_MOBILE_CLASS} ${ROLE_SECTION_SHARED_CLASS}" data-probe="role-section">
+        <div class="${ROLE_ROW_CLASS}" data-probe="role-row">
+${roleRadio("viewer", "Viewer", true)}
+${roleRadio("rider", "Rider", false)}
+${roleRadio("driver", "Driver", false)}
+        </div>
+      </div>
+    </div>
+  `,
+  widthProbe: "[data-probe='role-row']",
+  probe: {
+    boxes: [
+      "[data-probe='role-row']",
+      "[data-probe='viewer']",
+      "[data-probe='rider']",
+      "[data-probe='driver']",
+    ],
+  },
+  recorded: [
+    "The chain first: role-row contentWidth 311 at 375px, matching the predicted 375 − 64. The row has no padding of its own, so its contentWidth is the whole budget the three buttons divide.",
+    "AFTER the fix, at 375x812: the three buttons are 98.33 / 98.34 / 98.34 wide and the row ends exactly where the last one does - 0px unused. The 0.01px spread is the browser rounding 295 ÷ 3; the flex basis is 0, so the three shares are equal by construction and no figure here should be read as them differing.",
+    "AFTER, at 320 (the narrowest width the issue states): all three buttons are exactly 80.00 wide, 0px unused at the row's end. This is the width every other figure should be checked against first - it is the only one where the three divide to a whole number, so a spread of anything but 0 here is a real finding rather than rounding.",
+    "AFTER, the labels are inside their borders at every width, measured as a Range over each label's contents against that label's border rect - which this probe does not report, so it is a separate evaluation. The *smallest* clearance of the three, per side: 9.28px at 320, 15.95 at 360, 18.45 at 375, 20.95 at 390, 24.61 at 412. In all five it is Viewer that is tightest, as it is the longest word.",
+    "BEFORE (the defect, reproduced by giving each button a fixed quarter of the row in place of an equal flex share, a 32px gap in place of the 8px one, and a flat `font-size: 24px` with the `form-input` 12px padding - the quarter-width utility is described rather than named, because Tailwind scans this file and it is no longer used anywhere): at 375 each button was 77.75 wide, the three plus two 32px gaps occupied 297.25 of the 311px row and left **13.75px unused at its right-hand end**. Viewer's border rect was left 32 / right 109.75 and a Range over its text was left 29.92 / right 111.84 - the glyphs painted **2.08px outside the border on each side**. Rider and Driver stayed inside theirs, which is why only Viewer read as wrong.",
+    "The label widths the budget is sized from, measured with `white-space: nowrap` against this stylesheet and Montserrat: at 24px, Viewer 81.91, Driver 72.50, Rider 64.23; at 18px, Viewer 61.44, Driver 54.38, Rider 48.17. At 320 a button's content box is 80 − 8 of padding − 2 of border = 70, which 61.44 clears and 81.91 does not - and no gap or padding makes 81.91 fit three-up at 320, which is why the font size had to move.",
+    "**Montserrat is served here at the weights `_document.tsx` ships, 400 and 700 - not 500.** The arms declare `font-weight: 500`, which has no face and matches the 400 one, so these figures are the 400 face's. Serving a 500 face instead would measure a font the app never draws.",
+    "The desktop arm is unchanged by the fix, measured separately at 1280x800 with the same stylesheet: buttons 107.91 / 90.23 / 98.50, row 360.65, gap 32px, labels 24px with 12px padding and 13px of clearance on every side - identical figures before and after. See the width comment in `Radio.tsx` for why the old quarter-width utility was dropped rather than moved behind the breakpoint: it never resolved on desktop, and putting the same declaration inside a media query *starts* it resolving and shrinks Viewer's clearance to 4.12px.",
+  ],
+  reproduces: [
+    {
+      file: "src/pages/profile/index.tsx",
+      className: PROFILE_MOBILE_PANE_CLASS,
+    },
+    {
+      file: "src/components/Profile/UserSection.tsx",
+      className: ROLE_SECTION_MOBILE_CLASS,
+    },
+    {
+      file: "src/components/Profile/UserSection.tsx",
+      className: ROLE_SECTION_SHARED_CLASS,
+    },
+    {
+      file: "src/components/Profile/UserSection.tsx",
+      className: ROLE_ROW_CLASS,
+    },
+    { file: "src/components/Radio.tsx", className: ROLE_RADIO_SIZE_CLASS },
+    { file: "src/components/Radio.tsx", className: ROLE_RADIO_ENABLED_CLASS },
+    { file: "src/components/Radio.tsx", className: "font-size: 18px;" },
+    { file: "src/components/Radio.tsx", className: "padding-left: 4px;" },
+    { file: "src/components/Radio.tsx", className: "padding-right: 4px;" },
+    {
+      file: "src/components/Radio.tsx",
+      className: "@media ${DESKTOP_MEDIA_QUERY} {",
+    },
+    { file: "src/components/Radio.tsx", className: "font-size: 24px;" },
+    { file: "src/components/Radio.tsx", className: "padding-left: 12px;" },
+    { file: "src/components/Radio.tsx", className: "padding-right: 12px;" },
+  ],
+};
+
 export const LAYOUT_FIXTURES: readonly LayoutFixture[] = [
   groupMemberCardTrigger,
   groupMemberCardActionsMenu,
@@ -2502,6 +2668,7 @@ export const LAYOUT_FIXTURES: readonly LayoutFixture[] = [
   mobileTourMapStepSheetOverlap,
   profileDropdownPanel,
   userCardScheduleRow,
+  profileRoleRow,
 ];
 
 export const findFixture = (name: string): LayoutFixture | undefined =>
