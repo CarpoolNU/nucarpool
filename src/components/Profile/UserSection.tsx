@@ -143,8 +143,15 @@ const UserSection = ({
       <div
         className={`${isMobile ? "flex-col" : "flex h-24 w-[700px]"} max-w-full items-end`}
       >
-        {/* Radio buttons always in a row */}
-        <div className="flex gap-8">
+        {/* Radio buttons always in a row.
+
+            The gap is a quarter of the desktop one on a phone, and that is not
+            taste. The three buttons divide this row between them, so every
+            pixel of gap is three pixels off their combined width - and at a
+            320px viewport the row is 256px wide, which two 32px gaps would
+            spend an eighth of on empty space the labels need. See the width
+            comment in `Radio.tsx` for the figures. */}
+        <div className="desktop:gap-8 flex gap-2">
           <Radio
             label="Viewer"
             id="viewer"
