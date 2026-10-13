@@ -4099,10 +4099,10 @@ dom-helpers@^5.0.1:
     "@babel/runtime" "^7.8.7"
     csstype "^3.0.2"
 
-driver.js@^1.8.0:
-  version "1.8.0"
-  resolved "https://registry.yarnpkg.com/driver.js/-/driver.js-1.8.0.tgz#928c5bdee5f6dd5cb23e45906d22281835679c89"
-  integrity sha512-+8/IO7h1v14IzWh2GP60N7T3PFZweXwdn5e5POuxRSBoCYUojsBxzqawPeXh3YZIibRy7EehYNEyxe7slwwtdg==
+driver.js@^1.9.0:
+  version "1.9.0"
+  resolved "https://registry.yarnpkg.com/driver.js/-/driver.js-1.9.0.tgz#f8bffc39d2fda5a9cda4aa0d4c0887c29228a98f"
+  integrity sha512-+YWVdNVUrY1/2spszQshohWYY4soIjNBnMFS6lfmousT8igos2lmswhlqyuuNMhr+qbV0EjJ+L6i2FECPr6Ygg==
 
 dunder-proto@^1.0.0, dunder-proto@^1.0.1:
   version "1.0.1"
@@ -6454,10 +6454,10 @@ map-obj@^4.0.0:
   resolved "https://registry.npmjs.org/map-obj/-/map-obj-4.3.0.tgz"
   integrity sha512-hdN1wVrZbb29eBGiGjJbeP8JbKjq1urkHJ/LIP/NY48MZ1QVXUsQBV1G1zvYFHn1XE06cwjBsOI2K3Ulnj1YXQ==
 
-mapbox-gl@^3.31.0:
-  version "3.31.0"
-  resolved "https://registry.yarnpkg.com/mapbox-gl/-/mapbox-gl-3.31.0.tgz#15fc2e59c8231cab242680f106a379504600a5d0"
-  integrity sha512-7i25NyCPW5jnqsqJq3irgBBEoVTJgfZqTJJS446Q3ZuxyAb5Om75UIcxYIo38oz9eDswnBXr0riz+M/C8V7g3Q==
+mapbox-gl@^3.32.0:
+  version "3.32.0"
+  resolved "https://registry.yarnpkg.com/mapbox-gl/-/mapbox-gl-3.32.0.tgz#5ef14e911985098c4c7d5400ce75246502eac53a"
+  integrity sha512-+P4qrlyejQYLyz1Bfzoe+d5Ff5vAghH54RNHm1q2VeAZqkSjQ5e1XlovQoSHlf4xqpRJtJG58kn8nkLwPMQung==
 
 math-intrinsics@^1.1.0:
   version "1.1.0"
