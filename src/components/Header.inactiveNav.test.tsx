@@ -263,6 +263,32 @@ describe("the desktop tab row while the inactive blocker is up", () => {
     expect(screen.getByRole("button", { name: "Admin" })).toBeDisabled();
   });
 
+  it.each(["Explore", "Requests", "My Group"])(
+    "gives %s the disabled variant that greys it",
+    (name) => {
+      // The desktop half of the affordance the mobile bar already had, which
+      // is what made a dead tab indistinguishable from a broken one. SCRUM-673.
+      //
+      // **The utility is unconditional and that is the point**, so this is not
+      // the usual "present when disabled" assertion and has no "absent when
+      // enabled" twin - the active rider below carries the same class. The
+      // variant lives on the class and the browser applies it only while the
+      // native attribute is set, which is what keeps `renderClassName` from
+      // having to learn about the state and stops the two drifting apart. What
+      // this guards is that the constant still carries it and still reaches
+      // the button; the attribute that fires it is guarded above.
+      //
+      // jsdom resolves no CSS, so nothing here proves a greyer tab. Measured
+      // in Chromium against the compiled stylesheet instead: 0.4 disabled
+      // against 1 live, the figure `MobileNavItem` uses.
+      renderHeader(INACTIVE_RIDER);
+
+      expect(screen.getByRole("button", { name })).toHaveClass(
+        "disabled:opacity-40",
+      );
+    },
+  );
+
   it("leaves the profile dropdown's trigger live", () => {
     renderHeader(INACTIVE_RIDER);
 

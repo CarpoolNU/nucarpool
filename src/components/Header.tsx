@@ -181,10 +181,11 @@ const MobileNavItem = styled.button<{ $active: boolean }>`
      the rule above sets pointer unconditionally, and a dead control must not
      claim to be clickable.
 
-     The desktop tabs have no equivalent and are not given one here: they share
-     the disabled behaviour, not the styling, and the Tailwind class every
-     desktop tab draws from is one string for all four states, so widening this
-     there is a visual change to every tab. SCRUM-673. */
+     The desktop tabs now fade to the same 0.4, carried by the Tailwind class
+     they all draw from - one figure for both viewports, so the two read as one
+     decision rather than two guesses. They take no cursor reset, because
+     nothing sets pointer on them: preflight leaves a button on the UA default,
+     which is already the default cursor. SCRUM-673. */
   &:disabled {
     cursor: default;
     opacity: 0.4;
@@ -313,9 +314,19 @@ export const SigninLogo = styled.h1`
  * Hoisted into a constant because the six branches below return two distinct
  * strings between them, so the padding would otherwise live in the file six
  * times.
+ *
+ * The disabled variant is the only state-dependent utility here, and it is
+ * carried by the class rather than chosen by `renderClassName`: the styling
+ * then follows the native attribute the four buttons already set, so the two
+ * cannot drift apart and the function never learns about the state. It fades
+ * the whole tab, which is what keeps the active one's underline honest - the
+ * underline marks where the user is, not what they can press, so dimming it
+ * with the rest says "inert" without losing the position. The Requests badge
+ * is a child and fades with it, for the same reason. The figure is the 0.4
+ * `MobileNavItem` uses, deliberately. SCRUM-673.
  */
 export const HEADER_NAV_BUTTON_CLASS =
-  "rounded-xl px-4 py-header-nav-y font-medium text-xl text-white";
+  "rounded-xl px-4 py-header-nav-y font-medium text-xl text-white disabled:opacity-40";
 
 /** The same tab, underlined, which is how the active one is marked. */
 export const HEADER_NAV_BUTTON_ACTIVE_CLASS = `underline underline-offset-8 ${HEADER_NAV_BUTTON_CLASS}`;
