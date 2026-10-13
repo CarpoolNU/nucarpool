@@ -30,6 +30,7 @@ import {
 } from "../utils/breakpoints";
 import {
   activeMobileNavItem,
+  isNavItemDisabled,
   planMobileNav,
   type NavTab,
 } from "../utils/nav/mobileNavPlan";
@@ -174,6 +175,21 @@ const MobileNavItem = styled.button<{ $active: boolean }>`
     props.$active ? "4px solid #000" : "4px solid transparent"};
   cursor: pointer;
 
+  /* An affordance for the disabled state, because without one the bar is four
+     identical-looking icons of which three silently do nothing - the same
+     incoherence SCRUM-669 was about, just moved. The cursor is reset because
+     the rule above sets pointer unconditionally, and a dead control must not
+     claim to be clickable.
+
+     The desktop tabs have no equivalent and are not given one here: they share
+     the disabled behaviour, not the styling, and the Tailwind class every
+     desktop tab draws from is one string for all four states, so widening this
+     there is a visual change to every tab. SCRUM-673. */
+  &:disabled {
+    cursor: default;
+    opacity: 0.4;
+  }
+
   &:focus-visible {
     outline: 2px solid #c8102e;
     outline-offset: -2px;
@@ -308,6 +324,23 @@ interface HeaderProps {
   data?: {
     sidebarValue: string;
     setSidebar: Dispatch<SetStateAction<HeaderOptions>>;
+    /**
+     * Switches off the header's map navigation. `pages/index.tsx` sets it from
+     * `showsInactiveBlocker(user)` at both of its render sites, so it means
+     * "the inactive blocker is on screen".
+     *
+     * **Read by both viewports, and they apply one rule**: the map tabs go
+     * dead and the route to the profile stays live, because that route is how
+     * the user clears the status the blocker is complaining about.
+     * `isNavItemDisabled` states the rule and explains it; the desktop tabs
+     * below and the mobile bar's three tabs both follow it, while
+     * `DropDownMenu` and the mobile Profile item - the two ways to the profile
+     * - are deliberately outside it.
+     *
+     * It used to be read only by `renderSidebarOptions`, which meant a phone
+     * supplied a value nothing looked at and an inactive user could walk
+     * between tabs behind the blocker. SCRUM-669.
+     */
     disabled: boolean;
     /**
      * Called when the mobile bottom nav's My Group tab is tapped while it is
@@ -679,6 +712,13 @@ const Header = (props: HeaderProps) => {
             type="button"
             $active={currentActiveTab === item.id}
             aria-current={currentActiveTab === item.id ? "page" : undefined}
+            // The native attribute, which is what the desktop tabs use, so
+            // both viewports stop the click the same way rather than one of
+            // them relying on the handler declining to act.
+            disabled={isNavItemDisabled({
+              option: item.id,
+              headerDisabled: props.data?.disabled,
+            })}
             onClick={() => {
               handleMobileNavClick(item.id);
             }}
