@@ -161,3 +161,44 @@ export function activeMobileNavItem({
   // so the return type can be the three tabs rather than `string`.
   return isNavTab(candidate) ? candidate : null;
 }
+
+/**
+ * Whether a navigation control is inert because the header was handed
+ * `disabled` - which `index.tsx` sets from `showsInactiveBlocker(user)`, so
+ * in practice it means "the inactive blocker is on screen".
+ *
+ * **The rule, stated once for both viewports: the map tabs go dead, the route
+ * to the profile stays live.** The blocker exists to send an inactive rider or
+ * driver to the Account tab to reactivate, so the one control that gets them
+ * there cannot be part of what the blocker switches off. Everything else in
+ * the header moves between views of a map the blocker is already covering, and
+ * has nothing to offer until the status changes.
+ *
+ * That is what the desktop header has always done, though not by consulting
+ * this function: `renderSidebarOptions` gates its four tabs on `disabled`
+ * while `DropDownMenu` - whose menu holds Profile - renders outside it and is
+ * never gated. The mobile bar's Profile item stands in for that dropdown, so
+ * honouring `disabled` on the three tabs and not on Profile makes the two
+ * viewports agree rather than merely look similar.
+ *
+ * Pure, and beside `planMobileNav` for the same reason: `Header` cannot be
+ * executed without a router, a tRPC client and a portal, so a rule living in
+ * that component is a rule nothing checks.
+ *
+ * @param option the tapped item's id. `isNavTab` is what makes Profile exempt
+ *   - the three tabs are exactly the ids it accepts, and "profile" is not one
+ *   of them. An id that is neither is not disabled either, matching
+ *   `planMobileNav`, which already answers `ignore` for it: there is no reason
+ *   to grey out a control that was never going to act.
+ * @param headerDisabled the header's own `data.disabled`. Optional because
+ *   only `pages/index.tsx` supplies `data` at all; `/profile` and `/admin`
+ *   render the same bar with no blocker to honour, and an absent value must
+ *   leave every item live rather than read as disabled.
+ */
+export const isNavItemDisabled = ({
+  option,
+  headerDisabled,
+}: {
+  option: string;
+  headerDisabled?: boolean;
+}): boolean => headerDisabled === true && isNavTab(option);

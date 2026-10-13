@@ -1,5 +1,6 @@
 import {
   activeMobileNavItem,
+  isNavItemDisabled,
   isNavTab,
   planMobileNav,
   tabHref,
@@ -199,5 +200,63 @@ describe("activeMobileNavItem", () => {
     // return type rather than left implicit.
     expect(active({ sidebarValue: "settings" })).toBeNull();
     expect(active({ sidebarValue: "", lastTapped: "" })).toBeNull();
+  });
+});
+
+/**
+ * The one rule both viewports follow while the inactive blocker is up: the map
+ * tabs go dead, the route to the profile stays live.
+ *
+ * The exemption is the point of these tests, not a detail of them. Disabling
+ * Profile along with the rest would leave the blocker's own button as the only
+ * exit from a state whose only remedy is on the profile page, so the test that
+ * matters most here is the one asserting Profile survives.
+ */
+describe("isNavItemDisabled", () => {
+  const whenBlocked = (option: string) =>
+    isNavItemDisabled({ option, headerDisabled: true });
+
+  it.each(["explore", "requests", "mygroup"] as const)(
+    "disables the %s tab",
+    (option) => {
+      expect(whenBlocked(option)).toBe(true);
+    },
+  );
+
+  it("leaves Profile live, which is the way out of being inactive", () => {
+    // The mobile bar's counterpart to DropDownMenu, which the desktop header
+    // renders outside renderSidebarOptions and never gates on `disabled`.
+    expect(whenBlocked("profile")).toBe(false);
+  });
+
+  it("covers every tab planMobileNav would act on, and only those", () => {
+    // Derived from `isNavTab` rather than restating the three ids, so a fourth
+    // tab cannot be added to the bar and silently escape the guard - a
+    // hardcoded list here would keep passing while the new tab stayed live.
+    const barItems = ["explore", "requests", "mygroup", "profile"];
+
+    expect(barItems.filter(whenBlocked)).toEqual(barItems.filter(isNavTab));
+  });
+
+  it("leaves every item live when the header is not disabled", () => {
+    for (const option of ["explore", "requests", "mygroup", "profile"]) {
+      expect(isNavItemDisabled({ option, headerDisabled: false })).toBe(false);
+    }
+  });
+
+  it("leaves every item live on the pages that supply no data prop", () => {
+    // /profile and /admin render the same bar through Header with no `data`,
+    // so `headerDisabled` arrives undefined. Absent must read as "nothing to
+    // honour" rather than as disabled: those pages have no blocker.
+    for (const option of ["explore", "requests", "mygroup", "profile"]) {
+      expect(isNavItemDisabled({ option })).toBe(false);
+    }
+  });
+
+  it("does not grey out an id the bar does not handle", () => {
+    // planMobileNav already answers `ignore` for these, so there is nothing to
+    // switch off.
+    expect(whenBlocked("admin")).toBe(false);
+    expect(whenBlocked("")).toBe(false);
   });
 });
