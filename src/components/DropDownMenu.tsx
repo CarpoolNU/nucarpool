@@ -68,7 +68,25 @@ const DropDownMenu = ({ checkChanges }: DropDownMenuProps) => {
             The `width`/`height` props stay at 56: they are `next/image`'s
             intrinsic hint for the raster it requests, not a layout figure, and
             the class above is what sizes the box. */}
-        <Menu.Button className="h-header-control w-header-control flex items-center justify-center overflow-hidden rounded-full">
+        {/* `aria-label` on the button, rather than relying on the avatar's
+            `alt`. `ProfileAvatar` forwards `alt` to `next/image` and nowhere
+            else, so of its three branches only the one that draws a picture
+            puts any text in the DOM - the placeholder is a bare `div` and the
+            fallback is a `react-icons` `svg` carrying no role and no title.
+            This button's only child is that avatar, so on the two branches
+            without text it had no accessible name at all, and those are the
+            ordinary ones: most accounts have no picture. SCRUM-672.
+
+            The name describes the control rather than the image for the same
+            reason it lives here. The button opens the account menu in all
+            three states, where "Profile Image" named a picture that is
+            usually absent and, when present, is not what pressing this does.
+            The `alt` below stays: it describes the image to someone browsing
+            images, and the label above is what the button is called. */}
+        <Menu.Button
+          aria-label="Account menu"
+          className="h-header-control w-header-control flex items-center justify-center overflow-hidden rounded-full"
+        >
           <ProfileAvatar
             alt="Profile Image"
             width={56}

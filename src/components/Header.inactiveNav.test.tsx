@@ -273,16 +273,13 @@ describe("the desktop tab row while the inactive blocker is up", () => {
     // would close that route and break the agreement without touching a
     // single tab.
     //
-    // Selected by `expanded` rather than by name: `Menu.Button`'s only child
-    // is `ProfileAvatar`, whose placeholder and fallback are both bare divs,
-    // so the `alt` text reaches the DOM only when a real image loads and the
-    // trigger has no accessible name here at all. The filter matches
-    // `aria-expanded="false"`, which Headless UI puts on the closed trigger
-    // and nothing else in the desktop header carries. The missing name is a
-    // defect in its own right - SCRUM-672 - and this suite works around it
-    // rather than asserting it. When that is fixed, select by name here and
-    // drop this note.
-    expect(screen.getByRole("button", { expanded: false })).toBeEnabled();
+    // Selected by name, which it has on all three of `ProfileAvatar`'s
+    // branches since SCRUM-672 put the label on `Menu.Button` instead of
+    // leaving it to the avatar's `alt`. The presigned URL resolves `{ url:
+    // null }` above, so this is the fallback branch - the one that had no
+    // name at all and forced this assertion to select by `aria-expanded`.
+    // `DropDownMenu.test.tsx` is where the name itself is pinned.
+    expect(screen.getByRole("button", { name: "Account menu" })).toBeEnabled();
   });
 
   it("leaves every tab live for an active rider", () => {
