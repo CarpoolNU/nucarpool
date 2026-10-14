@@ -47,6 +47,8 @@ const RIDER_2 = "user-rider-2";
 const OUTSIDER = "user-outsider";
 const GROUP = "group-1";
 const OTHER_GROUP = "group-2";
+/** Every fixture group was formed at the same moment; `formedAt` reads it. */
+const GROUP_FORMED_AT = new Date("2026-01-05T09:00:00.000Z");
 
 type SearchRow = {
   id: string;
@@ -67,7 +69,12 @@ type SearchRow = {
   groupConversationStyle?: string | null;
 };
 
-type GroupRow = { id: string };
+/**
+ * `dateCreated` is here because it is what a pairing row's `formedAt` is read
+ * from. A fixture without it would let the resolver record `null` and still
+ * satisfy an assertion that only checked the user ids.
+ */
+type GroupRow = { id: string; dateCreated: Date };
 
 type RequestPair = [string, string];
 
@@ -104,14 +111,19 @@ const defaultSearches = (): SearchRow[] => [
 
 const buildGroupsDb = (opts?: {
   searches?: SearchRow[];
-  groups?: GroupRow[];
+  groups?: { id: string; dateCreated?: Date }[];
   requests?: RequestPair[];
   /** Block rows, `blockerId` first. None by default: nobody has blocked anybody. */
   blocks?: BlockRow[];
 }) => {
   const searches = (opts?.searches ?? defaultSearches()).map((s) => ({ ...s }));
+  // `dateCreated` defaults, so the hundred fixtures that say nothing about
+  // when a group formed keep naming only its id.
   const groups = new Map<string, GroupRow>(
-    (opts?.groups ?? [{ id: GROUP }]).map((g) => [g.id, { ...g }]),
+    (opts?.groups ?? [{ id: GROUP }]).map((g) => [
+      g.id,
+      { dateCreated: GROUP_FORMED_AT, ...g },
+    ]),
   );
   const requests = opts?.requests ?? [[DRIVER, RIDER_1]];
 
@@ -228,7 +240,10 @@ const buildGroupsDb = (opts?: {
 
   const carpoolGroup = {
     create: jest.fn(async () => {
-      const row = { id: `group-created-${groups.size + 1}` };
+      const row = {
+        id: `group-created-${groups.size + 1}`,
+        dateCreated: GROUP_FORMED_AT,
+      };
       groups.set(row.id, row);
       return { ...row };
     }),
@@ -246,6 +261,32 @@ const buildGroupsDb = (opts?: {
       if (!g) throw new Error(`No group ${where.id}`);
       groups.delete(where.id);
       return { ...g };
+    }),
+  };
+
+  /**
+   * The durable pairing record.
+   *
+   * It is a real delegate rather than an absent one on purpose.
+   * `recordPairings` swallows every error so that a failed write can never
+   * fail somebody's departure, and a mock without this property would hand it
+   * a `TypeError` on every teardown - which it would swallow, leaving every
+   * assertion below about pairing rows vacuously true while the resolver did
+   * nothing at all.
+   */
+  const pairings: {
+    groupId: string;
+    userAId: string;
+    userBId: string;
+    driverId: string | null;
+    formedAt: Date | null;
+    endedAt: Date;
+  }[] = [];
+
+  const carpoolPairing = {
+    createMany: jest.fn(async ({ data }: any) => {
+      pairings.push(...data);
+      return { count: data.length };
     }),
   };
 
@@ -444,6 +485,7 @@ const buildGroupsDb = (opts?: {
     {
       carpoolSearch,
       carpoolGroup,
+      carpoolPairing,
       request,
       block,
       $executeRaw: executeRaw,
@@ -454,6 +496,7 @@ const buildGroupsDb = (opts?: {
       groups: cloneState(groups),
       requests: cloneState(requests),
       requestStatus: cloneState(requestStatus),
+      pairings: cloneState(pairings),
     }),
     (before) => {
       searches.length = 0;
@@ -465,6 +508,8 @@ const buildGroupsDb = (opts?: {
       requestStatus.clear();
       for (const [key, value] of before.requestStatus)
         requestStatus.set(key, value);
+      pairings.length = 0;
+      pairings.push(...before.pairings);
     },
   );
 
@@ -493,9 +538,14 @@ const buildGroupsDb = (opts?: {
       requestStatus.get(`${from}|${to}`),
     carpoolGroup,
     carpoolSearch,
+    carpoolPairing,
     request,
     block,
     executeRaw,
+    /** Pairing rows as `a|b`, sorted, so order of insertion does not matter. */
+    pairedUsers: () =>
+      pairings.map((row) => `${row.userAId}|${row.userBId}`).sort(),
+    pairingRows: () => pairings.map((row) => ({ ...row })),
   };
 };
 
@@ -713,6 +763,293 @@ describe("user.groups.delete — the driver dissolves the group", () => {
     );
 
     expect(db.groupIds()).toEqual([GROUP]);
+  });
+});
+
+/**
+ * The durable pairing record (SCRUM-636).
+ *
+ * What a mocked Prisma can settle: which rows each parting produces, that a
+ * refused parting produces none, and that a pairing write which fails does not
+ * take the departure down with it. What it cannot settle is that the write is
+ * genuinely inside the teardown transaction and survives the group's deletion
+ * in a real database — `carpoolPairing.db.test.ts` is where that lives.
+ */
+describe("user.groups — a parting leaves a durable record", () => {
+  const pair = (a: string, b: string) => [a, b].sort().join("|");
+
+  const remove = (riderId: string, groupId = GROUP) => ({
+    driverId: DRIVER,
+    riderId,
+    groupId,
+    add: false,
+  });
+
+  /** A group of exactly two, so removing the rider dissolves it. */
+  const twoMemberDb = () =>
+    buildGroupsDb({
+      searches: [
+        {
+          id: "s-driver",
+          userId: DRIVER,
+          role: Role.DRIVER,
+          carpoolId: GROUP,
+          seatsAvail: 1,
+        },
+        {
+          id: "s-rider-1",
+          userId: RIDER_1,
+          role: Role.RIDER,
+          carpoolId: GROUP,
+          seatsAvail: 0,
+        },
+      ],
+    });
+
+  describe("dissolving the group outright", () => {
+    it("records every pair in it, not only the driver's", async () => {
+      // Three members travelled together, so all three pairs ended. A rider
+      // who needs to report the *other* rider afterwards depends on the
+      // rider-to-rider row existing.
+      const { caller, db } = callerFor(sessionFor(DRIVER));
+
+      await caller.user.groups.delete({ groupId: GROUP });
+
+      expect(db.pairedUsers()).toEqual(
+        [
+          pair(DRIVER, RIDER_1),
+          pair(DRIVER, RIDER_2),
+          pair(RIDER_1, RIDER_2),
+        ].sort(),
+      );
+    });
+
+    it("names the driver and the moment the group formed", async () => {
+      const { caller, db } = callerFor(sessionFor(DRIVER));
+
+      await caller.user.groups.delete({ groupId: GROUP });
+
+      for (const row of db.pairingRows()) {
+        expect(row.driverId).toBe(DRIVER);
+        expect(row.groupId).toBe(GROUP);
+        expect(row.formedAt).toEqual(GROUP_FORMED_AT);
+        expect(row.endedAt).toBeInstanceOf(Date);
+      }
+    });
+
+    it("records nothing when the delete is refused", async () => {
+      // A rider cannot dissolve the group, and a pairing row written before
+      // the authorization check would claim a carpool ended that is still
+      // running.
+      const { caller, db } = callerFor(sessionFor(RIDER_1));
+
+      await expect(
+        caller.user.groups.delete({ groupId: GROUP }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+      expect(db.pairedUsers()).toEqual([]);
+    });
+
+    it("records nothing when the group row was already gone", async () => {
+      // The P2025 path. This call did not dissolve anything - whoever did
+      // recorded the pairings already - so a second set of rows here would
+      // double-count one dissolution.
+      const db = buildGroupsDb();
+      const { caller } = callerFor(sessionFor(DRIVER), db);
+
+      db.carpoolGroup.delete.mockImplementationOnce(async () => {
+        throw Object.assign(new Error("Record to delete does not exist."), {
+          code: "P2025",
+        });
+      });
+
+      await expect(
+        caller.user.groups.delete({ groupId: GROUP }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+      expect(db.pairedUsers()).toEqual([]);
+    });
+  });
+
+  describe("one member leaving a group that survives", () => {
+    it("records the departing member against each member they leave behind", async () => {
+      const { caller, db } = callerFor(sessionFor(RIDER_1));
+
+      await caller.user.groups.edit(remove(RIDER_1));
+
+      expect(db.pairedUsers()).toEqual(
+        [pair(RIDER_1, DRIVER), pair(RIDER_1, RIDER_2)].sort(),
+      );
+    });
+
+    it("leaves the pairs that are still carpooling unrecorded", async () => {
+      // The driver and the remaining rider have not parted, so recording them
+      // here would date their pairing from the wrong departure - and expire it
+      // twelve months early.
+      const { caller, db } = callerFor(sessionFor(RIDER_1));
+
+      await caller.user.groups.edit(remove(RIDER_1));
+
+      expect(db.pairedUsers()).not.toContain(pair(DRIVER, RIDER_2));
+    });
+
+    it("records the second departure too, so every pair lands exactly once", async () => {
+      const db = buildGroupsDb();
+      const { caller: riderOne } = callerFor(sessionFor(RIDER_1), db);
+      await riderOne.user.groups.edit(remove(RIDER_1));
+
+      const { caller: riderTwo } = callerFor(sessionFor(RIDER_2), db);
+      await riderTwo.user.groups.edit(remove(RIDER_2));
+
+      // The second removal leaves one member, which dissolves the group - and
+      // a group of one has no pair left to record, so the three rows here are
+      // the three pairs the group ever held, each written once.
+      expect(db.pairedUsers()).toEqual(
+        [
+          pair(RIDER_1, DRIVER),
+          pair(RIDER_1, RIDER_2),
+          pair(RIDER_2, DRIVER),
+        ].sort(),
+      );
+      expect(db.groupIds()).toEqual([]);
+    });
+
+    it("records nothing when the removal is refused", async () => {
+      const { caller, db } = callerFor(sessionFor(RIDER_1));
+
+      await expect(
+        caller.user.groups.edit(remove(RIDER_2)),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+      expect(db.pairedUsers()).toEqual([]);
+    });
+
+    it("records nothing when the removal changed no row", async () => {
+      // The loser of two racing removals. It throws NOT_FOUND from inside the
+      // transaction, and the pairing write sits after that check for exactly
+      // this reason: the departure it would describe is one this call did not
+      // make.
+      const db = buildGroupsDb();
+      const { caller } = callerFor(sessionFor(DRIVER), db);
+
+      overrideRawStatement(db, "SET carpoolId = NULL", async () => 0);
+
+      await expect(
+        caller.user.groups.edit(remove(RIDER_1)),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+      expect(db.pairedUsers()).toEqual([]);
+    });
+  });
+
+  describe("the group dissolving on the way out", () => {
+    it("records the pair once, from the departure rather than the dissolution", async () => {
+      // A group of two: the rider leaves, the group goes with them. The
+      // departure writes the row; the dissolution adds nothing, because the
+      // one member left has nobody to be paired with. Writing at both would
+      // duplicate it.
+      const db = twoMemberDb();
+      const { caller } = callerFor(sessionFor(RIDER_1), db);
+
+      const result = await caller.user.groups.edit(remove(RIDER_1));
+
+      expect(result).toBeNull();
+      expect(db.groupIds()).toEqual([]);
+      expect(db.pairedUsers()).toEqual([pair(DRIVER, RIDER_1)]);
+    });
+
+    it("records the driver's own departure the same way", async () => {
+      // A driver may leave a group of two - at three or more they are refused,
+      // because leaving would strand the rest. The row is the same pair in the
+      // same order either way; `driverId` is what distinguishes them.
+      const db = twoMemberDb();
+      const { caller } = callerFor(sessionFor(DRIVER), db);
+
+      await caller.user.groups.edit({
+        driverId: DRIVER,
+        riderId: DRIVER,
+        groupId: GROUP,
+        add: false,
+      });
+
+      expect(db.pairedUsers()).toEqual([pair(DRIVER, RIDER_1)]);
+      expect(db.pairingRows()[0].driverId).toBe(DRIVER);
+    });
+  });
+
+  it("records nothing when a member joins", async () => {
+    // Pairings end; they are not written at formation. A row at this point
+    // would claim a carpool that has not happened yet.
+    const db = buildGroupsDb({
+      searches: defaultSearches(),
+      requests: [[OUTSIDER, DRIVER]],
+      groups: [{ id: GROUP }],
+    });
+    const { caller } = callerFor(sessionFor(DRIVER), db);
+
+    await caller.user.groups.edit({
+      driverId: DRIVER,
+      riderId: OUTSIDER,
+      groupId: GROUP,
+      add: true,
+    });
+
+    expect(db.carpoolIdOf(OUTSIDER)).toBe(GROUP);
+    expect(db.pairedUsers()).toEqual([]);
+  });
+
+  describe("a pairing write that fails", () => {
+    let consoleError: jest.SpyInstance;
+
+    beforeEach(() => {
+      consoleError = jest.spyOn(console, "error").mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      consoleError.mockRestore();
+    });
+
+    it("does not stop a rider leaving", async () => {
+      // The decision this pins (SCRUM-636, SCRUM-554): parting wins. A rider
+      // who presses Leave must get out whether or not the record of it lands.
+      // The opposite - a failed insert trapping somebody in a group - is the
+      // strictly worse failure.
+      const db = buildGroupsDb();
+      const { caller } = callerFor(sessionFor(RIDER_1), db);
+
+      db.carpoolPairing.createMany.mockImplementationOnce(async () => {
+        throw new Error("carpool_pairing is unreachable");
+      });
+
+      await expect(
+        caller.user.groups.edit(remove(RIDER_1)),
+      ).resolves.toBeDefined();
+
+      expect(db.carpoolIdOf(RIDER_1)).toBeNull();
+      expect(db.pairedUsers()).toEqual([]);
+      expect(consoleError).toHaveBeenCalled();
+    });
+
+    it("does not stop the driver dissolving the group, or lose the seat credit", async () => {
+      // The whole teardown has to survive, not merely the delete: the seat
+      // credit is in the same transaction, and a rollback would leave the
+      // driver two seats short.
+      const db = buildGroupsDb();
+      const { caller } = callerFor(sessionFor(DRIVER), db);
+      const seatsBefore = db.seatsOf(DRIVER)!;
+
+      db.carpoolPairing.createMany.mockImplementationOnce(async () => {
+        throw new Error("carpool_pairing is unreachable");
+      });
+
+      await expect(
+        caller.user.groups.delete({ groupId: GROUP }),
+      ).resolves.toBeDefined();
+
+      expect(db.groupIds()).toEqual([]);
+      expect(db.seatsOf(DRIVER)).toBe(seatsBefore + 2);
+      expect(db.pairedUsers()).toEqual([]);
+    });
   });
 });
 

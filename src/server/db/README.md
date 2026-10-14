@@ -323,6 +323,35 @@ A report is filed through `user.reports.create` and read by admins through `user
 - **The snapshot is the one place admins read message text.** `getReports` reads the copy on the report, never the `message` table.
 - **Which reports email the admins depends on the reason, not on the report.** `REPORT_URGENCY` in `src/utils/reports.ts` classifies each `ReportReason` as `IMMEDIATE` or `DIGEST`. Only `SAFETY_CONCERN` is immediate; the rest are counted in the weekly digest below, which a critical report also appears in. There is **no severity column** on `report` and there should not be — the classification is a product decision over an existing enum, and a `Record` over it fails the type check until a newly added reason has been placed.
 
+## Carpool pairings
+
+`carpool_pairing` is the one record that outlives a carpool. Everything else about a pairing is erased when it ends: the `group` row is deleted, `carpool_search.carpoolId` is nulled, and the `ACCEPTED` request becomes deletable by either party, taking the conversation and its messages with it. Without this table the schema can answer "who is carpooling now" and nothing about "who carpooled" — which is what blocked post-parting reporting, the full version of post-match feedback, and every retention metric. See [`docs/design/post-match-feedback.md`](../../../docs/design/post-match-feedback.md).
+
+- **A row is written when two members stop sharing a group**, inside the teardown transaction, by `recordPairings` in [`carpoolPairing.ts`](carpoolPairing.ts). There are two paths and both write: `groups.delete` dissolving a group outright, and `groups.edit` parting one member. A dissolution of three members writes all three pairs — including rider-to-rider, which is the pair a driver-centred record would miss and exactly the one a rider reporting the _other_ rider needs.
+- **Each pairing is recorded once.** A departure from a group of three records only the departing member's two pairs; the pair left behind is recorded whenever it ends. The dissolution that fires at one remaining member adds nothing, because a group of one has no pair to end.
+- **Every id is a plain column.** `AdminAuditLog` and `Report` are the precedent. A relation would be a foreign key to a row deleted in the same transaction, and under `relationMode = "prisma"` the emulated cascade would then take the pairing with it — the erasure this table exists to stop.
+- **`userAId` is always the lexicographically smaller id.** So "did these two carpool" is one indexed lookup, and the same pair cannot be stored twice in opposite orders. Neither column means "driver"; `driverId` does, and is nullable because driverless groups exist in production (SCRUM-406) and their riders leave one at a time.
+- **A pair may hold several rows, and there is deliberately no unique constraint.** Two people who carpool twice are two pairings, and a rider removed and re-added to the same group parts twice. A constraint would turn the second parting into a failed write.
+
+### The pairing write can never fail a parting
+
+The two requirements pull against each other. The write has to be **inside** the teardown transaction, or a pairing could describe a parting that rolled back. But it must not be able to **fail** that transaction, because a failed insert would leave a user in a group they pressed Leave on — and the exits stay unconditionally open ([`blocks.ts`](blocks.ts), SCRUM-554). A missing row is recoverable; a trapped user is not.
+
+`recordPairings` resolves this by catching its own error. Prisma rolls an interactive transaction back only when the callback throws, and InnoDB rolls back the failed statement rather than the transaction, so the detach and the seat credit still commit. **Parting wins; the record is best-effort.** `carpoolPairing.db.test.ts` proves both directions — a failure elsewhere in the teardown takes the pairing with it, and a failure of the insert itself leaves the teardown committed.
+
+The `console.error` on that path is **not a control**: this repository has no known destination for deployed server logs, so nothing alerts on a lost row and nothing reconciles it afterwards.
+
+### Retention and visibility
+
+Decided on SCRUM-636, which is where the options considered and rejected are recorded. **Nothing reads these rows yet** — SCRUM-623 is the first feature that will — so the visibility rules below are a constraint on whoever writes the first reader, not a description of one that exists.
+
+- **Twelve months from `endedAt`**, not `formedAt`, so a carpool that ran for a year is not already half-expired the day it ends. Long enough for a co-op cycle plus the following term; short enough not to be a permanent social graph.
+- **Expiry is deletion, not anonymisation.** A pairing stripped of its user ids is useless to everything that reads it. [`scripts/expire-carpool-pairings.ts`](../../../scripts/expire-carpool-pairings.ts) is the sweep; **nothing runs it on a schedule** and SCRUM-675 tracks that. Filtering old rows out on read would hide them, and the commitment is that they are gone.
+- **A user may read only their own pairings**, scoped from `ctx.session` and never from input — the `user.blocks.me` precedent, which resolves `preferredName || name` rather than returning a `PublicUser`. A pairing list should expose a counterpart's display name and nothing beyond what the user already saw while connected. No endpoint lets one user read another's list.
+- **Admins may read pairings only where they already read reports.** This is not to grow an admin surface of its own.
+
+There is one known gap in completeness, documented at the call site in `groups.ts`: a rider whose accept commits between `delete`'s transaction snapshot and its detach is detached but gets no pairing row. The window is the width of that race and the lost pairing existed for its duration; closing it would mean holding locks across the teardown.
+
 ## The weekly report digest
 
 `report_digest_delivery` holds one row per Monday-to-Sunday reporting window, and answers only "has this week been delivered". `src/server/db/reportDigestDelivery.ts` owns it; `src/server/reportDigestWindow.ts` derives the windows.

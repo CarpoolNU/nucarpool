@@ -141,6 +141,7 @@ describe("deleteAllData — the guard is on the primitive, not just the caller",
       "carpoolSearch",
       "location",
       "carpoolGroup",
+      "carpoolPairing",
       "adminAuditLog",
       "emailSendBudget",
       "reportDigestDelivery",
@@ -150,11 +151,13 @@ describe("deleteAllData — the guard is on the primitive, not just the caller",
     ]);
   });
 
-  // `admin_audit_log` and `email_send_budget` declare no relation to `User`,
-  // so no cascade — emulated or otherwise — reaches them, and a re-seed would
-  // leave their rows behind pointing at deleted users. Nothing but this list
-  // deletes them, which is why the assertion is on the list.
-  it.each(["adminAuditLog", "emailSendBudget"])(
+  // `admin_audit_log`, `carpool_pairing` and `email_send_budget` declare no
+  // relation to `User`, so no cascade — emulated or otherwise — reaches them,
+  // and a re-seed would leave their rows behind pointing at deleted users.
+  // Nothing but this list deletes them, which is why the assertion is on the
+  // list. `carpool_pairing` holds denormalised ids by design, precisely so it
+  // outlives the rows it names, which is what puts it in this group.
+  it.each(["adminAuditLog", "carpoolPairing", "emailSendBudget"])(
     "deletes %s, which has no relation to User to cascade from",
     async (model) => {
       const { client, deletes } = recordingClient();
