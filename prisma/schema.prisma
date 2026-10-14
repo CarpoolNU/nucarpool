@@ -411,6 +411,78 @@ model Report {
   @@map("report")
 }
 
+// A record that two users carpooled together, written at the moment their
+// shared membership ends.
+//
+// **Why the application keeps this at all.** Membership is only
+// `CarpoolSearch.carpoolId`, and every trace of a pairing — the
+// `CarpoolGroup` row, the carpool id, the `ACCEPTED` request and the
+// conversation — is erased when the pairing ends, so the schema could answer
+// "who is carpooling now" and nothing about "who carpooled". Three separate
+// pieces of work each stalled on that: post-parting report and block, the
+// full version of post-match feedback, and every retention metric. See
+// `docs/design/post-match-feedback.md`.
+//
+// **Every id here is a plain column, not a relation.** `AdminAuditLog` and
+// `Report` are the precedent and the reason is the same: the point of the row
+// is to outlive what it describes. `groupId` names a `CarpoolGroup` that is
+// deleted in the very transaction that writes this row, so a relation would
+// be a foreign key to a row that is already gone — and under
+// `relationMode = "prisma"` the emulated `Cascade` would then take the
+// pairing with it, which is exactly the erasure this model exists to stop.
+// The user ids are deliberately denormalised for the same reason.
+//
+// **The two user ids are stored in a canonical order** — `userAId` is always
+// the lexicographically smaller of the two — so "did these two carpool" is
+// one indexed lookup rather than an `OR` over both columns, and so the same
+// pair cannot be written twice in opposite orders. Neither column means
+// "driver": `driverId` says that, and is nullable because driverless groups
+// exist in production (SCRUM-406) and a group can lose its driver while its
+// riders are still leaving one at a time.
+//
+// **A pair may hold several rows.** Two people who carpool, part, and carpool
+// again later are two pairings, and even within one `groupId` a rider who is
+// removed and re-added parts twice. So there is deliberately no unique
+// constraint: it would turn the second parting into a failed write, and a
+// pairing write must never be able to fail someone's exit from a group.
+//
+// **Retention is 12 months from `endedAt`**, enforced by deleting rows rather
+// than anonymising them — a pairing stripped of its user ids is useless to
+// everything that reads it. `scripts/expire-carpool-pairings.ts` is the sweep.
+// A user reads only their own pairings, scoped from `ctx.session`. See the
+// database README.
+model CarpoolPairing {
+  id          String    @id @default(cuid())
+  // The `CarpoolGroup` these users shared. Plain id: that row is deleted by
+  // the time this one is readable. It is also the "pairing identifier minted
+  // at formation" — one dissolution of a group of three writes three rows
+  // that share it, which is what lets a reader see them as one event.
+  groupId     String    @map("group_id")
+  userAId     String    @map("user_a_id")
+  userBId     String    @map("user_b_id")
+  driverId    String?   @map("driver_id")
+  // The group's own `dateCreated`. Nullable only because the group row can
+  // already be missing when a membership that still points at it is cleared —
+  // the orphan state `groups.me` guards against. Null means "not knowable",
+  // never "just formed"; nothing derives retention from it.
+  formedAt    DateTime? @map("formed_at")
+  // When the two stopped sharing a group. Retention is measured from here,
+  // not from `formedAt`, so a long carpool is not expired early.
+  endedAt     DateTime  @map("ended_at")
+  dateCreated DateTime  @default(now()) @map("date_created")
+
+  // `endedAt` trails each user id because every read of these rows is "this
+  // user's pairings", newest or most recent first, and the sweep below is the
+  // only reader that starts from the date alone.
+  @@index([userAId, endedAt])
+  @@index([userBId, endedAt])
+  // `scripts/expire-carpool-pairings.ts` selects on `endedAt` with no user.
+  @@index([endedAt])
+  // Reassembling one dissolution from its rows.
+  @@index([groupId])
+  @@map("carpool_pairing")
+}
+
 // Represents a VerificationToken--need this for NextAuth.
 model VerificationToken {
   identifier String

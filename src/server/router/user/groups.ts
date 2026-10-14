@@ -14,6 +14,7 @@ import {
   GROUP_OPTION_MAX_LENGTH,
 } from "../../../utils/textLimits";
 import { assertNotBlocked, assertNotBlockedForUpdate } from "../../db/blocks";
+import { buildPairings, recordPairings } from "../../db/carpoolPairing";
 
 /**
  * Carpool group authorization.
@@ -703,8 +704,9 @@ export const groupsRouter = router({
       const callerId = requireCallerId(ctx.session.user?.id);
       await requireGroupDriver(ctx.prisma, callerId, input.groupId);
 
-      // Detaching the members, crediting the driver and deleting the group
-      // commit together. Members are detached before the group row is
+      // Detaching the members, crediting the driver, deleting the group and
+      // recording that these people carpooled all commit together. Members
+      // are detached before the group row is
       // deleted, so a failure in between would leave a group nobody points at
       // — and it could not be cleaned up through the app at all: retrying
       // reaches `requireGroupDriver` above, whose membership lookup is
@@ -778,8 +780,9 @@ export const groupsRouter = router({
         // Throwing here still aborts the transaction, so the detach above and
         // the seat credit roll back together - which is right: this call did
         // not dissolve the group, and whoever did credited the seats already.
+        let deletedGroup;
         try {
-          return await tx.carpoolGroup.delete({
+          deletedGroup = await tx.carpoolGroup.delete({
             where: {
               id: input.groupId,
             },
@@ -793,6 +796,39 @@ export const groupsRouter = router({
           }
           throw error;
         }
+
+        // The one thing about this group that outlives it.
+        //
+        // Written *after* the delete and still inside the transaction, which
+        // is deliberate on both counts: after, because the group row is where
+        // `formedAt` comes from and the delete is what hands it back; inside,
+        // because a pairing recorded by a transaction that then rolled back
+        // would describe a dissolution that never happened. `recordPairings`
+        // cannot fail this transaction — see its comment for why that
+        // asymmetry is the right one.
+        //
+        // **This records the snapshot's membership, not the current one.** A
+        // rider whose accept committed between this transaction's snapshot
+        // and the detach above is detached by that raw `UPDATE` — which reads
+        // current rows, which is the whole reason it is raw — but is absent
+        // from `memberCarpoolSearches` and so gets no pairing row. The seat
+        // credit works around the same staleness by counting `detached`
+        // instead; there is no equivalent here, because a count cannot name
+        // the user who is missing. The loss is one pairing that existed for
+        // the width of that window, and closing it would mean holding locks
+        // across a transaction this sensitive.
+        await recordPairings(
+          tx,
+          buildPairings({
+            groupId: input.groupId,
+            members: memberCarpoolSearches,
+            departing: null,
+            formedAt: deletedGroup.dateCreated,
+            endedAt: new Date(),
+          }),
+        );
+
+        return deletedGroup;
       });
     }),
   edit: protectedRouter
@@ -1051,6 +1087,26 @@ export const groupsRouter = router({
             select: { id: true },
           });
 
+          // The membership and the formation date the pairing rows are built
+          // from, both read before anything below moves a `carpoolId` — after
+          // the detach the departing member is no longer in the group and
+          // there would be nothing left to pair them with.
+          //
+          // This is the path that records a departure from a group that
+          // *survives* it. The dissolution below needs no pairing write of
+          // its own: it only fires when one member is left, and a group of one
+          // has no pair to end. A rider removed from a group of three
+          // therefore writes their two rows here, and the pair they leave
+          // behind is written whenever that pair itself ends.
+          const membersBeforeRemoval = await tx.carpoolSearch.findMany({
+            where: { carpoolId: input.groupId },
+            select: { userId: true, role: true },
+          });
+          const groupRow = await tx.carpoolGroup.findUnique({
+            where: { id: input.groupId },
+            select: { dateCreated: true },
+          });
+
           // when removing rider, clear carpoolId for the rider
           //
           // Scoped to *this* group and count-checked, which is what makes the
@@ -1085,6 +1141,21 @@ export const groupsRouter = router({
               message: "That user is not a member of this carpool group.",
             });
           }
+
+          // After the count check, so a removal that changed nothing records
+          // nothing: the loser of two racing removals throws above, and a
+          // pairing written before that check would describe a departure this
+          // call did not make.
+          await recordPairings(
+            tx,
+            buildPairings({
+              groupId: input.groupId,
+              members: membersBeforeRemoval,
+              departing: input.riderId,
+              formedAt: groupRow?.dateCreated ?? null,
+              endedAt: new Date(),
+            }),
+          );
         }
 
         // Check if group should be deleted (only 1 member left)

@@ -105,6 +105,11 @@ export const SEED_DELETE_ORDER = [
   "carpoolSearch",
   "location",
   "carpoolGroup",
+  // Deleted even though nothing it names survives the wipe above: a pairing
+  // row is denormalised ids, so an emulated cascade reaches it from nowhere
+  // and it would otherwise be the one table a re-seed leaves holding rows
+  // about users who no longer exist.
+  "carpoolPairing",
   "adminAuditLog",
   "emailSendBudget",
   // Cleared, because the seed deletes every `report` above: a delivery row
@@ -153,6 +158,7 @@ const deletableModels = (
   carpoolSearch: client.carpoolSearch,
   location: client.location,
   carpoolGroup: client.carpoolGroup,
+  carpoolPairing: client.carpoolPairing,
   adminAuditLog: client.adminAuditLog,
   emailSendBudget: client.emailSendBudget,
   reportDigestDelivery: client.reportDigestDelivery,
