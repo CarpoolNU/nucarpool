@@ -120,11 +120,17 @@ const membershipOf = async (
  * a group can hold one DRIVER. Nothing else can say which of two is the real
  * one, because `CarpoolGroup` stores no owner. Two things keep it at one:
  * `create` and `edit` refuse anyone but a RIDER in the rider slot, and
- * `user.edit` - the only procedure that writes `role` - refuses every role
- * change while the caller is in a group, not only a driver leaving the role:
- * narrower than that would let a grouped rider promote themselves and pass
- * this check. A new path that writes `role` has to keep the
- * same rule, or this check stops meaning anything.
+ * `user.edit` refuses every role change while the caller is in a group, not
+ * only a driver leaving the role: narrower than that would let a grouped
+ * rider promote themselves and pass this check. A new path that writes `role`
+ * has to keep the same rule, or this check stops meaning anything.
+ *
+ * **Two procedures write `role` now**, so that last sentence is a live
+ * constraint rather than a hypothetical: `user.admin.setUserToViewer` lets a
+ * manager drop someone to VIEWER, and it refuses a target whose `carpoolId`
+ * is set for exactly this reason — both in a pre-check and again in the
+ * `WHERE` of the statement that writes, since the gap between the two is a
+ * race a group invitation can win.
  */
 const requireGroupDriver = async (
   prisma: PrismaClientLike,

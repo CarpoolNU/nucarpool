@@ -9,6 +9,7 @@ import { ConfigProvider, Select } from "antd";
 import { Note } from "../../styles/profile";
 import { AdminUser } from "../../utils/types";
 import useIsHydrated from "../../utils/useIsHydrated";
+import { viewerActionState } from "./viewerAction";
 
 type UserManagementProps = {
   permission: Permission;
@@ -89,6 +90,35 @@ const UserManagement = ({ permission }: UserManagementProps) => {
     } else {
       toast.error("User or Permission not selected");
     }
+  };
+
+  /*
+   * Dropping a user to VIEWER, which takes them out of matching.
+   *
+   * Refetches `getAllUsers` on success for the same reason the permission
+   * mutation does, and for one more: the row's own role is what decides
+   * whether this action stays available, so a stale list would keep offering
+   * an action the server now refuses.
+   */
+  const setUserToViewer = trpc.user.admin.setUserToViewer.useMutation({
+    onSuccess: () => {
+      toast.success("User set to viewer. They are no longer being matched.");
+      utils.user.admin.getAllUsers.refetch();
+    },
+    onError: (error) => {
+      toast.error(`Failed to set user to viewer: ${error.message}`);
+    },
+  });
+
+  const viewerAction = viewerActionState(selectedUser, permission);
+
+  const setToViewer = () => {
+    // Guarded by `disabled` below, so this is the stale-state case rather than
+    // a click the UI meant to allow: the list can change under a selection.
+    if (!viewerAction.enabled || !selectedUser) {
+      return;
+    }
+    setUserToViewer.mutate({ userId: selectedUser.id });
   };
   const groupedOptions = users
     ? [
@@ -192,6 +222,39 @@ const UserManagement = ({ permission }: UserManagementProps) => {
               >
                 Update Permission
               </button>
+            )}
+
+            {/*
+             * Carpool role, which is a different axis from the permission
+             * above: permission is what a user may administer, role is how
+             * they take part in matching. Separated by a rule and its own
+             * heading so the two are not read as one control.
+             *
+             * One-way by design. Restoring a role belongs to the profile form,
+             * which validates the schedule and addresses a RIDER or DRIVER
+             * needs and a VIEWER does not have — and since nothing is locked,
+             * the user can do it themselves.
+             */}
+            {permission === "MANAGER" && (
+              <div className="flex flex-col gap-2 border-t border-gray-200 pt-6">
+                <h2 className="font-montserrat text-center text-xl font-bold text-black">
+                  Carpool Role
+                </h2>
+                <Note>
+                  Setting a user to viewer removes them from matching. It is not
+                  a suspension — they can change their role back from their own
+                  profile.
+                </Note>
+                <button
+                  className="bg-northeastern-red font-lato hover:bg-busy-red mt-2 w-full justify-center rounded-2xl py-2 font-bold text-white disabled:cursor-not-allowed disabled:bg-gray-400"
+                  onClick={setToViewer}
+                  disabled={!viewerAction.enabled || setUserToViewer.isPending}
+                  title={viewerAction.enabled ? undefined : viewerAction.reason}
+                >
+                  Set to Viewer
+                </button>
+                {!viewerAction.enabled && <Note>{viewerAction.reason}</Note>}
+              </div>
             )}
           </div>
         </div>

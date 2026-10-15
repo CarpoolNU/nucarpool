@@ -68,13 +68,16 @@ import { trpcSpies, resetTrpcSpies } from "../../testing/trpcHarness";
  * `enabled` through - so a fix that computed the gate but failed to pass it
  * shows up here as a fetch that still happens.
  *
- * `updateUserPermission` is inert and `useUtils` comes from the harness: the
- * component calls both during render and neither is the subject.
+ * `updateUserPermission` and `setUserToViewer` are inert and `useUtils` comes
+ * from the harness: the component calls all three during render and none of
+ * them is the subject. `setUserToViewer`'s own decision about when it may be
+ * offered is tested as a function, in `viewerAction.test.ts`.
  */
 jest.mock("../../utils/trpc", () =>
   require("../../testing/trpcHarness").buildTrpcMock({
     "user.admin.getAllUsers": { query: () => behaviour() },
     "user.admin.updateUserPermission": { inertMutation: true },
+    "user.admin.setUserToViewer": { inertMutation: true },
   }),
 );
 

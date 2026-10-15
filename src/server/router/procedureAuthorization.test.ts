@@ -109,6 +109,10 @@ const PROCEDURE_AUTHORIZATION: Record<string, ProcedureClass> = {
   "user.admin.getDashboardSeries": "admin",
   "user.admin.getDashboardStats": "admin",
   "user.admin.updateUserPermission": "admin",
+  // `admin` is the class, but the resolver additionally requires MANAGER —
+  // the same arrangement as `updateUserPermission` above, and tested the
+  // same way, in `admin.test.ts` rather than here.
+  "user.admin.setUserToViewer": "admin",
   "user.admin.getAuditLog": "admin",
   "user.admin.getReports": "admin",
   "user.admin.resolveReport": "admin",

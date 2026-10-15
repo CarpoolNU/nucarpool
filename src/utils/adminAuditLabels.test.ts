@@ -7,6 +7,7 @@ import {
 
 const PERMISSION = "user.admin.updateUserPermission";
 const RESOLVE = "user.admin.resolveReport";
+const TO_VIEWER = "user.admin.setUserToViewer";
 
 /** A realistic cuid — long enough that the shortening actually fires. */
 const CUID = "clx3k9a0b0000qwertyuiop12";
@@ -27,6 +28,7 @@ describe("describeAuditAction", () => {
   it("names each known action in words rather than its procedure path", () => {
     expect(describeAuditAction(PERMISSION)).toBe("Permission changed");
     expect(describeAuditAction(RESOLVE)).toBe("Report resolved");
+    expect(describeAuditAction(TO_VIEWER)).toBe("Carpool role changed");
   });
 
   it("prints an unmapped action verbatim rather than blank", () => {
@@ -174,6 +176,33 @@ describe("describeAuditDetails", () => {
         "rep-1",
       ),
     ).toEqual({ text: "Marked DISMISSED · report rep-1" });
+  });
+
+  it("says what a role row changed and what it changed from", () => {
+    // Both halves matter. The target can set their own role back, so once
+    // they do, this cell is the only surviving record of what it had been.
+    expect(
+      describeAuditDetails(
+        TO_VIEWER,
+        JSON.stringify({ role: "VIEWER", previousRole: "DRIVER" }),
+        "user-2",
+      ),
+    ).toEqual({ text: "Set to VIEWER from DRIVER" });
+  });
+
+  it("still names the new role when a role row lost its previous one", () => {
+    // `previousRole` is the half this feature added, so a row written before
+    // it existed — or one hand-written — should degrade to the part that is
+    // present rather than fall back to the raw JSON.
+    expect(
+      describeAuditDetails(TO_VIEWER, JSON.stringify({ role: "VIEWER" }), "u"),
+    ).toEqual({ text: "Set to VIEWER" });
+  });
+
+  it("falls back for a role row carrying no role at all", () => {
+    expect(
+      describeAuditDetails(TO_VIEWER, '{"previousRole":"RIDER"}', "user-2"),
+    ).toEqual({ text: '{"previousRole":"RIDER"}' });
   });
 
   it("leaves the cell empty when the row carried no metadata", () => {

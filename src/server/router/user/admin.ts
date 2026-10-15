@@ -223,6 +223,20 @@ export const adminDataRouter = router({
         id: true,
         email: true,
         permission: true,
+        // Whether `setUserToViewer` may be offered for a row turns on the
+        // user's role and on whether they are in a carpool group. Read here
+        // with the list rather than per selection: the screen already holds
+        // every user, and a second query per click would be a privileged read
+        // for something this one can carry for free.
+        //
+        // `FIRST_SEARCH` is the one-search-per-user assumption the rest of the
+        // codebase makes, and a nested select rather than a second `findMany`
+        // keeps this to one query — the property `getAllUsers`'s own test
+        // pins down.
+        carpoolSearches: {
+          ...FIRST_SEARCH,
+          select: { role: true, carpoolId: true },
+        },
       },
     });
   }),
@@ -544,6 +558,143 @@ export const adminDataRouter = router({
         });
 
         return updated;
+      });
+    }),
+
+  /**
+   * Drops a user's `CarpoolSearch.role` to `VIEWER`, which removes them from
+   * matching: `candidateSearch` never offers a VIEWER to anyone and never
+   * offers anyone to a VIEWER, so no new exclusion logic is needed to take
+   * someone out of circulation.
+   *
+   * **This is not a suspension, and must not be described as one.** `user.edit`
+   * writes `role` straight from the profile form, so the target can set
+   * themselves back to RIDER or DRIVER as soon as they notice. That was a
+   * deliberate product decision on SCRUM-679 — the alternative needs a column
+   * to lock against and so a migration and a Deploy Request. SCRUM-619 tracks
+   * the locked version. Treat this as an admin correction tool with an audit
+   * trail, not as enforcement.
+   *
+   * One-way, hence no `role` in the input. Promoting someone back from here
+   * would write a row `user.edit` would never accept: a VIEWER is exempt from
+   * the schedule and address requirements, so an admin-made DRIVER could have
+   * neither. Restoring a role belongs to the form that validates it, and since
+   * nothing is locked, the user can do it themselves.
+   *
+   * MANAGER rather than plain admin, matching `updateUserPermission` and
+   * SCRUM-619's note that a mutation removing someone's reach should sit
+   * behind the stricter of the two gates. The cost is real and was accepted:
+   * an ADMIN can read the report queue but cannot act on it here.
+   */
+  setUserToViewer: adminRouter
+    .input(z.object({ userId: z.string() }).strict())
+    .mutation(async ({ ctx, input }) => {
+      const permission = ctx.session.user?.permission;
+      if (permission !== "MANAGER") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Unauthorized access.",
+        });
+      }
+      if (input.userId === ctx.session.user?.id) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Cannot change your own role.",
+        });
+      }
+
+      // As in `updateUserPermission`: `isAdmin` already guarantees a session,
+      // so a missing id is something unexpectedly wrong rather than a caller
+      // who lacks permission.
+      const actorId = ctx.session.user?.id;
+      if (!actorId) {
+        throw new TRPCError({ code: "UNAUTHORIZED" });
+      }
+
+      // `userId` is unique on `CarpoolSearch`, so this is the user's only
+      // search — the invariant the rest of the codebase relies on, enforced by
+      // a real MySQL index rather than assumed.
+      //
+      // Outside the transaction deliberately, matching `updateUserPermission`:
+      // it commits nothing, and failing before the transaction opens keeps the
+      // atomic section to the two writes that belong together.
+      const search = await ctx.prisma.carpoolSearch.findUnique({
+        where: { userId: input.userId },
+        select: { id: true, role: true, carpoolId: true },
+      });
+
+      if (!search) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          // Covers both "no such user" and "never onboarded" without the
+          // second read it would take to tell them apart. Neither is
+          // actionable differently, and both already read as VIEWER through
+          // `user.me`'s default, so there is genuinely nothing to change.
+          message: "This user has no carpool search to change.",
+        });
+      }
+
+      // `user.edit` refuses every role change while the user is in a group,
+      // and this must refuse the same ones rather than offer an admin a way
+      // around it. Turning a group's only DRIVER into a VIEWER is the state
+      // nothing recovers from: `requireGroupDriver` then throws FORBIDDEN for
+      // every member, so nobody can remove anybody or dissolve the group, and
+      // the riders' shared preferences — read through the driver's own search
+      // — vanish. The long comment at the guard in `user.ts` has the detail.
+      if (search.carpoolId) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message:
+            "This user is in a carpool group. The group must be left or " +
+            "dissolved before their role can be changed.",
+        });
+      }
+
+      // Refused rather than treated as a no-op success. The write would be
+      // harmless, but the audit row would not: it would record a manager
+      // changing a role that was already what it is, and the log is the one
+      // place this feature leaves evidence.
+      if (search.role === Role.VIEWER) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "This user is already a viewer.",
+        });
+      }
+
+      return ctx.prisma.$transaction(async (tx) => {
+        // A conditional raw UPDATE rather than a Prisma `update`, for the
+        // reason `user.edit` gives where it does the same thing: the group
+        // check above is a read, so on its own it is only a guess about the
+        // moment of the write — the target can accept a group invitation in
+        // between. Re-asserting `carpoolId IS NULL` in the statement is what
+        // makes the guard hold, and InnoDB gives a raw UPDATE a current read
+        // where a transaction's snapshot read would happily win a race it
+        // should lose.
+        const claimed = await tx.$executeRaw`
+          UPDATE carpool_search
+          SET role = ${Role.VIEWER}
+          WHERE id = ${search.id} AND carpoolId IS NULL
+        `;
+
+        if (claimed === 0) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message:
+              "This user joined a carpool group while the change was in " +
+              "progress. Reload the user list and try again.",
+          });
+        }
+
+        await tx.adminAuditLog.create({
+          data: buildAuditLogEntry({
+            actorId,
+            action: AdminAuditAction.SET_USER_TO_VIEWER,
+            targetId: input.userId,
+            metadata: { role: Role.VIEWER, previousRole: search.role },
+          }),
+        });
+
+        return { id: search.id, role: Role.VIEWER };
       });
     }),
 
