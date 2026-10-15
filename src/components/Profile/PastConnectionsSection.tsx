@@ -6,7 +6,7 @@ import { trpc } from "../../utils/trpc";
 import UserActionsMenu from "../UserActions/UserActionsMenu";
 
 /**
- * The people the reader used to carpool with, each with Report and Block.
+ * The people the reader used to be connected to, each with Report and Block.
  *
  * **Why this screen exists.** `UserActionsMenu` was reachable only from a
  * live user card and a live conversation header, and a parting destroys both:
@@ -16,6 +16,18 @@ import UserActionsMenu from "../UserActions/UserActionsMenu";
  * SCRUM-636 kept the `CarpoolPairing` row that survives all of that, and this
  * is the surface that reads it. This is a third call site for that menu, not
  * a second menu.
+ *
+ * **Two kinds of connection, one list.** SCRUM-676 added the other half: a
+ * pair who exchanged messages, never carpooled, and whose request was then
+ * deleted by either party. `MessageContact` records those, and
+ * `user.pastConnections.me` merges both records before this sees them - so
+ * the component runs one query, holds no merge rule of its own, and does not
+ * re-sort or re-group what it is given.
+ *
+ * The two are labelled apart because they describe different relationships.
+ * Telling a reader they carpooled with someone they only exchanged messages
+ * with would be a claim about a shared ride that never happened, made to
+ * someone who is deciding whether to report that person.
  *
  * It sits in the profile's Account section beside `BlockedUsersSection` and
  * `ReportsFiledSection`, and outside its react-hook-form for the same reason
@@ -31,16 +43,17 @@ import UserActionsMenu from "../UserActions/UserActionsMenu";
  * does not.
  *
  * **What a row shows is a display name and a date**, which is the visibility
- * position recorded on SCRUM-623. The reader already had both while they were
- * carpooling. `driverId`, `formedAt` and `groupId` are on the row and the
- * procedure never returns them.
+ * position recorded on SCRUM-623 and carried forward unchanged by SCRUM-676.
+ * The reader already had both while they were connected. `driverId`,
+ * `formedAt` and `groupId` are on the pairing row and the procedure never
+ * returns them.
  *
  * No `requestId` is passed to the menu: the conversation a report would have
  * snapshotted is gone, `reports.create` takes `requestId` as optional, and a
  * report filed from here simply carries no snapshot.
  */
 const PastConnectionsSection = () => {
-  const pairings = trpc.user.carpoolPairings.me.useQuery();
+  const connections = trpc.user.pastConnections.me.useQuery();
 
   return (
     <section aria-labelledby="past-connections-heading" className="pb-8">
@@ -50,21 +63,23 @@ const PastConnectionsSection = () => {
         id="past-connections-heading"
         className="font-montserrat mt-4 mb-4 text-2xl font-bold"
       >
-        People You&apos;ve Carpooled With
+        People You&apos;ve Connected With
       </h2>
 
-      {pairings.isPending ? (
+      {connections.isPending ? (
         <Spinner />
-      ) : pairings.isError ? (
+      ) : connections.isError ? (
         <QueryError
-          subject="your past carpools"
-          onRetry={() => void pairings.refetch()}
+          subject="your past connections"
+          onRetry={() => void connections.refetch()}
         />
-      ) : pairings.data.length === 0 ? (
-        <Note className="py-2">You haven&apos;t finished a carpool yet.</Note>
+      ) : connections.data.length === 0 ? (
+        <Note className="py-2">
+          You haven&apos;t connected with anyone yet.
+        </Note>
       ) : (
         <ul className="divide-y divide-gray-200 rounded-md border border-gray-200">
-          {pairings.data.map((entry) => (
+          {connections.data.map((entry) => (
             <li
               key={entry.userId}
               className="flex items-center justify-between gap-4 px-4 py-3"
@@ -82,12 +97,18 @@ const PastConnectionsSection = () => {
                   A `<time>` element, so the machine-readable instant survives
                   the formatting - `superjson` means `endedAt` arrives as a
                   real `Date`, not a string that has to be reparsed.
+
+                  The verb comes from `kind`, which the server decided. A
+                  counterpart in both records is a carpool one, because that
+                  is the stronger description of the same relationship - see
+                  `pastConnections.ts` for why that is not picked by recency.
                 */}
                 <time
                   dateTime={entry.endedAt.toISOString()}
                   className="font-montserrat block text-sm text-gray-600"
                 >
-                  Carpooled until {format(entry.endedAt, "MMM dd yyyy")}
+                  {entry.kind === "CARPOOLED" ? "Carpooled" : "Messaged"} until{" "}
+                  {format(entry.endedAt, "MMM dd yyyy")}
                 </time>
               </div>
               <UserActionsMenu
@@ -100,10 +121,19 @@ const PastConnectionsSection = () => {
         </ul>
       )}
 
+      {/*
+        The window is written out rather than imported. Both retention
+        constants live in modules that pull `@prisma/client` in, which has no
+        business in a client bundle. `PastConnectionsSection.test.tsx` imports
+        them instead, where the bundle does not matter, and asserts both that
+        the number here matches and that the two windows still agree - so a
+        change to either policy fails that test rather than quietly leaving
+        this screen telling users the wrong number.
+      */}
       <Note className="py-2">
-        You can report or block someone you carpooled with in the last 12
-        months, even after the carpool has ended. They aren&apos;t told either
-        way.
+        You can report or block someone you carpooled with or messaged in the
+        last 12 months, even after the connection has ended. They aren&apos;t
+        told either way.
       </Note>
     </section>
   );

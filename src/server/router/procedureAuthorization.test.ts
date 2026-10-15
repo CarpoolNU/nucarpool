@@ -99,7 +99,7 @@ const PROCEDURE_AUTHORIZATION: Record<string, ProcedureClass> = {
   // to without a session. It must never become `public` - the rows pair two
   // real users by id, and an unscoped read of them would be the social graph
   // the retention decision on SCRUM-623 deliberately kept private.
-  "user.carpoolPairings.me": "protected",
+  "user.pastConnections.me": "protected",
   // The admin surface. Each of these reads or writes something a student must
   // not reach: the full user table, the dashboard aggregates, the report queue
   // (which carries message text from reported conversations), the permission

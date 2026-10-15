@@ -4,6 +4,7 @@ import { act } from "react";
 import PastConnectionsSection from "./PastConnectionsSection";
 import { BLOCK_GROUP_MEMBER_MESSAGE } from "../../server/router/user/blocks";
 import { PAIRING_RETENTION_MONTHS } from "../../server/db/carpoolPairing";
+import { CONTACT_RETENTION_MONTHS } from "../../server/db/messageContact";
 import { toastSpies } from "../../testing/toastStub";
 
 /**
@@ -64,7 +65,7 @@ jest.mock("../../utils/trpc", () => {
         mapbox: { geoJsonUserList: invalidatable() },
       }),
       user: {
-        carpoolPairings: {
+        pastConnections: {
           me: { useQuery: () => mockQuery },
         },
         blocks: {
@@ -111,11 +112,20 @@ const TAYLOR = {
   userId: "user-taylor",
   name: "Taylor",
   endedAt: new Date("2026-03-04T12:00:00.000Z"),
+  kind: "CARPOOLED" as const,
 };
 const JORDAN = {
   userId: "user-jordan",
   name: "Jordan",
   endedAt: new Date("2025-11-19T12:00:00.000Z"),
+  kind: "CARPOOLED" as const,
+};
+/** Someone the reader only ever messaged, whose request was deleted. */
+const RILEY = {
+  userId: "user-riley",
+  name: "Riley",
+  endedAt: new Date("2026-01-08T12:00:00.000Z"),
+  kind: "MESSAGED" as const,
 };
 
 beforeEach(() => {
@@ -133,14 +143,14 @@ const openMenu = async (
 };
 
 describe("PastConnectionsSection", () => {
-  it("says so when there are no past carpools", () => {
+  it("says so when there are no past connections", () => {
     render(<PastConnectionsSection />);
 
     expect(
-      screen.getByRole("heading", { name: "People You've Carpooled With" }),
+      screen.getByRole("heading", { name: "People You've Connected With" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("You haven't finished a carpool yet."),
+      screen.getByText("You haven't connected with anyone yet."),
     ).toBeInTheDocument();
     expect(screen.queryByRole("list")).not.toBeInTheDocument();
   });
@@ -151,7 +161,7 @@ describe("PastConnectionsSection", () => {
 
     expect(screen.getByRole("alert")).toBeInTheDocument();
     expect(
-      screen.queryByText("You haven't finished a carpool yet."),
+      screen.queryByText("You haven't connected with anyone yet."),
     ).not.toBeInTheDocument();
 
     await userEvent
@@ -176,6 +186,49 @@ describe("PastConnectionsSection", () => {
     expect(
       screen.getByRole("button", { name: "More actions for Jordan" }),
     ).toBeInTheDocument();
+  });
+
+  /*
+   * SCRUM-676. The two kinds are labelled apart because they describe
+   * different relationships: telling someone they carpooled with a person they
+   * only exchanged messages with would be a claim about a shared ride that
+   * never happened, and the reader is about to decide whether to report that
+   * person.
+   */
+  it("labels a messaged-only counterpart as messaged, not carpooled", () => {
+    mockQuery.data = [RILEY];
+    render(<PastConnectionsSection />);
+
+    const rows = within(screen.getByRole("list")).getAllByRole("listitem");
+    expect(rows.map((row) => row.textContent)).toEqual([
+      "RileyMessaged until Jan 08 2026",
+    ]);
+  });
+
+  it("gives a messaged-only counterpart the same actions menu", () => {
+    // The whole point of the ticket: a counterpart who was only ever messaged
+    // is reportable and blockable on exactly the same terms as one who was
+    // carpooled with.
+    mockQuery.data = [RILEY];
+    render(<PastConnectionsSection />);
+
+    expect(
+      screen.getByRole("button", { name: "More actions for Riley" }),
+    ).toBeInTheDocument();
+  });
+
+  it("renders both kinds in one list, in the order given", () => {
+    // One list, not two sections. The server has already merged and ordered
+    // them; the component does not re-sort or re-group.
+    mockQuery.data = [TAYLOR, RILEY, JORDAN];
+    render(<PastConnectionsSection />);
+
+    const rows = within(screen.getByRole("list")).getAllByRole("listitem");
+    expect(rows.map((row) => row.textContent)).toEqual([
+      "TaylorCarpooled until Mar 04 2026",
+      "RileyMessaged until Jan 08 2026",
+      "JordanCarpooled until Nov 19 2025",
+    ]);
   });
 
   /*
@@ -256,6 +309,18 @@ describe("PastConnectionsSection", () => {
         new RegExp(`in the last ${PAIRING_RETENTION_MONTHS} months`),
       ),
     ).toBeInTheDocument();
+  });
+
+  /*
+   * The note quotes **one** number for both kinds of connection, which is
+   * only honest while the two records keep the same window. They are separate
+   * constants on purpose - SCRUM-676 chose the same twelve months as
+   * SCRUM-636 rather than importing it, so that shortening one cannot
+   * silently shorten the other - and this is what notices if they diverge.
+   * If they ever do, the note needs two numbers, not one.
+   */
+  it("is only telling the truth while both windows are the same length", () => {
+    expect(CONTACT_RETENTION_MONTHS).toBe(PAIRING_RETENTION_MONTHS);
   });
 
   it("keeps the row when a report fails", async () => {

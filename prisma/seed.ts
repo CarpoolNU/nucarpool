@@ -110,6 +110,10 @@ export const SEED_DELETE_ORDER = [
   // and it would otherwise be the one table a re-seed leaves holding rows
   // about users who no longer exist.
   "carpoolPairing",
+  // The same, for the same reason. `message_contact` outlives the `request`
+  // deleted above by design - that is the whole point of the record - so
+  // deleting the requests does not reach it, and nothing else would.
+  "messageContact",
   "adminAuditLog",
   "emailSendBudget",
   // Cleared, because the seed deletes every `report` above: a delivery row
@@ -159,6 +163,7 @@ const deletableModels = (
   location: client.location,
   carpoolGroup: client.carpoolGroup,
   carpoolPairing: client.carpoolPairing,
+  messageContact: client.messageContact,
   adminAuditLog: client.adminAuditLog,
   emailSendBudget: client.emailSendBudget,
   reportDigestDelivery: client.reportDigestDelivery,

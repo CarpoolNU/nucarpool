@@ -483,6 +483,62 @@ model CarpoolPairing {
   @@map("carpool_pairing")
 }
 
+// Represents a durable record that two users corresponded, kept past the
+// deletion of the request that carried their conversation.
+//
+// The sibling of `CarpoolPairing`, and deliberately a separate table rather
+// than a `kind` column on that one. `CarpoolPairing.groupId` is NOT NULL and
+// doubles as the identifier that lets one dissolution of a group of three be
+// read back as a single event; a pair who only ever messaged have no group, so
+// sharing the table would mean half the rows carrying a required column with
+// nothing truthful in it, beside a `driverId` and a `formedAt` that are
+// equally meaningless for them. SCRUM-676 records the decision and the two
+// options rejected.
+//
+// **A row is written when the request is deleted, not when it is sent.** A
+// live request needs no row: the conversation still exists and
+// `UserActionsMenu` reaches it from `MessageHeader`. Only a deleted request
+// leaves anybody unreachable, so only a deleted request writes here.
+// Recording contact at the other obvious moment — the first message — would
+// have meant a row per request ever sent, because `requests.create` writes the
+// opening message itself, and that is a record of every approach anyone makes
+// rather than of the ones that ended somewhere unreachable.
+model MessageContact {
+  id          String   @id @default(cuid())
+  // The two correspondents, denormalised and held in a canonical order so that
+  // "did these two correspond" is one indexed lookup from either side. Plain
+  // ids, as on `CarpoolPairing`: the request they came from is deleted by the
+  // time this row is readable, and `relationMode = "prisma"` could not enforce
+  // a relation to `User` anyway.
+  userAId     String   @map("user_a_id")
+  userBId     String   @map("user_b_id")
+  // When the two stopped corresponding — the moment the request was deleted.
+  // Retention is measured from here.
+  endedAt     DateTime @map("ended_at")
+  // First contact, not most recent. The row is upserted and `endedAt` moves
+  // forward; this stays where it started.
+  dateCreated DateTime @default(now()) @map("date_created")
+
+  // **The one shape difference from `CarpoolPairing`, and the reason this
+  // record's reader needs no dedupe pass.** That model inserts freely and
+  // collapses rows per counterpart on read, which is safe there because a
+  // group teardown is heavyweight and rare. Creating and deleting a request is
+  // neither — the same pair can do it in a loop — so an insert per delete
+  // would let one pair write unbounded rows. One row per pair, upserted,
+  // bounds the table; and because the upsert moves `endedAt` forward, the
+  // retention clock measures the most recent contact, which is what "twelve
+  // months from the end of contact" should mean.
+  @@unique([userAId, userBId])
+  // `endedAt` trails each user id because every read of these rows is "this
+  // user's correspondents", most recent first, and the sweep below is the only
+  // reader that starts from the date alone.
+  @@index([userAId, endedAt])
+  @@index([userBId, endedAt])
+  // `scripts/expire-message-contacts.ts` selects on `endedAt` with no user.
+  @@index([endedAt])
+  @@map("message_contact")
+}
+
 // Represents a VerificationToken--need this for NextAuth.
 model VerificationToken {
   identifier String

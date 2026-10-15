@@ -11,7 +11,7 @@ This directory is the server-side API. Every endpoint the app exposes is a tRPC 
 | [`index.ts`](./index.ts)               | Merges subrouters into `appRouter` and exports its type                                                                                       |
 | [`user.ts`](./user.ts)                 | Core user procedures; mounts everything in [`user/`](./user)                                                                                  |
 | [`mapbox.ts`](./mapbox.ts)             | Address search, map user list, and directions                                                                                                 |
-| [`user/`](./user)                      | Feature subrouters: `admin`, `blocks`, `carpoolPairings`, `email`, `favorites`, `groups`, `message`, `recommendations`, `reports`, `requests` |
+| [`user/`](./user)                      | Feature subrouters: `admin`, `blocks`, `email`, `favorites`, `groups`, `message`, `pastConnections`, `recommendations`, `reports`, `requests` |
 
 `appRouter` is served over HTTP by [`[trpc].ts`](../../pages/api/trpc/%5Btrpc%5D.ts).
 
