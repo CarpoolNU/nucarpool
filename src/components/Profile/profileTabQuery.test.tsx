@@ -87,6 +87,10 @@ jest.mock("../../components/Profile/AccountSection", () => ({
   __esModule: true,
   default: () => <div>account section</div>,
 }));
+jest.mock("../../components/Profile/PastConnectionsSection", () => ({
+  __esModule: true,
+  default: () => null,
+}));
 jest.mock("../../components/Profile/BlockedUsersSection", () => ({
   __esModule: true,
   default: () => null,
