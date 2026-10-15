@@ -51,6 +51,7 @@ import Header from "../../components/Header";
 import PageTitle from "../../components/PageTitle";
 import CarpoolSection from "../../components/Profile/CarpoolSection";
 import AccountSection from "../../components/Profile/AccountSection";
+import PastConnectionsSection from "../../components/Profile/PastConnectionsSection";
 import BlockedUsersSection from "../../components/Profile/BlockedUsersSection";
 import ReportsFiledSection from "../../components/Profile/ReportsFiledSection";
 import SafetySection from "../../components/Profile/SafetySection";
@@ -677,10 +678,15 @@ const Index: NextPage = () => {
                     errors={errors}
                     setValue={setValue}
                   />
-                  {/* Beside the form rather than in it: unblocking takes
-                      effect immediately and is not part of Save Changes.
-                      The reports list is read-only and belongs to Save
-                      Changes even less. */}
+                  {/* Beside the form rather than in it: reporting,
+                      blocking and unblocking all take effect immediately and
+                      are not part of Save Changes. The reports list is
+                      read-only and belongs to Save Changes even less.
+
+                      Past carpools lead, because that section is the one the
+                      reader acts *from*; the two below it are records of
+                      actions already taken. */}
+                  <PastConnectionsSection />
                   <BlockedUsersSection />
                   <ReportsFiledSection />
                   <SafetySection />
@@ -731,10 +737,15 @@ const Index: NextPage = () => {
                     errors={errors}
                     setValue={setValue}
                   />
-                  {/* Beside the form rather than in it: unblocking takes
-                      effect immediately and is not part of Save Changes.
-                      The reports list is read-only and belongs to Save
-                      Changes even less. */}
+                  {/* Beside the form rather than in it: reporting,
+                      blocking and unblocking all take effect immediately and
+                      are not part of Save Changes. The reports list is
+                      read-only and belongs to Save Changes even less.
+
+                      Past carpools lead, because that section is the one the
+                      reader acts *from*; the two below it are records of
+                      actions already taken. */}
+                  <PastConnectionsSection />
                   <BlockedUsersSection />
                   <ReportsFiledSection />
                   <SafetySection />

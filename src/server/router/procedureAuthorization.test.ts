@@ -93,6 +93,13 @@ const PROCEDURE_AUTHORIZATION: Record<string, ProcedureClass> = {
   // caller has no reports. It is `protected` because there is no caller to
   // scope to without a session, not as a second line of defence.
   "user.reports.me": "protected",
+  // The same shape as `reports.me` above, and `protected` for the same
+  // reason: it takes no input, derives the reader from `ctx.session`, and
+  // returns only pairings that name that reader. There is no caller to scope
+  // to without a session. It must never become `public` - the rows pair two
+  // real users by id, and an unscoped read of them would be the social graph
+  // the retention decision on SCRUM-623 deliberately kept private.
+  "user.carpoolPairings.me": "protected",
   // The admin surface. Each of these reads or writes something a student must
   // not reach: the full user table, the dashboard aggregates, the report queue
   // (which carries message text from reported conversations), the permission

@@ -19,6 +19,7 @@ import { recommendationsRouter } from "./user/recommendations";
 import { emailsRouter } from "./user/email";
 import { blocksRouter } from "./user/blocks";
 import { reportsRouter } from "./user/reports";
+import { carpoolPairingsRouter } from "./user/carpoolPairings";
 import {
   deleteProfileImage,
   generatePresignedUrl,
@@ -927,4 +928,5 @@ export const userRouter = router({
   admin: adminDataRouter,
   blocks: blocksRouter,
   reports: reportsRouter,
+  carpoolPairings: carpoolPairingsRouter,
 });
