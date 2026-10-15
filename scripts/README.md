@@ -15,7 +15,7 @@ Node 22, per [`.nvmrc`](../.nvmrc). `ts-node` comes from `node_modules`, so run 
 
 **Why these are not `yarn` scripts.** Most are one-shot tools meant to be [retired](#retiring-a-script) once applied everywhere. A `package.json` entry each would recreate a mess this repository has had once — several entries pointing at long-deleted files — and the explicit `npx ts-node` keeps `--apply` visible at the call site rather than hidden behind an alias.
 
-**Two scripts are exceptions to both opening sentences**, and they are worth reading before the tables below. `send-report-digest.ts` is **recurring rather than one-shot** — it is meant to run every Monday, for as long as the app exists — and it is the only script here that is in fact scheduled. `expire-carpool-pairings.ts` is recurring too, and enforces a retention window rather than repairing anything, but **nothing schedules it**: see [Expiring carpool pairings is not scheduled](#expiring-carpool-pairings-is-not-scheduled). A Lambda defined in [`infra/report-digest/`](../infra/report-digest/) does the scheduling, and calls the same code rather than this file: see [Scheduling the report digest](#scheduling-the-report-digest).
+**Two scripts are exceptions to both opening sentences**, and they are worth reading before the tables below. `send-report-digest.ts` is **recurring rather than one-shot** — it is meant to run every Monday, for as long as the app exists — and it is the only script here that is in fact scheduled. `expire-carpool-pairings.ts` is recurring too, and enforces a retention window rather than repairing anything, but **nothing schedules it yet** — SCRUM-675 chose a Lambda and SCRUM-677 is blocked on AWS access, so a dated tripwire test holds the obligation in the meantime: see [Expiring carpool pairings is not scheduled yet](#expiring-carpool-pairings-is-not-scheduled-yet). A Lambda defined in [`infra/report-digest/`](../infra/report-digest/) does the scheduling, and calls the same code rather than this file: see [Scheduling the report digest](#scheduling-the-report-digest).
 
 ## Scripts that write
 
@@ -66,18 +66,24 @@ npx ts-node scripts/send-report-digest.ts --week 2026-09-28 # a week that was mi
 
 **The trigger does not have to fire reliably**, because the window is derived and the delivery is claimed: a missed Monday is sent by naming the week, and a doubled one sends nothing twice. That property is what made the choice of trigger replaceable rather than load-bearing — and what lets the stack be deleted without touching a row.
 
-### Expiring carpool pairings is not scheduled
+### Expiring carpool pairings is not scheduled yet
 
-**Nothing invokes `expire-carpool-pairings`.** Unlike the digest above it has no Lambda, no schedule and no workflow — it is a hand-run chore, and SCRUM-675 is the ticket that decides whether that changes.
+**Nothing invokes `expire-carpool-pairings`.** Unlike the digest above it has no Lambda, no schedule and no workflow — it is a hand-run chore.
 
-That is a deliberate sequencing choice rather than an oversight, and the reason it is tolerable is arithmetic: the pairing record began accumulating the day SCRUM-636 shipped, and the window is twelve months, so **the sweep has nothing to find until October 2027**. A dry run before then reports zero, which is also the answer to "has this been run" — unlike the repair scripts, a zero here does not distinguish "already run" from "never run", because nothing has yet aged out either way.
+**SCRUM-675 decided where it is going: the same place the digest went.** A scheduled Lambda beside [`infra/report-digest/`](../infra/report-digest/), reusing its packaging and its alarm shape, with the dry run behind a stack parameter so an armed schedule reports before it is ever trusted to delete. [SCRUM-677](https://carpoolnu.atlassian.net/browse/SCRUM-677) carries that work and is **blocked on AWS account access** — nobody working in this repository can deploy a CloudFormation stack, and the digest's own stack has never been applied to an account either. Committing a second never-deployed template would have bought no enforcement and added a second artifact nothing here can verify.
+
+**A scheduled GitHub Actions workflow was rejected outright**, on the same grounds the digest rejected it: a production `DATABASE_URL` in repository secrets, reachable by every workflow in the repository, is a materially larger exposure than this sweep's value justifies. See [why a Lambda rather than a GitHub Actions cron](../infra/report-digest/README.md#why-a-lambda-rather-than-a-github-actions-cron).
+
+That leaves a hand-run chore, and the reason it is tolerable is arithmetic: the pairing record began accumulating the day SCRUM-636 shipped, and the window is twelve months, so **the sweep has nothing to find until October 2027**. A dry run before then reports zero, which is also the answer to "has this been run" — unlike the repair scripts, a zero here does not distinguish "already run" from "never run", because nothing has yet aged out either way.
 
 ```bash
 npx ts-node scripts/expire-carpool-pairings.ts            # what would be deleted
 npx ts-node scripts/expire-carpool-pairings.ts --apply    # delete it
 ```
 
-**A filter on read would not substitute for this.** The decision on SCRUM-636 is that expired rows are gone, not hidden, so no reader may be written that treats old rows as absent and leaves them in the table.
+**A hand-run chore is a process control, so one thing here is not.** [`expire-carpool-pairings.test.ts`](./expire-carpool-pairings.test.ts) carries a dated tripwire: from **2027-07-01** it fails, and the failure message is the handover — what is overdue, the three ways to resolve it, and the fact that moving the date is legitimate only if the reason is recorded on SCRUM-677. Three months of lead before the first row can age out on 2027-10-14. It is a deliberate landmine, chosen over a warning nobody reads and a calendar reminder that lives where a reader of this directory cannot find it. **Deleting it without scheduling the sweep removes the only thing in this repository that enforces the retention window.**
+
+**A filter on read would not substitute for the sweep.** The decision on SCRUM-636 is that expired rows are gone, not hidden, so no reader may be written that treats old rows as absent and leaves them in the table.
 
 ## Read-only scripts
 

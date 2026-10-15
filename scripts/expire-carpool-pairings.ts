@@ -7,12 +7,17 @@
  * is the half of that decision which makes it true — a reader that merely
  * filters old rows out hides them, and the commitment was that they are gone.
  *
- * **Nothing in this repository runs on a schedule.** This is a hand-run chore
- * until something does, which is what SCRUM-675 tracks. It is safe to leave
- * un-run for a while and it is safe to run twice: the window is twelve months
- * and the record only began accumulating when this shipped, so for the first
- * year there is nothing for it to find, and `scripts/README.md` describes how
- * to tell whether it still has work to do.
+ * **Nothing runs this on a schedule yet.** SCRUM-675 decided it should be a
+ * scheduled Lambda beside `infra/report-digest/`, and SCRUM-677 carries that
+ * work, blocked on AWS account access; a scheduled GitHub Actions workflow was
+ * rejected rather than deferred, because it would put a production
+ * `DATABASE_URL` in repository secrets. Until SCRUM-677 lands this is a
+ * hand-run chore, and `expire-carpool-pairings.test.ts` holds the obligation
+ * with a tripwire that fails CI from 2027-07-01. It is safe to leave un-run
+ * for a while and it is safe to run twice: the window is twelve months and the
+ * record only began accumulating when this shipped, so for the first year
+ * there is nothing for it to find, and `scripts/README.md` describes how to
+ * tell whether it still has work to do.
  *
  * Safety, because this deletes production rows:
  *
