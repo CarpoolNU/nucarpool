@@ -34,7 +34,7 @@ This directory is the server-side API. Every endpoint the app exposes is a tRPC 
 
 That middleware answers **authentication** — is there a session, and does it belong to staff. It does not answer **authorization** — may _this_ caller act on _this_ record. Every NUCarpool user is signed in, so "requires a session" is not by itself a meaningful control on a mutation that names a user, group, or request id.
 
-Procedures that touch a specific record therefore carry their own ownership check in the handler, on top of the middleware. `favorites.edit` derives the owning user from `ctx.session` rather than accepting it; `admin.updateUserPermission` is the one procedure that narrows the middleware further, requiring `MANAGER`.
+Procedures that touch a specific record therefore carry their own ownership check in the handler, on top of the middleware. `favorites.edit` derives the owning user from `ctx.session` rather than accepting it; `admin.updateUserPermission` and `admin.setUserToViewer` are the two procedures that narrow the middleware further, each requiring `MANAGER` in its own handler. Both also refuse a caller who targets themselves, which the middleware cannot express.
 
 ## Writing a procedure
 

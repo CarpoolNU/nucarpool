@@ -387,8 +387,11 @@ export const userRouter = router({
         // Nobody in a group can change role while they are in it, in either
         // direction. A group's roles are what the group routes authorize
         // against - `groups.ts` stores no owner, so "the driver" is whichever
-        // member's search reads DRIVER - and this is the only procedure that
-        // writes `role`.
+        // member's search reads DRIVER.
+        //
+        // This is one of two procedures that write `role`;
+        // `user.admin.setUserToViewer` is the other, and it refuses a grouped
+        // target rather than giving a manager a way around this rule.
         //
         // Away from DRIVER, dropping a group's only DRIVER leaves a state
         // nothing can get out of: `requireGroupDriver` then throws FORBIDDEN

@@ -52,6 +52,16 @@ const buildPrismaMock = () => {
     carpoolSearch: {
       findMany: jest.fn().mockResolvedValue([]),
       count: jest.fn().mockResolvedValue(0),
+      // The target's search, read by `setUserToViewer` before it opens its
+      // transaction. Answers with an ungrouped RIDER by default — the one
+      // shape that is eligible — so the tests about the write itself are
+      // unaffected; the refusal tests each override it with the shape they
+      // are about.
+      findUnique: jest.fn().mockResolvedValue({
+        id: "search-1",
+        role: Role.RIDER,
+        carpoolId: null,
+      }),
     },
     adminAuditLog: {
       create: jest.fn().mockResolvedValue({}),
@@ -229,7 +239,19 @@ describe("getAllUsers", () => {
 
     expect(prisma.user.findMany).toHaveBeenCalledWith({
       where: { email: { not: null } },
-      select: { id: true, email: true, permission: true },
+      select: {
+        id: true,
+        email: true,
+        permission: true,
+        // Role and group membership decide whether the screen may offer
+        // `setUserToViewer` for a row, so they are read with the list rather
+        // than per selection. `take: 1` is the one-search-per-user
+        // assumption the rest of the codebase makes.
+        carpoolSearches: {
+          take: 1,
+          select: { role: true, carpoolId: true },
+        },
+      },
     });
   });
 
@@ -926,6 +948,152 @@ describe("updateUserPermission", () => {
 
     expect(prisma.user.update).toHaveBeenCalledTimes(1);
     expect(prisma.adminAuditLog.create).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * `setUserToViewer` is the admin half of SCRUM-619, and deliberately only a
+ * half: it removes someone from matching by writing `CarpoolSearch.role`, but
+ * nothing stops the target setting the role back from their own profile. That
+ * is a recorded product decision, not a gap these tests should paper over —
+ * there is no "stays a viewer" assertion to write, because that is not a
+ * property the code has.
+ *
+ * What the tests below do pin down is the part that would be dangerous to get
+ * wrong: the write must never land on a search that belongs to a carpool
+ * group. `user.edit` refuses a role change for exactly that reason
+ * (`user.ts:414`) — turning a group's only DRIVER into a VIEWER leaves
+ * `requireGroupDriver` throwing FORBIDDEN for every member, so nobody can
+ * remove anybody or dissolve the group. An admin path that wrote `role`
+ * without that guard would be a way to reach that state deliberately.
+ */
+describe("setUserToViewer", () => {
+  it("refuses a non-manager with FORBIDDEN rather than an opaque 500", async () => {
+    const { caller, prisma } = callerFor(adminSession(Permission.ADMIN));
+
+    await expect(
+      caller.user.admin.setUserToViewer({ userId: "someone-else" }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(prisma.$executeRaw).not.toHaveBeenCalled();
+    expect(prisma.adminAuditLog.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses a manager targeting themselves with FORBIDDEN", async () => {
+    const { caller, prisma } = callerFor(adminSession(Permission.MANAGER));
+
+    await expect(
+      caller.user.admin.setUserToViewer({ userId: "admin-1" }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(prisma.$executeRaw).not.toHaveBeenCalled();
+  });
+
+  it("answers NOT_FOUND when the target has no carpool search to change", async () => {
+    // Either the id names nobody, or it names someone who never onboarded.
+    // Both already read as VIEWER through `user.me`'s default, so there is
+    // nothing to write and the manager should not be told otherwise.
+    const { caller, prisma } = callerFor(adminSession(Permission.MANAGER));
+    prisma.carpoolSearch.findUnique.mockResolvedValue(null);
+
+    await expect(
+      caller.user.admin.setUserToViewer({ userId: "no-such-user" }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    // tRPC answers NOT_FOUND for an unrouted path too, so the code alone
+    // would pass against a procedure that does not exist. Proving the lookup
+    // happened is what makes this an assertion about the resolver.
+    expect(prisma.carpoolSearch.findUnique).toHaveBeenCalled();
+    expect(prisma.$executeRaw).not.toHaveBeenCalled();
+    expect(prisma.adminAuditLog.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses a target who is in a carpool group, leaving the group alone", async () => {
+    const { caller, prisma } = callerFor(adminSession(Permission.MANAGER));
+    prisma.carpoolSearch.findUnique.mockResolvedValue({
+      id: "search-1",
+      role: Role.DRIVER,
+      carpoolId: "group-1",
+    });
+
+    await expect(
+      caller.user.admin.setUserToViewer({ userId: "someone-else" }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(prisma.$executeRaw).not.toHaveBeenCalled();
+    expect(prisma.adminAuditLog.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses a target who is already a VIEWER, so the log holds no no-op row", async () => {
+    const { caller, prisma } = callerFor(adminSession(Permission.MANAGER));
+    prisma.carpoolSearch.findUnique.mockResolvedValue({
+      id: "search-1",
+      role: Role.VIEWER,
+      carpoolId: null,
+    });
+
+    await expect(
+      caller.user.admin.setUserToViewer({ userId: "someone-else" }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(prisma.adminAuditLog.create).not.toHaveBeenCalled();
+  });
+
+  it("reads the search belonging to the target, not to the acting manager", async () => {
+    // Guards against a check that reads `ctx.session.user.id` and so inspects
+    // the manager's own search for every target.
+    const { caller, prisma } = callerFor(adminSession(Permission.MANAGER));
+
+    await caller.user.admin.setUserToViewer({ userId: "someone-else" });
+
+    expect(prisma.carpoolSearch.findUnique).toHaveBeenCalledWith({
+      where: { userId: "someone-else" },
+      select: { id: true, role: true, carpoolId: true },
+    });
+  });
+
+  it("writes the role and one audit entry naming the actor, target and previous role", async () => {
+    const { caller, prisma } = callerFor(adminSession(Permission.MANAGER));
+
+    await caller.user.admin.setUserToViewer({ userId: "someone-else" });
+
+    expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
+    expect(prisma.adminAuditLog.create).toHaveBeenCalledTimes(1);
+    expect(prisma.adminAuditLog.create).toHaveBeenCalledWith({
+      data: {
+        actorId: "admin-1",
+        action: "user.admin.setUserToViewer",
+        targetId: "someone-else",
+        // `previousRole` is the whole value of this row. The target can set
+        // their role back themselves, so the log is the only surviving record
+        // of what it was when the manager acted.
+        metadata: JSON.stringify({
+          role: Role.VIEWER,
+          previousRole: Role.RIDER,
+        }),
+      },
+    });
+  });
+
+  it("guards the write itself on the search still being ungrouped", async () => {
+    // The group check above is a read, so on its own it is only a
+    // time-of-check/time-of-use guess: the target can accept a group
+    // invitation between that read and this write. `user.edit` solves the
+    // same race with a conditional raw UPDATE rather than a Prisma `update`,
+    // because a transaction's snapshot read can "win" a race it should lose;
+    // the comment at `user.ts:490` has the detail. This asserts the condition
+    // is actually in the statement, not just in the earlier `if`.
+    const { caller, prisma } = callerFor(adminSession(Permission.MANAGER));
+
+    await caller.user.admin.setUserToViewer({ userId: "someone-else" });
+
+    const sql = (prisma.$executeRaw.mock.calls[0][0] as string[]).join("?");
+    expect(sql).toContain("carpoolId IS NULL");
+  });
+
+  it("answers CONFLICT and writes no audit entry when it loses that race", async () => {
+    const { caller, prisma } = callerFor(adminSession(Permission.MANAGER));
+    prisma.$executeRaw.mockResolvedValueOnce(0); // Nothing matched the WHERE.
+
+    await expect(
+      caller.user.admin.setUserToViewer({ userId: "someone-else" }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(prisma.adminAuditLog.create).not.toHaveBeenCalled();
   });
 });
 

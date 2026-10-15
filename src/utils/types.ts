@@ -17,6 +17,18 @@ export type AdminUser = {
   id: string;
   email: string;
   permission: Permission;
+  /**
+   * The user's single `CarpoolSearch`, or an empty array for someone who never
+   * onboarded. Nested rather than flattened, unlike the `user.me` shape, because
+   * this list is read straight from Prisma by `getAllUsers` and nothing merges
+   * it — see the data-model note in `CLAUDE.md` about flat in the frontend not
+   * meaning flat in storage.
+   *
+   * Present so the user-management screen can tell whether `setUserToViewer`
+   * applies to a row: it does not for a user who is already a VIEWER, and the
+   * server refuses it for one who is in a carpool group.
+   */
+  carpoolSearches: { role: Role; carpoolId: string | null }[];
 };
 
 /** One row of `AdminAuditLog`, as `getAuditLog` returns it. */

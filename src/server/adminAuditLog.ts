@@ -6,10 +6,22 @@ import { Prisma } from "@prisma/client";
  * admin mutation (the account-suspension action this ticket's Jira issue
  * mentions) can start writing here without a schema change, which is the
  * whole point of this file covering "any future admin mutation".
+ *
+ * `SET_USER_TO_VIEWER` is the first action to take that offer up, and SCRUM-679
+ * cost no schema change because of it.
  */
 export const AdminAuditAction = {
   UPDATE_USER_PERMISSION: "user.admin.updateUserPermission",
   RESOLVE_REPORT: "user.admin.resolveReport",
+  /**
+   * A manager dropping someone's `CarpoolSearch.role` to `VIEWER`, which takes
+   * them out of matching. Its metadata carries `previousRole` as well as the
+   * new one, and that is not redundant: the target can set their own role back
+   * from the profile form, so once they do, this row is the only surviving
+   * evidence of what the role was when the manager acted. See SCRUM-619 for the
+   * locked version that would make this a real suspension.
+   */
+  SET_USER_TO_VIEWER: "user.admin.setUserToViewer",
 } as const;
 
 export type AdminAuditAction =

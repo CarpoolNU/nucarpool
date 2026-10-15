@@ -81,6 +81,33 @@ const DISPLAY: Record<AdminAuditAction, AuditDisplay> = {
       return permission ? { text: `Set to ${permission}` } : null;
     },
   },
+  "user.admin.setUserToViewer": {
+    label: "Carpool role changed",
+    targetKind: "user",
+    /*
+     * Names what the role became *and* what it had been. The second half is
+     * not decoration: the target can set their own role back from the profile
+     * form — this action locks nothing — so once they do, this cell is the
+     * only surviving record of what it was when the manager acted.
+     *
+     * Degrades to the new role alone rather than to raw JSON when
+     * `previousRole` is absent, so a row that predates it still reads as a
+     * sentence. The new role is the half that cannot be missing: without it
+     * there is nothing to report, hence `null`.
+     */
+    describe: (metadata) => {
+      const role = stringField(metadata, "role");
+      if (!role) {
+        return null;
+      }
+      const previousRole = stringField(metadata, "previousRole");
+      return {
+        text: previousRole
+          ? `Set to ${role} from ${previousRole}`
+          : `Set to ${role}`,
+      };
+    },
+  },
   "user.admin.resolveReport": {
     label: "Report resolved",
     targetKind: "report",
