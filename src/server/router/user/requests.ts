@@ -13,6 +13,7 @@ import {
 } from "../../db/conversationLink";
 import { MESSAGE_MAX_LENGTH } from "../../../utils/textLimits";
 import { assertNotBlocked, blockedCounterpartIds } from "../../db/blocks";
+import { buildContact, recordContact } from "../../db/messageContact";
 
 /**
  * Why `delete` refuses a pair who are currently carpooling together.
@@ -860,6 +861,45 @@ export const requestsRouter = router({
             message: CARPOOLING_PAIR_DELETE_MESSAGE,
           });
         }
+
+        // The pair corresponded, and this is the last moment anything records
+        // that they did (SCRUM-676).
+        //
+        // **Here, and not at the other two obvious moments.** Not when the
+        // request was created or its first message sent: `create` writes the
+        // opening message itself a few hundred lines above, so that trigger is
+        // "every request ever sent" and would retain a record of every
+        // approach anyone makes, including one declined seconds later. Not on
+        // accept either, which would miss the case this exists for — a
+        // harassing request the recipient never accepts. A *live* request
+        // needs no record at all, because the conversation still exists and
+        // `UserActionsMenu` reaches it from `MessageHeader`. The deletion is
+        // both the moment the counterpart becomes unreachable and the moment
+        // contact genuinely ended, which is what `endedAt` has to mean for the
+        // twelve-month window to be honest.
+        //
+        // **Placed after the conditional `DELETE` has reported a row, and
+        // before the early return below.** After, because a delete the
+        // compare-and-swap refused recorded nothing and must not write — that
+        // pair are still carpooling and still perfectly reachable. Before,
+        // because most requests have no conversation at all and the `return`
+        // below takes that path out of the transaction; writing after it would
+        // silently skip the 462-of-477 case.
+        //
+        // `recordContact` cannot throw. That is the whole reason it is shaped
+        // the way it is: Prisma rolls an interactive transaction back when its
+        // callback throws, so a failure here that propagated would undo the
+        // `DELETE` above and strand the user on a request they asked to clear.
+        // The exits stay unconditionally open (`src/server/db/blocks.ts`,
+        // SCRUM-554); the record is best-effort.
+        await recordContact(
+          tx,
+          buildContact({
+            fromUserId: invitation.fromUserId,
+            toUserId: invitation.toUserId,
+            endedAt: new Date(),
+          }),
+        );
 
         // Resolved rather than filtered in place, so the messages can be
         // deleted by id. Most requests have no conversation at all — 462 of

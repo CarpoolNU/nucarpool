@@ -46,6 +46,13 @@ type RequestRow = {
   conversationId: string | null;
 };
 
+/** A `MessageContact` row as the fake delegate below stores it. */
+type ContactFixture = {
+  userAId: string;
+  userBId: string;
+  endedAt: Date;
+};
+
 const requestRow = (
   id: string,
   fromUserId: string,
@@ -365,6 +372,28 @@ const buildRequestsDb = (
   // of the transaction snapshot.
   const block = fakeBlockDelegate();
 
+  /**
+   * The durable contact record `delete` writes on its way out (SCRUM-676).
+   *
+   * Keyed on the ordered pair rather than appended to, because the real table
+   * carries `@@unique([userAId, userBId])` and the write is an upsert: a fake
+   * that accumulated a row per call would let a test pass that the database
+   * would reject, and would hide the bounding property the unique index
+   * exists for. Inside the transaction snapshot below, so a rolled-back
+   * delete rolls the record back with it.
+   */
+  const contacts = new Map<string, ContactFixture>();
+
+  const messageContactUpsert = jest.fn(
+    async ({ where, update, create }: any) => {
+      const key = `${where.userAId_userBId.userAId}|${where.userAId_userBId.userBId}`;
+      const existing = contacts.get(key);
+      const row = existing ? { ...existing, ...update } : { ...create };
+      contacts.set(key, row);
+      return row;
+    },
+  );
+
   // `requests.create` commits its four writes as one transaction,
   // so the mock rolls back on a throw rather than merely passing through.
   const prisma = withTransaction(
@@ -386,6 +415,7 @@ const buildRequestsDb = (
         deleteMany: conversationDeleteMany,
       },
       message: { create: messageCreate, deleteMany: messageDeleteMany },
+      messageContact: { upsert: messageContactUpsert },
       block,
       $executeRaw: executeRaw,
       $queryRaw: queryRaw,
@@ -394,6 +424,7 @@ const buildRequestsDb = (
       requests: cloneState(requests),
       conversations: cloneState(conversations),
       messages: cloneState(messages),
+      contacts: cloneState(contacts),
     }),
     (before) => {
       requests.clear();
@@ -402,6 +433,8 @@ const buildRequestsDb = (
       for (const [id, row] of before.conversations) conversations.set(id, row);
       messages.length = 0;
       messages.push(...before.messages);
+      contacts.clear();
+      for (const [key, row] of before.contacts) contacts.set(key, row);
     },
   );
 
@@ -414,6 +447,13 @@ const buildRequestsDb = (
     conversations: () => [...conversations.values()],
     /** Live block rows: push to block, splice to unblock. */
     blocks: block.rows,
+    /** Surviving `MessageContact` rows, ordered for stable assertions. */
+    contacts: () =>
+      [...contacts.values()].sort((a, b) =>
+        `${a.userAId}|${a.userBId}`.localeCompare(`${b.userAId}|${b.userBId}`),
+      ),
+    /** The contact upsert itself: called at all, and with what. */
+    messageContactUpsert,
     create,
     destroy,
     /** The conditional `DELETE`: called at all, and with which values. */
@@ -1728,6 +1768,157 @@ describe("user.requests.delete — the delete carries its own condition", () => 
     expect(db.conversations()).toEqual([]);
   });
 });
+
+/**
+ * The durable contact record a deletion leaves behind (SCRUM-676).
+ *
+ * **Why the delete is the write site**, rather than the request's creation or
+ * its first message: a live request needs no record, because the conversation
+ * still exists and `UserActionsMenu` reaches it from `MessageHeader`. Only a
+ * deleted request leaves a counterpart unreachable - `delete` takes the
+ * conversation and every message with it, and a pair who never shared a group
+ * have no `CarpoolPairing` row either. Recording on the first message instead
+ * would have written a row per request ever sent, since `requests.create`
+ * writes the opening message itself.
+ *
+ * The property that matters most here is the last one: the write cannot fail
+ * the delete. `src/server/db/blocks.ts` and SCRUM-554 hold the exits
+ * unconditionally open, and a record that could strand a user on a request
+ * they pressed delete on would be a worse defect than the missing record it
+ * was protecting.
+ */
+describe("user.requests.delete — recording that the two corresponded", () => {
+  const ungrouped = () => ({ [USER_A]: null, [USER_B]: null });
+
+  /** A PENDING request between the pair, which either of them may clear. */
+  const pair = (
+    membership: Record<string, string | null>,
+    status: RequestStatus = RequestStatus.PENDING,
+  ) =>
+    buildRequestsDb(
+      [
+        requestRow("req-1", USER_A, USER_B, {
+          status,
+          conversationId: "conversation-req-1",
+        }),
+      ],
+      membership,
+    );
+
+  it("records the pair when the request is deleted", async () => {
+    const db = pair(ungrouped());
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await caller.user.requests.delete({ invitationId: "req-1" });
+
+    expect(db.contacts()).toEqual([
+      { userAId: USER_A, userBId: USER_B, endedAt: expect.any(Date) },
+    ]);
+  });
+
+  it("records the same row whichever party deletes", async () => {
+    // The canonical ordering, observed through the procedure rather than only
+    // in `buildContact`'s own unit test: the recipient deleting must produce
+    // the row the sender deleting would have, or the `@@unique` would not
+    // collapse the two directions and the pair could be listed twice.
+    const db = buildRequestsDb(
+      [
+        requestRow("req-1", USER_B, USER_A, {
+          status: RequestStatus.PENDING,
+          conversationId: "conversation-req-1",
+        }),
+      ],
+      ungrouped(),
+    );
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await caller.user.requests.delete({ invitationId: "req-1" });
+
+    expect(db.contacts()).toEqual([
+      { userAId: USER_A, userBId: USER_B, endedAt: expect.any(Date) },
+    ]);
+  });
+
+  it("records nothing for a self-request", async () => {
+    // Otherwise the owner's own past-connections list would offer to report
+    // and block themselves. Two of these rows exist in production.
+    const db = buildRequestsDb(
+      [
+        requestRow("req-self", USER_A, USER_A, {
+          status: RequestStatus.ACCEPTED,
+          conversationId: "conversation-req-self",
+        }),
+      ],
+      { [USER_A]: "group-1" },
+    );
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await caller.user.requests.delete({ invitationId: "req-self" });
+
+    expect(db.contacts()).toEqual([]);
+    expect(db.messageContactUpsert).not.toHaveBeenCalled();
+  });
+
+  it("records nothing when the guard refuses the delete", async () => {
+    // A refused delete never enters the transaction, so there is no deletion
+    // to record. Writing here would retain a pair who are still carpooling and
+    // still perfectly reachable through their live conversation.
+    const db = pair(
+      { [USER_A]: "group-1", [USER_B]: "group-1" },
+      RequestStatus.ACCEPTED,
+    );
+    const { caller } = callerFor(sessionFor(USER_A), db);
+
+    await expect(
+      caller.user.requests.delete({ invitationId: "req-1" }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+
+    expect(db.contacts()).toEqual([]);
+  });
+
+  it("records nothing when the conditional DELETE matched no row", async () => {
+    // The loser of the race deleted nothing, so there is nothing to record.
+    // The row still exists and is still reachable for whoever holds it.
+    const db = pair(ungrouped());
+    const { caller } = callerFor(sessionFor(USER_A), db);
+    db.setStatus("req-1", RequestStatus.ACCEPTED);
+    db.rawDelete.mockImplementationOnce(() => 0);
+
+    await caller.user.requests
+      .delete({ invitationId: "req-1" })
+      .catch(() => undefined);
+
+    expect(db.contacts()).toEqual([]);
+  });
+
+  it("deletes the request even when recording the contact throws", async () => {
+    // **The open-exits rule, SCRUM-554.** Prisma rolls an interactive
+    // transaction back when its callback throws, so an unhandled failure here
+    // would undo the delete and leave the user unable to clear the request. A
+    // missing record is recoverable; a user trapped on a request is not.
+    const db = pair(ungrouped());
+    const { caller } = callerFor(sessionFor(USER_A), db);
+    db.messageContactUpsert.mockImplementationOnce(async () => {
+      throw new Error("deadlock");
+    });
+    const consoleError = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+
+    try {
+      await expect(
+        caller.user.requests.delete({ invitationId: "req-1" }),
+      ).resolves.not.toThrow();
+
+      expect(db.rows()).toEqual([]);
+      expect(db.conversations()).toEqual([]);
+      expect(db.contacts()).toEqual([]);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+});
+
 describe("user.requests — authentication gate", () => {
   it("rejects an anonymous create without touching the database", async () => {
     const { caller, db } = callerFor(null);

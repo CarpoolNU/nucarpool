@@ -142,6 +142,7 @@ describe("deleteAllData — the guard is on the primitive, not just the caller",
       "location",
       "carpoolGroup",
       "carpoolPairing",
+      "messageContact",
       "adminAuditLog",
       "emailSendBudget",
       "reportDigestDelivery",
@@ -157,7 +158,12 @@ describe("deleteAllData — the guard is on the primitive, not just the caller",
   // Nothing but this list deletes them, which is why the assertion is on the
   // list. `carpool_pairing` holds denormalised ids by design, precisely so it
   // outlives the rows it names, which is what puts it in this group.
-  it.each(["adminAuditLog", "carpoolPairing", "emailSendBudget"])(
+  it.each([
+    "adminAuditLog",
+    "carpoolPairing",
+    "messageContact",
+    "emailSendBudget",
+  ])(
     "deletes %s, which has no relation to User to cascade from",
     async (model) => {
       const { client, deletes } = recordingClient();
