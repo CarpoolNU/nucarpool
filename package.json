@@ -95,7 +95,7 @@
     "@types/react-dom": "19.3.0",
     "esbuild": "0.28.2",
     "eslint": "8.57.1",
-    "eslint-config-next": "15.5.27",
+    "eslint-config-next": "15.5.28",
     "husky": "9.1.7",
     "jest": "^30.5.2",
     "jest-environment-jsdom": "^30.5.2",
