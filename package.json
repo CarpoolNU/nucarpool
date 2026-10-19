@@ -48,7 +48,7 @@
     "@trpc/next": "^11.19.0",
     "@trpc/react-query": "^11.19.0",
     "@trpc/server": "^11.19.0",
-    "antd": "6.6.5",
+    "antd": "6.6.6",
     "chart.js": "4.5.1",
     "chartjs-adapter-date-fns": "^3.0.0",
     "date-fns": "^4.4.0",
