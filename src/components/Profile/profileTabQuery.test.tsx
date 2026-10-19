@@ -95,10 +95,13 @@ jest.mock("../../components/Profile/BlockedUsersSection", () => ({
   __esModule: true,
   default: () => null,
 }));
-jest.mock("../../components/Profile/ReportsFiledSection", () => ({
-  __esModule: true,
-  default: () => null,
-}));
+// PARKED: `Profile` no longer imports this, so the mock is inert rather than
+// broken. Kept commented beside its siblings so restoring the section is one
+// uncomment here too - see the commented import in `src/pages/profile/index.tsx`.
+// jest.mock("../../components/Profile/ReportsFiledSection", () => ({
+//   __esModule: true,
+//   default: () => null,
+// }));
 jest.mock("../../components/Profile/SafetySection", () => ({
   __esModule: true,
   default: () => null,

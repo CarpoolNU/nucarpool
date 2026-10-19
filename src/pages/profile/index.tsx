@@ -53,7 +53,15 @@ import CarpoolSection from "../../components/Profile/CarpoolSection";
 import AccountSection from "../../components/Profile/AccountSection";
 import PastConnectionsSection from "../../components/Profile/PastConnectionsSection";
 import BlockedUsersSection from "../../components/Profile/BlockedUsersSection";
-import ReportsFiledSection from "../../components/Profile/ReportsFiledSection";
+// PARKED: "Reports You've Filed". The section is withheld until the team has
+// decided what happens to a report after an admin reads it - today the queue
+// ends at REVIEWED and no account action exists (SCRUM-619), so showing a
+// reporter a status promises a process that is not there. The component and
+// its tests are kept intact and `user.reports.me` still serves it; restoring
+// is uncommenting this import and the two render sites below, plus the three
+// other PARKED blocks this change left in `reports.ts`, `safety.tsx` and
+// `profileTabQuery.test.tsx`.
+// import ReportsFiledSection from "../../components/Profile/ReportsFiledSection";
 import SafetySection from "../../components/Profile/SafetySection";
 import UnsavedModal from "../../components/Profile/UnsavedModal";
 import useIsMobile from "../../utils/useIsMobile";
@@ -680,15 +688,16 @@ const Index: NextPage = () => {
                   />
                   {/* Beside the form rather than in it: reporting,
                       blocking and unblocking all take effect immediately and
-                      are not part of Save Changes. The reports list is
-                      read-only and belongs to Save Changes even less.
+                      are not part of Save Changes.
 
                       Past carpools lead, because that section is the one the
-                      reader acts *from*; the two below it are records of
+                      reader acts *from*; the one below it is a record of
                       actions already taken. */}
                   <PastConnectionsSection />
                   <BlockedUsersSection />
-                  <ReportsFiledSection />
+                  {/* PARKED - see the commented import at the top of this
+                      file for why, and for everything else to uncomment. */}
+                  {/* <ReportsFiledSection /> */}
                   <SafetySection />
                 </>
               ) : (
@@ -739,15 +748,16 @@ const Index: NextPage = () => {
                   />
                   {/* Beside the form rather than in it: reporting,
                       blocking and unblocking all take effect immediately and
-                      are not part of Save Changes. The reports list is
-                      read-only and belongs to Save Changes even less.
+                      are not part of Save Changes.
 
                       Past carpools lead, because that section is the one the
-                      reader acts *from*; the two below it are records of
+                      reader acts *from*; the one below it is a record of
                       actions already taken. */}
                   <PastConnectionsSection />
                   <BlockedUsersSection />
-                  <ReportsFiledSection />
+                  {/* PARKED - see the commented import at the top of this
+                      file for why, and for everything else to uncomment. */}
+                  {/* <ReportsFiledSection /> */}
                   <SafetySection />
                 </>
               ) : (

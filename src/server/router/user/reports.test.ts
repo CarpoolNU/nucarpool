@@ -807,14 +807,21 @@ describe("user.reports.me", () => {
 });
 
 /**
- * The refusal of a second OPEN report has to name somewhere the reporter can
- * actually go, which is the heading `ReportsFiledSection` renders. A rename on
- * either side fails here.
+ * PARKED, and inverted while it is. This used to assert the refusal names the
+ * heading `ReportsFiledSection` renders, so that a rename on either side
+ * failed here. That section is no longer rendered, so the live requirement is
+ * the opposite one: the refusal must not send a reporter to a profile section
+ * they cannot find. When the section comes back this flips to the original
+ * assertions, which are recorded in the `DUPLICATE_REPORT_MESSAGE` docstring.
  */
 describe("DUPLICATE_REPORT_MESSAGE", () => {
-  it("points at the profile section that now lists the first report", () => {
-    expect(DUPLICATE_REPORT_MESSAGE).toContain("Reports You've Filed");
-    expect(DUPLICATE_REPORT_MESSAGE).toContain("profile");
+  it("does not point at the parked profile section", () => {
+    expect(DUPLICATE_REPORT_MESSAGE).not.toContain("Reports You've Filed");
+    expect(DUPLICATE_REPORT_MESSAGE).not.toContain("profile");
+  });
+
+  it("still tells the reporter the first report stands", () => {
+    expect(DUPLICATE_REPORT_MESSAGE).toContain("already have an open report");
   });
 });
 

@@ -86,10 +86,14 @@ const Safety: NextPage = () => (
               Reporting someone offers to block them at the same time, and that
               box is ticked by default. You can untick it.
             </li>
-            <li>
+            {/* PARKED along with `ReportsFiledSection` - see the commented
+                import in `src/pages/profile/index.tsx`. Nothing lists a
+                reader's own reports while that section is withheld, so this
+                bullet would send people somewhere that does not exist. */}
+            {/* <li>
               Reports you have filed are listed under Account on your profile,
               with the status of each.
-            </li>
+            </li> */}
           </ul>
         </section>
 
