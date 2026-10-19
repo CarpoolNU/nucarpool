@@ -34,15 +34,23 @@ import { applyBlock } from "./blocks";
 /**
  * What a second OPEN report about the same person is refused with.
  *
- * It names where the first one can be read, so somebody who has forgotten
- * whether they already reported this person - or who now has more to say -
- * is not just told they can't proceed. The wording tracks the heading in
- * `ReportsFiledSection`; the two have to stay in step, which is what
- * `reports.test.ts` asserts.
+ * PARKED: this used to name where the first report could be read, so that
+ * somebody who had forgotten whether they already reported this person was
+ * not simply told they can't proceed. `ReportsFiledSection` is no longer
+ * rendered (see the commented import in `src/pages/profile/index.tsx`), so
+ * that sentence now sends people to a section they cannot find. Until the
+ * section returns the refusal says only that the report is already in, which
+ * is less useful but true. Restore the original below alongside it:
+ *
+ *   "You already have an open report about this user. You can see it, and any "
+ *   'decision an admin makes, under "Reports You\'ve Filed" in your profile.'
+ *
+ * The wording tracked the heading in `ReportsFiledSection` and had to stay in
+ * step with it; `reports.test.ts` asserts whichever of the two holds.
  */
 export const DUPLICATE_REPORT_MESSAGE =
-  "You already have an open report about this user. You can see it, and any " +
-  'decision an admin makes, under "Reports You\'ve Filed" in your profile.';
+  "You already have an open report about this user. The admins have it and " +
+  "will review it.";
 
 /**
  * How many reports one reporter may file inside `REPORT_RATE_LIMIT_WINDOW_MS`.
