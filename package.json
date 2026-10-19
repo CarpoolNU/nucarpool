@@ -59,7 +59,7 @@
     "jszip": "^3.10.2",
     "lodash": "^4.18.1",
     "mapbox-gl": "^3.32.0",
-    "mixpanel-browser": "2.83.0",
+    "mixpanel-browser": "2.84.0",
     "next": "15.5.27",
     "next-auth": "4.24.15",
     "pusher": "^5.3.4",
@@ -67,14 +67,14 @@
     "react": "19.3.0",
     "react-chartjs-2": "5.3.1",
     "react-dom": "19.3.0",
-    "react-easy-crop": "6.2.3",
-    "react-hook-form": "7.89.0",
+    "react-easy-crop": "6.2.4",
+    "react-hook-form": "7.90.0",
     "react-icons": "5.7.0",
     "react-toastify": "^11.1.0",
     "styled-components": "^6.5.3",
     "superjson": "^1.9.1",
     "tailwind-scrollbar": "^4.0.2",
-    "zod": "4.6.5"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@tailwindcss/forms": "0.5.11",
