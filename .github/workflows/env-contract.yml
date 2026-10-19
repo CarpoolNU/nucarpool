@@ -40,7 +40,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
       - name: install node
-        uses: actions/setup-node@v7.0.0
+        uses: actions/setup-node@v7.1.0
         with:
           node-version-file: .nvmrc
       # Intentionally no `yarn install`: the check is dependency-free, so this
