@@ -154,6 +154,8 @@ Four things that reliably trip people up:
 
 CI runs `lint`, `tsc`, `test`, `test-db`, `build`, `env-contract`, `schema` and `format` on every pull request. `test-db` brings up its own MySQL, so the database suite is exercised whether or not you run it locally. `yarn lint` and `yarn tsc` are the two worth running before you push.
 
+[`dependabot-alerts.yml`](.github/workflows/dependabot-alerts.yml) gates nothing and runs weekly instead. It asks whether any Dependabot alert has been open long enough that no automated fix is coming — a question no diff can answer, since an alert opens because an advisory was published rather than because somebody pushed. [`scripts/README.md`](scripts/README.md#not-operational-scripts) explains what it does and why it is scheduled when two other candidates for a cron were not. [`codeql.yml`](.github/workflows/codeql.yml) also runs on a weekly schedule, but gates pull requests as well.
+
 ## Dangerous commands
 
 These destroy data. Confirm `DATABASE_URL` points at your local container before running any of them.

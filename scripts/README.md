@@ -115,12 +115,29 @@ The `check-*` scripts exit `0` when clean and `1` when not, so they can gate a f
 
 ## Not operational scripts
 
-| File                                               | What it is                                                                                         |
-| -------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| [`check-env-contract.js`](./check-env-contract.js) | CI: `yarn check:env` and `yarn check:amplify`, and the source of the placeholder build environment |
-| [`check-page-routes.js`](./check-page-routes.js)   | CI: `yarn check:routes` and the `build` job's manifest assertion                                   |
-| [`measure-layout.ts`](./measure-layout.ts)         | Serves a layout fixture for measuring in a real browser. **No database.**                          |
-| [`emailtemplate.py`](./emailtemplate.py)           | **Mutates AWS.** Creates and updates the SES templates the app sends. Dry-run by default           |
+| File                                                         | What it is                                                                                         |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| [`check-env-contract.js`](./check-env-contract.js)           | CI: `yarn check:env` and `yarn check:amplify`, and the source of the placeholder build environment |
+| [`check-page-routes.js`](./check-page-routes.js)             | CI: `yarn check:routes` and the `build` job's manifest assertion                                   |
+| [`check-dependabot-alerts.js`](./check-dependabot-alerts.js) | CI: the weekly `dependabot-alerts.yml` run. Reads the Security tab. **No database.**               |
+| [`measure-layout.ts`](./measure-layout.ts)                   | Serves a layout fixture for measuring in a real browser. **No database.**                          |
+| [`emailtemplate.py`](./emailtemplate.py)                     | **Mutates AWS.** Creates and updates the SES templates the app sends. Dry-run by default           |
+
+`check-dependabot-alerts.js` reports open Dependabot alerts that have been open long enough that no automated fix is coming. Dependabot raises a pull request for an advisory it can fix by editing `package.json`; it raises nothing for one whose only fix is a `yarn.lock` refresh of a transitive package, because npm security updates only ever propose direct dependencies. No `.github/dependabot.yml` option changes that, and nothing else here refreshes transitive lockfile entries — so three `brace-expansion` alerts sat open for 25 days and were found by an unrelated audit rather than by any process (SCRUM-696, SCRUM-698).
+
+```bash
+node scripts/check-dependabot-alerts.js                    # the live alert list
+node scripts/check-dependabot-alerts.js --max-age-days 30  # a different threshold
+node scripts/check-dependabot-alerts.js --alerts list.json # a list fetched elsewhere
+```
+
+It reads the alert list through `gh api`, so a local run needs a `gh auth login` carrying the `security_events` scope. Like the other `check-*` scripts it exits `0` clean and `1` on findings; `2` means it could not run at all, which is reported separately because **"could not look" must never read as "nothing to see"**.
+
+Three decisions are worth knowing about. The fourteen-day threshold is derived rather than chosen: Dependabot's npm schedule is weekly and `cooldown.default-days` is 7, so an alert that will be fixed automatically is fixed inside about ten days. `RETAINED` in the script is how an alert stays open on purpose — SCRUM-671's `postcss` advisory, reachable only through `next`'s own nested copy, is the precedent — and each entry carries a `reviewBy` date past which the alert goes back to being a finding, so a decision made once cannot quietly become permanent. And the script does not fix anything, because the three repairs a stuck alert can need (a lockfile refresh, a scoped `resolutions` entry, a deliberate retention) are not distinguishable without reading the advisory.
+
+**[`dependabot-alerts.yml`](../.github/workflows/dependabot-alerts.yml) is the only workflow here that runs on a schedule and gates nothing, and the two rejections recorded above do not apply to it.** ([`codeql.yml`](../.github/workflows/codeql.yml) carries a weekly `cron` as well, but it gates pull requests too; the schedule there is a re-scan with updated query packs.) Both the digest and the `expire-*` sweeps rejected a workflow because running them needs a production `DATABASE_URL` in repository secrets, reachable by every workflow in the repository. This one touches no database and needs no secret at all: the automatic `GITHUB_TOKEN` with `security-events: read` and `issues: write` is the whole credential, it is scoped in the file, and it cannot write to the repository. The objection was to the credential, not to the cron.
+
+The workflow runs Mondays after Dependabot's own run, is dispatchable by hand with a threshold override, and keeps **one** tracking issue — found by its `stuck-dependabot-alert` label, body replaced on each run, closed again when the list clears — so a weekly schedule does not leave a year of duplicates behind. The job also goes red, because a single reused issue carries no history and the Actions tab does.
 
 `measure-layout.ts` is the exception to this directory's opening sentence: it touches no database, connects to no environment, and has no `--apply` because it writes nothing anywhere. It compiles `src/styles/globals.css` and serves it with a fixture over HTTP on an OS-assigned loopback port, so a browser can measure boxes that jsdom reports as zero. [`docs/testing.md`](../docs/testing.md#measuring-layout-in-a-real-browser) covers what it proves and does not. It is not in CI and nothing schedules it.
 

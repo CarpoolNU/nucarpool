@@ -1,0 +1,193 @@
+name: Dependabot Alert Age
+
+# The one workflow here that gates nothing.
+#
+# Every other workflow in this directory answers "is this diff all right?" and
+# runs on `pull_request` and on pushes to `main`. This one answers "is anything
+# rotting?", which nothing in a diff can tell you: a Dependabot alert opens
+# because an advisory was published, not because somebody pushed. So it runs on
+# a clock alone.
+#
+# `codeql.yml` carries a weekly `cron` too, and for a related reason - its query
+# packs are updated continuously, so a re-scan finds new problems in unchanged
+# code. The difference is that it still gates pull requests; this one has no
+# diff to have an opinion about.
+#
+# It exists because Dependabot will not raise a pull request for an advisory
+# whose only fix is a `yarn.lock` refresh of a transitive package - npm security
+# updates only ever propose direct dependencies - and no `.github/dependabot.yml`
+# option changes that. Three `brace-expansion` alerts sat open for 25 days and
+# were found by an unrelated audit (SCRUM-696, SCRUM-698).
+#
+# Monday, after Dependabot's own 06:00 America/New_York npm run, so a weekly
+# cycle has already had its chance before this looks. `schedule` is UTC-only, so
+# 13:00 UTC is 09:00 ET in summer and 08:00 ET in winter - the hour's drift is
+# irrelevant to a check measured in whole days.
+#
+# GitHub disables a scheduled workflow after 60 days without repository
+# activity. This repository is active, but a quiet summer is worth knowing
+# about: a silent check is indistinguishable from a clean one.
+on:
+  schedule:
+    - cron: "0 13 * * 1"
+  workflow_dispatch:
+    inputs:
+      max-age-days:
+        description: "Days an alert may stay open before it counts as stuck"
+        required: false
+        default: "14"
+
+# `security-events: read` is what reads the Dependabot alert list; `issues:
+# write` opens, updates and closes the one tracking issue, and creates its
+# label. `contents: read` is for the checkout. Every scope not listed is `none`.
+#
+# Note what is deliberately absent: nothing here can write to the repository.
+# This job reports; a human decides and fixes.
+permissions:
+  contents: read
+  issues: write
+  security-events: read
+
+# One run at a time, and never cancelled. A scheduled run and a manual one
+# both edit the same tracking issue, so two in flight could race to create it.
+# `cancel-in-progress: false` because a run that is halfway through issue
+# management is worse to kill than to wait for.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  stale-alerts:
+    name: stale-alerts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: install node
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .nvmrc
+      # Intentionally no `yarn install`, for the reason env-contract.yml gives:
+      # the check is dependency-free, so this job stays fast and keeps
+      # reporting even when installation is broken. It needs only `node` and
+      # the `gh` CLI, which is preinstalled on GitHub-hosted runners.
+      - name: check how long open alerts have been open
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAX_AGE_DAYS: ${{ inputs.max-age-days || '14' }}
+        # The script exits 1 on findings, which would end the job here and
+        # leave the issue unwritten - the one thing this workflow is for. So
+        # `set +e` disables the default `bash -e`, and the exit code is carried
+        # forward as an output instead. `PIPESTATUS[0]` rather than `$?`, which
+        # through a pipe is `tee`'s status and is always 0.
+        #
+        # No `2>&1`: the script puts its whole report on stdout precisely so
+        # this capture is a single ordered stream. Only a hard failure to run
+        # writes to stderr, and that path exits 2 and never reaches the issue.
+        run: |
+          set +e
+          node scripts/check-dependabot-alerts.js \
+            --max-age-days "$MAX_AGE_DAYS" | tee report.txt
+          echo "exit-code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+      # `gh issue create --label` fails outright on a label that does not
+      # exist, and this one would not exist on a fresh clone of the repository.
+      # `--force` updates it if it is already there, so this is idempotent.
+      - name: ensure the tracking label exists
+        if: steps.check.outputs.exit-code == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create stuck-dependabot-alert \
+            --force \
+            --color B60205 \
+            --description "A Dependabot alert nothing is going to fix on its own"
+      # One issue, reused. The label is the identity: a run finds the open
+      # issue carrying it and edits that, so a weekly schedule does not leave a
+      # year of duplicates behind. The body is replaced rather than commented
+      # on, because the current alert list is the useful thing and a thread of
+      # stale snapshots is not.
+      #
+      # The report goes in a fenced block. It is assembled from advisory text
+      # GitHub supplies, so it is data rather than markup, and a fence is what
+      # keeps it from rendering as one.
+      - name: open or update the tracking issue
+        if: steps.check.outputs.exit-code == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          {
+            echo "Dependabot has open alerts that no automated fix is coming for."
+            echo
+            echo '```'
+            cat report.txt
+            echo '```'
+            echo
+            echo "Raised by [\`dependabot-alerts.yml\`]($RUN_URL)."
+            echo "Reproduce locally with \`node scripts/check-dependabot-alerts.js\`."
+            echo "Background: SCRUM-698, and \`scripts/README.md\`."
+          } > body.md
+
+          existing=$(gh issue list \
+            --label stuck-dependabot-alert \
+            --state open \
+            --limit 1 \
+            --json number \
+            --jq '.[0].number // empty')
+
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --body-file body.md
+            echo "updated issue #$existing"
+          else
+            gh issue create \
+              --title "Dependabot alerts are not being cleared" \
+              --label stuck-dependabot-alert \
+              --body-file body.md
+          fi
+      # Closed by the same mechanism that opens it, so the issue tracks the
+      # current state rather than accumulating. Without this the first stuck
+      # alert leaves an issue open forever and the signal stops meaning
+      # anything.
+      - name: close the tracking issue when the list is clear
+        if: steps.check.outputs.exit-code == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          existing=$(gh issue list \
+            --label stuck-dependabot-alert \
+            --state open \
+            --limit 1 \
+            --json number \
+            --jq '.[0].number // empty')
+
+          if [ -n "$existing" ]; then
+            gh issue close "$existing" \
+              --comment "Every alert this was raised for is resolved or retained."
+            echo "closed issue #$existing"
+          else
+            echo "nothing stuck and no tracking issue open."
+          fi
+      # Last, so the issue is always written first. The job going red is the
+      # second signal: GitHub mails the failure, and the Actions tab shows the
+      # history that a single reused issue does not.
+      #
+      # Exit code 2 means the check could not run - most likely the alert
+      # endpoint refusing the token - and is failed separately, because "could
+      # not look" must never read as "nothing to see".
+      - name: fail if anything is stuck
+        if: steps.check.outputs.exit-code != '0'
+        # Through `env` rather than `${{ }}` inside the script. The value is
+        # this job's own exit code and could not be anything else, but an
+        # expression interpolated into a shell body is a habit worth not
+        # having: the next one to be written that way might not be.
+        env:
+          EXIT_CODE: ${{ steps.check.outputs.exit-code }}
+        run: |
+          if [ "$EXIT_CODE" = "1" ]; then
+            echo "::error::Dependabot alerts are not being cleared; see the tracking issue."
+          else
+            echo "::error::The alert check could not run (exit $EXIT_CODE). This is not a clean result."
+          fi
+          exit 1
