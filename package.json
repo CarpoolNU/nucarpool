@@ -99,7 +99,7 @@
     "husky": "9.1.7",
     "jest": "^30.5.2",
     "jest-environment-jsdom": "^30.5.2",
-    "postcss": "8.5.29",
+    "postcss": "8.5.31",
     "prettier": "3.9.10",
     "prettier-plugin-tailwindcss": "^0.8.1",
     "pretty-quick": "4.2.2",
@@ -111,6 +111,6 @@
     "typescript": "6.0.3"
   },
   "resolutions": {
-    "next/postcss": "8.5.29"
+    "next/postcss": "8.5.31"
   }
 }
