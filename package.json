@@ -111,6 +111,6 @@
     "typescript": "6.0.3"
   },
   "resolutions": {
-    "next/postcss": "8.5.29"
+    "next/postcss": "8.5.31"
   }
 }
