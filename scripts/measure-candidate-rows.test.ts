@@ -13,6 +13,10 @@ import {
 } from "../src/server/db/candidateSearch";
 import { searcherCanMatchNobody } from "../src/utils/candidateReachability";
 import { SEAT_AVAILABLE_FILTER } from "../src/utils/carpoolSeats";
+import { coopHasNotEndedFilter } from "../src/server/db/coopLiveness";
+
+/** A fixed clock, so the liveness clause asserted on below is stable. */
+const NOW = new Date("2026-10-27T13:45:12.345Z");
 
 /**
  * Tested because a measurement
@@ -123,6 +127,7 @@ describe("the widest where, against the SQL the figures were measured with", () 
       filters: widestFilters(),
       excludedUserIds: [],
       favoriteUserIds: [],
+      now: NOW,
     });
   };
 
@@ -136,12 +141,29 @@ describe("the widest where, against the SQL the figures were measured with", () 
     }
   });
 
-  it("narrows nothing by location or date at the widest filters", () => {
+  it("narrows nothing by location, and nothing by the searcher's own window", () => {
     for (const role of everyRole) {
       const where = whereFor(role);
       expect(where.homeLocation).toBeUndefined();
       expect(where.companyLocation).toBeUndefined();
-      expect(where.AND).toBeUndefined();
+      // `AND` holds the liveness clause alone. `widestFilters()` sets
+      // `dateOverlap: 0`, so `dateOverlapFilter` contributes no second member
+      // — which is the thing "widest" means here.
+      expect(where.AND).toHaveLength(1);
+    }
+  });
+
+  /**
+   * Liveness is **not** optional and so is not switched off by the widest
+   * filters, which is the whole of SCRUM-631. It matters to this file
+   * specifically: a figure taken with `pscale sql` is comparable to a run of
+   * this script only if both carry the predicate, so a recorded count from
+   * before this change is measuring a different population and must not be
+   * quoted against one from after it.
+   */
+  it("still applies the liveness rule at the widest filters", () => {
+    for (const role of everyRole) {
+      expect(whereFor(role).AND).toEqual([coopHasNotEndedFilter(NOW)]);
     }
   });
 

@@ -20,6 +20,7 @@ import {
   hasSeatAvailable,
 } from "../../utils/carpoolSeats";
 import { searcherCanMatchNobody } from "../../utils/candidateReachability";
+import { coopHasNotEndedFilter } from "./coopLiveness";
 import {
   anyFilters,
   BOSTON,
@@ -31,6 +32,27 @@ import {
   TERM_END,
   TERM_START,
 } from "../../utils/recommendation.fixtures";
+
+/**
+ * A fixed clock for the liveness predicate, so the `where` these tests assert
+ * on is the same object on every run. `buildCandidateWhere` defaults to
+ * `new Date()`, which would otherwise make every expectation below depend on
+ * the day the suite happens to run.
+ */
+const NOW = new Date("2026-10-27T13:45:12.345Z");
+
+/**
+ * A clock **before every fixture term in this file**, used where liveness is
+ * not the thing under test.
+ *
+ * The fixtures date from 2023–2025 and the liveness rule removes anything
+ * already ended, so under a present-day clock every one of them would be
+ * filtered out and the predicate actually being tested would never get to
+ * decide anything — the test would pass while asserting nothing. Winding the
+ * clock back makes the liveness clause inert without removing it, so the
+ * object under test is still the one production builds.
+ */
+const BEFORE_EVERY_TERM = new Date("2022-01-01T00:00:00.000Z");
 
 /**
  * The safety property this whole change rests on: the SQL predicate
@@ -189,9 +211,26 @@ describe("date overlap agrees with calculateScore", () => {
         if ((value as any[]).some((sub) => matches(sub, row))) return false;
         continue;
       }
+      // Handled rather than skipped, so the liveness clause this `AND` now
+      // carries is genuinely evaluated. Skipping `OR` would make it pass
+      // whatever it said, and the point of driving the produced object is
+      // that nothing in it is taken on trust.
+      if (key === "OR") {
+        if (!(value as any[]).some((sub) => matches(sub, row))) return false;
+        continue;
+      }
       if (key !== "startDate" && key !== "endDate") continue;
 
       const actual = row[key as "startDate" | "endDate"];
+
+      // `{ endDate: null }` is Prisma's "IS NULL", not an operator object —
+      // the liveness clause's first arm. Checked before the loop below, which
+      // would otherwise hand `Object.entries` a null and throw.
+      if (value === null) {
+        if (actual !== null) return false;
+        continue;
+      }
+
       for (const [op, operand] of Object.entries(
         value as Record<string, any>,
       )) {
@@ -273,6 +312,12 @@ describe("date overlap agrees with calculateScore", () => {
           filters: { ...filters, favorites: false },
           excludedUserIds: [],
           favoriteUserIds: [],
+          // The superset property under test belongs to the *date-overlap*
+          // mirror. Liveness is the one predicate that deliberately breaks it
+          // — the scorer does not know a co-op can be over — so it is held
+          // inert here rather than removed, and covered on its own terms in
+          // `coopHasNotEnded.db.test.ts`.
+          now: BEFORE_EVERY_TERM,
         });
 
         const sqlKeeps = matches(
@@ -525,14 +570,26 @@ describe("buildCandidateWhere — date overlap", () => {
       },
       excludedUserIds: [],
       favoriteUserIds: [],
+      now: NOW,
     });
 
-  it("adds nothing when any overlap will do", () => {
-    expect(build(0).AND).toBeUndefined();
+  /**
+   * **The hole SCRUM-631 closed, asserted directly.**
+   *
+   * `dateOverlap: 0` is the default every user starts on, and it used to make
+   * `AND` undefined — no date predicate at all, so a co-op that ended in 2024
+   * sat in the pool for everyone who never opened the Term Dates filter.
+   * Liveness is now applied whatever the filter says, which is the property a
+   * future refactor of `dateOverlapFilter` would silently reopen if nothing
+   * pinned it.
+   */
+  it("still applies the liveness rule when any overlap will do", () => {
+    expect(build(0).AND).toEqual([coopHasNotEndedFilter(NOW)]);
   });
 
   it("requires the term to span the window for a full overlap", () => {
     expect(build(2).AND).toEqual([
+      coopHasNotEndedFilter(NOW),
       {
         startDate: { not: null, lte: TERM_START },
         endDate: { not: null, gte: TERM_END },
@@ -542,6 +599,7 @@ describe("buildCandidateWhere — date overlap", () => {
 
   it("negates the two disjoint cases for a partial overlap", () => {
     expect(build(1).AND).toEqual([
+      coopHasNotEndedFilter(NOW),
       {
         startDate: { not: null },
         endDate: { not: null },
@@ -918,6 +976,18 @@ describe("group exclusion agrees with calculateScore", () => {
         case "carpoolId":
           expect(clause).toBeNull();
           return candidate.carpoolId === null;
+        case "AND": {
+          // Liveness, and under `anyFilters()` nothing else — `dateOverlap: 0`
+          // contributes no second member. It reads `end_date`, which is not
+          // one of the three columns this table varies, and `calculateScore`
+          // deliberately does not mirror it, so it cannot decide a row here.
+          //
+          // Asserted to be exactly that rather than waved through, so a
+          // *different* `AND` member added later still trips the `default`
+          // below and prompts the same question about the scorer.
+          expect(clause).toEqual([coopHasNotEndedFilter(NOW)]);
+          return true;
+        }
         default:
           throw new Error(
             `unhandled candidate predicate \`${key}\` — does calculateScore mirror it?`,
@@ -935,6 +1005,7 @@ describe("group exclusion agrees with calculateScore", () => {
         filters: { ...anyFilters(), favorites: false },
         excludedUserIds: ["current"],
         favoriteUserIds: [],
+        now: NOW,
       }) as Record<string, unknown>;
 
       const score = calculateScore(viewer, anyFilters(), "any");

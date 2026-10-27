@@ -323,8 +323,18 @@ model CarpoolSearch {
   @@index([homeLocationId])
   @@index([carpoolId])
   // The matching query filters status and role together. Neither is
-  // selective alone -- two and three values -- but the pair is the whole
+  // selective alone -- two and three values -- but the pair is most of the
   // non-relational predicate, so this is the index that covers it.
+  //
+  // `end_date` joined that predicate with SCRUM-631's liveness rule and is
+  // deliberately *not* in this index. It would have to be a third column
+  // here, and the filter is a range with an IS NULL arm, so it cannot narrow
+  // an index seek the way the two equality columns do -- it is applied to the
+  // rows they return. On production (2026-10-27) that is around 1,500 rows
+  // reduced to 368, which is well inside what a scan of the index's output
+  // costs. Revisit it if the ACTIVE population grows by an order of
+  // magnitude, not before: a wider index is a Deploy Request, and this one is
+  // already the hot path for every search.
   @@index([status, role])
   @@map("carpool_search")
 }
