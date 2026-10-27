@@ -66,6 +66,15 @@
  *
  * Confirm `DATABASE_URL` points where you intend first. Exits 0 when there is
  * nothing actionable and 1 when there is, so it can gate a follow-up.
+ *
+ * **Against production this exits 1 by design.** 66 of its findings are
+ * retained under the "ask, do not guess" policy rather than pending repair, so
+ * the number to compare a run against is 66 and not 0 — `scripts/README.md`
+ * carries the breakdown and the reasoning (SCRUM-644). A count above it means
+ * `user.edit`'s boundary validation has regressed; a count below it means
+ * affected users are re-saving. The exit code is deliberately left red rather
+ * than baselined away in code: a flag that exited 0 on "the expected 66" would
+ * also swallow the 67th.
  */
 
 import { PrismaClient, Role } from "@prisma/client";
