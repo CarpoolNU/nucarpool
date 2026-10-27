@@ -62,6 +62,7 @@ import { runViewRouteClick } from "../utils/map/viewRouteClick";
 import { runViewGroupRoute } from "../utils/map/groupRouteClick";
 import clearOtherUserMarkers from "../utils/map/clearOtherUserMarkers";
 import { isValidCoordinates } from "../utils/map/coordinates";
+import { isUnresolvedCoordinate } from "../utils/coordinates";
 import {
   isSheetDetentView,
   planExploreSidebar,
@@ -268,8 +269,76 @@ const Home: NextPage<any> = () => {
     };
   }, [filters]);
 
+  // Held as whole query objects rather than destructured to `data` alone: the
+  // error and loading states are what tell an empty list apart from a failed one.
+  //
+  // Declared above the map query rather than below it because that query now
+  // reads `user.role` - see `mapQueryInput`.
+  const userQuery = trpc.user.me.useQuery();
+  const { data: user = null } = userQuery;
+
+  // The two addresses a VIEWER picks in `viewerBox`, and the only geography
+  // the server has for that role. `[0, 0]` is `useAddressSelection`'s
+  // "nothing picked yet" sentinel, shared with `isUnresolvedCoordinate`.
+  //
+  // Declared here, above the map query, rather than down with the rest of the
+  // map state: `mapQueryInput` reads both.
+  const [companyAddressSelected, setCompanyAddressSelected] =
+    useState<CarpoolAddress>({
+      place_name: "",
+      center: [0, 0],
+    });
+  const [startAddressSelected, setStartAddressSelected] =
+    useState<CarpoolAddress>({
+      place_name: "",
+      center: [0, 0],
+    });
+
+  /**
+   * What the map query asks for: the filters, plus - for a VIEWER only - the
+   * two points they picked in `viewerBox`.
+   *
+   * **A VIEWER is the one role whose geography the server does not already
+   * know.** Their `Location` rows are optional and `user.me` reports `(0, 0)`
+   * when there are none, so until SCRUM-642 the server could not rank their
+   * candidates and exempted them from `MAP_RESULT_LIMIT` entirely - which meant
+   * browsing shipped every matchable profile on the platform. Sending the picks
+   * is what makes the ordinary cap meaningful for them.
+   *
+   * `[0, 0]` is `useAddressSelection`'s "nothing picked yet" sentinel and is
+   * dropped here rather than sent, so the server's campus fallback applies on
+   * its own terms instead of being handed a point in the Gulf of Guinea. The
+   * server re-checks it regardless; this just avoids sending it.
+   *
+   * These are *not* debounced alongside the filters. `addressSelected` only
+   * changes when a suggestion is chosen, which is already a discrete act - the
+   * debounce upstream exists for slider and checkbox churn, which this is not.
+   * Each pick costs one refetch, which is the point of the pick.
+   */
+  const mapQueryInput = useMemo(() => {
+    if (user?.role !== "VIEWER") {
+      return debouncedFilters;
+    }
+
+    const point = (address: CarpoolAddress) =>
+      isUnresolvedCoordinate(address.center[0], address.center[1])
+        ? undefined
+        : { lng: address.center[0], lat: address.center[1] };
+
+    return {
+      ...debouncedFilters,
+      viewerStart: point(startAddressSelected),
+      viewerCompany: point(companyAddressSelected),
+    };
+  }, [
+    debouncedFilters,
+    user?.role,
+    startAddressSelected,
+    companyAddressSelected,
+  ]);
+
   /*
-   * Held as the whole query object for the reason the comment below gives about
+   * Held as the whole query object for the reason the comment above gives about
    * `user.me`: this one feeds the map's pins, and `data` alone cannot tell a
    * neighbourhood with nobody in it from a Mapbox or server failure. Every
    * other list on this page goes through `toQueryState` for the same reason.
@@ -277,15 +346,9 @@ const Home: NextPage<any> = () => {
    * retry - the single worst failure mode a matching product has, because it
    * looks like an answer.
    */
-  const geoJsonUsersQuery =
-    trpc.mapbox.geoJsonUserList.useQuery(debouncedFilters);
+  const geoJsonUsersQuery = trpc.mapbox.geoJsonUserList.useQuery(mapQueryInput);
   const { data: geoJsonUsers } = geoJsonUsersQuery;
   const mapUsersState = toQueryState(geoJsonUsersQuery);
-
-  // Held as whole query objects rather than destructured to `data` alone: the
-  // error and loading states are what tell an empty list apart from a failed one.
-  const userQuery = trpc.user.me.useQuery();
-  const { data: user = null } = userQuery;
 
   /**
    * Where the sheet is actually resting: what the user chose, or the opening
@@ -497,17 +560,6 @@ const Home: NextPage<any> = () => {
   const [startAddressSuggestions, setStartAddressSuggestions] = useState<
     CarpoolFeature[]
   >([]);
-
-  const [companyAddressSelected, setCompanyAddressSelected] =
-    useState<CarpoolAddress>({
-      place_name: "",
-      center: [0, 0],
-    });
-  const [startAddressSelected, setStartAddressSelected] =
-    useState<CarpoolAddress>({
-      place_name: "",
-      center: [0, 0],
-    });
 
   const [companyAddress, setCompanyAddress] = useState("");
   const updateCompanyAddress = useMemo(
