@@ -22,6 +22,7 @@ import {
 import { AdminSupplyQueryRow, AdminUserRow } from "../../../utils/types";
 import { AdminAuditAction, buildAuditLogEntry } from "../../adminAuditLog";
 import { parseConversationSnapshot } from "../../reportSnapshot";
+import { coopHasNotEndedSql } from "../../db/coopLiveness";
 
 /** How many rows the audit log's list view reads back. Static — there is no
  * client-supplied window here, unlike `dashboardWindow` above, so a fixed
@@ -403,13 +404,30 @@ export const adminDataRouter = router({
       // Grouped in MySQL, one row per distinct city, because Prisma's
       // `groupBy` cannot group by a column on a related table.
       //
-      // The population is `summariseUsers`' `drivers` and `riders`: a user
-      // with an email whose search is ACTIVE and whose role is DRIVER or
-      // RIDER, so the rows sum to `driverAO + driverANO` and
-      // `riderAO + riderANO`. VIEWERs are about a third of production and
-      // are not demand. `LEFT JOIN location` and `COALESCE` keep a search
-      // whose home location is missing or has no city in the totals as
-      // `Unknown` rather than dropping it.
+      // The population is a user with an email whose search is ACTIVE, whose
+      // role is DRIVER or RIDER, and **whose co-op has not ended**. VIEWERs
+      // are about a third of production and are not demand. `LEFT JOIN
+      // location` and `COALESCE` keep a search whose home location is missing
+      // or has no city in the totals as `Unknown` rather than dropping it.
+      //
+      // `coopHasNotEndedSql` is the same predicate `buildCandidateWhere`
+      // applies, shared so this chart and the match pool cannot disagree
+      // about who is live (SCRUM-631). It is the reason the rows no longer
+      // sum to `summariseUsers`' `driverAO + driverANO` and
+      // `riderAO + riderANO`: those quadrants are an *onboarding* breakdown
+      // of stored `status` and deliberately keep counting ended co-ops, since
+      // "how many accounts are switched on" is a different question from
+      // "who could be matched today". This chart answers the second, which is
+      // what it is read for — it tells ops where drivers are short, and a
+      // city whose riders graduated in 2024 is not a shortage.
+      //
+      // On production (2026-10-27) this query's own population went from
+      // 1,597 rows to 466. That is not the same pair as the candidate-pool
+      // figures in `coopLiveness.ts` and `CANDIDATE_LIMIT`, and the gap is
+      // the join above: this one takes any user with an email, where the
+      // candidate query takes `user.isOnboarded`. Quoting one as the other is
+      // the mistake the `staging`-for-production note on `candidateLimit-
+      // Warning` records in its own form.
       //
       // `seats_avail` is what is left of the driver's seats - `reserveSeat`
       // decrements it - so the sum is open seats already, and `> 0` only
@@ -440,6 +458,7 @@ export const adminDataRouter = router({
           LEFT JOIN location l ON l.id = cs.homeLocationId
           WHERE cs.status = ${Status.ACTIVE}
             AND cs.role IN (${Role.DRIVER}, ${Role.RIDER})
+            AND ${coopHasNotEndedSql("cs")}
           GROUP BY LOWER(TRIM(COALESCE(l.city, '')))
         `,
     ]);

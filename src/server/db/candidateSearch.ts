@@ -14,6 +14,7 @@ import {
 } from "../../utils/candidateReachability";
 import { blockedCounterpartIds } from "./blocks";
 import type { BlockReader } from "./blocks";
+import { coopHasNotEndedFilter } from "./coopLiveness";
 
 /**
  * The candidate query behind both matching endpoints.
@@ -24,6 +25,15 @@ import type { BlockReader } from "./blocks";
  * makes this a performance change rather than a behavioural one, and it is why
  * the mirrored filters are written to match `calculateScore` exactly rather
  * than to a tidier equivalent.
+ *
+ * **`coopHasNotEndedFilter` is the one exception**, and it is an exception on
+ * purpose rather than an oversight. The scorer has no concept of liveness, so
+ * that predicate removes rows the scorer would have kept — a co-op that ended
+ * in 2024 scores perfectly well. It is the only predicate here whose job is to
+ * change the answer rather than to save a read; `coopLiveness.ts` carries the
+ * reasoning and the measurements. Every *other* predicate still owes the
+ * superset property, and "date overlap agrees with calculateScore" in the
+ * tests holds liveness inert so it can still check that.
  *
  * Deliberately *not* pushed down:
  *
@@ -74,17 +84,25 @@ export const CANDIDATE_LIMIT_LOG_PREFIX = "[candidate-limit]";
  * exist, which is indistinguishable from there being no good matches. This
  * turns that into a log line.
  *
- * **How full is it really? Re-measured 2026-10-08 under SCRUM-643**, read-only
+ * **How full is it really? Re-measured 2026-10-27 under SCRUM-631**, read-only
  * against the PlanetScale `main` branch, in the widest case (distance filters
- * "any", so no bounding box, and no date filter):
+ * "any", so no bounding box, and `dateOverlap: 0`, so no *overlap* filter —
+ * the liveness rule below is not optional and is included):
  *
- *   - **66** rows for a RIDER — only drivers, and only with a seat
- *   - **1,317** rows for a DRIVER — only ungrouped riders
- *   - **1,463** rows for a VIEWER, who is offered both roles and narrowed by
- *     neither the seat rule nor the group rule, and is therefore the worst case
+ *   - **24** rows for a RIDER — only drivers, and only with a seat (68 before)
+ *   - **324** rows for a DRIVER — only ungrouped riders (1,351 before)
+ *   - **368** rows for a VIEWER, who is offered both roles and narrowed by
+ *     neither the seat rule nor the group rule, and is therefore the worst
+ *     case (1,499 before)
  *
- * So the worst case is **73% of the ceiling**, and reaching it needs the
- * matchable population to grow by **37%**.
+ * So the worst case is **18% of the ceiling**, and reaching it needs the
+ * matchable population to grow by **443%**.
+ *
+ * "Before" is the same query without `coopHasNotEndedFilter`, which is what
+ * the previous figures here measured — **1,463 for a VIEWER on 2026-10-08, at
+ * 73% of the ceiling**. Almost all of that gap is the liveness rule rather
+ * than three weeks of change; the comparable unfiltered figure on 2026-10-27
+ * is 1,499.
  *
  * **The figures this replaced said 38% and 165%, and were not wrong when they
  * were taken — they were `staging`'s.** Re-running the same predicate against
@@ -103,19 +121,23 @@ export const CANDIDATE_LIMIT_LOG_PREFIX = "[candidate-limit]";
  * Re-derive all of this with `scripts/measure-candidate-rows.ts`, which now
  * reports headroom per role — **name the environment whenever you quote it.**
  *
- * **What the remaining 27% is made of matters more than its size.** 1,123 of
- * those 1,463 rows — 77% — are searches whose `end_date` has already passed.
- * Only 296 are co-ops still running. So the ceiling is being approached by
- * rows that should not be in the candidate set on any reading, not by the
- * platform outgrowing the bound, and SCRUM-631's liveness rule would take the
- * worst case to roughly 340 rows, about 17% of the ceiling.
+ * **The pressure on this ceiling was never growth, and SCRUM-631 removed it.**
+ * Of the 1,499 rows the widest VIEWER query read on 2026-10-27, **1,131 were
+ * searches whose `end_date` had already passed** and 44 held no dates at all;
+ * only 324 were co-ops still running. The ceiling was being approached by
+ * rows that did not belong in the candidate set on any reading, rather than by
+ * the platform outgrowing the bound. `coopHasNotEndedFilter` now removes them,
+ * which is why the worst case above is 368 and not 1,499 — the prediction
+ * recorded here was "roughly 340 rows, about 17%", and the measurement came in
+ * at 368 and 18%.
  *
  * **The threshold, so this is a decision and not a vibe (SCRUM-643 AC 3).**
  * Ranking in SQL becomes the active ticket when the worst case exceeds **80%
- * of `CANDIDATE_LIMIT`** — that is 1,600 rows, 137 above where production sat
- * on 2026-10-08. Raise it with SCRUM-631 instead if that is still open, since
- * it is the cheaper move and buys back four times as much. Below 80%, ranking
- * in SQL stays deliberately undone: it would have to reproduce
+ * of `CANDIDATE_LIMIT`** — that is 1,600 rows, 1,232 above where production
+ * sat on 2026-10-27. That headroom is now real growth rather than stale rows,
+ * so the cheap move has been spent: the next time this is approached there is
+ * no second liveness rule to find, and ranking in SQL is the answer. Below
+ * 80% it stays deliberately undone: it would have to reproduce
  * `calculateScore`'s ordering closely enough to keep the scoring tests
  * meaningful, and nothing today needs it.
  *
@@ -313,11 +335,14 @@ export const buildCandidateWhere = ({
   filters,
   excludedUserIds,
   favoriteUserIds,
+  now = new Date(),
 }: {
   currentSearch: CurrentSearch;
   filters: FInputs & { favorites: boolean };
   excludedUserIds: string[];
   favoriteUserIds: string[];
+  /** Injectable clock for the liveness boundary; see `coopLiveness.ts`. */
+  now?: Date;
 }): Prisma.CarpoolSearchWhereInput => {
   const homeWithin = locationWithin(
     currentSearch.homeLocation,
@@ -374,9 +399,20 @@ export const buildCandidateWhere = ({
     where.companyLocation = companyWithin;
   }
 
+  // Unconditional, and first. This is the absolute rule — "this co-op has not
+  // ended" — as against `dateOverlapFilter` below, which is the *searcher's*
+  // optional preference about how their own window lines up with a
+  // candidate's. Conflating the two is the defect SCRUM-631 closed: liveness
+  // used to ride on the optional filter, so the default `dateOverlap: 0`
+  // turned it off for everyone.
+  //
+  // Collected in `AND` rather than spread onto `where`, because the filter is
+  // an `OR` and a second top-level `OR` would overwrite the first.
+  where.AND = [coopHasNotEndedFilter(now)];
+
   const dates = dateOverlapFilter(filters);
   if (dates) {
-    where.AND = [dates];
+    where.AND.push(dates);
   }
 
   return where;
@@ -490,6 +526,7 @@ export const fetchRankedCandidates = async ({
   sort,
   excludedUserIds,
   favoriteUserIds,
+  now,
 }: {
   prisma: PrismaOrTransaction;
   currentUserSearch: Parameters<typeof calculateScore>[0] & CurrentSearch;
@@ -497,6 +534,8 @@ export const fetchRankedCandidates = async ({
   sort: string;
   excludedUserIds: string[];
   favoriteUserIds: string[];
+  /** Injectable clock for the liveness boundary; see `coopLiveness.ts`. */
+  now?: Date;
 }): Promise<CandidateSearch[]> => {
   // One row past the ceiling, so truncation is *detected* rather than guessed
   // at. Asking for exactly `CANDIDATE_LIMIT` cannot distinguish "the ceiling
@@ -510,6 +549,7 @@ export const fetchRankedCandidates = async ({
       filters,
       excludedUserIds,
       favoriteUserIds,
+      now,
     }),
     include: candidateInclude,
     take: CANDIDATE_LIMIT + 1,
