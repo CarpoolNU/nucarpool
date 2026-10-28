@@ -1,20 +1,23 @@
 import { Role, Status } from "@prisma/client";
 import { integrationPrisma } from "../../testing/integrationDatabase";
+import { coopYearBounds } from "../../utils/dateUtils";
 import { anyFilters } from "../../utils/recommendation.fixtures";
 import { candidateExclusions, fetchRankedCandidates } from "./candidateSearch";
-import { coopHasNotEndedFilter, coopHasNotEndedSql } from "./coopLiveness";
+import { coopIsLiveFilter, coopIsLiveSql } from "./coopLiveness";
 
 /**
- * The liveness predicate against real MySQL (SCRUM-631).
+ * The liveness predicate against real MySQL (SCRUM-631, SCRUM-699).
  *
  * This is the only place the rule can actually be checked. `end_date` is
- * `@db.Date` and the boundary is a timestamp on the Prisma side and a date
+ * `@db.Date` and each boundary is a timestamp on the Prisma side and a date
  * literal on the raw-SQL side, so what the comparison *means* is decided by
  * MySQL rather than by either of the renderings — and a mocked Prisma would
  * return whatever the test handed it, proving nothing about either. The four
- * cases below (ended, ends today, ends tomorrow, no dates) are the entire risk
- * the ticket identified, and the today case is the one that fails if the
- * comparison is ever flipped to exclusive.
+ * floor cases below (ended, ends today, ends tomorrow, no dates) are the
+ * entire risk SCRUM-631 identified, and the today case is the one that fails
+ * if the comparison is ever flipped to exclusive. The ceiling cases are
+ * SCRUM-699's, and the on-the-ceiling case is the one that fails if `lt` is
+ * ever written as `lte`.
  *
  * **Needs a real MySQL** and runs only through `yarn test:db`. Fixtures are
  * built per test: `jest.integration.setupAfterEnv.js` truncates every table
@@ -38,6 +41,22 @@ const utcDay = (year: number, month: number, day: number) =>
 const ENDED = utcDay(2024, 6, 30);
 const ENDS_TODAY = utcDay(2026, 10, 27);
 const ENDS_TOMORROW = utcDay(2026, 10, 28);
+
+/**
+ * The ceiling, derived rather than written: `coopYearBounds`' `latest` is
+ * relative to `NOW`, so a literal here would pass today and fail the January
+ * the bound moves. `ON_CEILING` is the last day the rule admits and
+ * `PAST_CEILING` the first it rejects.
+ */
+const CEILING_YEAR = coopYearBounds(NOW).latest;
+const ON_CEILING = utcDay(CEILING_YEAR, 12, 31);
+const PAST_CEILING = utcDay(CEILING_YEAR + 1, 1, 1);
+
+/**
+ * The shape SCRUM-699 found in production: a co-op whose two-digit year was
+ * pivoted into the 2070s, which "has not ended" and so passed the floor alone.
+ */
+const PIVOTED = utcDay(2073, 6, 30);
 
 /** An onboarded, ACTIVE user with a search, two locations and a co-op range. */
 const seedSearcher = async (
@@ -191,7 +210,52 @@ describe("the liveness rule, on the default dateOverlap of 0", () => {
     expect(await candidateIdsFor(rider.id)).toEqual([dateless.id]);
   });
 
-  it("separates the four cases in one pool rather than one at a time", async () => {
+  /**
+   * SCRUM-699. The row that motivated the ticket: production held two RIDER
+   * searches dated 2069→2073, which the floor alone admits *because* the date
+   * is wrong. Seeded as a DRIVER so it is a candidate for the searching rider
+   * at all — `compatibleRoles` would not offer a rider to a rider — since the
+   * defect is about the date rather than the role.
+   */
+  it("drops a candidate whose co-op is dated past the year ceiling", async () => {
+    const rider = await seedSearcher("Rider", Role.RIDER, {
+      startDate: utcDay(2026, 9, 1),
+      endDate: ENDS_TOMORROW,
+    });
+    await seedSearcher("Pivoted", Role.DRIVER, {
+      startDate: utcDay(2069, 1, 31),
+      endDate: PIVOTED,
+    });
+
+    expect(await candidateIdsFor(rider.id)).toEqual([]);
+  });
+
+  /**
+   * The upper boundary, and the reason the comparison is `lt` against the
+   * start of the following year rather than `lte` against the ceiling year.
+   *
+   * 31 December of `coopYearBounds`' `latest` is the last day the rule admits
+   * and 1 January after it the first it rejects. Both are asserted, because a
+   * bound that is a year out passes either test on its own.
+   */
+  it("keeps a candidate ending on the ceiling and drops one a day later", async () => {
+    const rider = await seedSearcher("Rider", Role.RIDER, {
+      startDate: utcDay(2026, 9, 1),
+      endDate: ENDS_TOMORROW,
+    });
+    const onCeiling = await seedSearcher("OnCeiling", Role.DRIVER, {
+      startDate: utcDay(2026, 8, 31),
+      endDate: ON_CEILING,
+    });
+    await seedSearcher("PastCeiling", Role.DRIVER, {
+      startDate: utcDay(2026, 8, 31),
+      endDate: PAST_CEILING,
+    });
+
+    expect(await candidateIdsFor(rider.id)).toEqual([onCeiling.id]);
+  });
+
+  it("separates the six cases in one pool rather than one at a time", async () => {
     const rider = await seedSearcher("Rider", Role.RIDER, {
       startDate: utcDay(2026, 9, 1),
       endDate: ENDS_TOMORROW,
@@ -199,6 +263,10 @@ describe("the liveness rule, on the default dateOverlap of 0", () => {
     await seedSearcher("Ended", Role.DRIVER, {
       startDate: utcDay(2024, 1, 31),
       endDate: ENDED,
+    });
+    await seedSearcher("Pivoted", Role.DRIVER, {
+      startDate: utcDay(2069, 1, 31),
+      endDate: PIVOTED,
     });
     const endsToday = await seedSearcher("EndsToday", Role.DRIVER, {
       startDate: utcDay(2026, 8, 31),
@@ -212,9 +280,13 @@ describe("the liveness rule, on the default dateOverlap of 0", () => {
       startDate: null,
       endDate: null,
     });
+    const onCeiling = await seedSearcher("OnCeiling", Role.DRIVER, {
+      startDate: utcDay(2026, 8, 31),
+      endDate: ON_CEILING,
+    });
 
     expect(await candidateIdsFor(rider.id)).toEqual(
-      [endsToday.id, endsTomorrow.id, dateless.id].sort(),
+      [endsToday.id, endsTomorrow.id, dateless.id, onCeiling.id].sort(),
     );
   });
 });
@@ -230,7 +302,7 @@ describe("the liveness rule, on the default dateOverlap of 0", () => {
  * change to one that the other does not follow fails here.
  */
 describe("the Prisma and raw-SQL renderings select the same rows", () => {
-  it("agree across ended, today, tomorrow and dateless", async () => {
+  it("agree across ended, today, tomorrow, dateless and both ceiling sides", async () => {
     await seedSearcher("Ended", Role.DRIVER, {
       startDate: utcDay(2024, 1, 31),
       endDate: ENDED,
@@ -247,22 +319,54 @@ describe("the Prisma and raw-SQL renderings select the same rows", () => {
       startDate: null,
       endDate: null,
     });
+    await seedSearcher("OnCeiling", Role.RIDER, {
+      startDate: utcDay(2026, 8, 31),
+      endDate: ON_CEILING,
+    });
+    await seedSearcher("PastCeiling", Role.RIDER, {
+      startDate: utcDay(2026, 8, 31),
+      endDate: PAST_CEILING,
+    });
 
     const viaPrisma = await prisma.carpoolSearch.findMany({
-      where: coopHasNotEndedFilter(NOW),
+      where: coopIsLiveFilter(NOW),
       select: { id: true },
     });
 
     const viaSql = await prisma.$queryRaw<{ id: string }[]>`
-      SELECT cs.id FROM carpool_search cs WHERE ${coopHasNotEndedSql("cs", NOW)}
+      SELECT cs.id FROM carpool_search cs WHERE ${coopIsLiveSql("cs", NOW)}
     `;
 
     const prismaIds = viaPrisma.map((row) => row.id).sort();
 
-    // Three of the four, so an accidental "select everything" on either side
-    // is a failure here rather than a pair that agrees on the wrong answer.
-    expect(prismaIds).toHaveLength(3);
+    // Four of the six, so an accidental "select everything" on either side is
+    // a failure here rather than a pair that agrees on the wrong answer.
+    expect(prismaIds).toHaveLength(4);
     expect(viaSql.map((row) => row.id).sort()).toEqual(prismaIds);
+  });
+
+  /**
+   * The ceiling gets its own aggregate probe for the reason the floor does:
+   * the Prisma side binds a timestamp against a DATE column, so only MySQL
+   * can settle which calendar day the bound landed on. `MAX` rather than the
+   * floor's `MIN`, because it is the upper bound being read back.
+   */
+  it("put the ceiling on the same calendar day MySQL sees", async () => {
+    await seedSearcher("OnCeiling", Role.DRIVER, {
+      startDate: utcDay(2026, 8, 31),
+      endDate: ON_CEILING,
+    });
+    await seedSearcher("PastCeiling", Role.DRIVER, {
+      startDate: utcDay(2026, 8, 31),
+      endDate: PAST_CEILING,
+    });
+
+    const [{ ceiling }] = await prisma.$queryRaw<{ ceiling: Date }[]>`
+      SELECT MAX(cs.end_date) AS ceiling FROM carpool_search cs
+      WHERE ${coopIsLiveSql("cs", NOW)}
+    `;
+
+    expect(ceiling).toEqual(ON_CEILING);
   });
 
   /**
@@ -279,23 +383,28 @@ describe("the Prisma and raw-SQL renderings select the same rows", () => {
 
     const [{ boundary }] = await prisma.$queryRaw<{ boundary: Date }[]>`
       SELECT MIN(cs.end_date) AS boundary FROM carpool_search cs
-      WHERE ${coopHasNotEndedSql("cs", NOW)}
+      WHERE ${coopIsLiveSql("cs", NOW)}
     `;
 
     expect(boundary).toEqual(ENDS_TODAY);
   });
 
   /**
-   * The predicate is `AND`ed into a `WHERE` that already has terms, so its
-   * internal `OR` has to be parenthesised. Without the brackets the `OR` binds
-   * looser than the surrounding `AND` and the dateless arm pulls in rows the
-   * other conditions excluded — a far wider result than intended, and one that
-   * looks plausible until someone counts it.
+   * The predicate is `AND`ed into a `WHERE` that already has terms, so each
+   * internal `OR` has to be parenthesised — and since SCRUM-699 there are two
+   * of them, inside one further pair of brackets. Without the brackets an
+   * `OR` binds looser than the surrounding `AND` and its dateless arm pulls in
+   * rows the other conditions excluded — a far wider result than intended, and
+   * one that looks plausible until someone counts it.
    */
   it("does not escape the surrounding AND", async () => {
     await seedSearcher("EndedDriver", Role.DRIVER, {
       startDate: utcDay(2024, 1, 31),
       endDate: ENDED,
+    });
+    await seedSearcher("PastCeilingDriver", Role.DRIVER, {
+      startDate: utcDay(2026, 8, 31),
+      endDate: PAST_CEILING,
     });
     await seedSearcher("DatelessRider", Role.RIDER, {
       startDate: null,
@@ -308,7 +417,7 @@ describe("the Prisma and raw-SQL renderings select the same rows", () => {
 
     const rows = await prisma.$queryRaw<{ id: string }[]>`
       SELECT cs.id FROM carpool_search cs
-      WHERE cs.role = ${Role.DRIVER} AND ${coopHasNotEndedSql("cs", NOW)}
+      WHERE cs.role = ${Role.DRIVER} AND ${coopIsLiveSql("cs", NOW)}
     `;
 
     const liveSearch = await prisma.carpoolSearch.findFirstOrThrow({
@@ -327,10 +436,14 @@ describe("the Prisma and raw-SQL renderings select the same rows", () => {
  * router, so it does not need an admin session to be meaningful.
  */
 describe("the admin supply counter counts the same population", () => {
-  it("excludes an ended co-op from a city's driver and rider totals", async () => {
+  it("excludes an ended and an over-dated co-op from a city's totals", async () => {
     await seedSearcher("EndedDriver", Role.DRIVER, {
       startDate: utcDay(2024, 1, 31),
       endDate: ENDED,
+    });
+    await seedSearcher("PivotedDriver", Role.DRIVER, {
+      startDate: utcDay(2069, 1, 31),
+      endDate: PIVOTED,
     });
     await seedSearcher("LiveDriver", Role.DRIVER, {
       startDate: utcDay(2026, 8, 31),
@@ -357,7 +470,7 @@ describe("the admin supply counter counts the same population", () => {
         LEFT JOIN location l ON l.id = cs.homeLocationId
         WHERE cs.status = ${Status.ACTIVE}
           AND cs.role IN (${Role.DRIVER}, ${Role.RIDER})
-          AND ${coopHasNotEndedSql("cs", NOW)}
+          AND ${coopIsLiveSql("cs", NOW)}
         GROUP BY LOWER(TRIM(COALESCE(l.city, '')))
       `;
 

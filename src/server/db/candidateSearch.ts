@@ -14,7 +14,7 @@ import {
 } from "../../utils/candidateReachability";
 import { blockedCounterpartIds } from "./blocks";
 import type { BlockReader } from "./blocks";
-import { coopHasNotEndedFilter } from "./coopLiveness";
+import { coopIsLiveFilter } from "./coopLiveness";
 
 /**
  * The candidate query behind both matching endpoints.
@@ -26,14 +26,15 @@ import { coopHasNotEndedFilter } from "./coopLiveness";
  * the mirrored filters are written to match `calculateScore` exactly rather
  * than to a tidier equivalent.
  *
- * **`coopHasNotEndedFilter` is the one exception**, and it is an exception on
+ * **`coopIsLiveFilter` is the one exception**, and it is an exception on
  * purpose rather than an oversight. The scorer has no concept of liveness, so
  * that predicate removes rows the scorer would have kept — a co-op that ended
- * in 2024 scores perfectly well. It is the only predicate here whose job is to
- * change the answer rather than to save a read; `coopLiveness.ts` carries the
- * reasoning and the measurements. Every *other* predicate still owes the
- * superset property, and "date overlap agrees with calculateScore" in the
- * tests holds liveness inert so it can still check that.
+ * in 2024, or one dated 2073, scores perfectly well. It is the only predicate
+ * here whose job is to change the answer rather than to save a read;
+ * `coopLiveness.ts` carries the reasoning and the measurements, including why
+ * it is two rules. Every *other* predicate still owes the superset property,
+ * and "date overlap agrees with calculateScore" in the tests holds liveness
+ * inert so it can still check that.
  *
  * Deliberately *not* pushed down:
  *
@@ -98,7 +99,7 @@ export const CANDIDATE_LIMIT_LOG_PREFIX = "[candidate-limit]";
  * So the worst case is **18% of the ceiling**, and reaching it needs the
  * matchable population to grow by **443%**.
  *
- * "Before" is the same query without `coopHasNotEndedFilter`, which is what
+ * "Before" is the same query without `coopIsLiveFilter`, which is what
  * the previous figures here measured — **1,463 for a VIEWER on 2026-10-08, at
  * 73% of the ceiling**. Almost all of that gap is the liveness rule rather
  * than three weeks of change; the comparable unfiltered figure on 2026-10-27
@@ -126,7 +127,7 @@ export const CANDIDATE_LIMIT_LOG_PREFIX = "[candidate-limit]";
  * searches whose `end_date` had already passed** and 44 held no dates at all;
  * only 324 were co-ops still running. The ceiling was being approached by
  * rows that did not belong in the candidate set on any reading, rather than by
- * the platform outgrowing the bound. `coopHasNotEndedFilter` now removes them,
+ * the platform outgrowing the bound. `coopIsLiveFilter` now removes them,
  * which is why the worst case above is 368 and not 1,499 — the prediction
  * recorded here was "roughly 340 rows, about 17%", and the measurement came in
  * at 368 and 18%.
@@ -399,16 +400,17 @@ export const buildCandidateWhere = ({
     where.companyLocation = companyWithin;
   }
 
-  // Unconditional, and first. This is the absolute rule — "this co-op has not
-  // ended" — as against `dateOverlapFilter` below, which is the *searcher's*
-  // optional preference about how their own window lines up with a
-  // candidate's. Conflating the two is the defect SCRUM-631 closed: liveness
+  // Unconditional, and first. This is the absolute rule — "this co-op is
+  // live", meaning it has not ended *and* its end date is not absurdly far in
+  // the future — as against `dateOverlapFilter` below, which is the
+  // *searcher's* optional preference about how their own window lines up with
+  // a candidate's. Conflating the two is the defect SCRUM-631 closed: liveness
   // used to ride on the optional filter, so the default `dateOverlap: 0`
-  // turned it off for everyone.
+  // turned it off for everyone. SCRUM-699 added the upper bound.
   //
   // Collected in `AND` rather than spread onto `where`, because the filter is
-  // an `OR` and a second top-level `OR` would overwrite the first.
-  where.AND = [coopHasNotEndedFilter(now)];
+  // built from `OR`s and a second top-level `OR` would overwrite the first.
+  where.AND = [coopIsLiveFilter(now)];
 
   const dates = dateOverlapFilter(filters);
   if (dates) {

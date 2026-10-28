@@ -22,7 +22,7 @@ import {
 import { AdminSupplyQueryRow, AdminUserRow } from "../../../utils/types";
 import { AdminAuditAction, buildAuditLogEntry } from "../../adminAuditLog";
 import { parseConversationSnapshot } from "../../reportSnapshot";
-import { coopHasNotEndedSql } from "../../db/coopLiveness";
+import { coopIsLiveSql } from "../../db/coopLiveness";
 
 /** How many rows the audit log's list view reads back. Static — there is no
  * client-supplied window here, unlike `dashboardWindow` above, so a fixed
@@ -405,15 +405,16 @@ export const adminDataRouter = router({
       // `groupBy` cannot group by a column on a related table.
       //
       // The population is a user with an email whose search is ACTIVE, whose
-      // role is DRIVER or RIDER, and **whose co-op has not ended**. VIEWERs
-      // are about a third of production and are not demand. `LEFT JOIN
-      // location` and `COALESCE` keep a search whose home location is missing
-      // or has no city in the totals as `Unknown` rather than dropping it.
+      // role is DRIVER or RIDER, and **whose co-op is live**. VIEWERs are
+      // about a third of production and are not demand. `LEFT JOIN location`
+      // and `COALESCE` keep a search whose home location is missing or has no
+      // city in the totals as `Unknown` rather than dropping it.
       //
-      // `coopHasNotEndedSql` is the same predicate `buildCandidateWhere`
-      // applies, shared so this chart and the match pool cannot disagree
-      // about who is live (SCRUM-631). It is the reason the rows no longer
-      // sum to `summariseUsers`' `driverAO + driverANO` and
+      // `coopIsLiveSql` is the same predicate `buildCandidateWhere` applies,
+      // shared so this chart and the match pool cannot disagree about who is
+      // live (SCRUM-631, extended by SCRUM-699 to reject an `end_date` beyond
+      // `coopYearBounds`). It is the reason the rows no longer sum to
+      // `summariseUsers`' `driverAO + driverANO` and
       // `riderAO + riderANO`: those quadrants are an *onboarding* breakdown
       // of stored `status` and deliberately keep counting ended co-ops, since
       // "how many accounts are switched on" is a different question from
@@ -458,7 +459,7 @@ export const adminDataRouter = router({
           LEFT JOIN location l ON l.id = cs.homeLocationId
           WHERE cs.status = ${Status.ACTIVE}
             AND cs.role IN (${Role.DRIVER}, ${Role.RIDER})
-            AND ${coopHasNotEndedSql("cs")}
+            AND ${coopIsLiveSql("cs")}
           GROUP BY LOWER(TRIM(COALESCE(l.city, '')))
         `,
     ]);

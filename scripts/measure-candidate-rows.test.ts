@@ -13,7 +13,7 @@ import {
 } from "../src/server/db/candidateSearch";
 import { searcherCanMatchNobody } from "../src/utils/candidateReachability";
 import { SEAT_AVAILABLE_FILTER } from "../src/utils/carpoolSeats";
-import { coopHasNotEndedFilter } from "../src/server/db/coopLiveness";
+import { coopIsLiveFilter } from "../src/server/db/coopLiveness";
 
 /** A fixed clock, so the liveness clause asserted on below is stable. */
 const NOW = new Date("2026-10-27T13:45:12.345Z");
@@ -163,7 +163,7 @@ describe("the widest where, against the SQL the figures were measured with", () 
    */
   it("still applies the liveness rule at the widest filters", () => {
     for (const role of everyRole) {
-      expect(whereFor(role).AND).toEqual([coopHasNotEndedFilter(NOW)]);
+      expect(whereFor(role).AND).toEqual([coopIsLiveFilter(NOW)]);
     }
   });
 

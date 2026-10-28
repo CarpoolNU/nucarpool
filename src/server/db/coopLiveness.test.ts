@@ -1,14 +1,21 @@
+import { coopYearBounds } from "../../utils/dateUtils";
 import {
+  coopEndsBeforeYearCeilingFilter,
+  coopEndsBeforeYearCeilingSql,
   coopHasNotEndedFilter,
   coopHasNotEndedSql,
+  coopIsLiveFilter,
+  coopIsLiveSql,
   coopLivenessBoundary,
   coopLivenessDay,
+  coopYearCeilingBoundary,
+  coopYearCeilingDay,
 } from "./coopLiveness";
 
 /**
- * The boundary and the two renderings of it.
+ * The two boundaries and the renderings of them.
  *
- * What this file can prove is that one day is computed and that both
+ * What this file can prove is that each day is computed and that both
  * renderings carry it. What it deliberately does **not** attempt is whether
  * the predicate selects the right rows — a mocked Prisma returns whatever the
  * test says, so an assertion here would only restate the clause. That is
@@ -130,5 +137,182 @@ describe("coopHasNotEndedSql", () => {
     expect(coopHasNotEndedSql("cs", now).values[0]).toBe(
       dated.endDate.gte.toISOString().slice(0, 10),
     );
+  });
+});
+
+describe("coopYearCeilingBoundary", () => {
+  it("is midnight UTC on 1 January after the coopYearBounds ceiling", () => {
+    // 2026 + COOP_YEARS_AHEAD is 2036, so the first instant that is too late
+    // is the start of 2037.
+    expect(
+      coopYearCeilingBoundary(new Date("2026-10-27T13:45:12.345Z")),
+    ).toEqual(new Date("2037-01-01T00:00:00.000Z"));
+  });
+
+  /**
+   * SCRUM-699 AC 2: the bound is **derived** from `coopYearBounds` rather than
+   * re-typed here. Asserted against that function at two clocks a decade
+   * apart, because a literal passes the single-date case above and fails the
+   * moment the relative ceiling moves — which it does every 1 January.
+   */
+  it("tracks coopYearBounds rather than hard-coding its ceiling", () => {
+    for (const iso of [
+      "2026-10-27T13:45:12.345Z",
+      "2036-03-04T00:00:00.000Z",
+    ]) {
+      const now = new Date(iso);
+
+      expect(coopYearCeilingBoundary(now).getUTCFullYear()).toBe(
+        coopYearBounds(now).latest + 1,
+      );
+    }
+  });
+
+  /**
+   * The same regression `coopLivenessBoundary` guards, one unit up: 03:00 UTC
+   * on 1 January is still 31 December in `America/New_York`, so an
+   * implementation reaching for `getFullYear` lands a whole year early. CI
+   * runs Jest in both zones, so this fails in exactly one arm.
+   */
+  it("gives the UTC year even when the local year differs", () => {
+    expect(
+      coopYearCeilingBoundary(new Date("2027-01-01T03:00:00.000Z")),
+    ).toEqual(new Date("2038-01-01T00:00:00.000Z"));
+  });
+});
+
+describe("coopYearCeilingDay", () => {
+  it("renders the ceiling as a bare YYYY-MM-DD", () => {
+    expect(coopYearCeilingDay(new Date("2026-10-27T13:45:12.345Z"))).toBe(
+      "2037-01-01",
+    );
+  });
+
+  it("agrees with the boundary it is derived from, in either zone", () => {
+    const now = new Date("2027-01-01T03:00:00.000Z");
+
+    expect(coopYearCeilingDay(now)).toBe(
+      coopYearCeilingBoundary(now).toISOString().slice(0, 10),
+    );
+  });
+});
+
+describe("coopEndsBeforeYearCeilingFilter", () => {
+  const now = new Date("2026-10-27T13:45:12.345Z");
+
+  it("admits a null end date alongside one before the ceiling", () => {
+    expect(coopEndsBeforeYearCeilingFilter(now)).toEqual({
+      OR: [
+        { endDate: null },
+        { endDate: { lt: new Date("2037-01-01T00:00:00.000Z") } },
+      ],
+    });
+  });
+
+  /**
+   * `lt`, not `lte`. The boundary is the first instant that is *too late*, so
+   * an inclusive comparison would admit 1 January of the year past the
+   * ceiling — a whole year of dates `coopYearBounds` calls implausible.
+   */
+  it("uses an exclusive comparison against the start of the year after", () => {
+    const [, dated] = coopEndsBeforeYearCeilingFilter(now).OR as [
+      unknown,
+      { endDate: Record<string, unknown> },
+    ];
+
+    expect(Object.keys(dated.endDate)).toEqual(["lt"]);
+  });
+});
+
+describe("coopEndsBeforeYearCeilingSql", () => {
+  const now = new Date("2026-10-27T13:45:12.345Z");
+
+  it("interpolates the alias as an identifier and the day as a parameter", () => {
+    const fragment = coopEndsBeforeYearCeilingSql("cs", now);
+
+    expect(fragment.sql).toBe("(cs.end_date IS NULL OR cs.end_date < ?)");
+    expect(fragment.values).toEqual(["2037-01-01"]);
+  });
+
+  it("binds a date string rather than a timestamp", () => {
+    expect(typeof coopEndsBeforeYearCeilingSql("cs", now).values[0]).toBe(
+      "string",
+    );
+  });
+
+  it("is parenthesised, so ANDing it into a WHERE cannot capture the OR", () => {
+    const { sql } = coopEndsBeforeYearCeilingSql("cs", now);
+
+    expect(sql.startsWith("(")).toBe(true);
+    expect(sql.endsWith(")")).toBe(true);
+  });
+
+  it("carries the same day as the Prisma rendering", () => {
+    const [, dated] = coopEndsBeforeYearCeilingFilter(now).OR as [
+      unknown,
+      { endDate: { lt: Date } },
+    ];
+
+    expect(coopEndsBeforeYearCeilingSql("cs", now).values[0]).toBe(
+      dated.endDate.lt.toISOString().slice(0, 10),
+    );
+  });
+});
+
+/**
+ * The composition, which is the only thing the callers touch.
+ *
+ * Asserted against the two halves rather than against a spelled-out clause, so
+ * a change to either half flows through instead of having to be copied here —
+ * and so the thing being pinned is "liveness is exactly these two, in this
+ * order", which is the property a later edit could break silently.
+ */
+describe("coopIsLiveFilter", () => {
+  const now = new Date("2026-10-27T13:45:12.345Z");
+
+  it("ANDs the floor and the ceiling, unchanged", () => {
+    expect(coopIsLiveFilter(now)).toEqual({
+      AND: [coopHasNotEndedFilter(now), coopEndsBeforeYearCeilingFilter(now)],
+    });
+  });
+
+  /**
+   * Both halves admit a null, so the composition does too — SCRUM-631's
+   * decision, which SCRUM-699 was explicitly not allowed to reverse.
+   */
+  it("still admits a dateless search", () => {
+    const [floor, ceiling] = coopIsLiveFilter(now).AND as [
+      { OR: unknown[] },
+      { OR: unknown[] },
+    ];
+
+    expect(floor.OR[0]).toEqual({ endDate: null });
+    expect(ceiling.OR[0]).toEqual({ endDate: null });
+  });
+});
+
+describe("coopIsLiveSql", () => {
+  const now = new Date("2026-10-27T13:45:12.345Z");
+
+  it("ANDs the two fragments inside one further pair of brackets", () => {
+    const fragment = coopIsLiveSql("cs", now);
+
+    expect(fragment.sql).toBe(
+      "((cs.end_date IS NULL OR cs.end_date >= ?) AND" +
+        " (cs.end_date IS NULL OR cs.end_date < ?))",
+    );
+    expect(fragment.values).toEqual(["2026-10-27", "2037-01-01"]);
+  });
+
+  it("carries the same two days as the Prisma rendering", () => {
+    const [floor, ceiling] = coopIsLiveFilter(now).AND as [
+      { OR: [unknown, { endDate: { gte: Date } }] },
+      { OR: [unknown, { endDate: { lt: Date } }] },
+    ];
+
+    expect(coopIsLiveSql("cs", now).values).toEqual([
+      floor.OR[1].endDate.gte.toISOString().slice(0, 10),
+      ceiling.OR[1].endDate.lt.toISOString().slice(0, 10),
+    ]);
   });
 });

@@ -20,7 +20,7 @@ import {
   hasSeatAvailable,
 } from "../../utils/carpoolSeats";
 import { searcherCanMatchNobody } from "../../utils/candidateReachability";
-import { coopHasNotEndedFilter } from "./coopLiveness";
+import { coopIsLiveFilter } from "./coopLiveness";
 import {
   anyFilters,
   BOSTON,
@@ -584,12 +584,12 @@ describe("buildCandidateWhere — date overlap", () => {
    * pinned it.
    */
   it("still applies the liveness rule when any overlap will do", () => {
-    expect(build(0).AND).toEqual([coopHasNotEndedFilter(NOW)]);
+    expect(build(0).AND).toEqual([coopIsLiveFilter(NOW)]);
   });
 
   it("requires the term to span the window for a full overlap", () => {
     expect(build(2).AND).toEqual([
-      coopHasNotEndedFilter(NOW),
+      coopIsLiveFilter(NOW),
       {
         startDate: { not: null, lte: TERM_START },
         endDate: { not: null, gte: TERM_END },
@@ -599,7 +599,7 @@ describe("buildCandidateWhere — date overlap", () => {
 
   it("negates the two disjoint cases for a partial overlap", () => {
     expect(build(1).AND).toEqual([
-      coopHasNotEndedFilter(NOW),
+      coopIsLiveFilter(NOW),
       {
         startDate: { not: null },
         endDate: { not: null },
@@ -985,7 +985,7 @@ describe("group exclusion agrees with calculateScore", () => {
           // Asserted to be exactly that rather than waved through, so a
           // *different* `AND` member added later still trips the `default`
           // below and prompts the same question about the scorer.
-          expect(clause).toEqual([coopHasNotEndedFilter(NOW)]);
+          expect(clause).toEqual([coopIsLiveFilter(NOW)]);
           return true;
         }
         default:
