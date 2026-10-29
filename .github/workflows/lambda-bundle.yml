@@ -1,0 +1,195 @@
+name: Lambda Bundle
+
+# Trigger policy, shared by lint / tsc / test / build / env-contract / schema:
+#   pull_request     - gates every PR before it can merge into main
+#   push to main     - catches anything that reaches main by another route
+# Deliberately not `on: [push]`: while a PR is open that runs every check twice,
+# once for the branch push and once for the pull_request event.
+#
+# Unlike those six, this one carries a `paths:` filter. `prisma generate` plus
+# esbuild costs a few seconds and the Prisma client copy is 16 MB, and none of
+# it can tell you anything about a PR that does not touch the bundle's inputs -
+# so running it on every PR would make it the slowest check on changes it cannot
+# fail for.
+#
+# **The filter is the measured module graph, not a guess.** It was derived by
+# asking esbuild what it actually pulled in:
+#
+#     yarn --silent esbuild infra/report-digest/handler.ts --bundle \
+#       --platform=node --target=node22 --format=cjs \
+#       --external:@prisma/client --external:.prisma/client \
+#       --metafile=/tmp/meta.json --outfile=/dev/null
+#     node -e 'console.log(Object.keys(require("/tmp/meta.json").inputs)
+#       .filter((f) => !f.startsWith("node_modules/")).sort().join("\n"))'
+#
+# which on 77db1e9 returned fourteen first-party files across `infra/`,
+# `src/server/`, `src/utils/` and one `scripts/` file. Two of those four are
+# easy to miss by reading `handler.ts` alone: it imports
+# `scripts/send-report-digest.ts`, which reaches `src/server/ses.ts` and from
+# there the whole of `src/utils/env/`. A filter naming only `src/server/**`
+# would let a change to `src/utils/scheduleTime.ts` break the bundle silently,
+# which is the failure this workflow exists to prevent.
+#
+# **Re-run that command when the imports change.** A filter is only as good as
+# its last derivation, and nothing here checks it against the graph.
+#
+# The workflow file itself is in the list so that a change to this check runs
+# this check - otherwise it could only ever be tested by changing something else.
+on:
+  pull_request:
+    paths:
+      - "infra/report-digest/**"
+      - "src/server/**"
+      - "src/utils/**"
+      - "scripts/send-report-digest.ts"
+      - "scripts/package-report-digest-lambda.sh"
+      - "prisma/schema.prisma"
+      - "package.json"
+      - "yarn.lock"
+      - ".github/workflows/lambda-bundle.yml"
+  push:
+    branches: [main]
+    paths:
+      - "infra/report-digest/**"
+      - "src/server/**"
+      - "src/utils/**"
+      - "scripts/send-report-digest.ts"
+      - "scripts/package-report-digest-lambda.sh"
+      - "prisma/schema.prisma"
+      - "package.json"
+      - "yarn.lock"
+      - ".github/workflows/lambda-bundle.yml"
+
+# `GITHUB_TOKEN` is scoped in the file rather than left to a repository setting.
+# Every scope not listed becomes `none`, and `contents: read` is all
+# `actions/checkout` needs - nothing here writes to the repository, comments, or
+# calls the API. `auto-comment.yml` is the one workflow that needs more, and
+# declares it on its own job.
+#
+# This job in particular touches no AWS account and holds no credential. It
+# bundles, copies, zips and requires the result; `package-report-digest-lambda.sh`
+# makes no API call, and the deploy steps in `infra/report-digest/README.md` are
+# run by a human.
+permissions:
+  contents: read
+
+# One run per ref, and a superseded run is cancelled.
+#
+# `github.ref` is `refs/pull/N/merge` for a `pull_request` and `refs/heads/main`
+# for a push, so two pushes to an open PR share a group and the older run is
+# cancelled. A push to `main` is keyed on its own SHA, which is unique per merge:
+# grouping those by ref would leave each merge run queued behind the previous
+# one, and a merge run should never be cancelled or delayed by the next merge.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# The report-digest Lambda is a **second build target**, and until this workflow
+# existed it was outside every check in CI. `tsc` proves `handler.ts` type-checks
+# and `build` proves `next build` succeeds, but neither runs esbuild over this
+# module graph, with these externals, for this runtime - so a new transitive
+# import, a dependency that does not survive bundling, or a Prisma client layout
+# change could break the deployment package and nothing would notice.
+#
+# The bundle is a hand-taken snapshot of `src/server/`, re-made immediately
+# before a deploy (`infra/report-digest/README.md`), so the breakage surfaced at
+# the worst possible moment: mid-deploy, with a half-created CloudFormation
+# stack and no signal about which of the intervening commits caused it. Eighteen
+# commits touched `src/server/` between SCRUM-626 and SCRUM-702 without the
+# bundle being rebuilt once; it still built, but only because someone checked by
+# hand, three weeks late. SCRUM-702 made the check cheap and automatic.
+jobs:
+  lambda-bundle:
+    name: lambda-bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: install node
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: yarn
+      - run: yarn install --frozen-lockfile
+      # Placeholders for the whole env contract, from the contract itself, so
+      # the load step below can import a module graph that validates with
+      # envsafe at import time. Set before the build rather than after it so
+      # that nothing in the packaging script - which runs `prisma generate`,
+      # and whose datasource block reads `env("DATABASE_URL")` - can fail for a
+      # missing variable.
+      #
+      # **Dummy values are correct here, not a compromise.** The point is to
+      # prove the module graph resolves, not to exercise the digest: no real
+      # credential or reachable database is involved, and the next step asserts
+      # that nothing tries to reach one. `DATABASE_URL` resolves to
+      # `mysql://ci:ci@127.0.0.1:3306/ci`, where no MySQL is listening on this
+      # runner, so a connection attempt would fail loudly rather than succeed
+      # quietly.
+      #
+      # Generated rather than hand-written so a newly required variable gets a
+      # placeholder for free - the same reason `build.yml` does this.
+      - name: provide placeholder environment
+        run: node scripts/check-env-contract.js --github-env >> "$GITHUB_ENV"
+      # The script generates the Prisma client itself, so there is no separate
+      # generate step: the engine for the Lambda's platform only exists once
+      # `binaryTargets` has been generated, and making the script do it is what
+      # lets it work on a clean clone.
+      - name: build the deployment package
+        run: yarn package:report-digest
+      # The size is printed rather than asserted, deliberately. A ceiling would
+      # have to be an arbitrary number and would fail noisily on legitimate
+      # growth long before approaching Lambda's 250 MB unzipped limit - the
+      # unzipped tree is around 19 MB today. Visible in the log is enough to
+      # notice drift; the zip grew from 7.6 MB to about 8 MB over the eighteen
+      # commits that prompted SCRUM-702. Do not read these numbers too closely -
+      # `du -h` reports allocated blocks and the zip embeds timestamps, so the
+      # same tree measures 8.0 MB or 8.1 MB run to run.
+      - name: report the package size
+        run: |
+          du -h build/report-digest-lambda/report-digest-lambda.zip
+          du -sh build/report-digest-lambda/dist
+      # Building is the weaker half of the check. esbuild will happily emit a
+      # bundle that throws the moment it is required - a missing external or a
+      # module-scope environment read produces exactly that - so the bundle is
+      # loaded and its handler export checked.
+      #
+      # The outbound paths are trapped first, which turns "makes no database or
+      # network connection" from something observed once into something this job
+      # enforces on every run. `PrismaClient` does not connect when constructed
+      # and nothing else here reaches out at import time, so the traps should
+      # never fire; if a future change adds a module-scope `$connect()` or an
+      # SES call, this is what reports it.
+      #
+      # Both halves were proven to fail when they should, and the first one has
+      # a trap in it worth knowing before you re-test this check. **An
+      # unresolvable import is only a negative control if its binding is used.**
+      # esbuild compiles TypeScript file by file with no type information, so it
+      # cannot tell an unused value import from a type import and elides it - an
+      # added `import { x } from "./does-not-exist"` with no reference to `x`
+      # bundles clean and exits 0. Reference the binding and the build fails with
+      # `Could not resolve`. The other two controls, both of which build fine and
+      # fail here: a module-scope `throw`, and a module-scope socket open, which
+      # the traps above catch.
+      #
+      # The handler is not invoked. That needs a real database and SES, and is
+      # the deploy-time demonstration in `infra/report-digest/README.md` step 7.
+      - name: assert the bundle loads and exports a handler
+        run: |
+          node -e '
+            const trip = (what) => () => {
+              console.error("the bundle attempted " + what + " at require time.");
+              process.exit(1);
+            };
+            require("net").Socket.prototype.connect = trip("a TCP connection");
+            require("tls").connect = trip("a TLS connection");
+            require("dns").lookup = trip("a DNS lookup");
+            require("dns").promises.lookup = trip("a DNS lookup");
+
+            const bundle = require("./build/report-digest-lambda/dist/index.js");
+            console.log("exports: " + Object.keys(bundle).sort().join(", "));
+
+            if (typeof bundle.handler !== "function") {
+              console.error("the bundle does not export a callable handler.");
+              process.exit(1);
+            }
+            console.log("the bundle loads, exports a callable handler, and opened no connection.");
+          '
