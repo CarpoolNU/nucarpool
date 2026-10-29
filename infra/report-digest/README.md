@@ -17,6 +17,7 @@ EventBridge Scheduler  ──cron(0 12 ? * MON *)──▶  Lambda  ──▶  s
 | `handler.test.ts`                         | Which week, which payloads are refused, what throws   |
 | `template.test.ts`                        | The four facts the template repeats from the code     |
 | `scripts/package-report-digest-lambda.sh` | Builds the deployment package                         |
+| `.github/workflows/lambda-bundle.yml`     | Builds and loads that package in CI                   |
 
 ## Nothing here has been deployed
 
@@ -27,8 +28,16 @@ expect to fix something.
 
 What _has_ been tested offline: the built bundle loads, exports `handler`, and
 runs the real window derivation and the real delivery claim through to an
-`already_sent` skip against a stub database. The packaging script produces a
-7.6 MB zip. Both are reproducible with `yarn package:report-digest`.
+`already_sent` skip against a stub database. The packaging script produces an
+8.0 MB zip. Both are reproducible with `yarn package:report-digest`.
+
+**The build and the load are checked in CI** by
+[`lambda-bundle.yml`](../../.github/workflows/lambda-bundle.yml), on any change
+to the bundle's module graph, so a packaging failure now surfaces on the PR that
+causes it rather than on deploy day. That narrows the paragraph above without
+retiring it: CI proves esbuild can bundle this handler and that requiring the
+result opens no connection. It proves nothing at all about how the function
+behaves in AWS, which is still what the first deploy finds out.
 
 ## Why a Lambda rather than a GitHub Actions cron
 
@@ -123,6 +132,10 @@ yarn package:report-digest
 Writes `build/report-digest-lambda/dist` (gitignored), which `template.yaml`
 points at. Re-run it after any change under `src/server/` or `infra/`, because
 the bundle is a snapshot rather than a reference.
+
+CI checks that the snapshot still _builds_, but it uploads no artifact, so this
+step is never skippable: what a deploy ships is always the tree built here, on
+the machine doing the deploying.
 
 ### 5. Put the database URL in SSM, then deploy with the schedule off
 
