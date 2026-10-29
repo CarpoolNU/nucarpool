@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { coopYearBounds } from "../../utils/dateUtils";
 import {
   coopEndsBeforeYearCeilingFilter,
@@ -73,12 +74,9 @@ describe("coopLivenessDay", () => {
 describe("coopHasNotEndedFilter", () => {
   const now = new Date("2026-10-27T13:45:12.345Z");
 
-  it("admits a null end date alongside one at or after the boundary", () => {
+  it("is a bare comparison against the boundary, with no null arm", () => {
     expect(coopHasNotEndedFilter(now)).toEqual({
-      OR: [
-        { endDate: null },
-        { endDate: { gte: new Date("2026-10-27T00:00:00.000Z") } },
-      ],
+      endDate: { gte: new Date("2026-10-27T00:00:00.000Z") },
     });
   });
 
@@ -89,12 +87,22 @@ describe("coopHasNotEndedFilter", () => {
    * sits exactly on the boundary, and this catches it on every run.
    */
   it("uses an inclusive comparison, so a co-op ending today survives", () => {
-    const [, dated] = coopHasNotEndedFilter(now).OR as [
-      unknown,
-      { endDate: Record<string, unknown> },
-    ];
+    const { endDate } = coopHasNotEndedFilter(now) as {
+      endDate: Record<string, unknown>;
+    };
 
-    expect(Object.keys(dated.endDate)).toEqual(["gte"]);
+    expect(Object.keys(endDate)).toEqual(["gte"]);
+  });
+
+  /**
+   * The SCRUM-633 decision, asserted as the *absence* of the arm that used to
+   * carry it rather than only through the shape above: a later edit restoring
+   * `OR: [{ endDate: null }, ...]` would satisfy a loose shape check while
+   * reversing the policy, and this names the thing that must not come back.
+   * Whether MySQL then drops the row is `coopHasNotEnded.db.test.ts`'s to say.
+   */
+  it("has no OR, so a dateless row cannot be admitted by an arm", () => {
+    expect(coopHasNotEndedFilter(now).OR).toBeUndefined();
   });
 });
 
@@ -104,7 +112,7 @@ describe("coopHasNotEndedSql", () => {
   it("interpolates the alias as an identifier and the day as a parameter", () => {
     const fragment = coopHasNotEndedSql("cs", now);
 
-    expect(fragment.sql).toBe("(cs.end_date IS NULL OR cs.end_date >= ?)");
+    expect(fragment.sql).toBe("(cs.end_date >= ?)");
     expect(fragment.values).toEqual(["2026-10-27"]);
   });
 
@@ -117,7 +125,7 @@ describe("coopHasNotEndedSql", () => {
     expect(typeof coopHasNotEndedSql("cs", now).values[0]).toBe("string");
   });
 
-  it("is parenthesised, so ANDing it into a WHERE cannot capture the OR", () => {
+  it("is parenthesised, so ANDing it into a WHERE keeps it one term", () => {
     const { sql } = coopHasNotEndedSql("cs", now);
 
     expect(sql.startsWith("(")).toBe(true);
@@ -125,17 +133,25 @@ describe("coopHasNotEndedSql", () => {
   });
 
   /**
+   * The SQL half of SCRUM-633, and the one that needs saying out loud: the
+   * Prisma rendering excludes a dateless row by the shape of the object, but
+   * this one would admit it again the moment someone reinstated `IS NULL OR`.
+   */
+  it("does not mention IS NULL, so a dateless row is not readmitted", () => {
+    expect(coopHasNotEndedSql("cs", now).sql).not.toContain("IS NULL");
+  });
+
+  /**
    * The anti-drift property the two renderings exist under: they may be
    * written in different languages, but they may not disagree about the day.
    */
   it("carries the same day as the Prisma rendering", () => {
-    const [, dated] = coopHasNotEndedFilter(now).OR as [
-      unknown,
-      { endDate: { gte: Date } },
-    ];
+    const { endDate } = coopHasNotEndedFilter(now) as {
+      endDate: { gte: Date };
+    };
 
     expect(coopHasNotEndedSql("cs", now).values[0]).toBe(
-      dated.endDate.gte.toISOString().slice(0, 10),
+      endDate.gte.toISOString().slice(0, 10),
     );
   });
 });
@@ -200,12 +216,9 @@ describe("coopYearCeilingDay", () => {
 describe("coopEndsBeforeYearCeilingFilter", () => {
   const now = new Date("2026-10-27T13:45:12.345Z");
 
-  it("admits a null end date alongside one before the ceiling", () => {
+  it("is a bare comparison against the ceiling, with no null arm", () => {
     expect(coopEndsBeforeYearCeilingFilter(now)).toEqual({
-      OR: [
-        { endDate: null },
-        { endDate: { lt: new Date("2037-01-01T00:00:00.000Z") } },
-      ],
+      endDate: { lt: new Date("2037-01-01T00:00:00.000Z") },
     });
   });
 
@@ -215,12 +228,16 @@ describe("coopEndsBeforeYearCeilingFilter", () => {
    * ceiling — a whole year of dates `coopYearBounds` calls implausible.
    */
   it("uses an exclusive comparison against the start of the year after", () => {
-    const [, dated] = coopEndsBeforeYearCeilingFilter(now).OR as [
-      unknown,
-      { endDate: Record<string, unknown> },
-    ];
+    const { endDate } = coopEndsBeforeYearCeilingFilter(now) as {
+      endDate: Record<string, unknown>;
+    };
 
-    expect(Object.keys(dated.endDate)).toEqual(["lt"]);
+    expect(Object.keys(endDate)).toEqual(["lt"]);
+  });
+
+  /** The ceiling's half of the SCRUM-633 decision, for the floor's reason. */
+  it("has no OR, so a dateless row cannot be admitted by an arm", () => {
+    expect(coopEndsBeforeYearCeilingFilter(now).OR).toBeUndefined();
   });
 });
 
@@ -230,7 +247,7 @@ describe("coopEndsBeforeYearCeilingSql", () => {
   it("interpolates the alias as an identifier and the day as a parameter", () => {
     const fragment = coopEndsBeforeYearCeilingSql("cs", now);
 
-    expect(fragment.sql).toBe("(cs.end_date IS NULL OR cs.end_date < ?)");
+    expect(fragment.sql).toBe("(cs.end_date < ?)");
     expect(fragment.values).toEqual(["2037-01-01"]);
   });
 
@@ -240,21 +257,26 @@ describe("coopEndsBeforeYearCeilingSql", () => {
     );
   });
 
-  it("is parenthesised, so ANDing it into a WHERE cannot capture the OR", () => {
+  it("is parenthesised, so ANDing it into a WHERE keeps it one term", () => {
     const { sql } = coopEndsBeforeYearCeilingSql("cs", now);
 
     expect(sql.startsWith("(")).toBe(true);
     expect(sql.endsWith(")")).toBe(true);
   });
 
+  it("does not mention IS NULL, so a dateless row is not readmitted", () => {
+    expect(coopEndsBeforeYearCeilingSql("cs", now).sql).not.toContain(
+      "IS NULL",
+    );
+  });
+
   it("carries the same day as the Prisma rendering", () => {
-    const [, dated] = coopEndsBeforeYearCeilingFilter(now).OR as [
-      unknown,
-      { endDate: { lt: Date } },
-    ];
+    const { endDate } = coopEndsBeforeYearCeilingFilter(now) as {
+      endDate: { lt: Date };
+    };
 
     expect(coopEndsBeforeYearCeilingSql("cs", now).values[0]).toBe(
-      dated.endDate.lt.toISOString().slice(0, 10),
+      endDate.lt.toISOString().slice(0, 10),
     );
   });
 });
@@ -277,17 +299,22 @@ describe("coopIsLiveFilter", () => {
   });
 
   /**
-   * Both halves admit a null, so the composition does too — SCRUM-631's
-   * decision, which SCRUM-699 was explicitly not allowed to reverse.
+   * Neither half admits a null, so the composition does not either —
+   * SCRUM-633's decision, reversing SCRUM-631's. Asserted on both halves
+   * because the hazard is a one-sided edit: restoring the arm in either one
+   * puts every dateless row back in the match pool and in the admin supply
+   * chart, and the composed object would still look well formed.
    */
-  it("still admits a dateless search", () => {
+  it("excludes a dateless search, in both halves", () => {
     const [floor, ceiling] = coopIsLiveFilter(now).AND as [
-      { OR: unknown[] },
-      { OR: unknown[] },
+      Prisma.CarpoolSearchWhereInput,
+      Prisma.CarpoolSearchWhereInput,
     ];
 
-    expect(floor.OR[0]).toEqual({ endDate: null });
-    expect(ceiling.OR[0]).toEqual({ endDate: null });
+    expect(floor.OR).toBeUndefined();
+    expect(ceiling.OR).toBeUndefined();
+    expect(floor.endDate).toEqual({ gte: coopLivenessBoundary(now) });
+    expect(ceiling.endDate).toEqual({ lt: coopYearCeilingBoundary(now) });
   });
 });
 
@@ -297,22 +324,19 @@ describe("coopIsLiveSql", () => {
   it("ANDs the two fragments inside one further pair of brackets", () => {
     const fragment = coopIsLiveSql("cs", now);
 
-    expect(fragment.sql).toBe(
-      "((cs.end_date IS NULL OR cs.end_date >= ?) AND" +
-        " (cs.end_date IS NULL OR cs.end_date < ?))",
-    );
+    expect(fragment.sql).toBe("((cs.end_date >= ?) AND (cs.end_date < ?))");
     expect(fragment.values).toEqual(["2026-10-27", "2037-01-01"]);
   });
 
   it("carries the same two days as the Prisma rendering", () => {
     const [floor, ceiling] = coopIsLiveFilter(now).AND as [
-      { OR: [unknown, { endDate: { gte: Date } }] },
-      { OR: [unknown, { endDate: { lt: Date } }] },
+      { endDate: { gte: Date } },
+      { endDate: { lt: Date } },
     ];
 
     expect(coopIsLiveSql("cs", now).values).toEqual([
-      floor.OR[1].endDate.gte.toISOString().slice(0, 10),
-      ceiling.OR[1].endDate.lt.toISOString().slice(0, 10),
+      floor.endDate.gte.toISOString().slice(0, 10),
+      ceiling.endDate.lt.toISOString().slice(0, 10),
     ]);
   });
 });

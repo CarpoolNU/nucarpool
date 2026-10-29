@@ -9,6 +9,10 @@ import {
 import type { Session } from "next-auth";
 import { addWeeks, format, startOfWeek } from "date-fns";
 import { integrationPrisma } from "../../../testing/integrationDatabase";
+import {
+  LIVE_COOP_END,
+  LIVE_COOP_START,
+} from "../../../testing/liveCoopWindow";
 import type { Context } from "../context";
 import { appRouter } from "../index";
 import {
@@ -290,6 +294,10 @@ describe("the request funnel against a real database", () => {
         role,
         status: Status.ACTIVE,
         daysWorking: "0,1,1,1,1,1,0",
+        // `supplyByCity` counts only live co-ops, and since SCRUM-633 a
+        // dateless search is not one. See `liveCoopWindow.ts`.
+        startDate: LIVE_COOP_START,
+        endDate: LIVE_COOP_END,
         homeLocationId: (await makeLocation()).id,
         companyLocationId: (await makeLocation()).id,
         carpoolId,
@@ -830,6 +838,12 @@ describe("supplyByCity against a real database", () => {
     city?: string | null;
     seatsAvail?: number;
     email?: string | null;
+    /**
+     * Stores no co-op dates, which since SCRUM-633 means the search is not
+     * live and this chart must not count it. Everything else here is live by
+     * default, so a test opts into the case rather than inheriting it.
+     */
+    dateless?: boolean;
   }) => {
     seeded += 1;
     const company = await makeLocation();
@@ -850,6 +864,8 @@ describe("supplyByCity against a real database", () => {
         role: options.role,
         status: options.status ?? Status.ACTIVE,
         seatsAvail: options.seatsAvail ?? 0,
+        startDate: options.dateless ? null : LIVE_COOP_START,
+        endDate: options.dateless ? null : LIVE_COOP_END,
         homeLocationId: home ? home.id : "no-such-location",
         companyLocationId: company.id,
       },
@@ -884,6 +900,18 @@ describe("supplyByCity against a real database", () => {
     });
     // `getDashboardStats` counts only users with an email, so this one is out.
     await seedUser({ role: Role.RIDER, city: "Worcester", email: null });
+    // Neither is a search with no co-op dates (SCRUM-633). A driver as well as
+    // a rider, because the driver moves `openSeats` and not just a head count,
+    // and Worcester because that city's expected row is a rider count with no
+    // driver — so admitting either of these would change a number that is
+    // already asserted rather than add a row nobody is looking at.
+    await seedUser({ role: Role.RIDER, city: "Worcester", dateless: true });
+    await seedUser({
+      role: Role.DRIVER,
+      city: "Worcester",
+      seatsAvail: 4,
+      dateless: true,
+    });
 
     const stats =
       await callerFor(managerSession()).user.admin.getDashboardStats();

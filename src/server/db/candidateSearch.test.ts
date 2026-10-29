@@ -223,9 +223,11 @@ describe("date overlap agrees with calculateScore", () => {
 
       const actual = row[key as "startDate" | "endDate"];
 
-      // `{ endDate: null }` is Prisma's "IS NULL", not an operator object —
-      // the liveness clause's first arm. Checked before the loop below, which
-      // would otherwise hand `Object.entries` a null and throw.
+      // `{ endDate: null }` is Prisma's "IS NULL", not an operator object.
+      // Nothing this module builds emits it since SCRUM-633 removed the
+      // liveness clause's null arm; the branch stays because the helper's job
+      // is to interpret what it is given rather than what it expects, and
+      // without it `Object.entries` would be handed a null and throw.
       if (value === null) {
         if (actual !== null) return false;
         continue;
@@ -256,7 +258,14 @@ describe("date overlap agrees with calculateScore", () => {
 
   // Terms straddling the filter window in every arrangement that matters:
   // entirely before, overlapping the start, inside, spanning, overlapping the
-  // end, entirely after, and missing dates.
+  // end, and entirely after.
+  //
+  // A dateless term is deliberately **not** here. The superset property this
+  // loop asserts does not hold for it — liveness excludes it while the scorer
+  // on `dateOverlap: 0` would keep it — and unlike the ended-co-op case that
+  // divergence cannot be neutralised by choosing `now`, because it is not
+  // about a date. It gets its own block below, which asserts the divergence
+  // rather than tiptoeing around it.
   const terms: { label: string; start: Date | null; end: Date | null }[] = [
     { label: "entirely before", start: day(2023, 1, 1), end: day(2023, 6, 1) },
     {
@@ -279,7 +288,6 @@ describe("date overlap agrees with calculateScore", () => {
       end: day(2024, 9, 1),
     },
     { label: "entirely after", start: day(2025, 1, 1), end: day(2025, 6, 1) },
-    { label: "no dates", start: null, end: null },
   ];
 
   for (const dateOverlap of [0, 1, 2]) {
@@ -331,6 +339,85 @@ describe("date overlap agrees with calculateScore", () => {
       });
     }
   }
+
+  /**
+   * SCRUM-633: a dateless candidate is excluded at **every** `dateOverlap`
+   * setting, which is the whole point of the ticket.
+   *
+   * Before it, `dateOverlapFilter`'s `notNull` guard dropped these rows for a
+   * searcher who had expressed any date preference and `dateOverlap: 0` — the
+   * default nobody changes — kept them, so whether a dateless candidate was
+   * visible depended on a control the searcher had never touched. Asserting
+   * all three settings is the regression: a test of `0` alone would still pass
+   * if someone put the null arm back, because `1` and `2` were never the
+   * broken case.
+   */
+  describe("a dateless candidate is excluded whatever the overlap setting", () => {
+    const dateless = buildSearch({
+      id: "candidate",
+      role: Role.DRIVER,
+      coopStart: null,
+      coopEnd: null,
+    });
+
+    const whereFor = (dateOverlap: number) =>
+      buildCandidateWhere({
+        currentSearch: {
+          role: Role.RIDER,
+          carpoolId: null,
+          seatsAvail: 0,
+          homeLocation: null,
+          companyLocation: null,
+        },
+        filters: {
+          ...anyFilters({
+            dateOverlap,
+            startDate: TERM_START,
+            endDate: TERM_END,
+          }),
+          favorites: false,
+        },
+        excludedUserIds: [],
+        favoriteUserIds: [],
+        // The same inert boundary the loop above uses, so what rejects this
+        // row is its nullness and not the calendar.
+        now: BEFORE_EVERY_TERM,
+      });
+
+    for (const dateOverlap of [0, 1, 2]) {
+      it(`dateOverlap ${dateOverlap}: SQL rejects it`, () => {
+        expect(
+          matches(
+            { AND: whereFor(dateOverlap).AND ?? [] },
+            {
+              startDate: null,
+              endDate: null,
+            },
+          ),
+        ).toBe(false);
+      });
+    }
+
+    /**
+     * The positive control. Without it the three assertions above would pass
+     * just as well if `matches` were broken, or if the scorer had never kept a
+     * dateless row in the first place — and then they would be proving nothing
+     * about liveness. This is the divergence being deliberate: on the default
+     * setting the scorer *would* have kept this candidate, and SQL removes it
+     * anyway.
+     */
+    it("diverges from the scorer, which keeps it on the default setting", () => {
+      const filters = anyFilters({
+        dateOverlap: 0,
+        startDate: TERM_START,
+        endDate: TERM_END,
+      });
+
+      expect(
+        calculateScore(rider, filters, "any")(dateless),
+      ).not.toBeUndefined();
+    });
+  });
 });
 
 describe("buildCandidateWhere — role compatibility", () => {

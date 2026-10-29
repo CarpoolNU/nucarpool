@@ -6,7 +6,8 @@ import { candidateExclusions, fetchRankedCandidates } from "./candidateSearch";
 import { coopIsLiveFilter, coopIsLiveSql } from "./coopLiveness";
 
 /**
- * The liveness predicate against real MySQL (SCRUM-631, SCRUM-699).
+ * The liveness predicate against real MySQL (SCRUM-631, SCRUM-699,
+ * SCRUM-633).
  *
  * This is the only place the rule can actually be checked. `end_date` is
  * `@db.Date` and each boundary is a timestamp on the Prisma side and a date
@@ -18,6 +19,12 @@ import { coopIsLiveFilter, coopIsLiveSql } from "./coopLiveness";
  * if the comparison is ever flipped to exclusive. The ceiling cases are
  * SCRUM-699's, and the on-the-ceiling case is the one that fails if `lt` is
  * ever written as `lte`.
+ *
+ * The no-dates case is the one whose **expected answer changed**: SCRUM-631
+ * admitted a dateless row and SCRUM-633 measured the cohort and excluded it.
+ * MySQL is what decides that, since dropping a null out of a comparison is a
+ * property of SQL rather than of the clause Prisma was handed, which is why
+ * the case is asserted here and not only against the object.
  *
  * **Needs a real MySQL** and runs only through `yarn test:db`. Fixtures are
  * built per test: `jest.integration.setupAfterEnv.js` truncates every table
@@ -191,23 +198,30 @@ describe("the liveness rule, on the default dateOverlap of 0", () => {
   });
 
   /**
-   * The decision SCRUM-631 left to be made on measurement, pinned so it is a
-   * decision rather than an accident of three-valued logic. `coopLiveness.ts`
-   * carries the reasoning: on production the dateless rows cost 44 of 1,499
-   * matchable rows, because the cohort is overwhelmingly VIEWERs, who are
-   * never candidates anyway.
+   * The decision SCRUM-631 left to be made on measurement, made by SCRUM-633
+   * against production and pinned here so it is a decision rather than an
+   * accident of three-valued logic — in either direction. `coopLiveness.ts`
+   * carries the reasoning: the 142 dateless DRIVER/RIDER rows are residue from
+   * the 2025-12-17 bulk load and not one of them has signed in within 120
+   * days, while the large dateless cohort it used to be confused with is
+   * VIEWERs, for whom a null date is correct and who are never candidates.
+   *
+   * Asserted against real MySQL rather than only against the clause because
+   * this is the case where the clause's shape and the database's behaviour
+   * could disagree: a null dropping out of a comparison is a property of SQL,
+   * not of the object Prisma was handed.
    */
-  it("keeps a candidate with no dates stored at all", async () => {
+  it("drops a candidate with no dates stored at all", async () => {
     const rider = await seedSearcher("Rider", Role.RIDER, {
       startDate: utcDay(2026, 9, 1),
       endDate: ENDS_TOMORROW,
     });
-    const dateless = await seedSearcher("Dateless", Role.DRIVER, {
+    await seedSearcher("Dateless", Role.DRIVER, {
       startDate: null,
       endDate: null,
     });
 
-    expect(await candidateIdsFor(rider.id)).toEqual([dateless.id]);
+    expect(await candidateIdsFor(rider.id)).toEqual([]);
   });
 
   /**
@@ -276,7 +290,7 @@ describe("the liveness rule, on the default dateOverlap of 0", () => {
       startDate: utcDay(2026, 8, 31),
       endDate: ENDS_TOMORROW,
     });
-    const dateless = await seedSearcher("Dateless", Role.DRIVER, {
+    await seedSearcher("Dateless", Role.DRIVER, {
       startDate: null,
       endDate: null,
     });
@@ -286,7 +300,7 @@ describe("the liveness rule, on the default dateOverlap of 0", () => {
     });
 
     expect(await candidateIdsFor(rider.id)).toEqual(
-      [endsToday.id, endsTomorrow.id, dateless.id, onCeiling.id].sort(),
+      [endsToday.id, endsTomorrow.id, onCeiling.id].sort(),
     );
   });
 });
@@ -339,9 +353,13 @@ describe("the Prisma and raw-SQL renderings select the same rows", () => {
 
     const prismaIds = viaPrisma.map((row) => row.id).sort();
 
-    // Four of the six, so an accidental "select everything" on either side is
-    // a failure here rather than a pair that agrees on the wrong answer.
-    expect(prismaIds).toHaveLength(4);
+    // Three of the six — ends today, ends tomorrow, on the ceiling — so an
+    // accidental "select everything" on either side is a failure here rather
+    // than a pair that agrees on the wrong answer. It was four until
+    // SCRUM-633 stopped admitting the dateless row, and the count is asserted
+    // rather than only the equality precisely so that kind of change has to be
+    // made deliberately on both sides.
+    expect(prismaIds).toHaveLength(3);
     expect(viaSql.map((row) => row.id).sort()).toEqual(prismaIds);
   });
 
@@ -390,14 +408,23 @@ describe("the Prisma and raw-SQL renderings select the same rows", () => {
   });
 
   /**
-   * The predicate is `AND`ed into a `WHERE` that already has terms, so each
-   * internal `OR` has to be parenthesised — and since SCRUM-699 there are two
-   * of them, inside one further pair of brackets. Without the brackets an
-   * `OR` binds looser than the surrounding `AND` and its dateless arm pulls in
-   * rows the other conditions excluded — a far wider result than intended, and
-   * one that looks plausible until someone counts it.
+   * The predicate is `AND`ed into a `WHERE` that already has terms, and has to
+   * narrow it rather than widen it.
+   *
+   * **This test used to guard the brackets and now guards the nulls.** Until
+   * SCRUM-633 each half carried an `IS NULL OR`, which binds looser than the
+   * surrounding `AND`, so an unparenthesised fragment pulled in rows the other
+   * conditions excluded. There is no `OR` left to escape, and `AND` is
+   * associative, so the brackets alone can no longer change this answer.
+   *
+   * What it does still catch is the null arm coming back: the dateless row is
+   * seeded as a **DRIVER**, so it satisfies every other term in this `WHERE`
+   * and liveness is the only thing keeping it out. Reinstating `IS NULL OR` in
+   * either half fails here, with or without the brackets — which is why the
+   * row's role was changed from RIDER when the rationale changed, rather than
+   * leaving a test whose fixture no longer reached the thing it described.
    */
-  it("does not escape the surrounding AND", async () => {
+  it("narrows the surrounding AND rather than widening it", async () => {
     await seedSearcher("EndedDriver", Role.DRIVER, {
       startDate: utcDay(2024, 1, 31),
       endDate: ENDED,
@@ -406,7 +433,7 @@ describe("the Prisma and raw-SQL renderings select the same rows", () => {
       startDate: utcDay(2026, 8, 31),
       endDate: PAST_CEILING,
     });
-    await seedSearcher("DatelessRider", Role.RIDER, {
+    await seedSearcher("DatelessDriver", Role.DRIVER, {
       startDate: null,
       endDate: null,
     });
@@ -434,9 +461,15 @@ describe("the Prisma and raw-SQL renderings select the same rows", () => {
  * SCRUM-631 that keeps the dashboard and the match pool telling the same
  * story. Asserted against the shape of that query rather than through the
  * router, so it does not need an admin session to be meaningful.
+ *
+ * The dateless case is covered here as well as in the candidate query,
+ * because this chart is where SCRUM-633's change is largest: on production it
+ * took the population from 467 rows to 325 and open seats from 65 to 58. The
+ * dateless driver below carries seats, so admitting it would move both the
+ * head count and the seat total and not just one of them.
  */
 describe("the admin supply counter counts the same population", () => {
-  it("excludes an ended and an over-dated co-op from a city's totals", async () => {
+  it("excludes ended, over-dated and dateless co-ops from a city's totals", async () => {
     await seedSearcher("EndedDriver", Role.DRIVER, {
       startDate: utcDay(2024, 1, 31),
       endDate: ENDED,
@@ -444,6 +477,10 @@ describe("the admin supply counter counts the same population", () => {
     await seedSearcher("PivotedDriver", Role.DRIVER, {
       startDate: utcDay(2069, 1, 31),
       endDate: PIVOTED,
+    });
+    await seedSearcher("DatelessDriver", Role.DRIVER, {
+      startDate: null,
+      endDate: null,
     });
     await seedSearcher("LiveDriver", Role.DRIVER, {
       startDate: utcDay(2026, 8, 31),
