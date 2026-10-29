@@ -85,25 +85,32 @@ export const CANDIDATE_LIMIT_LOG_PREFIX = "[candidate-limit]";
  * exist, which is indistinguishable from there being no good matches. This
  * turns that into a log line.
  *
- * **How full is it really? Re-measured 2026-10-27 under SCRUM-631**, read-only
+ * **How full is it really? Re-measured 2026-10-29 under SCRUM-633**, read-only
  * against the PlanetScale `main` branch, in the widest case (distance filters
  * "any", so no bounding box, and `dateOverlap: 0`, so no *overlap* filter —
  * the liveness rule below is not optional and is included):
  *
- *   - **24** rows for a RIDER — only drivers, and only with a seat (68 before)
- *   - **324** rows for a DRIVER — only ungrouped riders (1,351 before)
- *   - **368** rows for a VIEWER, who is offered both roles and narrowed by
+ *   - **22** rows for a RIDER — only drivers, and only with a seat (69 before)
+ *   - **287** rows for a DRIVER — only ungrouped riders (1,355 before)
+ *   - **326** rows for a VIEWER, who is offered both roles and narrowed by
  *     neither the seat rule nor the group rule, and is therefore the worst
- *     case (1,499 before)
+ *     case (1,504 before)
  *
- * So the worst case is **18% of the ceiling**, and reaching it needs the
- * matchable population to grow by **443%**.
+ * So the worst case is **16% of the ceiling**, and reaching it needs the
+ * matchable population to grow by **513%**.
  *
- * "Before" is the same query without `coopIsLiveFilter`, which is what
- * the previous figures here measured — **1,463 for a VIEWER on 2026-10-08, at
- * 73% of the ceiling**. Almost all of that gap is the liveness rule rather
- * than three weeks of change; the comparable unfiltered figure on 2026-10-27
- * is 1,499.
+ * These replace SCRUM-631's figures of 24 / 324 / 368 two days earlier. Most
+ * of the drop is SCRUM-633 rather than two days of churn: liveness no longer
+ * admits a dateless row, which removes 40 riders and 4 drivers that the
+ * earlier measurement counted. See `coopLiveness.ts` for why those 44 are
+ * residue rather than users.
+ *
+ * "Before" is the same query without `coopIsLiveFilter`, which is what the
+ * figures here measured before SCRUM-631 — **1,463 for a VIEWER on 2026-10-08,
+ * at 73% of the ceiling**. Almost all of that gap is the liveness rule rather
+ * than weeks of change; the comparable unfiltered figure is 1,499 on
+ * 2026-10-27 and 1,504 on 2026-10-29, so the pool itself is flat and the
+ * movement in the figures above is the predicate.
  *
  * **The figures this replaced said 38% and 165%, and were not wrong when they
  * were taken — they were `staging`'s.** Re-running the same predicate against
@@ -128,9 +135,10 @@ export const CANDIDATE_LIMIT_LOG_PREFIX = "[candidate-limit]";
  * only 324 were co-ops still running. The ceiling was being approached by
  * rows that did not belong in the candidate set on any reading, rather than by
  * the platform outgrowing the bound. `coopIsLiveFilter` now removes them,
- * which is why the worst case above is 368 and not 1,499 — the prediction
- * recorded here was "roughly 340 rows, about 17%", and the measurement came in
- * at 368 and 18%.
+ * which is why the worst case above is in the hundreds and not 1,500 — the
+ * prediction recorded here was "roughly 340 rows, about 17%", SCRUM-631
+ * measured 368 and 18% while still admitting the dateless rows, and SCRUM-633
+ * took those out as well for 326 and 16%.
  *
  * **The threshold, so this is a decision and not a vibe (SCRUM-643 AC 3).**
  * Ranking in SQL becomes the active ticket when the worst case exceeds **80%
@@ -279,6 +287,16 @@ const compatibleRoles = (role: Role): Role[] => {
  * without them SQL's three-valued logic would let a NULL-dated row through a
  * `NOT`, and the scorer would then drop it — a wasted read, though not a wrong
  * answer.
+ *
+ * **This filter used to be the only thing with an opinion about dateless
+ * rows, and that was SCRUM-633's defect.** `notNull` dropped them whenever the
+ * searcher expressed any date preference, and `dateOverlap: 0` — the default
+ * nobody changes — admitted them, so a dateless candidate appeared or vanished
+ * according to a control the searcher had never touched. `coopIsLiveFilter` is
+ * unconditional and now excludes them too, so the answer no longer depends on
+ * the filter state. The `endDate` half of `notNull` is consequently redundant
+ * and is kept because this clause's job is to mirror the scorer exactly; the
+ * `startDate` half is not redundant, since nothing else constrains it.
  */
 const dateOverlapFilter = (
   filters: Pick<FInputs, "dateOverlap" | "startDate" | "endDate">,
@@ -406,7 +424,9 @@ export const buildCandidateWhere = ({
   // *searcher's* optional preference about how their own window lines up with
   // a candidate's. Conflating the two is the defect SCRUM-631 closed: liveness
   // used to ride on the optional filter, so the default `dateOverlap: 0`
-  // turned it off for everyone. SCRUM-699 added the upper bound.
+  // turned it off for everyone. SCRUM-699 added the upper bound, and
+  // SCRUM-633 took the dateless rows out of it — the last case whose
+  // visibility still turned on the searcher's filter rather than on the data.
   //
   // Collected in `AND` rather than spread onto `where`, because the filter is
   // built from `OR`s and a second top-level `OR` would overwrite the first.

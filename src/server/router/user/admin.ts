@@ -430,6 +430,18 @@ export const adminDataRouter = router({
       // the mistake the `staging`-for-production note on `candidateLimit-
       // Warning` records in its own form.
       //
+      // SCRUM-633 moved it again, and this chart is where that change is most
+      // visible: excluding a dateless `end_date` takes the population from
+      // **467 rows to 325** and open seats from **65 to 58** (measured
+      // 2026-10-29). The 142 rows that leave are 138 riders and 4 drivers, and
+      // **not one of them has signed in within 120 days** — the most recent
+      // sign-in in that cohort is about nine months old. They were counted as
+      // demand in whichever city they sit, which is exactly the "a city whose
+      // riders graduated in 2024 is not a shortage" failure this chart's
+      // liveness rule exists to prevent; they were escaping it only because a
+      // null cannot be compared. Expect the chart to read lower after this
+      // ships, and note that the drop is removed noise rather than lost data.
+      //
       // `seats_avail` is what is left of the driver's seats - `reserveSeat`
       // decrements it - so the sum is open seats already, and `> 0` only
       // guards against a negative value pulling a city's total down. The

@@ -67,31 +67,53 @@ import { coopYearBounds } from "../../utils/dateUtils";
  *
  * ---
  *
- * **A null `end_date` is admitted. Deliberately.** By both halves, so
+ * **A null `end_date` is excluded. Deliberately.** By both halves, so
  * composing them does not quietly reverse the decision.
  *
  * A null cannot be compared, so the predicate must either admit the dateless
- * rows or exclude them, and SCRUM-631 left the choice to be made here on
- * measurement. Measured read-only against PlanetScale `main` on **2026-10-27**,
- * over the matchable pool (`status = ACTIVE`, `user.is_onboarded`, and a role
- * of DRIVER or RIDER — the floor every branch of the candidate query shares):
+ * rows or exclude them. SCRUM-631 admitted them and left the real choice to be
+ * made on measurement; **SCRUM-633 is that measurement, and it reversed the
+ * decision.** Measured read-only against PlanetScale `main` on **2026-10-29**.
  *
- *   - **1,499** rows in the pool
- *   - **1,131** ended — what the floor removes
- *   - **324** still running
- *   - **44** dateless — what admitting them keeps
+ * Both callers of this rule already restrict to DRIVER and RIDER — the
+ * candidate query through `compatibleRoles`, the admin supply chart through an
+ * explicit `role IN (...)` — so a VIEWER is out of reach of this predicate and
+ * the only rows it can decide are DRIVER/RIDER ones. There are **142** of
+ * those with no dates stored, 44 of them onboarded. Crossed against
+ * `session.expires`, which NextAuth writes 30 days ahead of a sign-in and is
+ * the only engagement signal the schema carries that is not a migration
+ * artifact:
  *
- * The 1,489 dateless rows SCRUM-549 counted were taken over the raw `ACTIVE`
- * population, which on the same day held 3,088 rows of which **1,491 are
- * VIEWERs**. That is the whole discrepancy: the dateless cohort is almost
- * entirely VIEWERs, and `compatibleRoles` already excludes a VIEWER from
- * everyone's candidate set, so they were never in the pool to remove. The real
- * cost of admitting nulls is **44 rows**, not 1,489.
+ *   - **0** have signed in within 120 days — in either the onboarded or the
+ *     un-onboarded half, and the figure is zero rather than small
+ *   - the most recent session expiry in the whole cohort is **2026-02-27**,
+ *     so the most recent sign-in is about **nine months** ago
+ *   - **6** have no `session` row at all, having never signed in
+ *   - all 142 were created by the **2025-12-17** bulk load and 43 of the 44
+ *     onboarded rows have had no write since
  *
- * So excluding them would buy 3% of the pool while silently hiding 44 riders
- * and drivers who simply never entered dates — people who may well be looking
- * for a carpool today. Admitting them keeps one effect that can be reasoned
- * about. The dateless cohort has its own ticket.
+ * So the cohort this rule governs is pre-enforcement residue, not live users:
+ * `onboardSchema` has required both co-op dates of every non-VIEWER since
+ * before any of these rows could be written today, which is why none has been
+ * created since the load.
+ *
+ * The large dateless population is real but is a **different** population.
+ * 1,427 dateless rows are VIEWERs and 110 of those signed in within 30 days —
+ * genuinely live people. For a VIEWER a null date is *correct*: the schema
+ * exempts them, their pickers are disabled, and `compatibleRoles` keeps them
+ * out of every candidate set. Nothing about them is missing and this rule
+ * cannot touch them. The 1,489 that SCRUM-549 and SCRUM-631 both quoted was
+ * the raw `ACTIVE` count, which conflates the two.
+ *
+ * The cost of excluding nulls is therefore 142 rows nobody has used in nine
+ * months, and the benefit is that a dateless row is no longer visible or
+ * invisible according to a filter the searcher never touched — see
+ * `dateOverlapFilter`, whose `notNull` guard dropped these rows the moment any
+ * date preference was expressed and kept them otherwise. The user-visible
+ * failure mode is also self-healing and not silent: should one of the 44
+ * return, the profile form refuses to save a non-VIEWER with an empty co-op
+ * date ("Cannot be empty"), so they must supply the dates that put them back
+ * in the pool.
  *
  * ---
  *
@@ -168,16 +190,20 @@ export const coopYearCeilingDay = (now: Date = new Date()): string =>
 /**
  * The Prisma rendering of the floor: searches whose co-op has not ended.
  *
- * Nested under `OR` rather than written as `endDate: { not: { lt: boundary } }`
- * because SQL's three-valued logic drops a NULL out of a negation — `NOT (NULL
- * < x)` is NULL, which is not true, so the dateless rows this predicate means
- * to admit would be filtered out instead. The explicit `null` arm is the only
- * form that admits them.
+ * A plain comparison, which excludes a dateless row on its own: `NULL >= x` is
+ * NULL rather than true, and a `WHERE` keeps only what is true. That is
+ * SCRUM-633's decision and not a side effect of the operator — the section
+ * above is where it is argued, and `coopHasNotEnded.db.test.ts` pins it
+ * against real MySQL rather than against this reasoning.
+ *
+ * It is written as a comparison rather than as `endDate: { not: null }` plus a
+ * bound for the same reason: one term that is already exact beats two that
+ * have to agree.
  */
 export const coopHasNotEndedFilter = (
   now: Date = new Date(),
 ): Prisma.CarpoolSearchWhereInput => ({
-  OR: [{ endDate: null }, { endDate: { gte: coopLivenessBoundary(now) } }],
+  endDate: { gte: coopLivenessBoundary(now) },
 });
 
 /**
@@ -199,7 +225,7 @@ export const coopHasNotEndedSql = (
 ): Prisma.Sql => {
   const endDate = Prisma.raw(`${alias}.end_date`);
 
-  return Prisma.sql`(${endDate} IS NULL OR ${endDate} >= ${coopLivenessDay(now)})`;
+  return Prisma.sql`(${endDate} >= ${coopLivenessDay(now)})`;
 };
 
 /**
@@ -208,13 +234,14 @@ export const coopHasNotEndedSql = (
  *
  * `lt`, matching the exclusive boundary — `coopYearCeilingBoundary` is the
  * first instant that is *too late*, so a co-op ending on 31 December of the
- * ceiling year survives. The `null` arm is the same decision, and carries the
- * same three-valued-logic reason, as the floor's.
+ * ceiling year survives. A dateless row is excluded here too, by the same
+ * comparison and for the same reason as the floor's: both halves agree about
+ * nulls, so composing them cannot reverse the decision either way.
  */
 export const coopEndsBeforeYearCeilingFilter = (
   now: Date = new Date(),
 ): Prisma.CarpoolSearchWhereInput => ({
-  OR: [{ endDate: null }, { endDate: { lt: coopYearCeilingBoundary(now) } }],
+  endDate: { lt: coopYearCeilingBoundary(now) },
 });
 
 /**
@@ -227,7 +254,7 @@ export const coopEndsBeforeYearCeilingSql = (
 ): Prisma.Sql => {
   const endDate = Prisma.raw(`${alias}.end_date`);
 
-  return Prisma.sql`(${endDate} IS NULL OR ${endDate} < ${coopYearCeilingDay(now)})`;
+  return Prisma.sql`(${endDate} < ${coopYearCeilingDay(now)})`;
 };
 
 /**
@@ -235,8 +262,11 @@ export const coopEndsBeforeYearCeilingSql = (
  * want** — the two halves are exported for their own tests and for readers,
  * not so a query can pick one.
  *
- * `AND` rather than one merged `OR`, so each half stays the predicate its own
- * tests assert and composing them cannot quietly rewrite either.
+ * `AND` of the two halves rather than one merged `endDate: { gte, lt }`, so
+ * each half stays exactly the predicate its own tests assert and composing
+ * them cannot quietly rewrite either. The merged form would read the same
+ * today and would put both boundaries back in one place for a later edit to
+ * get half-right.
  */
 export const coopIsLiveFilter = (
   now: Date = new Date(),
@@ -246,8 +276,10 @@ export const coopIsLiveFilter = (
 
 /**
  * The raw-SQL rendering of liveness. Both halves are already parenthesised and
- * the whole is parenthesised again, so `AND`ing it into a `WHERE` that has
- * other terms cannot let either internal `OR` escape.
+ * the whole is parenthesised again. Neither half contains an `OR` any more, so
+ * nothing can escape into a surrounding `AND` — the brackets are kept because
+ * the property should hold whatever the halves grow into, not because today's
+ * two comparisons need them.
  */
 export const coopIsLiveSql = (
   alias: string,

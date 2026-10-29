@@ -1,5 +1,6 @@
 import { Role, Status } from "@prisma/client";
 import { integrationPrisma } from "../../testing/integrationDatabase";
+import { LIVE_COOP_END, LIVE_COOP_START } from "../../testing/liveCoopWindow";
 import { anyFilters } from "../../utils/recommendation.fixtures";
 import { candidateExclusions, fetchRankedCandidates } from "./candidateSearch";
 
@@ -60,6 +61,10 @@ const seedSearcher = async (
       companyName: "Acme Robotics",
       daysWorking: "0,1,1,1,1,1,0",
       seatsAvail: overrides.seatsAvail ?? (role === Role.DRIVER ? 3 : 0),
+      // Only so the search is live — this suite is about group exclusion. See
+      // `liveCoopWindow.ts`.
+      startDate: LIVE_COOP_START,
+      endDate: LIVE_COOP_END,
       carpoolId: overrides.carpoolId ?? null,
       homeLocationId: home.id,
       companyLocationId: company.id,

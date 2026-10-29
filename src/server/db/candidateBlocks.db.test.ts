@@ -1,5 +1,6 @@
 import { Role, Status } from "@prisma/client";
 import { integrationPrisma } from "../../testing/integrationDatabase";
+import { LIVE_COOP_END, LIVE_COOP_START } from "../../testing/liveCoopWindow";
 import { anyFilters } from "../../utils/recommendation.fixtures";
 import { candidateExclusions, fetchRankedCandidates } from "./candidateSearch";
 
@@ -17,7 +18,13 @@ import { candidateExclusions, fetchRankedCandidates } from "./candidateSearch";
 
 const prisma = integrationPrisma();
 
-/** An onboarded, ACTIVE user with a search and two nearby Locations. */
+/**
+ * An onboarded, ACTIVE user with a live search and two nearby Locations.
+ *
+ * The co-op window is here only so the search is live; this suite is about
+ * blocks, and `liveCoopWindow.ts` explains why a dateless row would not reach
+ * the block rule at all.
+ */
 const seedSearcher = async (name: string, role: Role) => {
   const user = await prisma.user.create({
     data: {
@@ -54,6 +61,8 @@ const seedSearcher = async (name: string, role: Role) => {
       companyName: "Acme Robotics",
       daysWorking: "0,1,1,1,1,1,0",
       seatsAvail: role === Role.DRIVER ? 3 : 0,
+      startDate: LIVE_COOP_START,
+      endDate: LIVE_COOP_END,
       homeLocationId: home.id,
       companyLocationId: company.id,
     },
