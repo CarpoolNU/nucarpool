@@ -148,6 +148,13 @@ export const COOP_DATE_ORDER_MESSAGE =
   "End date cannot be before the start date";
 
 /**
+ * Message for a co-op date a non-VIEWER has left empty. The wording the form
+ * has always shown, now shared so `user.edit` says the same thing rather than
+ * accepting what the form refuses.
+ */
+export const COOP_DATE_REQUIRED_MESSAGE = "Cannot be empty";
+
+/**
  * True when a co-op range runs backwards.
  *
  * A reversed range is accepted by every column involved and then fails silently
@@ -307,6 +314,50 @@ const reversedCoopRangeFields = ({
     ? ["coopEndDate"]
     : [];
 
+/**
+ * Which co-op date fields a non-VIEWER has left empty, for the two schemas to
+ * attach an issue to each.
+ *
+ * **A VIEWER is exempt**, and for a stronger reason than the two checks above:
+ * a VIEWER's dates are legitimately null, not merely unenforced. Their pickers
+ * are disabled, `compatibleRoles` keeps them out of every candidate set, and
+ * the dates do nothing until they pick a real role.
+ *
+ * For a DRIVER or a RIDER a null date is the opposite: since SCRUM-633 a null
+ * `end_date` is excluded from liveness, so a dateless row is invisible to
+ * matching and to the admin supply counters, with no symptom the user could
+ * report. `role` is read from the submitted value rather than the stored one,
+ * so a VIEWER switching to DRIVER or RIDER must supply both dates in the same
+ * save - the one path to this state that needs no unusual client.
+ *
+ * `undefined` counts as missing alongside `null`: `onboardSchema`'s fields are
+ * optional, and a half-built form object is as empty as a cleared one. The
+ * `user.edit` input requires both keys to be present, so only `null` can reach
+ * this from there.
+ */
+const missingCoopDateFields = ({
+  role,
+  coopStartDate,
+  coopEndDate,
+}: {
+  role: Role;
+  coopStartDate: Date | null | undefined;
+  coopEndDate: Date | null | undefined;
+}): ("coopStartDate" | "coopEndDate")[] => {
+  if (role === Role.VIEWER) {
+    return [];
+  }
+
+  const fields: ("coopStartDate" | "coopEndDate")[] = [];
+  if (!coopStartDate) {
+    fields.push("coopStartDate");
+  }
+  if (!coopEndDate) {
+    fields.push("coopEndDate");
+  }
+  return fields;
+};
+
 export {
   handleMonthChange,
   handleMonthPickerChange,
@@ -318,5 +369,6 @@ export {
   coopYearMessage,
   implausibleCoopYearFields,
   reversedCoopRangeFields,
+  missingCoopDateFields,
   toMonthPickerValue,
 };

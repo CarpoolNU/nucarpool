@@ -9,6 +9,7 @@ import {
   isImplausibleCoopYear,
   isReversedCoopRange,
   lastDayOfMonthUTC,
+  missingCoopDateFields,
   reversedCoopRangeFields,
 } from "./dateUtils";
 import type { OnboardingFormInputs } from "./types";
@@ -412,5 +413,77 @@ describe("reversedCoopRangeFields", () => {
     expect(isReversedCoopRange(day("2027-01-31"), day("2026-01-31"))).toBe(
       true,
     );
+  });
+});
+
+/**
+ * The third of these field-naming helpers, and the one the two above
+ * deliberately leave alone: `isImplausibleCoopYear` and `isReversedCoopRange`
+ * both return false for a null, so nothing refused an empty date until
+ * SCRUM-703.
+ */
+describe("missingCoopDateFields", () => {
+  const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
+
+  it.each([Role.RIDER, Role.DRIVER])(
+    "names both empty dates for a %s",
+    (role) => {
+      expect(
+        missingCoopDateFields({
+          role,
+          coopStartDate: null,
+          coopEndDate: null,
+        }),
+      ).toEqual(["coopStartDate", "coopEndDate"]);
+    },
+  );
+
+  it.each(["coopStartDate", "coopEndDate"] as const)(
+    "names %s alone when only it is empty",
+    (field) => {
+      expect(
+        missingCoopDateFields({
+          role: Role.RIDER,
+          coopStartDate: day("2026-01-31"),
+          coopEndDate: day("2026-06-30"),
+          [field]: null,
+        }),
+      ).toEqual([field]);
+    },
+  );
+
+  it("names nothing when both are set", () => {
+    expect(
+      missingCoopDateFields({
+        role: Role.DRIVER,
+        coopStartDate: day("2026-01-31"),
+        coopEndDate: day("2026-06-30"),
+      }),
+    ).toEqual([]);
+  });
+
+  it("exempts a VIEWER, for whom a null date is correct", () => {
+    // Not the same exemption as the two helpers above. A VIEWER's dates are
+    // disabled on the form and unused by matching, so there is nothing missing
+    // about them - 1,427 production rows are in this state.
+    expect(
+      missingCoopDateFields({
+        role: Role.VIEWER,
+        coopStartDate: null,
+        coopEndDate: null,
+      }),
+    ).toEqual([]);
+  });
+
+  it("counts undefined as empty alongside null", () => {
+    // `onboardSchema`'s fields are optional, so a half-built form object
+    // arrives with the keys absent rather than null.
+    expect(
+      missingCoopDateFields({
+        role: Role.RIDER,
+        coopStartDate: undefined,
+        coopEndDate: undefined,
+      }),
+    ).toEqual(["coopStartDate", "coopEndDate"]);
   });
 });

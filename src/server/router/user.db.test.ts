@@ -206,8 +206,10 @@ describe("one CarpoolSearch per user", () => {
     pronouns: "",
     isOnboarded: true,
     daysWorking: "0,1,1,1,1,1,0",
-    coopStartDate: null,
-    coopEndDate: null,
+    // Required of a DRIVER since SCRUM-703, so a dateless save cannot reach
+    // the state SCRUM-633 hides from matching.
+    coopStartDate: new Date("2026-01-31T00:00:00.000Z"),
+    coopEndDate: new Date("2026-06-30T00:00:00.000Z"),
     bio: "",
     startStreet: "Elm St",
     startCity: "Somerville",
@@ -399,8 +401,9 @@ describe("a grouped rider cannot promote themselves to driver", () => {
     pronouns: "",
     isOnboarded: true,
     daysWorking: "0,1,1,1,1,1,0",
-    coopStartDate: null,
-    coopEndDate: null,
+    // Required of the DRIVER this promotes the rider to - see SCRUM-703.
+    coopStartDate: new Date("2026-01-31T00:00:00.000Z"),
+    coopEndDate: new Date("2026-06-30T00:00:00.000Z"),
     bio: "Driving now",
     startStreet: "Main St",
     startCity: "Cambridge",

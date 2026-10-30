@@ -22,6 +22,7 @@ import {
 } from "../../utils/scheduleTime";
 import {
   COOP_DATE_ORDER_MESSAGE,
+  COOP_DATE_REQUIRED_MESSAGE,
   coopYearBounds,
   coopYearMessage,
 } from "../../utils/dateUtils";
@@ -1053,8 +1054,12 @@ const editInput = (overrides: Record<string, unknown> = {}) =>
     pronouns: "",
     isOnboarded: true,
     daysWorking: "0,1,1,1,1,1,0",
-    coopStartDate: null,
-    coopEndDate: null,
+    // A forward range inside `coopYearBounds`, because the default role here
+    // is DRIVER and since SCRUM-703 `user.edit` refuses a non-VIEWER with
+    // either date empty. The year is fixed rather than relative to the clock:
+    // the floor of the bound is fixed too, so 2026 cannot age out of it.
+    coopStartDate: new Date("2026-01-31T00:00:00.000Z"),
+    coopEndDate: new Date("2026-06-30T00:00:00.000Z"),
     bio: "",
     ...SHARED_ADDRESS,
     startCoordLng: -71.1,
@@ -1960,16 +1965,20 @@ describe("user.edit - co-op dates must run forwards", () => {
     ).resolves.toBeDefined();
   });
 
-  it("still accepts a range that is not fully set", async () => {
-    // Whether both are required is `onboardSchema`'s question. A VIEWER has
-    // neither, and half-set combinations have always been storable here.
+  it("reports the empty half of a half-set range, not the ordering", async () => {
+    // A half-set range used to be storable here, which is the gap SCRUM-703
+    // closed. The ordering check still has to stay quiet about it: with one
+    // date missing there is no range to run backwards, and naming ordering
+    // would route the user to fix the wrong thing.
     const db = buildEditDb();
 
-    await expect(
-      editCallerFor(SESSION_USER, db).user.edit(
-        editInput({ coopStartDate: day("2026-01-31"), coopEndDate: null }),
+    expect(
+      await editIssues(
+        editCallerFor(SESSION_USER, db).user.edit(
+          editInput({ coopStartDate: day("2026-01-31"), coopEndDate: null }),
+        ),
       ),
-    ).resolves.toBeDefined();
+    ).toEqual([{ path: ["coopEndDate"], message: COOP_DATE_REQUIRED_MESSAGE }]);
   });
 
   it("still refuses a plausible reversed range, independently of the year bound", async () => {
@@ -2102,6 +2111,256 @@ describe("user.edit - co-op years must be plausible", () => {
       { path: ["coopEndDate"], message: coopYearMessage() },
       { path: ["coopEndDate"], message: COOP_DATE_ORDER_MESSAGE },
     ]);
+  });
+});
+
+/**
+ * Both co-op dates are required of a DRIVER or a RIDER, which `onboardSchema`
+ * has always told the form and `user.edit` did not enforce.
+ *
+ * The two existing co-op checks cannot stand in for this one: both
+ * `isImplausibleCoopYear` and `isReversedCoopRange` return false for a null,
+ * deliberately, so a dateless save passed every validation this procedure had.
+ *
+ * What made that consequential is SCRUM-633. Since it, a null `end_date` is
+ * excluded from `coopLiveness`, so a dateless DRIVER or RIDER is absent from
+ * every candidate set and from the admin supply counters - with no error, no
+ * toast and nothing on the page to indicate it. That ticket's argument rested
+ * on the cohort being closed (142 rows, all from the 2025-12-17 bulk load);
+ * this is the gap through which it could have reopened.
+ *
+ * Null handling is the whole subject here, so every case below turns on a null
+ * rather than on a populated row.
+ */
+describe("user.edit — a non-VIEWER must have both co-op dates", () => {
+  const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
+
+  /**
+   * The caller's own `Location` rows. `resolveOwnedLocations` updates them in
+   * place, so a seeded search needs them or the save fails for an unrelated
+   * reason.
+   */
+  const ownedLocations = (): LocationRow[] => [
+    {
+      id: "loc-home",
+      street: "Huntington Ave",
+      city: "Boston",
+      state: "Massachusetts",
+      streetAddress: "Huntington Ave, Boston, Massachusetts",
+      coordLng: -71.1,
+      coordLat: 42.31,
+    },
+    {
+      id: "loc-company",
+      street: "Congress St",
+      city: "Boston",
+      state: "Massachusetts",
+      streetAddress: "Congress St, Boston, Massachusetts",
+      coordLng: -71.05,
+      coordLat: 42.36,
+    },
+  ];
+
+  /** An existing ungrouped search for the caller, in the role given. */
+  const existingSearchAs = (role: Role) =>
+    buildEditDb(ownedLocations(), [
+      {
+        id: "search-mine",
+        userId: SESSION_USER,
+        homeLocationId: "loc-home",
+        companyLocationId: "loc-company",
+        role,
+        carpoolId: null,
+      },
+    ]);
+
+  it.each([Role.DRIVER, Role.RIDER])(
+    "refuses a %s with no co-op dates, writing nothing",
+    async (role) => {
+      const db = buildEditDb();
+
+      expect(
+        await editIssues(
+          editCallerFor(SESSION_USER, db).user.edit(
+            editInput({ role, coopStartDate: null, coopEndDate: null }),
+          ),
+        ),
+      ).toEqual([
+        { path: ["coopStartDate"], message: COOP_DATE_REQUIRED_MESSAGE },
+        { path: ["coopEndDate"], message: COOP_DATE_REQUIRED_MESSAGE },
+      ]);
+
+      // Refused at the input, so nothing reaches the transaction at all.
+      expect(db.prisma.carpoolSearch.create).not.toHaveBeenCalled();
+      expect(db.prisma.carpoolSearch.update).not.toHaveBeenCalled();
+      expect(db.prisma.user.update).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["coopStartDate", "coopEndDate"] as const)(
+    "refuses a non-VIEWER whose %s alone is null",
+    async (field) => {
+      // Either date alone being null is enough: `dateOverlapFilter` reads both
+      // columns, and `coopLiveness` reads `end_date`.
+      const db = buildEditDb();
+
+      expect(
+        await editIssues(
+          editCallerFor(SESSION_USER, db).user.edit(
+            editInput({ role: Role.RIDER, [field]: null }),
+          ),
+        ),
+      ).toEqual([{ path: [field], message: COOP_DATE_REQUIRED_MESSAGE }]);
+    },
+  );
+
+  it("accepts a VIEWER with no co-op dates at all", async () => {
+    // Unchanged, and the point of the exemption: for a VIEWER a null date is
+    // correct rather than missing. Their pickers are disabled, `compatibleRoles`
+    // keeps them out of every candidate set, and 1,427 production rows are in
+    // exactly this state.
+    const db = buildEditDb();
+
+    await expect(
+      editCallerFor(SESSION_USER, db).user.edit(
+        editInput({
+          role: Role.VIEWER,
+          seatAvail: 0,
+          coopStartDate: null,
+          coopEndDate: null,
+        }),
+      ),
+    ).resolves.toBeDefined();
+  });
+
+  it("accepts a non-VIEWER with both dates", async () => {
+    // The positive control. Without it every assertion above would still pass
+    // if the rule refused a DRIVER outright.
+    const db = buildEditDb();
+
+    await expect(
+      editCallerFor(SESSION_USER, db).user.edit(
+        editInput({
+          role: Role.DRIVER,
+          coopStartDate: day("2026-01-31"),
+          coopEndDate: day("2026-06-30"),
+        }),
+      ),
+    ).resolves.toBeDefined();
+  });
+
+  it("refuses a VIEWER turning RIDER without supplying dates", async () => {
+    // The one path here that needs no stale or hand-rolled client. A VIEWER
+    // legitimately holds two nulls; SCRUM-508 makes every new user one, so
+    // VIEWER to a real role is the ordinary path rather than a rare one. The
+    // rule reads the *submitted* role, so the save that performs the change is
+    // the save that must carry the dates.
+    const db = existingSearchAs(Role.VIEWER);
+
+    expect(
+      await editIssues(
+        editCallerFor(SESSION_USER, db).user.edit(
+          editInput({
+            role: Role.RIDER,
+            coopStartDate: null,
+            coopEndDate: null,
+          }),
+        ),
+      ),
+    ).toEqual([
+      { path: ["coopStartDate"], message: COOP_DATE_REQUIRED_MESSAGE },
+      { path: ["coopEndDate"], message: COOP_DATE_REQUIRED_MESSAGE },
+    ]);
+
+    // The role claim is a raw `UPDATE` ahead of the ordinary write, so a rule
+    // that only refused the write would still have let the role through.
+    expect(db.searchFor(SESSION_USER)).toMatchObject({ role: Role.VIEWER });
+    expect(db.prisma.$executeRaw).not.toHaveBeenCalled();
+  });
+
+  it("lets a VIEWER turn RIDER when the same save carries the dates", async () => {
+    const db = existingSearchAs(Role.VIEWER);
+
+    await expect(
+      editCallerFor(SESSION_USER, db).user.edit(
+        editInput({
+          role: Role.RIDER,
+          coopStartDate: day("2026-01-31"),
+          coopEndDate: day("2026-06-30"),
+        }),
+      ),
+    ).resolves.toBeDefined();
+
+    expect(db.searchFor(SESSION_USER)).toMatchObject({
+      role: Role.RIDER,
+      startDate: day("2026-01-31"),
+      endDate: day("2026-06-30"),
+    });
+    // The positive control for the `not.toHaveBeenCalled()` above: a role
+    // change does reach the raw claim when the input passes, so asserting it
+    // did not is a statement about this rule rather than about a path that
+    // never runs here.
+    expect(db.prisma.$executeRaw).toHaveBeenCalled();
+  });
+
+  it("refuses a dateless non-VIEWER who sends the fields as null", async () => {
+    // The stored row is already dateless - one of the 142 - and the save
+    // re-sends what it read. The decision recorded on the input: both keys are
+    // required to be present, so `null` is the only empty value that can
+    // arrive and it is refused whether or not the row was already in this
+    // state. Such a user is blocked until they supply dates, which is what the
+    // profile form has told them for longer than any of these rows has
+    // existed.
+    const db = existingSearchAs(Role.RIDER);
+
+    await expect(
+      editCallerFor(SESSION_USER, db).user.edit(
+        editInput({
+          role: Role.RIDER,
+          coopStartDate: null,
+          coopEndDate: null,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it.each(["coopStartDate", "coopEndDate"] as const)(
+    "refuses a save that omits %s entirely, for any role",
+    async (field) => {
+      // The other half of the recorded decision, and where these two fields
+      // part company with `startTime`/`endTime` above: those are `.optional()`
+      // and an absent one means "leave it alone", while these are not, so an
+      // absent one is a malformed payload. Refused for a VIEWER too - the
+      // exemption is about a null, not about an absent key.
+      for (const role of [Role.RIDER, Role.VIEWER]) {
+        const db = buildEditDb();
+        const input = editInput({ role, seatAvail: 0 });
+        delete input[field];
+
+        await expect(
+          editCallerFor(SESSION_USER, db).user.edit(input),
+        ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+        expect(db.prisma.carpoolSearch.create).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it("leaves the schedule-time rule alone", async () => {
+    // Regression: the two rules sit in the same `superRefine` and share the
+    // non-VIEWER condition. An omitted schedule time must still mean "leave it
+    // as it is" rather than inheriting the stricter treatment of the dates.
+    const db = existingSearchAs(Role.DRIVER);
+
+    await expect(
+      editCallerFor(SESSION_USER, db).user.edit(
+        editInput({ role: Role.DRIVER }),
+      ),
+    ).resolves.toBeDefined();
+
+    expect(
+      db.prisma.carpoolSearch.update.mock.calls[0][0].data.startTime,
+    ).toBeUndefined();
   });
 });
 

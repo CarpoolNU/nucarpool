@@ -115,6 +115,13 @@ import { coopYearBounds } from "../../utils/dateUtils";
  * date ("Cannot be empty"), so they must supply the dates that put them back
  * in the pool.
  *
+ * Since SCRUM-703 `user.edit` refuses it too, through
+ * `missingCoopDateFields`. That closes the one way this cohort could still
+ * have grown: the form's rule was the only thing in the way, and a VIEWER -
+ * which SCRUM-508 makes every new user - could change role to DRIVER or RIDER
+ * through the API while keeping the nulls that are correct for a VIEWER and
+ * wrong for either of those.
+ *
  * ---
  *
  * **This is the one predicate in the candidate query that is not a superset of

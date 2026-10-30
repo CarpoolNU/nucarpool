@@ -4,8 +4,10 @@ import { MAX_SEATS_AVAILABLE } from "../carpoolSeats";
 import { ADDRESS_MAX_LENGTH, PROFILE_TEXT_MAX_LENGTH } from "../textLimits";
 import {
   COOP_DATE_ORDER_MESSAGE,
+  COOP_DATE_REQUIRED_MESSAGE,
   coopYearMessage,
   implausibleCoopYearFields,
+  missingCoopDateFields,
   reversedCoopRangeFields,
 } from "../dateUtils";
 
@@ -53,21 +55,23 @@ export const onboardSchema = z
     coopEndDate: z.date().nullable().optional(),
   })
   .superRefine((data, ctx) => {
+    // The co-op dates, through the same helper `user.edit` uses since
+    // SCRUM-703 - the API used to accept what this refused. Outside the
+    // non-VIEWER block below only because the helper carries the exemption
+    // itself, as the ordering and year checks further down do.
+    for (const field of missingCoopDateFields({
+      role: data.role,
+      coopStartDate: data.coopStartDate,
+      coopEndDate: data.coopEndDate,
+    })) {
+      ctx.addIssue({
+        code: custom,
+        path: [field],
+        message: COOP_DATE_REQUIRED_MESSAGE,
+      });
+    }
+
     if (data.role !== Role.VIEWER) {
-      if (!data.coopEndDate) {
-        ctx.addIssue({
-          code: custom,
-          path: ["coopEndDate"],
-          message: "Cannot be empty",
-        });
-      }
-      if (!data.coopStartDate) {
-        ctx.addIssue({
-          code: custom,
-          path: ["coopStartDate"],
-          message: "Cannot be empty",
-        });
-      }
       if (!data.seatAvail && data.seatAvail !== 0)
         ctx.addIssue({
           code: custom,
