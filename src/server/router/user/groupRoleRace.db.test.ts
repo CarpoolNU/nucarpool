@@ -144,8 +144,9 @@ const riderSavesAs = (role: Role) => ({
   pronouns: "",
   isOnboarded: true,
   daysWorking: "0,1,1,1,1,1,0",
-  coopStartDate: null,
-  coopEndDate: null,
+  // Required of a DRIVER or a RIDER since SCRUM-703; this helper builds both.
+  coopStartDate: new Date("2026-01-31T00:00:00.000Z"),
+  coopEndDate: new Date("2026-06-30T00:00:00.000Z"),
   bio: "",
   startStreet: "Mass Ave",
   startCity: "Cambridge",

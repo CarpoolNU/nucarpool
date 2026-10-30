@@ -325,8 +325,9 @@ describe("seat accounting under concurrent writers", () => {
       pronouns: "",
       isOnboarded: true,
       daysWorking: "0,1,1,1,1,1,0",
-      coopStartDate: null,
-      coopEndDate: null,
+      // Required of a DRIVER since SCRUM-703.
+      coopStartDate: new Date("2026-01-31T00:00:00.000Z"),
+      coopEndDate: new Date("2026-06-30T00:00:00.000Z"),
       bio: "Now with a bio.",
       startStreet: `${driver.user.email} home`,
       startCity: "Boston",

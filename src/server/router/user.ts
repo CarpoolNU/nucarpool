@@ -49,8 +49,10 @@ import {
 } from "../../utils/scheduleTime";
 import {
   COOP_DATE_ORDER_MESSAGE,
+  COOP_DATE_REQUIRED_MESSAGE,
   coopYearMessage,
   implausibleCoopYearFields,
+  missingCoopDateFields,
   reversedCoopRangeFields,
 } from "../../utils/dateUtils";
 
@@ -243,6 +245,13 @@ export const userRouter = router({
             .refine(isScheduleTimeString, SCHEDULE_TIME_INVALID_MESSAGE)
             .nullable()
             .optional(),
+          // Nullable but **not** optional, unlike the two schedule times
+          // above, and that difference settles the "omitted or explicit null"
+          // question for them: there is no omitted case. Both keys are
+          // required to be present, every caller sends both, and `null` is the
+          // only way either arrives empty - so the `superRefine` below can
+          // refuse a non-VIEWER's null outright without that doubling as a
+          // refusal of "leave this field as it is".
           coopStartDate: z.date().nullable(),
           coopEndDate: z.date().nullable(),
           bio: z.string().max(PROFILE_TEXT_MAX_LENGTH),
@@ -318,6 +327,26 @@ export const userRouter = router({
                 message: DAYS_WORKING_REQUIRED_MESSAGE,
               });
             }
+          }
+
+          // The co-op dates, same rule and same wording as `onboardSchema`.
+          // Outside the block above only because `missingCoopDateFields`
+          // carries the VIEWER exemption itself, as its two neighbours do.
+          //
+          // Unconditional for a non-VIEWER, not "do not null out what is
+          // set": a save arriving with the new role already DRIVER or RIDER
+          // has to carry the dates, so a VIEWER cannot change role into a
+          // state SCRUM-633 then hides from matching.
+          for (const field of missingCoopDateFields({
+            role: data.role,
+            coopStartDate: data.coopStartDate,
+            coopEndDate: data.coopEndDate,
+          })) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [field],
+              message: COOP_DATE_REQUIRED_MESSAGE,
+            });
           }
 
           // `(0, 0)` is in range but is the "no address picked yet" sentinel
