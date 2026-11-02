@@ -143,3 +143,59 @@ export const trackRecommendationsLoaded = (properties: {
 }) => {
   trackEvent("Recommendations Loaded", properties);
 };
+
+/**
+ * The two events that make the rider-demand notice falsifiable.
+ *
+ * SCRUM-638 says outright that the feature "is a plausible intervention, not a
+ * measured one" and that it "should ship in a form that can tell". These are
+ * that form. Without them the notice would be a change nobody could evaluate,
+ * and the honest version of shipping an unmeasured guess is shipping the
+ * instrument alongside it.
+ *
+ * **The conversion funnel is these events plus one that already exists.** The
+ * question is "did seeing the count make anyone drive", and the answer is
+ * `Rider Demand Shown` → `Profile Completed` with `role: "DRIVER"`, which
+ * `trackProfileCompletion` has emitted from the profile save path all along.
+ * No third event and no new state: a funnel over events Mixpanel already
+ * joins by distinct id answers it, and a bespoke "converted" event would be a
+ * second thing to keep correct for no extra information.
+ *
+ * `Rider Demand Dismissed` is the counter-reading, and it is the one that can
+ * kill the feature. A high dismissal rate against a flat driver count is the
+ * evidence that this nags rather than informs — the exact risk the ticket
+ * names — and is the signal to remove the notice rather than reword it.
+ *
+ * **`surface` is why both are one event with a property rather than four
+ * events.** The empty recommendations list and the profile role selector are
+ * the same intervention in two places, and the thing worth knowing is which
+ * one converts; separate event names would make that a comparison across
+ * funnels instead of a breakdown within one.
+ *
+ * **`count` rides along for the same reason `resultCount` does above.** The
+ * interesting cohort is not fixed: a reader shown 3 and a reader shown 40 are
+ * being offered very different arguments, and a numeric property keeps that a
+ * filter rather than a second instrumentation path. Nothing finer than the
+ * count and the role is sent — no city here, because unlike the supply signal
+ * this is not a question about which corridor to recruit in.
+ *
+ * Emitted from `RiderDemandNotice`, which owns *when* they fire. The shown
+ * event is once per mount of a visible notice, so a reader who opens the
+ * filter panel and closes it again is counted twice; count unique users, not
+ * raw events, for the same reason `trackRecommendationsLoaded` says so.
+ */
+export const trackRiderDemandShown = (properties: {
+  count: number;
+  role: string;
+  surface: string;
+}) => {
+  trackEvent("Rider Demand Shown", properties);
+};
+
+export const trackRiderDemandDismissed = (properties: {
+  count: number;
+  role: string;
+  surface: string;
+}) => {
+  trackEvent("Rider Demand Dismissed", properties);
+};

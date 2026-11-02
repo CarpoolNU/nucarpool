@@ -435,6 +435,24 @@ const Home: NextPage<any> = () => {
   // supply measurement into a count of UI fiddling.
   useRecommendationsLoadedEvent(recommendationsQuery, user);
 
+  /**
+   * How many riders this user could carry if they drove, floored by the
+   * server. `SidebarContent` paints it under the recommendations empty state.
+   *
+   * **Not gated on `roleFetchesRecommendations`**, unlike the query above,
+   * and the difference is the point: a VIEWER is precisely a reader this
+   * number is for, and that predicate answers `false` for them. The server
+   * decides who gets an answer — `readerSeesRiderDemand` returns `null` for a
+   * DRIVER and for anyone already in a group — so there is one rule about
+   * who sees this and it lives next to the query that enforces it.
+   *
+   * No `refetchOnMount`, so it inherits the global `false` from
+   * `utils/trpc.ts`. The count moves on the scale of people joining the
+   * platform, not of navigations, and a reader who has dismissed the notice
+   * will not see a refetched number anyway.
+   */
+  const riderDemandQuery = trpc.user.recommendations.riderDemand.useQuery();
+
   const favoritesQuery = trpc.user.favorites.me.useQuery(undefined, {
     refetchOnMount: true,
   });
@@ -1256,6 +1274,7 @@ const Home: NextPage<any> = () => {
                   selectedUser={selectedUser}
                   mobileSelectedUser={mobileSelectedUserID}
                   handleMobileExpand={handleMobileSidebarExpand}
+                  riderDemandCount={riderDemandQuery.data?.count ?? null}
                   onViewGroupRoute={onViewGroupRoute}
                   collapseSidebar={(collapsed) =>
                     setSheetDetent(collapsed ? "collapsed" : "expanded")

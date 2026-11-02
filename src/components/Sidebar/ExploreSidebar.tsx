@@ -29,6 +29,12 @@ interface ExploreSidebarProps {
   onViewRequest: (userId: string) => void;
   mobileSelectedUser: string | null;
   handleMobileExpand: (userId?: string) => void;
+  /**
+   * Forwarded to `SidebarContent`, which decides whether the recommendations
+   * empty state carries the rider-demand notice. Passed straight through: this
+   * component makes no decision about it.
+   */
+  riderDemandCount?: number | null;
 }
 
 const ExploreSidebar = (props: ExploreSidebarProps) => {
@@ -232,6 +238,7 @@ const ExploreSidebar = (props: ExploreSidebarProps) => {
             onViewRequest={props.onViewRequest}
             mobileSelectedUser={props.mobileSelectedUser}
             handleMobileExpand={props.handleMobileExpand}
+            riderDemandCount={props.riderDemandCount}
             onConnectClose={(action) => {
               if (action === "closeAfterSend") {
                 setCurOption("recommendations");

@@ -39,6 +39,9 @@ let behaviour: () => Promise<unknown> = async () => ({});
 jest.mock("../../utils/trpc", () =>
   require("../../testing/trpcHarness").buildTrpcMock({
     "user.me": { query: () => behaviour() },
+    // Not what these tests are about; the profile page issues it for the
+    // rider-demand notice beside the role radios (SCRUM-638).
+    "user.recommendations.riderDemand": { inertQuery: true },
   }),
 );
 
