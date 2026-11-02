@@ -35,6 +35,8 @@ interface SidebarProps {
   handleMobileExpand: (userId?: string) => void;
   onViewGroupRoute?: (driver: PublicUser, riders: PublicUser[]) => void;
   collapseSidebar: (collapsed: boolean) => void;
+  /** Forwarded to `ExploreSidebar`; the other two sidebars have no use for it. */
+  riderDemandCount?: number | null;
 }
 
 export const SidebarPage = (props: SidebarProps) => {
@@ -87,6 +89,7 @@ export const SidebarPage = (props: SidebarProps) => {
         onViewRequest={props.onUserSelect}
         mobileSelectedUser={props.mobileSelectedUser}
         handleMobileExpand={props.handleMobileExpand}
+        riderDemandCount={props.riderDemandCount}
       />
     );
   } else if (props.sidebarType === "requests") {

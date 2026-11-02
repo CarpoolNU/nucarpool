@@ -45,6 +45,9 @@ jest.mock("../../utils/trpc", () =>
     "user.me": { query: async () => VIEWER_USER },
     "user.edit": { mutation: async () => ({}) },
     "user.recommendations.me": {},
+    // Not what these tests are about; the profile page issues it for the
+    // rider-demand notice beside the role radios (SCRUM-638).
+    "user.recommendations.riderDemand": { inertQuery: true },
     "mapbox.geoJsonUserList": {},
   }),
 );

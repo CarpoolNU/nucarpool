@@ -25,6 +25,7 @@ import {
 } from "../../utils/profile/signOutWithGuard";
 import { fieldErrorId } from "../../utils/formA11y";
 import { PendingPicture } from "../../utils/profile/pendingPicture";
+import { RiderDemandNotice } from "../RiderDemandNotice";
 
 interface UserSectionProps {
   register: UseFormRegister<OnboardingFormInputs>;
@@ -49,6 +50,13 @@ interface UserSectionProps {
    */
   pendingPicture: PendingPicture;
   user?: User;
+  /**
+   * How many riders this user could carry if they switched to Driver, already
+   * floored by the server, or `null` when they are to be told nothing. Passed
+   * down rather than queried here so the page keeps owning its queries; see
+   * the note on the query in `pages/profile/index.tsx`.
+   */
+  riderDemandCount?: number | null;
 
   /**
    * The profile page's unsaved-changes guard. Required rather than optional:
@@ -69,6 +77,7 @@ const UserSection = ({
   pendingPicture,
   user,
   checkChanges,
+  riderDemandCount,
 }: UserSectionProps) => {
   const isMobile = useIsMobile();
   const isViewer = watch("role") === Role.VIEWER;
@@ -137,6 +146,25 @@ const UserSection = ({
           from the Group page to change it - a group has exactly one driver, and
           it is already set.
         </Note>
+      )}
+
+      {/* Immediately above the control it argues for. The locked-role notes
+          come first because they explain why the radios are disabled, and a
+          reason to press a disabled button would read as mockery - though the
+          server already answers `null` for a grouped reader, so in practice
+          the two never appear together.
+
+          `watch("role")` rather than the saved role, so selecting Driver
+          removes the notice on the click rather than on the save. The count
+          itself is the server's and does not move; what moves is whether the
+          reader still needs to be told. */}
+      {watch("role") !== Role.DRIVER && (
+        <RiderDemandNotice
+          count={riderDemandCount}
+          role={user?.role}
+          surface="profile-role"
+          className="mb-3 max-w-xl"
+        />
       )}
 
       {/* Fixed layout issues */}

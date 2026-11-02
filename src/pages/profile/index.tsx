@@ -158,6 +158,26 @@ const Index: NextPage = () => {
     refetchOnMount: true,
   });
   const { data: user } = userQuery;
+
+  /**
+   * How many riders this user could carry if they drove, floored by the
+   * server. Rendered by `UserSection` beside the role radios — the one place
+   * in the product where the decision this number argues for is actually
+   * made.
+   *
+   * Issued here rather than inside `UserSection` so that the page owns its
+   * queries, which is the arrangement the rest of this file and `index.tsx`
+   * already use, and so the section stays a presentational component driven
+   * by props.
+   *
+   * Ungated on role, unlike the explore page's recommendations query. The
+   * server answers `null` for a DRIVER and for a grouped reader
+   * (`readerSeesRiderDemand`), so a gate here would be a second copy of that
+   * rule in a place that cannot see the group state the form has not loaded
+   * yet. The cost of being wrong is one cheap query, against the cost of the
+   * two rules drifting.
+   */
+  const riderDemandQuery = trpc.user.recommendations.riderDemand.useQuery();
   const editUserMutation = useEditUserMutation(
     router,
     () => setIsLoading(false),
@@ -665,6 +685,7 @@ const Index: NextPage = () => {
                   setValue={setValue}
                   user={user}
                   checkChanges={checkForChanges}
+                  riderDemandCount={riderDemandQuery.data?.count ?? null}
                 />
               ) : option === "carpool" ? (
                 <CarpoolSection
@@ -725,6 +746,7 @@ const Index: NextPage = () => {
                   setValue={setValue}
                   user={user}
                   checkChanges={checkForChanges}
+                  riderDemandCount={riderDemandQuery.data?.count ?? null}
                 />
               ) : option === "carpool" ? (
                 <CarpoolSection

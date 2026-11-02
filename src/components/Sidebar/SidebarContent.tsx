@@ -17,6 +17,7 @@ import { UserContext } from "../../utils/userContext";
 import { QueryState } from "../../utils/queryState";
 import { QueryError } from "../QueryError";
 import { viewerModeHidesCards } from "./viewerAccess";
+import { RiderDemandNotice } from "../RiderDemandNotice";
 
 interface SidebarContentProps {
   subType: string;
@@ -36,6 +37,17 @@ interface SidebarContentProps {
   handleMobileExpand?: (userId?: string) => void;
   /** Forwarded to the recommendations/favorites `ConnectCard`'s `onClose`, so a caller can react to the connect flow closing (e.g. resetting the active tab after a send). */
   onConnectClose?: (action: string) => void;
+  /**
+   * How many riders this user could carry if they drove, floored by the
+   * server, or `null` when they are to be told nothing.
+   *
+   * Rendered under the recommendations empty state and under the Viewer-mode
+   * copy — the two places a reader has just been told the product found them
+   * nobody, which is the moment the platform has their attention and
+   * currently spends it on a dead end. Never under favorites or requests:
+   * those lists being empty says nothing about driver supply.
+   */
+  riderDemandCount?: number | null;
 }
 
 const emptyMessages = {
@@ -241,6 +253,32 @@ export const SidebarContent = (props: SidebarContentProps) => {
       )
     : sortedUserCards;
 
+  /**
+   * The rider-demand notice, or nothing.
+   *
+   * Built once and painted into both empty branches below - the Viewer-mode
+   * copy and the ordinary "no results" copy - because they are the same
+   * moment reached by two different routes, and a reader who sees one never
+   * sees the other.
+   *
+   * **Gated on the sub-tab here, not inside the notice.** `viewerModeHidesCards`
+   * is reused rather than `subType === "recommendations"` written out, for the
+   * same reason the branch below gives: it is the one predicate that says
+   * which tab is discovery, and a second spelling of it is a second thing to
+   * keep in step. An empty favorites or requests list is not evidence about
+   * driver supply and must not carry this.
+   *
+   * `role` comes from the signed-in user's own context, not from the list.
+   */
+  const demandNotice = viewerModeHidesCards(props.subType) ? (
+    <RiderDemandNotice
+      count={props.riderDemandCount}
+      role={user.role}
+      surface="empty-recommendations"
+      className="mt-4"
+    />
+  ) : null;
+
   const renderedUserCards = filteredSortedUserCards.map(
     ({ otherUser, isUnread, latestMessage }) =>
       renderUserCard(
@@ -275,6 +313,7 @@ export const SidebarContent = (props: SidebarContentProps) => {
         {props.disabled && viewerModeHidesCards(props.subType) ? (
           <div className="m-4 text-center text-lg font-light">
             {emptyMessage(props.subType, props.disabled)}
+            {demandNotice}
           </div>
         ) : props.loadState.status === "error" ? (
           <QueryError
@@ -288,6 +327,7 @@ export const SidebarContent = (props: SidebarContentProps) => {
         ) : props.userCardList.length === 0 ? (
           <div className="m-4 text-center text-lg font-light">
             {emptyMessage(props.subType, props.disabled)}
+            {demandNotice}
           </div>
         ) : (
           renderedUserCards

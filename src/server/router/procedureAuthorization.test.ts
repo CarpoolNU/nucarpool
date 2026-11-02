@@ -72,6 +72,7 @@ const PROCEDURE_AUTHORIZATION: Record<string, ProcedureClass> = {
   "user.messages.sendMessage": "protected",
   "user.messages.markMessagesAsRead": "protected",
   "user.recommendations.me": "protected",
+  "user.recommendations.riderDemand": "protected",
   "user.requests.me": "protected",
   "user.requests.create": "protected",
   "user.requests.delete": "protected",
