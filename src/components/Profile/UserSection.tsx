@@ -167,9 +167,14 @@ const UserSection = ({
         />
       )}
 
-      {/* Fixed layout issues */}
+      {/* Fixed layout issues.
+
+          `justify-between` is what separates the role buttons from the seat
+          field, and it works only in combination with the cap on that field
+          below - see the comment there. The declared 700px is capped by
+          `max-w-full` to the 608px content column `max-w-2xl` leaves. */}
       <div
-        className={`${isMobile ? "flex-col" : "flex h-24 w-[700px]"} max-w-full items-end`}
+        className={`${isMobile ? "flex-col" : "flex h-24 w-[700px] justify-between"} max-w-full items-end`}
       >
         {/* Radio buttons always in a row.
 
@@ -209,10 +214,32 @@ const UserSection = ({
           />
         </div>
 
-        {/* Reduced gap between radio buttons and seat availability */}
+        {/* The seat field, and the cap on it is what puts air between this and
+            the Driver button.
+
+            Without the cap this block took every leftover pixel, so its left
+            edge *was* that button's right edge - zero separation, against the
+            32px between two adjacent buttons. That is SCRUM-707.
+
+            192px is measured rather than chosen. `EntryLabel` renders "Seat
+            Availability" plus its required asterisk at 20px Montserrat 700,
+            which needs 179.48px to stay on one line; 192 clears that by
+            12.52px. At 1440x900 the row is 608px and the three buttons plus
+            their two gaps are 360.65px, so capping the field here leaves
+            55.35px for `justify-between` to spend between the two groups.
+            Both figures were measured in Chromium against this repository's
+            compiled stylesheet - jsdom does no layout and cannot see any of it.
+
+            A cap rather than a gap on the row, and the difference is the
+            narrow case. Below a 608px row there is progressively less spare
+            space; below 540.13px there is none, the cap goes inert and the
+            arrangement is exactly what it was before this change. A gap would
+            instead take its pixels out of the buttons at every width -
+            including the band just above the mobile breakpoint, where the
+            three are already shrinking below their natural widths. */}
         {watch("role") == Role.DRIVER && (
           <div
-            className={`${isMobile ? "mt-2 w-full" : "flex-1"} flex flex-col`}
+            className={`${isMobile ? "mt-2 w-full" : "max-w-48 flex-1"} flex flex-col`}
           >
             <EntryLabel
               htmlFor="seatAvail"
