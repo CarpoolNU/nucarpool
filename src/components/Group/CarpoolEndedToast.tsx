@@ -1,5 +1,6 @@
 import { toast } from "react-toastify/unstyled";
 import { FEEDBACK_FORM_URL } from "../../utils/feedbackForm";
+import { trackLinkClicked } from "../../utils/mixpanel";
 
 /**
  * The success toast for a membership change, with a link to the feedback form.
@@ -29,6 +30,9 @@ export const CarpoolEndedToast = ({ message }: { message: string }) => (
       target="_blank"
       rel="noopener noreferrer"
       className="mt-1 inline-block text-sm font-medium underline"
+      onClick={() =>
+        trackLinkClicked({ link: "feedback", surface: "carpool-ended-toast" })
+      }
     >
       Tell us how the carpool went
     </a>

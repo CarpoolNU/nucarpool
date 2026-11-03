@@ -25,8 +25,10 @@
  */
 
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import DropDownMenu from "./DropDownMenu";
 import { profileImageSpies } from "../testing/profileImageStub";
+import { suppressLinkNavigation } from "../testing/suppressLinkNavigation";
 
 /**
  * `DropDownMenu` pushes `/profile` from its Profile button. Nothing here
@@ -63,7 +65,32 @@ jest.mock("../utils/useProfileImage", () =>
   require("../testing/profileImageStub").buildProfileImageMock(),
 );
 
+/**
+ * Mocked here rather than left to the `moduleNameMapper` stub in
+ * `jest.config.js`, whose methods are deliberately plain no-ops with nothing
+ * to assert against. A local `jest.mock` takes precedence over the mapper and
+ * still lets `utils/mixpanel` load for real, so the event name and property
+ * shape below come from the module under test. See
+ * `src/testing/mixpanelBrowserStub.js`.
+ */
+jest.mock("mixpanel-browser", () => ({
+  __esModule: true,
+  default: {
+    init: jest.fn(),
+    track: jest.fn(),
+    identify: jest.fn(),
+    reset: jest.fn(),
+  },
+}));
+
 const SIGNED_URL = "https://bucket.s3.amazonaws.com/profile/alex?sig=abc";
+
+/** Read back from the factory above, never closed over from before it. */
+const { track } = (
+  jest.requireMock("mixpanel-browser") as {
+    default: Record<"init" | "track" | "identify" | "reset", jest.Mock>;
+  }
+).default;
 
 /** What the hook reports; merged over a settled, picture-less default. */
 const hookReturns = (result: {
@@ -90,8 +117,14 @@ const hookReturns = (result: {
 const trigger = () => screen.getByRole("button", { expanded: false });
 
 beforeEach(() => {
+  // Before `hookReturns`, not after: `clearAllMocks` leaves implementations
+  // alone, but ordering it this way keeps that from being load-bearing.
+  jest.clearAllMocks();
   hookReturns({});
+  suppressLinkNavigation.install();
 });
+
+afterEach(suppressLinkNavigation.uninstall);
 
 describe("the menu trigger's accessible name", () => {
   /**
@@ -139,5 +172,51 @@ describe("the menu trigger's accessible name", () => {
     render(<DropDownMenu />);
 
     expect(trigger()).toHaveAccessibleName("Account menu");
+  });
+});
+
+/**
+ * The Feedback item's analytics, which exist to answer whether anyone uses it.
+ *
+ * This link and the one in `CarpoolEndedToast` point at the same Jira form,
+ * so the destination is not the question - `surface` is. The pair is only
+ * worth instrumenting if the two can be told apart, which is what the
+ * property asserted here buys and what a shared `Link Clicked` with no
+ * surface would throw away.
+ *
+ * **The menu has to be opened first, and that is the point.** The item does
+ * not exist in the DOM until then, which is exactly why the sweep-every-anchor
+ * approach this replaced would have bound nothing: at load there is no anchor
+ * here to find.
+ */
+describe("the Feedback item", () => {
+  const openMenu = async () => {
+    render(<DropDownMenu />);
+    await userEvent.click(trigger());
+    return screen.getByRole("link", { name: "Feedback" });
+  };
+
+  it("is not in the DOM until the menu is opened", () => {
+    render(<DropDownMenu />);
+
+    expect(
+      screen.queryByRole("link", { name: "Feedback" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("counts the click against the account menu", async () => {
+    await userEvent.click(await openMenu());
+
+    expect(track.mock.calls).toEqual([
+      ["Link Clicked", { link: "feedback", surface: "account-menu" }],
+    ]);
+  });
+
+  it("emits nothing merely for opening the menu", async () => {
+    await openMenu();
+
+    // Opening the menu is browsing, not feedback. Were the event to fire on
+    // render, every visit to the menu would read as an answered prompt.
+    expect(track).not.toHaveBeenCalled();
   });
 });

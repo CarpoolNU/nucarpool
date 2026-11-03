@@ -26,7 +26,7 @@ const SafetySection = () => (
       emergency.
     </p>
     <p className="mt-2">
-      <SafetyGuidanceLink />
+      <SafetyGuidanceLink surface="profile" />
     </p>
   </section>
 );

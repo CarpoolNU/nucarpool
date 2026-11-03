@@ -6,6 +6,7 @@ import React, { Fragment, useState } from "react";
 import { useRouter } from "next/router";
 import ProfileAvatar from "./ProfileAvatar";
 import { FEEDBACK_FORM_URL } from "../utils/feedbackForm";
+import { trackLinkClicked } from "../utils/mixpanel";
 import {
   signOutWithGuard,
   UnsavedChangesGuard,
@@ -125,6 +126,12 @@ const DropDownMenu = ({ checkChanges }: DropDownMenuProps) => {
                 <Link
                   href={FEEDBACK_FORM_URL}
                   className="mt-4 w-4/5 rounded-2xl border border-gray-300 bg-white px-3 py-2 text-center hover:bg-gray-100"
+                  onClick={() =>
+                    trackLinkClicked({
+                      link: "feedback",
+                      surface: "account-menu",
+                    })
+                  }
                 >
                   Feedback
                 </Link>
