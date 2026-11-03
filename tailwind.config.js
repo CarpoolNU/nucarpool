@@ -18,6 +18,8 @@
 const {
   MOBILE_BREAKPOINT_PX,
   DESKTOP_SCREEN_NAME,
+  MD_BREAKPOINT_PX,
+  MD_SCREEN_NAME,
   DESKTOP_TALL_SCREEN_NAME,
   DESKTOP_TALL_MEDIA_QUERY,
   MESSAGE_PANEL_TALL_SCREEN_NAME,
@@ -327,8 +329,12 @@ module.exports = {
       [DESKTOP_TALL_SCREEN_NAME]: { raw: DESKTOP_TALL_MEDIA_QUERY },
       // => @media (min-width: 640px) and (min-height: 844px) { ... }
 
-      // ipad 14 size
-      md: "834px",
+      // ipad 14 size. Composed from `breakpoints.js` rather than written as a
+      // literal because `Radio.tsx` needs the same boundary as a media-query
+      // string - a styled-components template cannot reach a screen - and the
+      // profile role row's arrangement is split across the two. That constant
+      // carries the argument.
+      [MD_SCREEN_NAME]: `${MD_BREAKPOINT_PX}px`,
       // => @media (min-width: 834px) { ... }
 
       lg: "1440px",

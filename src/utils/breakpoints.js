@@ -54,6 +54,45 @@ const DESKTOP_SCREEN_NAME = "desktop";
 const DESKTOP_MEDIA_QUERY = `(min-width: ${MOBILE_BREAKPOINT_PX}px)`;
 
 /**
+ * The second width boundary, 834px - an iPad 14 - and the one `tailwind.config.js`
+ * has always registered as `md`.
+ *
+ * It is hoisted here, rather than left as a literal in that config, for the
+ * reason this file exists at all: the profile page's role row now decides its
+ * *arrangement* on this boundary, and that decision is split across two
+ * languages. `UserSection` picks the row's direction with `md:` utilities,
+ * while `Radio`'s type scale is a `styled-components` template that cannot
+ * reach a Tailwind screen and needs the query as a string. Those are the two
+ * halves of one switch: below it the row is a block and the buttons divide it
+ * at 18px, at and above it the row is a content-sized flex row and the buttons
+ * are 24px. A number typed separately into each half is the two-threshold
+ * defect described above - `Header` at 768 against `useIsMobile` at 640 - with
+ * a narrower band and a subtler symptom, because a viewport caught between
+ * them gets a stacked row wearing the desktop type scale rather than an
+ * obviously broken header.
+ *
+ * `md` keeps its existing name here. Renaming it to something semantic would
+ * touch every call site that already uses the prefix, for no gain this ticket
+ * needs; what it gains is a single definition.
+ */
+const MD_BREAKPOINT_PX = 834;
+
+const MD_SCREEN_NAME = "md";
+
+/**
+ * The same boundary as a media query, for the `styled-components` template in
+ * `Radio.tsx`.
+ *
+ * `min-width`, matching `DESKTOP_MEDIA_QUERY`'s direction and for the reason
+ * given there: the narrower arrangement is the base and this overrides it, so
+ * the boundary pixel belongs to the wider side and no fractional
+ * `max-width: 833.98px` is needed to say so. 834 is therefore the first width
+ * at which the desktop row appears, and `md:` utilities turn on at exactly the
+ * same pixel.
+ */
+const MD_MEDIA_QUERY = `(min-width: ${MD_BREAKPOINT_PX}px)`;
+
+/**
  * The name of the screen that means "wide enough for the desktop layout *and*
  * tall enough to lay it out", used by the onboarding wizard.
  *
@@ -939,6 +978,9 @@ module.exports = {
   MOBILE_BREAKPOINT_PX,
   DESKTOP_SCREEN_NAME,
   DESKTOP_MEDIA_QUERY,
+  MD_BREAKPOINT_PX,
+  MD_SCREEN_NAME,
+  MD_MEDIA_QUERY,
   DESKTOP_TALL_SCREEN_NAME,
   DESKTOP_TALL_MEDIA_QUERY,
   WIZARD_CARD_HEIGHT_PX,

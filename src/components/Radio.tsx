@@ -2,7 +2,7 @@ import { Role } from "@prisma/client";
 import React, { useEffect, useState } from "react";
 import { FieldError } from "react-hook-form";
 import styled, { css } from "styled-components";
-import { DESKTOP_MEDIA_QUERY } from "../utils/breakpoints";
+import { MD_MEDIA_QUERY } from "../utils/breakpoints";
 import { fieldErrorId } from "../utils/formA11y";
 
 type RadioOwnProps = {
@@ -67,9 +67,22 @@ const radioButtonBase = css`
   justify-content: center;
 
   /*
-   * The mobile values, and they are the base rather than an override because
-   * DESKTOP_MEDIA_QUERY is a min-width - see breakpoints.js for why that
-   * direction is the one that agrees with useIsMobile at the boundary pixel.
+   * The narrow values, and they are the base rather than an override because
+   * MD_MEDIA_QUERY is a min-width - see breakpoints.js for why that direction
+   * is the one that agrees with the matching md: utilities at the boundary
+   * pixel. No backticks in here: this comment is inside a template literal and
+   * one would close it.
+   *
+   * **The boundary here is 834px and not the mobile one**, which is SCRUM-708.
+   * These are still "the values for a row that divides a column between three
+   * buttons", and that row is what UserSection lays out everywhere below
+   * 834px - not only on a phone. The 640px boundary this used to carry put the
+   * 24px scale on a row far too narrow to hold it: at a 667px viewport the
+   * three buttons need 360.65px against the 353px the content column gives
+   * them, so the group overflowed its own row and pushed the Seat Availability
+   * field off a screen that offers no horizontal scroll. The type scale and
+   * the row's direction are one decision and have to turn over together, which
+   * is why both now read the same constant.
    *
    * 18px because 24px does not fit. The three buttons divide the profile
    * page's content column between them, so at a 320px viewport each is 80px
@@ -90,7 +103,7 @@ const radioButtonBase = css`
   padding-left: 4px;
   padding-right: 4px;
 
-  @media ${DESKTOP_MEDIA_QUERY} {
+  @media ${MD_MEDIA_QUERY} {
     font-size: 24px;
     padding-left: 12px;
     padding-right: 12px;
@@ -184,7 +197,7 @@ const Radio = React.forwardRef<HTMLInputElement, RadioProps>(
      * resolves to `auto`. Measured in Chromium against this repository's
      * compiled stylesheet, the desktop buttons are 107.91 / 90.23 / 98.50px -
      * each one its own label's width plus padding and border, not the 90.16px
-     * a resolved quarter of the 360.65px row would give. `desktop:flex-initial`
+     * a resolved quarter of the 360.65px row would give. `md:flex-initial`
      * restores the flex default, so that arm renders exactly as it does today.
      *
      * Two details worth keeping, because both cost a measurement to find.
@@ -192,19 +205,29 @@ const Radio = React.forwardRef<HTMLInputElement, RadioProps>(
      * resolving - wrapped in `@media`, Chromium resolves the quarter and the
      * buttons become an equal 90.16px, which leaves the 24px "Viewer" just
      * 4.12px inside its border. So the inert rule could not simply be given a
-     * `desktop:` prefix and kept. And the row being content-sized is also why
+     * `md:` prefix and kept. And the row being content-sized is also why
      * the desktop arm never had this defect: a content-sized box cannot be too
      * narrow for its own content.
      *
-     * On mobile the row *is* definite - it is a block filling the content
-     * column - and a fixed quarter of it is the defect: three quarters plus
-     * the row's two gaps do not fill the row, so every button is narrower than
-     * it could be *and* the row ends in unused space. `flex-1` divides the row
-     * between the three instead, which both widens each button and removes
-     * that dead space. The three stay exactly equal because the basis is 0;
-     * anything content-sized would size them to their labels, which differ.
+     * Below the breakpoint the row *is* definite - it is a block filling the
+     * content column - and a fixed quarter of it is the defect: three quarters
+     * plus the row's two gaps do not fill the row, so every button is narrower
+     * than it could be *and* the row ends in unused space. `flex-1` divides
+     * the row between the three instead, which both widens each button and
+     * removes that dead space. The three stay exactly equal because the basis
+     * is 0; anything content-sized would size them to their labels, which
+     * differ.
+     *
+     * **`md:` and not `desktop:`, which is SCRUM-708.** These two arms are
+     * selected by which kind of box the row is, and `UserSection` now keeps
+     * the row a definite block all the way to 834px because the horizontal
+     * arrangement does not fit below that. Leaving the flex arm on the 640px
+     * boundary would hand the band between them the *other* half of each
+     * decision - content-sized buttons in a definite row, which is exactly the
+     * dead space the paragraph above describes. The type scale in
+     * `radioButtonBase` turns over on the same constant for the same reason.
      */
-    const sizeClass = "h-14 flex-1 desktop:flex-initial";
+    const sizeClass = "h-14 flex-1 md:flex-initial";
 
     /* Appended rather than ignored. This component took a `className` and
        dropped it on the floor, which is worse than not accepting one: the

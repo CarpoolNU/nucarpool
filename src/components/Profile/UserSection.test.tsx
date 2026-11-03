@@ -230,14 +230,28 @@ describe("the role radios", () => {
         .closest("label");
 
       /* Grow from a zero basis, so the three shares are equal whatever the
-         labels measure - and the flex default back at desktop width, where the
-         row is content-sized and this must not apply. */
+         labels measure - and the flex default back at `md`, where the row is
+         content-sized and this must not apply.
+
+         `md:` and not the mobile breakpoint since SCRUM-708: the row stays a
+         definite block up to 834px because the horizontal arrangement does not
+         fit below it, and the two arms are selected by which kind of box the
+         row is. Leaving this on the old prefix would pass while the band
+         between 640 and 834 rendered content-sized buttons in a definite row,
+         so the absence of any `desktop`-screen utility is asserted too - by
+         prefix rather than by name, since the old spelling is now unused and
+         Tailwind scans this file. */
       expect(label).toHaveClass("flex-1");
-      expect(label).toHaveClass("desktop:flex-initial");
+      expect(label).toHaveClass("md:flex-initial");
+      expect(
+        Array.from(label?.classList ?? []).filter((token) =>
+          token.startsWith("desktop:"),
+        ),
+      ).toEqual([]);
     }
   });
 
-  it("gives the row a phone-sized gap and the desktop one above the breakpoint", () => {
+  it("gives the row a narrow gap and the wide one from md up", () => {
     render(<Harness checkChanges={jest.fn()} />);
 
     const row = screen
@@ -246,7 +260,54 @@ describe("the role radios", () => {
 
     // Every pixel of gap is three pixels off the buttons' combined width.
     expect(row).toHaveClass("gap-2");
-    expect(row).toHaveClass("desktop:gap-8");
+    expect(row).toHaveClass("md:gap-8");
+    expect(
+      Array.from(row?.classList ?? []).filter((token) =>
+        token.startsWith("desktop:"),
+      ),
+    ).toEqual([]);
+  });
+
+  /*
+   * SCRUM-708. The row's own arrangement, which is the half of that fix this
+   * suite can see at all: jsdom lays nothing out, so what is checkable here is
+   * that the component asks for the block arrangement below `md` and the
+   * horizontal one from `md` up - the measured figures are in the
+   * `profile-content-column-width` fixture, which now carries `Radio.tsx`'s
+   * real declarations and so reproduces the overflow this ticket fixed.
+   *
+   * The absence of the unprefixed twins is the assertion that matters. An
+   * unprefixed `flex` would make the row horizontal at every width, which is
+   * the defect: three content-sized buttons need 360.65px against the 353px
+   * the content column gives this row at a 667px viewport.
+   *
+   * That half is checked by derivation rather than by listing the four names,
+   * and not for brevity. Tailwind v4 scans this file like any other, so a
+   * utility named here is emitted into the production stylesheet - and of the
+   * four, the row's declared height is now written *only* behind the prefix,
+   * so spelling the bare form would ship a rule matching nothing. Stripping
+   * the prefix off what the row actually carries needs no literal at all.
+   */
+  it("keeps the row a block until md, where the horizontal arrangement fits", () => {
+    render(<Harness checkChanges={jest.fn()} />);
+
+    const row = screen
+      .getByLabelText("Viewer", { selector: "input" })
+      .closest("label")?.parentElement?.parentElement;
+
+    expect(row).toHaveClass("md:flex");
+    expect(row).toHaveClass("md:justify-between");
+
+    const tokens = Array.from(row?.classList ?? []);
+    const prefixed = tokens.filter((token) => token.startsWith("md:"));
+
+    // The row has to declare the horizontal arrangement at all, or the loop
+    // below passes over an empty list and proves nothing.
+    expect(prefixed.length).toBeGreaterThanOrEqual(4);
+
+    for (const token of prefixed) {
+      expect(tokens).not.toContain(token.slice("md:".length));
+    }
   });
 
   it("applies a className passed from the call site instead of dropping it", () => {

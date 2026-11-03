@@ -172,19 +172,44 @@ const UserSection = ({
           `justify-between` is what separates the role buttons from the seat
           field, and it works only in combination with the cap on that field
           below - see the comment there. The declared 700px is capped by
-          `max-w-full` to the 608px content column `max-w-2xl` leaves. */}
-      <div
-        className={`${isMobile ? "flex-col" : "flex h-24 w-[700px] justify-between"} max-w-full items-end`}
-      >
+          `max-w-full` to the 608px content column `max-w-2xl` leaves.
+
+          **The horizontal arrangement starts at `md` (834px), not at the
+          mobile breakpoint - SCRUM-708.** It never fitted below that. The
+          three buttons are content-sized at the desktop type scale and need
+          360.65px, while the content column gives this row 353px at a 667px
+          viewport and 326px at 640px; the group alone overflowed, and the seat
+          field was pushed past the right-hand edge of a column that carries
+          `overflow-x-hidden`, so a Driver could not reach a required field by
+          any gesture. Below 834px the row stays the block it already was on a
+          phone and the seat field sits under the buttons.
+
+          **A CSS boundary rather than `isMobile`, deliberately.** That hook is
+          one constant shared with the header, the bottom navigation and every
+          other desktop branch, so moving it to fix this row would move all of
+          them. What is needed here is narrower: this row, and the type scale
+          in `Radio.tsx` that has to turn over with it, both read
+          `MD_BREAKPOINT_PX` from `breakpoints.js` so the two halves cannot
+          drift. `isMobile` is no longer consulted for the row at all - below
+          834px the two arms had become the same block, so the ternary was
+          stating one arrangement twice. */}
+      <div className="max-w-full items-end md:flex md:h-24 md:w-[700px] md:justify-between">
         {/* Radio buttons always in a row.
 
-            The gap is a quarter of the desktop one on a phone, and that is not
+            The gap is a quarter of the wide one below `md`, and that is not
             taste. The three buttons divide this row between them, so every
             pixel of gap is three pixels off their combined width - and at a
             320px viewport the row is 256px wide, which two 32px gaps would
             spend an eighth of on empty space the labels need. See the width
-            comment in `Radio.tsx` for the figures. */}
-        <div className="desktop:gap-8 flex gap-2">
+            comment in `Radio.tsx` for the figures.
+
+            `md:` rather than `desktop:` for the same reason the row above
+            carries it: the wide gap belongs to the content-sized arrangement,
+            which now begins at 834px. At 640px the narrow gap is also what
+            keeps the group inside the viewport - three content-sized buttons
+            and two 32px gaps reach 642.65px against a column that ends at
+            640. */}
+        <div className="flex gap-2 md:gap-8">
           <Radio
             label="Viewer"
             id="viewer"
@@ -233,14 +258,25 @@ const UserSection = ({
             A cap rather than a gap on the row, and the difference is the
             narrow case. Below a 608px row there is progressively less spare
             space; below 540.13px there is none, the cap goes inert and the
-            arrangement is exactly what it was before this change. A gap would
-            instead take its pixels out of the buttons at every width -
-            including the band just above the mobile breakpoint, where the
-            three are already shrinking below their natural widths. */}
+            arrangement is exactly what it was before SCRUM-707. A gap would
+            instead take its pixels out of the buttons at every width this row
+            is horizontal at, and the narrowest of those is now the 520px the
+            column gives it at 834 - where the field is already down to
+            159.35px and the two groups already touch.
+
+            SCRUM-708 narrowed the range that paragraph is about. The row was
+            horizontal from 640px up when it was written, so the squeeze it
+            describes ran all the way down to a 326px row; it now stops at
+            834px of viewport, and everything below is the block arrangement
+            where neither the cap nor `justify-between` applies at all.
+
+            Both arms are now selected by `md:` rather than by `isMobile`,
+            following the row - the cap and the flex share only mean anything
+            while the row is a flex container, and below 834px it is not. The
+            `md:w-auto` is what hands the main size back to `md:flex-1`'s zero
+            basis after `w-full` has applied below the breakpoint. */}
         {watch("role") == Role.DRIVER && (
-          <div
-            className={`${isMobile ? "mt-2 w-full" : "max-w-48 flex-1"} flex flex-col`}
-          >
+          <div className="mt-2 flex w-full flex-col md:mt-0 md:w-auto md:max-w-48 md:flex-1">
             <EntryLabel
               htmlFor="seatAvail"
               required={true}
