@@ -26,6 +26,7 @@ import {
   HEADER_BAR_HEIGHT,
   HEADER_BAR_MIN_HEIGHT,
   HEADER_LOGO_MAX_FONT_SIZE,
+  MD_MEDIA_QUERY,
   MOBILE_NAV_SPACE,
 } from "../utils/breakpoints";
 
@@ -1056,22 +1057,161 @@ const ENTRY_LABEL_STYLE = [
   "align-items: center",
 ].join("; ");
 
-const USER_SECTION_ROLE_ROW_DESKTOP_CLASS =
-  "flex h-24 w-[700px] justify-between";
+/**
+ * The role row, which is now one responsive class string rather than a
+ * ternary's two arms.
+ *
+ * SCRUM-708 moved the horizontal arrangement off the mobile breakpoint and
+ * onto `md` (834px), where it first fits - below that the group of three
+ * content-sized buttons is wider than the column that holds it. Both arms of
+ * the old `isMobile` ternary had then become the same block, so the ternary
+ * went with it and the row is selected entirely in CSS. That is also why one
+ * constant now serves both profile fixtures: the mobile arrangement and the
+ * narrow-desktop one are the same markup, which is the whole point of the fix.
+ *
+ * Written in the order `prettier-plugin-tailwindcss` sorts it into, because
+ * the drift guard is a substring match against `UserSection.tsx` and the
+ * plugin sorts JSX class attributes. A plain `const` like this one is left
+ * alone, so a copy written in a human's order stops matching the moment the
+ * component is formatted.
+ */
+const USER_SECTION_ROLE_ROW_CLASS =
+  "max-w-full items-end md:flex md:h-24 md:w-[700px] md:justify-between";
 
 /**
- * The seat block's desktop arm, which only renders while the selected role is
- * Driver. Pinned separately because the two halves of SCRUM-707's fix are
- * useless apart: the row's `justify-between` has nothing to distribute until
- * this block stops growing into every spare pixel, and the cap on its own
- * would leave the spare pixels on the wrong side of it.
+ * The seat block, which only renders while the selected role is Driver.
+ * Pinned separately because the two halves of SCRUM-707's fix are useless
+ * apart: the row's `justify-between` has nothing to distribute until this
+ * block stops growing into every spare pixel, and the cap on its own would
+ * leave the spare pixels on the wrong side of it.
+ *
+ * Both of those only mean anything while the row is a flex container, so
+ * SCRUM-708 moved them behind `md:` with the row itself. Below the breakpoint
+ * the block is full width under the buttons, which is where the seat field
+ * already sat on a phone.
  */
-const USER_SECTION_SEAT_BLOCK_DESKTOP_CLASS = "max-w-48 flex-1";
+const USER_SECTION_SEAT_BLOCK_CLASS =
+  "mt-2 flex w-full flex-col md:mt-0 md:w-auto md:max-w-48 md:flex-1";
+
+const MONTSERRAT_LINK =
+  '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap" />';
+
+/**
+ * `Radio.tsx`'s own declarations, shared by the two profile fixtures below.
+ *
+ * These reproduce `styled-components` declarations as well as Tailwind
+ * classes, so - as the two header fixtures explain - the markup carries its
+ * own `<style>` and the drift guard anchors on the declaration text.
+ *
+ * **The `<style>` block is unlayered on purpose, and that is the fixtures' one
+ * subtle copy.** `styled-components` injects plain rules, while the
+ * `form-input` the label also carries compiles into `@layer utilities` - and an
+ * unlayered rule beats a layered one whatever order they arrive in. That is how
+ * `Radio.tsx` overrides that class's padding and its `border-radius: 0`, so a
+ * fixture that put these declarations inside a layer would measure a box the
+ * app does not draw.
+ *
+ * **Hoisted here by SCRUM-708, and that move is the fix's regression guard.**
+ * `profile-content-column-width` used three plain `<span>`s for the buttons
+ * and so measured a 194.6px group against the app's 360.65px, which is why it
+ * reported no overflow on a column that was clipping a required field. The two
+ * fixtures now copy one component instead of two different approximations of
+ * it.
+ *
+ * Two labels are controls rather than criteria. "Rider" and "Driver" never
+ * overflowed at any width, so if a change made *them* bleed the cause would be
+ * the box and not the word - the opposite diagnosis from the one
+ * `profile-role-row` was built for.
+ */
+const ROLE_RADIO_STYLED_CSS = `
+  background-color: white;
+  color: black;
+  border: 1px solid black;
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 500;
+  border-radius: 10px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  padding-left: 4px;
+  padding-right: 4px;
+`;
+
+/**
+ * The wide arm. Named for `md` rather than for "desktop" because SCRUM-708
+ * moved it to that boundary: the 24px scale needs a row the three buttons can
+ * be content-sized in, and below 834px the row is a block that is narrower
+ * than they are.
+ */
+const ROLE_RADIO_STYLED_MD_CSS = `
+    font-size: 24px;
+    padding-left: 12px;
+    padding-right: 12px;
+`;
+
+/** `profile/index.tsx`'s mobile pane. The `pb-24` clears the bottom bar. */
+const PROFILE_MOBILE_PANE_CLASS = "px-8 pt-6 pb-24";
+
+/**
+ * The button row, in the order Prettier's Tailwind plugin sorted it into.
+ *
+ * The order matters because the drift guard is a substring match against
+ * `UserSection.tsx`, and the plugin sorts **JSX class attributes only** - a
+ * plain `const` like this one is left exactly as written. So a copy written in
+ * the order a human would choose silently stops matching the moment the
+ * component is formatted. Note the sort moved `md:gap-8` to the end, where the
+ * `desktop`-screen spelling of the same utility used to lead: a custom screen
+ * and `md` do not sort alike. That spelling is described rather than written,
+ * because nothing uses it any more and Tailwind scans this file - naming it
+ * would ship a rule matching no element.
+ */
+const ROLE_ROW_CLASS = "flex gap-2 md:gap-8";
+
+/**
+ * `Radio`'s own two class fragments. They are separate here because they are
+ * separate in the component - the label's class is assembled from a template,
+ * so no single literal in `Radio.tsx` spells out the whole string and a
+ * one-string anchor would not be found.
+ */
+const ROLE_RADIO_SIZE_CLASS = "h-14 flex-1 md:flex-initial";
+
+const ROLE_RADIO_ENABLED_CLASS = "cursor-pointer";
+
+const roleRadio = (name: string, label: string, selected: boolean): string =>
+  `<label class="form-input ${ROLE_RADIO_SIZE_CLASS} ${ROLE_RADIO_ENABLED_CLASS}" data-arm="${
+    selected ? "active" : "inactive"
+  }" data-probe="${name}">${label}</label>`;
+
+/**
+ * The `<style>` block both profile fixtures carry, as one string so they
+ * cannot reproduce different halves of the same component.
+ *
+ * The media query is written from `MD_MEDIA_QUERY` rather than as a literal,
+ * for the reason that constant gives: the row's direction and this type scale
+ * are one switch, and a fixture holding the old 640px would measure a state
+ * the app never renders.
+ */
+const roleRadioStyleBlock = (): string => `
+    <style>
+      [data-arm] {${ROLE_RADIO_STYLED_CSS}      }
+
+      [data-arm="active"] {
+        background-color: #c8102e;
+        color: white;
+      }
+
+      @media ${MD_MEDIA_QUERY} {
+        [data-arm] {${ROLE_RADIO_STYLED_MD_CSS}        }
+      }
+    </style>`;
 
 const profileContentColumnWidth: LayoutFixture = {
   name: "profile-content-column-width",
   summary:
-    "The profile page's two 700px desktop rows, now capped, inside the content column an overflow-x-hidden grid gives them",
+    "The profile page's two 700px desktop rows, now capped, inside the content column an overflow-x-hidden grid gives them - with the role row's real buttons",
   source: "src/components/Profile/AccountSection.tsx:89",
   /* This fixture carries both the current figures and the ones they
      replaced, labelled as such, because a fixture that only carries the
@@ -1084,6 +1224,7 @@ const profileContentColumnWidth: LayoutFixture = {
     { name: "inner px-8", x: 64 },
   ],
   markup: `
+    ${MONTSERRAT_LINK}
     <style>
       [data-probe="bar"] {${HEADER_BAR_CSS}      }
 
@@ -1093,17 +1234,20 @@ const profileContentColumnWidth: LayoutFixture = {
         }
       }
     </style>
+    ${roleRadioStyleBlock()}
     <div data-probe="bar"></div>
     <div class="${PROFILE_GRID_CLASS}" data-probe="grid">
       <div class="${PROFILE_SIDEBAR_CLASS}"></div>
       <div class="${PROFILE_SCROLL_COLUMN_CLASS}" data-probe="scroll-column">
         <div class="${PROFILE_SCROLL_INNER_CLASS}" data-probe="scroll-inner">
-          <div class="${USER_SECTION_ROLE_ROW_DESKTOP_CLASS} max-w-full items-end" data-probe="role-row">
-            <div class="flex gap-8">
-              <span>Viewer</span><span>Rider</span><span>Driver</span>
+          <div class="${USER_SECTION_ROLE_ROW_CLASS}" data-probe="role-row">
+            <div class="${ROLE_ROW_CLASS}" data-probe="radio-group">
+${roleRadio("viewer", "Viewer", false)}
+${roleRadio("rider", "Rider", false)}
+${roleRadio("driver", "Driver", true)}
             </div>
-            <div class="${USER_SECTION_SEAT_BLOCK_DESKTOP_CLASS} flex flex-col" data-probe="seat-block">
-              <span>Seat Availability</span>
+            <div class="${USER_SECTION_SEAT_BLOCK_CLASS}" data-probe="seat-block">
+              <label class="!text-lg" style="${ENTRY_LABEL_STYLE}" data-probe="seat-label">Seat Availability<span class="text-northeastern-red pl-1">*</span></label>
               <input class="h-14 w-full self-end text-lg" data-probe="seat-field" />
             </div>
           </div>
@@ -1137,6 +1281,10 @@ const profileContentColumnWidth: LayoutFixture = {
       "[data-probe='scroll-column']",
       "[data-probe='scroll-inner']",
       "[data-probe='role-row']",
+      "[data-probe='radio-group']",
+      "[data-probe='viewer']",
+      "[data-probe='rider']",
+      "[data-probe='driver']",
       "[data-probe='seat-block']",
       "[data-probe='seat-field']",
       "[data-probe='account-section']",
@@ -1162,7 +1310,13 @@ const profileContentColumnWidth: LayoutFixture = {
     'role-row — `UserSection.tsx:93`, the item an earlier survey ranked High — is the counter-example and is untouched by this ticket: `max-w-full` already capped its declared 700px, and it measures 338 here for the same reason account-section now does. That survey\'s "64px overflow" was a misreading: `ProfilePicture` is not in this div, it is at `UserSection.tsx:175`.',
     "SCRUM-707 added the seat block's cap and the row's `justify-between`, and re-measured. At 1440x900: seat-block rect left 957 width 192, right edge 1149 — flush with the row's own right edge and with account-section's below it. Before the cap it was left 901.65 width 247.35, beginning at the Driver button's right border with nothing between them. The 55.35px now separating them is the free space `justify-between` has to distribute once the block stops growing into it.",
     "SCRUM-707 at 667x375: nothing moved. seat-block rect left 476.61 width 158.39, measured identical before and after. The row has no spare space at this width, so the cap never binds and `justify-between` has nothing to distribute — which is the reason the fix is a cap rather than a gap on the row. A gap would have spent 55px here, where there are none to spend, and taken them out of buttons that are already shrinking.",
-    "**The role row's three buttons are plain `<span>`s in this fixture and do not reproduce their real widths.** `Radio.tsx` is styled-components, which this markup does not copy, so the group measures about 194.6 at 667x375 against the 360.65 it measures in the app. Read this fixture for the content column and for where seat-block's right edge lands; read SCRUM-707's own figures, taken against the real button CSS, for anything about where the Driver button ends. Same class of caveat as the webfont note above.",
+    "SCRUM-708 replaced the three plain `<span>`s this fixture used for the role buttons with `Radio.tsx`'s real markup and declarations, and serves the Montserrat link beside them. The spans measured about 194.6 at 667x375 against the 360.65 the app measures, which is why this fixture reported no overflow on a column that was clipping a required field: it was the fixture that was wrong, not the column. Everything below was taken against the real buttons.",
+    "SCRUM-708 BEFORE, at 667x375 and measured on the real button CSS: scroll-column scrollWidth **520** against clientWidth **417** — 103px outside the column, and `overflow-x-hidden` means no gesture reaches it. role-row 353 wide at left 282; radio-group **360.65**, so the group overflowed its own row by 7.65px before the seat field was considered; seat-block left 642.65 right **770.34** against a viewport ending at 667. The Seat Availability input is required and is the only place the seat count can be set.",
+    "SCRUM-708 AFTER, same viewport: scroll-column scrollWidth **417 = clientWidth 417**. The row is a block, radio-group and seat-block are both 353 wide at left 282, and seat-field's right edge is **635** — 32px inside the viewport. The three buttons are 112.33 / 112.34 / 112.34 at 18px, each label inside its border with 20.45px of clearance per side on the tightest, which is Viewer.",
+    "SCRUM-708 at 640x375, the bottom of the band and the worst case: scroll-column scrollWidth 390 = clientWidth 390, row 326, buttons 103.33 each, Viewer clear by 15.95px per side. Before the fix this width was the worst of all — scrollWidth 520 against 390, 130px outside the column.",
+    "SCRUM-708, the boundary pair, which is the whole of the evidence that no viewport falls between the two arrangements. At **833x900**: row 519 as a block, buttons 167.66 each at 18px, gap 8px, seat-block full width below them, scrollWidth 583 = clientWidth 583. At **834x900**: row 520 as a flex row, buttons **107.91 / 90.23 / 98.50** at 24px, gap 32px, seat-block left 642.65 width 159.35 ending flush with the row, scrollWidth 584 = clientWidth 584. 834 is the first width at which the horizontal arrangement fits: 360.65 of buttons plus the seat block's 127.7px min-content needs a 488.35px row, which the column first provides at about 802px of viewport.",
+    "SCRUM-708 at 1440x900, the control, and nothing moved: row 608, radio-group 360.65, buttons 107.91 / 90.23 / 98.50 at 24px, gap 32px, seat-block left 957 width 192 with its right edge at 1149 — flush with the row's, 0px difference — and 55.35px of `justify-between` space between the Driver button and it. Identical to what SCRUM-707 recorded.",
+    "One figure here disagrees with SCRUM-490's and the chain is not the reason: scroll-column clientWidth measures the full 417 at 667x375 rather than the 402 that note records, because this run's Chromium drew an **overlay** scrollbar rather than the classic 15px one. The column still scrolls vertically — clientHeight 331 against scrollHeight 396 at 640x375 — so it is the scrollbar's width that changed and not the overflow. Read the 15px note above as one possible rendering rather than as the fixture's answer.",
   ],
   reproduces: [
     { file: "src/pages/profile/index.tsx", className: PROFILE_GRID_CLASS },
@@ -1189,11 +1343,25 @@ const profileContentColumnWidth: LayoutFixture = {
     },
     {
       file: "src/components/Profile/UserSection.tsx",
-      className: USER_SECTION_ROLE_ROW_DESKTOP_CLASS,
+      className: USER_SECTION_ROLE_ROW_CLASS,
     },
     {
       file: "src/components/Profile/UserSection.tsx",
-      className: USER_SECTION_SEAT_BLOCK_DESKTOP_CLASS,
+      className: USER_SECTION_SEAT_BLOCK_CLASS,
+    },
+    {
+      file: "src/components/Profile/UserSection.tsx",
+      className: ROLE_ROW_CLASS,
+    },
+    { file: "src/components/Radio.tsx", className: ROLE_RADIO_SIZE_CLASS },
+    { file: "src/components/Radio.tsx", className: ROLE_RADIO_ENABLED_CLASS },
+    { file: "src/components/Radio.tsx", className: "font-size: 18px;" },
+    { file: "src/components/Radio.tsx", className: "padding-left: 4px;" },
+    { file: "src/components/Radio.tsx", className: "font-size: 24px;" },
+    { file: "src/components/Radio.tsx", className: "padding-left: 12px;" },
+    {
+      file: "src/components/Radio.tsx",
+      className: "@media ${MD_MEDIA_QUERY} {",
     },
   ],
 };
@@ -2296,9 +2464,6 @@ const profileDropdownPanel: LayoutFixture = {
  *  - `card-short-times` carries `9:00 AM` and `5:00 PM`, which fits either
  *    way and is the row's ordinary appearance.
  */
-const MONTSERRAT_LINK =
-  '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap" />';
-
 const SIDEBAR_DESKTOP_COLUMN_CLASS = "relative w-[25rem]";
 
 const SIDEBAR_CONTENT_GUTTER_CLASS = "relative h-full px-3.5";
@@ -2503,84 +2668,6 @@ ${scheduleCard("-short-times", LONG_COMPANY_NAME, "9:00 AM", "5:00 PM")}
   ],
 };
 
-/**
- * The profile page's role row on a phone: three buttons that have to hold
- * three words.
- *
- * This one reproduces `styled-components` declarations as well as Tailwind
- * classes, so - as the two header fixtures above explain - the markup carries
- * its own `<style>` and the drift guard anchors on the declaration text.
- *
- * **The `<style>` block is unlayered on purpose, and that is the fixture's one
- * subtle copy.** `styled-components` injects plain rules, while the
- * `form-input` the label also carries compiles into `@layer utilities` - and an
- * unlayered rule beats a layered one whatever order they arrive in. That is how
- * `Radio.tsx` overrides that class's padding and its `border-radius: 0`, so a
- * fixture that put these declarations inside a layer would measure a box the
- * app does not draw.
- *
- * Two labels are here as controls rather than as criteria. "Rider" and
- * "Driver" never overflowed at any width, so if a change made *them* bleed the
- * cause would be the box and not the word - the opposite diagnosis from the
- * one this fixture was built for.
- */
-const ROLE_RADIO_STYLED_CSS = `
-  background-color: white;
-  color: black;
-  border: 1px solid black;
-  font-family: "Montserrat";
-  font-style: normal;
-  font-weight: 500;
-  border-radius: 10px;
-  text-align: center;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  padding-left: 4px;
-  padding-right: 4px;
-`;
-
-const ROLE_RADIO_STYLED_DESKTOP_CSS = `
-    font-size: 24px;
-    padding-left: 12px;
-    padding-right: 12px;
-`;
-
-/** `profile/index.tsx`'s mobile pane. The `pb-24` clears the bottom bar. */
-const PROFILE_MOBILE_PANE_CLASS = "px-8 pt-6 pb-24";
-
-/** `UserSection`'s wrapper, mobile arm. `flex-col` with no `flex` is a block. */
-const ROLE_SECTION_MOBILE_CLASS = "flex-col";
-
-const ROLE_SECTION_SHARED_CLASS = "max-w-full items-end";
-
-/**
- * The row, in the order Prettier's Tailwind plugin sorted it into.
- *
- * The order matters because the drift guard is a substring match against
- * `UserSection.tsx`, and the plugin sorts **JSX class attributes only** - a
- * plain `const` like this one is left exactly as written. So a copy written in
- * the order a human would choose silently stops matching the moment the
- * component is formatted.
- */
-const ROLE_ROW_CLASS = "desktop:gap-8 flex gap-2";
-
-/**
- * `Radio`'s own two class fragments. They are separate here because they are
- * separate in the component - the label's class is assembled from a template,
- * so no single literal in `Radio.tsx` spells out the whole string and a
- * one-string anchor would not be found.
- */
-const ROLE_RADIO_SIZE_CLASS = "h-14 flex-1 desktop:flex-initial";
-
-const ROLE_RADIO_ENABLED_CLASS = "cursor-pointer";
-
-const roleRadio = (name: string, label: string, selected: boolean): string =>
-  `<label class="form-input ${ROLE_RADIO_SIZE_CLASS} ${ROLE_RADIO_ENABLED_CLASS}" data-arm="${
-    selected ? "active" : "inactive"
-  }" data-probe="${name}">${label}</label>`;
-
 const profileRoleRow: LayoutFixture = {
   name: "profile-role-row",
   summary:
@@ -2588,28 +2675,19 @@ const profileRoleRow: LayoutFixture = {
   source: "src/components/Profile/UserSection.tsx:146",
   issue: "SCRUM-670",
   viewportWidth: 375,
-  /* One step, because on a phone there is only one. `UserSection`'s wrapper is
-     `flex-col` with no `flex`, so it is an ordinary block and adds nothing;
-     the row inside it is a block-level flex container filling the pane. The
-     desktop arm's `w-[700px]` is on the other side of the ternary and is not
-     in this chain at all. */
+  /* One step, because on a phone there is only one. `UserSection`'s wrapper
+     carries no `flex` below `md`, so it is an ordinary block and adds nothing;
+     the row inside it is a block-level flex container filling the pane. Its
+     `md:w-[700px]` does not apply at this width and is not in this chain at
+     all - SCRUM-708 replaced the ternary that used to keep that declaration on
+     the other side of an `isMobile` branch, which changes where the width is
+     written but not whether it reaches this fixture. */
   insets: [{ name: "profile mobile pane px-8", x: 64 }],
   markup: `
     ${MONTSERRAT_LINK}
-    <style>
-      [data-arm] {${ROLE_RADIO_STYLED_CSS}      }
-
-      [data-arm="active"] {
-        background-color: #c8102e;
-        color: white;
-      }
-
-      @media (min-width: 640px) {
-        [data-arm] {${ROLE_RADIO_STYLED_DESKTOP_CSS}        }
-      }
-    </style>
+    ${roleRadioStyleBlock()}
     <div class="${PROFILE_MOBILE_PANE_CLASS}" data-probe="profile-pane">
-      <div class="${ROLE_SECTION_MOBILE_CLASS} ${ROLE_SECTION_SHARED_CLASS}" data-probe="role-section">
+      <div class="${USER_SECTION_ROLE_ROW_CLASS}" data-probe="role-section">
         <div class="${ROLE_ROW_CLASS}" data-probe="role-row">
 ${roleRadio("viewer", "Viewer", true)}
 ${roleRadio("rider", "Rider", false)}
@@ -2636,6 +2714,8 @@ ${roleRadio("driver", "Driver", false)}
     "The label widths the budget is sized from, measured with `white-space: nowrap` against this stylesheet and Montserrat: at 24px, Viewer 81.91, Driver 72.50, Rider 64.23; at 18px, Viewer 61.44, Driver 54.38, Rider 48.17. At 320 a button's content box is 80 − 8 of padding − 2 of border = 70, which 61.44 clears and 81.91 does not - and no gap or padding makes 81.91 fit three-up at 320, which is why the font size had to move.",
     "**Montserrat is served here at the weights `_document.tsx` ships, 400 and 700 - not 500.** The arms declare `font-weight: 500`, which has no face and matches the 400 one, so these figures are the 400 face's. Serving a 500 face instead would measure a font the app never draws.",
     "The desktop arm is unchanged by the fix, measured separately at 1280x800 with the same stylesheet: buttons 107.91 / 90.23 / 98.50, row 360.65, gap 32px, labels 24px with 12px padding and 13px of clearance on every side - identical figures before and after. See the width comment in `Radio.tsx` for why the old quarter-width utility was dropped rather than moved behind the breakpoint: it never resolved on desktop, and putting the same declaration inside a media query *starts* it resolving and shrinks Viewer's clearance to 4.12px.",
+    "**SCRUM-708 moved the boundary between those two arms from 640px to 834px and this fixture is unchanged by it**, which is the point: re-measured after the move, 320 gives three 80.00 buttons with 0px unused at the row's end and Viewer clear by 9.28px per side, and 375 gives 98.33 / 98.34 / 98.34 in a 311px row, also 0px unused, Viewer clear by 18.45. Both match the figures above to the hundredth. A phone was always on the narrow side of that boundary; what changed is how much else is.",
+    "Clearance above is border-box - half of (button width − label width), padding and border included - which is the definition the SCRUM-670 figures were taken with. Measuring from the content box instead subtracts the 4px of padding and the 1px border a side and reads 5px smaller at every width, so the two cannot be compared without saying which is meant.",
   ],
   reproduces: [
     {
@@ -2644,11 +2724,7 @@ ${roleRadio("driver", "Driver", false)}
     },
     {
       file: "src/components/Profile/UserSection.tsx",
-      className: ROLE_SECTION_MOBILE_CLASS,
-    },
-    {
-      file: "src/components/Profile/UserSection.tsx",
-      className: ROLE_SECTION_SHARED_CLASS,
+      className: USER_SECTION_ROLE_ROW_CLASS,
     },
     {
       file: "src/components/Profile/UserSection.tsx",
@@ -2661,7 +2737,7 @@ ${roleRadio("driver", "Driver", false)}
     { file: "src/components/Radio.tsx", className: "padding-right: 4px;" },
     {
       file: "src/components/Radio.tsx",
-      className: "@media ${DESKTOP_MEDIA_QUERY} {",
+      className: "@media ${MD_MEDIA_QUERY} {",
     },
     { file: "src/components/Radio.tsx", className: "font-size: 24px;" },
     { file: "src/components/Radio.tsx", className: "padding-left: 12px;" },
