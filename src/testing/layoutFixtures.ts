@@ -1056,7 +1056,17 @@ const ENTRY_LABEL_STYLE = [
   "align-items: center",
 ].join("; ");
 
-const USER_SECTION_ROLE_ROW_DESKTOP_CLASS = "flex h-24 w-[700px]";
+const USER_SECTION_ROLE_ROW_DESKTOP_CLASS =
+  "flex h-24 w-[700px] justify-between";
+
+/**
+ * The seat block's desktop arm, which only renders while the selected role is
+ * Driver. Pinned separately because the two halves of SCRUM-707's fix are
+ * useless apart: the row's `justify-between` has nothing to distribute until
+ * this block stops growing into every spare pixel, and the cap on its own
+ * would leave the spare pixels on the wrong side of it.
+ */
+const USER_SECTION_SEAT_BLOCK_DESKTOP_CLASS = "max-w-48 flex-1";
 
 const profileContentColumnWidth: LayoutFixture = {
   name: "profile-content-column-width",
@@ -1092,7 +1102,7 @@ const profileContentColumnWidth: LayoutFixture = {
             <div class="flex gap-8">
               <span>Viewer</span><span>Rider</span><span>Driver</span>
             </div>
-            <div class="flex flex-1 flex-col">
+            <div class="${USER_SECTION_SEAT_BLOCK_DESKTOP_CLASS} flex flex-col" data-probe="seat-block">
               <span>Seat Availability</span>
               <input class="h-14 w-full self-end text-lg" data-probe="seat-field" />
             </div>
@@ -1127,6 +1137,7 @@ const profileContentColumnWidth: LayoutFixture = {
       "[data-probe='scroll-column']",
       "[data-probe='scroll-inner']",
       "[data-probe='role-row']",
+      "[data-probe='seat-block']",
       "[data-probe='seat-field']",
       "[data-probe='account-section']",
       "[data-probe='date-row']",
@@ -1149,6 +1160,9 @@ const profileContentColumnWidth: LayoutFixture = {
     "BEFORE (the original defect): scroll-inner contentWidth 353 / clientWidth 417; account-section 700 wide at left 282, 315px off-screen; save-button 700 wide with 385 on screen; end-date right edge 748.66; scroll-column scrollWidth 732 against clientWidth 417, with the document pinned at scrollLeft 0 so no gesture reached any of it.",
     'BEFORE, and not a defect: the save-button label survived, centred in the 700px box at x 632, inside 667. Reading that as "the label is cut off" was the easy mistake.',
     'role-row — `UserSection.tsx:93`, the item an earlier survey ranked High — is the counter-example and is untouched by this ticket: `max-w-full` already capped its declared 700px, and it measures 338 here for the same reason account-section now does. That survey\'s "64px overflow" was a misreading: `ProfilePicture` is not in this div, it is at `UserSection.tsx:175`.',
+    "SCRUM-707 added the seat block's cap and the row's `justify-between`, and re-measured. At 1440x900: seat-block rect left 957 width 192, right edge 1149 — flush with the row's own right edge and with account-section's below it. Before the cap it was left 901.65 width 247.35, beginning at the Driver button's right border with nothing between them. The 55.35px now separating them is the free space `justify-between` has to distribute once the block stops growing into it.",
+    "SCRUM-707 at 667x375: nothing moved. seat-block rect left 476.61 width 158.39, measured identical before and after. The row has no spare space at this width, so the cap never binds and `justify-between` has nothing to distribute — which is the reason the fix is a cap rather than a gap on the row. A gap would have spent 55px here, where there are none to spend, and taken them out of buttons that are already shrinking.",
+    "**The role row's three buttons are plain `<span>`s in this fixture and do not reproduce their real widths.** `Radio.tsx` is styled-components, which this markup does not copy, so the group measures about 194.6 at 667x375 against the 360.65 it measures in the app. Read this fixture for the content column and for where seat-block's right edge lands; read SCRUM-707's own figures, taken against the real button CSS, for anything about where the Driver button ends. Same class of caveat as the webfont note above.",
   ],
   reproduces: [
     { file: "src/pages/profile/index.tsx", className: PROFILE_GRID_CLASS },
@@ -1176,6 +1190,10 @@ const profileContentColumnWidth: LayoutFixture = {
     {
       file: "src/components/Profile/UserSection.tsx",
       className: USER_SECTION_ROLE_ROW_DESKTOP_CLASS,
+    },
+    {
+      file: "src/components/Profile/UserSection.tsx",
+      className: USER_SECTION_SEAT_BLOCK_DESKTOP_CLASS,
     },
   ],
 };
