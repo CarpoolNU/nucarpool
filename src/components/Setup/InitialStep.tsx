@@ -62,18 +62,10 @@ const InitialStep = ({
           Get Started
         </button>
       )}
-      {isMobile && (
-        <div className="mt-4 w-full rounded-md bg-amber-50 p-2 text-center">
-          <p className="text-xs font-medium text-amber-800">
-            ⚠️ Mobile version is currently under development. Some features are
-            only available on Desktop
-          </p>
-        </div>
-      )}
       {step === 1 && (
         <div className="mt-4 flex flex-col items-center justify-center">
           <h3
-            className={`font-montserrat mb-3 ${isMobile ? "text-l" : "text-2xl"} font-semibold`}
+            className={`font-montserrat mb-3 ${isMobile ? "text-xl" : "text-2xl"} font-semibold`}
           >
             Please select a role to start:
           </h3>

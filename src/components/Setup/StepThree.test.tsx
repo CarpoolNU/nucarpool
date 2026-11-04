@@ -3,6 +3,13 @@ import { useForm, UseFormReturn } from "react-hook-form";
 import { Role, Status } from "@prisma/client";
 import StepThree from "./StepThree";
 import { OnboardingFormInputs } from "../../utils/types";
+import {
+  MOBILE_WIDTH,
+  restoreViewportAfterEach,
+  setViewportWidth,
+} from "../../testing/viewport";
+
+restoreViewportAfterEach();
 
 /**
  * The co-op month pickers, unmounted and remounted with the same form
@@ -219,5 +226,30 @@ describe("StepThree co-op date range error association", () => {
     expect(endInput.getAttribute("aria-invalid")).not.toBe("true");
     expect(startInput).toHaveAccessibleDescription("");
     expect(endInput).toHaveAccessibleDescription("");
+  });
+});
+
+/**
+ * SCRUM-711. This step carried the shorter of the wizard's two "under
+ * development" banners, gated on `isMobile`. The product decision recorded on
+ * that ticket removed both, extending SCRUM-503's decision for `/` to
+ * onboarding.
+ *
+ * The control matters more here than in `InitialStep`: this tree mounts two
+ * antd date pickers, so a render that threw partway would leave the document
+ * empty and a bare absence check would pass on the wreckage.
+ */
+describe("StepThree on a mobile viewport", () => {
+  it("renders no under-development claim", () => {
+    setViewportWidth(MOBILE_WIDTH);
+    const formOut: { current: UseFormReturn<OnboardingFormInputs> | null } = {
+      current: null,
+    };
+    render(<Harness mounted={true} formOut={formOut} />);
+
+    expect(
+      screen.getByRole("textbox", { name: "Start Date *" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/under development/i)).toBeNull();
   });
 });
