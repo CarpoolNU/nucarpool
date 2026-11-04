@@ -1,10 +1,12 @@
+import { Role, Status } from "@prisma/client";
+import type { NavTab } from "../nav/mobileNavPlan";
 import {
   isSheetDetentView,
   planExploreSidebar,
   resolveMobileSelectedUser,
   type ExploreSidebarView,
 } from "./exploreSidebarView";
-import type { SheetDetent } from "./sheetDetents";
+import { defaultSheetDetent, type SheetDetent } from "./sheetDetents";
 
 /**
  * The explore sidebar's visibility decision.
@@ -276,5 +278,77 @@ describe("isSheetDetentView", () => {
 
       expect(isSheetDetentView(produced)).toBe(true);
     }
+  });
+});
+
+/**
+ * SCRUM-709, the regression case.
+ *
+ * `planExploreSidebar` was never wrong here - given `collapsed` it correctly
+ * returned `collapsed`. The defect was one step upstream, in which detent the
+ * page resolved on arrival, and the only way to see it is to run the two
+ * functions in the order `index.tsx` runs them. Neither half fails alone, so
+ * a test of either alone would have gone on passing through the whole bug.
+ *
+ * This is the closest the suite can get to the user's report. `index.tsx` is
+ * not renderable in jsdom - Mapbox, NextAuth and a dozen tRPC queries - so the
+ * composition is reproduced here from the same two exports the page imports,
+ * rather than observed. What it cannot show is that the sheet is *visible*:
+ * jsdom does no layout, and the view-to-class mapping lives in `index.tsx`.
+ * A phone-width Chromium pass is the evidence for that half.
+ *
+ * It asserts the view rather than a class string on purpose. The view is the
+ * contract this module publishes - its own docblock makes that argument - and
+ * Tailwind v4 scans this file, so spelling the collapsed utilities out here
+ * would emit each one into the bundle whether or not anything renders it.
+ */
+describe("the mobile My Group screen is reachable (SCRUM-709)", () => {
+  /** The page's own chain: opening position in, view out. */
+  const arriveOn = (sidebarType: NavTab, role: Role): ExploreSidebarView =>
+    planExploreSidebar({
+      isMobile: true,
+      hasOpenConversation: false,
+      isDetailOpen: false,
+      // `null` override: a tab change drops whatever the user had chosen, so
+      // every arrival re-reads the default. That is what made this permanent
+      // rather than a first-visit glitch.
+      detent: defaultSheetDetent({ role, status: Status.ACTIVE, sidebarType }),
+    });
+
+  it("gives a VIEWER a visible screen on arrival", () => {
+    // The bug: this was `collapsed`, and `collapsed` is
+    // zero-height/zero-opacity/no-pointer-events, which reaches `GroupPage`'s
+    // `position: fixed` overlay through the subtree. The tab lit up and
+    // nothing was drawn.
+    expect(arriveOn("mygroup", Role.VIEWER)).toBe("expanded");
+  });
+
+  it("gives a RIDER and a DRIVER the same screen it always did", () => {
+    expect(arriveOn("mygroup", Role.RIDER)).toBe("expanded");
+    expect(arriveOn("mygroup", Role.DRIVER)).toBe("expanded");
+  });
+
+  it("leaves the VIEWER's explore sheet collapsed on arrival", () => {
+    // The guard on the fix. The role default exists so an empty
+    // recommendations list does not cover the route-search panel; if this ever
+    // flips, SCRUM-668's defect is back and this ticket caused it.
+    expect(arriveOn("explore", Role.VIEWER)).toBe("collapsed");
+  });
+
+  it("still collapses My Group when the user asks it to", () => {
+    // Not a detail: `GroupPage`'s Close button is `collapseSidebar(true)`, and
+    // since its mobile branch renders the overlay unconditionally rather than
+    // off its own `isOpen`, this view is the only thing that dismisses the
+    // screen. A fix that made My Group ignore the detent - the one the ticket
+    // first proposed - would have left that button inert. Tapping the tab
+    // again drops the override and brings the screen back.
+    expect(
+      planExploreSidebar({
+        isMobile: true,
+        hasOpenConversation: false,
+        isDetailOpen: false,
+        detent: "collapsed",
+      }),
+    ).toBe("collapsed");
   });
 });

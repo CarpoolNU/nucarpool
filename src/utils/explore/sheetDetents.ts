@@ -24,6 +24,7 @@
 import { Role, Status } from "@prisma/client";
 import { MOBILE_SHEET_MAP_STRIP_REM } from "../breakpoints";
 import { showsInactiveBlocker } from "../map/inactiveBlocker";
+import type { NavTab } from "../nav/mobileNavPlan";
 
 /**
  * The sheet's resting positions.
@@ -126,21 +127,52 @@ export const toggleSheetDetent = (detent: SheetDetent): SheetDetent =>
  * them consult the role or the status, because by then the user has expressed a
  * preference and this default has done its job.
  *
+ * **Neither reason reaches My Group, which is why the tab is an input
+ * (SCRUM-709).** The container this detent dresses is not only the explore
+ * sheet: `Sidebar.tsx` renders `GroupPage` into the same box for
+ * `sidebarType === "mygroup"`. Both reasons above are boxes *inside* `#map` —
+ * the route-search panel and `InactiveBlocker` — and My Group is neither
+ * beside them nor behind them; it covers the map outright, and it is what the
+ * user tapped a navigation tab to get. So a VIEWER arriving there opened a
+ * container classed `h-0 opacity-0 pointer-events-none`, and `opacity` and
+ * `pointer-events` reach a `position: fixed` descendant, which is what
+ * `GroupPage`'s mobile branch is: the screen was mounted, invisible and
+ * untappable. There was no way out either — the drag handle is gated to
+ * `explore` and `requests`, and the `[sidebarType, mapState]` effect drops the
+ * override on every tab change, so each arrival re-read this default.
+ *
+ * **Fixed here rather than in `planExploreSidebar`, which the ticket
+ * proposed.** Making the *view* ignore the detent on My Group would have taken
+ * `collapsed` away from that tab — and `collapsed` is load-bearing there:
+ * `GroupPage`'s Close button is `collapseSidebar(true)`, and because its
+ * mobile branch renders the overlay unconditionally rather than off its own
+ * `isOpen`, that class string is the only thing that dismisses the screen.
+ * The plan is already right for the detent it is given; only the opening
+ * position was wrong, so only the opening position moves.
+ *
  * @param role the signed-in user's role, `undefined` while `user.me` is still in
  *   flight
  * @param status the user's activity status, `undefined` likewise. With neither
  *   known this resolves to `expanded`, which is unobservable — the page
  *   renders a spinner instead of the sheet until the user loads — and is the
  *   safe end of the range if that ever stops being true.
+ * @param sidebarType which tab is mounted in the container. Optional, and
+ *   omitting it means the explore sheet: the page resolves this default in
+ *   more than one place, and a required argument missed at one of them would
+ *   have opened the sheet over a VIEWER's route panel rather than failing
+ *   where a reader could see it.
  */
 export const defaultSheetDetent = ({
   role,
   status,
+  sidebarType = "explore",
 }: {
   role?: Role;
   status?: Status;
+  sidebarType?: NavTab;
 }): SheetDetent =>
-  role === Role.VIEWER || showsInactiveBlocker({ role, status })
+  sidebarType !== "mygroup" &&
+  (role === Role.VIEWER || showsInactiveBlocker({ role, status }))
     ? "collapsed"
     : "expanded";
 
