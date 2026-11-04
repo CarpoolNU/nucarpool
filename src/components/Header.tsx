@@ -485,6 +485,23 @@ const Header = (props: HeaderProps) => {
     }
   };
 
+  /**
+   * The mobile bottom navigation.
+   *
+   * **Deliberately shows no loading interstitial.** `isLoading` is read only
+   * by `renderSidebarOptions`, which is called below the
+   * `isMobile && !props.signIn` early return - so on a phone every write to
+   * it was written and never read. The writes were removed rather than given
+   * a reader: the desktop spinner covers the viewport, and on a tab switch
+   * that stays on the map that is a heavier interruption than the wait it
+   * would be reporting. The `guard` case had a second reason of its own - the
+   * modal is rendered by the profile page, and a full-screen spinner raised
+   * first would cover it and stay up if the user cancels.
+   *
+   * If a phone ever does need progress feedback here, a busy state on the
+   * tapped item is the proportionate shape, not this header's spinner.
+   * SCRUM-712.
+   */
   const handleMobileNavClick = (option: string) => {
     // Set before the guard runs, and harmless there: `renderMobileNav` pins
     // the highlight to "profile" whenever the route is the profile page, so a
@@ -501,16 +518,12 @@ const Header = (props: HeaderProps) => {
     // The full page load the profile page needs, deliberately not run until
     // the guard below has had its say.
     const leaveProfile = (href: string) => {
-      setIsLoading(true);
       // Don't use timeout - let the browser handle the navigation naturally
       window.location.href = href;
     };
 
     switch (plan.kind) {
       case "guard":
-        // `setIsLoading` is *not* set here: the modal is rendered by the
-        // profile page, and raising the header's spinner first would cover it
-        // and stay up if the user cancels.
         void props.checkChanges?.(() => leaveProfile(plan.href));
         return;
 
@@ -519,9 +532,7 @@ const Header = (props: HeaderProps) => {
         return;
 
       case "switchTab":
-        setIsLoading(true);
         router.push({ pathname: "/", query: { tab: plan.tab } }).finally(() => {
-          setIsLoading(false);
           if (props.data?.setSidebar) {
             props.data.setSidebar(plan.tab);
           }
@@ -535,10 +546,7 @@ const Header = (props: HeaderProps) => {
         return;
 
       case "openProfile":
-        setIsLoading(true);
-        router.push("/profile").finally(() => {
-          setIsLoading(false);
-        });
+        void router.push("/profile");
         return;
 
       case "ignore":
