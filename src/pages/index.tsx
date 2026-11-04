@@ -245,6 +245,16 @@ const Home: NextPage<any> = () => {
     useState<SheetDetent | null>(null);
 
   /**
+   * Which tab the sidebar container is showing.
+   *
+   * Declared here, above the detent derivation, rather than beside the other
+   * view state further down: the opening position depends on it (SCRUM-709 -
+   * My Group is not the explore sheet and does not take the explore sheet's
+   * role default), and a `const` cannot be read before its declaration.
+   */
+  const [sidebarType, setSidebarType] = useState<HeaderOptions>("explore");
+
+  /**
    * The expanded card, masked to null on desktop.
    *
    * `expandedUserId` above is the raw state and is deliberately awkward to
@@ -359,10 +369,15 @@ const Home: NextPage<any> = () => {
    * or driver's is `InactiveBlocker`; both render inside `#map`, and an
    * expanded sheet paints over them from a stacking context neither can reach
    * out of.
+   *
+   * It also takes the tab, because neither of those boxes is under My Group:
+   * that view covers the map outright and is what the user tapped the
+   * navigation to reach, so it opens shown whatever the role default is. See
+   * `defaultSheetDetent` for why a VIEWER previously got no My Group at all.
    */
   const sheetDetent =
     sheetDetentOverride ??
-    defaultSheetDetent({ role: user?.role, status: user?.status });
+    defaultSheetDetent({ role: user?.role, status: user?.status, sidebarType });
 
   /**
    * The setter every existing call site keeps using, `useState`-shaped so that
@@ -375,11 +390,14 @@ const Home: NextPage<any> = () => {
    * keeps "toggle from where it looks like it is" true on a VIEWER's first tap,
    * and on an inactive user's.
    *
-   * Both inputs to the default are dependencies. `status` is not decoration
-   * there: it changes within a session - reactivating from the profile page
-   * and returning here is the whole point of the blocker's button - and a
-   * callback that had closed over the old one would resolve the first tap
-   * after that against the detent the *previous* status opened in.
+   * Every input to the default is a dependency, and none of them is
+   * decoration. `status` changes within a session - reactivating from the
+   * profile page and returning here is the whole point of the blocker's button
+   * - and a callback that had closed over the old one would resolve the first
+   * tap after that against the detent the *previous* status opened in. The
+   * same holds for the tab: this resolves "the detent on screen", and after
+   * SCRUM-709 that differs between My Group and the explore sheet, so a stale
+   * tab here would hand the updater a detent the user is not looking at.
    */
   const setSheetDetent = useCallback(
     (next: SetStateAction<SheetDetent>) =>
@@ -387,11 +405,15 @@ const Home: NextPage<any> = () => {
         typeof next === "function"
           ? next(
               override ??
-                defaultSheetDetent({ role: user?.role, status: user?.status }),
+                defaultSheetDetent({
+                  role: user?.role,
+                  status: user?.status,
+                  sidebarType,
+                }),
             )
           : next,
       ),
-    [user?.role, user?.status],
+    [user?.role, user?.status, sidebarType],
   );
 
   /**
@@ -513,7 +535,6 @@ const Home: NextPage<any> = () => {
     }
   };
 
-  const [sidebarType, setSidebarType] = useState<HeaderOptions>("explore");
   const [popupUsers, setPopupUsers] = useState<PublicUser[] | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
 

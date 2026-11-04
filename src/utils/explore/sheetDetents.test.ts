@@ -199,6 +199,100 @@ describe("defaultSheetDetent", () => {
     expect(defaultSheetDetent({})).toBe("expanded");
   });
 
+  /**
+   * SCRUM-709. The cases below are about *which tab* the sheet is opening
+   * into, which is the term this default was missing.
+   *
+   * The sheet is not only the explore list. `Sidebar.tsx` renders `GroupPage`
+   * into the same container for `sidebarType === "mygroup"`, and that
+   * container takes its visibility from this detent - so a VIEWER, whose
+   * default is `collapsed`, reached My Group through a box classed
+   * `h-0 opacity-0 pointer-events-none`. `GroupPage`'s mobile branch is a
+   * `position: fixed` overlay, so the height never mattered, but `opacity` and
+   * `pointer-events` apply to a fixed descendant all the same: the screen was
+   * mounted, invisible and untappable, with no drag handle to open it - that
+   * control is gated to `explore` and `requests`.
+   *
+   * Both reasons this default collapses are boxes *inside* `#map` - the
+   * "Search my route" panel and `InactiveBlocker`. My Group covers the map
+   * outright and is the thing the user just asked for, so neither reaches it.
+   */
+  it("opens expanded on My Group for a VIEWER, whose tab was otherwise unreachable", () => {
+    expect(
+      defaultSheetDetent({
+        role: Role.VIEWER,
+        status: Status.ACTIVE,
+        sidebarType: "mygroup",
+      }),
+    ).toBe("expanded");
+  });
+
+  it("still opens collapsed for a VIEWER on explore and on requests", () => {
+    // The other half of the same rule, and the half that must not move: the
+    // reason the VIEWER default exists is the route-search panel under the
+    // explore sheet. `requests` is deliberately unchanged - a VIEWER lands on
+    // a collapsed sheet there too, which is recoverable because that tab draws
+    // the handle, and is out of this ticket's scope.
+    expect(
+      defaultSheetDetent({
+        role: Role.VIEWER,
+        status: Status.ACTIVE,
+        sidebarType: "explore",
+      }),
+    ).toBe("collapsed");
+    expect(
+      defaultSheetDetent({
+        role: Role.VIEWER,
+        status: Status.ACTIVE,
+        sidebarType: "requests",
+      }),
+    ).toBe("collapsed");
+  });
+
+  it("leaves a RIDER and a DRIVER on My Group where they already were", () => {
+    // Neither role ever had the defect - their default is `expanded`
+    // everywhere - so this pins that the fix was not bought by moving them.
+    expect(
+      defaultSheetDetent({
+        role: Role.RIDER,
+        status: Status.ACTIVE,
+        sidebarType: "mygroup",
+      }),
+    ).toBe("expanded");
+    expect(
+      defaultSheetDetent({
+        role: Role.DRIVER,
+        status: Status.ACTIVE,
+        sidebarType: "mygroup",
+      }),
+    ).toBe("expanded");
+  });
+
+  it("treats a missing tab as the explore sheet", () => {
+    // The tab is optional, and omitting it has to keep the old answer: the
+    // page resolves this default in three places, and a required argument
+    // forgotten at one of them would have opened the sheet over a VIEWER's
+    // route panel rather than failing visibly.
+    expect(
+      defaultSheetDetent({ role: Role.VIEWER, status: Status.ACTIVE }),
+    ).toBe("collapsed");
+  });
+
+  it("opens expanded on My Group for an inactive user as well", () => {
+    // Unobservable today: `showsInactiveBlocker` disables the three map tabs,
+    // so an inactive user cannot reach My Group at all. Pinned because the
+    // blocker - the other box inside `#map` - is just as absent from this
+    // screen as the VIEWER panel is, so this stays the right answer if that
+    // gate ever opens.
+    expect(
+      defaultSheetDetent({
+        role: Role.RIDER,
+        status: Status.INACTIVE,
+        sidebarType: "mygroup",
+      }),
+    ).toBe("expanded");
+  });
+
   it("is only the opening position, not a rule a tap has to respect", () => {
     // A VIEWER who taps the handle gets the sheet, Favorites and all. The
     // default exists so the route-search panel is reachable without first
