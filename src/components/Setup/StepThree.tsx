@@ -172,14 +172,6 @@ const StepThree = ({
           </Note>
         </div>
       </div>
-
-      {isMobile && (
-        <div className="mt-2 w-full rounded-md bg-amber-50 p-1 text-center">
-          <p className="text-xs font-medium text-amber-800">
-            ⚠️ Mobile version is currently under development.
-          </p>
-        </div>
-      )}
     </div>
   );
 };
