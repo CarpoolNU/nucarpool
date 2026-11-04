@@ -10,6 +10,7 @@ import {
 } from "../../utils/reports";
 import { REPORT_MESSAGE_MAX_LENGTH } from "../../utils/textLimits";
 import { toastSpies } from "../../testing/toastStub";
+import { suppressLinkNavigation } from "../../testing/suppressLinkNavigation";
 
 /**
  * The report form.
@@ -88,9 +89,33 @@ jest.mock("react-toastify/unstyled", () =>
 );
 const mockToast = toastSpies();
 
+/**
+ * Mocked locally rather than left to the `moduleNameMapper` stub, whose
+ * methods are deliberately plain no-ops with nothing to assert against. The
+ * dialog reaches `utils/mixpanel` through `SafetyGuidanceLink`.
+ */
+jest.mock("mixpanel-browser", () => ({
+  __esModule: true,
+  default: {
+    init: jest.fn(),
+    track: jest.fn(),
+    identify: jest.fn(),
+    reset: jest.fn(),
+  },
+}));
+
+const { track } = (
+  jest.requireMock("mixpanel-browser") as {
+    default: Record<"init" | "track" | "identify" | "reset", jest.Mock>;
+  }
+).default;
+
 beforeEach(() => {
   jest.clearAllMocks();
+  suppressLinkNavigation.install();
 });
+
+afterEach(suppressLinkNavigation.uninstall);
 
 const renderDialog = (requestId?: string) => {
   const onClose = jest.fn();
@@ -293,6 +318,29 @@ describe("ReportDialog", () => {
         name: "Reporting, blocking and staying safe",
       }),
     ).toHaveAttribute("href", "/safety");
+  });
+
+  /*
+   * The surface, not the destination. `SafetyGuidanceLink` is shared by this
+   * dialog, the block dialog and the profile, so `link: "safety"` alone
+   * cannot say which of them sends people to the page - and the reason to
+   * instrument it at all is that a reader who opens the guidance while
+   * reporting somebody is in a different situation from one browsing their
+   * profile. The other two surfaces are pinned in
+   * `src/components/SafetyGuidanceLink.test.tsx`.
+   */
+  it("counts a click on that link against the report dialog", async () => {
+    const { user } = renderDialog();
+
+    await user.click(
+      screen.getByRole("link", {
+        name: "Reporting, blocking and staying safe",
+      }),
+    );
+
+    expect(track.mock.calls).toEqual([
+      ["Link Clicked", { link: "safety", surface: "report-dialog" }],
+    ]);
   });
 
   it("closes on Cancel without sending", async () => {

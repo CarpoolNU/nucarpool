@@ -67,7 +67,7 @@ const BlockConfirmDialog = ({
             your profile.
           </p>
           <p className="mb-6 text-sm text-gray-700">
-            <SafetyGuidanceLink />
+            <SafetyGuidanceLink surface="block-dialog" />
           </p>
           <div className="flex justify-end gap-4">
             <button

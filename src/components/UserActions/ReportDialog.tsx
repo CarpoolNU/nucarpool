@@ -107,7 +107,7 @@ const ReportDialog = ({
               before filing. */}
           <p className="mb-4 text-sm text-gray-700">
             This goes to the NUCarpool admins only. {userName} is not told that
-            you reported them. <SafetyGuidanceLink />
+            you reported them. <SafetyGuidanceLink surface="report-dialog" />
           </p>
           <form onSubmit={submit} className="flex flex-col">
             <label htmlFor="report-reason" className="mb-1 font-medium">

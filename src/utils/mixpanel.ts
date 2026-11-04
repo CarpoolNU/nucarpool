@@ -199,3 +199,44 @@ export const trackRiderDemandDismissed = (properties: {
 }) => {
   trackEvent("Rider Demand Dismissed", properties);
 };
+
+/**
+ * Where a link sent the reader, and which surface it was followed from.
+ *
+ * **A named destination rather than the `href`.** The obvious instrumentation
+ * here is one listener over every `<a>`, sending `link_url` and the anchor's
+ * text. It is wrong twice over in this app. Mechanically, the links are not
+ * in the DOM to be found: the Feedback item exists only while the account
+ * menu is open and the carpool-ended prompt only while its toast is shown, so
+ * a sweep at load time binds nothing, and nothing rebinds after a client-side
+ * navigation. And in principle, an `href` and a run of visible text are an
+ * open channel into a third party - the one thing `identifyUser` above is
+ * careful not to open. `LinkDestination` is a closed vocabulary: a new link
+ * is a deliberate edit here, not an automatic export.
+ *
+ * **`surface` is why `feedback` is one destination and not two events.** The
+ * account menu and the carpool-ended toast point at the same form, and the
+ * question worth asking is which of them people actually use - a breakdown
+ * within one funnel, exactly as `trackRiderDemandShown` argues above. The
+ * safety link carries it for the same reason, across its three dialogs.
+ *
+ * **Not every link is worth an event.** The back-link from `/safety` to `/`
+ * is deliberately uninstrumented: `init` sets `track_pageview: true`, so
+ * landing on `/` is already recorded, and a click event there would be a
+ * second name for a page view. The safety link is still worth one despite
+ * also being internal, because the page view says somebody reached `/safety`
+ * and not which surface sent them.
+ *
+ * Fired from an `onClick` on the link itself, which is additive: nothing here
+ * calls `preventDefault`, so the navigation is unaffected either way. On the
+ * external feedback link the browser may start unloading the page before the
+ * request leaves, so read this as a floor rather than an exact count.
+ */
+export type LinkDestination = "feedback" | "safety";
+
+export const trackLinkClicked = (properties: {
+  link: LinkDestination;
+  surface: string;
+}) => {
+  trackEvent("Link Clicked", properties);
+};

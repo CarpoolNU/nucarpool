@@ -22,7 +22,12 @@
  * would still pass if a profile object were appended to it.
  */
 
-import { identifyUser, resetIdentity, trackEvent } from "./mixpanel";
+import {
+  identifyUser,
+  resetIdentity,
+  trackEvent,
+  trackLinkClicked,
+} from "./mixpanel";
 
 /*
  * Only the four methods `utils/mixpanel` is allowed to use are defined, which
@@ -89,6 +94,48 @@ describe("the tracking helpers alongside identity", () => {
     expect(track).toHaveBeenCalledWith("Sign In Attempt", {
       provider: "azure-ad",
     });
+    expect(identify).not.toHaveBeenCalled();
+    expect(reset).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The link helper's own contract, apart from any component that calls it.
+ *
+ * What this pins is the part a call site cannot: that the event carries the
+ * two properties it was given and **nothing else**. The destination is a
+ * closed vocabulary precisely so an `href` or a run of page text can never
+ * become a property here, and an exact `toEqual` on the whole payload is the
+ * only assertion that keeps a third one from being added without a decision.
+ * Where each surface comes from is pinned at the call sites instead - see
+ * `src/components/SafetyGuidanceLink.test.tsx`.
+ */
+describe("trackLinkClicked", () => {
+  it("sends the destination and surface, and no other property", () => {
+    trackLinkClicked({ link: "feedback", surface: "account-menu" });
+
+    expect(track.mock.calls).toEqual([
+      ["Link Clicked", { link: "feedback", surface: "account-menu" }],
+    ]);
+  });
+
+  it("names one event for both destinations, told apart by the properties", () => {
+    trackLinkClicked({ link: "feedback", surface: "carpool-ended-toast" });
+    trackLinkClicked({ link: "safety", surface: "report-dialog" });
+
+    // One event name is deliberate: a dashboard breaks these down by `link`
+    // and `surface` within a single funnel rather than joining across four
+    // event names, the same argument `trackRiderDemandShown` makes.
+    expect(track.mock.calls.map(([name]) => name)).toEqual([
+      "Link Clicked",
+      "Link Clicked",
+    ]);
+  });
+
+  it("identifies nobody by itself", () => {
+    trackLinkClicked({ link: "safety", surface: "profile" });
+
+    expect(track).toHaveBeenCalledTimes(1);
     expect(identify).not.toHaveBeenCalled();
     expect(reset).not.toHaveBeenCalled();
   });
