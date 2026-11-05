@@ -179,15 +179,37 @@ export const trackRecommendationsLoaded = (properties: {
  * count and the role is sent — no city here, because unlike the supply signal
  * this is not a question about which corridor to recruit in.
  *
- * Emitted from `RiderDemandNotice`, which owns *when* they fire. The shown
- * event is once per mount of a visible notice, so a reader who opens the
- * filter panel and closes it again is counted twice; count unique users, not
- * raw events, for the same reason `trackRecommendationsLoaded` says so.
+ * **`viewport` is what makes the pair readable at all, and it was missing for
+ * SCRUM-638's first weeks** (SCRUM-713). The two surfaces are not the same
+ * thing on a phone: the profile one renders in an ordinary scrolling column,
+ * while the explore one renders inside a bottom sheet with four states. Without
+ * this property the mobile and desktop readings are summed, so a dismissal rate
+ * computed from them describes nobody. `surface` separates the two placements;
+ * this separates the two layouts, and both are needed to get to one cohort.
+ *
+ * It is taken from `useIsMobile`, which shares its breakpoint with the
+ * `desktop:` screen through `utils/breakpoints.js`, rather than from a width
+ * compared against a literal here — so the number the analytics splits on and
+ * the number the layout switches on cannot drift apart.
+ *
+ * Emitted from `RiderDemandNotice`, which owns *when* they fire. **The shown
+ * event is once per notice that has actually been on screen**, gated on an
+ * `IntersectionObserver` rather than on mounting: the explore page's mobile
+ * sheet keeps its subtree mounted in every detent, so an effect firing there
+ * is not evidence that anyone saw anything. It is still once per *mount*, so a
+ * reader who opens the filter panel and closes it again is counted twice;
+ * count unique users, not raw events, for the same reason
+ * `trackRecommendationsLoaded` says so.
+ *
+ * Where the browser has no `IntersectionObserver` the gate fails open and the
+ * event fires on mount, as it always did — see `utils/useHasBeenSeen.ts` for
+ * why that is the right default for an instrument.
  */
 export const trackRiderDemandShown = (properties: {
   count: number;
   role: string;
   surface: string;
+  viewport: string;
 }) => {
   trackEvent("Rider Demand Shown", properties);
 };
@@ -196,6 +218,7 @@ export const trackRiderDemandDismissed = (properties: {
   count: number;
   role: string;
   surface: string;
+  viewport: string;
 }) => {
   trackEvent("Rider Demand Dismissed", properties);
 };

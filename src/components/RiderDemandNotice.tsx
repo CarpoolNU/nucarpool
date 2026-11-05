@@ -6,6 +6,8 @@ import {
 } from "../utils/mixpanel";
 import { useRiderDemandDismissal } from "../utils/riderDemand/dismissal";
 import { riderDemandToDisplay } from "../utils/riderDemand/floor";
+import useIsMobile from "../utils/useIsMobile";
+import { useHasBeenSeen } from "../utils/useHasBeenSeen";
 
 /**
  * "N riders want a route like yours." The user-facing half of SCRUM-638.
@@ -83,6 +85,30 @@ export const RiderDemandNotice = ({
 }: RiderDemandNoticeProps) => {
   const { hasLoaded, dismissed, dismiss } = useRiderDemandDismissal();
 
+  /**
+   * Which layout the reader is in, for the event breakdown only — never for
+   * rendering, which this component leaves entirely to its `className` and to
+   * whatever box it is placed in.
+   *
+   * From `useIsMobile` so it shares its breakpoint with the `desktop:` screen
+   * through `utils/breakpoints.js`. A width read and compared here would be a
+   * second definition of the same boundary, free to drift from the one the
+   * layout actually switches on.
+   */
+  const viewport = useIsMobile() ? "mobile" : "desktop";
+
+  /**
+   * Whether anyone has actually looked at this.
+   *
+   * **Mounting is not an impression**, and on the explore page the gap is
+   * wide: the mobile sheet renders every detent as a class on a wrapper that
+   * never unmounts its children, so this component is mounted and its effects
+   * run while the sheet is `display: none` or collapsed to zero height. The
+   * observer is the only thing that can tell those apart from a notice on
+   * screen — see `utils/useHasBeenSeen.ts`, including why it fails open.
+   */
+  const { ref: noticeRef, hasBeenSeen } = useHasBeenSeen<HTMLDivElement>();
+
   /** The count as it may be shown, re-floored. `null` renders nothing. */
   const shown = typeof count === "number" ? riderDemandToDisplay(count) : null;
 
@@ -102,12 +128,23 @@ export const RiderDemandNotice = ({
     if (!visible || shown === null) {
       return;
     }
+    /* The gate. Everything above is about whether there is a notice to show;
+       this is about whether it reached anyone. It latches, so this effect can
+       depend on it without re-firing when the notice scrolls back off. */
+    if (!hasBeenSeen) {
+      return;
+    }
     if (reportedCount.current === shown) {
       return;
     }
     reportedCount.current = shown;
-    trackRiderDemandShown({ count: shown, role: role ?? "", surface });
-  }, [visible, shown, role, surface]);
+    trackRiderDemandShown({
+      count: shown,
+      role: role ?? "",
+      surface,
+      viewport,
+    });
+  }, [visible, hasBeenSeen, shown, role, surface, viewport]);
 
   // After the hooks, never before: an early return above them would change
   // the hook order between the pre-load and post-load renders.
@@ -116,12 +153,18 @@ export const RiderDemandNotice = ({
   }
 
   const onDismiss = () => {
-    trackRiderDemandDismissed({ count: shown, role: role ?? "", surface });
+    trackRiderDemandDismissed({
+      count: shown,
+      role: role ?? "",
+      surface,
+      viewport,
+    });
     dismiss();
   };
 
   return (
     <div
+      ref={noticeRef}
       // `status` rather than `alert`: this is informational and must not
       // interrupt a screen reader mid-sentence. The region is labelled so the
       // dismiss button has something to belong to.
