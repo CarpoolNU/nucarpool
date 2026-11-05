@@ -18,6 +18,7 @@
  */
 
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { Role, Status } from "@prisma/client";
 import { useForm } from "react-hook-form";
 import { SidebarContent } from "./SidebarContent";
@@ -30,6 +31,16 @@ import {
 } from "../../utils/types";
 import { QueryState } from "../../utils/queryState";
 import { RIDER_DEMAND_FLOOR } from "../../utils/riderDemand/floor";
+import {
+  trackRiderDemandDismissed,
+  trackRiderDemandShown,
+} from "../../utils/mixpanel";
+import { stubIntersectionObserverForEach } from "../../testing/intersectionObserverStub";
+import {
+  MOBILE_WIDTH,
+  restoreViewportAfterEach,
+  setViewportWidth,
+} from "../../testing/viewport";
 
 jest.mock("next-auth/react", () =>
   require("../../testing/nextAuthStub").buildNextAuthMock(),
@@ -73,7 +84,7 @@ beforeEach(() => {
 // Surface one: the empty recommendations list.
 // ---------------------------------------------------------------------------
 
-const renderSidebar = ({
+const sidebarTree = ({
   subType = "recommendations",
   disabled = false,
   cards = [] as EnhancedPublicUser[],
@@ -87,22 +98,29 @@ const renderSidebar = ({
   riderDemandCount?: number | null;
   loadState?: QueryState;
   role?: Role;
-} = {}) =>
-  render(
-    <UserContext.Provider value={signedInUser(role)}>
-      <SidebarContent
-        subType={subType}
-        userCardList={cards}
-        loadState={loadState}
-        disabled={disabled}
-        onViewRouteClick={() => undefined}
-        onCardClick={() => undefined}
-        selectedUser={null}
-        onViewRequest={() => undefined}
-        riderDemandCount={riderDemandCount}
-      />
-    </UserContext.Provider>,
-  );
+} = {}) => (
+  <UserContext.Provider value={signedInUser(role)}>
+    <SidebarContent
+      subType={subType}
+      userCardList={cards}
+      loadState={loadState}
+      disabled={disabled}
+      onViewRouteClick={() => undefined}
+      onCardClick={() => undefined}
+      selectedUser={null}
+      onViewRequest={() => undefined}
+      riderDemandCount={riderDemandCount}
+    />
+  </UserContext.Provider>
+);
+
+/**
+ * Split from the tree above so a test can re-render the *same* surface with a
+ * different count. That is what models the count arriving late, which is the
+ * only ordering in which the impression gate can be caught failing.
+ */
+const renderSidebar = (props: Parameters<typeof sidebarTree>[0] = {}) =>
+  render(sidebarTree(props));
 
 describe("the empty recommendations list", () => {
   it("carries the notice when the list came back empty", async () => {
@@ -294,6 +312,110 @@ describe("the profile role selector", () => {
     expect(screen.getByRole("button", { name: /dismiss/i })).toHaveAttribute(
       "type",
       "button",
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The instrument, across the two layouts (SCRUM-713).
+// ---------------------------------------------------------------------------
+
+/**
+ * That the surfaces hand the notice a gated, dimensioned impression.
+ *
+ * Both of these were mobile defects, and neither test file here had any mobile
+ * coverage at all before this block — `useIsMobile` was not referenced once.
+ *
+ * **What this cannot show.** The explore surface really lives inside a bottom
+ * sheet whose detents are CSS, and jsdom evaluates no CSS and performs no
+ * layout, so nothing here can demonstrate that collapsing the sheet produces a
+ * non-intersecting entry. That is a browser fact. What these assert is the
+ * wiring either side of it: the surface renders a notice that waits to be
+ * observed, and reports the layout it was seen in. The sheet's own geometry is
+ * stated in the PR and asserted nowhere.
+ */
+describe("the instrument, across the two layouts", () => {
+  const observer = stubIntersectionObserverForEach();
+  restoreViewportAfterEach();
+
+  const shown = trackRiderDemandShown as jest.Mock;
+  const dismissedEvent = trackRiderDemandDismissed as jest.Mock;
+
+  beforeEach(() => {
+    shown.mockClear();
+    dismissedEvent.mockClear();
+  });
+
+  it("reports nothing for a notice the surface has rendered but nobody has seen", async () => {
+    setViewportWidth(MOBILE_WIDTH);
+    renderSidebar();
+    await screen.findByRole("status");
+
+    expect(shown).not.toHaveBeenCalled();
+
+    // Positive control in the same harness: the notice is real and the event
+    // does fire, as soon as anything says it was on screen.
+    observer().intersect(true);
+    expect(shown).toHaveBeenCalledTimes(1);
+  });
+
+  it("holds a count that lands after the reader has already put the sheet away", async () => {
+    setViewportWidth(MOBILE_WIDTH);
+    const { rerender } = renderSidebar({ riderDemandCount: null });
+    expect(notice()).toBeNull();
+
+    // The race, at the surface rather than in the component: the query
+    // resolves second. Rendering a suppressed notice from the start would
+    // never mount one, so that ordering passes with the defect present.
+    rerender(sidebarTree({ riderDemandCount: ABOVE_FLOOR }));
+    await screen.findByRole("status");
+
+    expect(shown).not.toHaveBeenCalled();
+    observer().intersect(true);
+    expect(shown).toHaveBeenCalledTimes(1);
+  });
+
+  it("dimensions the explore surface by layout as well as by placement", async () => {
+    setViewportWidth(MOBILE_WIDTH);
+    renderSidebar();
+    await screen.findByRole("status");
+    observer().intersect(true);
+
+    expect(shown).toHaveBeenCalledWith(
+      expect.objectContaining({
+        surface: "empty-recommendations",
+        viewport: "mobile",
+      }),
+    );
+  });
+
+  it("dimensions the profile surface the same way, on the same reader", async () => {
+    setViewportWidth(MOBILE_WIDTH);
+    render(<ProfileHarness riderDemandCount={ABOVE_FLOOR} />);
+    await screen.findByRole("status");
+    observer().intersect(true);
+
+    // Same phone, same person, different placement. `surface` separates these
+    // two; `viewport` is what separates either of them from its desktop twin.
+    expect(shown).toHaveBeenCalledWith(
+      expect.objectContaining({
+        surface: "profile-role",
+        viewport: "mobile",
+      }),
+    );
+  });
+
+  it("carries the dimension on the dismissal, which is the other half of the ratio", async () => {
+    const user = userEvent.setup();
+    setViewportWidth(MOBILE_WIDTH);
+    renderSidebar();
+    await screen.findByRole("status");
+    observer().intersect(true);
+
+    await user.click(screen.getByRole("button", { name: /dismiss/i }));
+
+    expect(dismissedEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ viewport: "mobile" }),
     );
   });
 });

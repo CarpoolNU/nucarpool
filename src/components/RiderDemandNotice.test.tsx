@@ -19,6 +19,13 @@ import {
   RIDER_DEMAND_DISMISSED_KEY,
   readDismissed,
 } from "../utils/riderDemand/dismissal";
+import { stubIntersectionObserverForEach } from "../testing/intersectionObserverStub";
+import {
+  DESKTOP_WIDTH,
+  MOBILE_WIDTH,
+  restoreViewportAfterEach,
+  setViewportWidth,
+} from "../testing/viewport";
 
 const trackShown = jest.fn();
 const trackDismissed = jest.fn();
@@ -204,6 +211,9 @@ describe("the measurement", () => {
       count: 14,
       role: "VIEWER",
       surface: "empty-recommendations",
+      // jsdom's default width is 1024, so these two blocks run as a desktop
+      // reader. `the viewport dimension` below drives both sides explicitly.
+      viewport: "desktop",
     });
   });
 
@@ -238,6 +248,161 @@ describe("the measurement", () => {
       count: 14,
       role: "RIDER",
       surface: "empty-recommendations",
+      viewport: "desktop",
     });
+  });
+});
+
+/**
+ * The gate, and what a green run here does and does not prove.
+ *
+ * jsdom does no layout, so no test in this file can show that the mobile
+ * sheet's collapse actually produces a non-intersecting entry — there is no
+ * geometry for an observer to read. What these cover is the logic either side
+ * of that: that the notice is observed, that nothing is reported until the
+ * observer says it is on screen, and that it is reported exactly once when it
+ * is. The browser half is stated in the PR and is not asserted anywhere.
+ *
+ * `installIntersectionObserverStub` never fires on its own, so each negative
+ * below is paired with the drive that makes it fire — otherwise "no event"
+ * would be what a component wired to nothing also produces.
+ */
+describe("the impression gate", () => {
+  const observer = stubIntersectionObserverForEach();
+
+  it("observes the notice element itself", async () => {
+    renderNotice(14);
+    const region = await screen.findByRole("status");
+
+    // Observing a wrapper, or the document, would report an impression for a
+    // notice scrolled past rather than one seen.
+    expect(observer().observed.length).toBeGreaterThan(0);
+    expect(new Set(observer().observed)).toEqual(new Set([region]));
+
+    // StrictMode attaches, detaches and re-attaches the ref, so the element is
+    // legitimately observed more than once. What must not happen is two live
+    // observers — which is why the stub records an array rather than a set.
+    expect(observer().liveObservers).toBe(1);
+  });
+
+  it("reports nothing for a notice that is mounted but not on screen", async () => {
+    renderNotice(14);
+    await screen.findByRole("status");
+
+    // The notice is in the DOM. On the explore page that is true in every
+    // sheet detent, including the two that render it at zero height or
+    // `display: none` — the defect this gate exists for.
+    expect(trackShown).not.toHaveBeenCalled();
+
+    // Positive control in the same harness, so the negative above is not
+    // vacuous: this *can* fire, and does the moment the observer says so.
+    observer().intersect(true);
+    expect(trackShown).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports once, however many times the notice crosses the edge", async () => {
+    renderNotice(14);
+    await screen.findByRole("status");
+
+    observer().intersect(true);
+    observer().intersect(false);
+    observer().intersect(true);
+
+    // Scrolling the sheet up and down is not three impressions.
+    expect(trackShown).toHaveBeenCalledTimes(1);
+  });
+
+  it("holds a count that arrives while the notice is off screen until it is seen", async () => {
+    // The actual race: the page mounts, the reader collapses the sheet or
+    // opens a conversation, and `user.recommendations.riderDemand` resolves
+    // afterwards. Rendering an already-suppressed notice would not catch this
+    // — there would be no mount to count — so the count has to arrive second.
+    const { rerender } = renderNotice(undefined);
+    expect(notice()).toBeNull();
+
+    rerender(
+      <RiderDemandNotice
+        count={14}
+        role="RIDER"
+        surface="empty-recommendations"
+      />,
+    );
+    await screen.findByRole("status");
+
+    expect(trackShown).not.toHaveBeenCalled();
+
+    observer().intersect(true);
+    expect(trackShown).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops observing once the notice has been counted", async () => {
+    renderNotice(14);
+    const region = await screen.findByRole("status");
+    observer().intersect(true);
+
+    // Nothing left to watch for: the impression is recorded and the event
+    // cannot fire again. A live observer per mounted notice would be a leak
+    // that only shows up on a long-lived page.
+    expect(observer().unobserved).toContain(region);
+  });
+
+  it("reports immediately where the browser has no observer to ask", async () => {
+    // Fails open, deliberately. `IntersectionObserver` is universal in the
+    // browsers this app supports, so this path is really about jsdom and
+    // anything exotic — and in an analytics gate a missing API must not
+    // silently stop the measurement, which would look exactly like a feature
+    // nobody ever saw.
+    observer().restore();
+    delete (window as { IntersectionObserver?: unknown }).IntersectionObserver;
+
+    renderNotice(14);
+    await screen.findByRole("status");
+
+    expect(trackShown).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("the viewport dimension", () => {
+  const observer = stubIntersectionObserverForEach();
+  restoreViewportAfterEach();
+
+  it("reports a mobile reader as mobile", async () => {
+    setViewportWidth(MOBILE_WIDTH);
+    renderNotice(14, "VIEWER");
+    await screen.findByRole("status");
+    observer().intersect(true);
+
+    expect(trackShown).toHaveBeenCalledWith(
+      expect.objectContaining({ viewport: "mobile" }),
+    );
+  });
+
+  it("reports a desktop reader as desktop", async () => {
+    setViewportWidth(DESKTOP_WIDTH);
+    renderNotice(14, "VIEWER");
+    await screen.findByRole("status");
+    observer().intersect(true);
+
+    // The two surfaces render very differently on a phone, and without this
+    // property the mobile and desktop readings cannot be separated at all.
+    expect(trackShown).toHaveBeenCalledWith(
+      expect.objectContaining({ viewport: "desktop" }),
+    );
+  });
+
+  it("carries the viewport on the dismissal too, not only the impression", async () => {
+    const user = userEvent.setup();
+    setViewportWidth(MOBILE_WIDTH);
+    renderNotice(14);
+    await screen.findByRole("status");
+    observer().intersect(true);
+
+    await user.click(screen.getByRole("button", { name: /dismiss/i }));
+
+    // A dismissal rate is a ratio of these two. Dimensioning one and not the
+    // other leaves the ratio unsegmentable, which is the whole defect.
+    expect(trackDismissed).toHaveBeenCalledWith(
+      expect.objectContaining({ viewport: "mobile" }),
+    );
   });
 });
