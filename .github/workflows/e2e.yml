@@ -1,0 +1,136 @@
+name: End-to-end Tests
+
+# Trigger policy, and it is deliberately NOT the one lint / tsc / test /
+# test-db / build / env-contract / schema / format share.
+#
+#   push to main       - every merge is covered
+#   workflow_dispatch  - on demand, for a branch that changes this layer
+#
+# No `pull_request`. This job downloads a browser, runs a full `next build`,
+# boots the built app and drives Chromium at two viewports, so it is the most
+# expensive check in the repository by a wide margin - and every journey runs
+# twice, once per viewport, which doubles the browser half of it. Gating every
+# PR on that would slow down the checks that catch most defects, to re-prove a
+# handful of journeys that the overwhelming majority of PRs do not touch.
+#
+# The cost of that choice, stated plainly: a PR can merge while breaking a
+# journey here, and the failure appears on the `main` run afterwards rather
+# than on the PR. That is an accepted trade, not an oversight. Anyone changing
+# auth, the page guards, or this layer itself should run it on their branch
+# first with `gh workflow run e2e.yml --ref <branch>`.
+#
+# Revisit the trade if this becomes a gate for a release, or if the suite grows
+# to cover journeys that ordinary feature work touches routinely.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Scoped in the file rather than left to a repository setting, as the sibling
+# workflows are. Every scope not listed becomes `none`; `contents: read` is all
+# `actions/checkout` needs.
+permissions:
+  contents: read
+
+# A push to `main` is keyed on its own SHA, so merge runs never cancel or queue
+# behind each other. `workflow_dispatch` keys on the ref it was asked for, so a
+# second manual run on one branch supersedes the first.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' }}
+
+jobs:
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+
+    services:
+      # The same image and the same reasoning as `test-db.yml`: MySQL 8.0 is the
+      # major version PlanetScale serves and `docker-compose.yml` runs locally.
+      mysql:
+        image: mysql:8.0
+        env:
+          # A throwaway credential for a container that lives as long as this
+          # job and is reachable only from it. Not a secret, and must not become
+          # one - a repository secret here would stop a fork or a laptop from
+          # reproducing this run.
+          MYSQL_ROOT_PASSWORD: nucarpool
+          # Chosen to satisfy `testDatabaseGuard.ts`, and deliberately NOT the
+          # same name `test-db.yml` uses: these are different jobs on different
+          # runners, but keeping the names distinct means a future move to one
+          # shared server cannot have them truncating each other. Splitting on
+          # `_` gives `nucarpool`, `e2e`, `test` - one word is exactly `test`,
+          # and none of `prod`/`stag`/`live`/`main` appears. Renaming it means
+          # re-reading that guard first.
+          MYSQL_DATABASE: nucarpool_e2e_test
+        ports:
+          # Published to the runner, so the suite connects to 127.0.0.1, which
+          # is in the guard's local-hostname allowlist. The service alias
+          # (`mysql`) is allowlisted too but only resolves from a job running in
+          # a container, and this one runs directly on the runner.
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pnucarpool"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+          --health-start-period=30s
+
+    env:
+      # Read by `src/utils/testDatabaseGuard.ts` and nothing else.
+      #
+      # `DATABASE_URL` is deliberately not set here either. The placeholder env
+      # written in a step below supplies one naming the database `ci`, which is
+      # a different database on the same server - so the guard's "not the same
+      # host, port and database" rule holds. The *application* is handed this
+      # URL as its `DATABASE_URL`, in the server's own environment only; see
+      # `e2e/support/environment.ts` for why that is not a circumvention.
+      TEST_DATABASE_URL: mysql://root:nucarpool@127.0.0.1:3306/nucarpool_e2e_test
+
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: install node
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: yarn
+      - run: yarn install --frozen-lockfile
+      # Explicit rather than relying on @prisma/client's postinstall, matching
+      # build.yml and test-db.yml. `prisma generate` needs no datasource URL.
+      - name: generate prisma client
+        run: yarn prisma generate
+      # Throwaway placeholders for every envsafe-validated variable, derived
+      # from the env contract itself. This is what lets the job build and boot
+      # the app with no repository secrets, and it cannot drift from
+      # `.env.example` because the same script enforces both.
+      #
+      # The Mapbox token it emits is syntactically valid and non-functional,
+      # which is why route-level stubbing is the decided approach for any
+      # journey that loads the map rather than one option among several. No
+      # journey here does.
+      - name: provide placeholder application environment
+        run: node scripts/check-env-contract.js --github-env >> "$GITHUB_ENV"
+      # Chromium only. Firefox and WebKit would triple the download and the
+      # runtime to re-prove the same guards in engines this application has
+      # never been verified against by any other means.
+      - name: install the browser
+        run: yarn test:e2e:install
+      # `globalSetup` approves the target, claims the database, replays
+      # `prisma/migrations/` into it and truncates what it finds, before the
+      # web server starts. The Playwright config then builds the app and boots
+      # it on port 3100.
+      - run: yarn test:e2e
+      # Traces and screenshots from failures, which are what make a CI-only
+      # failure diagnosable without reproducing it. `if: always()` so they
+      # survive the failing run that needs them; the report directory is absent
+      # on a clean pass, which `if-no-files-found: ignore` tolerates.
+      - name: upload the report
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7

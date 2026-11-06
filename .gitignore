@@ -68,3 +68,16 @@ nucarpool-db-data/
 # source change to explain it. It also puts false hits in front of anyone
 # grepping for live uses of a class. Session debris, never content.
 .playwright-mcp/
+
+# Written by the Playwright test runner (`yarn test:e2e`): the HTML report, and
+# the traces, screenshots and error context kept from failing runs. The same two
+# reasons as `.playwright-mcp/` above apply with more force, because a trace
+# embeds the page's real markup and the report embeds the page's real
+# stylesheet - so an unignored one would feed the whole compiled CSS back into
+# Tailwind's repo-wide scan as scan *input*. Run output, never content.
+/playwright-report/
+/test-results/
+/blob-report/
+# The browser binaries, when someone sets PLAYWRIGHT_BROWSERS_PATH=0 to keep
+# them beside the project instead of in the shared cache.
+/.playwright/

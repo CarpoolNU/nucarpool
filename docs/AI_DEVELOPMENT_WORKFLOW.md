@@ -223,6 +223,36 @@ diff. Judging each changed line on its own merits is exactly how six of the
 nineteen survived a pass that had the right method: every one of them was found
 later by reading across the seam instead of down the diff.
 
+## Continuous integration
+
+Step 14 of the lifecycle is "inspect CI", and what there is to inspect is not uniform — the triggers differ on purpose, so a red X and a missing check mean different things.
+
+| Check           | Trigger                                  | What it runs                                                          |
+| --------------- | ---------------------------------------- | --------------------------------------------------------------------- |
+| `lint`          | PR + push to `main`                      | `eslint --max-warnings=0` over `src/`                                 |
+| `tsc`           | PR + push to `main`                      | Type check                                                            |
+| `test`          | PR + push to `main`                      | Jest, mocks only, in three timezones                                  |
+| `test-db`       | PR + push to `main`                      | The database suite against a disposable MySQL, in three timezones     |
+| `build`         | PR + push to `main`                      | A real `next build`, then the route-table assertion                   |
+| `env-contract`  | PR + push to `main`                      | `.env.example` **and** `amplify.yml` — two different contracts        |
+| `schema`        | PR + push to `main`                      | Replays `prisma/migrations/` and diffs against `schema.prisma`        |
+| `format`        | PR + push to `main`                      | `prettier --check`                                                    |
+| `lambda-bundle` | **Path-filtered**                        | Builds and loads the report-digest Lambda package                     |
+| `e2e`           | **push to `main` + `workflow_dispatch`** | Playwright: a built app in Chromium at two viewports, on a real MySQL |
+
+Two of those are not gates on your PR, and both absences are deliberate:
+
+- **`lambda-bundle` is path-filtered**, so it is simply absent on a PR that does not touch that bundle's module graph. That graph is wider than it looks — it reaches `src/utils/` and one file in `scripts/`. [The workflow](../.github/workflows/lambda-bundle.yml) carries the command that re-derives the filter.
+- **`e2e` does not run on pull requests at all.** It downloads a browser, builds the app, boots it and drives Chromium at two viewports — every journey twice — which makes it by a wide margin the most expensive check here. Gating every PR on it would slow the checks that catch most defects in order to re-prove a handful of journeys most PRs do not touch.
+
+  **The cost of that, stated plainly: a PR can merge while breaking an end-to-end journey, and the failure appears on the `main` run afterwards rather than on the PR.** If you are changing authentication, a page guard, or the end-to-end layer itself, run it on your branch first:
+
+  ```bash
+  gh workflow run e2e.yml --ref <your-branch>
+  ```
+
+  What it covers is five journeys wide and is listed in [the testing docs](testing.md#the-end-to-end-suite). A green `e2e` is not whole-app assurance and should not be reported as any.
+
 ## Discovered-issue workflow
 
 **How you ask determines what happens:**
@@ -291,4 +321,4 @@ Controlled by GitHub org/repo admins, and not fixable by a PR here:
 - PlanetScale deploy-request permissions.
 - **Dependabot security updates.** [`.github/dependabot.yml`](../.github/dependabot.yml) enables scheduled _version_ updates by itself, but vulnerability-driven _security_ updates are a repository setting under Settings → Code security. Until an admin enables them, the repository gets routine upgrades and no alert-triggered patches.
 
-Open items a future developer may pick up: confirm and document branch protection; add browser/end-to-end tests, which do not exist at all. For what the current suite does and does not cover, see [the testing docs](testing.md).
+Open items a future developer may pick up: confirm and document branch protection; widen the end-to-end suite, which now exists but covers five journeys and no more — the map, onboarding, messaging and the admin console are all outside it. For what the current suites do and do not cover, see [the testing docs](testing.md).

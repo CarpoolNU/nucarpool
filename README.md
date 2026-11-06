@@ -144,6 +144,8 @@ Four things that reliably trip people up:
 | `yarn tsc`                       | Type check                                          |
 | `yarn test`                      | Jest — mocks only, no database                      |
 | `yarn test:db`                   | Integration suite against `TEST_DATABASE_URL`       |
+| `yarn test:e2e`                  | Playwright — a built app in Chromium, two viewports |
+| `yarn test:e2e:install`          | Fetch the browser `yarn test:e2e` needs             |
 | `yarn check:format`              | Prettier, check only                                |
 | `yarn check:env`                 | `.env.example` covers every required variable       |
 | `yarn check:amplify`             | `amplify.yml` carries every variable to the runtime |
@@ -153,6 +155,10 @@ Four things that reliably trip people up:
 | `yarn seed`                      | **Wipes** the database, then inserts sample users   |
 
 CI runs `lint`, `tsc`, `test`, `test-db`, `build`, `env-contract`, `schema` and `format` on every pull request. `test-db` brings up its own MySQL, so the database suite is exercised whether or not you run it locally. `yarn lint` and `yarn tsc` are the two worth running before you push.
+
+**`e2e` is not one of them.** [`e2e.yml`](.github/workflows/e2e.yml) runs Playwright on pushes to `main` and on `workflow_dispatch`, not on pull requests — it downloads a browser, builds the app, boots it against a disposable MySQL and drives every journey twice, once per viewport, which makes it by far the most expensive check here. The cost of that trade is real: **a PR can merge while breaking an end-to-end journey**, and the failure shows up on the `main` run afterwards. If you are touching authentication, a page guard or `e2e/` itself, run it on your branch first with `gh workflow run e2e.yml --ref <branch>`. What it covers is five journeys wide and listed in [the testing docs](docs/testing.md#the-end-to-end-suite).
+
+Running it locally needs `yarn test:e2e:install` once, and a `TEST_DATABASE_URL` naming a database you are willing to lose — the same guard and the same disposable-database mechanism as `yarn test:db`, and it truncates everything it finds.
 
 [`dependabot-alerts.yml`](.github/workflows/dependabot-alerts.yml) gates nothing and runs weekly instead. It asks whether any Dependabot alert has been open long enough that no automated fix is coming — a question no diff can answer, since an alert opens because an advisory was published rather than because somebody pushed. [`scripts/README.md`](scripts/README.md#not-operational-scripts) explains what it does and why it is scheduled when two other candidates for a cron were not. [`codeql.yml`](.github/workflows/codeql.yml) also runs on a weekly schedule, but gates pull requests as well.
 
