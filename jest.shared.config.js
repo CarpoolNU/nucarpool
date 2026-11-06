@@ -131,10 +131,22 @@ module.exports = {
   // an unanchored pattern would ignore that worktree's own tests and Jest would
   // exit "no tests found" rather than fail. Anchored, it resolves to this
   // checkout's own directory and matches only worktrees nested below it.
+  //
+  // "<rootDir>/e2e/" is the second of two independent reasons Jest never
+  // collects a Playwright file. The first is the name: those are `*.e2e.ts`,
+  // which matches none of the patterns above. Two reasons rather than one
+  // because the failure this prevents is not a browser starting inside
+  // `yarn test` - that would fail loudly - but Jest loading a file written
+  // against Playwright's `test` object, which has no `expect` of Jest's shape
+  // and would take the whole suite out of the run at load time. That failure
+  // reports as *fewer tests*, not as a failure.
+  // `test-runner-separation.test.ts` asserts the separation from the other
+  // side, inside `yarn test` itself.
   testPathIgnorePatterns: [
     "/node_modules/",
     "/\\.next/",
     "<rootDir>/\\.claude/worktrees/",
+    "<rootDir>/e2e/",
     "\\.db\\.test\\.ts$",
   ],
 };

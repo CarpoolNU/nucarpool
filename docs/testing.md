@@ -130,8 +130,59 @@ The `test-db` CI job provisions a disposable MySQL 8.0 service container, applie
 
 What it covers beyond the harness's own self-test: `user.me`'s nested `include` across `user` → `carpool_search` → `location`, the field renames that shape crosses, and the referential actions `relationMode = "prisma"` emulates — including the one that matters, that a delete which bypasses Prisma does **not** cascade. See [the database docs](../src/server/db/README.md#integration-tests-against-a-real-database).
 
-## Not covered at all
+## The end-to-end suite
 
-No **automated** browser or end-to-end tests exist, and nothing in CI opens a browser. Anything that depends on layout, paint order, or real device behaviour is unverified by any run.
+`yarn test:e2e` drives a real Chromium against a real build against a real MySQL, through Playwright. `yarn test:e2e:install` fetches the browser the first time.
 
-Layout can be measured by hand, in Chromium, through [the harness above](#measuring-layout-in-a-real-browser) — but that is a tool for taking a measurement, not a test that stops a regression. Nothing invokes it.
+**It is a smoke layer, and the list below is the whole of it.** A green run proves these journeys at these viewports and nothing else — it is not whole-app assurance and must not be reported as any.
+
+All of it lives in [`auth-redirect.e2e.ts`](../e2e/smoke/auth-redirect.e2e.ts), and every row runs at both viewports.
+
+| What is asserted                                             | Kind     |
+| ------------------------------------------------------------ | -------- |
+| Signed-out visitor at `/` lands on `/sign-in`, which renders | browser  |
+| The sign-in control's measured box is inside the viewport    | geometry |
+| The project runs at the viewport width it declares           | geometry |
+| Without a session cookie, `/` redirects to `/sign-in`        | guard    |
+| With one, `/` redirects by onboarding state instead          | guard    |
+| An onboarded user is sent off `/sign-in`                     | guard    |
+| `permission` and `role` reach the rows they are seeded into  | data     |
+
+Desktop is 1280×800; mobile is `MOBILE_BREAKPOINT_PX - 1` wide, read from [`breakpoints.js`](../src/utils/breakpoints.js) so the suite and the app cannot drift apart. Why only the mobile width is pinned to the breakpoint is argued in [`e2e/support/environment.ts`](../e2e/support/environment.ts).
+
+**Do not assert layout with `scrollWidth`.** `globals.css` sets `html, body { overflow: hidden }`, so a 4000px element appended to `body` leaves `document.documentElement.scrollWidth` at exactly the viewport width — measured at 1280 and 639. A document-overflow assertion cannot fail on any page of this app and would ship looking like geometry while asserting nothing. Measure the element's own box against the viewport, and confirm the inverse fails before trusting it. The same `overflow: hidden` is why it matters: a control outside the viewport here is unreachable, not scrollable-to.
+
+**Four journeys from SCRUM-264 are not here yet** — onboarding, the map and sidebar, sending a carpool request, and the admin dashboard — and neither is the mobile bottom navigation's geometry assertion. Each carries its own stubbing decisions for Mapbox, Pusher and SES; they are separate tickets for that reason.
+
+### Authentication, without Azure AD
+
+No test automates Northeastern sign-in, and no production auth code was changed to make testing possible. NextAuth runs the **database** session strategy here, so a session is a row: the helper in [`e2e/support/session.ts`](../e2e/support/session.ts) inserts a `user` and a `session`, then injects the token as the `next-auth.session-token` cookie. Parameterised by `permission`, `isOnboarded` and `role` — and `role` lives on `CarpoolSearch`, not `User`, so passing one creates a search and its two locations.
+
+The cookie's name depends on the scheme (`__Secure-` prefixed over HTTPS), which is why the config pins `NEXTAUTH_URL` to the HTTP base URL rather than letting it be inferred.
+
+### Decisions worth not re-litigating
+
+- **Screenshot comparison: no.** It is the only thing that would catch a breakpoint converted in the wrong direction, and it is rejected anyway: Tailwind v4 scans the whole repository, so the compiled stylesheet changes when a _comment_ names a utility, and five UI systems coexist in the tree. Snapshots under those conditions fail for reasons unrelated to the change under review, and a suite whose failures are usually noise gets waved through. Computed geometry is asserted instead.
+- **The safe-area inset is a third run configuration, and is not built yet.** Chromium defines `env(safe-area-inset-bottom)` as an actual `0px` when no override is set — fallback or no — so a Playwright device descriptor cannot produce one; see [`layoutFixtures.ts:1753`](../src/testing/layoutFixtures.ts). The only mechanism is the CDP call `Emulation.setSafeAreaInsetsOverride`. It belongs on the one assertion that needs it, which is on a journey not yet written. **No test here sets or claims an inset.**
+- **Mapbox, Pusher and SES are out of reach of these journeys rather than stubbed.** None of them loads the map, opens a Pusher connection or calls an email procedure. Route-level stubbing is the decided approach for when one does — the env contract supplies a syntactically valid but non-functional Mapbox token, so letting calls through is not an option that works — and is specified per journey. A stub written now against no caller would be unexercised code that drifts.
+- **The trigger policy is narrower than every other check.** [`e2e.yml`](../.github/workflows/e2e.yml) runs on pushes to `main` and on `workflow_dispatch`, not on pull requests. The reasoning, and the cost of that trade, are in the file.
+
+### Nothing in `e2e/` may name a Tailwind class
+
+Tailwind v4 scans this whole repository minus what `.gitignore` excludes, and `e2e/` is tracked — so a utility named in a selector, a string or a comment there ships as CSS. **Select by role, accessible name or `data-testid`.** `playwright-report/` and `test-results/` are gitignored for the same reason and not only for tidiness: a trace embeds the page's markup and the report embeds its stylesheet, which would feed the compiled CSS back in as scan input.
+
+### The two runners cannot collect each other's files
+
+Jest takes `*.test.ts(x)` and `*.spec.ts(x)`; Playwright takes `*.e2e.ts` under `e2e/`, which Jest also ignores by path. Two independent guards, because the failure prevented is the quiet one — Jest loading a file written against Playwright's `test` would throw at _load_ time, dropping a whole suite from the run and reporting fewer tests rather than a failure. [`test-runner-separation.test.ts`](../test-runner-separation.test.ts) asserts it from the other side, inside `yarn test`.
+
+### Two databases, and why the guard is not being circumvented
+
+`globalSetup` calls the same `prepareIntegrationDatabase` the Jest database suite uses, so there is one mechanism for claiming, migrating and emptying a disposable MySQL — not two. It truncates **once per run** rather than between tests; every test seeds its own randomly identified user, which is what lets the workers run in parallel.
+
+The Next server has to read the rows the suite seeds, so it is handed the disposable database as its `DATABASE_URL` — **in the child process's environment alone**, exactly as `applyIntegrationMigrations` already hands the URL to the Prisma CLI. This process keeps the two variables distinct, so [`testDatabaseGuard.ts`](../src/utils/testDatabaseGuard.ts) passes on its own terms and a developer's real database is never the truncation target.
+
+## Not covered by any automated run
+
+The suite above is five journeys wide. Everything outside it that depends on layout, paint order or real device behaviour is still unverified: the map, the explore sheet, messaging, the admin console, onboarding, and every safe-area and `dvh` behaviour.
+
+Layout can also be measured by hand, in Chromium, through [the harness above](#measuring-layout-in-a-real-browser) — a tool for taking a measurement, not a test that stops a regression. Nothing invokes it.
