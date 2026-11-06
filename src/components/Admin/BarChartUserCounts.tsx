@@ -1,5 +1,6 @@
 import React from "react";
 import { Bar } from "react-chartjs-2";
+import { AdminUserCounts } from "../../utils/types";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -54,27 +55,14 @@ ChartJS.register(
   Legend,
 );
 
-interface BarChartOnboardingProps {
-  totalAO: number;
-  totalANO: number;
-  totalIO: number;
-  totalINO: number;
-
-  driverAO: number;
-  driverANO: number;
-  driverIO: number;
-  driverINO: number;
-
-  riderAO: number;
-  riderANO: number;
-  riderIO: number;
-  riderINO: number;
-
-  viewerAO: number;
-  viewerANO: number;
-  viewerIO: number;
-  viewerINO: number;
-}
+/**
+ * The props are exactly `AdminUserCounts`, which is what `admin.getStats`
+ * returns and what `AdminData` spreads in. Aliasing rather than restating the
+ * sixteen fields keeps the chart from drifting out of step with the server:
+ * a count added to `AdminUserCounts` arrives here as a type error instead of
+ * compiling against a stale local copy.
+ */
+type BarChartOnboardingProps = AdminUserCounts;
 
 function BarChartUserCounts({
   totalAO,

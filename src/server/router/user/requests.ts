@@ -6,6 +6,7 @@ import { Prisma, RequestStatus } from "@prisma/client";
 import {
   convertCarpoolSearchToPublicWithExactHome,
   convertRequestCounterpart,
+  publicUserWithContactSelect,
 } from "../../publicUser";
 import {
   conversationsToDeleteWith,
@@ -132,17 +133,7 @@ export const requestsRouter = router({
     const currentUserSearch = await ctx.prisma.carpoolSearch.findFirst({
       where: { userId },
       include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            image: true,
-            bio: true,
-            preferredName: true,
-            pronouns: true,
-          },
-        },
+        user: { select: publicUserWithContactSelect },
         homeLocation: true,
         companyLocation: true,
       },
@@ -160,17 +151,7 @@ export const requestsRouter = router({
     const sentCarpoolSearches = await ctx.prisma.carpoolSearch.findMany({
       where: { userId: { in: sentUserIds } },
       include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            image: true,
-            bio: true,
-            preferredName: true,
-            pronouns: true,
-          },
-        },
+        user: { select: publicUserWithContactSelect },
         homeLocation: true,
         companyLocation: true,
       },
@@ -181,17 +162,7 @@ export const requestsRouter = router({
     const receivedCarpoolSearches = await ctx.prisma.carpoolSearch.findMany({
       where: { userId: { in: receivedUserIds } },
       include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            image: true,
-            bio: true,
-            preferredName: true,
-            pronouns: true,
-          },
-        },
+        user: { select: publicUserWithContactSelect },
         homeLocation: true,
         companyLocation: true,
       },

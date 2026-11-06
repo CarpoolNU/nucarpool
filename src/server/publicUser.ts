@@ -25,6 +25,45 @@ type PublicUserFields = {
   pronouns: string;
 };
 
+/**
+ * The Prisma `select` that produces `PublicUserFields`, and the one that adds
+ * `email` to it.
+ *
+ * These live here, beside the converters, because each select is the `select`
+ * spelling of one converter's input type and the pairing is the whole access
+ * rule: `publicUserSelect` feeds `convertCarpoolSearchToPublic`, and
+ * `publicUserWithContactSelect` is what
+ * `convertCarpoolSearchToPublicWithExactHome` and `convertRequestCounterpart`
+ * need. Writing the columns out at each query let a caller pick the wrong
+ * pair silently, because a `select` that is too wide still type-checks
+ * against the narrower converter - `buildPublicUser` enumerates the fields it
+ * reads, so a stray `email` is dropped rather than rejected.
+ *
+ * `withContact` is derived from the base rather than restated so the two can
+ * never drift apart in the one direction that matters: a column added here for
+ * display reaches both, and `email` stays the single documented difference.
+ */
+export const publicUserSelect = {
+  id: true,
+  name: true,
+  image: true,
+  bio: true,
+  preferredName: true,
+  pronouns: true,
+} as const;
+
+/**
+ * `publicUserSelect` plus the email address.
+ *
+ * Only for a query whose rows go to a converter gated on a mutual
+ * relationship. See `convertCarpoolSearchToPublicWithExactHome` for why
+ * coordinates and `email` share one gate.
+ */
+export const publicUserWithContactSelect = {
+  ...publicUserSelect,
+  email: true,
+} as const;
+
 type CarpoolSearchWithRelations = CarpoolSearch & {
   user: PublicUserFields;
   homeLocation: Location | null;
