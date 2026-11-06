@@ -2,7 +2,10 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { router, protectedRouter } from "../createRouter";
 import _ from "lodash";
-import { convertCarpoolSearchToPublic } from "../../publicUser";
+import {
+  convertCarpoolSearchToPublic,
+  publicUserSelect,
+} from "../../publicUser";
 import { assertNotBlocked, blockedCounterpartIds } from "../../db/blocks";
 
 export const favoritesRouter = router({
@@ -61,16 +64,11 @@ export const favoritesRouter = router({
         userId: { in: favoritedUserIds },
       },
       include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            image: true,
-            bio: true,
-            preferredName: true,
-            pronouns: true,
-          },
-        },
+        // `publicUserSelect`, not `publicUserWithContactSelect`: a favourite is
+        // not a counterpart, so `email` is deliberately not selected here. The
+        // narrower select is what pairs this query with
+        // `convertCarpoolSearchToPublic` below.
+        user: { select: publicUserSelect },
         homeLocation: true,
         companyLocation: true,
       },

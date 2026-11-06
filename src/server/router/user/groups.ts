@@ -4,7 +4,10 @@ import { router, protectedRouter } from "../createRouter";
 import _ from "lodash";
 import { Role, RequestStatus, Status } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
-import { convertCarpoolSearchToPublicWithExactHome } from "../../publicUser";
+import {
+  convertCarpoolSearchToPublicWithExactHome,
+  publicUserWithContactSelect,
+} from "../../publicUser";
 import {
   NO_SEATS_MESSAGE,
   MAX_SEATS_AVAILABLE,
@@ -435,17 +438,7 @@ export const groupsRouter = router({
         carpoolId: carpoolSearch.carpoolId,
       },
       include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            image: true,
-            bio: true,
-            preferredName: true,
-            pronouns: true,
-          },
-        },
+        user: { select: publicUserWithContactSelect },
         homeLocation: true,
         companyLocation: true,
       },
