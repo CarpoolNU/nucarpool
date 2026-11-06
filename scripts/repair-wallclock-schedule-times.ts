@@ -74,6 +74,7 @@ import {
   type WallClockScheduleRow,
 } from "../src/server/db/scheduleTimeIntegrity";
 import { formatScheduleTime } from "../src/utils/scheduleTime";
+import { createParseArgs } from "./lib/parseArgs";
 
 /**
  * Well above the eight rows production held when this was written, and well
@@ -81,7 +82,7 @@ import { formatScheduleTime } from "../src/utils/scheduleTime";
  */
 const DEFAULT_MAX = 50;
 
-export type Options = { apply: boolean; max: number };
+export type { Options } from "./lib/parseArgs";
 
 /**
  * The number the dry run has to state before anyone types `--apply`: how many
@@ -143,28 +144,7 @@ export const decideRepair = (
  * requires `--apply`, and there is no argument spelling that reaches a write
  * by accident.
  */
-export const parseArgs = (argv: string[]): Options => {
-  const options: Options = { apply: false, max: DEFAULT_MAX };
-
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === "--apply") {
-      options.apply = true;
-    } else if (arg === "--dry-run") {
-      options.apply = false;
-    } else if (arg === "--max") {
-      const value = Number(argv[++i]);
-      if (!Number.isInteger(value) || value <= 0) {
-        throw new Error(`--max expects a positive integer, got ${argv[i]}`);
-      }
-      options.max = value;
-    } else {
-      throw new Error(`unknown argument: ${arg}`);
-    }
-  }
-
-  return options;
-};
+export const parseArgs = createParseArgs(DEFAULT_MAX);
 
 /** The stored digits, read in UTC because that is how the column is stored. */
 const iso = (time: Date | null): string =>
