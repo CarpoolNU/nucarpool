@@ -1086,10 +1086,10 @@
     "@tanstack/react-virtual" "^3.13.9"
     use-sync-external-store "^1.5.0"
 
-"@hookform/resolvers@6.0.0":
-  version "6.0.0"
-  resolved "https://registry.yarnpkg.com/@hookform/resolvers/-/resolvers-6.0.0.tgz#1c33be45bafddc9890fe938730f8b5eb09bb6137"
-  integrity sha512-6iBzQnB+YwAveVc8HUi6QYLITn5X+xNKRMFIcNXHZlvp2aTI7yWbj4n/JodXxirMCcBc4VCjb2aYAJh4x07mVw==
+"@hookform/resolvers@7.0.1":
+  version "7.0.1"
+  resolved "https://registry.yarnpkg.com/@hookform/resolvers/-/resolvers-7.0.1.tgz#2d8d3dce6031083eede37326707e317e85944c73"
+  integrity sha512-F3aM0dDWsRGmFjnnXjogaGLwP7gY2HA6/c5qp4v4Im/UV7pTNkX+WAjcOlM1V0PE0zoMzuPqCyaYtMzUhoFToA==
   dependencies:
     "@standard-schema/utils" "^0.3.0"
 
