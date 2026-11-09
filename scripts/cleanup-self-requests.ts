@@ -51,39 +51,19 @@
 import { PrismaClient } from "@prisma/client";
 import { conversationsToDeleteWith } from "../src/server/db/conversationLink";
 import { findSelfRequestIds } from "./check-self-requests";
+import { createParseArgs } from "./lib/parseArgs";
 
 const DEFAULT_MAX = 500;
 /** Candidates listed in the report before it truncates. */
 const SAMPLE_SIZE = 20;
 
-export type Options = { apply: boolean; max: number };
+export type { Options } from "./lib/parseArgs";
 
 /**
  * Exported so the test can pin the property that matters most: deleting
  * requires `--apply`, and no argument spelling reaches a delete by accident.
  */
-export const parseArgs = (argv: string[]): Options => {
-  const options: Options = { apply: false, max: DEFAULT_MAX };
-
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === "--apply") {
-      options.apply = true;
-    } else if (arg === "--dry-run") {
-      options.apply = false;
-    } else if (arg === "--max") {
-      const value = Number(argv[++i]);
-      if (!Number.isInteger(value) || value <= 0) {
-        throw new Error(`--max expects a positive integer, got ${argv[i]}`);
-      }
-      options.max = value;
-    } else {
-      throw new Error(`unknown argument: ${arg}`);
-    }
-  }
-
-  return options;
-};
+export const parseArgs = createParseArgs(DEFAULT_MAX);
 
 export type RequestRow = {
   id: string;

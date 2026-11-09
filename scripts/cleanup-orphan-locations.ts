@@ -32,40 +32,20 @@
 
 import { PrismaClient } from "@prisma/client";
 import { findOrphanLocationIds } from "../src/server/db/locationOwnership";
+import { createParseArgs } from "./lib/parseArgs";
 
 const DEFAULT_MAX = 500;
 /** Candidates listed in the report before it truncates. */
 const SAMPLE_SIZE = 10;
 
-export type Options = { apply: boolean; max: number };
+export type { Options } from "./lib/parseArgs";
 
 /**
  * Exported so `cleanup-orphan-locations.test.ts` can pin the property that
  * matters most here: deleting requires `--apply`, and there is no argument
  * spelling that reaches a delete by accident.
  */
-export const parseArgs = (argv: string[]): Options => {
-  const options: Options = { apply: false, max: DEFAULT_MAX };
-
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === "--apply") {
-      options.apply = true;
-    } else if (arg === "--dry-run") {
-      options.apply = false;
-    } else if (arg === "--max") {
-      const value = Number(argv[++i]);
-      if (!Number.isInteger(value) || value <= 0) {
-        throw new Error(`--max expects a positive integer, got ${argv[i]}`);
-      }
-      options.max = value;
-    } else {
-      throw new Error(`unknown argument: ${arg}`);
-    }
-  }
-
-  return options;
-};
+export const parseArgs = createParseArgs(DEFAULT_MAX);
 
 const main = async () => {
   const { apply, max } = parseArgs(process.argv.slice(2));
