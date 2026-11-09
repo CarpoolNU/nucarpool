@@ -7,8 +7,8 @@ import { Location, Role } from "@prisma/client";
 import { DirectionsResponse } from "../../utils/types";
 import { convertCarpoolSearchToPublic, roundCoord } from "../publicUser";
 import {
-  candidateExclusions,
   fetchRankedCandidates,
+  loadCandidateContext,
 } from "../db/candidateSearch";
 import { parseMapboxFeature } from "../../utils/map/parseAddress";
 import {
@@ -294,41 +294,21 @@ export const mapboxRouter = router({
         });
       }
 
-      const currentUserSearch = await ctx.prisma.carpoolSearch.findFirst({
-        where: { userId },
-        include: {
-          user: {
-            include: {
-              favorites: input.favorites,
-              sentRequests: !input.messaged,
-              receivedRequests: !input.messaged,
-            },
-          },
-          homeLocation: true,
-          companyLocation: true,
+      // The reader's own search, and the users the candidate query must not
+      // return - the reader, anyone with a block either way, and, when the
+      // filter asks, anyone they have messaged. Lives in `candidateSearch.ts`
+      // because `user.recommendations.me` opens exactly the same way; both
+      // sites used to hold a copy.
+      const { currentUserSearch, excludedUserIds } = await loadCandidateContext(
+        {
+          prisma: ctx.prisma,
+          userId,
+          messaged: input.messaged,
+          favorites: input.favorites,
         },
-      });
+      );
 
-      if (!currentUserSearch) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: `No carpool search found for user ${userId}.`,
-        });
-      }
-
-      const { favorites, sentRequests, receivedRequests } =
-        currentUserSearch.user;
-
-      // The reader, anyone with a block either way, and - when the filter
-      // asks - anyone they have messaged. Shared with
-      // `user.recommendations.me`.
-      const excludedUserIds = await candidateExclusions({
-        prisma: ctx.prisma,
-        userId,
-        messaged: input.messaged,
-        sentRequests,
-        receivedRequests,
-      });
+      const { favorites } = currentUserSearch.user;
 
       // A VIEWER has no stored coordinates to rank against, so the points they
       // picked in the browser stand in — campus if they have picked none.
@@ -343,9 +323,10 @@ export const mapboxRouter = router({
         filters: input,
         sort: "distance",
         excludedUserIds,
-        // Guarded for the same reason as the `sentRequests` branch above: the
-        // `favorites` include is `input.favorites`, and Prisma omits the key
-        // rather than returning [] when an include is false.
+        // Guarded for the same reason as the `sentRequests` branch inside
+        // `loadCandidateContext`: the `favorites` include it issued is
+        // `input.favorites`, and Prisma omits the key rather than returning
+        // [] when an include is false.
         favoriteUserIds: input.favorites ? favorites.map((f) => f.id) : [],
       });
 

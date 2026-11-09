@@ -5,6 +5,7 @@ import {
   rankCandidates,
   fetchRankedCandidates,
   candidateLimitWarning,
+  loadCandidateContext,
   CANDIDATE_LIMIT,
   CANDIDATE_LIMIT_LOG_PREFIX,
 } from "./candidateSearch";
@@ -1138,5 +1139,125 @@ describe("group exclusion agrees with calculateScore", () => {
         empty: searcherCanMatchNobody(state),
       });
     }
+  });
+});
+
+/**
+ * The prologue both matching endpoints used to hold a copy of.
+ *
+ * What these pin is the *text of the query*, because that is where the risk
+ * in the extraction sits: it is only safe if the `where`, the `include` and
+ * the `NOT_FOUND` message came across unchanged, and nothing else in the
+ * repository would fail if one of them quietly did not. The `include` in
+ * particular governs what `candidateExclusions` can see, so a key dropped
+ * from it narrows the candidate pool on both endpoints at once with nothing
+ * throwing.
+ *
+ * `candidateFilters.test.ts` drives both endpoints through the real router
+ * and is the control for the behaviour; this is the control for the query.
+ * The `include` is asserted whole rather than key by key, so a key *added*
+ * fails here too - that would widen the payload for both endpoints.
+ */
+describe("loadCandidateContext — the shared prologue", () => {
+  const READER = "reader";
+
+  const reader = {
+    id: "search-reader",
+    userId: READER,
+    role: Role.RIDER,
+    status: Status.ACTIVE,
+    user: {
+      id: READER,
+      favorites: [{ id: "fav" }],
+      sentRequests: [{ toUserId: "sent-to" }],
+      receivedRequests: [{ fromUserId: "received-from" }],
+    },
+  };
+
+  const run = (
+    { messaged, favorites }: { messaged: boolean; favorites: boolean },
+    search: unknown = reader,
+  ) => {
+    const findFirst = jest.fn().mockResolvedValue(search);
+    // No blocks: the block rows have their own coverage in `blocks.test.ts`,
+    // and what is under test here is the reader's half of the exclusions.
+    const blockFindMany = jest.fn().mockResolvedValue([]);
+
+    const call = loadCandidateContext({
+      prisma: {
+        carpoolSearch: { findFirst },
+        block: { findMany: blockFindMany },
+      } as unknown as Parameters<typeof loadCandidateContext>[0]["prisma"],
+      userId: READER,
+      messaged,
+      favorites,
+    });
+
+    return { call, findFirst };
+  };
+
+  it("reads the reader's own search by userId alone", async () => {
+    const { call, findFirst } = run({ messaged: false, favorites: false });
+    await call;
+
+    // `findFirst` with no `orderBy` is correct only because `userId` is
+    // unique on `CarpoolSearch`.
+    expect(findFirst.mock.calls[0][0].where).toEqual({ userId: READER });
+  });
+
+  it("includes the request relations when the messaged filter is off", async () => {
+    const { call, findFirst } = run({ messaged: false, favorites: true });
+    await call;
+
+    expect(findFirst.mock.calls[0][0].include).toEqual({
+      user: {
+        include: {
+          favorites: true,
+          sentRequests: true,
+          receivedRequests: true,
+        },
+      },
+      homeLocation: true,
+      companyLocation: true,
+    });
+  });
+
+  it("drops both request includes when the messaged filter is on", async () => {
+    const { call, findFirst } = run({ messaged: true, favorites: false });
+    await call;
+
+    // Prisma omits a relation whose include is `false` rather than returning
+    // [], which is why `candidateExclusions` takes them as possibly
+    // `undefined`.
+    expect(findFirst.mock.calls[0][0].include.user.include).toEqual({
+      favorites: false,
+      sentRequests: false,
+      receivedRequests: false,
+    });
+  });
+
+  it("excludes the reader and everyone they have a request with", async () => {
+    const { call } = run({ messaged: false, favorites: false });
+
+    expect((await call).excludedUserIds).toEqual([
+      READER,
+      "sent-to",
+      "received-from",
+    ]);
+  });
+
+  it("excludes only the reader when the messaged filter is on", async () => {
+    const { call } = run({ messaged: true, favorites: false });
+
+    expect((await call).excludedUserIds).toEqual([READER]);
+  });
+
+  it("throws NOT_FOUND naming the user when there is no search", async () => {
+    const { call } = run({ messaged: false, favorites: false }, null);
+
+    await expect(call).rejects.toMatchObject({
+      code: "NOT_FOUND",
+      message: `No carpool search found for user ${READER}.`,
+    });
   });
 });

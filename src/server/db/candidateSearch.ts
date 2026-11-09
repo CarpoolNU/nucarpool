@@ -1,3 +1,4 @@
+import { TRPCError } from "@trpc/server";
 import { Prisma, Role, Status } from "@prisma/client";
 import _ from "lodash";
 import {
@@ -533,6 +534,82 @@ export const candidateExclusions = async ({
   }
 
   return excluded;
+};
+
+/**
+ * The reader's own search, loaded, plus the users the candidate query must
+ * never return to them.
+ *
+ * Both matching endpoints open with the same four steps - load the caller's
+ * `CarpoolSearch`, fail with `NOT_FOUND` if there is none, take the request
+ * relations off it, and turn those into exclusions. That prologue was copied
+ * at both sites rather than shared, and each copy carried a comment pointing
+ * at the other; this is where it lives now.
+ *
+ * **The `include` is the point, not the convenience.** It is what
+ * `candidateExclusions` above can see, so two copies that drift produce two
+ * silently different candidate pools - the reader's own requests excluded on
+ * one endpoint and not the other, with nothing failing. One include makes
+ * that impossible rather than merely unlikely.
+ *
+ * `messaged` and `favorites` are passed in because the two callers name them
+ * differently - `input.messaged` on the map, `input.filters.messaged` in the
+ * sidebar. That difference is the callers' business and is deliberately not
+ * pushed in here as a union.
+ *
+ * What stays with the callers is ranking: `mapbox.geoJsonUserList`
+ * substitutes a reference point for a `VIEWER` first
+ * (`viewerReferenceSearch`) and `user.recommendations.me` does not, so the
+ * step after this one is genuinely not shared.
+ */
+export const loadCandidateContext = async ({
+  prisma,
+  userId,
+  messaged,
+  favorites,
+}: {
+  prisma: PrismaOrTransaction;
+  userId: string;
+  /** The caller's "messaged" filter: when false, anyone already in a request is hidden. */
+  messaged: boolean;
+  /** The caller's "favorites" filter, which decides whether they are read at all. */
+  favorites: boolean;
+}) => {
+  const currentUserSearch = await prisma.carpoolSearch.findFirst({
+    where: { userId },
+    include: {
+      user: {
+        include: {
+          favorites,
+          sentRequests: !messaged,
+          receivedRequests: !messaged,
+        },
+      },
+      homeLocation: true,
+      companyLocation: true,
+    },
+  });
+
+  if (!currentUserSearch) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: `No carpool search found for user ${userId}.`,
+    });
+  }
+
+  const { sentRequests, receivedRequests } = currentUserSearch.user;
+
+  // The reader, anyone with a block either way, and - when the filter asks -
+  // anyone they have a request with.
+  const excludedUserIds = await candidateExclusions({
+    prisma,
+    userId,
+    messaged,
+    sentRequests,
+    receivedRequests,
+  });
+
+  return { currentUserSearch, excludedUserIds };
 };
 
 /**
