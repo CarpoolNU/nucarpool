@@ -126,7 +126,7 @@ jobs:
       # on a clean pass, which `if-no-files-found: ignore` tolerates.
       - name: upload the report
         if: always()
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: playwright-report
           path: |
