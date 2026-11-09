@@ -2615,17 +2615,17 @@
     postcss "^8.5.16"
     tailwindcss "4.3.3"
 
-"@tanstack/query-core@5.105.0":
-  version "5.105.0"
-  resolved "https://registry.yarnpkg.com/@tanstack/query-core/-/query-core-5.105.0.tgz#c3bbf51a664d4af09b2f404b2595ccdc9a743021"
-  integrity sha512-7p56vRmT/z4UJ6sctGIdl5WRUQyUv53IUpUwEKi2g97zMbO7zh8ZsCLffGAvCPBR4xD72e3VXsDyLwXHhoNTMQ==
+"@tanstack/query-core@5.105.1":
+  version "5.105.1"
+  resolved "https://registry.yarnpkg.com/@tanstack/query-core/-/query-core-5.105.1.tgz#8f44982e87f8b5cb9257737ae10dcfc43cab3f65"
+  integrity sha512-B/rNlZoZ54w1dlddiUt9oEe1SLM+37c00SKLJEg9YH+7as3Y54P81o9Fh+2ujZ36tXPnQJ5oVe7AcyEWkyFhPg==
 
-"@tanstack/react-query@5.105.0":
-  version "5.105.0"
-  resolved "https://registry.yarnpkg.com/@tanstack/react-query/-/react-query-5.105.0.tgz#16605f0d0fcae9d179071cf48434c4adc4a59497"
-  integrity sha512-y+hMuDERvgg6ay1da0V1a6ZC0ZONt7dELxSFkqRZuwm7p1TTZs0MoXrPlBRflIpRoYjvzQVYxycnLImpFLhWrw==
+"@tanstack/react-query@5.105.1":
+  version "5.105.1"
+  resolved "https://registry.yarnpkg.com/@tanstack/react-query/-/react-query-5.105.1.tgz#3619467713014f3336d67bb9ba5c627d474ba8ee"
+  integrity sha512-qcu+/+PtBOjW8qU4/0l47QVmNG7hPOWsCLzP0bTRhE1X7HYa757C4732wXTUH0QhCjTV1yedX8onsCiEwlNYrA==
   dependencies:
-    "@tanstack/query-core" "5.105.0"
+    "@tanstack/query-core" "5.105.1"
 
 "@tanstack/react-virtual@^3.13.9":
   version "3.14.10"
@@ -2677,25 +2677,25 @@
   resolved "https://registry.yarnpkg.com/@testing-library/user-event/-/user-event-14.6.8.tgz#9433b5008d8aff4cdf60c177f5789ce32062b763"
   integrity sha512-vgSSqnANMnkcYR/vUNDbwS7aM3OErRLNUG8vCVVlj4oc6cKffUrccX7UAS5AmJQQNZTSibi9z5GvvRZ0aYgUCQ==
 
-"@trpc/client@^11.19.0":
-  version "11.19.0"
-  resolved "https://registry.yarnpkg.com/@trpc/client/-/client-11.19.0.tgz#06fd3d44c3cdf9a6bb567e3ef2ab8987d2a8e593"
-  integrity sha512-0MKkPq6MejsKB5Opca1Rl22KVIaqo2+A1EiXyZ8EGUsl9TLrPdpGn+Usux20TZKFwnSC2+wI/WilqNJaP4ODfw==
+"@trpc/client@^11.22.1":
+  version "11.22.1"
+  resolved "https://registry.yarnpkg.com/@trpc/client/-/client-11.22.1.tgz#5299f8bb1adc80fee8b73a19af2f91ce219a1c09"
+  integrity sha512-flkAwF8bzzNCVJ5xcTMS+Az6Go/XK30ZIOGT94UJBYAmMq1w2tY7gk7+CIMiRUdvHzOYAVPitX2H+20qcIIomA==
 
-"@trpc/next@^11.19.0":
-  version "11.19.0"
-  resolved "https://registry.yarnpkg.com/@trpc/next/-/next-11.19.0.tgz#eca7557489e4ceb50a57a9c1ca0d6eb4e92e3a0d"
-  integrity sha512-6rSzxEm87zZP3XM4KZakhUTMFrrqs+eVV9zqyX5Xpu03s7VhXfvDYQ/ampnZ5NxL5wrvcl14jV2QYeJ6FSzBJw==
+"@trpc/next@^11.22.1":
+  version "11.22.1"
+  resolved "https://registry.yarnpkg.com/@trpc/next/-/next-11.22.1.tgz#f2a291b25e1bb07a875a93fb744fb57eb0595ded"
+  integrity sha512-e9VrIiuL8HHVB8RgkBnGe4jEgodCSuUOgMs+eGA9OdyzT7H0r3dCcVG5254dMk29C6Gmcd9A8Qvl7aFK2O2ZEQ==
 
-"@trpc/react-query@^11.19.0":
-  version "11.19.0"
-  resolved "https://registry.yarnpkg.com/@trpc/react-query/-/react-query-11.19.0.tgz#46238f42bd568e26d1e50ad4586acb5f88e1369a"
-  integrity sha512-TrqZBa/6weXX27mf0P2dMCI65duqO3B/wf9BkP1MezUWSUg7SRGJrIv6K8vjgjeHdafFBI1mmcqPEYXHF4AlVQ==
+"@trpc/react-query@^11.22.1":
+  version "11.22.1"
+  resolved "https://registry.yarnpkg.com/@trpc/react-query/-/react-query-11.22.1.tgz#bf5eddd1f2b7bbd68548ca662b8ae5e3afc88a98"
+  integrity sha512-PEd3EzQwiJDSi2qlOm1kkfnh5q4rsQcjVGBdKqcbW9iLl7f6/NH/5NOPDdWu/yiV8cY4QJ1pWHENLuD0A1j9uA==
 
-"@trpc/server@^11.19.0":
-  version "11.19.0"
-  resolved "https://registry.yarnpkg.com/@trpc/server/-/server-11.19.0.tgz#1f3b6ce1a34cc1a39ca1cdb4dc2951ed77ef689d"
-  integrity sha512-7C1goiDurz82yFKtZUbEzjXd0Rg/jyisaIZQhdvus+1l7E6mwcEYZXjZ1US/HF8kOyz1LERL8UN3bcboJtjcyQ==
+"@trpc/server@^11.22.1":
+  version "11.22.1"
+  resolved "https://registry.yarnpkg.com/@trpc/server/-/server-11.22.1.tgz#e17377140881ef3664e99e11f631f38fea41284c"
+  integrity sha512-9SjWTS5iwENHOVPqpTjm0I1Os/CtuT6p8kDlovyEm00pXhpHX55tQM2vszJTEpcQhm/JfUz4ut/7Y9JZZQZo6A==
 
 "@tsconfig/node10@^1.0.7":
   version "1.0.11"
