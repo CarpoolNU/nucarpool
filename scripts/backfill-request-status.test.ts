@@ -107,6 +107,25 @@ describe("parseArgs", () => {
     expect(parseArgs(["--apply"]).apply).toBe(true);
   });
 
+  it("accepts --dry-run, which this script used to reject", () => {
+    // Until SCRUM-719 this threw `unexpected argument: --dry-run`, alone among
+    // the scripts sharing this parser. The flag an operator reaches for when
+    // they want to be certain they are not writing now works here too.
+    expect(parseArgs(["--dry-run"]).apply).toBe(false);
+  });
+
+  it("lets the last of --apply and --dry-run win", () => {
+    // An explicit --dry-run after --apply wins, so the more cautious of two
+    // conflicting flags is reachable without retyping the command.
+    expect(parseArgs(["--apply", "--dry-run"]).apply).toBe(false);
+    // And the reverse order writes. This is the case SCRUM-719 had to decide
+    // rather than inherit: before convergence it threw and wrote nothing, so
+    // this assertion is the record that the change was intentional, not the
+    // accidental half of a refactor. Pinned here so a future reversal to a
+    // sticky --dry-run has to argue with a test rather than slip through.
+    expect(parseArgs(["--dry-run", "--apply"]).apply).toBe(true);
+  });
+
   it("rejects an argument spelling that is not exactly --apply", () => {
     // The property that matters: no near-miss reaches a write.
     for (const arg of ["--Apply", "-apply", "apply", "--apply=true"]) {
@@ -126,5 +145,18 @@ describe("parseArgs", () => {
 
   it("rejects unknown arguments rather than ignoring them", () => {
     expect(() => parseArgs(["--force"])).toThrow();
+  });
+
+  it("reports both failures in the shared parser's wording", () => {
+    // Nothing pinned either string before SCRUM-719, and converging onto
+    // `lib/parseArgs.ts` reworded both: `--max needs a positive integer, got:
+    // X` became `--max expects a positive integer, got X`, and `unexpected
+    // argument: X` became `unknown argument: X`. Asserted so the divergence
+    // cannot quietly come back, and so the next reader can tell which parser
+    // produced a message they are looking at.
+    expect(() => parseArgs(["--max", "0"])).toThrow(
+      "--max expects a positive integer, got 0",
+    );
+    expect(() => parseArgs(["--force"])).toThrow("unknown argument: --force");
   });
 });

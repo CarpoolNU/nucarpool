@@ -47,39 +47,28 @@
  */
 
 import { PrismaClient, RequestStatus } from "@prisma/client";
+import { createParseArgs } from "./lib/parseArgs";
 
 const DEFAULT_MAX = 500;
 /** Candidates listed in the report before it truncates. */
 const SAMPLE_SIZE = 10;
 
-export type Options = { apply: boolean; max: number };
+export type { Options } from "./lib/parseArgs";
 
 /**
  * Exported so the test can pin the property that matters most: writing requires
  * `--apply`, and no argument spelling reaches a write by accident.
+ *
+ * This script kept a hand-written copy of this parser until SCRUM-719, and the
+ * copy had no `--dry-run` branch, so the flag an operator reaches for when they
+ * want to be certain they are *not* writing threw here and was accepted by
+ * every sibling. SCRUM-716 left that alone rather than change a destructive
+ * script's behaviour under cover of a refactor; SCRUM-719 decided it
+ * deliberately and converged, so `--dry-run` now behaves here exactly as it
+ * does everywhere else. See {@link createParseArgs} for the ordering rule and
+ * why that was the choice.
  */
-export const parseArgs = (argv: string[]): Options => {
-  const options: Options = { apply: false, max: DEFAULT_MAX };
-
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === "--apply") {
-      options.apply = true;
-      continue;
-    }
-    if (arg === "--max") {
-      const value = Number(argv[++i]);
-      if (!Number.isInteger(value) || value <= 0) {
-        throw new Error(`--max needs a positive integer, got: ${argv[i]}`);
-      }
-      options.max = value;
-      continue;
-    }
-    throw new Error(`unexpected argument: ${arg}`);
-  }
-
-  return options;
-};
+export const parseArgs = createParseArgs(DEFAULT_MAX);
 
 type RequestRow = {
   id: string;

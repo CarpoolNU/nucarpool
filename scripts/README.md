@@ -125,7 +125,7 @@ Retaining them costs the match pool almost nothing, which is the part worth know
 | [`check-page-routes.js`](./check-page-routes.js)             | CI: `yarn check:routes` and the `build` job's manifest assertion                                   |
 | [`check-dependabot-alerts.js`](./check-dependabot-alerts.js) | CI: the weekly `dependabot-alerts.yml` run. Reads the Security tab. **No database.**               |
 | [`measure-layout.ts`](./measure-layout.ts)                   | Serves a layout fixture for measuring in a real browser. **No database.**                          |
-| [`lib/parseArgs.ts`](./lib/parseArgs.ts)                     | The `--apply` / `--dry-run` / `--max` parser six of the writing scripts share. **No database.**    |
+| [`lib/parseArgs.ts`](./lib/parseArgs.ts)                     | The `--apply` / `--dry-run` / `--max` parser seven of the writing scripts share. **No database.**  |
 | [`emailtemplate.py`](./emailtemplate.py)                     | **Mutates AWS.** Creates and updates the SES templates the app sends. Dry-run by default           |
 
 `check-dependabot-alerts.js` reports open Dependabot alerts that have been open long enough that no automated fix is coming. Dependabot raises a pull request for an advisory it can fix by editing `package.json`; it raises nothing for one whose only fix is a `yarn.lock` refresh of a transitive package, because npm security updates only ever propose direct dependencies. No `.github/dependabot.yml` option changes that, and nothing else here refreshes transitive lockfile entries — so three `brace-expansion` alerts sat open for 25 days and were found by an unrelated audit rather than by any process (SCRUM-696, SCRUM-698).
