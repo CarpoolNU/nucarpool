@@ -6466,10 +6466,10 @@ map-obj@^4.0.0:
   resolved "https://registry.npmjs.org/map-obj/-/map-obj-4.3.0.tgz"
   integrity sha512-hdN1wVrZbb29eBGiGjJbeP8JbKjq1urkHJ/LIP/NY48MZ1QVXUsQBV1G1zvYFHn1XE06cwjBsOI2K3Ulnj1YXQ==
 
-mapbox-gl@^3.33.0:
-  version "3.33.0"
-  resolved "https://registry.yarnpkg.com/mapbox-gl/-/mapbox-gl-3.33.0.tgz#1b38dd38b6d371d037469598e3089a27e61b88bd"
-  integrity sha512-2HpIrVedccHedolZyMVG/7FXdpgmsLTENgEDsX71x3/gKDGfYMf1FCRY0prntknkn/JXcraUKXlBTv7vkr0EXg==
+mapbox-gl@^3.34.1:
+  version "3.34.1"
+  resolved "https://registry.yarnpkg.com/mapbox-gl/-/mapbox-gl-3.34.1.tgz#88834690f6197c8c5372dd5a935342bbce077c95"
+  integrity sha512-r4UbcZyEljltuMkMoHhwBSpbWnflHKFBUAfhvjEGxlR2mBjNxI0OBFzrr4AlbHsXnMVPMCWAvdHD5HWtMThWPg==
 
 math-intrinsics@^1.1.0:
   version "1.1.0"
@@ -7272,10 +7272,10 @@ react-stately@3.49.0:
     "@swc/helpers" "^0.5.0"
     use-sync-external-store "^1.6.0"
 
-react-toastify@^11.1.0:
-  version "11.1.0"
-  resolved "https://registry.yarnpkg.com/react-toastify/-/react-toastify-11.1.0.tgz#3d3c73a44d5cac868ee9a52e0f90dd706532c4a4"
-  integrity sha512-e9h23x3phN0wbFeB6yovmWp7lobzV4CaCH0LO8nVP6H7Y+3GbcLpIzMm9dJhcp1RXbpyfvjgpfXqO80QAmn7sg==
+react-toastify@^11.2.0:
+  version "11.2.0"
+  resolved "https://registry.yarnpkg.com/react-toastify/-/react-toastify-11.2.0.tgz#9035cbf6549c68fca0c150a9591cbc9fe1a41596"
+  integrity sha512-lznu1N00MfEv4p9vGWNVqCfDQ3DxScDAZTFk6STMsEcLcRZKT4PCO0JxsNduGN7LJPBSkXXs/YuLydjh650T7Q==
   dependencies:
     clsx "^2.1.1"
 
