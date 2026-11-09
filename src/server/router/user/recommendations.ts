@@ -2,8 +2,8 @@ import { TRPCError } from "@trpc/server";
 import { protectedRouter, router } from "../createRouter";
 import { convertCarpoolSearchToPublic } from "../../publicUser";
 import {
-  candidateExclusions,
   fetchRankedCandidates,
+  loadCandidateContext,
 } from "../../db/candidateSearch";
 import { riderDemandCount } from "../../db/riderDemand";
 import { z } from "zod";
@@ -43,42 +43,21 @@ export const recommendationsRouter = router({
         });
       }
 
-      // Get current user's CarpoolSearch for comparison
-      const currentUserSearch = await ctx.prisma.carpoolSearch.findFirst({
-        where: { userId },
-        include: {
-          user: {
-            include: {
-              favorites: input.filters.favorites,
-              sentRequests: !input.filters.messaged,
-              receivedRequests: !input.filters.messaged,
-            },
-          },
-          homeLocation: true,
-          companyLocation: true,
+      // The current user's own CarpoolSearch, for comparison, and the users
+      // the candidate query must not return - the reader, anyone with a block
+      // either way, and, when the filter asks, anyone they have a request
+      // with. Lives in `candidateSearch.ts` because `mapbox.geoJsonUserList`
+      // opens exactly the same way; both sites used to hold a copy.
+      const { currentUserSearch, excludedUserIds } = await loadCandidateContext(
+        {
+          prisma: ctx.prisma,
+          userId,
+          messaged: input.filters.messaged,
+          favorites: input.filters.favorites,
         },
-      });
+      );
 
-      if (!currentUserSearch) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: `No carpool search found for user ${userId}.`,
-        });
-      }
-
-      const { favorites, sentRequests, receivedRequests } =
-        currentUserSearch.user;
-
-      // The reader, anyone with a block either way, and - when the filter
-      // asks - anyone they have a request with. Shared with
-      // `mapbox.geoJsonUserList`.
-      const excludedUserIds = await candidateExclusions({
-        prisma: ctx.prisma,
-        userId,
-        messaged: input.filters.messaged,
-        sentRequests,
-        receivedRequests,
-      });
+      const { favorites } = currentUserSearch.user;
 
       // Bounded candidate query plus scoring, shared with
       // `mapbox.geoJsonUserList`.
@@ -89,9 +68,10 @@ export const recommendationsRouter = router({
         sort: input.sort,
         excludedUserIds,
         // Only read when the filter is on, and only included then: the
-        // `favorites` include above is `input.filters.favorites`, and Prisma
-        // omits the key entirely rather than returning [] for a false include,
-        // so mapping it unconditionally would throw on every default page load.
+        // `favorites` include `loadCandidateContext` issued is
+        // `input.filters.favorites`, and Prisma omits the key entirely rather
+        // than returning [] for a false include, so mapping it
+        // unconditionally would throw on every default page load.
         favoriteUserIds: input.filters.favorites
           ? favorites.map((f) => f.id)
           : [],
