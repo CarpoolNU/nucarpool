@@ -1086,10 +1086,10 @@
     "@tanstack/react-virtual" "^3.13.9"
     use-sync-external-store "^1.5.0"
 
-"@hookform/resolvers@7.0.1":
-  version "7.0.1"
-  resolved "https://registry.yarnpkg.com/@hookform/resolvers/-/resolvers-7.0.1.tgz#2d8d3dce6031083eede37326707e317e85944c73"
-  integrity sha512-F3aM0dDWsRGmFjnnXjogaGLwP7gY2HA6/c5qp4v4Im/UV7pTNkX+WAjcOlM1V0PE0zoMzuPqCyaYtMzUhoFToA==
+"@hookform/resolvers@7.0.5":
+  version "7.0.5"
+  resolved "https://registry.yarnpkg.com/@hookform/resolvers/-/resolvers-7.0.5.tgz#7afaeb916a817915449864a9f93cf892af251349"
+  integrity sha512-E7ca3tpIJxHPGhFOfXLlCCZh7up6EcnUTbgTt0SRUENXagq8DJnob9rK+VqsNCsfUuO6mMU5NYNm6BaL18flgQ==
   dependencies:
     "@standard-schema/utils" "^0.3.0"
 
@@ -4111,10 +4111,10 @@ dom-helpers@^5.0.1:
     "@babel/runtime" "^7.8.7"
     csstype "^3.0.2"
 
-driver.js@^1.10.2:
-  version "1.10.2"
-  resolved "https://registry.yarnpkg.com/driver.js/-/driver.js-1.10.2.tgz#2c3fb1458d0edc49c50aff4c03cc8f92faf970f6"
-  integrity sha512-L/EMTriJPAmg+5kIFmrjzt3TI+1NblhHOV/UZkfpgU/uxhSflGheynMBxk5oImDSy6seAEkIl6MzNOc0zdoKtg==
+driver.js@^1.11.0:
+  version "1.11.0"
+  resolved "https://registry.yarnpkg.com/driver.js/-/driver.js-1.11.0.tgz#39dd87cba35cb387bd3c4a3d164eb037915e36e1"
+  integrity sha512-Xp/tYNYQ4Wth6AN3HqVVYdrCF4ahe4FVBDphWKylVDBBbeDEsFqnogxko6Gv30Yf9T/B92g0RZOCp4xfl1gqqw==
 
 dunder-proto@^1.0.0, dunder-proto@^1.0.1:
   version "1.0.1"
@@ -6466,10 +6466,10 @@ map-obj@^4.0.0:
   resolved "https://registry.npmjs.org/map-obj/-/map-obj-4.3.0.tgz"
   integrity sha512-hdN1wVrZbb29eBGiGjJbeP8JbKjq1urkHJ/LIP/NY48MZ1QVXUsQBV1G1zvYFHn1XE06cwjBsOI2K3Ulnj1YXQ==
 
-mapbox-gl@^3.34.1:
-  version "3.34.1"
-  resolved "https://registry.yarnpkg.com/mapbox-gl/-/mapbox-gl-3.34.1.tgz#88834690f6197c8c5372dd5a935342bbce077c95"
-  integrity sha512-r4UbcZyEljltuMkMoHhwBSpbWnflHKFBUAfhvjEGxlR2mBjNxI0OBFzrr4AlbHsXnMVPMCWAvdHD5HWtMThWPg==
+mapbox-gl@^3.34.2:
+  version "3.34.2"
+  resolved "https://registry.yarnpkg.com/mapbox-gl/-/mapbox-gl-3.34.2.tgz#2075dbc2737d6c0949edad384c088835a1769567"
+  integrity sha512-SfuzpqjokSjv4C9/JEjxAfqVHY37B7Kky/AOFpc+9D0Sx0KuIoV3keSlvvuHuM/jxw84iQ/Nh7yIK1VxuDBBHA==
 
 math-intrinsics@^1.1.0:
   version "1.1.0"
@@ -6589,10 +6589,10 @@ mitt@^3.0.0:
   resolved "https://registry.npmjs.org/mitt/-/mitt-3.0.1.tgz"
   integrity sha512-vKivATfr97l2/QBCYAkXYDbrIWPM2IIKEl7YPhjCvKlG3kE2gm+uBo6nEXK3M5/Ffh/FLpKExzOQ3JJoJGFKBw==
 
-mixpanel-browser@*, mixpanel-browser@2.84.0:
-  version "2.84.0"
-  resolved "https://registry.yarnpkg.com/mixpanel-browser/-/mixpanel-browser-2.84.0.tgz#5c0a33b9cd8d06102b19330730c37a525b6de9f1"
-  integrity sha512-GFvXNiJ6+0RA9fch6WEZBJL5U8FlHICmYXhKIa+zixeYxudC+BtKAbicMCYzgdekgJHLcPhWHAaARfIaArO1tA==
+mixpanel-browser@*, mixpanel-browser@2.85.0:
+  version "2.85.0"
+  resolved "https://registry.yarnpkg.com/mixpanel-browser/-/mixpanel-browser-2.85.0.tgz#960a04d914a87c41c485b695f28d30f6a0e94e43"
+  integrity sha512-8W9xHj/ki39FtFFIrZh3k4zwB68m1set4cbiZTcGYheGx9vCt1fS3M1tBNlSz74dHej024orjfgWSY5e51KPTQ==
   dependencies:
     "@mixpanel/rrweb" "2.0.0-alpha.18.6"
     "@mixpanel/rrweb-plugin-console-record" "2.0.0-alpha.18.6"
