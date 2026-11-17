@@ -26,6 +26,7 @@ import {
   NEVER_EDITED_TOLERANCE_MS,
   applyRepairs,
   buildManifest,
+  decideApprovedCore,
   decideRepair,
   defaultManifestPath,
   extractManifestPath,
@@ -821,6 +822,7 @@ describe("applyRepairs", () => {
       store,
       ...run,
       asOf: ON_COOP,
+      requireApprovedCore: false,
       clock: steppingClock(),
       log: silent,
     });
@@ -848,6 +850,7 @@ describe("applyRepairs", () => {
         store,
         ...run,
         asOf: ON_COOP,
+        requireApprovedCore: false,
         clock: steppingClock(),
         log: silent,
       });
@@ -880,6 +883,7 @@ describe("applyRepairs", () => {
         store,
         ...run,
         asOf: ON_COOP,
+        requireApprovedCore: false,
         clock: steppingClock(),
         log: silent,
       });
@@ -904,6 +908,7 @@ describe("applyRepairs", () => {
           store,
           ...run,
           asOf: ON_COOP,
+          requireApprovedCore: false,
           clock: steppingClock(),
           log: silent,
         }),
@@ -941,6 +946,7 @@ describe("applyRepairs", () => {
           store,
           ...run,
           asOf: ON_COOP,
+          requireApprovedCore: false,
           clock: steppingClock(),
           log: silent,
         }),
@@ -975,6 +981,7 @@ describe("applyRepairs", () => {
           store,
           ...run,
           asOf: ON_COOP,
+          requireApprovedCore: false,
           clock: steppingClock(),
           log: silent,
         }),
@@ -993,6 +1000,7 @@ describe("applyRepairs", () => {
           store,
           ...run,
           asOf: ON_COOP,
+          requireApprovedCore: false,
           clock: () => new Date("2026-08-01T00:00:00.000Z"),
           log: silent,
         }),
@@ -1027,6 +1035,7 @@ describe("applyRepairs", () => {
             store,
             ...first,
             asOf: ON_COOP,
+            requireApprovedCore: false,
             clock: steppingClock(),
             log: silent,
           }),
@@ -1055,6 +1064,7 @@ describe("applyRepairs", () => {
           manifest,
           manifestFile,
           asOf: ON_COOP,
+          requireApprovedCore: false,
           clock: steppingClock(),
           log: silent,
         });
@@ -1081,6 +1091,7 @@ describe("applyRepairs", () => {
           store,
           ...run,
           asOf: ON_COOP,
+          requireApprovedCore: false,
           clock: steppingClock(),
           log: silent,
         }),
@@ -1104,6 +1115,195 @@ describe("applyRepairs", () => {
 
       expect(rollbackMatches).toEqual(["cs_a", "cs_b"]);
     });
+  });
+});
+
+describe("applyRepairs on a canary, when the row leaves the approved scope after selection", () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  /**
+   * Each change happens after `selectOnly` accepted the row and before the
+   * loop re-reads it, and none of them touches `date_modified` or the two
+   * schedule values — so `decideRepair` and the compare-and-swap both pass
+   * it, and only the approved-core re-check stands in the way.
+   */
+  const scopeChanges: [string, Partial<ScheduleTimeAuditRow>, RegExp][] = [
+    ["becomes a VIEWER", { role: "VIEWER" }, /now a VIEWER/],
+    ["is no longer ACTIVE", { status: "INACTIVE" }, /now INACTIVE/],
+    [
+      "no longer reads as never edited",
+      // Still inside the 2026 EDT window, so the span rule still holds.
+      { dateCreated: new Date("2026-06-01T12:00:00.000Z") },
+      /no longer reads as never edited/,
+    ],
+  ];
+
+  /** A one-row canary whose row is changed by `change` after selection. */
+  const canaryRun = (change: Partial<ScheduleTimeAuditRow>) => {
+    const run = plannedRun(["cs_a"]);
+    const selection = selectOnly(run.candidates, ["cs_a"]);
+    expect(selection.ok).toBe(true);
+
+    const changed = { ...run.candidates[0].row, ...change };
+    return { run, ...fakeStore([changed]) };
+  };
+
+  it("repairs the row when nothing has changed, which is what makes the skips below meaningful", async () => {
+    const { run, store, executed } = canaryRun({});
+
+    const result = await applyRepairs({
+      store,
+      ...run,
+      asOf: ON_COOP,
+      requireApprovedCore: true,
+      clock: steppingClock(),
+      log: silent,
+    });
+
+    expect(result).toEqual({ repaired: 1, skipped: 0, lostRace: 0 });
+    expect(executed).toEqual(["cs_a"]);
+  });
+
+  it.each(scopeChanges)(
+    "skips a row that %s, sends nothing and records why",
+    async (_label, change, reason) => {
+      const { run, store, table, executed } = canaryRun(change);
+
+      const result = await applyRepairs({
+        store,
+        ...run,
+        asOf: ON_COOP,
+        requireApprovedCore: true,
+        clock: steppingClock(),
+        log: silent,
+      });
+
+      expect(result).toEqual({ repaired: 0, skipped: 1, lostRace: 0 });
+      expect(executed).toEqual([]);
+      expect(toSqlTime(table.get("cs_a")?.startTime as Date)).toBe("13:00:00");
+      expect(toSqlTime(table.get("cs_a")?.endTime as Date)).toBe("21:00:00");
+      expect(table.get("cs_a")?.dateModified).toEqual(EDT_2026_JULY);
+      // Refused before the write-ahead step, so no stamp was ever recorded
+      // and the rollback has nothing to match.
+      const entry = readManifest(run.manifestFile).rows[0];
+      expect(entry).toMatchObject({
+        outcome: "skipped",
+        note: expect.stringMatching(reason),
+      });
+      expect(entry.repairStampedAt).toBeUndefined();
+    },
+  );
+
+  it.each(scopeChanges)(
+    "still repairs a row that %s on a full run, whose scope is the span rule",
+    async (_label, change) => {
+      // The control: the full run is unchanged, and the skip above comes
+      // from the approved-core re-check rather than from `decideRepair`.
+      const { run, store, executed } = canaryRun(change);
+
+      const result = await applyRepairs({
+        store,
+        ...run,
+        asOf: ON_COOP,
+        requireApprovedCore: false,
+        clock: steppingClock(),
+        log: silent,
+      });
+
+      expect(result).toEqual({ repaired: 1, skipped: 0, lostRace: 0 });
+      expect(executed).toEqual(["cs_a"]);
+    },
+  );
+
+  it("skips a row edited after selection, which the DST re-check already refuses", async () => {
+    // The realistic way out of "never edited": the owner saves, and
+    // `date_modified` moves. `decideRepair` gives the reason, being first.
+    const { run, store, executed } = canaryRun({
+      dateModified: new Date("2026-08-15T12:00:00.000Z"),
+    });
+
+    const result = await applyRepairs({
+      store,
+      ...run,
+      asOf: ON_COOP,
+      requireApprovedCore: true,
+      clock: steppingClock(),
+      log: silent,
+    });
+
+    expect(result).toEqual({ repaired: 0, skipped: 1, lostRace: 0 });
+    expect(executed).toEqual([]);
+    expect(readManifest(run.manifestFile).rows[0].note).toMatch(
+      /date_modified has moved/,
+    );
+  });
+
+  it("catches a row flipped while an earlier row in the same canary is being written", async () => {
+    const run = plannedRun(["cs_a", "cs_b", "cs_c"]);
+    expect(selectOnly(run.candidates, ["cs_a", "cs_b", "cs_c"]).ok).toBe(true);
+    const { store, table, executed } = fakeStore(
+      run.candidates.map((c) => c.row),
+      {
+        beforeExecute: (id) => {
+          const next = table.get("cs_b");
+          if (id === "cs_a" && next) next.status = "INACTIVE";
+        },
+      },
+    );
+
+    const result = await applyRepairs({
+      store,
+      ...run,
+      asOf: ON_COOP,
+      requireApprovedCore: true,
+      clock: steppingClock(),
+      log: silent,
+    });
+
+    expect(result).toEqual({ repaired: 2, skipped: 1, lostRace: 0 });
+    expect(executed).toEqual(["cs_a", "cs_c"]);
+    expect(toSqlTime(table.get("cs_b")?.startTime as Date)).toBe("13:00:00");
+    expect(
+      readManifest(run.manifestFile).rows.map((row) => row.outcome),
+    ).toEqual(["repaired", "skipped", "repaired"]);
+  });
+});
+
+describe("decideApprovedCore", () => {
+  it("names the criterion that failed", () => {
+    expect(decideApprovedCore(auditRow())).toEqual({ action: "repair" });
+    expect(decideApprovedCore(auditRow({ role: "VIEWER" }))).toEqual({
+      action: "skip",
+      reason: expect.stringMatching(/now a VIEWER/),
+    });
+    expect(decideApprovedCore(auditRow({ status: "INACTIVE" }))).toEqual({
+      action: "skip",
+      reason: expect.stringMatching(/now INACTIVE/),
+    });
+    expect(
+      decideApprovedCore(
+        auditRow({ dateCreated: new Date("2026-06-01T12:00:00.000Z") }),
+      ),
+    ).toEqual({
+      action: "skip",
+      reason: expect.stringMatching(/never edited/),
+    });
+  });
+
+  it("agrees with isApprovedCoreRow, which selection uses", () => {
+    const rows = [
+      auditRow(),
+      auditRow({ role: "RIDER" }),
+      auditRow({ role: "VIEWER" }),
+      auditRow({ status: "INACTIVE" }),
+      auditRow({ dateModified: new Date("2026-08-15T12:00:00.000Z") }),
+    ];
+
+    for (const row of rows) {
+      expect(isApprovedCoreRow(row)).toBe(
+        decideApprovedCore(row).action === "repair",
+      );
+    }
   });
 });
 
@@ -1362,6 +1562,7 @@ describe("a canary, then re-runs", () => {
   const run = async (
     store: RepairStore,
     candidates: DstScheduleRow[],
+    requireApprovedCore: boolean,
     clock: () => Date,
   ) => {
     const manifest = buildManifest(candidates, META);
@@ -1373,6 +1574,7 @@ describe("a canary, then re-runs", () => {
       manifest,
       manifestFile,
       asOf: ON_COOP,
+      requireApprovedCore,
       clock,
       log: silent,
     });
@@ -1390,6 +1592,7 @@ describe("a canary, then re-runs", () => {
     const { result, manifestFile } = await run(
       store,
       selection.selected,
+      true,
       steppingClock(),
     );
 
@@ -1410,7 +1613,7 @@ describe("a canary, then re-runs", () => {
     const { store, table: db } = fakeStore(table());
     const first = selectOnly(plan(db.values()), CANARY);
     if (!first.ok) throw new Error(first.problems.join("; "));
-    await run(store, first.selected, steppingClock());
+    await run(store, first.selected, true, steppingClock());
 
     const again = selectOnly(plan(db.values()), CANARY);
 
@@ -1426,7 +1629,7 @@ describe("a canary, then re-runs", () => {
     const canary = selectOnly(plan(db.values()), CANARY);
     if (!canary.ok) throw new Error(canary.problems.join("; "));
     const clock = steppingClock();
-    await run(store, canary.selected, clock);
+    await run(store, canary.selected, true, clock);
     executed.length = 0;
 
     const remaining = plan(db.values());
@@ -1437,7 +1640,9 @@ describe("a canary, then re-runs", () => {
       "cs_viewer",
     ]);
 
-    const { result } = await run(store, remaining, clock);
+    // A full run: its scope is the span rule, so the VIEWER and the edited
+    // row are repaired here even though no canary could reach them.
+    const { result } = await run(store, remaining, false, clock);
 
     expect(result).toEqual({ repaired: 4, skipped: 0, lostRace: 0 });
     expect(executed).not.toEqual(expect.arrayContaining([CANARY[0]]));

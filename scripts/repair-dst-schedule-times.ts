@@ -107,6 +107,9 @@
  * {@link isApprovedCoreRow}. Anything else refuses the whole run before the
  * manifest is written, so a canary can never touch a row the full run would
  * not, nor a row whose scope is still undecided. It narrows; it never widens.
+ * The approved-scope test is repeated on each row's fresh re-read immediately
+ * before its write, so a row that turns `VIEWER` or `INACTIVE` after selection
+ * is skipped rather than written.
  * An explicit list rather than `--canary N` because a re-run of the same
  * command then *refuses* — the ids are no longer candidates once repaired —
  * instead of quietly taking the next N.
@@ -733,7 +736,9 @@ export type ApplyResult = {
  * The order of those steps is the crash-safety argument, so it is fixed here
  * rather than left to `main`:
  *
- *   1. Re-read and `decideRepair`. A skip is recorded and flushed.
+ *   1. Re-read and `decideRepair`, then — on a canary, `requireApprovedCore`
+ *      — `decideApprovedCore` on the same fresh row. A skip from either is
+ *      recorded and flushed, and nothing is sent.
  *   2. Choose the stamp, record the row as `in-flight` with it, and flush —
  *      **before** the statement is sent. If the flush fails, nothing has been
  *      written and the run stops.
@@ -747,6 +752,11 @@ export type ApplyResult = {
  * A failed statement or a failed flush stops the run rather than moving on.
  * Either means something is wrong with the connection or the disk, and the
  * next row would hit the same thing.
+ *
+ * **`requireApprovedCore` is required, not defaulted**, so a caller cannot
+ * drop the canary's scope check by forgetting to pass it. `main` sets it
+ * exactly when `--only` was given; the full run's scope is the wider span
+ * rule, which `decideRepair` already re-checks.
  */
 export const applyRepairs = async ({
   store,
@@ -754,6 +764,7 @@ export const applyRepairs = async ({
   manifest,
   manifestFile,
   asOf,
+  requireApprovedCore,
   clock = () => new Date(),
   log = console.log,
 }: {
@@ -762,6 +773,7 @@ export const applyRepairs = async ({
   manifest: Manifest;
   manifestFile: string;
   asOf: Date;
+  requireApprovedCore: boolean;
   clock?: () => Date;
   log?: (line: string) => void;
 }): Promise<ApplyResult> => {
@@ -775,7 +787,13 @@ export const applyRepairs = async ({
     // bug.
     const current = await store.readRow(searchId);
 
-    const decision = decideRepair(current, candidate.row, asOf);
+    // The DST checks first, so a row that fails both reports the reason the
+    // full run would also have given. `current` is non-null past a repair
+    // decision — `decideRepair` skips a missing row.
+    let decision = decideRepair(current, candidate.row, asOf);
+    if (decision.action === "repair" && requireApprovedCore && current) {
+      decision = decideApprovedCore(current);
+    }
     if (decision.action === "skip") {
       log(`  search ${searchId}: skipped — ${decision.reason}`);
       recordOutcome(manifest, searchId, "skipped", decision.reason);
@@ -915,18 +933,66 @@ const isNeverEdited = (
  * the ticket was silent on status, and a canary is for rows whose owners will
  * actually see the result.
  *
- * Evaluated at selection time, against the row the plan read. The write's
- * compare-and-swap does not include role or status, so a raw status flip in
- * the seconds between selection and write would not be caught — it would
- * still leave a correctly repaired row, just one outside this core.
+ * Evaluated twice on a canary: by {@link selectOnly} against the row the plan
+ * read, and by `applyRepairs` against the row it re-reads immediately before
+ * that row's write — see {@link decideApprovedCore}, which both go through so
+ * the two cannot drift apart.
  */
-export const isApprovedCoreRow = (
-  row: Pick<
-    ScheduleTimeAuditRow,
-    "role" | "status" | "dateCreated" | "dateModified"
-  >,
-): boolean =>
-  row.role !== "VIEWER" && row.status === "ACTIVE" && isNeverEdited(row);
+export const isApprovedCoreRow = (row: ApprovedCoreFields): boolean =>
+  decideApprovedCore(row).action === "repair";
+
+type ApprovedCoreFields = Pick<
+  ScheduleTimeAuditRow,
+  "role" | "status" | "dateCreated" | "dateModified"
+>;
+
+/**
+ * {@link isApprovedCoreRow} as a decision, naming the criterion that failed.
+ *
+ * **Why the canary re-checks this at write time.** `decideRepair` re-asks the
+ * DST rule and pins `date_modified` and both values to the plan, but none of
+ * that looks at `role` or `status`, and neither does the compare-and-swap. A
+ * row selected as an `ACTIVE` driver can become `INACTIVE` or a `VIEWER` before
+ * the loop reaches it. The admin set-to-viewer mutation in `admin.ts` flips
+ * `role` with a raw `UPDATE` that leaves `date_modified` alone, and the
+ * scheduled deactivation job that flips `status` lives outside this repository,
+ * so what it does to `date_modified` is unknown. Without this the canary would
+ * write a row outside the scope it was approved for.
+ *
+ * The never-edited test is repeated as well. A moved `date_modified` is
+ * already refused by `decideRepair`, so what it adds is a `date_created`
+ * rewritten underneath the plan.
+ *
+ * **What remains:** the read and the statement are still two round trips, so
+ * a role or status change landing between them is not caught. That window is
+ * the gap between `findUnique` returning and `$executeRaw` being sent.
+ */
+export const decideApprovedCore = (row: ApprovedCoreFields): RepairDecision => {
+  if (row.role === "VIEWER") {
+    return {
+      action: "skip",
+      reason: "the row is now a VIEWER, outside SCRUM-725's approved scope",
+    };
+  }
+
+  if (row.status !== "ACTIVE") {
+    return {
+      action: "skip",
+      reason: `the row is now ${row.status}, outside SCRUM-725's approved scope`,
+    };
+  }
+
+  if (!isNeverEdited(row)) {
+    return {
+      action: "skip",
+      reason:
+        "the row no longer reads as never edited since creation, outside " +
+        "SCRUM-725's approved scope",
+    };
+  }
+
+  return { action: "repair" };
+};
 
 /** Characters a `carpool_search` id (a cuid) can contain. */
 const SEARCH_ID = /^[A-Za-z0-9_-]+$/;
@@ -1250,6 +1316,7 @@ const main = async () => {
       manifest,
       manifestFile,
       asOf,
+      requireApprovedCore: onlyIds !== null,
     });
 
     console.log(`\n✓ repaired ${repaired} schedule(s)`);
