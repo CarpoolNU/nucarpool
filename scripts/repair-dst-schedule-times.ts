@@ -361,7 +361,7 @@ export const toSqlDateTime = (at: Date): string => {
  * `date_modified` would be enough *if* every write advanced it, and every
  * application write that changes a schedule does today — `user.edit` goes
  * through `carpoolSearch.update`, so `@updatedAt` moves it. But nothing in
- * the database enforces that: the column has no `ON UPDATE`, four of the
+ * the database enforces that: the column has no `ON UPDATE`, five of the
  * raw `UPDATE carpool_search` statements in `groups.ts` and `admin.ts`
  * already leave it alone, and a console session would too. So the prior
  * values are in the `WHERE` as well.
