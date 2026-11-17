@@ -17,6 +17,7 @@ import {
   CONVERTING_ERA_BEGAN_AT,
   SCHEDULE_FIX_DEPLOYED_AT,
   findDstWrittenScheduleRows,
+  isEasternOffsetEvidenced,
   isProvablyDstWritten,
   toCanonicalFromEdtScheduleTime,
   type ScheduleTimeAuditRow,
@@ -33,6 +34,18 @@ const hhmm = (d: Date) =>
   ).padStart(2, "0")}`;
 
 const ON_COOP = new Date("2026-11-16T12:00:00.000Z");
+
+/**
+ * Coordinates standing in for the three zones production actually holds.
+ *
+ * The two non-Eastern ones are the shapes of the two rows measured on
+ * production on 2026-11-17 — one Central, one Pacific — which the span rule
+ * selects and the repair harms.
+ */
+const BOSTON = { coordLat: 42.34, coordLng: -71.09 };
+const AUSTIN = { coordLat: 30.27, coordLng: -97.74 };
+const SAN_JOSE = { coordLat: 37.34, coordLng: -121.89 };
+const UNSET = { coordLat: 0, coordLng: 0 };
 
 /** EDT instants well inside their windows, and an EST one for contrast. */
 const EDT_2026_JULY = new Date("2026-07-15T12:00:00.000Z");
@@ -55,6 +68,8 @@ const auditRow = (
   endDate: new Date("2026-12-31T00:00:00.000Z"),
   dateCreated: EDT_2026_JULY,
   dateModified: EDT_2026_JULY,
+  companyCoords: BOSTON,
+  homeCoords: BOSTON,
   ...overrides,
 });
 
@@ -176,6 +191,61 @@ describe("isProvablyDstWritten", () => {
   });
 });
 
+describe("isEasternOffsetEvidenced", () => {
+  it("accepts a row whose home and company are both in the Eastern band", () => {
+    expect(
+      isEasternOffsetEvidenced({
+        companyCoords: BOSTON,
+        homeCoords: BOSTON,
+      }),
+    ).toBe(true);
+  });
+
+  it.each([
+    ["Central", AUSTIN],
+    ["Pacific", SAN_JOSE],
+  ])(
+    "rejects a %s row, whose browser applied a different offset",
+    (_label, coords) => {
+      expect(
+        isEasternOffsetEvidenced({ companyCoords: coords, homeCoords: coords }),
+      ).toBe(false);
+    },
+  );
+
+  it("rejects a row where only one of the two is Eastern", () => {
+    expect(
+      isEasternOffsetEvidenced({
+        companyCoords: BOSTON,
+        homeCoords: SAN_JOSE,
+      }),
+    ).toBe(false);
+
+    expect(
+      isEasternOffsetEvidenced({
+        companyCoords: SAN_JOSE,
+        homeCoords: BOSTON,
+      }),
+    ).toBe(false);
+  });
+
+  it("treats an ungeocoded (0, 0) as absence of evidence, not as a location", () => {
+    expect(
+      isEasternOffsetEvidenced({ companyCoords: UNSET, homeCoords: BOSTON }),
+    ).toBe(false);
+  });
+
+  it("rejects a row with a missing location row", () => {
+    expect(
+      isEasternOffsetEvidenced({ companyCoords: null, homeCoords: BOSTON }),
+    ).toBe(false);
+
+    expect(
+      isEasternOffsetEvidenced({ companyCoords: BOSTON, homeCoords: null }),
+    ).toBe(false);
+  });
+});
+
 describe("findDstWrittenScheduleRows", () => {
   it("selects a provable row on a running co-op and pairs it with its repair", () => {
     const row = auditRow();
@@ -208,6 +278,30 @@ describe("findDstWrittenScheduleRows", () => {
     });
 
     expect(findDstWrittenScheduleRows([wallClock], ON_COOP)).toHaveLength(0);
+  });
+
+  it("leaves a non-Eastern row alone however provable its span is", () => {
+    // The Central row measured on production: stored 12:00, which under CDT
+    // is the 7:00 AM its owner typed and is already displayed correctly. Its
+    // timestamps are provably inside one DST window, so only the offset
+    // evidence keeps the repair off it.
+    const central = auditRow({
+      startTime: storedAt(12),
+      endTime: storedAt(22),
+      companyCoords: AUSTIN,
+      homeCoords: AUSTIN,
+    });
+
+    expect(findDstWrittenScheduleRows([central], ON_COOP)).toHaveLength(0);
+
+    const pacific = auditRow({
+      startTime: storedAt(13),
+      endTime: storedAt(22),
+      companyCoords: SAN_JOSE,
+      homeCoords: SAN_JOSE,
+    });
+
+    expect(findDstWrittenScheduleRows([pacific], ON_COOP)).toHaveLength(0);
   });
 
   it("leaves a row with no schedule alone", () => {

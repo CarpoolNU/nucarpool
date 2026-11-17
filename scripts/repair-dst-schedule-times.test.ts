@@ -10,12 +10,24 @@
  * state has moved since the plan was built.
  */
 
+import { mkdtempSync, statSync, readFileSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import {
+  buildManifest,
   decideRepair,
+  defaultManifestPath,
+  extractManifestPath,
   parseArgs,
+  recordOutcome,
+  repairStatement,
   sortById,
   summariseRepair,
+  toSqlDateTime,
+  toSqlTime,
+  writeManifest,
 } from "./repair-dst-schedule-times";
+import { isProvablyDstWritten } from "../src/server/db/dstScheduleIntegrity";
 import type { ScheduleTimeAuditRow } from "../src/server/db/dstScheduleIntegrity";
 import type { DstScheduleRow } from "../src/server/db/dstScheduleIntegrity";
 
@@ -24,6 +36,7 @@ const storedAt = (hour: number, minute = 0) =>
 
 const EDT_2026_JULY = new Date("2026-07-15T12:00:00.000Z");
 const ON_COOP = new Date("2026-11-16T12:00:00.000Z");
+const BOSTON = { coordLat: 42.34, coordLng: -71.09 };
 
 const auditRow = (
   overrides: Partial<ScheduleTimeAuditRow> = {},
@@ -38,6 +51,8 @@ const auditRow = (
   endDate: new Date("2026-12-31T00:00:00.000Z"),
   dateCreated: EDT_2026_JULY,
   dateModified: EDT_2026_JULY,
+  companyCoords: BOSTON,
+  homeCoords: BOSTON,
   ...overrides,
 });
 
@@ -161,5 +176,267 @@ describe("decideRepair", () => {
       action: "skip",
       reason: "the schedule now reads as a wall-clock value",
     });
+  });
+});
+
+describe("toSqlTime", () => {
+  it("reads the stored digits in UTC, not the runner's zone", () => {
+    // CI runs this suite under both UTC and America/New_York. A local
+    // accessor here would send different digits to MySQL on the two runs.
+    expect(toSqlTime(storedAt(14))).toBe("14:00:00");
+    expect(toSqlTime(storedAt(0, 30))).toBe("00:30:00");
+    expect(toSqlTime(storedAt(23, 45))).toBe("23:45:00");
+  });
+});
+
+describe("toSqlDateTime", () => {
+  it("keeps millisecond precision, which the compare-and-swap depends on", () => {
+    expect(toSqlDateTime(new Date("2026-07-15T12:34:56.789Z"))).toBe(
+      "2026-07-15 12:34:56.789",
+    );
+  });
+
+  it("pads every field, including a sub-100ms millisecond", () => {
+    expect(toSqlDateTime(new Date("2026-01-02T03:04:05.006Z"))).toBe(
+      "2026-01-02 03:04:05.006",
+    );
+  });
+});
+
+describe("repairStatement", () => {
+  const stmt = () =>
+    repairStatement(
+      "cs_1",
+      storedAt(14),
+      storedAt(22),
+      new Date("2026-07-15T12:34:56.789Z"),
+    );
+
+  // Structural, because no behavioural test can see these. A statement that
+  // dropped the date_modified assignment would still repair the row; it would
+  // just silently stop being safe to re-run. One that dropped the WHERE term
+  // would still repair the row; it would just silently stop being a
+  // compare-and-swap.
+  it("assigns date_modified, because raw SQL bypasses @updatedAt", () => {
+    expect(stmt().sql).toMatch(/date_modified\s*=\s*NOW\(3\)/);
+  });
+
+  it("puts date_modified in the WHERE, which is what makes it a swap", () => {
+    const where = stmt().sql.split(/WHERE/i)[1];
+
+    expect(where).toBeDefined();
+    expect(where).toMatch(/date_modified\s*=\s*\?/);
+    expect(where).toMatch(/id\s*=\s*\?/);
+  });
+
+  it("binds the values as parameters rather than interpolating them", () => {
+    expect(stmt().values).toEqual([
+      "14:00:00",
+      "22:00:00",
+      "cs_1",
+      "2026-07-15 12:34:56.789",
+    ]);
+  });
+
+  it("writes both columns in the one statement", () => {
+    expect(stmt().sql).toMatch(/start_time\s*=/);
+    expect(stmt().sql).toMatch(/end_time\s*=/);
+  });
+});
+
+describe("rerun safety", () => {
+  it("cannot select a row again once the repair has stamped date_modified", () => {
+    // The property the whole script leans on. A repaired row keeps timestamps
+    // that the span rule would otherwise still accept - 13:00 becomes 14:00,
+    // and July is still July - so what excludes it is date_modified having
+    // moved past the fix cutoff.
+    const beforeRepair = auditRow();
+    expect(isProvablyDstWritten(beforeRepair)).toBe(true);
+
+    const afterRepair = auditRow({ dateModified: new Date() });
+    expect(isProvablyDstWritten(afterRepair)).toBe(false);
+  });
+
+  it("stays excluded even when the repair runs during daylight saving", () => {
+    // A run in July leaves date_modified inside a DST window, so the season
+    // half of the rule still passes. The fix cutoff is what refuses it.
+    const repairedInSummer = auditRow({
+      dateModified: new Date("2027-07-04T12:00:00.000Z"),
+    });
+
+    expect(isProvablyDstWritten(repairedInSummer)).toBe(false);
+  });
+});
+
+describe("extractManifestPath", () => {
+  it("pulls the path out and leaves the rest for the shared parser", () => {
+    expect(extractManifestPath(["--apply", "--manifest", "run.json"])).toEqual({
+      manifestPath: "run.json",
+      rest: ["--apply"],
+    });
+  });
+
+  it("returns no path when the flag is absent", () => {
+    expect(extractManifestPath(["--apply"])).toEqual({
+      manifestPath: null,
+      rest: ["--apply"],
+    });
+  });
+
+  it("throws rather than swallowing the next flag as a path", () => {
+    expect(() => extractManifestPath(["--manifest", "--apply"])).toThrow(
+      /--manifest expects a path/,
+    );
+    expect(() => extractManifestPath(["--manifest"])).toThrow(
+      /--manifest expects a path/,
+    );
+  });
+
+  it("leaves an unknown argument for the shared parser to reject", () => {
+    const { rest } = extractManifestPath(["--force"]);
+
+    expect(() => parseArgs(rest)).toThrow(/unknown argument/);
+  });
+});
+
+describe("defaultManifestPath", () => {
+  it("is timestamped, so two runs never collide", () => {
+    const path = defaultManifestPath(new Date("2026-11-17T15:04:05.123Z"));
+
+    expect(path).toBe("dst-schedule-repair-2026-11-17T15-04-05-123Z.json");
+    expect(path).not.toContain(":");
+  });
+});
+
+describe("buildManifest", () => {
+  const meta = {
+    asOf: ON_COOP,
+    mode: "apply" as const,
+    now: new Date("2026-11-17T15:00:00.000Z"),
+  };
+
+  it("records the prior and proposed value of every row", () => {
+    const manifest = buildManifest([candidate("cs_1")], meta);
+
+    expect(manifest.rows).toHaveLength(1);
+    expect(manifest.rows[0]).toMatchObject({
+      searchId: "cs_1",
+      userId: "u_1",
+      priorStartTime: "13:00:00",
+      priorEndTime: "21:00:00",
+      proposedStartTime: "14:00:00",
+      proposedEndTime: "22:00:00",
+      outcome: "pending",
+    });
+  });
+
+  it("records the date_modified the compare-and-swap is keyed on", () => {
+    const manifest = buildManifest([candidate("cs_1")], meta);
+
+    expect(manifest.rows[0].dateModifiedAtPlan).toBe(
+      EDT_2026_JULY.toISOString(),
+    );
+    expect(manifest.rows[0].dateCreated).toBe(EDT_2026_JULY.toISOString());
+  });
+
+  it("marks a dry run as such, so a plan is never mistaken for a record of writes", () => {
+    const manifest = buildManifest([candidate("cs_1")], {
+      ...meta,
+      mode: "dry-run",
+    });
+
+    expect(manifest.mode).toBe("dry-run");
+    expect(manifest.rows[0].outcome).toBe("dry-run");
+  });
+
+  it("carries rollback instructions that do not restore date_modified", () => {
+    const manifest = buildManifest([candidate("cs_1")], meta);
+
+    expect(manifest.rollback).toMatch(/UPDATE carpool_search/);
+    expect(manifest.rollback).toMatch(/Do NOT restore date_modified/);
+  });
+
+  it("describes every candidate before any of them is written", () => {
+    const manifest = buildManifest(
+      [candidate("cs_1"), candidate("cs_2"), candidate("cs_3")],
+      meta,
+    );
+
+    expect(manifest.candidateCount).toBe(3);
+    expect(manifest.rows.map((row) => row.outcome)).toEqual([
+      "pending",
+      "pending",
+      "pending",
+    ]);
+  });
+});
+
+describe("recordOutcome", () => {
+  const manifest = () =>
+    buildManifest([candidate("cs_1"), candidate("cs_2")], {
+      asOf: ON_COOP,
+      mode: "apply",
+      now: new Date("2026-11-17T15:00:00.000Z"),
+    });
+
+  it("resolves one row and leaves the others pending", () => {
+    const m = manifest();
+
+    expect(recordOutcome(m, "cs_1", "repaired")).toBe(true);
+    expect(m.rows[0].outcome).toBe("repaired");
+    expect(m.rows[1].outcome).toBe("pending");
+  });
+
+  it("keeps the reason a row was skipped", () => {
+    const m = manifest();
+    recordOutcome(m, "cs_2", "skipped", "the co-op is no longer running");
+
+    expect(m.rows[1]).toMatchObject({
+      outcome: "skipped",
+      note: "the co-op is no longer running",
+    });
+  });
+
+  it("leaves a partial run's untouched rows at pending", () => {
+    // What a crash after the first row looks like on disk: row one resolved,
+    // row two still pending and still carrying its prior values.
+    const m = manifest();
+    recordOutcome(m, "cs_1", "failed", "connection lost");
+
+    expect(m.rows.map((row) => row.outcome)).toEqual(["failed", "pending"]);
+    expect(m.rows[1].priorStartTime).toBe("13:00:00");
+  });
+
+  it("reports an id it does not hold rather than inventing a row", () => {
+    expect(recordOutcome(manifest(), "cs_missing", "repaired")).toBe(false);
+  });
+});
+
+describe("writeManifest", () => {
+  const manifest = () =>
+    buildManifest([candidate("cs_1")], {
+      asOf: ON_COOP,
+      mode: "apply",
+      now: new Date("2026-11-17T15:00:00.000Z"),
+    });
+
+  it("writes the record at mode 0600, since it holds a user id per row", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "dst-manifest-")), "run.json");
+
+    writeManifest(path, manifest());
+
+    // Low nine bits only: the file type bits are not what this is about.
+    expect(statSync(path).mode & 0o777).toBe(0o600);
+    expect(JSON.parse(readFileSync(path, "utf8")).rows[0].searchId).toBe(
+      "cs_1",
+    );
+  });
+
+  it("refuses an existing path rather than destroying a previous rollback record", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "dst-manifest-")), "run.json");
+    writeFileSync(path, "{}");
+
+    expect(() => writeManifest(path, manifest())).toThrow();
+    expect(readFileSync(path, "utf8")).toBe("{}");
   });
 });
