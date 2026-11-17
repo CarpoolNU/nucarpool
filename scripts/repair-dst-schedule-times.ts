@@ -44,14 +44,27 @@
  *   - Every candidate is re-checked immediately before its own write, against
  *     a row read after the plan was built, so somebody who retyped their
  *     schedule in between keeps what they entered.
- *   - **The write itself is a compare-and-swap on `date_modified`**, so the
- *     re-check cannot be raced. The re-read above narrows the window; it does
- *     not close it, and a profile save landing inside it would otherwise be
- *     overwritten by a value computed from the stale read.
+ *   - **The write itself is a compare-and-swap on the plan's snapshot** —
+ *     `date_modified` *and* both schedule values exactly as the plan read
+ *     them — so the re-check cannot be raced. The re-read above narrows the
+ *     window; it does not close it, and a profile save landing inside it would
+ *     otherwise be overwritten by a value computed from the stale read. The
+ *     values are compared as well as the timestamp because nothing in the
+ *     database makes a write advance `date_modified`: Prisma's `@updatedAt`
+ *     does it for Prisma's own writes, and raw SQL — several of the existing
+ *     `UPDATE carpool_search` statements, any console session — does not.
  *   - **A rollback manifest is written before the first write**, at mode
  *     `0600`, and updated as each row resolves. Both columns are overwritten
  *     in place and there is no history table, so without it a closed terminal
- *     is an unrecoverable repair.
+ *     is an unrecoverable repair. Every update is an atomic replace — a
+ *     fsynced sibling file renamed over the old one — so a crash or a full
+ *     disk mid-update leaves the previous complete record, never a truncated
+ *     one.
+ *   - **Write-ahead, per row.** The `date_modified` a row is about to be
+ *     stamped with is recorded, as `in-flight`, before its statement is sent.
+ *     A run that dies at any point therefore leaves every row it may have
+ *     written identifiable: the rollback matches on that stamp, not on the
+ *     outcome the run managed to record.
  *   - Refuses to proceed when the candidate count exceeds `--max`. The default
  *     is deliberately above the ~221 expected and well below a count that
  *     could only mean the rule is wrong.
@@ -77,9 +90,16 @@
  * **That guarantee now rests on one line of SQL.** The write is raw, and raw
  * SQL bypasses Prisma's `@updatedAt` — the column has no
  * `ON UPDATE CURRENT_TIMESTAMP` behind it, as `SHOW COLUMNS` confirms. So the
- * statement assigns `date_modified = NOW(3)` by hand. Drop that assignment and
- * nothing breaks visibly: the repair still writes, and every future run
- * re-selects and re-repairs the same rows, adding an hour each time.
+ * statement assigns `date_modified` by hand, to a stamp the script chooses and
+ * records in the manifest first, and refuses to build a statement whose stamp
+ * is not past the fix cutoff. Drop that assignment and nothing breaks visibly:
+ * the repair still writes, and every future run re-selects and re-repairs the
+ * same rows, adding an hour each time.
+ *
+ * **Recovering from a run that stopped part-way** is a re-run with a new
+ * `--manifest`: rows it wrote carry the stamp and cannot be selected again,
+ * and rows it never reached still can. Undoing one is the manifest's
+ * `rollback` instructions.
  *
  * Usage:
  *   npx ts-node scripts/repair-dst-schedule-times.ts            # report only
@@ -95,9 +115,23 @@
  * script does not print it.
  */
 
-import { existsSync, writeFileSync } from "fs";
+import { randomBytes } from "crypto";
+import {
+  closeSync,
+  existsSync,
+  fchmodSync,
+  fsyncSync,
+  linkSync,
+  openSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "fs";
+import { basename, dirname, join } from "path";
 import { Prisma, PrismaClient } from "@prisma/client";
 import {
+  SCHEDULE_FIX_DEPLOYED_AT,
   findDstWrittenScheduleRows,
   isProvablyDstWritten,
   type DstScheduleRow,
@@ -111,9 +145,9 @@ import { formatScheduleTime } from "../src/utils/scheduleTime";
 import { createParseArgs } from "./lib/parseArgs";
 
 /**
- * Above the 210 rows production held when this was written, with room for the
- * set to have grown a little, and far below a count that could only mean the
- * selection rule has broken. Higher than the wall-clock repair's 50 because
+ * Above the 221 rows production held when this was measured on 2026-11-17 (see
+ * the module docstring), with room for the set to have grown a little, and far
+ * below a count that could only mean the selection rule has broken. Higher than the wall-clock repair's 50 because
  * the population is genuinely larger, not because the guard matters less.
  */
 const DEFAULT_MAX = 300;
@@ -189,6 +223,15 @@ export type RepairDecision =
   { action: "repair" } | { action: "skip"; reason: string };
 
 /**
+ * Whether two stored `TIME(0)` values hold the same digits.
+ *
+ * Compared as the digits `repairStatement` binds rather than as instants, so
+ * this refuses exactly what the statement's `WHERE` would.
+ */
+const sameStoredTime = (a: Date | null, b: Date | null): boolean =>
+  a !== null && b !== null && toSqlTime(a) === toSqlTime(b);
+
+/**
  * The re-check that runs against a row read *after* the plan was built, once
  * per row, immediately before its own write.
  *
@@ -199,9 +242,19 @@ export type RepairDecision =
  * than a second, weaker one. The co-op and wall-clock checks are re-run for
  * the same reason: anything that would have excluded the row at planning time
  * must still exclude it now.
+ *
+ * **`planned` is the row as the plan read it**, and the repaired value was
+ * computed from it. So the current row must still *be* that row — same
+ * `date_modified`, same two values — not merely still pass the rule. A write
+ * that changed a value without advancing `date_modified` (raw SQL, which
+ * bypasses `@updatedAt`) would otherwise pass every check above and be
+ * overwritten by a value computed from what it replaced. `repairStatement`
+ * enforces the same snapshot in its `WHERE`; this is the early, explained
+ * refusal, and that is the one that cannot be raced.
  */
 export const decideRepair = (
   current: ScheduleTimeAuditRow | null,
+  planned: Pick<ScheduleTimeAuditRow, "startTime" | "endTime" | "dateModified">,
   asOf: Date,
 ): RepairDecision => {
   if (!current) {
@@ -216,6 +269,25 @@ export const decideRepair = (
     return {
       action: "skip",
       reason: "the row has been saved since the plan was built",
+    };
+  }
+
+  if (current.dateModified.getTime() !== planned.dateModified.getTime()) {
+    return {
+      action: "skip",
+      reason: "date_modified has moved since the plan was built",
+    };
+  }
+
+  if (
+    !sameStoredTime(current.startTime, planned.startTime) ||
+    !sameStoredTime(current.endTime, planned.endTime)
+  ) {
+    return {
+      action: "skip",
+      reason:
+        "the schedule values changed since the plan was built without " +
+        "date_modified moving",
     };
   }
 
@@ -283,31 +355,82 @@ export const toSqlDateTime = (at: Date): string => {
  * and `groups.ts` reach for the same raw primitive for the same reason, and
  * both say so at length.
  *
- * **`date_modified = NOW(3)` is assigned explicitly** because raw SQL bypasses
+ * **The swap is on the plan's whole snapshot, not on `date_modified`
+ * alone.** The repaired value is computed from the plan's two stored values,
+ * so the statement must only land on a row that still holds them. Keying on
+ * `date_modified` would be enough *if* every write advanced it, and every
+ * application write that changes a schedule does today — `user.edit` goes
+ * through `carpoolSearch.update`, so `@updatedAt` moves it. But nothing in
+ * the database enforces that: the column has no `ON UPDATE`, four of the
+ * raw `UPDATE carpool_search` statements in `groups.ts` and `admin.ts`
+ * already leave it alone, and a console session would too. So the prior
+ * values are in the `WHERE` as well.
+ *
+ * **`date_modified` is assigned explicitly** because raw SQL bypasses
  * `@updatedAt` and the column carries no `ON UPDATE CURRENT_TIMESTAMP`. That
  * assignment is the whole of the rerun guarantee — see the module docstring.
+ * It is a value the caller chose and recorded in the manifest *before* sending
+ * this, rather than `NOW(3)`, so a run that dies before it can record an
+ * outcome still leaves the rollback an exact predicate for "this run wrote
+ * this row and nobody has touched it since". A stamp at or before the fix
+ * cutoff would leave the row selectable, so it is refused here, where no
+ * caller can skip the check.
  *
  * Returned rather than executed so the test can read `.sql` and `.values`
  * directly. A behavioural test cannot see a missing `SET date_modified`; the
  * run would still look correct and quietly stop being idempotent.
  */
 export const repairStatement = (
-  id: string,
-  startTime: Date,
-  endTime: Date,
-  expectedDateModified: Date,
-): Prisma.Sql => Prisma.sql`
-    UPDATE carpool_search
-    SET start_time = ${toSqlTime(startTime)},
-        end_time = ${toSqlTime(endTime)},
-        date_modified = NOW(3)
-    WHERE id = ${id}
-      AND date_modified = ${toSqlDateTime(expectedDateModified)}
-  `;
+  planned: Pick<
+    ScheduleTimeAuditRow,
+    "id" | "startTime" | "endTime" | "dateModified"
+  >,
+  repair: { startTime: Date; endTime: Date },
+  stampedAt: Date,
+): Prisma.Sql => {
+  if (stampedAt.getTime() <= SCHEDULE_FIX_DEPLOYED_AT.getTime()) {
+    throw new Error(
+      `refusing to stamp date_modified at ${stampedAt.toISOString()}: it ` +
+        `must be after ${SCHEDULE_FIX_DEPLOYED_AT.toISOString()} or the row ` +
+        `stays selectable and a re-run repairs it twice. Check this ` +
+        `machine's clock.`,
+    );
+  }
 
-/** How one row ended up, as the manifest records it. */
+  if (!planned.startTime || !planned.endTime) {
+    throw new Error(`search ${planned.id} has no schedule to repair`);
+  }
+
+  return Prisma.sql`
+    UPDATE carpool_search
+    SET start_time = ${toSqlTime(repair.startTime)},
+        end_time = ${toSqlTime(repair.endTime)},
+        date_modified = ${toSqlDateTime(stampedAt)}
+    WHERE id = ${planned.id}
+      AND date_modified = ${toSqlDateTime(planned.dateModified)}
+      AND start_time = ${toSqlTime(planned.startTime)}
+      AND end_time = ${toSqlTime(planned.endTime)}
+  `;
+};
+
+/**
+ * How one row ended up, as the manifest records it.
+ *
+ * `in-flight` is written *before* a row's statement is sent and replaced once
+ * it returns, so a row left at `in-flight` is one the run may or may not have
+ * written — the run died in between. `failed` is the same uncertainty with an
+ * error to show for it: a connection lost after the commit fails the call too.
+ * Neither is resolved by guessing; the rollback's `date_modified` predicate
+ * says which of them actually landed.
+ */
 export type ManifestOutcome =
-  "pending" | "dry-run" | "repaired" | "skipped" | "lost-race" | "failed";
+  | "pending"
+  | "dry-run"
+  | "in-flight"
+  | "repaired"
+  | "skipped"
+  | "lost-race"
+  | "failed";
 
 export type ManifestRow = {
   searchId: string;
@@ -319,13 +442,19 @@ export type ManifestRow = {
   priorEndTime: string;
   proposedStartTime: string;
   proposedEndTime: string;
+  /**
+   * The `date_modified` this run writes onto the row, recorded before the
+   * statement is sent. Absent until the run reaches the row.
+   */
+  repairStampedAt?: string;
   outcome: ManifestOutcome;
   note?: string;
 };
 
 export type Manifest = {
   script: "repair-dst-schedule-times";
-  manifestVersion: 1;
+  /** 2 added `repairStampedAt` and the `in-flight` outcome. */
+  manifestVersion: 2;
   generatedAt: string;
   asOf: string;
   mode: "dry-run" | "apply";
@@ -340,15 +469,30 @@ export type Manifest = {
  * remembered. `date_modified` is deliberately *not* restored: putting it back
  * would make the row selectable again, so a rollback would be undone by the
  * next run of this script.
+ *
+ * **Keyed on the stamp, not on the recorded outcome.** A run that died between
+ * a write and the flush that would have recorded it leaves that row at
+ * `in-flight` or `failed`, so "rows marked repaired" misses exactly the rows a
+ * crash makes uncertain. And the two value predicates alone are not enough:
+ * an owner who retyped their schedule after the repair stores the same
+ * canonical value the repair did, and a value-only rollback would put the
+ * broken one back over what they typed. The stamp is the run's own
+ * fingerprint, so it matches only rows this run wrote and nobody has saved
+ * since.
  */
 const ROLLBACK_INSTRUCTIONS =
-  "To undo: for each row with outcome 'repaired', run " +
-  "UPDATE carpool_search SET start_time = <priorStartTime>, " +
+  "To undo: for each row with outcome 'repaired', 'in-flight' or 'failed', " +
+  "run UPDATE carpool_search SET start_time = <priorStartTime>, " +
   "end_time = <priorEndTime> WHERE id = <searchId> AND " +
-  "start_time = <proposedStartTime> AND end_time = <proposedEndTime>. " +
-  "The two value predicates make it a compare-and-swap, so a row its owner " +
-  "has edited since the repair is left alone. Do NOT restore date_modified: " +
-  "leaving it at the repair's value is what keeps the row out of a later run.";
+  "start_time = <proposedStartTime> AND end_time = <proposedEndTime> AND " +
+  "date_modified = <repairStampedAt> (as 'YYYY-MM-DD HH:MM:SS.mmm' UTC). " +
+  "A row whose write never landed, or whose owner has saved since, does " +
+  "not match and is left alone - so 'in-flight' and 'failed' rows are safe " +
+  "to include whatever actually happened to them. Do NOT restore " +
+  "date_modified: leaving it at the repair's value is what keeps the row " +
+  "out of a later run. To finish a run that stopped part-way instead, " +
+  "re-run the script with a new --manifest: the rows it wrote are no " +
+  "longer selectable and the rest still are.";
 
 /**
  * The rollback record for a planned run.
@@ -363,7 +507,7 @@ export const buildManifest = (
   meta: { asOf: Date; mode: "dry-run" | "apply"; now: Date },
 ): Manifest => ({
   script: "repair-dst-schedule-times",
-  manifestVersion: 1,
+  manifestVersion: 2,
   generatedAt: meta.now.toISOString(),
   asOf: meta.asOf.toISOString(),
   mode: meta.mode,
@@ -388,6 +532,7 @@ export const recordOutcome = (
   searchId: string,
   outcome: ManifestOutcome,
   note?: string,
+  repairStampedAt?: Date,
 ): boolean => {
   const entry = manifest.rows.find((row) => row.searchId === searchId);
   if (!entry) {
@@ -397,6 +542,9 @@ export const recordOutcome = (
   entry.outcome = outcome;
   if (note !== undefined) {
     entry.note = note;
+  }
+  if (repairStampedAt !== undefined) {
+    entry.repairStampedAt = repairStampedAt.toISOString();
   }
 
   return true;
@@ -410,32 +558,270 @@ export const recordOutcome = (
 export const defaultManifestPath = (now: Date): string =>
   `dst-schedule-repair-${now.toISOString().replace(/[:.]/g, "-")}.json`;
 
+/** The mode a new manifest is created at: it holds a user id per row. */
+const MANIFEST_MODE = 0o600;
+
+const serialiseManifest = (manifest: Manifest): string =>
+  `${JSON.stringify(manifest, null, 2)}\n`;
+
 /**
- * Writes the manifest at mode `0600`.
+ * Writes `contents` to a new, uniquely named file beside `target`, at exactly
+ * `mode`, flushed to disk. Returns its path. On any failure the partial file
+ * is removed and the error rethrown; `target` is never opened.
  *
- * **Refuses an existing path.** `mode` is only applied when the file is
- * created, so writing over one that already exists would silently inherit its
- * permissions — and, worse, destroy the rollback record of whichever run
- * produced it. The caller passes a timestamped default for that reason.
+ * Beside the target rather than in a temp directory because `rename` is only
+ * atomic within one filesystem. `fchmod` after `open` because the `open` mode
+ * is filtered through the process umask, and a umask is not something an
+ * operator's shell can be trusted to have set sensibly.
+ */
+const writeDurableSibling = (
+  target: string,
+  contents: string,
+  mode: number,
+): string => {
+  const temp = join(
+    dirname(target),
+    `.${basename(target)}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`,
+  );
+
+  let fd: number | undefined;
+  try {
+    // `wx`: a name collision is refused rather than written through.
+    fd = openSync(temp, "wx", mode);
+    fchmodSync(fd, mode);
+    writeFileSync(fd, contents);
+    fsyncSync(fd);
+    closeSync(fd);
+    fd = undefined;
+    return temp;
+  } catch (error) {
+    if (fd !== undefined) {
+      try {
+        closeSync(fd);
+      } catch {
+        // Already failing; the original error is the one worth reporting.
+      }
+    }
+    rmSync(temp, { force: true });
+    throw error;
+  }
+};
+
+/**
+ * Makes a rename or link inside `dir` durable. Without it the new name can be
+ * lost on power failure even though the file's contents were fsynced.
+ *
+ * Skipped on Windows, which cannot open a directory for fsync.
+ */
+const fsyncDirectory = (dir: string): void => {
+  if (process.platform === "win32") {
+    return;
+  }
+
+  const fd = openSync(dir, "r");
+  try {
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+};
+
+/**
+ * Creates the manifest at mode `0600`, atomically.
+ *
+ * **Refuses an existing path**, which would be the rollback record of
+ * whichever run produced it. The contents go to a fsynced sibling first and
+ * are then hard-linked into place: `link` fails if the name is taken, so the
+ * refusal and the creation are one step with no window between them, and the
+ * name never points at a partially written file.
  *
  * It holds a user id per row, which is why it is `0600` and why it belongs
  * somewhere deliberate rather than in a shared temp directory.
  */
 export const writeManifest = (path: string, manifest: Manifest): void => {
-  writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`, {
-    mode: 0o600,
-    // Fails rather than truncating if the path is taken. Re-flushing the same
-    // run's manifest goes through `flushManifest`, which has already created
-    // it.
-    flag: "wx",
-  });
+  const temp = writeDurableSibling(
+    path,
+    serialiseManifest(manifest),
+    MANIFEST_MODE,
+  );
+
+  try {
+    linkSync(temp, path);
+  } finally {
+    rmSync(temp, { force: true });
+  }
+
+  fsyncDirectory(dirname(path));
 };
 
-/** Rewrites a manifest this run already created, as outcomes resolve. */
-const flushManifest = (path: string, manifest: Manifest): void => {
-  writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`, {
-    mode: 0o600,
-  });
+/**
+ * Replaces a manifest this run already created, as outcomes resolve.
+ *
+ * **Atomic, so the last valid record survives anything.** Truncating the file
+ * and writing it again — what a plain `writeFileSync` does — leaves an empty or
+ * half-written file if the process dies, the disk fills, or the write throws
+ * part-way, and at that moment the only record of which rows were rewritten is
+ * gone. Here the new contents are written and fsynced to a sibling and then
+ * renamed over the old file, so at every instant the path holds either the
+ * previous complete manifest or the new complete one. A failure before the
+ * rename removes the sibling and leaves the previous record exactly as it was.
+ *
+ * **Preserves the existing file's permission bits** rather than resetting
+ * them: if an operator has tightened the record mid-run, a flush does not
+ * loosen it again. A manifest that has gone missing is an error rather than
+ * something to recreate — the run's record has been moved by somebody, and
+ * carrying on writing rows without knowing where it went is the wrong answer.
+ */
+export const replaceManifest = (path: string, manifest: Manifest): void => {
+  const contents = serialiseManifest(manifest);
+  const mode = statSync(path).mode & 0o777;
+  const temp = writeDurableSibling(path, contents, mode);
+
+  try {
+    renameSync(temp, path);
+  } catch (error) {
+    rmSync(temp, { force: true });
+    throw error;
+  }
+
+  fsyncDirectory(dirname(path));
+};
+
+/**
+ * The reads and the write `applyRepairs` needs, so the loop can be driven by a
+ * test without a database. `main` supplies the Prisma-backed one.
+ */
+export type RepairStore = {
+  readRow: (searchId: string) => Promise<ScheduleTimeAuditRow | null>;
+  execute: (statement: Prisma.Sql) => Promise<number>;
+};
+
+export type ApplyResult = {
+  repaired: number;
+  skipped: number;
+  lostRace: number;
+};
+
+/**
+ * The write half of a run: one candidate at a time, re-read, re-checked,
+ * recorded, written, recorded again.
+ *
+ * The order of those steps is the crash-safety argument, so it is fixed here
+ * rather than left to `main`:
+ *
+ *   1. Re-read and `decideRepair`. A skip is recorded and flushed.
+ *   2. Choose the stamp, record the row as `in-flight` with it, and flush —
+ *      **before** the statement is sent. If the flush fails, nothing has been
+ *      written and the run stops.
+ *   3. Send the compare-and-swap.
+ *   4. Record `repaired`, `lost-race` or `failed`, and flush.
+ *
+ * A crash between any two of those leaves a manifest on disk that is complete
+ * and true: `pending` rows were never sent, and every row that might have been
+ * written carries the stamp its rollback matches on.
+ *
+ * A failed statement or a failed flush stops the run rather than moving on.
+ * Either means something is wrong with the connection or the disk, and the
+ * next row would hit the same thing.
+ */
+export const applyRepairs = async ({
+  store,
+  candidates,
+  manifest,
+  manifestFile,
+  asOf,
+  clock = () => new Date(),
+  log = console.log,
+}: {
+  store: RepairStore;
+  candidates: readonly DstScheduleRow[];
+  manifest: Manifest;
+  manifestFile: string;
+  asOf: Date;
+  clock?: () => Date;
+  log?: (line: string) => void;
+}): Promise<ApplyResult> => {
+  const result: ApplyResult = { repaired: 0, skipped: 0, lostRace: 0 };
+
+  for (const candidate of candidates) {
+    const searchId = candidate.row.id;
+
+    // Re-read. Between building the plan and getting here the user may have
+    // retyped their schedule, and overwriting that would be worse than the
+    // bug.
+    const current = await store.readRow(searchId);
+
+    const decision = decideRepair(current, candidate.row, asOf);
+    if (decision.action === "skip") {
+      log(`  search ${searchId}: skipped — ${decision.reason}`);
+      recordOutcome(manifest, searchId, "skipped", decision.reason);
+      replaceManifest(manifestFile, manifest);
+      result.skipped++;
+      continue;
+    }
+
+    // Built before anything is recorded, so a stamp `repairStatement` refuses
+    // stops the run with the row still at `pending`.
+    const stampedAt = clock();
+    const statement = repairStatement(
+      candidate.row,
+      {
+        startTime: candidate.repairStartTime,
+        endTime: candidate.repairEndTime,
+      },
+      stampedAt,
+    );
+
+    // Write-ahead: the stamp is on disk before the statement that writes it
+    // is sent.
+    recordOutcome(manifest, searchId, "in-flight", undefined, stampedAt);
+    replaceManifest(manifestFile, manifest);
+
+    log(
+      `  search ${searchId}: ` +
+        `${iso(candidate.row.startTime)}-${iso(candidate.row.endTime)} → ` +
+        `${iso(candidate.repairStartTime)}-${iso(candidate.repairEndTime)}`,
+    );
+
+    // Both columns in one statement, so an interrupted run never leaves a row
+    // with a repaired start and an unrepaired end — which would be a schedule
+    // nobody entered and no reading explains.
+    let affected: number;
+    try {
+      affected = await store.execute(statement);
+    } catch (error) {
+      // Recorded and flushed before rethrowing, so the manifest describes the
+      // row the run died on. Not "not written": a connection lost after the
+      // commit fails this call too, which is why the stamp stays recorded.
+      recordOutcome(
+        manifest,
+        searchId,
+        "failed",
+        `outcome unknown: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      replaceManifest(manifestFile, manifest);
+      throw error;
+    }
+
+    if (affected === 0) {
+      // The row moved between the re-read and this statement. Rare, and
+      // exactly the case the compare-and-swap exists for.
+      log(
+        `  search ${searchId}: skipped — the row was saved while this ` +
+          `statement was being prepared`,
+      );
+      recordOutcome(manifest, searchId, "lost-race");
+      replaceManifest(manifestFile, manifest);
+      result.lostRace++;
+      continue;
+    }
+
+    recordOutcome(manifest, searchId, "repaired");
+    replaceManifest(manifestFile, manifest);
+    result.repaired++;
+  }
+
+  return result;
 };
 
 /**
@@ -475,6 +861,24 @@ export const extractManifestPath = (
  * by accident.
  */
 export const parseArgs = createParseArgs(DEFAULT_MAX);
+
+/**
+ * What a run that exceeds `--max` prints before refusing.
+ *
+ * **No row count of its own.** It used to quote the size of the population
+ * when the script was written, and that number was wrong by the time it
+ * shipped — 210 where production held 221 — and would only have drifted
+ * further: the pool can only shrink as people edit their profiles. A stale
+ * figure in a refusal is worse than none, because it is the number an
+ * operator compares against when deciding whether to raise `--max`. The
+ * measured count, with its date, lives in the module docstring.
+ */
+export const maxRefusalMessage = (rowCount: number, max: number): string =>
+  `✖ ${rowCount} candidate(s) exceeds --max ${max}. Refusing to run, and ` +
+  `not listing them. The default ceiling sits just above the count measured ` +
+  `when this script was reviewed, so a count above it means the data or the ` +
+  `selection rule has changed. Find out which before re-running with a ` +
+  `higher --max.`;
 
 /** The stored digits, read in UTC because that is how the column is stored. */
 const iso = (time: Date | null): string =>
@@ -572,12 +976,7 @@ const main = async () => {
     // carries a user id, and dumping hundreds of them to a terminal is not
     // something to do on the way to refusing the run anyway.
     if (rowCount > max) {
-      console.error(
-        `\n✖ ${rowCount} candidate(s) exceeds --max ${max}. Refusing to run, ` +
-          `and not listing them. 210 rows matched when this was written, so ` +
-          `a count much larger means the data or the selection rule has ` +
-          `changed. Confirm this is expected, then re-run with a higher --max.`,
-      );
+      console.error(`\n${maxRefusalMessage(rowCount, max)}`);
       process.exitCode = 2;
       return;
     }
@@ -609,84 +1008,22 @@ const main = async () => {
       return;
     }
 
-    let repaired = 0;
-    let skipped = 0;
-    let lostRace = 0;
-
-    for (const candidate of candidates) {
-      // Re-read. Between building the plan and getting here the user may have
-      // retyped their schedule, and overwriting that would be worse than the
-      // bug.
-      const current = await prisma.carpoolSearch.findUnique({
-        where: { id: candidate.row.id },
-        select: AUDIT_SELECT,
-      });
-
-      const decision = decideRepair(current ? toAuditRow(current) : null, asOf);
-      if (decision.action === "skip") {
-        console.log(
-          `  search ${candidate.row.id}: skipped — ${decision.reason}`,
-        );
-        recordOutcome(manifest, candidate.row.id, "skipped", decision.reason);
-        flushManifest(manifestFile, manifest);
-        skipped++;
-        continue;
-      }
-
-      console.log(
-        `  search ${candidate.row.id}: ` +
-          `${iso(candidate.row.startTime)}-${iso(candidate.row.endTime)} → ` +
-          `${iso(candidate.repairStartTime)}-${iso(candidate.repairEndTime)}`,
-      );
-
-      // Both columns in one statement, so an interrupted run never leaves a
-      // row with a repaired start and an unrepaired end — which would be a
-      // schedule nobody entered and no reading explains.
-      //
-      // Keyed on the `date_modified` of the row just re-read, so a save that
-      // commits between that read and this statement makes the WHERE miss
-      // rather than losing what the user typed. `current` is non-null here:
-      // `decideRepair` returned "repair".
-      let affected: number;
-      try {
-        affected = await prisma.$executeRaw(
-          repairStatement(
-            candidate.row.id,
-            candidate.repairStartTime,
-            candidate.repairEndTime,
-            (current as { dateModified: Date }).dateModified,
-          ),
-        );
-      } catch (error) {
-        // Recorded and flushed before rethrowing, so the manifest describes
-        // the row the run died on rather than leaving it at "pending".
-        recordOutcome(
-          manifest,
-          candidate.row.id,
-          "failed",
-          error instanceof Error ? error.message : String(error),
-        );
-        flushManifest(manifestFile, manifest);
-        throw error;
-      }
-
-      if (affected === 0) {
-        // The row moved between the re-read and this statement. Rare, and
-        // exactly the case the compare-and-swap exists for.
-        console.log(
-          `  search ${candidate.row.id}: skipped — the row was saved while ` +
-            `this statement was being prepared`,
-        );
-        recordOutcome(manifest, candidate.row.id, "lost-race");
-        flushManifest(manifestFile, manifest);
-        lostRace++;
-        continue;
-      }
-
-      recordOutcome(manifest, candidate.row.id, "repaired");
-      flushManifest(manifestFile, manifest);
-      repaired++;
-    }
+    const { repaired, skipped, lostRace } = await applyRepairs({
+      store: {
+        readRow: async (searchId) => {
+          const current = await prisma.carpoolSearch.findUnique({
+            where: { id: searchId },
+            select: AUDIT_SELECT,
+          });
+          return current ? toAuditRow(current) : null;
+        },
+        execute: (statement) => prisma.$executeRaw(statement),
+      },
+      candidates,
+      manifest,
+      manifestFile,
+      asOf,
+    });
 
     console.log(`\n✓ repaired ${repaired} schedule(s)`);
     if (skipped > 0) {
