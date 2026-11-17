@@ -28,9 +28,20 @@
  * **no `@updatedAt`**, so it is immutable, and the schedule must have been
  * authored somewhere in `[dateCreated, dateModified]`. When that whole span
  * lies inside a single daylight-saving window, every instant it could have
- * been is an EDT instant — so the offset is determined without locating the
+ * been is an EDT instant — so the *season* is determined without locating the
  * moment. Rows whose span crosses a transition keep the original ambiguity and
  * are left alone.
+ *
+ * **The season is not the offset, and this module needs both.** The pre-fix
+ * write path stored `date.toDate()` off the picker — an instant resolved in
+ * the *browser's* zone — so the stored value is `typed - browser_offset`. For
+ * a user in Boston in July that offset is EDT and the two coincide; for a user
+ * typing from California it is PDT and it does not. The span rule says nothing
+ * about where anyone was sitting. `isEasternOffsetEvidenced` is the second
+ * half, and it reads the user's own `Location` rows. On production two of 223
+ * span-provable rows are not Eastern, and the repair harms both — one of them
+ * is already correct. See that function for why this is evidence and not
+ * proof.
  *
  * Pure, and kept out of the script for the same reason as its siblings: the
  * selection and the repaired value are the parts worth testing, and they test
@@ -67,7 +78,19 @@ dayjs.extend(timezone);
 export type ScheduleTimeAuditRow = ScheduleTimeRow & {
   dateCreated: Date;
   dateModified: Date;
+  /**
+   * The user's two `Location` rows, as the offset evidence below reads them.
+   *
+   * Nullable because the relation is emulated (`relationMode = "prisma"`), so
+   * a missing row is a shape the database permits rather than one the schema
+   * rules out. A row with no usable location proves nothing and is excluded.
+   */
+  companyCoords: LocationCoords | null;
+  homeCoords: LocationCoords | null;
 };
+
+/** The two columns `isEasternOffsetEvidenced` reads off a `Location`. */
+export type LocationCoords = { coordLat: number; coordLng: number };
 
 export type DstScheduleRow = {
   row: ScheduleTimeAuditRow;
@@ -128,6 +151,76 @@ const EDT_OFFSET_MINUTES = -240;
  */
 const isDaylightSaving = (at: Date): boolean =>
   dayjs(at).tz(SCHEDULE_TIMEZONE).utcOffset() === EDT_OFFSET_MINUTES;
+
+/**
+ * The longitude band treated as evidence of US Eastern time, and the latitude
+ * band that keeps it to North America.
+ *
+ * `America/New_York` reaches roughly -67° at its eastern edge and -85° at its
+ * western one, give or take the zone's real political boundary through
+ * Indiana, Kentucky, Tennessee and Michigan. The band is deliberately the
+ * *narrow* reading of that edge: a row just outside it is left unrepaired,
+ * which is the status quo, where a row wrongly inside it is rewritten with an
+ * offset that was never applied to it.
+ */
+export const EASTERN_LONGITUDE = { min: -85.0, max: -66.0 } as const;
+
+/** Keeps the longitude band to the North American landmass. */
+export const EASTERN_LATITUDE = { min: 24.0, max: 48.0 } as const;
+
+/** Whether one `Location` sits inside the Eastern band. */
+const isEasternCoords = (coords: LocationCoords | null): boolean => {
+  if (!coords) {
+    return false;
+  }
+
+  // `(0, 0)` is the column default, not the Gulf of Guinea. It means the
+  // address never geocoded, and `scripts/check-profile-coordinates.ts` owns
+  // that population. An unset coordinate is absence of evidence.
+  if (coords.coordLat === 0 && coords.coordLng === 0) {
+    return false;
+  }
+
+  return (
+    coords.coordLng >= EASTERN_LONGITUDE.min &&
+    coords.coordLng <= EASTERN_LONGITUDE.max &&
+    coords.coordLat >= EASTERN_LATITUDE.min &&
+    coords.coordLat <= EASTERN_LATITUDE.max
+  );
+};
+
+/**
+ * Whether this row carries evidence that its author was in Eastern time.
+ *
+ * **This is the check the span rule cannot make, and the repair is wrong
+ * without it.** `isProvablyDstWritten` establishes *when* the schedule was
+ * authored — somewhere inside one daylight-saving window — and the module
+ * above reasons from that to an EDT offset. That step is only sound if the
+ * pre-fix write path converted at `America/New_York`. It did not. It stored
+ * `date.toDate()` off the antd picker (see SCRUM-373's commit), which is an
+ * instant resolved in **the browser's** zone, so the stored value is
+ * `typed - browser_offset`. Season and offset are the same thing only for a
+ * user who was sitting in Eastern time.
+ *
+ * Measured on production on 2026-11-17: of 223 rows the span rule selects, two
+ * are not Eastern — one Central, one Pacific — and the repair harms both. The
+ * Central row is *already correct*, because CDT's -5 is the EST anchor offset;
+ * repairing it would move a right value to a wrong one.
+ *
+ * Both locations must qualify. They agreed for every row measured, so
+ * requiring both costs nothing today and refuses the genuinely mixed case
+ * rather than picking a side.
+ *
+ * **Evidence, not proof.** Where somebody lives and works now is not where
+ * their browser was when they typed a schedule months ago: a student who
+ * onboarded from home in another zone and has since moved to Boston still
+ * passes. This narrows the risk; it does not close it. Closing it needs the
+ * user asked, which is the ambiguous remainder's answer too.
+ */
+export const isEasternOffsetEvidenced = (
+  row: Pick<ScheduleTimeAuditRow, "companyCoords" | "homeCoords">,
+): boolean =>
+  isEasternCoords(row.companyCoords) && isEasternCoords(row.homeCoords);
 
 /**
  * Whether this row's schedule provably went in under EDT.
@@ -209,7 +302,13 @@ export const toCanonicalFromEdtScheduleTime = (stored: Date): Date => {
  * **Wall-clock values are excluded explicitly**, not merely by era. The era
  * bound already keeps them out; carrying a wall clock anyway would mean the
  * row's history is not what this rule assumes, whatever its timestamps say, so
- * it is left to the repair that understands it.
+ * it is left to the repair that understands it. On production that exclusion
+ * currently removes no rows at all — it is live defence in depth rather than a
+ * filter the count depends on.
+ *
+ * **Rows without Eastern-time evidence are excluded too**, by
+ * `isEasternOffsetEvidenced`, because the span proves the season and not the
+ * offset the browser applied.
  *
  * Not idempotent by value — a repaired `13:00` becomes `14:00`, which this
  * rule would select again on its timestamps alone. It is idempotent by
@@ -229,6 +328,7 @@ export const findDstWrittenScheduleRows = (
         row.endTime !== null &&
         isOnCoopAt(row, asOf) &&
         isProvablyDstWritten(row) &&
+        isEasternOffsetEvidenced(row) &&
         !isWallClockSchedule(row.startTime, row.endTime),
     )
     .map((row) => ({
