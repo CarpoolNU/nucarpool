@@ -22,16 +22,21 @@ import { tmpdir } from "os";
 import { join } from "path";
 import type { Prisma } from "@prisma/client";
 import {
+  CANARY_MAX,
+  NEVER_EDITED_TOLERANCE_MS,
   applyRepairs,
   buildManifest,
   decideRepair,
   defaultManifestPath,
   extractManifestPath,
+  extractOnlyIds,
+  isApprovedCoreRow,
   maxRefusalMessage,
   parseArgs,
   recordOutcome,
   replaceManifest,
   repairStatement,
+  selectOnly,
   sortById,
   summariseRepair,
   toSqlDateTime,
@@ -1100,4 +1105,349 @@ describe("applyRepairs", () => {
       expect(rollbackMatches).toEqual(["cs_a", "cs_b"]);
     });
   });
+});
+
+describe("isApprovedCoreRow", () => {
+  it("accepts a never-edited ACTIVE rider or driver, which is SCRUM-725's approved scope", () => {
+    expect(isApprovedCoreRow(auditRow({ role: "DRIVER" }))).toBe(true);
+    expect(isApprovedCoreRow(auditRow({ role: "RIDER" }))).toBe(true);
+  });
+
+  it("refuses a VIEWER, whom SCRUM-725's cohort excluded", () => {
+    expect(isApprovedCoreRow(auditRow({ role: "VIEWER" }))).toBe(false);
+  });
+
+  it("refuses an INACTIVE row", () => {
+    expect(isApprovedCoreRow(auditRow({ status: "INACTIVE" }))).toBe(false);
+  });
+
+  it("refuses a row edited after creation, which only the wider span rule reaches", () => {
+    const at = EDT_2026_JULY.getTime();
+
+    expect(
+      isApprovedCoreRow(
+        auditRow({
+          dateModified: new Date(at + NEVER_EDITED_TOLERANCE_MS),
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      isApprovedCoreRow(
+        auditRow({
+          dateModified: new Date(at + NEVER_EDITED_TOLERANCE_MS + 1),
+        }),
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("extractOnlyIds", () => {
+  it("pulls the list out and leaves the rest for the other parsers", () => {
+    expect(
+      extractOnlyIds([
+        "--only",
+        "cs_a,cs_b",
+        "--apply",
+        "--manifest",
+        "c.json",
+      ]),
+    ).toEqual({
+      onlyIds: ["cs_a", "cs_b"],
+      rest: ["--apply", "--manifest", "c.json"],
+    });
+  });
+
+  it("returns no list when the flag is absent, so the full run is unchanged", () => {
+    expect(extractOnlyIds(["--apply"])).toEqual({
+      onlyIds: null,
+      rest: ["--apply"],
+    });
+  });
+
+  it("throws rather than swallowing the next flag as the list", () => {
+    expect(() => extractOnlyIds(["--only", "--apply"])).toThrow(
+      /--only expects/,
+    );
+    expect(() => extractOnlyIds(["--only"])).toThrow(/--only expects/);
+  });
+
+  it("refuses a second --only rather than merging or dropping one", () => {
+    expect(() => extractOnlyIds(["--only", "cs_a", "--only", "cs_b"])).toThrow(
+      /more than once/,
+    );
+  });
+
+  it.each([[""], ["cs_a,"], ["cs_a,,cs_b"], [" cs_a"], ["cs_a;DROP"]])(
+    "refuses a malformed list %j",
+    (value) => {
+      expect(() => extractOnlyIds(["--only", value])).toThrow(/malformed/);
+    },
+  );
+
+  it("leaves an unknown argument for the shared parser to reject", () => {
+    const { rest } = extractOnlyIds(["--only", "cs_a", "--canary"]);
+
+    expect(() => parseArgs(rest)).toThrow(/unknown argument/);
+  });
+
+  it("composes with --manifest in either order", () => {
+    const argv = ["--manifest", "c.json", "--only", "cs_a", "--apply"];
+    const { onlyIds, rest } = extractOnlyIds(argv);
+    const { manifestPath, rest: remaining } = extractManifestPath(rest);
+
+    expect(onlyIds).toEqual(["cs_a"]);
+    expect(manifestPath).toBe("c.json");
+    expect(parseArgs(remaining)).toEqual({ apply: true, max: 300 });
+  });
+});
+
+describe("selectOnly", () => {
+  const ids = ["cs_1", "cs_2", "cs_3", "cs_4", "cs_5", "cs_6", "cs_7"];
+  const pool = ids.map(candidate);
+
+  const problemsOf = (result: ReturnType<typeof selectOnly>): string[] =>
+    result.ok ? [] : result.problems;
+
+  it("selects exactly the named rows, in candidate order whatever order they were typed", () => {
+    const result = selectOnly(pool, ["cs_4", "cs_1", "cs_3"]);
+
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.selected.map((c) => c.row.id)).toEqual([
+      "cs_1",
+      "cs_3",
+      "cs_4",
+    ]);
+  });
+
+  it("accepts exactly CANARY_MAX ids", () => {
+    expect(CANARY_MAX).toBe(5);
+    expect(selectOnly(pool, ids.slice(0, CANARY_MAX)).ok).toBe(true);
+  });
+
+  it("refuses more than CANARY_MAX ids, even when every one is eligible", () => {
+    const result = selectOnly(pool, ids.slice(0, CANARY_MAX + 1));
+
+    expect(result.ok).toBe(false);
+    expect(problemsOf(result).join("\n")).toMatch(/exceeds the canary limit/);
+  });
+
+  it("refuses an id that is not a current candidate, and selects none of the others", () => {
+    const result = selectOnly(pool, ["cs_1", "cs_missing"]);
+
+    expect(result.ok).toBe(false);
+    expect(problemsOf(result)).toEqual([
+      expect.stringMatching(/^cs_missing is not a current candidate/),
+    ]);
+  });
+
+  it.each([
+    ["a VIEWER", { role: "VIEWER" }, /VIEWER, ACTIVE, never edited/],
+    [
+      "an INACTIVE row",
+      { status: "INACTIVE" },
+      /DRIVER, INACTIVE, never edited/,
+    ],
+    [
+      "a row edited after creation",
+      { dateModified: new Date("2026-08-15T12:00:00.000Z") },
+      /DRIVER, ACTIVE, edited after creation/,
+    ],
+  ])(
+    "refuses %s even though the full rule selects it",
+    (_label, overrides, reason) => {
+      const outside: DstScheduleRow = {
+        ...candidate("cs_out"),
+        row: auditRow({ id: "cs_out", ...overrides }),
+      };
+      // Precondition: the wide rule really does select it, so the refusal
+      // comes from the scope check and not from the row being ineligible.
+      expect(findDstWrittenScheduleRows([outside.row], ON_COOP)).toHaveLength(
+        1,
+      );
+
+      const result = selectOnly([...pool, outside], ["cs_1", "cs_out"]);
+
+      expect(result.ok).toBe(false);
+      expect(problemsOf(result)).toEqual([
+        expect.stringMatching(/^cs_out is a candidate but outside SCRUM-725/),
+      ]);
+      expect(problemsOf(result)[0]).toMatch(reason);
+    },
+  );
+
+  it("refuses duplicates", () => {
+    const result = selectOnly(pool, ["cs_1", "cs_1"]);
+
+    expect(problemsOf(result)).toEqual([
+      expect.stringMatching(/duplicate id\(s\): cs_1/),
+    ]);
+  });
+
+  it("refuses an empty list", () => {
+    expect(problemsOf(selectOnly(pool, []))).toEqual(["--only names no ids"]);
+  });
+
+  it("reports every problem at once, so one correction fixes the command", () => {
+    const result = selectOnly(pool, [
+      "cs_1",
+      "cs_1",
+      "cs_x",
+      "cs_y",
+      "cs_2",
+      "cs_3",
+      "cs_4",
+    ]);
+
+    // Duplicate, over the limit (6 distinct), and two unknown ids.
+    expect(problemsOf(result)).toHaveLength(4);
+  });
+
+  it("refuses everything against an empty candidate set", () => {
+    const result = selectOnly([], ["cs_1"]);
+
+    expect(problemsOf(result)).toEqual([
+      expect.stringMatching(/^cs_1 is not a current candidate/),
+    ]);
+  });
+});
+
+describe("buildManifest, --only", () => {
+  it("records the selection and describes only the selected rows", () => {
+    const manifest = buildManifest([candidate("cs_1")], {
+      ...META,
+      selection: { only: ["cs_1"], fullCandidateCount: 221 },
+    });
+
+    expect(manifest.candidateCount).toBe(1);
+    expect(manifest.rows.map((row) => row.searchId)).toEqual(["cs_1"]);
+    expect(manifest.selection).toEqual({
+      only: ["cs_1"],
+      fullCandidateCount: 221,
+    });
+  });
+
+  it("carries no selection key on a full run", () => {
+    expect(buildManifest([candidate("cs_1")], META)).not.toHaveProperty(
+      "selection",
+    );
+  });
+});
+
+describe("a canary, then re-runs", () => {
+  /**
+   * Seven core rows, a VIEWER and a row edited after creation — all nine of
+   * which the full rule selects. Driven through the real selection rule,
+   * `selectOnly`, `applyRepairs` and a table that applies the real
+   * statement, so each re-run plans from what the previous one left behind.
+   */
+  const table = () => {
+    const core = ["cs_1", "cs_2", "cs_3", "cs_4", "cs_5", "cs_6", "cs_7"].map(
+      (id) => auditRow({ id }),
+    );
+    return [
+      ...core,
+      auditRow({ id: "cs_viewer", role: "VIEWER" }),
+      auditRow({
+        id: "cs_edited",
+        dateModified: new Date("2026-08-15T12:00:00.000Z"),
+      }),
+    ];
+  };
+
+  const CANARY = ["cs_2", "cs_4", "cs_5", "cs_6", "cs_7"];
+
+  const plan = (rows: Iterable<ScheduleTimeAuditRow>) =>
+    sortById(findDstWrittenScheduleRows([...rows], ON_COOP));
+
+  const run = async (
+    store: RepairStore,
+    candidates: DstScheduleRow[],
+    clock: () => Date,
+  ) => {
+    const manifest = buildManifest(candidates, META);
+    const manifestFile = join(freshDir(), "run.json");
+    writeManifest(manifestFile, manifest);
+    const result = await applyRepairs({
+      store,
+      candidates,
+      manifest,
+      manifestFile,
+      asOf: ON_COOP,
+      clock,
+      log: silent,
+    });
+    return { result, manifestFile };
+  };
+
+  it("repairs exactly the canary rows and leaves every other row untouched", async () => {
+    const rows = table();
+    expect(plan(rows)).toHaveLength(9);
+
+    const selection = selectOnly(plan(rows), CANARY);
+    if (!selection.ok) throw new Error(selection.problems.join("; "));
+
+    const { store, table: db, executed } = fakeStore(rows);
+    const { result, manifestFile } = await run(
+      store,
+      selection.selected,
+      steppingClock(),
+    );
+
+    expect(result).toEqual({ repaired: 5, skipped: 0, lostRace: 0 });
+    expect(executed).toEqual(CANARY);
+    expect(readManifest(manifestFile).rows.map((r) => r.searchId)).toEqual(
+      CANARY,
+    );
+    for (const [id, row] of db) {
+      expect([id, toSqlTime(row.startTime as Date)]).toEqual([
+        id,
+        CANARY.includes(id) ? "14:00:00" : "13:00:00",
+      ]);
+    }
+  });
+
+  it("refuses a re-run of the same canary command instead of picking other rows", async () => {
+    const { store, table: db } = fakeStore(table());
+    const first = selectOnly(plan(db.values()), CANARY);
+    if (!first.ok) throw new Error(first.problems.join("; "));
+    await run(store, first.selected, steppingClock());
+
+    const again = selectOnly(plan(db.values()), CANARY);
+
+    expect(again.ok).toBe(false);
+    expect(problemsOf(again)).toHaveLength(CANARY.length);
+    for (const problem of problemsOf(again)) {
+      expect(problem).toMatch(/is not a current candidate/);
+    }
+  });
+
+  it("lets the full run that follows pick up every remaining row and none of the canary", async () => {
+    const { store, table: db, executed } = fakeStore(table());
+    const canary = selectOnly(plan(db.values()), CANARY);
+    if (!canary.ok) throw new Error(canary.problems.join("; "));
+    const clock = steppingClock();
+    await run(store, canary.selected, clock);
+    executed.length = 0;
+
+    const remaining = plan(db.values());
+    expect(remaining.map((c) => c.row.id)).toEqual([
+      "cs_1",
+      "cs_3",
+      "cs_edited",
+      "cs_viewer",
+    ]);
+
+    const { result } = await run(store, remaining, clock);
+
+    expect(result).toEqual({ repaired: 4, skipped: 0, lostRace: 0 });
+    expect(executed).not.toEqual(expect.arrayContaining([CANARY[0]]));
+    // Every row repaired exactly once: the canary rows were not shifted again.
+    for (const row of db.values()) {
+      expect(toSqlTime(row.startTime as Date)).toBe("14:00:00");
+    }
+    expect(plan(db.values())).toEqual([]);
+  });
+
+  const problemsOf = (result: ReturnType<typeof selectOnly>): string[] =>
+    result.ok ? [] : result.problems;
 });

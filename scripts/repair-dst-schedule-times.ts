@@ -101,11 +101,22 @@
  * and rows it never reached still can. Undoing one is the manifest's
  * `rollback` instructions.
  *
+ * **A canary first: `--only <id,id,...>`** (SCRUM-728). At most
+ * {@link CANARY_MAX} `carpool_search` ids, each of which must be a candidate
+ * *right now* and must sit inside the scope SCRUM-725 actually approved — see
+ * {@link isApprovedCoreRow}. Anything else refuses the whole run before the
+ * manifest is written, so a canary can never touch a row the full run would
+ * not, nor a row whose scope is still undecided. It narrows; it never widens.
+ * An explicit list rather than `--canary N` because a re-run of the same
+ * command then *refuses* — the ids are no longer candidates once repaired —
+ * instead of quietly taking the next N.
+ *
  * Usage:
  *   npx ts-node scripts/repair-dst-schedule-times.ts            # report only
  *   npx ts-node scripts/repair-dst-schedule-times.ts --apply    # write
  *   npx ts-node scripts/repair-dst-schedule-times.ts --apply --max 300
  *   npx ts-node scripts/repair-dst-schedule-times.ts --apply --manifest run.json
+ *   npx ts-node scripts/repair-dst-schedule-times.ts --only id1,id2 --manifest canary.json
  *
  * `--manifest <path>` names the rollback record. It defaults to a timestamped
  * file in the working directory, and the script refuses to overwrite one that
@@ -458,7 +469,14 @@ export type Manifest = {
   generatedAt: string;
   asOf: string;
   mode: "dry-run" | "apply";
+  /** How many rows this manifest describes — after any `--only` narrowing. */
   candidateCount: number;
+  /**
+   * Present only on an `--only` run: the ids asked for, and how many rows the
+   * full rule selected before narrowing. Optional and additive, so a v2
+   * reader that ignores it still reads every row and the rollback correctly.
+   */
+  selection?: { only: string[]; fullCandidateCount: number };
   /** How to undo a run, kept with the data rather than in a wiki page. */
   rollback: string;
   rows: ManifestRow[];
@@ -504,7 +522,12 @@ const ROLLBACK_INSTRUCTIONS =
  */
 export const buildManifest = (
   candidates: readonly DstScheduleRow[],
-  meta: { asOf: Date; mode: "dry-run" | "apply"; now: Date },
+  meta: {
+    asOf: Date;
+    mode: "dry-run" | "apply";
+    now: Date;
+    selection?: Manifest["selection"];
+  },
 ): Manifest => ({
   script: "repair-dst-schedule-times",
   manifestVersion: 2,
@@ -512,6 +535,7 @@ export const buildManifest = (
   asOf: meta.asOf.toISOString(),
   mode: meta.mode,
   candidateCount: candidates.length,
+  ...(meta.selection ? { selection: meta.selection } : {}),
   rollback: ROLLBACK_INSTRUCTIONS,
   rows: candidates.map(({ row, repairStartTime, repairEndTime }) => ({
     searchId: row.id,
@@ -856,6 +880,175 @@ export const extractManifestPath = (
 };
 
 /**
+ * The most ids `--only` accepts. It exists for a canary — a handful of rows an
+ * operator then checks by hand in the live app — not as a way to run the
+ * repair in tranches, so it is a fixed constant rather than a flag.
+ */
+export const CANARY_MAX = 5;
+
+/**
+ * SCRUM-725's "never edited since creation" tolerance, in milliseconds.
+ *
+ * That ticket measured it as `ABS(TIMESTAMPDIFF(SECOND, ...)) <= 5`, which
+ * truncates, so a 5.9-second gap counted there and does not here. Stricter is
+ * the safe direction for a scope check.
+ */
+export const NEVER_EDITED_TOLERANCE_MS = 5_000;
+
+/** SCRUM-725's condition 5: `date_modified` within the tolerance of creation. */
+const isNeverEdited = (
+  row: Pick<ScheduleTimeAuditRow, "dateCreated" | "dateModified">,
+): boolean =>
+  Math.abs(row.dateModified.getTime() - row.dateCreated.getTime()) <=
+  NEVER_EDITED_TOLERANCE_MS;
+
+/**
+ * Whether a candidate sits inside the scope SCRUM-725 approved, as distinct
+ * from the wider whole-span rule this script selects with.
+ *
+ * That ticket approved rows **never edited since creation**, on a live cohort
+ * it defined as `role <> 'VIEWER'`, and put everything else out of scope. The
+ * span rule reaches further — 221 rows on production on 2026-11-17 against 92
+ * here — and the decision to accept that has not been recorded. A canary is
+ * restricted to this core so it can run under the approval that exists
+ * without pre-empting the one that does not. `INACTIVE` is excluded as well:
+ * the ticket was silent on status, and a canary is for rows whose owners will
+ * actually see the result.
+ *
+ * Evaluated at selection time, against the row the plan read. The write's
+ * compare-and-swap does not include role or status, so a raw status flip in
+ * the seconds between selection and write would not be caught — it would
+ * still leave a correctly repaired row, just one outside this core.
+ */
+export const isApprovedCoreRow = (
+  row: Pick<
+    ScheduleTimeAuditRow,
+    "role" | "status" | "dateCreated" | "dateModified"
+  >,
+): boolean =>
+  row.role !== "VIEWER" && row.status === "ACTIVE" && isNeverEdited(row);
+
+/** Characters a `carpool_search` id (a cuid) can contain. */
+const SEARCH_ID = /^[A-Za-z0-9_-]+$/;
+
+/**
+ * Pulls `--only <id,id,...>` out of the argument list, the same way
+ * {@link extractManifestPath} does and for the same reason.
+ *
+ * Syntax only: a missing value, a repeated flag, an empty entry or a
+ * character no id contains throws here. Whether the ids are acceptable is
+ * {@link selectOnly}'s question, because it needs the candidate set.
+ */
+export const extractOnlyIds = (
+  argv: readonly string[],
+): { onlyIds: string[] | null; rest: string[] } => {
+  const rest: string[] = [];
+  let onlyIds: string[] | null = null;
+
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] !== "--only") {
+      rest.push(argv[i]);
+      continue;
+    }
+
+    if (onlyIds !== null) {
+      // Two lists would have to be merged or one ignored, and either is a
+      // guess about what the operator meant.
+      throw new Error("--only given more than once; pass one list");
+    }
+
+    const value = argv[++i];
+    if (value === undefined || value.startsWith("--")) {
+      throw new Error("--only expects a comma-separated list of search ids");
+    }
+
+    const ids = value.split(",");
+    const bad = ids.filter((id) => !SEARCH_ID.test(id));
+    if (bad.length > 0) {
+      throw new Error(
+        `--only holds ${bad.length} malformed entr${bad.length === 1 ? "y" : "ies"} ` +
+          `(empty, or not a search id): ${JSON.stringify(bad)}`,
+      );
+    }
+    onlyIds = ids;
+  }
+
+  return { onlyIds, rest };
+};
+
+export type OnlySelection =
+  { ok: true; selected: DstScheduleRow[] } | { ok: false; problems: string[] };
+
+/**
+ * Narrows the candidates to the ids `--only` named, or refuses.
+ *
+ * **Narrows, never widens.** `candidates` is the output of the full
+ * selection rule, computed fresh by this run, so an id that is not in it —
+ * already repaired, edited since, never eligible, or simply mistyped — is
+ * refused rather than looked up some other way. Every problem is reported at
+ * once rather than the first, so one correction fixes the command.
+ *
+ * Refusal is all-or-nothing: four good ids and one bad one write nothing.
+ * A canary whose membership silently changed is not the canary that was
+ * reviewed.
+ *
+ * The selected rows come back in `candidates` order, which `main` has already
+ * sorted by id, so the run is deterministic whatever order the ids were typed.
+ */
+export const selectOnly = (
+  candidates: readonly DstScheduleRow[],
+  onlyIds: readonly string[],
+): OnlySelection => {
+  const problems: string[] = [];
+
+  if (onlyIds.length === 0) {
+    problems.push("--only names no ids");
+  }
+
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+  for (const id of onlyIds) {
+    (seen.has(id) ? duplicates : seen).add(id);
+  }
+  if (duplicates.size > 0) {
+    problems.push(`duplicate id(s): ${[...duplicates].join(", ")}`);
+  }
+
+  if (seen.size > CANARY_MAX) {
+    problems.push(
+      `${seen.size} ids exceeds the canary limit of ${CANARY_MAX}; ` +
+        `run the remainder without --only once the canary is verified`,
+    );
+  }
+
+  const byId = new Map(candidates.map((c) => [c.row.id, c]));
+  for (const id of seen) {
+    const match = byId.get(id);
+    if (!match) {
+      problems.push(
+        `${id} is not a current candidate (already repaired, saved since ` +
+          `the dry run, outside the rule, or not a search id)`,
+      );
+    } else if (!isApprovedCoreRow(match.row)) {
+      problems.push(
+        `${id} is a candidate but outside SCRUM-725's approved scope ` +
+          `(${match.row.role}, ${match.row.status}, ` +
+          `${isNeverEdited(match.row) ? "never edited" : "edited after creation"})`,
+      );
+    }
+  }
+
+  if (problems.length > 0) {
+    return { ok: false, problems };
+  }
+
+  return {
+    ok: true,
+    selected: candidates.filter((c) => seen.has(c.row.id)),
+  };
+};
+
+/**
  * Exported so the test can pin the property that matters most: writing
  * requires `--apply`, and there is no argument spelling that reaches a write
  * by accident.
@@ -903,7 +1096,8 @@ const describeCandidate = (candidate: DstScheduleRow): string => {
 };
 
 const main = async () => {
-  const { manifestPath, rest } = extractManifestPath(process.argv.slice(2));
+  const { onlyIds, rest: afterOnly } = extractOnlyIds(process.argv.slice(2));
+  const { manifestPath, rest } = extractManifestPath(afterOnly);
   const { apply, max } = parseArgs(rest);
   const prisma = new PrismaClient();
 
@@ -933,8 +1127,7 @@ const main = async () => {
     });
     const rows = selected.map(toAuditRow);
 
-    const candidates = sortById(findDstWrittenScheduleRows(rows, asOf));
-    const { rowCount } = summariseRepair(candidates);
+    const allCandidates = sortById(findDstWrittenScheduleRows(rows, asOf));
 
     const onCoop = rows.filter((row) => isOnCoopAt(row, asOf)).length;
 
@@ -963,9 +1156,39 @@ const main = async () => {
     console.log(`${onCoopWithSchedule} of those carrying a schedule`);
     console.log(`${spanProvable} of those provably written during EDT`);
     console.log(
-      `${rowCount} of those also evidencing an Eastern-time author ` +
-        `(${spanProvable - rowCount} dropped for want of that evidence)`,
+      `${allCandidates.length} of those also evidencing an Eastern-time ` +
+        `author (${spanProvable - allCandidates.length} dropped for want of ` +
+        `that evidence)`,
     );
+    // Printed on every run, not only a canary: the gap between this and the
+    // line above is the scope decision SCRUM-725 still has open.
+    console.log(
+      `${allCandidates.filter((c) => isApprovedCoreRow(c.row)).length} of ` +
+        `those inside SCRUM-725's approved scope (never edited since ` +
+        `creation, not VIEWER, ACTIVE)`,
+    );
+
+    // Narrowed before the empty check, so a canary re-run whose ids have all
+    // been repaired refuses loudly instead of reporting "nothing to repair".
+    let candidates = allCandidates;
+    if (onlyIds !== null) {
+      const selection = selectOnly(allCandidates, onlyIds);
+      if (!selection.ok) {
+        console.error(`\n✖ --only refused; nothing written, no manifest.`);
+        for (const problem of selection.problems) {
+          console.error(`  - ${problem}`);
+        }
+        process.exitCode = 2;
+        return;
+      }
+      candidates = selection.selected;
+      console.log(
+        `\n--only: ${candidates.length} of ${allCandidates.length} ` +
+          `candidate(s) selected`,
+      );
+    }
+
+    const { rowCount } = summariseRepair(candidates);
 
     if (rowCount === 0) {
       console.log("\n✓ nothing to repair.");
@@ -996,6 +1219,10 @@ const main = async () => {
       asOf,
       mode: apply ? "apply" : "dry-run",
       now: startedAt,
+      selection:
+        onlyIds === null
+          ? undefined
+          : { only: onlyIds, fullCandidateCount: allCandidates.length },
     });
     writeManifest(manifestFile, manifest);
     console.log(`\nManifest written to ${manifestFile} (mode 0600)`);
