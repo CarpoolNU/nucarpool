@@ -28,6 +28,7 @@ import StepFour from "../../components/Setup/StepFour";
 import ViewerConfirmModal from "../../components/Setup/ViewerConfirmModal";
 import OvernightScheduleModal from "../../components/Schedule/OvernightScheduleModal";
 import { useOvernightScheduleConfirmation } from "../../utils/profile/useOvernightScheduleConfirmation";
+import { rememberConfirmedSchedule } from "../../utils/profile/useScheduleReconfirmationRecord";
 import { Role } from "@prisma/client";
 import { trackFTUECompletion, trackFTUEStep } from "../../utils/mixpanel";
 import { useUploadFile } from "../../utils/profile/useUploadFile";
@@ -113,7 +114,11 @@ const Setup: NextPage = () => {
   const [pendingPicture, setPendingPicture] = useState<PendingPicture>(null);
   const pendingFile = pendingPictureFile(pendingPicture);
   const [showViewerConfirm, setShowViewerConfirm] = useState(false);
-  const overnightSchedule = useOvernightScheduleConfirmation();
+  // A kept overnight schedule is confirmed, so the profile's SCRUM-733 notice
+  // does not ask about it again on the first visit.
+  const overnightSchedule = useOvernightScheduleConfirmation({
+    onKeep: (schedule) => rememberConfirmedSchedule(schedule),
+  });
   const stepCardRef = useRef<HTMLDivElement>(null);
   const previousStep = useRef(step);
   const { uploadFile } = useUploadFile(pendingFile);

@@ -31,6 +31,9 @@ import {
 import { planCoopRangeNotice } from "../../utils/profile/coopRangeNotice";
 import { useOvernightScheduleConfirmation } from "../../utils/profile/useOvernightScheduleConfirmation";
 import OvernightScheduleModal from "../../components/Schedule/OvernightScheduleModal";
+import { planScheduleReconfirmation } from "../../utils/profile/scheduleReconfirmation";
+import { useScheduleReconfirmationRecord } from "../../utils/profile/useScheduleReconfirmationRecord";
+import ScheduleReconfirmationNotice from "../../components/Profile/ScheduleReconfirmationNotice";
 import {
   DEFAULT_PROFILE_TAB,
   PROFILE_TAB_QUERY_KEY,
@@ -146,7 +149,16 @@ const Index: NextPage = () => {
   const coopRangeNoticeShown = useRef(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  const overnightSchedule = useOvernightScheduleConfirmation();
+  /**
+   * This device's answers to the schedule notice (SCRUM-733). Handed to the
+   * save-time question as well, because keeping an overnight pair there is
+   * the same answer, and the notice must not ask it again once the save has
+   * stored that pair.
+   */
+  const scheduleReconfirmation = useScheduleReconfirmationRecord();
+  const overnightSchedule = useOvernightScheduleConfirmation({
+    onKeep: scheduleReconfirmation.confirm,
+  });
   /**
    * The unsaved picture change: a cropped file, a pending removal, or
    * nothing. One slot rather than two pieces of state, because uploading and
@@ -638,6 +650,45 @@ const Index: NextPage = () => {
       </div>
     );
   }
+
+  /*
+   * Whether to ask about the *stored* schedule (SCRUM-733), never the form's.
+   * Planned from `user` on every render rather than latched like the co-op
+   * notice, because nothing here moves the user: it is inline, and it goes
+   * away by itself the moment it no longer applies. An answer removes it, and
+   * so does a save that stores a different pair, because the save refetches
+   * `user.me`. Nothing renders until this device's answers have been read,
+   * so a confirmed schedule never flashes the notice.
+   */
+  const storedSchedule = { startTime: user.startTime, endTime: user.endTime };
+  const reconfirmation = scheduleReconfirmation.hasLoaded
+    ? planScheduleReconfirmation({
+        role: user.role,
+        status: user.status,
+        coopEndDate: user.coopEndDate,
+        ...storedSchedule,
+        record: scheduleReconfirmation.record,
+        now: new Date(),
+      })
+    : null;
+  // One element in both layouts, ahead of whichever tab is showing, so it
+  // stays mounted when "Update my schedule" changes the tab.
+  const reconfirmationNotice = reconfirmation && (
+    <ScheduleReconfirmationNotice
+      schedule={reconfirmation.schedule}
+      showsSchedulePickers={option === "carpool"}
+      onConfirm={() => {
+        scheduleReconfirmation.confirm(storedSchedule);
+        toast.success("Thanks for confirming your schedule.");
+      }}
+      onUpdate={() => setOption("carpool")}
+      onRemindLater={() => {
+        scheduleReconfirmation.snooze(storedSchedule);
+        toast.info("We will ask about your schedule again in a week.");
+      }}
+    />
+  );
+
   return (
     <div className="relative h-full select-none">
       <PageTitle page="Profile" />
@@ -699,6 +750,7 @@ const Index: NextPage = () => {
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
             <div className="px-8 pt-6 pb-24">
+              {reconfirmationNotice}
               {option === "user" ? (
                 <UserSection
                   watch={watch}
@@ -760,6 +812,7 @@ const Index: NextPage = () => {
 
           <div className="col-start-2 col-end-4 flex h-full shrink items-start justify-center overflow-x-hidden overflow-y-auto">
             <div className="mt-10 w-full max-w-2xl px-8">
+              {reconfirmationNotice}
               {option === "user" ? (
                 <UserSection
                   watch={watch}

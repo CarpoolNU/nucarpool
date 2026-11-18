@@ -25,8 +25,15 @@ import {
  * The confirmed pair is remembered for the life of the page, so a save the
  * server refuses does not ask again when it is retried. What is *stored* needs
  * no memory: `planOvernightScheduleQuestion` never asks about it.
+ *
+ * `onKeep` hears each pair the user kept. Keeping one is the same answer
+ * SCRUM-733's on-load notice asks for, so both pages pass it on to that
+ * notice's record. Otherwise someone who kept a long overnight schedule here
+ * would be asked about it again the next time the profile opened.
  */
-export const useOvernightScheduleConfirmation = () => {
+export const useOvernightScheduleConfirmation = ({
+  onKeep,
+}: { onKeep?: (schedule: SchedulePair) => void } = {}) => {
   const [question, setQuestion] = useState<OvernightScheduleQuestion | null>(
     null,
   );
@@ -61,6 +68,7 @@ export const useOvernightScheduleConfirmation = () => {
             startTime: schedule.startTime,
             endTime: schedule.endTime,
           };
+          onKeep?.(confirmed.current);
         }
         resolve(keep);
       };

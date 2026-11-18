@@ -24,6 +24,7 @@ import {
   installResizeObserverStub,
   pickTime,
 } from "../../testing/timePickerDriver";
+import { SCHEDULE_RECONFIRMATION_KEY } from "../../utils/profile/useScheduleReconfirmationRecord";
 
 jest.mock("../../pages/api/auth/[...nextauth]", () => ({ authOptions: {} }));
 jest.mock("next-auth", () => ({ getServerSession: jest.fn() }));
@@ -149,7 +150,14 @@ const endInput = () => screen.getByLabelText(/End Time/);
 
 beforeEach(() => {
   jest.clearAllMocks();
+  window.localStorage.clear();
 });
+
+/** What SCRUM-733's profile notice will read on this device. */
+const reconfirmationRecord = () => {
+  const raw = window.localStorage.getItem(SCHEDULE_RECONFIRMATION_KEY);
+  return raw === null ? null : JSON.parse(raw);
+};
 
 describe("onboarding's schedule step", () => {
   it("moves on with no question for a same-day schedule", async () => {
@@ -193,6 +201,28 @@ describe("onboarding's schedule step", () => {
     );
     expect(screen.getByText("step three")).toBeInTheDocument();
     expect(screen.queryByText("step four")).not.toBeInTheDocument();
+    expect(reconfirmationRecord()).toBeNull();
+  });
+
+  it("remembers a kept 9:00 AM to 5:00 AM as confirmed, so the profile does not ask about it again", async () => {
+    await renderAtScheduleStep();
+    await pickTime(startInput(), { hour: "09" });
+    await pickTime(endInput(), { hour: "05", meridiem: "AM" });
+    await pressContinue();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Keep overnight" }),
+    );
+
+    expect(await screen.findByText("step four")).toBeInTheDocument();
+    expect(reconfirmationRecord()).toEqual({
+      confirmed: {
+        startMinute: 540,
+        endMinute: 300,
+        confirmedAt: expect.stringMatching(/^\d{4}-\d\d-\d\dT/),
+      },
+      snoozed: null,
+    });
   });
 
   it("moves on once a real night shift is kept, and does not ask again", async () => {
