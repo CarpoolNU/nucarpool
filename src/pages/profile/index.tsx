@@ -29,6 +29,8 @@ import {
   pendingPictureFile,
 } from "../../utils/profile/pendingPicture";
 import { planCoopRangeNotice } from "../../utils/profile/coopRangeNotice";
+import { useOvernightScheduleConfirmation } from "../../utils/profile/useOvernightScheduleConfirmation";
+import OvernightScheduleModal from "../../components/Schedule/OvernightScheduleModal";
 import {
   DEFAULT_PROFILE_TAB,
   PROFILE_TAB_QUERY_KEY,
@@ -144,6 +146,7 @@ const Index: NextPage = () => {
   const coopRangeNoticeShown = useRef(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const overnightSchedule = useOvernightScheduleConfirmation();
   /**
    * The unsaved picture change: a cropped file, a pending removal, or
    * nothing. One slot rather than two pieces of state, because uploading and
@@ -420,6 +423,21 @@ const Index: NextPage = () => {
       return false;
     }
 
+    // An end at or before the start is valid - night shifts are real - and is
+    // also what every wrong AM or PM looks like, so it is asked about rather
+    // than refused (SCRUM-732). Only when the pair differs from what is
+    // stored: an untouched schedule is never questioned. After the address
+    // guard, so nobody answers a question for a save that was going to fail
+    // anyway, and before the spinner, which would unmount the question.
+    const keepSchedule = await overnightSchedule.confirmSchedule(values, {
+      startTime: user?.startTime,
+      endTime: user?.endTime,
+    });
+    if (!keepSchedule) {
+      setOption("carpool");
+      return false;
+    }
+
     setIsLoading(true);
     const userInfo = {
       ...values,
@@ -628,6 +646,13 @@ const Index: NextPage = () => {
           onClose={onDismissModal}
           onContinue={onContinue}
           onSave={handleSaveChanges}
+        />
+      )}
+      {overnightSchedule.question && (
+        <OvernightScheduleModal
+          question={overnightSchedule.question}
+          onKeep={overnightSchedule.keep}
+          onChange={overnightSchedule.change}
         />
       )}
 
