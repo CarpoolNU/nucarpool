@@ -114,11 +114,7 @@ const Setup: NextPage = () => {
   const [pendingPicture, setPendingPicture] = useState<PendingPicture>(null);
   const pendingFile = pendingPictureFile(pendingPicture);
   const [showViewerConfirm, setShowViewerConfirm] = useState(false);
-  // A kept overnight schedule is confirmed, so the profile's SCRUM-733 notice
-  // does not ask about it again on the first visit.
-  const overnightSchedule = useOvernightScheduleConfirmation({
-    onKeep: (schedule) => rememberConfirmedSchedule(schedule),
-  });
+  const overnightSchedule = useOvernightScheduleConfirmation();
   const stepCardRef = useRef<HTMLDivElement>(null);
   const previousStep = useRef(step);
   const { uploadFile } = useUploadFile(pendingFile);
@@ -346,6 +342,14 @@ const Setup: NextPage = () => {
         sessionName,
         mutation: editUserMutation,
       });
+      // A schedule kept at step 3's overnight question is confirmed, so the
+      // profile's SCRUM-733 notice does not ask about it on the first visit.
+      // Recorded here, once the save has stored it, not when Keep overnight
+      // was pressed: onboarding may still be abandoned, refused, or finished
+      // with different times. Keyed by the account, as the profile's record is.
+      if (user && overnightSchedule.wasKept(values)) {
+        rememberConfirmedSchedule(user.id, values);
+      }
       trackFTUECompletion(userInfo.role);
     } catch (error) {
       // `useEditUserMutation`'s `onError` has already toasted and cleared

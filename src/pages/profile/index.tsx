@@ -149,16 +149,7 @@ const Index: NextPage = () => {
   const coopRangeNoticeShown = useRef(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  /**
-   * This device's answers to the schedule notice (SCRUM-733). Handed to the
-   * save-time question as well, because keeping an overnight pair there is
-   * the same answer, and the notice must not ask it again once the save has
-   * stored that pair.
-   */
-  const scheduleReconfirmation = useScheduleReconfirmationRecord();
-  const overnightSchedule = useOvernightScheduleConfirmation({
-    onKeep: scheduleReconfirmation.confirm,
-  });
+  const overnightSchedule = useOvernightScheduleConfirmation();
   /**
    * The unsaved picture change: a cropped file, a pending removal, or
    * nothing. One slot rather than two pieces of state, because uploading and
@@ -173,6 +164,13 @@ const Index: NextPage = () => {
     refetchOnMount: true,
   });
   const { data: user } = userQuery;
+  /**
+   * This account's answers to the schedule notice on this device
+   * (SCRUM-733), keyed by the signed-in user so one account's answer never
+   * stands in for another's on a shared browser. The save-time question
+   * feeds it too, after a successful save: see `onSubmit`.
+   */
+  const scheduleReconfirmation = useScheduleReconfirmationRecord(user?.id);
 
   /**
    * How many riders this user could carry if they drove, floored by the
@@ -542,6 +540,14 @@ const Index: NextPage = () => {
         sessionName,
         mutation: editUserMutation,
       });
+      // Keeping an overnight pair at SCRUM-732's question is the answer the
+      // SCRUM-733 notice asks for, so the notice must not ask it again. Only
+      // now, once the server has stored that pair: a refused save leaves the
+      // old pair stored, and its confirmation must not be overwritten by one
+      // for a schedule that was never saved.
+      if (overnightSchedule.wasKept(values)) {
+        scheduleReconfirmation.confirm(values);
+      }
       trackProfileCompletion(userInfo.role, userInfo.status);
       // Named separately rather than sharing one message: "could not be
       // uploaded" told a user who pressed Remove the opposite of what happened,
@@ -657,8 +663,8 @@ const Index: NextPage = () => {
    * notice, because nothing here moves the user: it is inline, and it goes
    * away by itself the moment it no longer applies. An answer removes it, and
    * so does a save that stores a different pair, because the save refetches
-   * `user.me`. Nothing renders until this device's answers have been read,
-   * so a confirmed schedule never flashes the notice.
+   * `user.me`. Nothing renders until this account's answers on this device
+   * have been read, so a confirmed schedule never flashes the notice.
    */
   const storedSchedule = { startTime: user.startTime, endTime: user.endTime };
   const reconfirmation = scheduleReconfirmation.hasLoaded

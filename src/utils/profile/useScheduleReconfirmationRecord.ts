@@ -31,33 +31,45 @@ import {
  * to matter, this interface is what a column would sit behind. Nothing that
  * calls it would change.
  *
- * **Not namespaced by user id**, for the reason `dismissal.ts` gives. Two
- * accounts on one browser share a record, and a record only suppresses the
- * notice for the exact pair it names, so a second account is spared only when
- * it stores the identical overnight schedule.
+ * ## One record per account
+ *
+ * **Namespaced by user id, unlike `dismissal.ts`.** That file accepts two
+ * accounts on one browser sharing a flag, because what is shared is a
+ * preference about a sentence. Here it would be one person's answer standing
+ * in for another's: someone who confirmed 9:00 AM to 5:00 AM would silence
+ * the question for anyone else who signs in on that browser with the same
+ * stored pair, about a schedule they never looked at. That is the failure
+ * this notice exists to prevent, so the record follows the account.
+ *
+ * The cost is the one `dismissal.ts` named: the key carries the account's id,
+ * a durable identifier, on a browser that may be shared. It carries nothing
+ * else about the person. The id is the `user.me` row's, which the server
+ * derives from the session, so it is the authenticated user and the same
+ * row whose schedule the notice describes.
  *
  * ## What is stored
  *
  * `ScheduleReconfirmationRecord`, as JSON: which pair was confirmed and when,
  * and which pair was snoozed and until when. Times are Boston wall-clock
- * minutes, and nothing in it identifies the user. See
- * `scheduleReconfirmation.ts` for why the pair is the key.
+ * minutes. See `scheduleReconfirmation.ts` for why the pair is the key.
  */
 
 /**
- * The storage key. Versioned, so a change to the record's shape can start
- * clean rather than misread an old one. Namespaced with the feature, as
+ * The storage key's prefix. Versioned, so a change to the record's shape can
+ * start clean rather than misread an old one. Namespaced with the feature, as
  * `RIDER_DEMAND_DISMISSED_KEY` is.
  */
-export const SCHEDULE_RECONFIRMATION_KEY =
+export const SCHEDULE_RECONFIRMATION_KEY_PREFIX =
   "nucarpool.scheduleReconfirmation.v1";
 
+/** The storage key for one account's record. */
+export const scheduleReconfirmationKey = (userId: string): string =>
+  `${SCHEDULE_RECONFIRMATION_KEY_PREFIX}.${userId}`;
+
 /** The stored record, or `null` when storage cannot be read at all. */
-const readStoredRecord = (): ScheduleReconfirmationRecord | null => {
+const readStoredRecord = (key: string): ScheduleReconfirmationRecord | null => {
   try {
-    return parseReconfirmationRecord(
-      window.localStorage.getItem(SCHEDULE_RECONFIRMATION_KEY),
-    );
+    return parseReconfirmationRecord(window.localStorage.getItem(key));
   } catch {
     return null;
   }
@@ -68,33 +80,38 @@ const readStoredRecord = (): ScheduleReconfirmationRecord | null => {
  * updated what is on screen, and a storage error is nothing the user can act
  * on.
  */
-const writeStoredRecord = (record: ScheduleReconfirmationRecord): void => {
+const writeStoredRecord = (
+  key: string,
+  record: ScheduleReconfirmationRecord,
+): void => {
   try {
-    window.localStorage.setItem(
-      SCHEDULE_RECONFIRMATION_KEY,
-      JSON.stringify(record),
-    );
+    window.localStorage.setItem(key, JSON.stringify(record));
   } catch {
     // Private browsing, blocked site data, or a quota that is already full.
   }
 };
 
 /**
- * Record that the user confirmed `pair`, with no hook. Used by onboarding,
+ * Record that `userId` confirmed `pair`, with no hook. Used by onboarding,
  * whose SCRUM-732 "Keep overnight" is a confirmation and renders no notice to
  * update. Without it, someone who kept a long overnight schedule while
  * onboarding would be asked about it again on their first profile visit.
+ *
+ * Call it only once the save storing `pair` has succeeded.
  */
 export const rememberConfirmedSchedule = (
+  userId: string,
   pair: SchedulePair,
   now: Date = new Date(),
 ): void => {
   const stamp = scheduleStamp(pair);
 
   if (stamp) {
+    const key = scheduleReconfirmationKey(userId);
     writeStoredRecord(
+      key,
       withConfirmation(
-        readStoredRecord() ?? EMPTY_RECONFIRMATION_RECORD,
+        readStoredRecord(key) ?? EMPTY_RECONFIRMATION_RECORD,
         stamp,
         now,
       ),
@@ -103,21 +120,35 @@ export const rememberConfirmedSchedule = (
 };
 
 export type ScheduleReconfirmationRecordState = {
-  /** True once storage has been read. The notice renders nothing before it. */
+  /**
+   * True once this account's record has been read. The notice renders
+   * nothing before it, including while `user.me` has not yet said who the
+   * account is.
+   */
   hasLoaded: boolean;
   record: ScheduleReconfirmationRecord;
-  /** "Yes, these hours are correct", or SCRUM-732's "Keep overnight". */
+  /**
+   * "Yes, these hours are correct", or SCRUM-732's "Keep overnight" once the
+   * save that stores the kept pair has succeeded.
+   */
   confirm: (pair: SchedulePair) => void;
   /** "Remind me later". */
   snooze: (pair: SchedulePair) => void;
 };
 
+/** The record as read, and whose it is. */
+type LoadedRecord = { userId: string; record: ScheduleReconfirmationRecord };
+
 /**
- * The record as state, for the profile page.
+ * `userId`'s record as state, for the profile page. `undefined` until
+ * `user.me` has answered; the hook reads nothing and answers nothing until
+ * then.
  *
  * **Read after mount, never during render.** `/profile` renders on the
  * server, where there is no `localStorage`, for the reason `dismissal.ts`
  * gives. `hasLoaded` lets the page render nothing until the answer is known.
+ * The loaded record remembers whose it is, so a different account's id is
+ * never shown the previous one's record while its own is read.
  *
  * **Each answer updates the screen before it writes**, so the notice goes on
  * the press and still goes when the write throws. It is built on the
@@ -128,59 +159,69 @@ export type ScheduleReconfirmationRecordState = {
  * **Other tabs follow.** A `storage` event fires in every *other* tab of the
  * origin when one writes, so a notice answered in one tab leaves the rest on
  * the spot rather than on their next reload. `key === null` is a `clear()`.
+ * Only this account's key counts.
  */
-export const useScheduleReconfirmationRecord =
-  (): ScheduleReconfirmationRecordState => {
-    const [record, setRecord] = useState<ScheduleReconfirmationRecord>(
-      EMPTY_RECONFIRMATION_RECORD,
-    );
-    const [hasLoaded, setHasLoaded] = useState(false);
+export const useScheduleReconfirmationRecord = (
+  userId: string | undefined,
+): ScheduleReconfirmationRecordState => {
+  const [loaded, setLoaded] = useState<LoadedRecord | null>(null);
 
-    useEffect(() => {
-      const load = () =>
-        setRecord(readStoredRecord() ?? EMPTY_RECONFIRMATION_RECORD);
+  useEffect(() => {
+    if (!userId) {
+      return;
+    }
 
-      load();
-      setHasLoaded(true);
+    const key = scheduleReconfirmationKey(userId);
+    const load = () =>
+      setLoaded({
+        userId,
+        record: readStoredRecord(key) ?? EMPTY_RECONFIRMATION_RECORD,
+      });
 
-      const onStorage = (event: StorageEvent) => {
-        if (event.key === null || event.key === SCHEDULE_RECONFIRMATION_KEY) {
-          load();
-        }
-      };
+    load();
 
-      window.addEventListener("storage", onStorage);
-      return () => window.removeEventListener("storage", onStorage);
-    }, []);
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === null || event.key === key) {
+        load();
+      }
+    };
 
-    const answer = useCallback(
-      (
-        pair: SchedulePair,
-        apply: typeof withConfirmation | typeof withSnooze,
-      ) => {
-        const stamp = scheduleStamp(pair);
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [userId]);
 
-        if (!stamp) {
-          return;
-        }
+  const current = userId && loaded?.userId === userId ? loaded : null;
+  const record = current?.record ?? EMPTY_RECONFIRMATION_RECORD;
 
-        // Outside a `setRecord` updater on purpose: StrictMode invokes those
-        // twice, and a write is a side effect.
-        const next = apply(readStoredRecord() ?? record, stamp, new Date());
-        setRecord(next);
-        writeStoredRecord(next);
-      },
-      [record],
-    );
+  const answer = useCallback(
+    (
+      pair: SchedulePair,
+      apply: typeof withConfirmation | typeof withSnooze,
+    ) => {
+      const stamp = scheduleStamp(pair);
 
-    const confirm = useCallback(
-      (pair: SchedulePair) => answer(pair, withConfirmation),
-      [answer],
-    );
-    const snooze = useCallback(
-      (pair: SchedulePair) => answer(pair, withSnooze),
-      [answer],
-    );
+      if (!userId || !stamp) {
+        return;
+      }
 
-    return { hasLoaded, record, confirm, snooze };
-  };
+      // Outside a `setLoaded` updater on purpose: StrictMode invokes those
+      // twice, and a write is a side effect.
+      const key = scheduleReconfirmationKey(userId);
+      const next = apply(readStoredRecord(key) ?? record, stamp, new Date());
+      setLoaded({ userId, record: next });
+      writeStoredRecord(key, next);
+    },
+    [userId, record],
+  );
+
+  const confirm = useCallback(
+    (pair: SchedulePair) => answer(pair, withConfirmation),
+    [answer],
+  );
+  const snooze = useCallback(
+    (pair: SchedulePair) => answer(pair, withSnooze),
+    [answer],
+  );
+
+  return { hasLoaded: current !== null, record, confirm, snooze };
+};

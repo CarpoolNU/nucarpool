@@ -24,7 +24,7 @@ import {
   installResizeObserverStub,
   pickTime,
 } from "../../testing/timePickerDriver";
-import { SCHEDULE_RECONFIRMATION_KEY } from "../../utils/profile/useScheduleReconfirmationRecord";
+import { scheduleReconfirmationKey } from "../../utils/profile/useScheduleReconfirmationRecord";
 
 jest.mock("../../pages/api/auth/[...nextauth]", () => ({ authOptions: {} }));
 jest.mock("next-auth", () => ({ getServerSession: jest.fn() }));
@@ -40,6 +40,7 @@ jest.mock("next-auth/react", () =>
  * step before the schedule passes its gate, and no schedule yet.
  */
 const USER = {
+  id: "user-onboarding",
   role: "RIDER",
   hasCarpoolSearch: true,
   seatAvail: 0,
@@ -153,10 +154,28 @@ beforeEach(() => {
   window.localStorage.clear();
 });
 
-/** What SCRUM-733's profile notice will read on this device. */
+/** What SCRUM-733's profile notice will read for this account on this device. */
 const reconfirmationRecord = () => {
-  const raw = window.localStorage.getItem(SCHEDULE_RECONFIRMATION_KEY);
+  const raw = window.localStorage.getItem(scheduleReconfirmationKey(USER.id));
   return raw === null ? null : JSON.parse(raw);
+};
+
+/** Step 3's Continue on a 9:00 AM to 5:00 AM, kept at the question. */
+const keepNineToFive = async () => {
+  await renderAtScheduleStep();
+  await pickTime(startInput(), { hour: "09" });
+  await pickTime(endInput(), { hour: "05", meridiem: "AM" });
+  await pressContinue();
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Keep overnight" }),
+  );
+  await screen.findByText("step four");
+};
+
+const pressComplete = async () => {
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Complete" }));
+  });
 };
 
 describe("onboarding's schedule step", () => {
@@ -204,17 +223,20 @@ describe("onboarding's schedule step", () => {
     expect(reconfirmationRecord()).toBeNull();
   });
 
-  it("remembers a kept 9:00 AM to 5:00 AM as confirmed, so the profile does not ask about it again", async () => {
-    await renderAtScheduleStep();
-    await pickTime(startInput(), { hour: "09" });
-    await pickTime(endInput(), { hour: "05", meridiem: "AM" });
-    await pressContinue();
+  it("records nothing when Keep overnight is pressed, before anything is saved", async () => {
+    await keepNineToFive();
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Keep overnight" }),
-    );
+    expect(mockUpdateUser).not.toHaveBeenCalled();
+    expect(reconfirmationRecord()).toBeNull();
+  });
 
-    expect(await screen.findByText("step four")).toBeInTheDocument();
+  it("remembers a kept 9:00 AM to 5:00 AM as confirmed once onboarding saves it, so the profile does not ask about it again", async () => {
+    mockUpdateUser.mockResolvedValueOnce(undefined);
+    await keepNineToFive();
+
+    await pressComplete();
+
+    await waitFor(() => expect(mockUpdateUser).toHaveBeenCalledTimes(1));
     expect(reconfirmationRecord()).toEqual({
       confirmed: {
         startMinute: 540,
@@ -223,6 +245,27 @@ describe("onboarding's schedule step", () => {
       },
       snoozed: null,
     });
+    // This account's key, and no other.
+    expect(Object.keys(window.localStorage)).toEqual([
+      scheduleReconfirmationKey(USER.id),
+    ]);
+  });
+
+  it("remembers nothing when the save of a kept schedule is refused", async () => {
+    const consoleError = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    try {
+      mockUpdateUser.mockRejectedValueOnce(new Error("Refused"));
+      await keepNineToFive();
+
+      await pressComplete();
+
+      await waitFor(() => expect(mockUpdateUser).toHaveBeenCalledTimes(1));
+      expect(reconfirmationRecord()).toBeNull();
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   it("moves on once a real night shift is kept, and does not ask again", async () => {

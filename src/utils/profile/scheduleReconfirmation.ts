@@ -27,8 +27,9 @@
  *     shown does no harm, and asking about it is friction for nothing.
  *  3. **Both times set**, and the pair **ends at or before it starts and runs
  *     longer than 12 hours**. That is `isMisPickShaped`, below.
- *  4. **Not already answered for this exact pair** on this device: confirmed,
- *     or snoozed less than `RECONFIRMATION_SNOOZE_HOURS` ago.
+ *  4. **Not already answered for this exact pair** by this account on this
+ *     device: confirmed, or snoozed less than `RECONFIRMATION_SNOOZE_HOURS`
+ *     ago.
  *
  * Rule 3 is the one that matters, and it is not a guess about which shifts
  * are plausible. A wrong AM or PM moves one end by exactly twelve hours. On a
@@ -108,10 +109,12 @@ export interface ScheduleStamp {
 }
 
 /**
- * What one device remembers. One slot for each answer, not a history: only
- * the stored pair is ever compared, and a user has one stored pair. Moving to
- * a different overnight pair goes through SCRUM-732's save-time question,
- * which records its own confirmation, so the slot follows the schedule.
+ * What one device remembers for one account. One slot for each answer, not a
+ * history: only the stored pair is ever compared, and a user has one stored
+ * pair. Moving to a different overnight pair goes through SCRUM-732's
+ * save-time question, whose kept pair is recorded once the save stores it, so
+ * the slot follows the schedule. That is also why it is recorded no sooner: a
+ * kept pair the server refused would take the slot from the pair still stored.
  */
 export interface ScheduleReconfirmationRecord {
   /** The pair the user said is right, and when they said it. */

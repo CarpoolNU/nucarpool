@@ -35,7 +35,7 @@ import {
   installResizeObserverStub,
   pickTime,
 } from "../../testing/timePickerDriver";
-import { SCHEDULE_RECONFIRMATION_KEY } from "../../utils/profile/useScheduleReconfirmationRecord";
+import { scheduleReconfirmationKey } from "../../utils/profile/useScheduleReconfirmationRecord";
 
 jest.mock("../../pages/api/auth/[...nextauth]", () => ({ authOptions: {} }));
 jest.mock("next-auth", () => ({ getServerSession: jest.fn() }));
@@ -183,6 +183,7 @@ const NEXT_YEAR_END = new Date(
  * `10:00`, since Boston is UTC-5 at the anchor date.
  */
 const MIS_PICKED = {
+  id: "user-sam",
   role: "RIDER",
   hasCarpoolSearch: true,
   seatAvail: 0,
@@ -232,9 +233,22 @@ const notice = () => screen.queryByRole("region", { name: NOTICE });
 const findNotice = () => screen.findByRole("region", { name: NOTICE });
 const button = (name: string) => screen.getByRole("button", { name });
 
+/** This account's record: the one the page under test reads and writes. */
+const KEY = scheduleReconfirmationKey(MIS_PICKED.id);
+
 const storedRecord = () => {
-  const raw = window.localStorage.getItem(SCHEDULE_RECONFIRMATION_KEY);
+  const raw = window.localStorage.getItem(KEY);
   return raw === null ? null : JSON.parse(raw);
+};
+
+/** A record confirming the stored 9:00 AM to 5:00 AM. */
+const CONFIRMED_NINE_TO_FIVE = {
+  confirmed: {
+    startMinute: 540,
+    endMinute: 300,
+    confirmedAt: "2026-11-01T12:00:00.000Z",
+  },
+  snoozed: null,
 };
 
 /** Long enough for the effect that reads storage to have run. */
@@ -407,7 +421,7 @@ describe("Remind me later", () => {
 
   it("asks again once the snooze has run out", async () => {
     window.localStorage.setItem(
-      SCHEDULE_RECONFIRMATION_KEY,
+      KEY,
       JSON.stringify({
         confirmed: null,
         snoozed: {
@@ -483,10 +497,12 @@ describe("Update my schedule", () => {
       startTime: iso(14),
       endTime: iso(9),
     });
-    expect(storedRecord().confirmed).toMatchObject({
-      startMinute: 540,
-      endMinute: 240,
-    });
+    await waitFor(() =>
+      expect(storedRecord()?.confirmed).toMatchObject({
+        startMinute: 540,
+        endMinute: 240,
+      }),
+    );
 
     storedUser = { ...MIS_PICKED, endTime: storedAt(9) };
     await reload();
@@ -510,6 +526,82 @@ describe("Update my schedule", () => {
     expect(editFn).not.toHaveBeenCalled();
     expect(storedRecord()).toBeNull();
     expect(await findNotice()).toBeInTheDocument();
+  });
+
+  it("remembers nothing when the server refuses a kept overnight pair", async () => {
+    refuseNextSave = true;
+    await renderProfile();
+    fireEvent.click(await screen.findByText("Update my schedule"));
+    await pickTime(await screen.findByLabelText(/End Time/), {
+      hour: "04",
+      meridiem: "AM",
+    });
+    fireEvent.click(button("Save carpool"));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Keep overnight" }),
+    );
+
+    await waitFor(() => expect(editFn).toHaveBeenCalledTimes(1));
+    await screen.findByRole("button", { name: "Save carpool" });
+    expect(storedRecord()).toBeNull();
+    // Still asking about what is stored, which the refused save left alone.
+    expect(await findNotice()).toHaveTextContent(
+      "9:00 AM to 5:00 AM the next day (20 hours)",
+    );
+  });
+
+  it("keeps an earlier confirmation of the stored pair when a kept new pair is refused", async () => {
+    window.localStorage.setItem(KEY, JSON.stringify(CONFIRMED_NINE_TO_FIVE));
+    refuseNextSave = true;
+    await renderProfile();
+    await settle();
+    expect(notice()).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Carpool/ }));
+    await pickTime(await screen.findByLabelText(/End Time/), {
+      hour: "04",
+      meridiem: "AM",
+    });
+    fireEvent.click(button("Save carpool"));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Keep overnight" }),
+    );
+
+    await waitFor(() => expect(editFn).toHaveBeenCalledTimes(1));
+    await screen.findByRole("button", { name: "Save carpool" });
+    expect(storedRecord()).toEqual(CONFIRMED_NINE_TO_FIVE);
+
+    // The stored 9:00 AM to 5:00 AM is still confirmed on the next visit.
+    await reload();
+    await settle();
+    expect(notice()).not.toBeInTheDocument();
+  });
+
+  it("records a kept pair when a retry of its refused save succeeds, without asking again", async () => {
+    refuseNextSave = true;
+    await renderProfile();
+    fireEvent.click(await screen.findByText("Update my schedule"));
+    await pickTime(await screen.findByLabelText(/End Time/), {
+      hour: "04",
+      meridiem: "AM",
+    });
+    fireEvent.click(button("Save carpool"));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Keep overnight" }),
+    );
+    await waitFor(() => expect(editFn).toHaveBeenCalledTimes(1));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Save carpool" }),
+    );
+
+    await waitFor(() => expect(editFn).toHaveBeenCalledTimes(2));
+    expect(overnightQuestion()).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(storedRecord()?.confirmed).toMatchObject({
+        startMinute: 540,
+        endMinute: 240,
+      }),
+    );
   });
 
   it("keeps the notice when the server refuses the correction", async () => {
@@ -612,11 +704,11 @@ describe("two tabs", () => {
       },
       snoozed: null,
     });
-    window.localStorage.setItem(SCHEDULE_RECONFIRMATION_KEY, written);
+    window.localStorage.setItem(KEY, written);
     act(() => {
       window.dispatchEvent(
         new StorageEvent("storage", {
-          key: SCHEDULE_RECONFIRMATION_KEY,
+          key: KEY,
           newValue: written,
         }),
       );
@@ -650,7 +742,7 @@ describe("two tabs", () => {
       snoozedUntil: new Date(Date.now() + 3_600_000).toISOString(),
     };
     window.localStorage.setItem(
-      SCHEDULE_RECONFIRMATION_KEY,
+      KEY,
       JSON.stringify({ confirmed: null, snoozed: otherTabSnooze }),
     );
 
@@ -660,6 +752,72 @@ describe("two tabs", () => {
       confirmed: expect.objectContaining({ startMinute: 540, endMinute: 300 }),
       snoozed: otherTabSnooze,
     });
+  });
+});
+
+describe("two accounts on one browser", () => {
+  const OTHER_KEY = scheduleReconfirmationKey("user-alex");
+
+  it("asks this account even when another account confirmed the identical pair", async () => {
+    window.localStorage.setItem(
+      OTHER_KEY,
+      JSON.stringify(CONFIRMED_NINE_TO_FIVE),
+    );
+
+    await renderProfile();
+
+    expect(await findNotice()).toHaveTextContent(
+      "9:00 AM to 5:00 AM the next day (20 hours)",
+    );
+  });
+
+  it("writes this account's answer under its own key, leaving the other's alone", async () => {
+    const otherRecord = JSON.stringify({
+      confirmed: null,
+      snoozed: {
+        startMinute: 540,
+        endMinute: 300,
+        snoozedUntil: new Date(Date.now() + 3_600_000).toISOString(),
+      },
+    });
+    window.localStorage.setItem(OTHER_KEY, otherRecord);
+    await renderProfile();
+
+    fireEvent.click(await screen.findByText("Yes, these hours are correct"));
+
+    expect(storedRecord().confirmed).toMatchObject({
+      startMinute: 540,
+      endMinute: 300,
+    });
+    expect(window.localStorage.getItem(OTHER_KEY)).toBe(otherRecord);
+  });
+
+  it("is not closed by another account answering in another tab", async () => {
+    await renderProfile();
+    await findNotice();
+
+    const written = JSON.stringify(CONFIRMED_NINE_TO_FIVE);
+    window.localStorage.setItem(OTHER_KEY, written);
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent("storage", { key: OTHER_KEY, newValue: written }),
+      );
+    });
+    await settle();
+
+    expect(notice()).toBeInTheDocument();
+  });
+
+  it("does not carry one account's confirmation to the next account to sign in", async () => {
+    await renderProfile();
+    fireEvent.click(await screen.findByText("Yes, these hours are correct"));
+    await waitFor(() => expect(notice()).not.toBeInTheDocument());
+
+    // Another person signs in on this browser, with the same stored pair.
+    storedUser = { ...MIS_PICKED, id: "user-alex" };
+    await reload();
+
+    expect(await findNotice()).toBeInTheDocument();
   });
 });
 
