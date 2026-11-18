@@ -102,8 +102,21 @@ export const toStoredScheduleTime = (
     return null;
   }
 
-  const hour = String(picked.hour()).padStart(2, "0");
-  const minute = String(picked.minute()).padStart(2, "0");
+  return scheduleTimeFromWallClock(picked.hour(), picked.minute());
+};
+
+/**
+ * The stored value for a Boston wall clock: `toStoredScheduleTime` minus the
+ * picker. Exported for the one other place that needs to build a stored-shape
+ * value from digits, the panel seed in `scheduleSpan.ts`, so that a seeded pick
+ * and a typed one go through the same conversion rather than two copies of it.
+ */
+export const scheduleTimeFromWallClock = (
+  wallHour: number,
+  wallMinute: number,
+): Date => {
+  const hour = String(wallHour).padStart(2, "0");
+  const minute = String(wallMinute).padStart(2, "0");
 
   const boston = dayjs.tz(
     `${SCHEDULE_ANCHOR_DATE} ${hour}:${minute}`,

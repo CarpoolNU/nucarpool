@@ -64,6 +64,13 @@ interface ControlledTimePickerProps {
   value?: Date;
   isDisabled?: boolean;
   error?: FieldError;
+  /**
+   * Where the panel opens while the field is empty, as a stored-shape value -
+   * see `scheduleOpenTime`. Without it antd opens on midnight, which makes AM
+   * the answer for any pick that never touches the AM/PM column (SCRUM-732).
+   * Ignored once the field has a value: the panel then opens on that value.
+   */
+  openValue?: Date;
 }
 const ControlledTimePicker = (props: ControlledTimePickerProps) => {
   const errorId = props.error && props.id ? fieldErrorId(props.id) : undefined;
@@ -113,6 +120,9 @@ const ControlledTimePicker = (props: ControlledTimePickerProps) => {
                 minuteStep={15}
                 use12Hours={true}
                 value={toPickerScheduleTime(fieldProps.value)}
+                defaultOpenValue={
+                  toPickerScheduleTime(props.openValue) ?? undefined
+                }
                 inputReadOnly={true}
                 onChange={(date) => {
                   fieldProps.onChange(toStoredScheduleTime(date));

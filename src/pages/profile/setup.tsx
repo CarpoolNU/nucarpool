@@ -26,6 +26,8 @@ import StepThree from "../../components/Setup/StepThree";
 import { SetupContainer } from "../../components/Setup/SetupContainer";
 import StepFour from "../../components/Setup/StepFour";
 import ViewerConfirmModal from "../../components/Setup/ViewerConfirmModal";
+import OvernightScheduleModal from "../../components/Schedule/OvernightScheduleModal";
+import { useOvernightScheduleConfirmation } from "../../utils/profile/useOvernightScheduleConfirmation";
 import { Role } from "@prisma/client";
 import { trackFTUECompletion, trackFTUEStep } from "../../utils/mixpanel";
 import { useUploadFile } from "../../utils/profile/useUploadFile";
@@ -111,6 +113,7 @@ const Setup: NextPage = () => {
   const [pendingPicture, setPendingPicture] = useState<PendingPicture>(null);
   const pendingFile = pendingPictureFile(pendingPicture);
   const [showViewerConfirm, setShowViewerConfirm] = useState(false);
+  const overnightSchedule = useOvernightScheduleConfirmation();
   const stepCardRef = useRef<HTMLDivElement>(null);
   const previousStep = useRef(step);
   const { uploadFile } = useUploadFile(pendingFile);
@@ -411,6 +414,17 @@ const Setup: NextPage = () => {
       const valid = await trigger(scheduleStepFields);
       if (!valid) {
         focusFirstInvalidField(scheduleStepFields);
+        return;
+      }
+      // Here rather than at Complete, so "Change times" leaves the user on the
+      // step with the pickers - see `useOvernightScheduleConfirmation`. Every
+      // path to Complete passes this gate, and an answer is remembered, so
+      // going back and forth does not ask twice about the same schedule.
+      const keepSchedule = await overnightSchedule.confirmSchedule(
+        { startTime: watch("startTime"), endTime: watch("endTime") },
+        { startTime: user?.startTime, endTime: user?.endTime },
+      );
+      if (!keepSchedule) {
         return;
       }
     } else if (step === 4) {
@@ -791,6 +805,13 @@ const Setup: NextPage = () => {
             setShowViewerConfirm(false);
             await handleSubmit(onSubmit)();
           }}
+        />
+      )}
+      {overnightSchedule.question && (
+        <OvernightScheduleModal
+          question={overnightSchedule.question}
+          onKeep={overnightSchedule.keep}
+          onChange={overnightSchedule.change}
         />
       )}
     </div>
