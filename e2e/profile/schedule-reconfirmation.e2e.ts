@@ -208,12 +208,16 @@ test.describe("/profile asks about a stored mis-pick shape", () => {
     const endTime = page.getByLabel("End Time");
     await expect(endTime).toHaveValue("5:00 AM");
 
-    // Open the end picker and switch its meridiem. The panel's three columns
-    // are plain lists; only the open picker's are visible.
+    // Open the end picker and switch its meridiem. Each column of the panel is
+    // a listbox of options, and a closed picker leaves its panel in the DOM,
+    // so only the open picker's column is visible. A meridiem option is named
+    // by its raw value ("pm"), not its "PM" text, so the name matches either
+    // case.
     await endTime.click();
     await page
-      .getByRole("listitem")
-      .filter({ hasText: /^PM$/, visible: true })
+      .getByRole("listbox", { name: "Select a meridiem" })
+      .filter({ visible: true })
+      .getByRole("option", { name: /^pm$/i })
       .click();
     // A pick commits when the picker closes. Clicking away closes it.
     await page.getByRole("heading", { name: "Carpool Details" }).click();
