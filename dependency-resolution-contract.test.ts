@@ -1,5 +1,5 @@
-import { readFileSync } from "fs";
-import { dirname, join } from "path";
+import { existsSync, readdirSync, readFileSync } from "fs";
+import { dirname, join, relative } from "path";
 
 /**
  * A scoped `resolutions` entry and the top-level pin of the same package have
@@ -26,6 +26,15 @@ import { dirname, join } from "path";
  * and transitive. An entry whose key this cannot interpret fails loudly rather
  * than being skipped — a resolution that quietly checks nothing is the failure
  * mode this file exists to prevent.
+ *
+ * Checking under the parent alone proved too narrow. SCRUM-737 found PR #608
+ * splitting postcss somewhere else: `@tailwindcss/postcss` widened its range,
+ * and the regenerated lockfile resolved it to a fresh copy nested under
+ * Tailwind's plugin instead of deduping onto the pin. Every assertion here
+ * stayed green. Only `tsc` noticed, and only because one script happens to
+ * hand Tailwind's plugin to the root postcss. So each overridden dependency
+ * must also have exactly one installed copy, wherever a second would come
+ * from.
  */
 
 const repoRoot = __dirname;
@@ -87,6 +96,70 @@ const installedFrom = (
     version: string;
   };
   return { path, version };
+};
+
+/**
+ * Every installed package directory in the tree, as paths relative to the
+ * repository root, found the way Node looks for them. Each `node_modules`
+ * holds packages, a scope directory holds more, and any package can carry a
+ * `node_modules` of its own.
+ *
+ * Symlinks are skipped rather than followed, so a linked package cannot send
+ * the walk round in a loop. Yarn Classic links nothing without workspaces or
+ * `link:` dependencies, and this repository uses neither.
+ */
+const listInstalledPackages = (): string[] => {
+  const found: string[] = [];
+
+  const subdirectories = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+      .map((entry) => entry.name);
+
+  const walk = (nodeModules: string): void => {
+    for (const name of subdirectories(nodeModules)) {
+      const packageDirs = name.startsWith("@")
+        ? subdirectories(join(nodeModules, name)).map((scoped) =>
+            join(nodeModules, name, scoped),
+          )
+        : [join(nodeModules, name)];
+
+      for (const packageDir of packageDirs) {
+        found.push(relative(repoRoot, packageDir));
+
+        const nested = join(packageDir, "node_modules");
+        if (existsSync(nested)) {
+          walk(nested);
+        }
+      }
+    }
+  };
+
+  walk(join(repoRoot, "node_modules"));
+  return found;
+};
+
+let installedPackages: string[] | undefined;
+
+/**
+ * The installed copies of `name`, matched on each manifest's `name` field and
+ * not on the directory. `@tailwindcss/postcss` lives in a directory called
+ * `postcss` without being postcss, and an npm alias installs a package under
+ * a directory named for the alias.
+ */
+const installedCopiesOf = (name: string): string[] => {
+  installedPackages ??= listInstalledPackages();
+
+  return installedPackages.filter((packageDir) => {
+    const manifestPath = join(repoRoot, packageDir, "package.json");
+    if (!existsSync(manifestPath)) {
+      return false;
+    }
+    const { name: declared } = JSON.parse(
+      readFileSync(manifestPath, "utf8"),
+    ) as { name?: string };
+    return declared === name;
+  });
 };
 
 const resolutions = Object.entries(manifest.resolutions ?? {});
@@ -163,5 +236,14 @@ describe.each(resolutions)("the %s resolution", (key, pinned) => {
     expect(installedFrom(dependency, parentDir).path).toBe(
       installedFrom(dependency, repoRoot).path,
     );
+  });
+
+  it(`installs exactly one copy of ${dependency} anywhere in the tree`, () => {
+    // The test above checks only under the parent. A split that some
+    // other package pulls in leaves it green, and leaves the build loading
+    // two copies whose types do not match (SCRUM-737).
+    expect(installedCopiesOf(dependency)).toEqual([
+      join("node_modules", dependency),
+    ]);
   });
 });
