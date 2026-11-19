@@ -23,7 +23,6 @@ import { join } from "path";
 import type { Prisma } from "@prisma/client";
 import {
   CANARY_MAX,
-  NEVER_EDITED_TOLERANCE_MS,
   applyRepairs,
   buildManifest,
   decideApprovedCore,
@@ -47,7 +46,7 @@ import {
   type RepairStore,
 } from "./repair-dst-schedule-times";
 import {
-  SCHEDULE_FIX_DEPLOYED_AT,
+  SCHEDULE_FIX_MERGED_AT,
   findDstWrittenScheduleRows,
   isProvablyDstWritten,
 } from "../src/server/db/dstScheduleIntegrity";
@@ -96,7 +95,7 @@ const candidate = (id: string): DstScheduleRow => ({
 
 describe("parseArgs", () => {
   it("reports rather than writes by default", () => {
-    expect(parseArgs([])).toEqual({ apply: false, max: 300 });
+    expect(parseArgs([])).toEqual({ apply: false, max: 100 });
   });
 
   it("writes only for exactly --apply", () => {
@@ -240,14 +239,26 @@ describe("decideRepair", () => {
     });
   });
 
-  it("skips a row whose date_modified moved but is still inside the window", () => {
-    // Still provable on its own timestamps, but no longer the row the repair
-    // was computed from.
+  it("skips a row re-saved inside the window, which the rule now refuses as edited", () => {
+    // Before SCRUM-731 this row was still provable on its own timestamps.
+    // Now any write after creation takes it out of the rule.
     const resaved = auditRow({
       dateModified: new Date("2026-07-20T12:00:00.000Z"),
     });
 
     expect(decideRepair(resaved, PLANNED, ON_COOP)).toEqual({
+      action: "skip",
+      reason: "the row has been saved since the plan was built",
+    });
+  });
+
+  it("skips a row whose timestamps both moved, though it still reads as never edited", () => {
+    // Provable on its own timestamps, but no longer the row the repair was
+    // computed from. Only the snapshot comparison catches it.
+    const moved = new Date("2026-07-20T12:00:00.000Z");
+    const rewritten = auditRow({ dateCreated: moved, dateModified: moved });
+
+    expect(decideRepair(rewritten, PLANNED, ON_COOP)).toEqual({
       action: "skip",
       reason: "date_modified has moved since the plan was built",
     });
@@ -336,7 +347,7 @@ describe("repairStatement", () => {
   });
 
   it.each([
-    ["at the fix cutoff", SCHEDULE_FIX_DEPLOYED_AT],
+    ["at the fix cutoff", SCHEDULE_FIX_MERGED_AT],
     ["before it", new Date("2026-08-01T00:00:00.000Z")],
   ])(
     "refuses a stamp %s, which would leave the row selectable",
@@ -1130,12 +1141,6 @@ describe("applyRepairs on a canary, when the row leaves the approved scope after
   const scopeChanges: [string, Partial<ScheduleTimeAuditRow>, RegExp][] = [
     ["becomes a VIEWER", { role: "VIEWER" }, /now a VIEWER/],
     ["is no longer ACTIVE", { status: "INACTIVE" }, /now INACTIVE/],
-    [
-      "no longer reads as never edited",
-      // Still inside the 2026 EDT window, so the span rule still holds.
-      { dateCreated: new Date("2026-06-01T12:00:00.000Z") },
-      /no longer reads as never edited/,
-    ],
   ];
 
   /** A one-row canary whose row is changed by `change` after selection. */
@@ -1215,28 +1220,43 @@ describe("applyRepairs on a canary, when the row leaves the approved scope after
     },
   );
 
-  it("skips a row edited after selection, which the DST re-check already refuses", async () => {
-    // The realistic way out of "never edited": the owner saves, and
-    // `date_modified` moves. `decideRepair` gives the reason, being first.
-    const { run, store, executed } = canaryRun({
-      dateModified: new Date("2026-08-15T12:00:00.000Z"),
-    });
+  it.each([
+    [
+      "is saved by its owner",
+      // The realistic way out of "never edited": `date_modified` moves.
+      { dateModified: new Date("2026-08-15T12:00:00.000Z") },
+    ],
+    [
+      "has its date_created rewritten underneath the plan",
+      // Still inside the 2026 EDT window, so only never-edited fails.
+      { dateCreated: new Date("2026-06-01T12:00:00.000Z") },
+    ],
+  ])(
+    "skips a row that %s after selection, on a canary or a full run alike",
+    async (_label, change) => {
+      // Since SCRUM-731 never-edited is part of the selection rule itself,
+      // so `decideRepair` refuses this before the approved-core re-check is
+      // reached, and the full run is protected as well as the canary.
+      for (const requireApprovedCore of [true, false]) {
+        const { run, store, executed } = canaryRun(change);
 
-    const result = await applyRepairs({
-      store,
-      ...run,
-      asOf: ON_COOP,
-      requireApprovedCore: true,
-      clock: steppingClock(),
-      log: silent,
-    });
+        const result = await applyRepairs({
+          store,
+          ...run,
+          asOf: ON_COOP,
+          requireApprovedCore,
+          clock: steppingClock(),
+          log: silent,
+        });
 
-    expect(result).toEqual({ repaired: 0, skipped: 1, lostRace: 0 });
-    expect(executed).toEqual([]);
-    expect(readManifest(run.manifestFile).rows[0].note).toMatch(
-      /date_modified has moved/,
-    );
-  });
+        expect(result).toEqual({ repaired: 0, skipped: 1, lostRace: 0 });
+        expect(executed).toEqual([]);
+        expect(readManifest(run.manifestFile).rows[0].note).toMatch(
+          /saved since the plan was built/,
+        );
+      }
+    },
+  );
 
   it("catches a row flipped while an earlier row in the same canary is being written", async () => {
     const run = plannedRun(["cs_a", "cs_b", "cs_c"]);
@@ -1321,22 +1341,20 @@ describe("isApprovedCoreRow", () => {
     expect(isApprovedCoreRow(auditRow({ status: "INACTIVE" }))).toBe(false);
   });
 
-  it("refuses a row edited after creation, which only the wider span rule reaches", () => {
+  it("refuses a row written even a millisecond after creation, as the selection rule does", () => {
+    // One definition of "never edited" for both, with no tolerance
+    // (SCRUM-731). SCRUM-725 allowed five seconds. No production candidate
+    // fell inside that allowance.
     const at = EDT_2026_JULY.getTime();
 
+    expect(isApprovedCoreRow(auditRow({ dateModified: new Date(at) }))).toBe(
+      true,
+    );
     expect(
-      isApprovedCoreRow(
-        auditRow({
-          dateModified: new Date(at + NEVER_EDITED_TOLERANCE_MS),
-        }),
-      ),
-    ).toBe(true);
+      isApprovedCoreRow(auditRow({ dateModified: new Date(at + 1) })),
+    ).toBe(false);
     expect(
-      isApprovedCoreRow(
-        auditRow({
-          dateModified: new Date(at + NEVER_EDITED_TOLERANCE_MS + 1),
-        }),
-      ),
+      isProvablyDstWritten(auditRow({ dateModified: new Date(at + 1) })),
     ).toBe(false);
   });
 });
@@ -1397,7 +1415,7 @@ describe("extractOnlyIds", () => {
 
     expect(onlyIds).toEqual(["cs_a"]);
     expect(manifestPath).toBe("c.json");
-    expect(parseArgs(remaining)).toEqual({ apply: true, max: 300 });
+    expect(parseArgs(remaining)).toEqual({ apply: true, max: 100 });
   });
 });
 
@@ -1447,11 +1465,6 @@ describe("selectOnly", () => {
       { status: "INACTIVE" },
       /DRIVER, INACTIVE, never edited/,
     ],
-    [
-      "a row edited after creation",
-      { dateModified: new Date("2026-08-15T12:00:00.000Z") },
-      /DRIVER, ACTIVE, edited after creation/,
-    ],
   ])(
     "refuses %s even though the full rule selects it",
     (_label, overrides, reason) => {
@@ -1474,6 +1487,23 @@ describe("selectOnly", () => {
       expect(problemsOf(result)[0]).toMatch(reason);
     },
   );
+
+  it("refuses a row edited after creation, which is no longer a candidate at all", () => {
+    // Before SCRUM-731 the full rule selected this row and only the scope
+    // check kept it out of a canary. Now the rule itself excludes it.
+    const edited = auditRow({
+      id: "cs_edited",
+      dateModified: new Date("2026-08-15T12:00:00.000Z"),
+    });
+    const plan = findDstWrittenScheduleRows([edited], ON_COOP);
+    expect(plan).toHaveLength(0);
+
+    const result = selectOnly([...pool, ...plan], ["cs_1", "cs_edited"]);
+
+    expect(problemsOf(result)).toEqual([
+      expect.stringMatching(/^cs_edited is not a current candidate/),
+    ]);
+  });
 
   it("refuses duplicates", () => {
     const result = selectOnly(pool, ["cs_1", "cs_1"]);
@@ -1535,8 +1565,9 @@ describe("buildManifest, --only", () => {
 
 describe("a canary, then re-runs", () => {
   /**
-   * Seven core rows, a VIEWER and a row edited after creation — all nine of
-   * which the full rule selects. Driven through the real selection rule,
+   * Seven core rows, a VIEWER and a row edited after creation. The full rule
+   * selects the first eight. Since SCRUM-731 it does not select the edited
+   * row, and no run touches it. Driven through the real selection rule,
    * `selectOnly`, `applyRepairs` and a table that applies the real
    * statement, so each re-run plans from what the previous one left behind.
    */
@@ -1583,7 +1614,7 @@ describe("a canary, then re-runs", () => {
 
   it("repairs exactly the canary rows and leaves every other row untouched", async () => {
     const rows = table();
-    expect(plan(rows)).toHaveLength(9);
+    expect(plan(rows)).toHaveLength(8);
 
     const selection = selectOnly(plan(rows), CANARY);
     if (!selection.ok) throw new Error(selection.problems.join("; "));
@@ -1636,19 +1667,23 @@ describe("a canary, then re-runs", () => {
     expect(remaining.map((c) => c.row.id)).toEqual([
       "cs_1",
       "cs_3",
-      "cs_edited",
       "cs_viewer",
     ]);
 
-    // A full run: its scope is the span rule, so the VIEWER and the edited
-    // row are repaired here even though no canary could reach them.
+    // A full run: its scope is the selection rule, so the VIEWER is repaired
+    // here even though no canary could reach it. The edited row is not,
+    // because it may hold a correct EST-stored edit (SCRUM-731).
     const { result } = await run(store, remaining, false, clock);
 
-    expect(result).toEqual({ repaired: 4, skipped: 0, lostRace: 0 });
+    expect(result).toEqual({ repaired: 3, skipped: 0, lostRace: 0 });
     expect(executed).not.toEqual(expect.arrayContaining([CANARY[0]]));
-    // Every row repaired exactly once: the canary rows were not shifted again.
-    for (const row of db.values()) {
-      expect(toSqlTime(row.startTime as Date)).toBe("14:00:00");
+    // Every selected row repaired exactly once: the canary rows were not
+    // shifted again, and the edited row was never touched.
+    for (const [id, row] of db) {
+      expect([id, toSqlTime(row.startTime as Date)]).toEqual([
+        id,
+        id === "cs_edited" ? "13:00:00" : "14:00:00",
+      ]);
     }
     expect(plan(db.values())).toEqual([]);
   });

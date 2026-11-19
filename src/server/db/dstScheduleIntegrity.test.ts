@@ -15,9 +15,10 @@
 import {
   BULK_LOAD_DAY,
   CONVERTING_ERA_BEGAN_AT,
-  SCHEDULE_FIX_DEPLOYED_AT,
+  SCHEDULE_FIX_MERGED_AT,
   findDstWrittenScheduleRows,
   isEasternOffsetEvidenced,
+  isNeverEdited,
   isProvablyDstWritten,
   toCanonicalFromEdtScheduleTime,
   type ScheduleTimeAuditRow,
@@ -99,8 +100,50 @@ describe("toCanonicalFromEdtScheduleTime", () => {
   });
 });
 
+describe("isNeverEdited", () => {
+  it("accepts a row whose two timestamps are the same instant", () => {
+    expect(
+      isNeverEdited({
+        dateCreated: EDT_2026_JULY,
+        dateModified: EDT_2026_JULY,
+      }),
+    ).toBe(true);
+  });
+
+  it("rejects a row written one millisecond after its creation", () => {
+    // No tolerance: production's never-edited rows all have a zero gap, so
+    // any gap at all is a later write.
+    expect(
+      isNeverEdited({
+        dateCreated: EDT_2026_JULY,
+        dateModified: new Date(EDT_2026_JULY.getTime() + 1),
+      }),
+    ).toBe(false);
+  });
+
+  it("rejects a row modified before it was created", () => {
+    expect(
+      isNeverEdited({
+        dateCreated: EDT_2026_AUGUST,
+        dateModified: EDT_2026_JULY,
+      }),
+    ).toBe(false);
+  });
+});
+
 describe("isProvablyDstWritten", () => {
-  it("accepts a span wholly inside one daylight-saving window", () => {
+  it("accepts a row never edited since creation, created under EDT", () => {
+    expect(
+      isProvablyDstWritten(
+        auditRow({ dateCreated: EDT_2025_JULY, dateModified: EDT_2025_JULY }),
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects an edited row even when its whole span is inside one daylight-saving window", () => {
+    // SCRUM-731. Before the fix, an edit resolved at the stored value's epoch
+    // date, which is EST, so this row may hold a correct value. Before
+    // SCRUM-731 the span rule accepted it.
     expect(
       isProvablyDstWritten(
         auditRow({
@@ -108,15 +151,16 @@ describe("isProvablyDstWritten", () => {
           dateModified: EDT_2026_AUGUST,
         }),
       ),
-    ).toBe(true);
-  });
+    ).toBe(false);
 
-  it("accepts a row never edited since creation", () => {
     expect(
       isProvablyDstWritten(
-        auditRow({ dateCreated: EDT_2025_JULY, dateModified: EDT_2025_JULY }),
+        auditRow({
+          dateCreated: EDT_2026_JULY,
+          dateModified: new Date(EDT_2026_JULY.getTime() + 1000),
+        }),
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("rejects a span crossing a winter, where the schedule could have been retyped under EST", () => {
@@ -130,25 +174,62 @@ describe("isProvablyDstWritten", () => {
     ).toBe(false);
   });
 
-  it("rejects a row created outside daylight saving", () => {
+  it("rejects a never-edited row created outside daylight saving", () => {
     expect(
       isProvablyDstWritten(
         auditRow({
           dateCreated: EST_2026_JANUARY,
-          dateModified: EDT_2026_JULY,
+          dateModified: EST_2026_JANUARY,
         }),
       ),
     ).toBe(false);
   });
 
-  it("rejects a row that might have been saved through the fixed path", () => {
-    const afterTheFix = new Date(SCHEDULE_FIX_DEPLOYED_AT.getTime() + 1000);
+  it("puts the fix cutoff at the moment SCRUM-373 merged", () => {
+    // The earliest instant the fixed path could have been live. A later
+    // value admits rows that may already be correct (SCRUM-731).
+    expect(SCHEDULE_FIX_MERGED_AT.toISOString()).toBe(
+      "2026-09-08T14:20:43.000Z",
+    );
+  });
+
+  // The boundary instants below are literals, not offsets from the constant,
+  // so they pin the merge time independently of it. Derived from the
+  // constant, they would move with it and pass against the old 09-14 value.
+
+  it("rejects a never-edited row saved one minute after the fix merged", () => {
+    // The shape of the 4 production rows SCRUM-731 found: created
+    // 2026-09-09 to 09-11, never edited, and selected under the old
+    // 2026-09-14 cutoff.
+    const afterTheMerge = new Date("2026-09-08T14:21:43.000Z");
 
     expect(
       isProvablyDstWritten(
-        auditRow({ dateCreated: EDT_2026_JULY, dateModified: afterTheFix }),
+        auditRow({ dateCreated: afterTheMerge, dateModified: afterTheMerge }),
       ),
     ).toBe(false);
+  });
+
+  it("rejects a never-edited row saved at the merge instant itself", () => {
+    const atTheMerge = new Date("2026-09-08T14:20:43.000Z");
+
+    expect(
+      isProvablyDstWritten(
+        auditRow({ dateCreated: atTheMerge, dateModified: atTheMerge }),
+      ),
+    ).toBe(false);
+  });
+
+  it("accepts a never-edited row saved one second before the fix merged", () => {
+    // The positive control for the two boundary tests above. Without it,
+    // they would pass even if the rule rejected every September row.
+    const beforeTheMerge = new Date("2026-09-08T14:20:42.000Z");
+
+    expect(
+      isProvablyDstWritten(
+        auditRow({ dateCreated: beforeTheMerge, dateModified: beforeTheMerge }),
+      ),
+    ).toBe(true);
   });
 
   it("rejects a wall-clock-era row, which is five hours out rather than one", () => {

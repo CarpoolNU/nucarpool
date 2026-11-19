@@ -32,6 +32,15 @@
  * moment. Rows whose span crosses a transition keep the original ambiguity and
  * are left alone.
  *
+ * **The season settles the offset only for a fresh pick, so only never-edited
+ * rows qualify** (SCRUM-731). An *edit* through the pre-fix picker resolved at
+ * the existing value's epoch date, which is in EST, so it stored at the anchor's
+ * offset whatever the season and may already be correct. A row written since
+ * its creation might hold such an edit. `isProvablyDstWritten` therefore
+ * requires `dateModified === dateCreated`, and the span reduces to the instant
+ * of creation. The span rule as first written accepted edited rows, which is
+ * unsound.
+ *
  * **The season is not the offset, and this module needs both.** The pre-fix
  * write path stored `date.toDate()` off the picker — an instant resolved in
  * the *browser's* zone — so the stored value is `typed - browser_offset`. For
@@ -101,19 +110,41 @@ export type DstScheduleRow = {
 };
 
 /**
- * The first instant from which a stored schedule time is treated as correct.
+ * The first instant from which a stored schedule time might be correct: the
+ * moment SCRUM-373's fix merged (`c68f6da`, 2026-09-08 14:20:43Z).
  *
- * The fix landed on 2026-09-08 and the deploy followed it. The exact deploy
- * time is not recorded anywhere this code can read, so the cutoff is pushed
- * out to cover it: a row last saved in that gap might have gone through either
- * path, and a row that *might* already be correct is left alone.
+ * The deploy followed the merge by an amount nothing this code can read
+ * records, so a row last saved between the two might have gone through either
+ * write path. **The cutoff is therefore the earliest instant the fix could
+ * have been live, not a guess at when it was.** Only rows last saved before it
+ * are provably pre-fix.
  *
- * The asymmetry is deliberate. Setting this too late leaves a handful of
- * broken rows unrepaired, which is the status quo. Setting it too early
- * rewrites rows that are already right, which is the one outcome this repair
- * must not produce.
+ * The asymmetry runs this way. A cutoff that is *too early* leaves a few
+ * broken rows, saved between the merge and the deploy, unrepaired. That is the
+ * status quo. A cutoff that is *too late* admits rows saved through the fixed
+ * path and rewrites values that are already right, which is the one outcome
+ * this repair must not produce. This constant used to sit at 2026-09-14,
+ * six days late, on the opposite reading. On production that admitted 11 rows
+ * last saved after the merge (SCRUM-731).
  */
-export const SCHEDULE_FIX_DEPLOYED_AT = new Date("2026-09-14T00:00:00.000Z");
+export const SCHEDULE_FIX_MERGED_AT = new Date("2026-09-08T14:20:43.000Z");
+
+/**
+ * Whether this row has never been written since the insert that created it.
+ *
+ * Prisma stamps `dateCreated` and `dateModified` with the same instant on
+ * create, so the test is equality, with no tolerance. SCRUM-725 measured
+ * "never edited" as within five seconds. On production on 2026-11-19 every
+ * candidate inside that allowance had a gap of exactly zero, so the strict test
+ * selects the same rows and leaves no window for a quick second save.
+ *
+ * Any later write moves `dateModified`, whatever it changed (see the db
+ * README), so this means "nothing has touched the row". That is stricter than
+ * "the schedule was not retyped", which is the safe direction.
+ */
+export const isNeverEdited = (
+  row: Pick<ScheduleTimeAuditRow, "dateCreated" | "dateModified">,
+): boolean => row.dateModified.getTime() === row.dateCreated.getTime();
 
 /**
  * The first instant written by an era that converted at all.
@@ -225,28 +256,39 @@ export const isEasternOffsetEvidenced = (
 /**
  * Whether this row's schedule provably went in under EDT.
  *
- * The authoring moment is unknown but necessarily lies in `[dateCreated,
- * dateModified]`, so the test is on the whole span rather than on a guess at a
- * point inside it: if every instant in the span is EDT, the offset follows.
+ * **Only a row never edited since creation can qualify** (SCRUM-731). The
+ * pre-fix picker wrote two different ways. A *fresh* pick, with no existing
+ * value, resolved at today's date, so a summer save converted at EDT. An
+ * *edit* of an existing value resolved at that value's own date, which is
+ * `1970-01-01` and in EST, so an edited time was stored at the anchor's offset
+ * **in every season** and may already be correct. Executing the historical
+ * picker shows both behaviours, and production's edited rows skew an hour later
+ * than its never-edited ones, which is the signature of EST-stored edits. A row
+ * that has been written since its insert might be holding an edit, so it is
+ * left alone. Of the 216 rows the span rule alone selected on 2026-11-19, 127
+ * were edited.
+ *
+ * For a never-edited row the authoring moment is its creation. The span tests
+ * below still run, on `[dateCreated, dateModified]`, so a row created across a
+ * transition is still refused and the rule does not depend on how
+ * `isNeverEdited` defines "never".
  *
  * "One window" is daylight saving at both ends **and the same calendar year**.
  * US daylight saving runs March to November and never crosses New Year, so a
- * year holds exactly one window — two EDT instants in one year are in the same
- * window, while two in different years have a winter between them where the
- * schedule could have been retyped under EST.
+ * year holds exactly one window.
  */
 export const isProvablyDstWritten = (row: ScheduleTimeAuditRow): boolean => {
   const { dateCreated, dateModified } = row;
 
-  // A row cannot have been modified before it existed. Treated as unusable
-  // rather than impossible, because the bulk load wrote both columns directly.
-  if (dateModified.getTime() < dateCreated.getTime()) {
+  // Equality, so this also refuses a row "modified" before it was created.
+  // The bulk load wrote both columns directly, which makes that shape possible.
+  if (!isNeverEdited(row)) {
     return false;
   }
 
   if (
     dateCreated.getTime() < CONVERTING_ERA_BEGAN_AT.getTime() ||
-    dateModified.getTime() >= SCHEDULE_FIX_DEPLOYED_AT.getTime() ||
+    dateModified.getTime() >= SCHEDULE_FIX_MERGED_AT.getTime() ||
     dayjs.utc(dateCreated).format("YYYY-MM-DD") === BULK_LOAD_DAY
   ) {
     return false;
@@ -291,8 +333,9 @@ export const toCanonicalFromEdtScheduleTime = (stored: Date): Date => {
 };
 
 /**
- * The rows to repair: schedules provably written under EDT, on a co-op running
- * at `asOf`, each paired with the value a repair would write.
+ * The rows to repair: schedules provably written under EDT, never edited since
+ * creation and saved before the fix merged, on a co-op running at `asOf`, each
+ * paired with the value a repair would write.
  *
  * Scoped to running co-ops for the same reason as the wall-clock repair — a
  * student between placements re-enters their schedule when they return, so
@@ -313,9 +356,10 @@ export const toCanonicalFromEdtScheduleTime = (stored: Date): Date => {
  * Not idempotent by value — a repaired `13:00` becomes `14:00`, which this
  * rule would select again on its timestamps alone. It is idempotent by
  * *write*: the repair moves `dateModified` to now, which is past
- * `SCHEDULE_FIX_DEPLOYED_AT`, so a second run cannot select the row. That
- * safety lives in the write rather than the value, which is exactly why the
- * script must re-read and re-check every row immediately before writing it.
+ * `SCHEDULE_FIX_MERGED_AT` and also makes the row no longer never-edited, so a
+ * second run cannot select the row. That safety lives in the write rather than
+ * the value, which is exactly why the script must re-read and re-check every
+ * row immediately before writing it.
  */
 export const findDstWrittenScheduleRows = (
   rows: readonly ScheduleTimeAuditRow[],
