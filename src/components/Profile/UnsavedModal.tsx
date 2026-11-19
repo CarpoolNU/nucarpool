@@ -65,7 +65,7 @@ function UnsavedModal({ onClose, onSave, onContinue }: UnsavedModalProps) {
           <div className="flex justify-center space-x-4">
             <button
               onClick={onContinue}
-              className="rounded bg-gray-400 px-4 py-2 font-bold text-white hover:bg-gray-600"
+              className="rounded bg-gray-600 px-4 py-2 font-bold text-white hover:bg-gray-900 focus:ring-2 focus:ring-black focus:outline-hidden"
             >
               Continue
             </button>

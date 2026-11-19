@@ -26,7 +26,7 @@ function ViewerConfirmModal({ onCancel, onConfirm }: ViewerConfirmModalProps) {
         <div className="flex justify-center space-x-4">
           <button
             onClick={onCancel}
-            className="rounded bg-gray-400 px-4 py-2 font-bold text-white hover:bg-gray-600"
+            className="rounded bg-gray-600 px-4 py-2 font-bold text-white hover:bg-gray-900 focus:ring-2 focus:ring-black focus:outline-hidden"
           >
             Go back
           </button>
