@@ -31,6 +31,9 @@ import {
 import { planCoopRangeNotice } from "../../utils/profile/coopRangeNotice";
 import { useOvernightScheduleConfirmation } from "../../utils/profile/useOvernightScheduleConfirmation";
 import OvernightScheduleModal from "../../components/Schedule/OvernightScheduleModal";
+import { planScheduleReconfirmation } from "../../utils/profile/scheduleReconfirmation";
+import { useScheduleReconfirmationRecord } from "../../utils/profile/useScheduleReconfirmationRecord";
+import ScheduleReconfirmationNotice from "../../components/Profile/ScheduleReconfirmationNotice";
 import {
   DEFAULT_PROFILE_TAB,
   PROFILE_TAB_QUERY_KEY,
@@ -161,6 +164,13 @@ const Index: NextPage = () => {
     refetchOnMount: true,
   });
   const { data: user } = userQuery;
+  /**
+   * This account's answers to the schedule notice on this device
+   * (SCRUM-733), keyed by the signed-in user so one account's answer never
+   * stands in for another's on a shared browser. The save-time question
+   * feeds it too, after a successful save: see `onSubmit`.
+   */
+  const scheduleReconfirmation = useScheduleReconfirmationRecord(user?.id);
 
   /**
    * How many riders this user could carry if they drove, floored by the
@@ -530,6 +540,14 @@ const Index: NextPage = () => {
         sessionName,
         mutation: editUserMutation,
       });
+      // Keeping an overnight pair at SCRUM-732's question is the answer the
+      // SCRUM-733 notice asks for, so the notice must not ask it again. Only
+      // now, once the server has stored that pair: a refused save leaves the
+      // old pair stored, and its confirmation must not be overwritten by one
+      // for a schedule that was never saved.
+      if (overnightSchedule.wasKept(values)) {
+        scheduleReconfirmation.confirm(values);
+      }
       trackProfileCompletion(userInfo.role, userInfo.status);
       // Named separately rather than sharing one message: "could not be
       // uploaded" told a user who pressed Remove the opposite of what happened,
@@ -638,6 +656,45 @@ const Index: NextPage = () => {
       </div>
     );
   }
+
+  /*
+   * Whether to ask about the *stored* schedule (SCRUM-733), never the form's.
+   * Planned from `user` on every render rather than latched like the co-op
+   * notice, because nothing here moves the user: it is inline, and it goes
+   * away by itself the moment it no longer applies. An answer removes it, and
+   * so does a save that stores a different pair, because the save refetches
+   * `user.me`. Nothing renders until this account's answers on this device
+   * have been read, so a confirmed schedule never flashes the notice.
+   */
+  const storedSchedule = { startTime: user.startTime, endTime: user.endTime };
+  const reconfirmation = scheduleReconfirmation.hasLoaded
+    ? planScheduleReconfirmation({
+        role: user.role,
+        status: user.status,
+        coopEndDate: user.coopEndDate,
+        ...storedSchedule,
+        record: scheduleReconfirmation.record,
+        now: new Date(),
+      })
+    : null;
+  // One element in both layouts, ahead of whichever tab is showing, so it
+  // stays mounted when "Update my schedule" changes the tab.
+  const reconfirmationNotice = reconfirmation && (
+    <ScheduleReconfirmationNotice
+      schedule={reconfirmation.schedule}
+      showsSchedulePickers={option === "carpool"}
+      onConfirm={() => {
+        scheduleReconfirmation.confirm(storedSchedule);
+        toast.success("Thanks for confirming your schedule.");
+      }}
+      onUpdate={() => setOption("carpool")}
+      onRemindLater={() => {
+        scheduleReconfirmation.snooze(storedSchedule);
+        toast.info("We will ask about your schedule again in a week.");
+      }}
+    />
+  );
+
   return (
     <div className="relative h-full select-none">
       <PageTitle page="Profile" />
@@ -699,6 +756,7 @@ const Index: NextPage = () => {
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
             <div className="px-8 pt-6 pb-24">
+              {reconfirmationNotice}
               {option === "user" ? (
                 <UserSection
                   watch={watch}
@@ -760,6 +818,7 @@ const Index: NextPage = () => {
 
           <div className="col-start-2 col-end-4 flex h-full shrink items-start justify-center overflow-x-hidden overflow-y-auto">
             <div className="mt-10 w-full max-w-2xl px-8">
+              {reconfirmationNotice}
               {option === "user" ? (
                 <UserSection
                   watch={watch}

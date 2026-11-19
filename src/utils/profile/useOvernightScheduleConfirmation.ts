@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import {
   OvernightScheduleQuestion,
   planOvernightScheduleQuestion,
+  samePair,
   SchedulePair,
 } from "../scheduleSpan";
 
@@ -25,6 +26,13 @@ import {
  * The confirmed pair is remembered for the life of the page, so a save the
  * server refuses does not ask again when it is retried. What is *stored* needs
  * no memory: `planOvernightScheduleQuestion` never asks about it.
+ *
+ * `wasKept` says whether a pair is the one the user kept. Keeping one is the
+ * same answer SCRUM-733's on-load notice asks for, so both pages record it in
+ * that notice's record, but **only once the save has succeeded**. Recording
+ * it on the press would remember an answer about a schedule the server then
+ * refused, and the record holds one confirmation, so that would also
+ * overwrite a confirmation of the schedule that is still stored.
  */
 export const useOvernightScheduleConfirmation = () => {
   const [question, setQuestion] = useState<OvernightScheduleQuestion | null>(
@@ -73,5 +81,7 @@ export const useOvernightScheduleConfirmation = () => {
     confirmSchedule,
     keep: () => answer.current?.(true),
     change: () => answer.current?.(false),
+    wasKept: (schedule: SchedulePair): boolean =>
+      confirmed.current !== null && samePair(schedule, confirmed.current),
   };
 };

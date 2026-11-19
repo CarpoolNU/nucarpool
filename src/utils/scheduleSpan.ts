@@ -182,7 +182,8 @@ export interface OvernightScheduleQuestion {
   length: string;
 }
 
-const samePair = (a: SchedulePair, b: SchedulePair): boolean =>
+/** Whether two pairs name the same Boston wall-clock start and end. */
+export const samePair = (a: SchedulePair, b: SchedulePair): boolean =>
   scheduleMinuteOfDay(a.startTime) === scheduleMinuteOfDay(b.startTime) &&
   scheduleMinuteOfDay(a.endTime) === scheduleMinuteOfDay(b.endTime);
 

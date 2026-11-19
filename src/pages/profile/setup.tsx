@@ -28,6 +28,7 @@ import StepFour from "../../components/Setup/StepFour";
 import ViewerConfirmModal from "../../components/Setup/ViewerConfirmModal";
 import OvernightScheduleModal from "../../components/Schedule/OvernightScheduleModal";
 import { useOvernightScheduleConfirmation } from "../../utils/profile/useOvernightScheduleConfirmation";
+import { rememberConfirmedSchedule } from "../../utils/profile/useScheduleReconfirmationRecord";
 import { Role } from "@prisma/client";
 import { trackFTUECompletion, trackFTUEStep } from "../../utils/mixpanel";
 import { useUploadFile } from "../../utils/profile/useUploadFile";
@@ -341,6 +342,14 @@ const Setup: NextPage = () => {
         sessionName,
         mutation: editUserMutation,
       });
+      // A schedule kept at step 3's overnight question is confirmed, so the
+      // profile's SCRUM-733 notice does not ask about it on the first visit.
+      // Recorded here, once the save has stored it, not when Keep overnight
+      // was pressed: onboarding may still be abandoned, refused, or finished
+      // with different times. Keyed by the account, as the profile's record is.
+      if (user && overnightSchedule.wasKept(values)) {
+        rememberConfirmedSchedule(user.id, values);
+      }
       trackFTUECompletion(userInfo.role);
     } catch (error) {
       // `useEditUserMutation`'s `onError` has already toasted and cleared
