@@ -1895,7 +1895,7 @@ const centredDialogPanels: LayoutFixture = {
         <h3 class="mb-6 text-xl font-semibold lg:text-2xl">You have unsaved changes!</h3>
         <p class="my-4 text-gray-700">Continue with or without saving?</p>
         <div class="flex justify-center space-x-4" data-probe="unsaved-buttons">
-          <button class="rounded bg-gray-400 px-4 py-2 font-bold text-white" data-probe="unsaved-continue">Continue</button>
+          <button class="rounded bg-gray-600 px-4 py-2 font-bold text-white" data-probe="unsaved-continue">Continue</button>
           <button class="bg-northeastern-red rounded px-4 py-2 font-bold text-white" data-probe="unsaved-save">Save and Continue</button>
         </div>
       </div>
