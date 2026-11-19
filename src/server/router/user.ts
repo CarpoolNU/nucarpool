@@ -541,7 +541,7 @@ export const userRouter = router({
           if (input.role !== existingSearch.role) {
             const claimed = await tx.$executeRaw`
               UPDATE carpool_search
-              SET role = ${input.role}
+              SET role = ${input.role}, date_modified = NOW(3)
               WHERE id = ${existingSearch.id} AND carpoolId IS NULL
             `;
 

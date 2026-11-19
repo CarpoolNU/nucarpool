@@ -51,8 +51,9 @@
  *     otherwise be overwritten by a value computed from the stale read. The
  *     values are compared as well as the timestamp because nothing in the
  *     database makes a write advance `date_modified`: Prisma's `@updatedAt`
- *     does it for Prisma's own writes, and raw SQL — several of the existing
- *     `UPDATE carpool_search` statements, any console session — does not.
+ *     does it for Prisma's own writes, and raw SQL does so only by assigning
+ *     it by hand — which the application's raw statements now do (SCRUM-727)
+ *     and a console session need not.
  *   - **A rollback manifest is written before the first write**, at mode
  *     `0600`, and updated as each row resolves. Both columns are overwritten
  *     in place and there is no history table, so without it a closed terminal
@@ -375,10 +376,10 @@ export const toSqlDateTime = (at: Date): string => {
  * `date_modified` would be enough *if* every write advanced it, and every
  * application write that changes a schedule does today — `user.edit` goes
  * through `carpoolSearch.update`, so `@updatedAt` moves it. But nothing in
- * the database enforces that: the column has no `ON UPDATE`, five of the
- * raw `UPDATE carpool_search` statements in `groups.ts` and `admin.ts`
- * already leave it alone, and a console session would too. So the prior
- * values are in the `WHERE` as well.
+ * the database enforces that: the column has no `ON UPDATE`, so a raw
+ * `UPDATE carpool_search` advances it only by assigning it by hand. Five
+ * application statements did not until SCRUM-727, and a console session
+ * still need not. So the prior values are in the `WHERE` as well.
  *
  * **`date_modified` is assigned explicitly** because raw SQL bypasses
  * `@updatedAt` and the column carries no `ON UPDATE CURRENT_TIMESTAMP`. That
