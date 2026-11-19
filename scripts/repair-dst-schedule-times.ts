@@ -17,8 +17,14 @@
  * that whole span sits inside one daylight-saving window, every instant it
  * could have been is EDT. Rows whose span crosses a transition keep the
  * original ambiguity and **are not touched**. Neither are rows the bulk load
- * stamped, rows from the era that stored a wall clock, or rows that might have
- * been saved through the fixed path.
+ * stamped, rows from the era that stored a wall clock, or rows last saved at
+ * or after the fix merged, which might have gone through the fixed path.
+ *
+ * **Only rows never edited since creation are selected** (SCRUM-731). The
+ * pre-fix picker converted a *fresh* pick at today's offset but an *edit* at
+ * the existing value's epoch date, which is EST in every season. An edited
+ * row may therefore hold a correct value, and the span cannot tell which. See
+ * `isProvablyDstWritten`.
  *
  * **The span proves the season, not the offset.** The pre-fix path stored an
  * instant resolved in the *browser's* zone, so season and offset coincide only
@@ -27,16 +33,20 @@
  *
  * On production as measured on 2026-11-17: 324 live rows carry a schedule, 234
  * of those are pre-fix converting-era rows, 223 of *those* have a span that
- * proves the season, and **221** survive the Eastern-offset evidence check.
+ * proves the season, and 221 survive the Eastern-offset evidence check.
  * The 11 the span rule drops, and the 2 the offset check drops, need their
  * owners asked rather than guessed at.
  *
- * **The scope here is wider than SCRUM-725 authorised and that is a decision
- * somebody has to take.** That ticket approved a rule requiring `date_modified`
- * within five seconds of `date_created` — "never edited since creation", 90
- * rows — and put the rest explicitly out of scope. The span rule below is a
- * sound generalisation of it, but it is a generalisation: it reaches rows that
- * ticket said nothing may touch. Record the decision before `--apply`.
+ * Re-measured on 2026-11-19, after the 5-row canary, with SCRUM-731's two
+ * narrowings: 216 rows passed the old rule. 127 of them were edited after
+ * creation, and 4 more were never edited but created after the fix merged.
+ * That leaves **85** candidates. The edited rows need their owners asked.
+ *
+ * **The scope is still slightly wider than SCRUM-725 authorised.** That ticket
+ * approved never-edited rows with `role <> 'VIEWER'`. This script also selects
+ * `VIEWER` and `INACTIVE` rows. On 2026-11-19 that is 2 of the 85, and **83**
+ * are inside the approved scope. Record the decision on those 2 before a full
+ * `--apply`.
  *
  * Safety, because this writes to production rows:
  *
@@ -67,8 +77,8 @@
  *     written identifiable: the rollback matches on that stamp, not on the
  *     outcome the run managed to record.
  *   - Refuses to proceed when the candidate count exceeds `--max`. The default
- *     is deliberately above the ~221 expected and well below a count that
- *     could only mean the rule is wrong.
+ *     is deliberately above the ~85 expected and below the 216 that the rule
+ *     selected before it excluded edited rows.
  *   - **Prints the prior value of every row before touching it**, as well as
  *     recording it in the manifest.
  *   - Every candidate is listed, never sampled, and the ceiling is checked
@@ -85,8 +95,9 @@
  * **Re-running is safe, but not because the value stops matching.** A repaired
  * `13:00` becomes `14:00`, which the timestamp rule would still accept. What
  * excludes it is the write itself: `date_modified` moves to now, which is past
- * the fix cutoff, so the row can never be selected again. That makes the
- * re-check before each write load-bearing rather than defensive.
+ * the fix cutoff and no longer equals `date_created`, so the row can never be
+ * selected again. That makes the re-check before each write load-bearing
+ * rather than defensive.
  *
  * **That guarantee now rests on one line of SQL.** The write is raw, and raw
  * SQL bypasses Prisma's `@updatedAt` — the column has no
@@ -118,7 +129,7 @@
  * Usage:
  *   npx ts-node scripts/repair-dst-schedule-times.ts            # report only
  *   npx ts-node scripts/repair-dst-schedule-times.ts --apply    # write
- *   npx ts-node scripts/repair-dst-schedule-times.ts --apply --max 300
+ *   npx ts-node scripts/repair-dst-schedule-times.ts --apply --max 120
  *   npx ts-node scripts/repair-dst-schedule-times.ts --apply --manifest run.json
  *   npx ts-node scripts/repair-dst-schedule-times.ts --only id1,id2 --manifest canary.json
  *
@@ -146,8 +157,9 @@ import {
 import { basename, dirname, join } from "path";
 import { Prisma, PrismaClient } from "@prisma/client";
 import {
-  SCHEDULE_FIX_DEPLOYED_AT,
+  SCHEDULE_FIX_MERGED_AT,
   findDstWrittenScheduleRows,
+  isNeverEdited,
   isProvablyDstWritten,
   type DstScheduleRow,
   type ScheduleTimeAuditRow,
@@ -160,12 +172,15 @@ import { formatScheduleTime } from "../src/utils/scheduleTime";
 import { createParseArgs } from "./lib/parseArgs";
 
 /**
- * Above the 221 rows production held when this was measured on 2026-11-17 (see
- * the module docstring), with room for the set to have grown a little, and far
- * below a count that could only mean the selection rule has broken. Higher than the wall-clock repair's 50 because
- * the population is genuinely larger, not because the guard matters less.
+ * Above the 85 candidates production held on 2026-11-19 (see the module
+ * docstring), and **below the 216 the rule selected before SCRUM-731**
+ * excluded edited rows. That gap is the point of the number. A regression that
+ * re-admitted edited rows would raise the count past this ceiling and refuse,
+ * instead of running under a ceiling that had been sized for the unsound
+ * rule. The population can only shrink, because the selection window closed
+ * when the fix merged, so there is no need to leave room for growth.
  */
-const DEFAULT_MAX = 300;
+const DEFAULT_MAX = 100;
 
 export type { Options } from "./lib/parseArgs";
 
@@ -403,10 +418,10 @@ export const repairStatement = (
   repair: { startTime: Date; endTime: Date },
   stampedAt: Date,
 ): Prisma.Sql => {
-  if (stampedAt.getTime() <= SCHEDULE_FIX_DEPLOYED_AT.getTime()) {
+  if (stampedAt.getTime() <= SCHEDULE_FIX_MERGED_AT.getTime()) {
     throw new Error(
       `refusing to stamp date_modified at ${stampedAt.toISOString()}: it ` +
-        `must be after ${SCHEDULE_FIX_DEPLOYED_AT.toISOString()} or the row ` +
+        `must be after ${SCHEDULE_FIX_MERGED_AT.toISOString()} or the row ` +
         `stays selectable and a re-run repairs it twice. Check this ` +
         `machine's clock.`,
     );
@@ -521,8 +536,8 @@ const ROLLBACK_INSTRUCTIONS =
  *
  * Built from the plan rather than written as each row succeeds, so the file
  * describes every row the run intends to touch *before* it touches any of
- * them. A crash after the third write still leaves the prior values of all
- * 221 rows on disk.
+ * them. A crash after the third write still leaves the prior values of every
+ * planned row on disk.
  */
 export const buildManifest = (
   candidates: readonly DstScheduleRow[],
@@ -756,8 +771,8 @@ export type ApplyResult = {
  *
  * **`requireApprovedCore` is required, not defaulted**, so a caller cannot
  * drop the canary's scope check by forgetting to pass it. `main` sets it
- * exactly when `--only` was given; the full run's scope is the wider span
- * rule, which `decideRepair` already re-checks.
+ * exactly when `--only` was given. The full run's scope is the selection rule,
+ * which admits only never-edited rows and which `decideRepair` re-checks.
  */
 export const applyRepairs = async ({
   store,
@@ -906,33 +921,18 @@ export const extractManifestPath = (
 export const CANARY_MAX = 5;
 
 /**
- * SCRUM-725's "never edited since creation" tolerance, in milliseconds.
- *
- * That ticket measured it as `ABS(TIMESTAMPDIFF(SECOND, ...)) <= 5`, which
- * truncates, so a 5.9-second gap counted there and does not here. Stricter is
- * the safe direction for a scope check.
- */
-export const NEVER_EDITED_TOLERANCE_MS = 5_000;
-
-/** SCRUM-725's condition 5: `date_modified` within the tolerance of creation. */
-const isNeverEdited = (
-  row: Pick<ScheduleTimeAuditRow, "dateCreated" | "dateModified">,
-): boolean =>
-  Math.abs(row.dateModified.getTime() - row.dateCreated.getTime()) <=
-  NEVER_EDITED_TOLERANCE_MS;
-
-/**
  * Whether a candidate sits inside the scope SCRUM-725 approved, as distinct
- * from the wider whole-span rule this script selects with.
+ * from the slightly wider rule this script selects with.
  *
  * That ticket approved rows **never edited since creation**, on a live cohort
- * it defined as `role <> 'VIEWER'`, and put everything else out of scope. The
- * span rule reaches further — 221 rows on production on 2026-11-17 against 92
- * here — and the decision to accept that has not been recorded. A canary is
- * restricted to this core so it can run under the approval that exists
- * without pre-empting the one that does not. `INACTIVE` is excluded as well:
- * the ticket was silent on status, and a canary is for rows whose owners will
- * actually see the result.
+ * it defined as `role <> 'VIEWER'`, and put everything else out of scope.
+ * Since SCRUM-731 the selection rule requires never-edited too, so the only
+ * remaining difference is `role` and `status`: 85 candidates on production on
+ * 2026-11-19 against 83 here. The decision to accept those 2 has not been
+ * recorded. A canary is restricted to this core so it can run under the
+ * approval that exists without pre-empting the one that does not. `INACTIVE`
+ * is excluded as well: the ticket was silent on status, and a canary is for
+ * rows whose owners will actually see the result.
  *
  * Evaluated twice on a canary: by {@link selectOnly} against the row the plan
  * read, and by `applyRepairs` against the row it re-reads immediately before
@@ -960,9 +960,10 @@ type ApprovedCoreFields = Pick<
  * so what it does to `date_modified` is unknown. Without this the canary would
  * write a row outside the scope it was approved for.
  *
- * The never-edited test is repeated as well. A moved `date_modified` is
- * already refused by `decideRepair`, so what it adds is a `date_created`
- * rewritten underneath the plan.
+ * The never-edited test is repeated as well, through the same `isNeverEdited`
+ * the selection rule uses. A moved `date_modified` is already refused by
+ * `decideRepair`, so what it adds is a `date_created` rewritten underneath the
+ * plan, and a named reason if the rule and this check ever drift apart.
  *
  * **What remains:** the read and the statement are still two round trips, so
  * a role or status change landing between them is not caught. That window is
