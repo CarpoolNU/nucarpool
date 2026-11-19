@@ -704,7 +704,7 @@ export const adminDataRouter = router({
         // should lose.
         const claimed = await tx.$executeRaw`
           UPDATE carpool_search
-          SET role = ${Role.VIEWER}
+          SET role = ${Role.VIEWER}, date_modified = NOW(3)
           WHERE id = ${search.id} AND carpoolId IS NULL
         `;
 

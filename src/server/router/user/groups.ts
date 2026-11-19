@@ -339,7 +339,7 @@ const markRequestAccepted = async (
 const reserveSeat = async (prisma: PrismaClientLike, driverUserId: string) => {
   const reserved = await prisma.$executeRaw`
     UPDATE carpool_search
-    SET seats_avail = seats_avail - 1
+    SET seats_avail = seats_avail - 1, date_modified = NOW(3)
     WHERE userId = ${driverUserId} AND seats_avail > 0
   `;
 
@@ -643,7 +643,7 @@ export const groupsRouter = router({
         // transaction's group linked to a real rider but no driver.
         const driverLinked = await tx.$executeRaw`
           UPDATE carpool_search
-          SET carpoolId = ${group.id}
+          SET carpoolId = ${group.id}, date_modified = NOW(3)
           WHERE userId = ${input.driverId} AND carpoolId IS NULL
         `;
 
@@ -666,7 +666,7 @@ export const groupsRouter = router({
         // the current committed row, so it did not actually close the race.
         const riderLinked = await tx.$executeRaw`
           UPDATE carpool_search
-          SET carpoolId = ${group.id}
+          SET carpoolId = ${group.id}, date_modified = NOW(3)
           WHERE userId = ${input.riderId} AND role = ${Role.RIDER} AND carpoolId IS NULL
         `;
 
@@ -1050,7 +1050,7 @@ export const groupsRouter = router({
           // equivalent guard above.
           const riderLinked = await tx.$executeRaw`
             UPDATE carpool_search
-            SET carpoolId = ${input.groupId}
+            SET carpoolId = ${input.groupId}, date_modified = NOW(3)
             WHERE userId = ${input.riderId} AND role = ${Role.RIDER} AND carpoolId IS NULL
           `;
 
