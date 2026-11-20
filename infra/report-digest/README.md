@@ -83,13 +83,24 @@ same environment. `src/server/ses.ts` is in the bundle, because
 `import()` in the script's `main()`, which the handler never calls, so
 `serverEnv` is never evaluated.
 
-**`NODE_ENV` is unset in the Lambda runtime**, so envsafe applies `devDefault`
-and a missing `NEXT_PUBLIC_ENV` reads as `development` instead of failing. That
-was equally true before SCRUM-739. What stands between it and a staging stack
-mailing every admin is the template: `NEXT_PUBLIC_ENV` always comes from the
-`DeployEnv` parameter, whose only allowed values are `production` and `staging`.
-Do not configure the function's environment by hand outside the template.
-SCRUM-740 tracks making a missing value refuse to start instead.
+**A missing `NEXT_PUBLIC_ENV` refuses to start**, through
+`requireDeployEnv.ts`, which `handler.ts` imports first. Without it the Lambda
+would read the variable as `development`. `NODE_ENV` is unset in the Lambda
+runtime, so envsafe applies `deployEnv.ts`'s `devDefault`, and staging's
+gmail-only filter would be off. SCRUM-740 closed that gap. Before it, the
+template was the only guard. `environment.test.ts` and the `lambda-bundle`
+workflow both assert the refusal with `NODE_ENV` unset.
+
+An explicitly set `NEXT_PUBLIC_ENV=development` is still accepted, as it is
+everywhere else, and also leaves the filter off. The template's `DeployEnv`
+parameter allows only `production` and `staging`, so keep configuring the
+function through the template.
+
+**Locally, the Prisma client loads the repository's `.env` when it is
+required** and fills in any unset variable, so a bundle loaded from the
+repository root can pick up `NEXT_PUBLIC_ENV` from there. To reproduce the
+Lambda's environment by hand, run from inside `build/report-digest-lambda/dist`,
+as the workflow's refusal step does.
 
 **Neither `yarn check:env` nor `yarn check:amplify` is affected**, and that is by
 design rather than by luck: both derive their list from the two `envsafe`

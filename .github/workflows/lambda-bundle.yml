@@ -207,3 +207,37 @@ jobs:
             }
             console.log("the bundle loads, exports a callable handler, and opened no connection.");
           '
+      # The negative control for the step above (SCRUM-740). Without
+      # NEXT_PUBLIC_ENV the bundle must refuse to load, with NODE_ENV unset as
+      # the Lambda runtime leaves it. Before SCRUM-740 it loaded and read the
+      # variable as `development`, which turns staging's gmail-only recipient
+      # filter off. `infra/report-digest/requireDeployEnv.ts` explains why an
+      # esbuild `--define` of NODE_ENV would not have fixed that.
+      #
+      # It fails on a *different* error too, so a bundle that throws for an
+      # unrelated reason cannot pass as a refusal.
+      #
+      # Run from inside the package so no `.env` is in reach. The Prisma client
+      # loads one on require and fills in any unset variable, which locally
+      # supplies NEXT_PUBLIC_ENV and makes the bundle load. CI has no `.env`;
+      # this keeps the step meaningful when it is re-run by hand.
+      - name: assert the bundle refuses to load without NEXT_PUBLIC_ENV
+        working-directory: build/report-digest-lambda/dist
+        run: |
+          env -i PATH="$PATH" \
+            DATABASE_URL="mysql://ci:ci@127.0.0.1:3306/ci" \
+          node -e '
+            try {
+              require("./index.js");
+            } catch (error) {
+              if (/Missing environment variables[\s\S]*NEXT_PUBLIC_ENV/.test(error.message)) {
+                console.log("the bundle refuses to load without NEXT_PUBLIC_ENV.");
+                process.exit(0);
+              }
+              console.error("the bundle threw, but not for a missing NEXT_PUBLIC_ENV:");
+              console.error(error);
+              process.exit(1);
+            }
+            console.error("the bundle loaded without NEXT_PUBLIC_ENV; staging would mail every admin.");
+            process.exit(1);
+          '

@@ -14,9 +14,10 @@
  * every PR and names the failing module; that one proves esbuild's output and
  * the Prisma externals agree.
  *
- * `NODE_ENV=production` throughout, so that `devDefault` does not quietly
- * supply `NEXT_PUBLIC_ENV`. The Lambda runtime does not set `NODE_ENV` at all;
- * see the last test for what that means.
+ * Most cases set `NODE_ENV=production`, as `next build` does. The Lambda
+ * runtime does not set `NODE_ENV` at all, so the last block repeats the cases
+ * that matter with it unset — which is where `devDefault` used to supply a
+ * missing `NEXT_PUBLIC_ENV` (SCRUM-740).
  */
 
 export {};
@@ -49,6 +50,13 @@ afterEach(() => {
  * Replaces the environment wholesale — not merely deleting four names — so a
  * variable some other suite's setup happened to provide cannot satisfy the
  * graph by accident. `PATH` is kept because Node and its children expect it.
+ *
+ * **Not airtight locally.** Requiring `@prisma/client` loads the repository's
+ * `.env` and fills in any variable still unset, so from that point on a local
+ * run can see a `NEXT_PUBLIC_ENV` the test did not give it. CI has no `.env`.
+ * The refusals below hold anyway, because `handler.ts` imports
+ * `requireDeployEnv.ts` before Prisma; a new assertion about an unset variable
+ * has to be made before the handler is required.
  */
 const useOnly = (env: Record<string, string>) => {
   process.env = { PATH: savedEnv.PATH, ...env } as unknown as NodeJS.ProcessEnv;
@@ -128,22 +136,37 @@ describe("the recipient filter in that environment", () => {
 });
 
 describe("with NODE_ENV unset, as the Lambda runtime leaves it", () => {
-  it("reads a missing NEXT_PUBLIC_ENV as development rather than refusing", () => {
-    // Pinned so the behaviour is visible, not because it is wanted. envsafe
-    // applies `devDefault` whenever NODE_ENV is not `production`, and nothing
-    // in the Lambda sets it — so the refusal in the test above holds only
-    // under `next build`. `template.yaml` always supplies NEXT_PUBLIC_ENV
-    // from its `DeployEnv` parameter, whose allowed values have no empty
-    // option, which is what stands between this and a staging stack mailing
-    // every admin. Unchanged by SCRUM-739: `browserEnv` behaved the same way.
-    // SCRUM-740 tracks making a missing value refuse; invert this when it lands.
+  it("refuses to start without NEXT_PUBLIC_ENV rather than reading it as development", () => {
+    // envsafe applies `deployEnv.ts`'s `devDefault` whenever NODE_ENV is not
+    // `production`, and nothing in the Lambda sets it. Before SCRUM-740 this
+    // loaded as `development`, so a function configured without the variable
+    // started with staging's gmail-only filter off. `requireDeployEnv.ts` now
+    // refuses whatever NODE_ENV is.
     useOnly({ DATABASE_URL });
 
-    loadHandler();
+    expect(loadHandler).toThrow(
+      /Missing environment variables[\s\S]*NEXT_PUBLIC_ENV/,
+    );
+  });
+
+  it("refuses an empty NEXT_PUBLIC_ENV the same way", () => {
+    // envsafe treats "" as unset, so a variable cleared to empty in the
+    // console is the same exposure as one deleted.
+    useOnly({ DATABASE_URL, NEXT_PUBLIC_ENV: "" });
+
+    expect(loadHandler).toThrow(
+      /Missing environment variables[\s\S]*NEXT_PUBLIC_ENV/,
+    );
+  });
+
+  it("still loads, and staging still restricts to gmail.com", () => {
+    // The positive control: the refusal above must come from the missing
+    // value, not from NODE_ENV being unset.
+    useOnly({ DATABASE_URL, NEXT_PUBLIC_ENV: "staging" });
+    expect(typeof loadHandler().handler).toBe("function");
+
     expect(
-      (
-        require("../../src/utils/env/deployEnv") as typeof import("../../src/utils/env/deployEnv")
-      ).deployEnv.NEXT_PUBLIC_ENV,
-    ).toBe("development");
+      ["admin@gmail.com", "admin@northeastern.edu"].map(loadRecipientFilter()),
+    ).toEqual([true, false]);
   });
 });
