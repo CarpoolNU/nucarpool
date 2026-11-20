@@ -1,5 +1,5 @@
 import { SendTemplatedEmailCommandInput } from "@aws-sdk/client-ses";
-import { browserEnv } from "../utils/env/browser";
+import { deployEnv } from "../utils/env/deployEnv";
 
 /**
  * Whether staging is allowed to mail this address.
@@ -11,9 +11,14 @@ import { browserEnv } from "../utils/env/browser";
  * notification was refused, while `adminReportAlert.ts` filters, because an
  * admin alert must never fail the report that caused it. One predicate, so
  * the two cannot drift into disagreeing about what staging may send.
+ *
+ * It reads `deployEnv` rather than `browserEnv` because this module is also
+ * bundled into the report-digest Lambda, which should not have to carry the
+ * four other `NEXT_PUBLIC_*` variables `browserEnv` requires. The two hold the
+ * same validated value; see `utils/env/deployEnv.ts`.
  */
 export const isDeliverableRecipient = (email: string): boolean =>
-  browserEnv.NEXT_PUBLIC_ENV !== "staging" ||
+  deployEnv.NEXT_PUBLIC_ENV !== "staging" ||
   email.toLowerCase().endsWith("@gmail.com");
 
 /**

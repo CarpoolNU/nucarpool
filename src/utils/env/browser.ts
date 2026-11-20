@@ -1,39 +1,26 @@
-import { envsafe, makeValidator, str } from "envsafe";
+import { envsafe, str } from "envsafe";
+import { DEPLOY_ENVS, deployEnvValidator } from "./deployEnvValidator";
 
 /**
- * Which deployment this build is. The values are an allow-list rather than a
- * free string because this is the most consequential variable in the app:
+ * `NEXT_PUBLIC_ENV`'s allow-list, its type and its parser live in
+ * `deployEnvValidator.ts`, which explains why the variable is validated at
+ * all. They are re-exported here so existing imports keep working.
  *
- *  - `staging` enables the Google provider in `[...nextauth].ts`, renders the
- *    Google button in `sign-in.tsx`, and restricts email recipients to
- *    gmail.com in `email.ts`. Set it in production by mistake and anyone with
- *    a Google account could bypass Northeastern SSO.
- *  - the value is written verbatim into every S3 profile-picture key
- *    (`profile-pictures/{env}/{userId}`), so a missing or renamed value orphans
- *    every existing upload. Left unvalidated, an unset value would produce the
- *    literal key `profile-pictures/undefined/...`.
- *
- * Production is `production`, which is what these keys already contain — so
- * validating the variable does not move any existing object.
+ * `deployEnv.ts` validates `NEXT_PUBLIC_ENV` again on its own, for code that
+ * needs that one variable without the other four — the report-digest Lambda.
+ * The options below are deliberately written out rather than shared, because
+ * `scripts/check-env-contract.js` reads them from this file's text; a test in
+ * `deployEnv.test.ts` holds the two validators to the same answers.
  *
  * `devDefault` keeps local setups working: `.env.example` ships this empty, and
  * envsafe treats an empty string as absent, so a developer who never set it
  * gets `development` instead of a startup failure.
  */
-export const DEPLOY_ENVS = ["production", "staging", "development"] as const;
-
-export type DeployEnv = (typeof DEPLOY_ENVS)[number];
-
-/**
- * Narrows the parsed value to `DeployEnv` so a mistyped comparison — the very
- * thing this variable invites, since it is compared to string literals in four
- * places — fails to compile. `envsafe` applies `choices` after this parser, so
- * the runtime rejection is still its own.
- */
-const deployEnv = makeValidator<DeployEnv>((input) => input as DeployEnv);
+export { DEPLOY_ENVS };
+export type { DeployEnv } from "./deployEnvValidator";
 
 export const browserEnv = envsafe({
-  NEXT_PUBLIC_ENV: deployEnv({
+  NEXT_PUBLIC_ENV: deployEnvValidator({
     input: process.env.NEXT_PUBLIC_ENV,
     choices: DEPLOY_ENVS,
     devDefault: "development",

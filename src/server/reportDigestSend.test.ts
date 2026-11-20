@@ -20,8 +20,8 @@ import { Permission, ReportReason } from "@prisma/client";
 
 let deployEnv = "production";
 
-jest.mock("../utils/env/browser", () => ({
-  browserEnv: {
+jest.mock("../utils/env/deployEnv", () => ({
+  deployEnv: {
     get NEXT_PUBLIC_ENV() {
       return deployEnv;
     },

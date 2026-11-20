@@ -63,29 +63,6 @@ Parameters:
       as this stack; the handler then falls back to the AWS_REGION the Lambda
       runtime sets.
 
-  # The four below are public by construction: Next inlines every NEXT_PUBLIC_*
-  # variable into the client bundle, so every browser already has them. They are
-  # here only because `browserEnv` validates all five as one group with envsafe,
-  # which throws at import time for any one that is missing - and
-  # `emailParams.ts` needs the fifth, NEXT_PUBLIC_ENV, for the staging recipient
-  # filter. Verified by loading the built bundle with them absent, which fails
-  # with "Missing environment variables" before the handler runs.
-  #
-  # They are NOT NoEcho, deliberately. Marking a public token secret would imply
-  # the stack holds five secrets when it holds one.
-  MapboxAccessToken:
-    Type: String
-    Description: NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN. Unused by the digest.
-  MixpanelProjectToken:
-    Type: String
-    Description: NEXT_PUBLIC_MIXPANEL_PROJECT_TOKEN. Unused by the digest.
-  PusherKey:
-    Type: String
-    Description: NEXT_PUBLIC_PUSHER_KEY. Unused by the digest.
-  PusherCluster:
-    Type: String
-    Description: NEXT_PUBLIC_PUSHER_CLUSTER. Unused by the digest.
-
   ScheduleExpression:
     Type: String
     Default: cron(0 12 ? * MON *)
@@ -139,6 +116,12 @@ Resources:
         Monday-to-Sunday week. Safe to invoke repeatedly.
       CodeUri: ../../build/report-digest-lambda/dist
       Handler: index.handler
+      # Everything the handler's module graph reads. `NEXT_PUBLIC_ENV` is
+      # validated on its own by src/utils/env/deployEnv.ts, so the app's other
+      # four NEXT_PUBLIC_* variables are not needed here (SCRUM-739);
+      # environment.test.ts and the lambda-bundle workflow both load the
+      # handler with only these. No AWS key appears: the SES client takes its
+      # credentials from this function's execution role.
       Environment:
         Variables:
           DATABASE_URL:
@@ -147,14 +130,6 @@ Resources:
             Ref: DeployEnv
           REGION_AWS:
             Ref: SesRegion
-          NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN:
-            Ref: MapboxAccessToken
-          NEXT_PUBLIC_MIXPANEL_PROJECT_TOKEN:
-            Ref: MixpanelProjectToken
-          NEXT_PUBLIC_PUSHER_KEY:
-            Ref: PusherKey
-          NEXT_PUBLIC_PUSHER_CLUSTER:
-            Ref: PusherCluster
           # The packaging script emits a sourcemap; without this the stack
           # traces in CloudWatch point at bundled line numbers.
           NODE_OPTIONS: --enable-source-maps

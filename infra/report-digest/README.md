@@ -54,31 +54,48 @@ is not.
 
 ## What the job needs in its environment
 
-Six variables, and only the first is a secret.
+Two variables, and only the first is a secret.
 
-| Variable                             | Why                                             |
-| ------------------------------------ | ----------------------------------------------- |
-| `DATABASE_URL`                       | **Secret.** The reports and the delivery claim. |
-| `NEXT_PUBLIC_ENV`                    | `emailParams.ts` reads it for staging's filter  |
-| `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN`    | Unused by the digest — see below                |
-| `NEXT_PUBLIC_MIXPANEL_PROJECT_TOKEN` | Unused by the digest                            |
-| `NEXT_PUBLIC_PUSHER_KEY`             | Unused by the digest                            |
-| `NEXT_PUBLIC_PUSHER_CLUSTER`         | Unused by the digest                            |
-
-The four marked unused are there because `browserEnv` validates all five
-`NEXT_PUBLIC_*` variables as one group with `envsafe`, which **throws at import
-time** for any one that is missing — measured by loading the built bundle
-without them, which fails with `Missing environment variables` before the
-handler is reached. They are public by construction: Next inlines every
-`NEXT_PUBLIC_*` value into the client bundle, so every browser already has them.
+| Variable          | Why                                             |
+| ----------------- | ----------------------------------------------- |
+| `DATABASE_URL`    | **Secret.** The reports and the delivery claim. |
+| `NEXT_PUBLIC_ENV` | `emailParams.ts` reads it for staging's filter  |
 
 `REGION_AWS` is optional and names SES's region; left empty, the handler falls
-back to the region the Lambda runs in.
+back to the region the Lambda runs in. AWS credentials are not variables at
+all: the SES client resolves them from the execution role.
+
+**`NEXT_PUBLIC_ENV` is validated on its own, by `src/utils/env/deployEnv.ts`.**
+The app's `browserEnv` validates all five `NEXT_PUBLIC_*` variables as one
+`envsafe` group and throws at import time if any is missing, so while
+`emailParams.ts` imported it the stack also had to carry the Mapbox, Mixpanel
+and Pusher values the digest never reads. SCRUM-739 gave `emailParams.ts` a
+validator for this one variable — the same allow-list and `devDefault`, held to
+the same answers as `browserEnv` by `deployEnv.test.ts` — and removed the other
+four from `template.yaml`.
+
+**That stays true only while nothing in the handler's static import graph
+reaches `browserEnv` or `serverEnv`.** Two checks hold the line:
+`environment.test.ts` loads the real handler under exactly the template's
+variables, and the `lambda-bundle` workflow requires the built bundle under the
+same environment. `src/server/ses.ts` is in the bundle, because
+`scripts/send-report-digest.ts` reaches it, but only through a dynamic
+`import()` in the script's `main()`, which the handler never calls, so
+`serverEnv` is never evaluated.
+
+**`NODE_ENV` is unset in the Lambda runtime**, so envsafe applies `devDefault`
+and a missing `NEXT_PUBLIC_ENV` reads as `development` instead of failing. That
+was equally true before SCRUM-739. What stands between it and a staging stack
+mailing every admin is the template: `NEXT_PUBLIC_ENV` always comes from the
+`DeployEnv` parameter, whose only allowed values are `production` and `staging`.
+Do not configure the function's environment by hand outside the template.
+SCRUM-740 tracks making a missing value refuse to start instead.
 
 **Neither `yarn check:env` nor `yarn check:amplify` is affected**, and that is by
 design rather than by luck: both derive their list from the two `envsafe`
-modules, and this change adds no variable to either. The Lambda reuses the
-app's existing contract in a second runtime instead of extending it.
+modules, and the Lambda's variables are a subset of that list.
+`deployEnv.test.ts` fails if `deployEnv.ts` ever reads a variable `browser.ts`
+does not.
 
 ## Deploying it
 
@@ -163,10 +180,6 @@ sam deploy --guided \
         --with-decryption --query Parameter.Value --output text)" \
     "AlarmEmail=<your address>" \
     "DeployEnv=production" \
-    "MapboxAccessToken=<value>" \
-    "MixpanelProjectToken=<value>" \
-    "PusherKey=<value>" \
-    "PusherCluster=<value>" \
     "ScheduleState=DISABLED"
 ```
 
@@ -275,7 +288,7 @@ deliberately no run-state table in this repository.
 | `-missed` alarm                  | The schedule is disabled, deleted, or not reaching the function. Send the skipped week with the `week` payload below.  |
 | `-dead-lettered` alarm           | The DLQ message body says why Scheduler could not invoke it.                                                           |
 | `TemplateDoesNotExist`           | Step 2 was skipped.                                                                                                    |
-| `Missing environment variables`  | One of the five `NEXT_PUBLIC_*` values is unset. The log names which.                                                  |
+| `Missing environment variables`  | `NEXT_PUBLIC_ENV` is unset or not an allowed value. Anything else named means the handler's import graph has grown.    |
 | Skips `no_recipients` every week | No `permission != USER` user has a deliverable address. On staging, only `gmail.com` is deliverable.                   |
 | `state_not_recorded`             | The mail went out but the row does not say so. Check `report_digest_delivery` before the next Monday — it may re-send. |
 

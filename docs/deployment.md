@@ -65,13 +65,13 @@ Both checks derive their variable list from the `envsafe` modules, so the list c
 
 The weekly report digest runs in a Lambda, deployed from [`infra/report-digest/`](../infra/report-digest/) by `sam deploy` rather than by Amplify. **It is a third place the environment has to be right, and neither check above looks at it** — `yarn check:env` reads `.env.example` and `yarn check:amplify` reads `amplify.yml`.
 
-Both checks nonetheless stay correct for it, by construction rather than by luck: they derive their list from the two `envsafe` modules, and the Lambda **adds no variable to either**. It needs `DATABASE_URL` and the five `NEXT_PUBLIC_*` variables — the app's existing contract, satisfied in a second runtime. A variable added to `src/utils/env/server.ts` later would be caught for Amplify and silently missing here, so that is the case to watch.
+Both checks nonetheless stay correct for it, by construction rather than by luck: they derive their list from the two `envsafe` modules, and the Lambda **adds no variable to either**. It needs `DATABASE_URL` and `NEXT_PUBLIC_ENV`, plus an optional `REGION_AWS` — a subset of the app's contract, satisfied in a second runtime. `NEXT_PUBLIC_ENV` reaches it through [`deployEnv.ts`](../src/utils/env/deployEnv.ts), which validates that one variable exactly as `browserEnv` does, rather than through `browserEnv` and its four other required variables (SCRUM-739). **The case to watch is a new import, not a new variable**: anything that puts `browserEnv` or `serverEnv` on the handler's static import graph makes the Lambda require that module's whole group, and the stack does not supply it. The `lambda-bundle` check loads the built bundle with only the two variables, so that fails CI rather than the first scheduled run.
 
-|                     | Amplify                                                     | The digest Lambda                                               |
-| ------------------- | ----------------------------------------------------------- | --------------------------------------------------------------- |
-| Gets variables from | the console, copied into `.env.production` by `amplify.yml` | CloudFormation parameters in the stack                          |
-| AWS credentials     | `ACCESS_KEY_ID_AWS` and `SECRET_ACCESS_KEY_AWS`, as values  | **none** — an execution role scoped to `ses:SendTemplatedEmail` |
-| Checked by          | `yarn check:amplify`                                        | nothing automated; `infra/report-digest/README.md` lists them   |
+|                     | Amplify                                                     | The digest Lambda                                                   |
+| ------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------- |
+| Gets variables from | the console, copied into `.env.production` by `amplify.yml` | CloudFormation parameters in the stack                              |
+| AWS credentials     | `ACCESS_KEY_ID_AWS` and `SECRET_ACCESS_KEY_AWS`, as values  | **none** — an execution role scoped to `ses:SendTemplatedEmail`     |
+| Checked by          | `yarn check:amplify`                                        | the `lambda-bundle` workflow, which loads the bundle with only them |
 
 That the Lambda holds no AWS key is the reason SCRUM-626 chose it over a scheduled GitHub Actions workflow, which would have needed the production credential set as repository secrets.
 
