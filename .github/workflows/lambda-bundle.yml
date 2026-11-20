@@ -172,8 +172,22 @@ jobs:
       #
       # The handler is not invoked. That needs a real database and SES, and is
       # the deploy-time demonstration in `infra/report-digest/README.md` step 7.
+      #
+      # **It loads under the Lambda's environment, not the placeholder one.**
+      # `env -i` clears everything the placeholder step above put in, and the
+      # bundle gets only what `template.yaml` gives the function: DATABASE_URL
+      # and NEXT_PUBLIC_ENV (REGION_AWS is optional and read only when the SES
+      # client is built). Under the full placeholder set, a new import that
+      # dragged `browserEnv` or `serverEnv` into the graph would load fine here
+      # and throw `Missing environment variables` on the first scheduled run -
+      # which is how the digest came to need four Mapbox, Mixpanel and Pusher
+      # values it never read until SCRUM-739. NODE_ENV is left unset because
+      # the Lambda runtime leaves it unset.
       - name: assert the bundle loads and exports a handler
         run: |
+          env -i PATH="$PATH" \
+            DATABASE_URL="mysql://ci:ci@127.0.0.1:3306/ci" \
+            NEXT_PUBLIC_ENV=production \
           node -e '
             const trip = (what) => () => {
               console.error("the bundle attempted " + what + " at require time.");

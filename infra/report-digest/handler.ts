@@ -48,13 +48,13 @@ import {
  *
  * ## The environment this does need
  *
- * `DATABASE_URL`, and — because `emailParams.ts` reads `NEXT_PUBLIC_ENV` to
- * decide whether staging's gmail-only recipient filter applies — the five
- * `NEXT_PUBLIC_*` variables `browserEnv` validates as a group. Four of those
- * five are not used by this job and are set only because `envsafe` throws a
- * `TypeError` at import time for any missing one; they are public tokens that
- * every browser already receives, so setting them in a Lambda discloses
- * nothing. `infra/report-digest/README.md` lists them with that caveat.
+ * `DATABASE_URL`, and `NEXT_PUBLIC_ENV`, which `emailParams.ts` reads to decide
+ * whether staging's gmail-only recipient filter applies. It reads it through
+ * `src/utils/env/deployEnv.ts`, which validates that one variable, rather
+ * than through `browserEnv`, which would also require the app's Mapbox,
+ * Mixpanel and Pusher values (SCRUM-739). `environment.test.ts` loads this
+ * file under exactly that environment, so a new import that drags `browserEnv`
+ * or `serverEnv` into the graph fails a test rather than the first run.
  *
  * `REGION_AWS` is the repository's name for SES's region and is read here for
  * the same purpose, falling back to the `AWS_REGION` the Lambda runtime always

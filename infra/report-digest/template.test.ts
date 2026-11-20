@@ -11,12 +11,13 @@ import { REPORT_DIGEST_SCHEDULE } from "../../src/server/reportDigestWindow";
  * decides, because those are the pairs that drift silently and whose drift is
  * only discovered in production.
  *
- * There are four:
+ * There are five:
  *
  *   - the schedule, which `REPORT_DIGEST_SCHEDULE.eventBridge` owns;
  *   - the handler path, which the packaging script's output layout owns;
  *   - the From address, which `generateAdminReportDigestEmailParams` owns;
- *   - the architecture, which `prisma/schema.prisma`'s `binaryTargets` owns.
+ *   - the architecture, which `prisma/schema.prisma`'s `binaryTargets` owns;
+ *   - the environment, which the handler's import graph owns.
  *
  * Read as text rather than parsed as YAML, deliberately. Parsing would need a
  * YAML library with CloudFormation tag support that this repository does not
@@ -131,5 +132,63 @@ describe("a failed or missed run is observable", () => {
 
     expect(alarms).toHaveLength(3);
     expect(actions).toHaveLength(alarms.length);
+  });
+});
+
+describe("the function's environment is what the handler reads, and no more", () => {
+  /**
+   * The variable names under `Environment.Variables`, in order. Sliced to the
+   * block and matched at its indentation, so a variable named in a comment or
+   * a parameter description elsewhere in the file cannot count.
+   */
+  const functionVariables = () => {
+    const start = TEMPLATE.indexOf("        Variables:\n");
+    const end = TEMPLATE.indexOf("      Policies:\n", start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+
+    return [
+      ...TEMPLATE.slice(start, end).matchAll(/^ {10}([A-Z][A-Z0-9_]*):/gm),
+    ].map((match) => match[1]);
+  };
+
+  it("sets exactly DATABASE_URL, NEXT_PUBLIC_ENV, REGION_AWS and NODE_OPTIONS", () => {
+    // `environment.test.ts` loads the handler with the first three and shows
+    // they are enough; NODE_OPTIONS only turns on source maps. Anything added
+    // here should be something the handler's graph genuinely reads.
+    expect(functionVariables()).toEqual([
+      "DATABASE_URL",
+      "NEXT_PUBLIC_ENV",
+      "REGION_AWS",
+      "NODE_OPTIONS",
+    ]);
+  });
+
+  it("no longer declares the four NEXT_PUBLIC_* values the digest never read", () => {
+    // SCRUM-739. They were required only because `emailParams.ts` imported
+    // `browserEnv`, which validates all five as one group.
+    for (const name of [
+      "MapboxAccessToken",
+      "MixpanelProjectToken",
+      "PusherKey",
+      "PusherCluster",
+      "NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN",
+      "NEXT_PUBLIC_MIXPANEL_PROJECT_TOKEN",
+      "NEXT_PUBLIC_PUSHER_KEY",
+      "NEXT_PUBLIC_PUSHER_CLUSTER",
+    ]) {
+      expect(TEMPLATE).not.toContain(name);
+    }
+  });
+
+  it("carries no AWS credential, which comes from the execution role", () => {
+    for (const name of [
+      "ACCESS_KEY_ID_AWS",
+      "SECRET_ACCESS_KEY_AWS",
+      "AWS_ACCESS_KEY_ID",
+      "AWS_SECRET_ACCESS_KEY",
+    ]) {
+      expect(functionVariables()).not.toContain(name);
+    }
   });
 });
