@@ -1086,10 +1086,10 @@
     "@tanstack/react-virtual" "^3.13.9"
     use-sync-external-store "^1.5.0"
 
-"@hookform/resolvers@7.0.5":
-  version "7.0.5"
-  resolved "https://registry.yarnpkg.com/@hookform/resolvers/-/resolvers-7.0.5.tgz#7afaeb916a817915449864a9f93cf892af251349"
-  integrity sha512-E7ca3tpIJxHPGhFOfXLlCCZh7up6EcnUTbgTt0SRUENXagq8DJnob9rK+VqsNCsfUuO6mMU5NYNm6BaL18flgQ==
+"@hookform/resolvers@7.0.6":
+  version "7.0.6"
+  resolved "https://registry.yarnpkg.com/@hookform/resolvers/-/resolvers-7.0.6.tgz#c5a489b153989670bec2824dc5f2e29cf305d21c"
+  integrity sha512-LSTMwW4tmRWtM7pS5HkSqahi71USbhrmjc9pNHNa7UyYTbKIK/e0G1EAw6xsEnp9GahTjXhunxRJp0Bd8E6NZA==
   dependencies:
     "@standard-schema/utils" "^0.3.0"
 
@@ -4118,10 +4118,10 @@ dom-helpers@^5.0.1:
     "@babel/runtime" "^7.8.7"
     csstype "^3.0.2"
 
-driver.js@^1.11.0:
-  version "1.11.0"
-  resolved "https://registry.yarnpkg.com/driver.js/-/driver.js-1.11.0.tgz#39dd87cba35cb387bd3c4a3d164eb037915e36e1"
-  integrity sha512-Xp/tYNYQ4Wth6AN3HqVVYdrCF4ahe4FVBDphWKylVDBBbeDEsFqnogxko6Gv30Yf9T/B92g0RZOCp4xfl1gqqw==
+driver.js@^1.14.0:
+  version "1.14.0"
+  resolved "https://registry.yarnpkg.com/driver.js/-/driver.js-1.14.0.tgz#1cb35b11c9d136eb10c56ee758d4df8124075c37"
+  integrity sha512-BnCFuNU8QO2rrYiDra43Ortx6D6chqMvEMF1q3fWQfsC3xNyCX4T1P1vZDTXTxGdtcXh2v5r11hxSpNLF3DJVw==
 
 dunder-proto@^1.0.0, dunder-proto@^1.0.1:
   version "1.0.1"
@@ -6473,10 +6473,10 @@ map-obj@^4.0.0:
   resolved "https://registry.npmjs.org/map-obj/-/map-obj-4.3.0.tgz"
   integrity sha512-hdN1wVrZbb29eBGiGjJbeP8JbKjq1urkHJ/LIP/NY48MZ1QVXUsQBV1G1zvYFHn1XE06cwjBsOI2K3Ulnj1YXQ==
 
-mapbox-gl@^3.34.2:
-  version "3.34.2"
-  resolved "https://registry.yarnpkg.com/mapbox-gl/-/mapbox-gl-3.34.2.tgz#2075dbc2737d6c0949edad384c088835a1769567"
-  integrity sha512-SfuzpqjokSjv4C9/JEjxAfqVHY37B7Kky/AOFpc+9D0Sx0KuIoV3keSlvvuHuM/jxw84iQ/Nh7yIK1VxuDBBHA==
+mapbox-gl@^3.35.0:
+  version "3.35.0"
+  resolved "https://registry.yarnpkg.com/mapbox-gl/-/mapbox-gl-3.35.0.tgz#b8fbd1c5d53ffe39a601061c8c4332ab41af3fbf"
+  integrity sha512-kMe3klYmwU8Lw9kPU2tB/AKDcYUfPrhkQU/M67FiYgFDn7rCBllLU4XbUhnUoRjPyIaB7HVT63EO8jbzhoKGMA==
 
 math-intrinsics@^1.1.0:
   version "1.1.0"
@@ -7235,17 +7235,17 @@ react-dom@19.3.1:
   dependencies:
     scheduler "^0.28.0"
 
-react-easy-crop@6.2.4:
-  version "6.2.4"
-  resolved "https://registry.yarnpkg.com/react-easy-crop/-/react-easy-crop-6.2.4.tgz#749f239ef6563964b60d9a56a09d22b196095a80"
-  integrity sha512-OWdnFYctzUNlekjob+bQfloG9wyhIBkkmeISnM5XVE4Byqn0jmVxDF7oz85ovUF+EIPQyj0yAHbBEFtnxwGv4g==
+react-easy-crop@6.2.5:
+  version "6.2.5"
+  resolved "https://registry.yarnpkg.com/react-easy-crop/-/react-easy-crop-6.2.5.tgz#a822fbdafabc1f0dd64897bd570c0117383d6d7f"
+  integrity sha512-NoJ+mtq7vNu6b77VDT1g4D3GXrhp5N4zKR0r63yUbQzbUkr6/aPibFXAOEzxZcHfUB2/R4KwxOU8g3eB7hnKjQ==
   dependencies:
     normalize-wheel "^1.0.1"
 
-react-hook-form@7.91.0:
-  version "7.91.0"
-  resolved "https://registry.yarnpkg.com/react-hook-form/-/react-hook-form-7.91.0.tgz#751ffa4eef441562b7417727e247446ce7d2a002"
-  integrity sha512-5BEBUnCBwa28AFXYTYmOaB/+CSpJ/+CWVASHEvIGUzFdHyUiPHeRhG7r5hOZ8nZi0yP7pbHdFNXO/p31EKTJFQ==
+react-hook-form@7.92.0:
+  version "7.92.0"
+  resolved "https://registry.yarnpkg.com/react-hook-form/-/react-hook-form-7.92.0.tgz#6d4ef30192906d7f2318ff57eef17e83e35b09f1"
+  integrity sha512-O5ILyY5fYHN7N13Pfxpe55KboyNFsJdM03BHpshQkClJd8raugiAUGY7VjifITrfhVxyx81ko25azXCoayhf1w==
 
 react-icons@5.7.0:
   version "5.7.0"
