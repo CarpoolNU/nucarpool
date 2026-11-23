@@ -1,3 +1,6 @@
+// First, so a missing NEXT_PUBLIC_ENV refuses to start before anything else
+// in the graph runs. See the file for why this is not left to `deployEnv.ts`.
+import "./requireDeployEnv";
 import { PrismaClient } from "@prisma/client";
 import { SESClient } from "@aws-sdk/client-ses";
 import {
@@ -55,6 +58,9 @@ import {
  * Mixpanel and Pusher values (SCRUM-739). `environment.test.ts` loads this
  * file under exactly that environment, so a new import that drags `browserEnv`
  * or `serverEnv` into the graph fails a test rather than the first run.
+ *
+ * A missing `NEXT_PUBLIC_ENV` refuses to start, through `requireDeployEnv.ts`,
+ * rather than reading as `development`, which would turn staging's filter off.
  *
  * `REGION_AWS` is the repository's name for SES's region and is read here for
  * the same purpose, falling back to the `AWS_REGION` the Lambda runtime always
