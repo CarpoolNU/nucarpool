@@ -186,7 +186,7 @@ export class PostService implements PublicPostReader {
    *
    * **A second delete refuses rather than succeeding quietly.** `save`/`unsave`
    * and `vote`/`unvote` are idempotent because a retried request must not
-   * invert an intent; delete has no inverse to be flipped into, so the honest
+   * reverse an intent; delete has no inverse to be flipped into, so the honest
    * answer to "delete this post" when it is already gone is that it is gone.
    */
   async delete(actor: Member, input: { postId: string }): Promise<void> {

@@ -717,7 +717,7 @@ enum CommunityTargetType {
 
 // Every rate-limited action. One budget row per (user, action, window).
 // New members are APPENDED, never inserted. MySQL stores an ENUM as the
-// ordinal of its value, so appending is an instant metadata-only ALTER while
+// position number of its value, so appending is an instant metadata-only ALTER while
 // inserting in the middle silently reinterprets every row already stored.
 enum CommunityBudgetAction {
   HANDLE_CLAIM
