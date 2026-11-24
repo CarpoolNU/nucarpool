@@ -23,9 +23,12 @@ type AuditDisplay = {
   /**
    * Which table `targetId` points at, which decides whose email the Target
    * cell names: the target itself for `"user"`, the user the target *refers
-   * to* for `"report"`.
+   * to* for `"report"`. `"community"` names no NUCarpool row at all: a
+   * Community moderation entry's `targetId` is a `CommunityReport` id, a
+   * queue's status filter or a moderator id, so it is shown as stored rather
+   * than looked up as a user it is not.
    */
-  targetKind: "user" | "report";
+  targetKind: "user" | "report" | "community";
   /**
    * The Details cell, from the row's parsed metadata and its `targetId`.
    * Returns `null` when the object does not carry what this action expects,
@@ -123,6 +126,27 @@ const DISPLAY: Record<AdminAuditAction, AuditDisplay> = {
         : null;
     },
   },
+  /*
+   * Community moderation (SCRUM-742). Labelled so the log never prints a
+   * procedure path, but Details deliberately falls back to the stored JSON:
+   * the moderator UI that gives these rows sentences is a later phase of
+   * SCRUM-741, and a raw cell is the documented fallback rather than a blank.
+   */
+  "community.moderation.queue": {
+    label: "Community queue viewed",
+    targetKind: "community",
+    describe: () => null,
+  },
+  "community.moderation.review": {
+    label: "Community report reviewed",
+    targetKind: "community",
+    describe: () => null,
+  },
+  "community.moderation.identify": {
+    label: "Community identity revealed",
+    targetKind: "community",
+    describe: () => null,
+  },
 };
 
 /** `undefined` for an action this build has no wording for. */
@@ -170,6 +194,11 @@ export const describeAuditTarget = (
   // would be a guess. The raw id is the honest answer.
   if (!display) {
     return { text: row.targetId };
+  }
+
+  // Not a NUCarpool user or report, so there is no one to put a name to.
+  if (display.targetKind === "community") {
+    return cellForId(row.targetId, (short) => short);
   }
 
   const personId =
