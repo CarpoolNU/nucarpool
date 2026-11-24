@@ -1,4 +1,43 @@
-import { AdminAuditAction, buildAuditLogEntry } from "./adminAuditLog";
+import {
+  AdminAuditAction,
+  buildAuditLogEntry,
+  writeAuditLog,
+} from "./adminAuditLog";
+
+/**
+ * `writeAuditLog` is the single writer every audit row goes through: the
+ * admin mutations and Community's moderation actions alike (SCRUM-742).
+ */
+describe("writeAuditLog", () => {
+  it("creates exactly the row buildAuditLogEntry describes", async () => {
+    const create = jest.fn(async () => ({}));
+    const input = {
+      actorId: "actor-1",
+      action: AdminAuditAction.RESOLVE_REPORT,
+      targetId: "report-1",
+      metadata: { status: "RESOLVED" },
+    };
+
+    await writeAuditLog({ adminAuditLog: { create } } as never, input);
+
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create).toHaveBeenCalledWith({ data: buildAuditLogEntry(input) });
+  });
+
+  it("rejects when the write fails, so a transaction around it rolls back", async () => {
+    const create = jest.fn(async () => {
+      throw new Error("db down");
+    });
+
+    await expect(
+      writeAuditLog({ adminAuditLog: { create } } as never, {
+        actorId: "actor-1",
+        action: AdminAuditAction.UPDATE_USER_PERMISSION,
+        targetId: "user-1",
+      }),
+    ).rejects.toThrow("db down");
+  });
+});
 
 /**
  * `buildAuditLogEntry`'s construction, isolated from Prisma (the

@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 
 /**
  * Every admin/manager mutation this codebase logs, named by the tRPC
@@ -22,6 +22,19 @@ export const AdminAuditAction = {
    * locked version that would make this a real suspension.
    */
   SET_USER_TO_VIEWER: "user.admin.setUserToViewer",
+  /**
+   * Community moderation (SCRUM-742), written through `NucarpoolHostAdapter`
+   * in `communityHost.ts`. These three strings are fixed by Community's
+   * `ModeratorAuditEntry["action"]`, and the adapter's type check is what
+   * holds the two lists together. Note what each `targetId` is, because none
+   * of them is a NUCarpool user or `Report`: `queue` stores the status filter
+   * of the page viewed, `review` a `CommunityReport` id, and `identify` either
+   * that report id or the acting moderator's own id, depending on which half
+   * of an identity resolution wrote it.
+   */
+  COMMUNITY_MODERATION_QUEUE: "community.moderation.queue",
+  COMMUNITY_MODERATION_REVIEW: "community.moderation.review",
+  COMMUNITY_MODERATION_IDENTIFY: "community.moderation.identify",
 } as const;
 
 export type AdminAuditAction =
@@ -50,3 +63,28 @@ export const buildAuditLogEntry = (
   targetId: input.targetId,
   metadata: input.metadata ? JSON.stringify(input.metadata) : null,
 });
+
+/**
+ * The one `AdminAuditLog` delegate method an audit write needs. Both the base
+ * client and an interactive-transaction client satisfy it, so a caller inside
+ * `$transaction` passes `tx` and the entry commits or rolls back with the
+ * change it describes.
+ */
+export type AuditLogWriter = {
+  adminAuditLog: Pick<PrismaClient["adminAuditLog"], "create">;
+};
+
+/**
+ * Appends one entry to the admin audit log.
+ *
+ * The impure half of `buildAuditLogEntry`, and the only place an audit row is
+ * created: the admin mutations in `router/user/admin.ts` and Community's
+ * moderation actions all write through it, so every entry in the table has
+ * one shape.
+ */
+export const writeAuditLog = async (
+  db: AuditLogWriter,
+  input: AdminAuditLogInput,
+): Promise<void> => {
+  await db.adminAuditLog.create({ data: buildAuditLogEntry(input) });
+};

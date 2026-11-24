@@ -20,7 +20,7 @@ import {
   weeksSpanned,
 } from "../../adminDataUtils";
 import { AdminSupplyQueryRow, AdminUserRow } from "../../../utils/types";
-import { AdminAuditAction, buildAuditLogEntry } from "../../adminAuditLog";
+import { AdminAuditAction, writeAuditLog } from "../../adminAuditLog";
 import { parseConversationSnapshot } from "../../reportSnapshot";
 import { coopIsLiveSql } from "../../db/coopLiveness";
 
@@ -580,13 +580,11 @@ export const adminDataRouter = router({
           },
         });
 
-        await tx.adminAuditLog.create({
-          data: buildAuditLogEntry({
-            actorId,
-            action: AdminAuditAction.UPDATE_USER_PERMISSION,
-            targetId: input.userId,
-            metadata: { permission: input.permission },
-          }),
+        await writeAuditLog(tx, {
+          actorId,
+          action: AdminAuditAction.UPDATE_USER_PERMISSION,
+          targetId: input.userId,
+          metadata: { permission: input.permission },
         });
 
         return updated;
@@ -717,13 +715,11 @@ export const adminDataRouter = router({
           });
         }
 
-        await tx.adminAuditLog.create({
-          data: buildAuditLogEntry({
-            actorId,
-            action: AdminAuditAction.SET_USER_TO_VIEWER,
-            targetId: input.userId,
-            metadata: { role: Role.VIEWER, previousRole: search.role },
-          }),
+        await writeAuditLog(tx, {
+          actorId,
+          action: AdminAuditAction.SET_USER_TO_VIEWER,
+          targetId: input.userId,
+          metadata: { role: Role.VIEWER, previousRole: search.role },
         });
 
         return { id: search.id, role: Role.VIEWER };
@@ -961,13 +957,11 @@ export const adminDataRouter = router({
           });
         }
 
-        await tx.adminAuditLog.create({
-          data: buildAuditLogEntry({
-            actorId,
-            action: AdminAuditAction.RESOLVE_REPORT,
-            targetId: input.reportId,
-            metadata: { status: input.status },
-          }),
+        await writeAuditLog(tx, {
+          actorId,
+          action: AdminAuditAction.RESOLVE_REPORT,
+          targetId: input.reportId,
+          metadata: { status: input.status },
         });
 
         return { id: input.reportId, status: input.status };
