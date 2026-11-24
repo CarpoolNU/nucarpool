@@ -1,4 +1,4 @@
-import { envsafe, str } from "envsafe";
+import { bool, envsafe, str } from "envsafe";
 import { DEPLOY_ENVS, deployEnvValidator } from "./deployEnvValidator";
 
 /**
@@ -36,5 +36,18 @@ export const browserEnv = envsafe({
   }),
   NEXT_PUBLIC_PUSHER_CLUSTER: str({
     input: process.env.NEXT_PUBLIC_PUSHER_CLUSTER,
+  }),
+  /**
+   * Whether Community is reachable (SCRUM-741). Off unless a deployment says
+   * otherwise, so the schema and code can ship ahead of it; turning it back
+   * off is the intended rollback. While off, every `community.*` procedure
+   * refuses: see `communityServicesFor` in `src/server/communityHost.ts`.
+   *
+   * `default`, not `devDefault`, so an environment that never sets it is off
+   * in production as well as locally.
+   */
+  NEXT_PUBLIC_COMMUNITY_ENABLED: bool({
+    input: process.env.NEXT_PUBLIC_COMMUNITY_ENABLED,
+    default: false,
   }),
 });

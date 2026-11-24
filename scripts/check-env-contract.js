@@ -147,6 +147,10 @@ const PLACEHOLDER_OVERRIDES = {
   // which also keeps the CI build closest to the real one — and because
   // `next build` sets NODE_ENV=production, the devDefault does not apply here.
   NEXT_PUBLIC_ENV: "production",
+
+  // Parsed by envsafe's `bool()`, which rejects the generic placeholder. Off,
+  // so CI builds and tests the shape every deployment has until one opts in.
+  NEXT_PUBLIC_COMMUNITY_ENABLED: "false",
 };
 
 const DEFAULT_PLACEHOLDER = "ci-placeholder-not-a-real-secret";

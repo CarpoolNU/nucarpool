@@ -5,6 +5,8 @@ import { getServerSession } from "next-auth";
 import { authOptions as nextAuthOptions } from "../../pages/api/auth/[...nextauth]";
 import { prisma } from "../db/client";
 import { sesClient } from "../ses";
+import { communityServicesFor } from "../communityHost";
+import { browserEnv } from "../../utils/env/browser";
 import { newRequestId } from "./requestId";
 
 export const createContext = async (
@@ -29,6 +31,15 @@ export const createContext = async (
      * tRPC invokes them.
      */
     requestId: newRequestId(),
+    /**
+     * Community's services, composed per request so the host adapter's block
+     * and standing memos live exactly as long as one request. Refuses on every
+     * touch while `NEXT_PUBLIC_COMMUNITY_ENABLED` is off.
+     */
+    community: communityServicesFor(
+      prisma,
+      browserEnv.NEXT_PUBLIC_COMMUNITY_ENABLED,
+    ),
   };
 };
 
