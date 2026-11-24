@@ -249,3 +249,48 @@ describe("describeAuditDetails", () => {
     ).toEqual({ text: '{"whatever":1}' });
   });
 });
+
+/**
+ * Community moderation rows (SCRUM-742). None of their target ids is a
+ * NUCarpool user or `Report`, so the Target cell must not look one up.
+ */
+describe("community moderation rows", () => {
+  const COMMUNITY_ACTIONS = [
+    "community.moderation.queue",
+    "community.moderation.review",
+    "community.moderation.identify",
+  ];
+
+  it.each(COMMUNITY_ACTIONS)("labels %s in words", (action) => {
+    expect(describeAuditAction(action)).not.toBe(action);
+  });
+
+  it("shows a community target as stored, never as an email it happens to resolve to", () => {
+    const resolve = jest.fn(mapOf({ [CUID]: "someone@example.com" }));
+
+    expect(
+      describeAuditTarget(
+        {
+          action: "community.moderation.review",
+          targetId: CUID,
+          targetUserId: null,
+        },
+        resolve,
+      ),
+    ).toEqual({ text: "…tyuiop12", title: CUID });
+    expect(resolve).not.toHaveBeenCalled();
+  });
+
+  it("prints a queue's status filter unchanged", () => {
+    expect(
+      describeAuditTarget(
+        {
+          action: "community.moderation.queue",
+          targetId: "OPEN",
+          targetUserId: null,
+        },
+        resolvesNothing,
+      ),
+    ).toEqual({ text: "OPEN" });
+  });
+});

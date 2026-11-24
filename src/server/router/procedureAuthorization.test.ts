@@ -122,6 +122,40 @@ const PROCEDURE_AUTHORIZATION: Record<string, ProcedureClass> = {
   "mapbox.search": "protected",
   "mapbox.geoJsonUserList": "protected",
   "mapbox.getDirections": "protected",
+  // Community (SCRUM-742). Every tier in `router/community/procedures.ts`
+  // extends `protectedRouter`, so `protected` is the class all of these carry.
+  // What a tier adds on top is not an authorization *class* in this file's
+  // sense, and is tested where it lives: the member tier (a claimed handle) in
+  // `authorWriteTier.test.ts`, and the moderator tier in
+  // `moderationTier.test.ts`. That tier demands a handle *and* the same
+  // `permission !== "USER"` predicate `adminRouter` applies, so the moderation
+  // rows below are no weaker than `admin` - but they are not built with
+  // `adminRouter`, and a row here must name the gate a procedure really has.
+  // While `NEXT_PUBLIC_COMMUNITY_ENABLED` is off, every one of them refuses a
+  // signed-in caller too; `communityHost.test.ts` sweeps that.
+  "community.profiles.me": "protected",
+  "community.profiles.create": "protected",
+  "community.profiles.byHandle": "protected",
+  "community.profiles.posts": "protected",
+  "community.posts.categories": "protected",
+  "community.posts.list": "protected",
+  "community.posts.byId": "protected",
+  "community.posts.create": "protected",
+  "community.posts.edit": "protected",
+  "community.posts.delete": "protected",
+  "community.comments.list": "protected",
+  "community.comments.create": "protected",
+  "community.comments.edit": "protected",
+  "community.comments.delete": "protected",
+  "community.votes.vote": "protected",
+  "community.votes.unvote": "protected",
+  "community.saved.list": "protected",
+  "community.saved.save": "protected",
+  "community.saved.unsave": "protected",
+  "community.reports.create": "protected",
+  "community.moderation.queue": "protected",
+  "community.moderation.review": "protected",
+  "community.moderation.identify": "protected",
 };
 
 /**
