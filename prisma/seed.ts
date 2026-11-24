@@ -97,6 +97,20 @@ const prisma = new PrismaClient();
  * between a documented order and an executed one.
  */
 export const SEED_DELETE_ORDER = [
+  // Community (SCRUM-742), children before parents. `relationMode = "prisma"`
+  // emulates each `User` relation as `Restrict`, so a post with comments,
+  // votes, saves or reports cannot go before them, and none of these can
+  // outlast `user` below. `communityCategory` follows the posts that name it;
+  // `communityActionBudget` names no one, like `emailSendBudget`, and is
+  // cleared so a re-seeded user does not inherit a spent rate limit.
+  "communityReport",
+  "communitySavedPost",
+  "communityPostVote",
+  "communityComment",
+  "communityPost",
+  "communityProfile",
+  "communityCategory",
+  "communityActionBudget",
   "report",
   "block",
   "request",
@@ -154,6 +168,14 @@ export type SeedDeleteClient = Record<SeededModel, Deletable> & {
 const deletableModels = (
   client: SeedDeleteClient,
 ): Record<SeededModel, Deletable> => ({
+  communityReport: client.communityReport,
+  communitySavedPost: client.communitySavedPost,
+  communityPostVote: client.communityPostVote,
+  communityComment: client.communityComment,
+  communityPost: client.communityPost,
+  communityProfile: client.communityProfile,
+  communityCategory: client.communityCategory,
+  communityActionBudget: client.communityActionBudget,
   report: client.report,
   block: client.block,
   request: client.request,

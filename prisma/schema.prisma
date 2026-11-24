@@ -243,6 +243,15 @@ model User {
   blocksReceived          Block[]         @relation("blocksReceived")
   reportsMade             Report[]        @relation("reportsMade")
   reportsReceived         Report[]        @relation("reportsReceived")
+  // Community's seven back-relations (SCRUM-742). Virtual on this side - the
+  // foreign key lives on each child - so they generate no SQL against `user`.
+  communityProfile         CommunityProfile?
+  communityPosts           CommunityPost[]
+  communityComments        CommunityComment[]
+  communityPostVotes       CommunityPostVote[]
+  communitySavedPosts      CommunitySavedPost[]
+  communityReportsMade     CommunityReport[]  @relation("communityReportsMade")
+  communityReportsReceived CommunityReport[]  @relation("communityReportsReceived")
   dateCreated             DateTime        @default(now())
   dateModified            DateTime        @default(now()) @updatedAt
   carpoolSearches         CarpoolSearch[]
@@ -665,3 +674,279 @@ model ReportDigestDelivery {
 
   @@map("report_digest_delivery")
 }
+
+// NUCarpool Community — schema fragment.
+//
+// This file is APPENDED into `nucarpool/prisma/schema.prisma` at merge time.
+// It declares no `datasource` or `generator` of its own; it inherits the
+// host schema's `relationMode = "prisma"`.
+//
+// Two consequences of that mode govern everything below, and both are
+// documented at length in `docs/superpowers/specs/2026-10-09-nucarpool-community-design.md`:
+//
+//   1. MySQL receives NO foreign-key constraints. Prisma emulates them in
+//      application code, so referential integrity is the repository layer's
+//      job (spec §6), not the database's.
+//   2. Relation scalar fields are NOT indexed automatically. Every one below
+//      carries an explicit `@@index`, without which each emulated check is a
+//      table scan.
+//
+// The `User` relations deliberately declare no `onDelete`, so the emulated
+// default is `Restrict` — a user with community content cannot be deleted out
+// from under it. This matches `Report`, `Message` and `Request`.
+
+enum CommunityReportReason {
+  HARASSMENT
+  SPAM
+  MISINFORMATION
+  OFF_TOPIC
+  SAFETY_CONCERN
+  OTHER
+}
+
+enum CommunityReportStatus {
+  OPEN
+  REVIEWED
+  DISMISSED
+}
+
+enum CommunityTargetType {
+  POST
+  COMMENT
+}
+
+// Every rate-limited action. One budget row per (user, action, window).
+// New members are APPENDED, never inserted. MySQL stores an ENUM as the
+// position number of its value, so appending is an instant metadata-only ALTER while
+// inserting in the middle silently reinterprets every row already stored.
+enum CommunityBudgetAction {
+  HANDLE_CLAIM
+  POST_CREATE
+  COMMENT_CREATE
+  VOTE
+  SAVE
+  REPORT_CREATE
+  CONTENT_EDIT
+  CONTENT_DELETE
+}
+
+// Organizes discussions. Reference data, not an enum, so adding a category is
+// a data change rather than a migration plus a PlanetScale Deploy Request.
+//
+// The cost of that choice: Deploy Requests are schema-only, so these rows need
+// their own provisioning path to each environment. See spec §15.3.
+//
+// There is deliberately NO post counter here. Every post insert would contend
+// on one row per category — a hot-row bottleneck bought for a number nobody
+// needs. Category counts are a `GROUP BY`.
+model CommunityCategory {
+  id          String          @id @default(cuid())
+  slug        String          @unique @db.VarChar(32)
+  name        String          @db.VarChar(48)
+  description String          @default("") @db.VarChar(191)
+  sortOrder   Int             @default(0) @map("sort_order")
+  isActive    Boolean         @default(true) @map("is_active")
+  posts       CommunityPost[]
+
+  @@index([isActive, sortOrder])
+  @@map("community_category")
+}
+
+// Maps a NUCarpool user to a public handle.
+//
+// **`handleNormalized` carries the uniqueness, not `handle`.** MySQL's default
+// collation is case-insensitive, so a `@unique` on `handle` alone would appear
+// to stop `Husky` colliding with `husky` — but that is an implicit property of
+// the column's charset, which a later migration can change without anyone
+// noticing the invariant moved. An explicit normalized column states it.
+//
+// **The handle is immutable.** A renameable handle defeats accountability:
+// post, get reported, rename, repeat. There is no update path.
+model CommunityProfile {
+  id               String   @id @default(cuid())
+  userId           String   @unique @map("user_id")
+  user             User     @relation(fields: [userId], references: [id])
+  handle           String   @db.VarChar(24)
+  handleNormalized String   @unique @map("handle_normalized") @db.VarChar(24)
+  dateCreated      DateTime @default(now()) @map("date_created")
+
+  @@map("community_profile")
+}
+
+// Stores posts.
+//
+// **`hiddenAt` and `deletedAt` are different events.** `deletedAt` is the
+// author removing their own content; `hiddenAt` is moderation or the
+// auto-hide threshold. Collapsing them would make "did a moderator act here?"
+// unanswerable, and the two carry different retention consequences.
+//
+// **`editedAt` exists because no `@updatedAt` column could mean "edited".**
+// A vote writes `voteCount` on this row, so `@updatedAt` would move for
+// reasons that have nothing to do with the author touching their text.
+model CommunityPost {
+  id           String            @id @default(cuid())
+  authorId     String            @map("author_id")
+  author       User              @relation(fields: [authorId], references: [id])
+  categoryId   String            @map("category_id")
+  category     CommunityCategory @relation(fields: [categoryId], references: [id])
+  title        String            @db.VarChar(150)
+  content      String            @db.VarChar(5000)
+  // Denormalized and ADVISORY. The authoritative count is always COUNT(*).
+  // A drifted counter mis-sorts a feed; it can never authorize an action.
+  // Written only in the same transaction as the row that causes it, always
+  // with a relative update. See spec §9.
+  voteCount    Int               @default(0) @map("vote_count")
+  commentCount Int               @default(0) @map("comment_count")
+  hiddenAt     DateTime?         @map("hidden_at")
+  deletedAt    DateTime?         @map("deleted_at")
+  editedAt     DateTime?         @map("edited_at")
+  dateCreated  DateTime          @default(now()) @map("date_created")
+
+  comments CommunityComment[]
+  votes    CommunityPostVote[]
+  savedBy  CommunitySavedPost[]
+
+  // These three tuples ARE the keyset cursors. The trailing `id` is
+  // load-bearing: ties on the sort column otherwise drop or duplicate rows
+  // across page boundaries.
+  //
+  // The third is the profile list's cursor (SCRUM-684). It replaces a
+  // single-column `@@index([authorId])`, which existed only to satisfy the
+  // emulated referential integrity `relationMode = "prisma"` requires: that
+  // index would have narrowed to one author and then filesorted every post
+  // they have written, on every page. `authorId` is still the leftmost
+  // column, so the referential-integrity use is unaffected and the old index
+  // is redundant rather than merely superseded — dropping it keeps one index
+  // to maintain per post insert instead of two.
+  @@index([categoryId, dateCreated, id])
+  @@index([categoryId, voteCount, id])
+  @@index([authorId, dateCreated, id])
+  @@map("community_post")
+}
+
+// Stores replies. Flat — no `parentId`. Threading is a query and UI rewrite
+// that launch volume does not justify.
+model CommunityComment {
+  id          String        @id @default(cuid())
+  postId      String        @map("post_id")
+  post        CommunityPost @relation(fields: [postId], references: [id])
+  authorId    String        @map("author_id")
+  author      User          @relation(fields: [authorId], references: [id])
+  content     String        @db.VarChar(2000)
+  hiddenAt    DateTime?     @map("hidden_at")
+  deletedAt   DateTime?     @map("deleted_at")
+  editedAt    DateTime?     @map("edited_at")
+  dateCreated DateTime      @default(now()) @map("date_created")
+
+  @@index([postId, dateCreated, id])
+  @@index([authorId])
+  @@map("community_comment")
+}
+
+// Upvotes. Upvote-only: the row's existence IS the vote.
+//
+// The unique pair is the real guard against a double vote, not a prior read.
+// `vote` inserts and treats a duplicate-key error as success, which is what
+// makes it idempotent under a retried request.
+model CommunityPostVote {
+  id          String        @id @default(cuid())
+  userId      String        @map("user_id")
+  user        User          @relation(fields: [userId], references: [id])
+  postId      String        @map("post_id")
+  post        CommunityPost @relation(fields: [postId], references: [id])
+  dateCreated DateTime      @default(now()) @map("date_created")
+
+  @@unique([userId, postId])
+  @@index([postId])
+  @@map("community_post_vote")
+}
+
+// Bookmarks. Same idempotency reasoning as votes: `save` and `unsave` are
+// explicit operations, never a toggle, because a retried toggle inverts the
+// user's intent rather than repeating it.
+model CommunitySavedPost {
+  id          String        @id @default(cuid())
+  userId      String        @map("user_id")
+  user        User          @relation(fields: [userId], references: [id])
+  postId      String        @map("post_id")
+  post        CommunityPost @relation(fields: [postId], references: [id])
+  dateCreated DateTime      @default(now()) @map("date_created")
+
+  @@unique([userId, postId])
+  // The saved-list keyset cursor.
+  @@index([userId, dateCreated, id])
+  @@index([postId])
+  @@map("community_saved_post")
+}
+
+// Tracks content reports.
+//
+// **A report must outlive what it describes**, exactly as `Report` does for
+// conversations. So `targetId` is a plain id rather than a relation — it may
+// point at content that has since been purged — and `contentSnapshot` is the
+// server-built copy taken when the report was filed. That copy is the evidence.
+//
+// The unique triple makes a second report on the same item by the same user a
+// no-op, which is what lets an open-report count mean "distinct reporters" and
+// so be safe to drive the auto-hide threshold.
+model CommunityReport {
+  id              String                @id @default(cuid())
+  reporterId      String                @map("reporter_id")
+  reporter        User                  @relation("communityReportsMade", fields: [reporterId], references: [id])
+  reportedUserId  String                @map("reported_user_id")
+  reportedUser    User                  @relation("communityReportsReceived", fields: [reportedUserId], references: [id])
+  targetType      CommunityTargetType   @map("target_type")
+  targetId        String                @map("target_id")
+  reason          CommunityReportReason
+  message         String?               @db.VarChar(500)
+  contentSnapshot String?               @map("content_snapshot") @db.Text
+  status          CommunityReportStatus @default(OPEN)
+  reviewedById    String?               @map("reviewed_by_id")
+  reviewNote      String?               @map("review_note") @db.VarChar(500)
+  dateCreated     DateTime              @default(now()) @map("date_created")
+  dateModified    DateTime              @default(now()) @updatedAt @map("date_modified")
+
+  @@unique([reporterId, targetType, targetId])
+  @@index([status, dateCreated])
+  @@index([targetType, targetId])
+  @@index([reportedUserId])
+  @@map("community_report")
+}
+
+// Per-user rate-limit buckets, modelled directly on `EmailSendBudget`.
+//
+// **It counts actions, in a table the caller has no procedure that writes to.**
+// `emailBudget.ts` documents why that matters: a cap built by counting rows the
+// caller can delete is not a cap, because deleting them resets the count.
+//
+// **Fixed windows, not sliding.** `windowStart` is floored to the window
+// length so every user shares a bucket boundary and the row is addressable
+// without a prior read — which is what lets the claim be a single atomic
+// statement. The cost is a bounded burst of at most twice the budget across a
+// boundary, which is a bounded failure rather than an unbounded one.
+//
+// It declares no `User` relation, following `EmailSendBudget`.
+model CommunityActionBudget {
+  userId      String                @map("user_id")
+  action      CommunityBudgetAction
+  windowStart DateTime              @map("window_start")
+  count       Int                   @default(0)
+
+  @@id([userId, action, windowStart])
+  @@map("community_action_budget")
+}
+
+// ---------------------------------------------------------------------------
+// Added to the existing `User` model at merge time (spec §16.3 step 2).
+// Back-relations are virtual on the parent side — the foreign key lives on the
+// child — so these generate NO SQL against the `user` table. That is what
+// makes the whole schema delta purely additive, and rollback safe.
+//
+//   communityProfile         CommunityProfile?
+//   communityPosts           CommunityPost[]
+//   communityComments        CommunityComment[]
+//   communityPostVotes       CommunityPostVote[]
+//   communitySavedPosts      CommunitySavedPost[]
+//   communityReportsMade     CommunityReport[]  @relation("communityReportsMade")
+//   communityReportsReceived CommunityReport[]  @relation("communityReportsReceived")
+// ---------------------------------------------------------------------------
