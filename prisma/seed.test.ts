@@ -133,6 +133,14 @@ describe("deleteAllData — the guard is on the primitive, not just the caller",
     await deleteAllData(client, { DATABASE_URL: LOCAL_URLS.localhost });
 
     expect(deletes).toEqual([
+      "communityReport",
+      "communitySavedPost",
+      "communityPostVote",
+      "communityComment",
+      "communityPost",
+      "communityProfile",
+      "communityCategory",
+      "communityActionBudget",
       "report",
       "block",
       "request",
