@@ -61,6 +61,9 @@ describe("route titles", () => {
     // make every assertion below pass.
     expect(files.map(rel).sort()).toEqual([
       "admin.tsx",
+      "community/index.tsx",
+      "community/search.tsx",
+      "community/u/[handle].tsx",
       "index.tsx",
       "profile/index.tsx",
       "profile/setup.tsx",
